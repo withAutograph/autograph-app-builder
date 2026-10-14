@@ -889,6 +889,12 @@ export const operatorOwnerContextSchema = z
 export type OperatorOwnerContext = z.infer<typeof operatorOwnerContextSchema>;
 export const operatorRequestSchema = z.discriminatedUnion("action", [
   z.strictObject({
+    action: z.literal("resolve-preview-target"),
+    appId: operatorSelectionSchema.shape.appId,
+    sessionId: id,
+    ownerContext: operatorOwnerContextSchema.optional(),
+  }),
+  z.strictObject({
     action: z.literal("neon-authorization"),
     callbackUrl: z.url().optional(),
     ownerContext: operatorOwnerContextSchema.optional(),

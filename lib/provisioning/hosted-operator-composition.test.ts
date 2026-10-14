@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import nativeEntryPoint from "./hosted-operator-function";
-import { createDependencies, resolveFullPlan } from "./hosted-operator-composition";
+import {
+  createDependencies,
+  createConfiguredPreviewTargetResolver,
+  resolveFullPlan,
+} from "./hosted-operator-composition";
 import { readHostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
 
 import { hostedOperatorPlanSchema } from "./hosted-operator-contract";
@@ -337,4 +341,101 @@ describe("app publication binding at plan renewal", () => {
       expect(f.unexpectedPort).not.toHaveBeenCalled();
     },
   );
+});
+
+describe("configured owner-authorized Preview target metadata", () => {
+  const resolverFixture = () => {
+    const f = publicationFixture();
+    const order: string[] = [];
+    const consentOwner = {
+      // oxlint-disable-next-line eslint/require-await -- Synthetic async authority ports record their invocation synchronously.
+      authorize: vi.fn(async () => {
+        order.push("owner");
+        if (context.ownerContext === undefined) {
+          throw new Error("Fixture owner missing");
+        }
+        return { authority, ownerContext: context.ownerContext };
+      }),
+    };
+    const controlPlane = {
+      // oxlint-disable-next-line eslint/require-await -- Synthetic async authority ports record their invocation synchronously.
+      authorize: vi.fn(async () => {
+        order.push("project");
+        return structuredClone(context);
+      }),
+      // oxlint-disable-next-line eslint/require-await -- Synthetic async authority revalidation records its invocation synchronously.
+      assertPlanningAuthorized: vi.fn(async () => {
+        order.push("revalidate");
+      }),
+    };
+    const resolve = createConfiguredPreviewTargetResolver(
+      f.configuration,
+      consentOwner,
+      controlPlane,
+    );
+    return { ...f, order, consentOwner, controlPlane, resolve };
+  };
+  const identity = { appId: context.target.appId, sessionId: context.target.sessionId };
+
+  it("resolves the configured project and branch after owner and provider checks without compiling or planning", async () => {
+    const f = resolverFixture();
+    const result = await f.resolve(request(), identity, context.ownerContext);
+    expect(result.target).toMatchObject(identity);
+    expect(f.order.indexOf("owner")).toBeGreaterThanOrEqual(0);
+    expect(f.order.indexOf("owner")).toBeLessThan(f.order.indexOf("project"));
+    expect(f.order.indexOf("project")).toBeLessThan(f.order.lastIndexOf("revalidate"));
+    expect(f.controlPlane.authorize).toHaveBeenCalledWith(
+      expect.any(Request),
+      {
+        ...identity,
+        projectId: context.target.projectId,
+        branch: context.target.branch,
+        environment: "preview",
+      },
+      context.ownerContext,
+    );
+    expect(f.unexpectedPort).not.toHaveBeenCalled();
+  });
+  it("does not look up a configured app before current-owner authorization succeeds", async () => {
+    const f = resolverFixture();
+    f.consentOwner.authorize.mockRejectedValue(new Error("revoked owner"));
+    await expect(
+      f.resolve(request(), { ...identity, appId: "unconfigured" }, context.ownerContext),
+    ).rejects.toThrow("revoked owner");
+    expect(f.controlPlane.authorize).not.toHaveBeenCalled();
+  });
+  it("does not authorize an unconfigured app", async () => {
+    const f = resolverFixture();
+    await expect(
+      f.resolve(request(), { ...identity, appId: "unconfigured" }, context.ownerContext),
+    ).rejects.toThrow("resource_mismatch");
+    expect(f.controlPlane.authorize).not.toHaveBeenCalled();
+  });
+  it("preserves actual provider project access denial", async () => {
+    const f = resolverFixture();
+    f.controlPlane.authorize.mockRejectedValue(new Error("project access revoked"));
+    await expect(f.resolve(request(), identity, context.ownerContext)).rejects.toThrow(
+      "project access revoked",
+    );
+    expect(f.controlPlane.assertPlanningAuthorized).not.toHaveBeenCalled();
+  });
+  it("rejects a target in a different configured owner team", async () => {
+    const f = resolverFixture();
+    f.controlPlane.authorize.mockResolvedValue({
+      ...context,
+      target: { ...context.target, scopeId: "other-team" },
+    });
+    await expect(f.resolve(request(), identity, context.ownerContext)).rejects.toThrow(
+      "resource_mismatch",
+    );
+  });
+  it("does not return metadata if the owner is revoked during resolution", async () => {
+    const f = resolverFixture();
+    f.controlPlane.assertPlanningAuthorized.mockRejectedValue(
+      new Error("owner revoked during lookup"),
+    );
+    await expect(f.resolve(request(), identity, context.ownerContext)).rejects.toThrow(
+      "owner revoked during lookup",
+    );
+  });
 });

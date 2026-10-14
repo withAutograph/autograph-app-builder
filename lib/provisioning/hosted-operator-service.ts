@@ -40,6 +40,7 @@ import {
   operatorReceiptSchema,
   operatorAuthIdentityInputSchema,
   operatorRequestSchema,
+  operatorSelectionSchema,
   restrictedOperatorEnvironment,
   sameOperatorSelection,
   hostedOperatorRecordSchema,
@@ -132,6 +133,12 @@ export interface ProtectedHostedOperatorDependencies {
   authorize: (
     request: Request,
     selection: OperatorSelection,
+    ownerContext?: OperatorOwnerContext,
+  ) => Promise<Context>;
+  /** Read only the configured Preview target after current-owner and provider authorization. */
+  resolvePreviewTarget?: (
+    request: Request,
+    identity: Pick<OperatorSelection, "appId" | "sessionId">,
     ownerContext?: OperatorOwnerContext,
   ) => Promise<Context>;
   /**
@@ -545,7 +552,9 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
       const input = operatorRequestSchema.parse(await request.json());
       const isConsentRequest = input.action === "neon-authorization";
       createHostedOperatorConsentDiagnostic(
-        isConsentRequest ? input.sessionId : input.selection.sessionId,
+        isConsentRequest || input.action === "resolve-preview-target"
+          ? input.sessionId
+          : input.selection.sessionId,
       )({
         boundary: "operator",
         outcome: "started",
@@ -571,6 +580,24 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
             await deps.neonAuthorization(context, consentRequest),
           ),
         );
+      }
+      if (input.action === "resolve-preview-target") {
+        appId = input.appId;
+        if (deps.resolvePreviewTarget === undefined) {
+          throw new HostedOperatorError("protected_operator_required");
+        }
+        const context = normalizeOperatorContext(
+          await deps.resolvePreviewTarget(
+            request,
+            { appId: input.appId, sessionId: input.sessionId },
+            input.ownerContext,
+          ),
+        );
+        const selection = operatorSelectionSchema.parse(selectionFor(context.target));
+        if (selection.appId !== input.appId || selection.sessionId !== input.sessionId) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        return response(selection);
       }
       appId = input.selection.appId;
       const authorized = await deps.authorize(request, input.selection, input.ownerContext);

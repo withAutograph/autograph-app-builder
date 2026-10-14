@@ -19,6 +19,7 @@ import {
   hostedOperatorPlanSchema,
   operatorReceiptSchema,
   restrictedOperatorEnvironment,
+  operatorSelectionSchema,
 } from "./hosted-operator-contract";
 import type {
   HostedOperatorPlan,
@@ -62,7 +63,7 @@ const hash = (
   value: ManagedOperatorEnvironmentRow[] | OperatorDeploymentCandidate | { rows: never[] },
 ) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const selectedApplication = (
-  configuration: HostedOperatorSourceConfiguration,
+  configuration: Pick<HostedOperatorSourceConfiguration, "applications" | "teamId">,
   context: HostedOperatorContext,
 ) => {
   const selected = configuration.applications[context.target.appId];
@@ -83,6 +84,32 @@ const selectedApplication = (
   }
   return selected;
 };
+
+/** Resolve configured metadata under the same live owner/provider authority used by planning. */
+export const createConfiguredPreviewTargetResolver =
+  (
+    configuration: Pick<HostedOperatorSourceConfiguration, "applications" | "teamId">,
+    consentOwner: Pick<ReturnType<typeof createHostedOperatorConsentOwner>, "authorize">,
+    controlPlane: Pick<ControlPlane, "authorize" | "assertPlanningAuthorized">,
+  ): NonNullable<ProtectedHostedOperatorDependencies["resolvePreviewTarget"]> =>
+  async (request, identity, ownerContext) => {
+    const currentOwner = await consentOwner.authorize(request, identity.sessionId, ownerContext);
+    const application = configuration.applications[identity.appId];
+    if (application === undefined) {
+      throw new HostedOperatorError(RESOURCE_MISMATCH);
+    }
+    const selection = operatorSelectionSchema.parse({
+      appId: identity.appId,
+      branch: application.branch,
+      environment: "preview",
+      projectId: application.projectId,
+      sessionId: identity.sessionId,
+    });
+    const context = await controlPlane.authorize(request, selection, currentOwner.ownerContext);
+    selectedApplication(configuration, context);
+    await controlPlane.assertPlanningAuthorized(context);
+    return context;
+  };
 
 const readRelease = async (
   controlPlane: ControlPlane,
@@ -1274,6 +1301,11 @@ export const composeHostedOperatorDependencies = (
     authIdentityInput,
     authorize: controlPlane.authorize,
     authorizeNeonConsent: consentOwner.authorize,
+    resolvePreviewTarget: createConfiguredPreviewTargetResolver(
+      configuration,
+      consentOwner,
+      controlPlane,
+    ),
     bindings,
     executeEffect,
     neonAuthorization: createHostedOperatorNeonAuthorization({
