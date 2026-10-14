@@ -1,8 +1,8 @@
-import {
+import type {
   reportRuntimePreparationFailure,
   reportRuntimePreparationStarted,
+  RuntimePreparationStage,
 } from "../provisioning/hosted-operator-consent-diagnostic";
-import type { RuntimePreparationStage } from "../provisioning/hosted-operator-consent-diagnostic";
 import type { WorkflowStepToolContext } from "eve/tools";
 import type {
   HostedOperatorError as HostedOperatorErrorType,
@@ -41,12 +41,27 @@ interface HostedRuntimeContract {
   digest: (plan: HostedOperatorPlan) => string;
   isOperatorError: (error: unknown) => error is HostedOperatorErrorType;
   sameSelection: (left: OperatorSelection, right: OperatorSelection) => boolean;
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Caught exceptions are classified by the injected closed diagnostic boundary.
+  onFailure?: (stage: RuntimePreparationStage, error: unknown) => void;
 }
 
 type HostedOperatorErrorClassifier = (value: unknown) => value is HostedOperatorErrorType;
 const noHostedOperatorError: HostedOperatorErrorClassifier = (
   _value: unknown,
 ): _value is HostedOperatorErrorType => false;
+
+const reportCaughtPreparationFailure = (
+  contract: HostedRuntimeContract,
+  stage: RuntimePreparationStage,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Only the injected reporter classifies caught exceptions into closed metadata.
+  error: unknown,
+) => {
+  try {
+    contract.onFailure?.(stage, error);
+  } catch {
+    /* Diagnostics cannot change the original blocked result. */
+  }
+};
 
 // oxlint-disable-next-line eslint/complexity -- Legacy readiness and participant preflight retain their separate approval-bound identity handoffs.
 export const prepareHostedRuntimeWithOperator = async (
@@ -124,7 +139,7 @@ export const prepareHostedRuntimeWithOperator = async (
     const identityInput = needsIdentity ? await requestIdentity() : null;
     return { identityInput, result };
   } catch (error) {
-    reportRuntimePreparationFailure(ctx.session.id, stage, error);
+    reportCaughtPreparationFailure(contract, stage, error);
     const result = {
       appId: input.appId,
       authenticatedBehavior: "unassessed" as const,
@@ -156,7 +171,12 @@ export async function prepareHostedRuntimeStep(
   "use step";
   let isHostedOperatorError = noHostedOperatorError;
   let stage: RuntimePreparationStage = "module_loading";
-  reportRuntimePreparationStarted(ctx.session.id, stage);
+  let diagnostic:
+    | {
+        reportRuntimePreparationFailure: typeof reportRuntimePreparationFailure;
+        reportRuntimePreparationStarted: typeof reportRuntimePreparationStarted;
+      }
+    | undefined;
   const blockedPreparation = (error: Error) => ({
     identityInput: null,
     result: {
@@ -168,6 +188,8 @@ export async function prepareHostedRuntimeStep(
   });
 
   try {
+    diagnostic = await import("../provisioning/hosted-operator-consent-diagnostic");
+    diagnostic.reportRuntimePreparationStarted(ctx.session.id, stage);
     const [clientModule, contract, state, priorApprovalModule] = await Promise.all([
       import("../../lib/provisioning/hosted-operator-client"),
       import("../../lib/provisioning/hosted-operator-contract"),
@@ -206,10 +228,12 @@ export async function prepareHostedRuntimeStep(
         isOperatorError: (error): error is HostedOperatorErrorType =>
           error instanceof contract.HostedOperatorError,
         sameSelection: (left, right) => contract.sameOperatorSelection(left, right),
+        onFailure: (failureStage, error) =>
+          diagnostic?.reportRuntimePreparationFailure(ctx.session.id, failureStage, error),
       },
     );
   } catch (error) {
-    reportRuntimePreparationFailure(ctx.session.id, stage, error);
+    diagnostic?.reportRuntimePreparationFailure(ctx.session.id, stage, error);
     return blockedPreparation(
       error instanceof Error ? error : new Error("Unknown hosted runtime preparation failure"),
     );
