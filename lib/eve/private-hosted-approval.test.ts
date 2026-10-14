@@ -217,7 +217,9 @@ describe("private hosted approval receipts", () => {
         store,
       });
       const settled = approvalSettled("between-turn-request", outcome);
-      if (settled.type !== "approval.settled") throw new Error("Expected native settlement");
+      if (settled.type !== "approval.settled") {
+        throw new Error("Expected native settlement");
+      }
       settled.data.turnId = "";
       await resumed.observe(settled);
       const savedReceipt = {
