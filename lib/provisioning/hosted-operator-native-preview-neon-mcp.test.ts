@@ -69,8 +69,32 @@ let wrongEndpoint = false;
 let wrongCredential = false;
 let invalidMetadataTool = "";
 type NeonFixtureMetadata = z.infer<ReturnType<typeof z.json>>;
-const toolResponseText = (name: string, value: NeonFixtureMetadata) =>
-  JSON.stringify(name === invalidMetadataTool ? {} : value);
+const toolResponseText = (name: string, value: NeonFixtureMetadata) => {
+  if (name === "get_connection_string" && name !== invalidMetadataTool) {
+    const credential = z
+      .object({
+        uri: z.string(),
+        projectId: z.string(),
+        databaseName: z.string(),
+        roleName: z.string(),
+        branchId: z.string(),
+        computeId: z.string(),
+      })
+      .parse(value);
+    return [
+      "Connection string details:",
+      `URI: ${credential.uri}`,
+      `Project ID: ${credential.projectId}`,
+      `Database: ${credential.databaseName}`,
+      `Role: ${credential.roleName}`,
+      `Branch ID: ${credential.branchId}`,
+      `Compute ID: ${credential.computeId}`,
+      "",
+      "You can use this connection string with any PostgreSQL client to connect to your Neon database.",
+    ].join("\n");
+  }
+  return JSON.stringify(name === invalidMetadataTool ? {} : value);
+};
 const called: { name: string; arguments: Record<string, string> }[] = [];
 const projectOidc = "fixture-project-oidc";
 const privateMcpBearer = "fixture-private-owner-token";

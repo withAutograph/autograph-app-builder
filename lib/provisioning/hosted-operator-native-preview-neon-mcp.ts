@@ -23,10 +23,15 @@ import {
 } from "./hosted-operator-synthetic-neon-provenance";
 import type { NativePreviewNeonInitSource } from "./hosted-operator-synthetic-neon-provenance";
 
-import { observeOperatorPlanStage } from "./hosted-operator-consent-diagnostic";
+import {
+  observeOperatorPlanStage,
+  reportOperatorNeonMcpFailure,
+} from "./hosted-operator-consent-diagnostic";
+import { readPreviewNeonMcpResponse } from "./hosted-operator-native-preview-neon-mcp-response";
 import type {
   HostedOperatorConsentDiagnosticSink,
   OperatorPlanStage,
+  OperatorNeonMcpFailure,
 } from "./hosted-operator-consent-diagnostic";
 
 const readTools = [
@@ -39,26 +44,6 @@ const readTools = [
 ] as const;
 type NativeReadTool = (typeof readTools)[number];
 const unavailable = () => new Error("Protected Preview Neon MCP credential is unavailable.");
-const metadata = z.object({
-  content: z.array(z.object({ text: z.string(), type: z.literal("text") })),
-  isError: z.boolean().optional(),
-  structuredContent: z.json().optional(),
-});
-const decoded = (
-  value: Awaited<ReturnType<Awaited<ReturnType<typeof createMCPClient>>["callTool"]>>,
-) => {
-  const result = metadata.parse(value);
-  if (result.isError === true) {
-    throw unavailable();
-  }
-  if (result.structuredContent !== undefined) {
-    return result.structuredContent;
-  }
-  if (result.content.length !== 1) {
-    throw unavailable();
-  }
-  return z.json().parse(JSON.parse(result.content[0]?.text ?? ""));
-};
 export interface PreviewNeonMcpDependencies {
   diagnosticSink?: HostedOperatorConsentDiagnosticSink;
   configuration: Omit<NativePreviewNeonConfiguration, "connectorInstallationId">;
@@ -111,6 +96,10 @@ const runReader = async <T>(
 ): Promise<T> => {
   const observe = async <Result>(stage: OperatorPlanStage, run: () => Result | Promise<Result>) =>
     await observeOperatorPlanStage(context.target.sessionId, stage, run, deps.diagnosticSink);
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Pass SDK exceptions only to the closed numeric diagnostic parser, never to public errors.
+  const reportCredentialFailure = (phase: OperatorNeonMcpFailure["phase"], error?: unknown) => {
+    reportOperatorNeonMcpFailure(context.target.sessionId, phase, error, deps.diagnosticSink);
+  };
   let client: Pick<MCPClient, "callTool" | "close"> | undefined;
   try {
     const { scope, configuration } = await observe("neon_configuration", () => {
@@ -270,9 +259,22 @@ const runReader = async <T>(
         get_connection_string: "neon_connection_credential",
       };
       const currentClient = client;
-      const result = await observe(stages[name], async () =>
-        decoded(await currentClient.callTool({ arguments: argumentsInput, name })),
-      );
+      const result = await observe(stages[name], async () => {
+        let response: Awaited<ReturnType<typeof currentClient.callTool>>;
+        try {
+          response = await currentClient.callTool({ arguments: argumentsInput, name });
+        } catch (error) {
+          if (name === "get_connection_string") {
+            reportCredentialFailure("tool_request", error);
+          }
+          throw error;
+        }
+        return readPreviewNeonMcpResponse(response, name === "get_connection_string", (phase) => {
+          if (name === "get_connection_string") {
+            reportCredentialFailure(phase);
+          }
+        });
+      });
       await guard();
       return result;
     };
@@ -369,7 +371,14 @@ const runReader = async <T>(
       return result;
     }
     const maintenanceUrl = await observe("neon_connection_credential", async () => {
-      const credential = z
+      const rawCredential = await call("get_connection_string", {
+        branch_id: scope.branchId,
+        compute_id: scope.endpointId,
+        database_name: scope.maintenanceDatabase,
+        project_id: scope.projectId,
+        role_name: scope.maintenanceRole,
+      });
+      const parsedCredential = z
         .object({
           branchId: z.string(),
           computeId: z.string(),
@@ -378,15 +387,12 @@ const runReader = async <T>(
           roleName: z.string(),
           uri: z.string(),
         })
-        .parse(
-          await call("get_connection_string", {
-            branch_id: scope.branchId,
-            compute_id: scope.endpointId,
-            database_name: scope.maintenanceDatabase,
-            project_id: scope.projectId,
-            role_name: scope.maintenanceRole,
-          }),
-        );
+        .safeParse(rawCredential);
+      if (!parsedCredential.success) {
+        reportCredentialFailure("credential_shape");
+        throw parsedCredential.error;
+      }
+      const credential = parsedCredential.data;
       if (
         [
           credential.projectId !== scope.projectId,
@@ -396,9 +402,15 @@ const runReader = async <T>(
           credential.roleName !== scope.maintenanceRole,
         ].some(Boolean)
       ) {
+        reportCredentialFailure("credential_identity");
         throw unavailable();
       }
-      return privateMaintenanceUrl(credential.uri, scope);
+      try {
+        return privateMaintenanceUrl(credential.uri, scope);
+      } catch (error) {
+        reportCredentialFailure("credential_uri");
+        throw error;
+      }
     });
     await revalidateEnrollment();
     await assertProviderScope();

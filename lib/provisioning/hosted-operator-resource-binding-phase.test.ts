@@ -1,3 +1,4 @@
+import { encryptHostedRuntimeFiles } from "./hosted-runtime-service";
 import { describe, expect, it } from "vitest";
 import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
 import type { HostedOperatorPlan } from "./hosted-operator-contract";
@@ -254,6 +255,52 @@ const phaseFixture = (participants = false) => {
 };
 
 describe("read-only completed resource binding phase", () => {
+  const encryptedPhaseFixture = (participants = false) => {
+    const f = phaseFixture(participants);
+    const raw = encryptHostedRuntimeFiles({
+      authority,
+      target: context.target,
+      files: { "synthetic.json": "synthetic-only" },
+      config: { tokenKey: Buffer.alloc(32, 9), tokenKeyVersion: "synthetic_v1" },
+    });
+    f.row.record = hostedRuntimeJournalRecordSchema.parse({ ...f.row.record, privateState: raw });
+    f.input.privateState = raw;
+    return { ...f, raw };
+  };
+  it.each([false, true])(
+    "accepts unchanged actual encryption output across the journal parser, participants=%s",
+    (participants) => {
+      const f = encryptedPhaseFixture(participants);
+      expect(Object.keys(f.raw)).not.toEqual(Object.keys(f.row.record.privateState ?? {}));
+      expect(f.raw).toEqual(f.row.record.privateState);
+      expect(requireFinalResourceBindingPhase(f.row, f.input)).toBe(f.row);
+    },
+  );
+  it.each(["encryptedToken", "tokenIv", "tokenTag", "keyVersion"] as const)(
+    "rejects a changed encrypted envelope %s",
+    (field) => {
+      const f = encryptedPhaseFixture();
+      f.raw[field] += "-changed";
+      expect(() => requireFinalResourceBindingPhase(f.row, f.input)).toThrow(
+        "operation_in_progress",
+      );
+    },
+  );
+  it.each(["encryptedToken", "tokenIv", "tokenTag", "keyVersion"] as const)(
+    "rejects a missing encrypted envelope %s",
+    (field) => {
+      const f = encryptedPhaseFixture();
+      Reflect.deleteProperty(f.raw, field);
+      expect(
+        hostedRuntimeJournalRecordSchema.safeParse({ ...f.row.record, privateState: f.raw })
+          .success,
+      ).toBe(false);
+      expect(() => requireFinalResourceBindingPhase(f.row, f.input)).toThrow(
+        "operation_in_progress",
+      );
+    },
+  );
+
   it.each([false, true])(
     "opens only completed idle Auth phase, participants=%s",
     (participants) => {

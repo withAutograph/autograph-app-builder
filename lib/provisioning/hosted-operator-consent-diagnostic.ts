@@ -195,6 +195,32 @@ export const operatorOwnerStoreImportErrorCodeSchema = z.enum([
   "ERR_UNSUPPORTED_ESM_URL_SCHEME",
 ]);
 
+const neonMcpFailureSchema = z.strictObject({
+  phase: z.enum([
+    "tool_request",
+    "tool_error",
+    "response_shape",
+    "response_decode",
+    "credential_shape",
+    "credential_identity",
+    "credential_uri",
+  ]),
+  sdkCode: z
+    .union([
+      z.literal(-32_700),
+      z.literal(-32_600),
+      z.literal(-32_601),
+      z.literal(-32_602),
+      z.literal(-32_603),
+      z.literal(-32_000),
+      z.literal(-32_001),
+      z.literal(-32_002),
+    ])
+    .optional(),
+  httpStatus: z.number().int().min(100).max(599).optional(),
+});
+export type OperatorNeonMcpFailure = z.infer<typeof neonMcpFailureSchema>;
+
 const metadata = z.strictObject({
   accessClass: z
     .enum(["upstream_auth_denied", "application_auth_denied", "other_failed", "ok"])
@@ -220,6 +246,7 @@ const metadata = z.strictObject({
     .optional(),
   httpStatus: z.number().int().min(100).max(599).optional(),
   nativeNotFound: z.boolean().optional(),
+  neonMcpFailure: neonMcpFailureSchema.optional(),
   outcome,
   ownerConfiguration: z
     .strictObject({
@@ -438,5 +465,47 @@ export const observeOperatorExecutionStage = async <T>(
       /* Reporting cannot change the original rejection. */
     }
     throw error;
+  }
+};
+
+/** Fixed credential-read failure phases and numeric SDK status only; never inspect messages or bodies. */
+export const reportOperatorNeonMcpFailure = (
+  sessionId: string,
+  failurePhase: OperatorNeonMcpFailure["phase"],
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- SDK exceptions are untrusted; only own numeric fields enter closed diagnostic schemas.
+  error?: unknown,
+  sink?: HostedOperatorConsentDiagnosticSink,
+): void => {
+  try {
+    const failure: OperatorNeonMcpFailure = { phase: failurePhase };
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep descriptor values untrusted until the closed numeric schemas below parse them.
+    const ownValue = (name: string): unknown => {
+      try {
+        return Object.getOwnPropertyDescriptor(error, name)?.value;
+      } catch {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing or hostile descriptors supply no diagnostic value.
+        return undefined;
+      }
+    };
+    const sdkCode = neonMcpFailureSchema.shape.sdkCode.safeParse(ownValue("code"));
+    const httpStatus = neonMcpFailureSchema.shape.httpStatus.safeParse(ownValue("statusCode"));
+    if (sdkCode.success && sdkCode.data !== undefined) {
+      failure.sdkCode = sdkCode.data;
+    }
+    if (httpStatus.success && httpStatus.data !== undefined) {
+      failure.httpStatus = httpStatus.data;
+    }
+    createHostedOperatorConsentDiagnostic(
+      sessionId,
+      sink,
+    )({
+      boundary: "operator",
+      phase: "inline",
+      stage: "operator_request",
+      outcome: "setup_unavailable",
+      neonMcpFailure: failure,
+    });
+  } catch {
+    /* Diagnostics cannot change credential authorization or expose hostile exception properties. */
   }
 };
