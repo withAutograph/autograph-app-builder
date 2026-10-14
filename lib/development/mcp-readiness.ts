@@ -1,9 +1,4 @@
-import { TOOL_NAMES } from "../../scripts/portable-release";
 import { setTimeout as delay } from "node:timers/promises";
-
-class UnexpectedDevelopmentToolsError extends Error {
-  name = "UnexpectedDevelopmentToolsError";
-}
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function abortReason(signal: AbortSignal | undefined) {
@@ -118,19 +113,8 @@ export async function waitForDevelopmentMcp(input: {
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const names = await developmentMcpToolNames(input);
-      if (
-        names.length !== TOOL_NAMES.length ||
-        names.some((name, index) => name !== TOOL_NAMES[index])
-      ) {
-        throw new UnexpectedDevelopmentToolsError(
-          `Development MCP must expose exactly ${TOOL_NAMES.join(", ")} in order; received ${names.join(", ") || "no tools"}.`,
-        );
-      }
       return names;
     } catch (error) {
-      if (error instanceof UnexpectedDevelopmentToolsError) {
-        throw error;
-      }
       lastError = error;
     }
     try {

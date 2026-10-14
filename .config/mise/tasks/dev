@@ -36,8 +36,8 @@ Options:
   --web-ca PATH            Existing CA (default CAROOT or cached mkcert -CAROOT).
   -h, --help               Show this help.
 
-The command snapshots Arrusted, starts loopback /mcp, verifies exactly five
-autograph_* tools, and installs app-builder@autograph-dev in the active
+The command snapshots Arrusted, starts loopback /mcp, checks MCP transport
+readiness, and installs app-builder@autograph-dev in the active
 CODEX_HOME, disabled globally and enabled by this repository's .codex/config.toml.
 Development mode cannot publish, deploy, or mutate providers.
 EOF

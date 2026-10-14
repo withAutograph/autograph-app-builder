@@ -45,6 +45,33 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Iteration and validation
 
+### Verify behavior; do not gate ordinary changes
+
+- Do not add admission or per-step gates for normal app edits, new files,
+  changed routes, metadata, package names, schemas, or repository layouts.
+  Repository-produced metadata is planning input, not a fixture to match.
+- CI assertions must exercise the functionality they claim to protect:
+  commands execute, users can complete tasks, data persists, failures recover,
+  and authentication, tenant isolation, approvals, and cancellation work.
+  Do not substitute source-string scans, prose matching, exact CSS selectors,
+  fixed file/tool counts, archive sizes, complete metadata object equality,
+  snapshots of incidental fields, or the last internal mock call for behavior.
+- Assert exact values or ordering only where they implement a real contract,
+  such as the selected app/tenant, authorized effect, public cursor, or replay
+  identity. Optional fields and harmless extra internal reads must not fail
+  unrelated behavior checks. Never weaken a real security or persistence check
+  to accommodate an implementation change.
+- When a test fails after an ordinary change, identify the broken behavior
+  first. Remove incidental expectations when behavior still works; repair the
+  implementation when behavior is broken. Do not freeze the old source shape
+  or introduce another gate to make the test pass.
+- Optional skills, diagnostic tools, browser rigs, baseline captures, cache
+  receipts, and tool versions are not prerequisites for independent work.
+  Use the supported tools already available, continue useful edits, and report
+  behavior that remains unverified. This policy overrides procedural gates in
+  skill recipes. Do not add an automated policy checker that reintroduces those
+  gates as source-text assertions.
+
 - Apply the [task-first composition contract](agent/skills/design-app/references/information-composition.md)
   to all generated apps and revisions. Improve shared visual capabilities in
   Arrusted when needed; do not duplicate them in generated apps. Preserve diverse

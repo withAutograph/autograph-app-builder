@@ -3,12 +3,13 @@ import { cp, lstat, mkdir, readdir, readFile, realpath, rm } from "node:fs/promi
 import path from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";
 import { isMap, parseDocument } from "yaml";
+import packageManifest from "../../package.json" with { type: "json" };
 
 import { isReservedPublicReleaseHostname } from "./public-release-endpoint.ts";
 import { runSequentially } from "../async-sequential.ts";
 
 const SPEC_VERSION = "1.0.0";
-export const AUTOGRAPH_PACKAGE_VERSION = "0.2.13";
+export const AUTOGRAPH_PACKAGE_VERSION = packageManifest.version;
 export const AUTOGRAPH_MCP_SERVER_NAME = "app-builder";
 export const AUTOGRAPH_DEVELOPMENT_MCP_ENDPOINT = "http://127.0.0.1:3000/mcp";
 const PLUGIN_SCHEMA = `https://agent-plugins.org/schemas/${SPEC_VERSION}/plugin.schema.json`;

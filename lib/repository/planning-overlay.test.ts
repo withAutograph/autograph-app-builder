@@ -138,9 +138,22 @@ describe("planning from the current checkout", () => {
     expect(executor.mock.calls.map(([request]) => request.command)).toEqual(["identity"]);
   });
 
-  it.each([undefined, "appId", "workspacePath", "appSpecPath"])(
-    "projects current producer metadata while preserving identity binding (%s)",
-    async (changedField) => {
+  it.each([
+    { field: undefined, value: undefined },
+    { field: "appId", value: "other" },
+    { field: "workspacePath", value: "products/stock-exceptions" },
+    { field: "appSpecPath", value: "products/stock-exceptions/design.md" },
+    { field: "appSpecSourcePath", value: "design/stock-exceptions.md" },
+    { field: "cueSourcePath", value: "schemas/stock-exceptions.cue" },
+    { field: "schemaCuePath", value: "products/stock-exceptions/data/model.cue" },
+    { field: "title", value: "Stock Review Desk" },
+    { field: "packageName", value: "stock-review-desk" },
+    { field: "packageName", value: "@company/stock-review-desk" },
+    { field: "baseRoutes", value: ["/review"] },
+    { field: "baseRoutes", value: ["/review", "/review/:path*", "/exceptions"] },
+  ])(
+    "uses repository metadata while preserving app identity ($field: $value)",
+    async ({ field: changedField, value }) => {
       const fixture = fixtureTargetCommandExecutor();
       const executor = vi.fn(async (request: Parameters<typeof fixture>[0]) => {
         const result = await fixture(request);
@@ -155,7 +168,7 @@ describe("planning from the current checkout", () => {
         };
         if (changedField !== undefined) {
           Object.assign(parsed, {
-            [changedField]: changedField === "appId" ? "other" : "apps/other",
+            [changedField]: value,
           });
         }
         return {
@@ -183,10 +196,19 @@ describe("planning from the current checkout", () => {
         executor,
         sandbox,
       });
-      if (changedField === undefined) {
+      if (changedField !== "appId") {
         const result = await planning;
         expect(result.identity).not.toHaveProperty("producerMetadata");
         expect(result.proposal.contract.appId).toBe("stock-exceptions");
+        if (changedField !== undefined) {
+          expect(result.identity).toHaveProperty(changedField, value);
+        }
+        if (changedField === "workspacePath" || changedField === "packageName") {
+          expect(result.proposal.plan.source).toHaveProperty(changedField, value);
+        }
+        if (changedField === "baseRoutes") {
+          expect(result.proposal.plan.topology.routes).toEqual(value);
+        }
       } else {
         await expect(planning).rejects.toThrow(
           "Target identity did not match the accepted app id.",

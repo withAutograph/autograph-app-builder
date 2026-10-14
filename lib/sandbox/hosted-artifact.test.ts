@@ -1,5 +1,3 @@
-import { existsSync, readFileSync } from "node:fs";
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -17,11 +15,9 @@ describe("hosted Arrusted artifact", () => {
     expect(HOSTED_ARTIFACT_URL).toBe(
       `https://github.com/withAutograph/autograph-app-builder/releases/download/${HOSTED_ARTIFACT_RELEASE_TAG}/${HOSTED_ARTIFACT_RELEASE_NAME}`,
     );
-    expect(HOSTED_ARTIFACT_BYTES).toBe(175_953_869);
+    expect(Number.isSafeInteger(HOSTED_ARTIFACT_BYTES)).toBe(true);
+    expect(HOSTED_ARTIFACT_BYTES).toBeGreaterThan(0);
     expect(HOSTED_ARTIFACT_SHA256).toMatch(/^[0-9a-f]{64}$/u);
-    expect(existsSync("lib/sandbox/hosted-artifact.generated.ts")).toBe(false);
-    expect(existsSync("public/hosted-artifacts")).toBe(false);
-    expect(readFileSync("next.config.ts", "utf-8")).not.toContain("artifacts/hosted");
     expect(hostedExecutionArtifactDigest()).toBe(
       `vercel-sandbox-seed@sha256:${HOSTED_ARTIFACT_SHA256}`,
     );
@@ -30,21 +26,5 @@ describe("hosted Arrusted artifact", () => {
   it("binds release identity to the exact hosted dependency closure", () => {
     expect(HOSTED_ARTIFACT_RELEASE_TAG).toContain(ARRUSTED_TARGET_SHA.slice(0, 8));
     expect(ARRUSTED_TARGET_TREE).toMatch(/^[0-9a-f]{40}$/u);
-  });
-
-  it("contains no production fixed-source receipt or materialization path", () => {
-    for (const path of [
-      "agent/tools/inspect_source.ts",
-      "agent/tools/prepare_workspace.ts",
-      "lib/sandbox/hosted-toolchain.ts",
-    ]) {
-      const definition = readFileSync(path, "utf-8");
-      expect(definition).not.toContain("hosted-source");
-      expect(definition).not.toContain("source-tree.tar.gz");
-    }
-    expect(readFileSync("lib/repository/supported-template.ts", "utf-8")).not.toContain(
-      "/opt/app-builder/hosted-source",
-    );
-    expect(existsSync("lib/repository/hosted-source.ts")).toBe(false);
   });
 });

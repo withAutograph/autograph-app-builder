@@ -3,52 +3,62 @@ name: next-cache-components-optimizer
 description: >
   Drive a Next.js route to instant navigation by setting up an agentic loop,
   under Cache Components / PPR, on initial load (hard navigation) and
-  client-side navigation (soft navigation). Encode the goal as a failing
-  @next/playwright instant() e2e and work it to green, one verified route at a
-  time; the shipped test then guards against regression. Use when asked to make
+  client-side navigation (soft navigation). Use focused behavior checks and an
+  existing @next/playwright instant() test when available. Use when asked to make
   a route's navigation instant (its static shell commits immediately), fix a
   route whose static shell isn't prerendered/served/prefetched, grow a route's
   static shell or fix its slow first paint, diagnose which Suspense boundary
   keeps a route out of its static shell, or write the instant() e2e guard for
-  one. Requires Next.js 16.3+ with cacheComponents; directs an upgrade if older.
+  one. The examples use Next.js 16.3+ with Cache Components when available.
 ---
 
 # next-cache-components-optimizer
 
-Set up an agentic optimization loop that drives a Next.js route from "not
-instant" to "instant" and keeps it there. The loop is test-driven: encode the
-goal as a failing `@next/playwright` `instant()` test, work it to green, and
-ship the test as the regression guard. Run it once per target route. Work the
-phases P → G in order; each ends in a gate. Fix recipes live in two lazily-read
+Use focused evidence to improve a requested route's initial or client-side
+navigation. An existing `@next/playwright` `instant()` test can be a useful
+regression check, but adding a test rig or reaching a staged RED/GREEN sequence
+is optional. Reuse current tests and runtime observations; don't block source
+edits on optional infrastructure or per-route builds. The phases below are
+diagnostic examples, not mandatory gates. Fix recipes live in two lazily-read
 references — `reference/patterns.md` (before→after for each blocker type) and
 `reference/real-app-patterns.md` (parallel routes, auth gates, the empty-shell
 and responsive-skeleton failure modes). Read one only when its phase points
 there.
+
+## project policy and scope
+
+Use this skill only for a requested navigation optimization or diagnosis. The
+repository's local-development and focused-validation policy takes precedence:
+no incidental source shape, app layout, framework version, cache state,
+receipt, or exact tool shape gates unrelated work. CI should check relevant
+functionality and security properties rather than implementation shapes. Do
+not install tools, upgrade Next.js, create a rig, or run a build just to satisfy
+this optional workflow. If the project's supported behavior cannot be checked
+with available tools, continue independent source work and report the evidence
+limit. Preserve auth and authorization behavior, tenant isolation, credentials,
+and approval boundaries.
 
 ## What is invariant, and what is yours
 
 One thing here is fixed. The rest is yours. Read this before treating any
 command, platform, or env var below as a requirement.
 
-- **Invariant: the verification loop.** Maximizing the shell is worthless
-  unless you can prove it. The proof is an automated check: under a lock that
-  gates dynamic data, the static shell still commits. RED shows the gap, GREEN
-  shows it closed, the test ships as the regression guard. It must run on a
-  production-like build and must not be able to pass vacuously. Stand the loop
-  up once; every later optimization is then verifiable by construction. The
-  loop is the deliverable, not any one route.
-- **The mechanism: `@next/playwright` `instant()`.** This skill uses
+- **Goal: verify the changed experience.** Confirm that the intended shared
+  content appears promptly and deferred content still resolves correctly. Use
+  the project's relevant tests or a focused runtime observation when available.
+  `instant()` under a dynamic-data lock is one strong automated signal; do not
+  add a rig solely to obtain it or treat it as a prerequisite for source edits.
+- **One optional mechanism: `@next/playwright` `instant()`.** This skill uses
   [`instant()`](https://nextjs.org/docs/app/guides/instant-navigation#prevent-regressions-with-e2e-tests)
   as a ruler, not a stopwatch (phase A). It comes from
   `@next/playwright` (installed alongside `@playwright/test`, on the same
-  release line as `next`), so it isn't tied to any host. Keep it. Timing a
-  navigation by hand is too flaky to trust, and is the failure mode this skill
-  exists to prevent.
-- **Yours: the rig.** How you build, deploy, authenticate, configure
+  release line as `next`), so it isn't tied to any host. Reuse it when
+  available. A focused runtime observation is still useful when the test
+  helper or rig is unavailable.
+- **Optional rig.** How you build, deploy, authenticate, configure
   Playwright, and loop belongs to your stack, not to this skill. A local
   `next build && next start`, a CI/staging container, and a per-push preview
-  deploy are equally valid rigs; the verdict comes from the build, never the
-  platform. Phase 0 maps the invariant onto your repo. Read every platform
+  deploy are equally valid rigs; report which environment was observed. Read every platform
   name, env-var spelling, and command below as an example to translate, not a
   requirement.
 
@@ -68,30 +78,25 @@ navigation is driven ("Driving the navigation in tests" below). The two shells
 can differ; guard the one you ship, both when both matter
 (`reference/real-app-patterns.md`).
 
-## Goal
+## Intended behavior
 
-Maximizing the static shell is the optimization objective: the most meaningful
-prerendered content commits immediately, and only genuinely per-request data
-streams in afterward. The shipped test deterministically encodes **present ∧
-instant**; **non-blank** is the additional bar the workflow enforces by
-judgment (D1/D2/E), because an `instant()` pass alone is satisfied by a blank
-`fallback={null}` shell (the empty-shell failure mode,
-`reference/real-app-patterns.md`).
+The goal is for meaningful shared content to commit promptly while genuinely
+per-request data streams afterward. A passing `instant()` assertion alone can
+accept a blank shell, so inspect the actual user-visible result when the
+available runtime allows it.
 
-`instant()` is a ruler, not a stopwatch: assert that the shell appears under
-the lock; do not time it. A trustworthy verdict requires a production build
-(phase A).
+When an existing `instant()` rig is used, it checks shell availability rather
+than elapsed time. Production behavior differs from `next dev`; distinguish
+which environment was observed and avoid claiming production prefetch behavior
+from development-only evidence.
 
-The GREEN under the lock is the deterministic verdict; each gate keeps it
-trustworthy.
+Use the checks that fit the changed behavior and report their scope.
 
 ## Reporting to the user
 
-This loop is meant to run unattended, so it doesn't stop to ask between steps.
-Work the navigation the user named, finish it, and stop. What matters is how you
-word and present the results, not how often you interrupt. The mechanics below —
-the rig, RED, GREEN, the gates — are your scaffolding; the user never needs to
-hear those words.
+Work on the navigation the user named. Use the available evidence without
+installing optional infrastructure or pausing for each internal phase. Report
+the observed behavior and any limits plainly.
 
 - **Speak their language.** Describe the gap and the result in terms of what the
   user sees: "navigating to the dashboard waited on the charts query before
@@ -115,25 +120,18 @@ hear those words.
 ## The workflow
 
 ```
-- [ ] P  PREREQS      Next.js 16.3+ with cacheComponents: true; upgrade first → below
-- [ ] 0  SETUP        once per repo: discover + write instant-nav.rig.md     → rig-template.md
-- [ ] A  RIG          production build with the testing API exposed          → below
-- [ ] B  BASELINE     unlocked: the marker renders for the test user         → test-template.md
-- [ ] C  RED          locked instant(): the shell does not commit            → test-template.md
-- [ ] C-gate          VERIFY-RED: stop until the RED is trustworthy          → reference/red-test-robustness.md
-- [ ] D  FIX          push each Suspense boundary down to the data it guards → reference/patterns.md
-- [ ]      D1 reuse the route's existing loading UI; do not hand-build skeletons
-- [ ]      D2 the shell matches the real render at every breakpoint  → reference/real-app-patterns.md
-- [ ] E  PARITY       the refactor changed only whether the route is instant
-- [ ] F  DIFFERENTIAL revert only the fix → RED; re-apply → GREEN            → reference/red-test-robustness.md
-- [ ] G  REVIEW       PR checklist (below)
+- [ ] Inspect the route and relevant existing tests or runtime evidence.
+- [ ] Make the focused change; preserve data, loading, error, and auth behavior.
+- [ ] Verify the affected behavior with an available focused check.
+- [ ] Report the check used and any behavior that remains unverified.
 ```
 
-Phases B and C build the test; only the locked test from C ships.
+The phase details below explain optional test techniques for projects that
+already have a suitable production-like rig.
 
 ---
 
-## P. PREREQUISITES: current Next.js with Cache Components
+## Optional feature capabilities: Next.js with Cache Components
 
 The workflow depends on framework capabilities that ship with current Next.js:
 
@@ -145,40 +143,40 @@ The workflow depends on framework capabilities that ship with current Next.js:
   testing API is in the `next` runtime, gated by the
   `experimental.exposeTestingApiInProductionBuild` config flag (phase A).
 
-If the project does not meet these, upgrade first (`npx @next/codemod upgrade`
-automates most of it), then enable Cache Components in `next.config.ts`:
+If an explicitly requested optimization needs capabilities the project does
+not have, explain the feature-specific limitation. Ask before a dependency
+upgrade; do not upgrade to run this optional skill, and continue unrelated
+source work. For an authorized migration, version-matched upgrade guidance is
+available via the link above.
 
 ```ts
 export default { cacheComponents: true };
 ```
 
-Enabling the flag surfaces the blocking routes to resolve first; the
+When the user requests enabling the flag, it surfaces the blocking routes to
+resolve as part of that migration. The
 [`next-cache-components-adoption`](https://github.com/vercel/next.js/tree/canary/skills/next-cache-components-adoption)
-skill drives that adoption. Reach for this optimizer once the app builds under
-Cache Components.
+skill describes that migration. For a route optimization, use the feature only
+if already supported; a missing capability is not a gate for other edits.
 
-This gate is deliberate: the skill targets current Next.js, and none of the
-verdicts below are meaningful on older versions.
+The test recipes below are specific to the framework versions they describe.
 
-## 0. SETUP: discover this project's rig, once per repo
+## Optional setup: reuse an existing test rig
 
-The principles in this skill are fixed; the infrastructure they run on is
-yours. On first use in a repository, discover how the project builds, deploys,
-authenticates, and tests (inspect the repository first, and ask the user only
-what it cannot answer), then write the answers to a committed
-`instant-nav.rig.md`. Every later run reads that file instead of
-rediscovering. The six questions (BUILD / EXPOSE / RUN / TEST USER / DRIFT /
-LOOP), the file template, and filled examples (local-only, generic CI +
-container, preview deploy) are in **`rig-template.md`**.
+If the repository already has an `instant()` rig or rig notes, reuse them. Do
+not add a committed rig file as a prerequisite. The six example questions
+(BUILD / EXPOSE / RUN / TEST USER / DRIFT / LOOP), the template, and filled
+examples (local-only, generic CI + container, preview deploy) are in
+**`rig-template.md`**.
 
-If the repo has no Playwright e2e harness yet, standing up a minimal one
-(`@next/playwright`, a config with `baseURL`, one authenticated path) is part
-of this step; the loop does not assume a pre-existing suite.
+If there is no suitable Playwright harness, use existing project checks or a
+focused manual observation when available. Do not create new test
+infrastructure just to continue the route edit.
 
-## A. RIG: a production build with the testing API exposed
+## A. Optional `instant()` test setup
 
-Stand up the rig described by `instant-nav.rig.md`. Two invariants hold on
-every platform:
+If an existing `instant()` rig is available, use it for this particular signal.
+Its results are meaningful only when these details hold:
 
 1. **Never measure on `next dev`.** It does not prefetch, and its lock is
    unreliable for blocking routes, so a dev `instant()` result is not a valid
@@ -187,7 +185,7 @@ every platform:
    silently no-ops and the test passes vacuously (see
    `reference/red-test-robustness.md`). The lock-engagement proof is the phase-C
    RED itself: the unfixed target route is the known-blocking route, and its
-   RED under the lock shows the lock engages on this build (C-gate); the
+   RED under the lock shows the lock engages on this build; the
    self-validating variant in `test-template.md` is the in-band guarantee. Wire
    `experimental.exposeTestingApiInProductionBuild` to a condition that is
    true for every build you measure and never true in production:
@@ -203,48 +201,46 @@ every platform:
    }
    ```
 
-The rig is any production-like build that exposes the testing API: a local
+An existing rig may be any production-like build that exposes the testing API: a local
 `next build && next start`, a CI/staging container, and a preview deploy are
 all equally valid; the verdict comes from the build, not the platform. See
 `rig-template.md` for filled examples.
 
-For any deployed or remote build, poll the rig's LIVENESS probe to confirm the
-artifact contains `HEAD` before trusting a verdict (a stale deploy reads as a
-false RED or GREEN); a local `next build && next start` needs none. The probe
-mechanism is in `rig-template.md` (question 6).
+For a deployed or remote build, use its available liveness evidence to establish
+which artifact was observed. A local `next build && next start` needs no remote
+probe. If the artifact identity is uncertain, report that limit rather than
+using the result as proof.
 
-## B. BASELINE (unlocked): development scaffold, do not ship
+## B. Optional unlocked comparison
 
-Drive the real navigation with no `instant()` lock and assert that the
+If using an existing `instant()` rig, drive the real navigation with no lock and assert that the
 destination's `SHELL_MARKER` renders **as the test user**: the account the
 e2e suite authenticates as (in CI, the CI account; locally, your e2e login
 fixture), with its flags, plan, role, and data. This establishes that the
 marker is real and reachable: not flag-gated, not redirected away, not a
 guessed selector. The suite runs as the test account, not the author's session;
-that environment drift (the rig DRIFT list) is a common source of
-untrustworthy REDs. Scaffold and run command: **`test-template.md`**.
-**Delete this baseline before the PR.**
+that environment drift can make test results misleading. See
+**`test-template.md`** for example scaffolding; do not add it just to continue
+source work.
 
-## C. RED (locked) + the VERIFY-RED gate
+## C. Optional locked test
 
-Wrap the same navigation in `instant()`; assert the shell commits under the
-lock. A RED here is the gap. **This is the test that ships**
-(`test-template.md`).
+When the existing rig supports it, wrap the same navigation in `instant()` to
+check whether the shell commits under the lock. A failing result can help
+locate the gap; it is one verification option, not a prerequisite.
 
 Prefer the self-validating variant when the route has deferred content. If the
 route cannot build while blocked, or a cookie/session read stays GREEN, use the
 RED recipes in `reference/red-test-robustness.md`.
 
-> **C-gate: do not start optimizing until the RED is verified trustworthy.** A
-> RED that is red for the wrong reason sends you optimizing a route that was
-> never broken.
+Treat a RED as a diagnostic: confirm it concerns the changed route and target
+behavior before using it to guide a fix. If the rig is unavailable, continue
+with other relevant evidence.
 
-The question that settles it: **does `SHELL_MARKER` render without the lock,
-as the test user?** Answer it by re-running phase B as the test user, not by
-adding assertions to the shipped test. The two-branch resolution (No → marker
-or environment bug; Yes → genuine gap, proceed to D), the full taxonomy of
-untrustworthy REDs, the checklist, and worked cases are in
-**`reference/red-test-robustness.md`**. Read it now.
+When a test result is ambiguous, compare the unlocked behavior for the same
+test user and inspect the failure causes in
+**`reference/red-test-robustness.md`**. Use this to improve confidence, not as a
+stop condition for independent work.
 
 ---
 
@@ -352,20 +348,18 @@ Exception: if the deferred component renders `null` for some users (for
 example, a flag-gated control), `fallback={null}` is correct, since a skeleton
 would flash and then collapse.
 
-### D2: the shell must match the real render at every breakpoint
+### D2: the shell should match the real render while resizing
 
 A skeleton frozen to one breakpoint misaligns on the others. Fix it the same
 way: one responsive component renders both the live UI and the shell (D1
-skeleton in its data slots), so the breakpoint switch happens once. Verify by
-re-asserting the shell marker at two widths
-(`await page.setViewportSize({ width: 1280, height: 800 })`, then
-`{ width: 390, height: 844 }`), or by adding a mobile Playwright project, so
-this gate is as machine-checkable as the others. Detail:
+skeleton in its data slots), so the breakpoint switch happens once. Where
+useful, inspect it at two desktop window sizes (for example, 1280 and 900 pixels
+wide) to confirm it remains usable while resizing. Do not add phone/tablet
+acceptance or a separate viewport project. Detail:
 `reference/real-app-patterns.md`.
 
-> **D-gate: phase D is complete when the locked test from phase C passes GREEN
-> under the lock on the production-build rig**, not when the code compiles. That
-> GREEN is the deterministic stop for the fix loop; proceed to E.
+If an existing locked test covers this behavior, use its result as one signal.
+Otherwise, use an available focused runtime check and report its scope.
 
 **When URL data can't be pushed down** (for example, the whole page depends on
 `params`, `searchParams`, or the full URL), there may be no meaningful static
@@ -378,10 +372,10 @@ manual prefetch caveat, and `instant()` test gotchas.
 
 ## E. PARITY: the refactor changed only whether the route is instant
 
-The push-down is a mechanical transform, not a redesign. Afterward the route
-must render the same tree, data, ordering, empty and error states, redirects,
-and interactions as before; the only observable difference is that the shell
-now commits instantly. Verify:
+The push-down is a focused transform, not a redesign. Preserve the user's
+expected content, data, ordering, empty and error states, redirects, and
+interactions; structure may change as needed while keeping the experience and
+authorization guarantees intact. Use these as behavior checks where relevant:
 
 - **Same render output.** The moved `await`s compute and return the same
   values; after the stream, the route shows the same content as the base
@@ -399,28 +393,26 @@ now commits instantly. Verify:
 
 If anything other than whether the route is instant changed, reduce the refactor.
 
-## F. DIFFERENTIAL
+## F. Optional differential check
 
-Revert only the fix → RED; re-apply → GREEN; link both runs
-(`reference/red-test-robustness.md`). On a deployed rig, confirm each run is live
-(LIVENESS, phase A) before trusting its color.
+When an existing rig makes this inexpensive, compare behavior before and after
+the focused fix. A fresh revert-and-reapply test or deployed rig is not required
+to continue or report the change. For remote results, identify the observed
+artifact when that evidence is available.
 
 ## G. REVIEW (PR checklist)
 
-A green final state means nothing if the RED was never trustworthy. The
-test-trustworthiness items are the robustness checklist
-(`reference/red-test-robustness.md`); confirm them, then require these
-PR-specific items:
+Use these questions to review a requested optimization when they apply; they
+are not source-shape or CI gates:
 
-- [ ] **Differential shown**: RED without the fix, GREEN with it, runs linked.
-- [ ] **Parity confirmed (E)**: same content, redirects, and state.
-- [ ] **Existing loading UI reused (D1)**: no new page-mirroring skeleton.
-- [ ] **Shell matches the real render at desktop and mobile widths (D2)**.
-- [ ] **Baseline removed**: only the locked test from C remains.
+- [ ] **Behavior preserved**: same content, redirects, and state.
+- [ ] **Loading UI considered**: reuse existing loading UI where suitable.
+- [ ] **Resizing considered**: the desktop layout remains usable while resized.
+- [ ] **Evidence described**: checks run and any limitations are stated.
 
-**Stop condition for the whole workflow:** the locked test from C is GREEN on
-the rig, the differential (F) holds, and every item above is checked. Until all
-three hold, you are not done.
+Finish with the repository's normal focused validation and report any requested
+behavior that could not be confirmed. Do not hold independent work for optional
+test scaffolding or differential runs.
 
 ## Driving the navigation in tests
 
@@ -438,9 +430,9 @@ three hold, you are not done.
 - `rig-template.md`: phase 0, the six-question rig discovery, the
   `instant-nav.rig.md` template, and filled examples (local-only, generic CI,
   preview deploy).
-- `test-template.md`: the shipped `instant()` specs for both navigation
-  types (phase C), and the delete-before-PR baseline scaffold (phase B).
-- `reference/red-test-robustness.md`: the C-gate and phase F. The taxonomy of
+- `test-template.md`: example `instant()` specs for both navigation types and
+  an optional baseline scaffold.
+- `reference/red-test-robustness.md`: optional test diagnostics. The taxonomy of
   untrustworthy REDs, the checklist, the differential recipe, the vacuous-pass
   failure mode, and worked cases.
 - `reference/real-app-patterns.md`: parallel routes, deferring an auth gate,

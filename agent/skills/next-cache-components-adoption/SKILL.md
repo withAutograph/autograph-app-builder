@@ -11,6 +11,18 @@ description: >
 
 # next-cache-components-adoption
 
+## project policy and scope
+
+Use this skill only when the user asks to adopt or debug Cache Components.
+The repository's local-development and focused-validation policy takes
+precedence for unrelated edits: this migration's route inventory, optional
+tools, framework versions, build artifacts, cache state, receipts, and exact
+source shapes are not general work or CI gates. Reuse relevant evidence and
+run focused checks for changed behavior; do not require a new rig, tool
+installation, or per-route build before continuing source work. Report any
+unverified migration behavior honestly. Preserve authentication, tenant
+isolation, credential handling, and approval boundaries.
+
 Enable Cache Components on an app and walk it to a passing build. This skill sequences the work; per-error recipes live in the dev overlay fix cards and the build's terminal output. The [migrating to Cache Components guide](https://nextjs.org/docs/app/guides/migrating-to-cache-components) is the canonical reference for the concepts and per-API recipes this skill applies — consult it whenever the skill steps reference a pattern (`"use cache"`, `cacheLife`, `<Suspense>` placement, etc.) and you want the full explanation.
 
 ## requires
@@ -19,11 +31,15 @@ Enable Cache Components on an app and walk it to a passing build. This skill seq
 
 - **A resolved app directory.** Locate `next.config.{js,ts,mjs,cjs}` first: that's the project root, and an agent invoked from a subdirectory would otherwise test for `app/` against the wrong `cwd` and find nothing. Look for `app/` and `src/app/` under it, and treat every command and glob in this skill as relative to whichever one exists. If both exist, Next.js builds `app/` and never looks at `src/app/`, so its routes are shadowed and unbuilt — tell the user that and ask which tree to migrate instead of picking one.
 
-- **A runnable app.** The whole loop verifies against `next dev` and a browser, so the app has to boot. If it reads a database or required env at import (e.g. an `env.ts` that throws on a missing `DATABASE_URL`), confirm it actually starts — with the real environment, or local data you stand up — before step 1. Adoption can't be verified against an app that won't run.
+- **A runnable app helps with runtime observation.** If it reads a database or required env at import, use an available environment for the behavior being checked. If the app cannot start, continue independent source work and report that runtime evidence is unavailable.
 
-- **Next.js 16.3 or later.** That release is where the pieces this skill relies on land: top-level `cacheComponents`, `export const instant`, the dev-overlay instant-navigation validation warnings, and the `cache-components-instant-false` codemod. If `next --version` reports below 16.3, upgrade first:
-  - `npx @next/codemod@latest upgrade latest` to apply the version-to-version codemods.
-  - Read the relevant [version upgrade guide](https://nextjs.org/docs/app/guides/upgrading) (e.g. [Version 16](https://nextjs.org/docs/app/guides/upgrading/version-16)) for what the codemod doesn't cover.
+- **Feature support depends on the installed Next.js version.** The commands
+  described here assume 16.3 or later, which includes top-level
+  `cacheComponents`, `export const instant`, the dev-overlay validation
+  warnings, and the codemod. Check the installed version and version-matched
+  docs when adopting this feature. If a requested migration needs a capability
+  the project lacks, report that specific limitation; do not upgrade or stop
+  unrelated work to satisfy this workflow.
 
 - **No incompatible config keys.** `cacheComponents: true` errors on any file that still exports `dynamic`, `revalidate`, or `fetchCache`. **Translate, don't delete.** Each export encodes behavior the route needs to keep doing; migrate each one to its Cache Components equivalent via the [migration guide's per-key sections](https://nextjs.org/docs/app/guides/migrating-to-cache-components#enable-cache-components). The exception is `dynamic = 'force-dynamic'`: under Cache Components every route is already dynamic by default, so the migration guide removes it outright rather than translating it — don't overthink a batch of identical `force-dynamic` deletions. `revalidate` and `fetchCache` still need real translation. If a value can't be cleanly translated yet, leave a `// TODO: Cache Components adoption — restore revalidate = 3600` comment so the loop picks it up. The `cache-components-instant-false` codemod does not touch these.
 
@@ -35,18 +51,23 @@ Enable Cache Components on an app and walk it to a passing build. This skill seq
 
 - **Offline docs.** Guide links have offline copies under `node_modules/next/dist/docs/` (bundled since Next.js 16.2), with the directory layout numbered for ordering (e.g. `node_modules/next/dist/docs/01-app/02-guides/migrating-to-cache-components.md`). If you can't predict the numbered prefix, `find node_modules/next/dist/docs -name '<slug>.md'` resolves it. The `/docs/messages/*` error pages are not bundled.
 
-- **Older versions without bundled docs.** Suggest `npx @next/codemod@latest agents-md` to the user before starting: it downloads a version-matched copy to `.next-docs/` and writes an index into `AGENTS.md` / `CLAUDE.md`. It touches files in their repo, so ask first and run it only if they want it.
+- **Older versions without bundled docs.** Use the available version-matched online documentation. The `agents-md` codemod is optional; do not download it or edit `AGENTS.md` / `CLAUDE.md` solely to use this skill.
 
 ## the shape of the work
 
 There's one loop: walk the route tree top-down, one feature at a time, adopting each route against `next dev` + a browser. The build is a final check for each feature, not the working surface.
 
-The choice in step 1 is whether to opt every route out of validation first or fix routes as you go. Either way the loop is the same:
+The two organizational options below describe a possible migration sequence. They are not prerequisites for beginning focused source work:
 
-- **With a quiet pre-step (Incremental).** Run the codemod to opt every page and layout out of validation. Once you've also fixed what the codemod can't (sync-IO calls, leftover `revalidate`/`dynamic`/`fetchCache` exports), the build passes; you ship that as its own PR and then start the loop — removing one opt-out at a time and adopting that route. This splits the work into small, reviewable PRs.
-- **Without (Direct).** Enable `cacheComponents` and start the loop on whatever the build flags first. Same loop, but every fix sits on one branch until adoption is complete.
+- **With a quiet pre-step (Incremental).** A codemod can opt routes out of validation before adopting them. Treat this as an organizational option; a standalone build or PR is not a prerequisite to continue.
+- **Without (Direct).** Enable `cacheComponents` and use relevant build or dev diagnostics to identify blocking routes. Keep edits focused and use one final local acceptance pass when ready.
 
-In both, the per-route success bar is the same: **dev loop reports no errors AND `next build` passes**. Check in with the user after every feature, and suggest a commit but never make one without their confirmation. Expect to spend most of the time in the loop, not in the pre-step.
+For the requested migration, use the live route behavior and the most focused
+available build or runtime checks to confirm the affected experience. Reuse
+existing evidence; do not run a separate build after every route. Once the
+migration is ready, perform the repository's single local acceptance pass and
+report any remaining uncertainty. The incremental and direct paths are
+organizational options, not prerequisites for unrelated edits.
 
 ## background
 
@@ -66,22 +87,29 @@ Whenever a fix introduces `<Suspense>`, follow the Streaming guide's [granular s
 
 ### finding blocking routes
 
-Prefer `next dev` over `next build` while you work.
+When available, prefer `next dev` for route-specific diagnostics while working.
+The build and browser recipes below help explain this feature's behavior; they
+are not mandatory per-route gates. Use existing project checks and focus on the
+route or shared code changed.
 
-- **`next dev`** — the working surface. Visit a route; its blocking errors surface in the dev overlay with full stack traces and fix cards linking the per-error docs. Work one route at a time — errors don't accumulate in one place. The route itself still returns HTTP 200, so read the overlay (or `.next-dev.log`), not status codes. A cleared overlay is one half of calling a route clean — the other half is browser verification (see [step 2](#step-2-the-inner-loop-remove-opt-outs-one-feature-at-a-time)) and a passing build for that route.
-- **`next build`** — detection only. The build is `next dev`'s authoritative check, not its replacement. Use it as the last gate on each feature in the loop (a passing build is part of the per-route success bar) and as the final verification across the whole app. In Incremental, the build also confirms the pre-step (codemod opted every route out, no shared layout still has a sync-IO blocker) before you ship that PR. Don't reach for the build instead of the dev loop while you're working a route — a passing compile doesn't tell you what ended up in the static shell and what streamed. By default the build stops at the first blocking route, so it's also poor for sizing the work. Two flags help when iterating: `--debug-build-paths` builds only the routes you name (comma-separated glob patterns of file paths relative to the project root, e.g. `--debug-build-paths="app/admin/**/page.tsx"` — not URL paths; `--debug-build-paths="app/(marketing)/about/page.tsx"` — not `/about`; `--debug-build-paths="app/admin"` matches nothing and silently builds zero routes), and `--debug-prerender` disables the early exit so the build continues past the first prerender failure, reports every blocking route, and prints a fuller stack trace that names the originating file and line.
+- **`next dev`** — an available diagnostic surface. Visit a route to inspect blocking errors in the dev overlay and use linked docs to understand them. The route itself may still return HTTP 200, so inspect the overlay rather than status codes. Use this where it helps diagnose changed behavior; it is not a per-route acceptance gate.
+- **`next build`** — an optional diagnostic and final acceptance check. Use it when it helps diagnose a concrete migration issue or for the repository's final local acceptance pass; do not run it after every route or treat a route-by-route build as the edit loop. `--debug-build-paths` and `--debug-prerender` can narrow or expand diagnostics when a concrete build failure needs investigation.
 
 Every blocking error has a docs page — open it. Both the dev overlay and the build terminal print a `https://nextjs.org/docs/messages/<slug>` link with each error. That page is the canonical recipe for the fix; the inline message is a summary. Fetch the link for every distinct error you encounter, even if you think you know the pattern — the recipes evolve, and the same error class can have different correct fixes depending on what the route reads. Don't improvise from the inline message alone. (`/docs/messages/*` pages aren't bundled offline; if you have no network, fall back to the per-API guides under `node_modules/next/dist/docs/` and note the limitation when you report back.)
 
 ### verifying each fix at runtime
 
-A passing build or a cleared overlay isn't proof the route actually behaves — Cache Components is a runtime concern (a static shell with streamed data). Verify after every fix, not only at the end.
+Build output or a cleared overlay alone does not prove streamed UI behavior.
+For an explicitly requested Cache Components change, use a focused runtime
+observation when available; otherwise report the available evidence and what
+remains unverified. Do not hold unrelated edits for a browser or optional
+diagnostic tool.
 
 In preference order:
 
-1. **[`next-dev-loop`](https://github.com/vercel/next.js/tree/canary/skills/next-dev-loop) — strongly preferred.** Cross-checks `/_next/mcp` against the live browser via `agent-browser` and surfaces both compile and runtime issues in one pass. The diagnostics (React tree, suspense boundaries, console + network) are richer than poking at `next dev` by hand.
+1. **[`next-dev-loop`](https://github.com/vercel/next.js/tree/canary/skills/next-dev-loop) — optional.** When already available, it cross-checks `/_next/mcp` against a live browser and can surface compile and runtime issues together.
 
-   Install it before starting the loop. Don't wait until you hit something `next dev` alone can't explain. It ships alongside this skill, so check whether it is already available first, and install it only if it is not:
+   Check whether it is already available. Do not install it just to continue this skill; proceed with the integrated Browser, an existing Playwright setup, or focused app checks if not:
 
    ```bash
    npx skills add https://github.com/vercel/next.js/tree/canary/skills/next-dev-loop
@@ -89,23 +117,23 @@ In preference order:
 
    The skill states its required `agent-browser` version and walks you through it.
 
-   **Requires Turbopack.** If `package.json`'s `dev` script passes `--webpack`, flag it to the user and ask whether there's a reason to stay on webpack. If not, switch to Turbopack (the Next.js 16.3+ default). If they want to keep webpack, skip this install and use the [build-only loop](#the-loop-build-only-fallback) instead.
+   This diagnostic uses Turbopack. If the app uses webpack, skip it and use the integrated Browser, project Playwright setup, or other focused checks without changing the bundler solely for this diagnostic.
 
-   You don't need permission to install `next-dev-loop` itself. It's a tool, like installing a dev dependency. If a user is present, briefly tell them you're installing it for verification. In a non-interactive run (CI, dashboard, sandbox), install it without asking — "can't prompt the user" is not a reason to skip. The only legitimate skip is a real technical blocker: no network, no npm, read-only filesystem, a stated no-new-deps policy, or a webpack-only dev script. If you skip, name the specific blocker in your final report.
+   This optional verifier may require Turbopack and `agent-browser`; their absence is not a blocker. Do not install dependencies or change bundler settings solely to run it.
 
-2. **A browser you can drive yourself.** Playwright, `agent-browser` directly, any browser-automation tool. Use only when `next-dev-loop` is genuinely blocked. You'll miss the framework-side checks (`/_next/mcp`), so DOM assertions alone don't catch every regression — be more cautious about what you call "verified."
+2. **An available browser.** Use the integrated Browser, project Playwright setup, or another available browser tool for a focused observation. Framework-side checks may be unavailable; label the evidence accordingly.
 
 3. **Build-only.** If you can't run a dev server at all, the build is your only signal. `○ (Static)` routes with no `<Suspense>` are fully verified by the build (nothing streamed to test). `◐ (Partial Prerender)` routes are only shell-verified — flag them when you report back.
 
-4. **No tooling at all.** Ask the user to run the dev server (or build) and report what they see, or hand off the milestone you've reached.
+4. **No tooling at all.** Continue source work using available evidence and report that runtime behavior remains unverified. Ask the user to run the app only when that observation is needed to resolve the requested behavior.
 
 ## step 1: choose a strategy
 
-Ask the user, in terms of the PRs they want, not the size of the job. Never use the internal labels (Incremental, Direct) when talking to the user — those are your own scaffolding. Ask in terms of PRs and features, e.g.: _"Do you want me to first open a PR that turns on Cache Components and opts every route out of validation, then handle the actual route adoptions feature-by-feature in follow-up PRs? Or do everything on one branch?"_ Even on a tiny app, the incremental path still has value (review-sized PR, revertible, the `// TODO: Cache Components adoption` markers double as your work queue for next session). Don't pick on their behalf.
+Choose a focused migration sequence based on the requested work and existing source. Do not pause ordinary edits to select a PR strategy; group changes for review when they are ready.
 
-If there's no user to ask, default to **Incremental** and document the choice.
+When a choice matters to scope or user-visible behavior, ask; otherwise proceed with the focused path and report it.
 
-- **Incremental** — quiet pre-step + the loop. Run the codemod to opt every page and layout out of validation, get the build passing, stop and check in with the user (see [end of the pre-step](#end-of-the-pre-step-check-in)), then enter [step 2's loop](#step-2-the-inner-loop-remove-opt-outs-one-feature-at-a-time) and ship each feature as a follow-up PR.
+- **Incremental** — a quiet pre-step can opt routes out of validation before adoption. It is an organizational option; do not require a passing build or separate PR before continuing.
 - **Direct** — skip the pre-step. Enable `cacheComponents` and go straight to [step 2's loop](#step-2-the-inner-loop-remove-opt-outs-one-feature-at-a-time); the build's blocking routes are the work queue.
 
 ### incremental
@@ -114,7 +142,7 @@ Before invoking the codemod, fix the blocker that does not require build feedbac
 
 1. **Incompatible segment configs.** Grep for `^export const (revalidate|dynamic|fetchCache)` across the app directory and translate per the `requires` note above. The codemod does not touch them; leaving them in place fails the build after the codemod.
 
-The codemod refuses to run on a dirty working tree. Commit or stash unrelated work first, or pass `--force` to let its edits land alongside your WIP. Common false positive: if you recently upgraded Next.js, `package.json` and the lockfile will already be dirty — commit those first.
+The codemod may refuse a dirty working tree. Do not commit or stash unrelated work just to run it; use its supported force option or make the focused edit directly.
 
 ```bash
 npx @next/codemod@latest cache-components-instant-false ./app
@@ -136,7 +164,7 @@ The codemod opts every segment out, not only the root, on purpose. Resolution is
 
 Because the highest opt-out wins, remove them top-down (root layout first, then descend). Removing a leaf's opt-out does nothing while an ancestor still holds one.
 
-Next, run `next build` to surface blockers the codemod could not handle. The build is the proof, not the codemod run — a shared layout that calls `new Date()` / `Math.random()` directly still fails regardless of the opt-out (see [background](#background)). If the normal build reports a sync-IO error without locating the call, rerun that route with `next build --debug-prerender --debug-build-paths="app/path/to/page.tsx"`. For each sync-IO error it reports:
+If a focused build is useful for diagnosing a blocker the codemod could not handle, a shared layout that calls `new Date()` / `Math.random()` directly can still surface even when a route is opted out (see [background](#background)). If a build reports a sync-IO error without locating the call, rerun only as useful with `next build --debug-prerender --debug-build-paths="app/path/to/page.tsx"`. For each sync-IO error it reports:
 
 1. **Sync-IO at module/render time.** Use the route, originating file and line, and `/docs/messages/` link in the build output to locate the error. If needed, grep the whole repo for `new Date()`, `Date.now()`, `Math.random()`, and `crypto.randomUUID()` (not only `app/**/layout.{js,jsx,ts,tsx}` — the read might live in any component imported by a layout). Do not change unreported matches. Apply the appropriate option from the linked error page, then add this comment above a temporary boundary introduced only to unblock the build:
 
@@ -146,22 +174,17 @@ Next, run `next build` to surface blockers the codemod could not handle. The bui
 
    It shares the `TODO: Cache Components adoption` prefix with the comments the codemod writes, so the check-in grep finds both. Removing the boundary makes the error fire again with its fix cards — the same motion as removing an opt-out in the loop.
 
-After each fix, rerun the scoped build when available, then run `next build` again to find the next blocker. Repeat until the normal build passes.
+Use a focused check to diagnose a concrete blocker. Defer a broad build until the repository's final local acceptance pass; do not repeat it after each fix.
 
-After the build passes, confirm the root layout got an opt-out (`grep -n "export const instant" <app dir>/layout.*`). The root layout renders every route, including framework routes like `/_not-found`, so if it was missed, add `export const instant = false` to it by hand.
+When using the codemod, ensure its intended behavior covers the root layout and relevant routes. Treat a text grep or marker inventory as debugging context, not a required source-shape check.
 
 Synthetic routes like `/_not-found` have no user file — when they block, fix the root layout's opt-out, not the synthetic route. Client Components (`"use client"`) get no opt-out (it's a build error to export `instant` from them), but they are not a rare blocker. The high-frequency case is a client component in the root layout's nav or header calling `usePathname()`/`useSearchParams()`: it blocks _every_ dynamic route with `blocking-prerender-client-hook`, and static routes pass (the pathname is known at prerender), which masks it until you reach a dynamic segment. It's not an ancestor-data fix — follow the [error's docs page](https://nextjs.org/docs/messages/blocking-prerender-client-hook) for the `<Suspense>` recipe. Only when a client route blocks on _server_ data do you fix that data in its ancestor.
 
-### end of the pre-step: check in
+### optional migration checkpoint
 
-Incremental only. Stop here before starting step 2 — the pre-step is the shippable PR. Talk to the user in their language; don't say "Incremental" or other internal labels; talk about adoption, PRs, and what the app does now. Tell them:
-
-- What you did: turned on Cache Components, ran the codemod that opts every page and layout out of the new validation (or did it by hand), fixed any blockers the codemod can't (list them), confirmed the build passes.
-- What changed: every page and layout in the app directory now exports `instant = false` with a `// TODO: Cache Components adoption` comment, except client components and any that already had an `instant` export.
-- What to sanity-check: the diff is mostly mechanical (new exports + comments). The build passes. Routes still behave exactly as they did before — the opt-outs preserve current behavior; no rendering changes yet.
-- The question: "Want to open this as its own PR before we start adopting Cache Components route by route? Or keep going on this branch?" Wait for the answer.
-
-Moving to step 2 without checking in defeats the point of taking the incremental path.
+If a separately reviewable pre-step helps the requested work, summarize the
+scope and evidence. Do not stop source work or wait for a PR decision between
+migration steps unless the user asks for that boundary.
 
 ### direct
 
@@ -175,7 +198,7 @@ Within a feature, walk top-down (layouts before pages, root layout first). Remov
 
 A passing build mid-walk doesn't mean the layout is clean. Removing a layout's opt-out while its descendant pages still have theirs keeps the build passing — each page shadows the inherited validation. The layout's actual blocking reads only surface once nothing below it shadows them. Don't call a feature done at the layout boundary.
 
-Use the **with-a-browser** loop unless a browser is genuinely unreachable. The [`next-dev-loop`](#verifying-each-fix-at-runtime) skill is the source of truth for what counts as "browser available" and how to install it.
+Use an available browser observation when it helps verify changed user-visible behavior. The [`next-dev-loop`](#verifying-each-fix-at-runtime) describes optional diagnostics; its tools and version requirements are not prerequisites.
 
 ### the loop, with a browser (preferred)
 
@@ -189,15 +212,15 @@ Per route:
 
 ### the loop, build-only (fallback)
 
-Used when there's no way to drive a browser — CI, sandbox, the user has no `next dev` running and you can't start one. Weaker signal: confirms the build passes and the route prerenders, but not what ended up in the static shell vs streamed.
+Use build-only diagnostics only when they help with a concrete issue and no browser check is available. Build output cannot show which content the user sees in the shell.
 
 Per route:
 
 - Remove the opt-out (Incremental) or target the failing route (Direct).
-- Rebuild with `--debug-build-paths app/<route>/**` (only that route) or `--debug-prerender` (full build, but past the first failure). Route passing? Move on. Still blocking? Fix.
+- If a concrete build failure needs investigation, consider `--debug-build-paths app/<route>/**` or `--debug-prerender` to inspect it.
 - Fix — fetch the docs page linked from the error (`https://nextjs.org/docs/messages/<slug>`), apply the recipe from there.
 - Re-check siblings if the fix touched shared code.
-- Flag the route as build-only-verified when you hand the feature off. Each `◐` route still needs a browser pass before the feature is done.
+- When handing off, distinguish build evidence from browser-confirmed behavior; note what remains unverified.
 
 ### loop notes
 
@@ -206,28 +229,28 @@ Per route:
 - Don't narrate the refactor with comments. The only comment the codemod (or you) should leave is `// TODO: Cache Components adoption` on opt-outs, and the user's existing comments. Don't annotate every `<Suspense>` boundary or `"use cache"` call with what it does — the code says that. Drop a comment only when the _why_ isn't clear from the code (e.g. a deliberate Block with a reason).
 - For many routes with the same mechanical fix, verify one representative route first. Then batch disjoint route groups using the same recipe, and run the shared build and browser checks together.
 
-Keep a todo list of the feature's routes. When every route in the feature is clean, move to step 3.
+Keep track of the routes relevant to the requested feature. Use the inventory to focus checks; do not expand it into an unrelated source or layout gate.
 
 ## step 3: verify the feature
 
 Checklist before checking in with the user:
 
-- `next build` completes without blocking-route errors.
-- No bare TODOs in the feature: `grep -rn "TODO: Cache Components adoption"` finds both the codemod's opt-out comments and the sync-IO unblocks from the pre-step. Any `instant = false` left behind is a deliberate, documented Block — comment rewritten to a reason (see [references/per-page-decisions.md](./references/per-page-decisions.md) → "when to leave a Block in place"). Any `await io()` or `await connection()` left behind has been reviewed and kept on purpose, not left over from the pre-step.
-- Each route visited in the browser: confirm the static shell renders first and every `<Suspense>` fallback resolves to its real content. Capture both states if you can — the fallback (mid-stream) and the final paint — so you have a streaming-experience demo to show the user. Throttle the network in the browser if streaming is too fast to observe.
+- Use the repository's final local acceptance pass when ready. Report its result and any remaining behavior uncertainty.
+- Review opt-outs, TODOs, and blocking reads as migration context; do not impose exact marker or file-shape requirements.
+- Use an available browser to confirm changed shell and streaming behavior when possible. A screenshot or throttled demo is optional.
 - If runtime verification fails, reproduce the same route on the pre-adoption branch or with its opt-out restored. A failure that already exists is an environment or data problem, not an adoption regression.
 
-Then check in with the user. Same rule as the pre-step: speak their language. Don't say "feature-by-feature loop" or other internal labels; talk about the feature you adopted and what the user will see.
+When reporting, speak about the feature and what the user will see; distinguish confirmed behavior from source-level or build-only evidence.
 
 - What you did: which routes you touched, and the user-visible result per route (e.g. "the post page now streams the article body behind a skeleton while the layout stays static").
 - What changed: opt-outs removed, fallbacks added, caching boundaries introduced.
-- Show, don't tell. The `next-dev-loop` session runs the browser headed, so drive the route live for the user so they see the static shell → fallback → final content sequence in real time. If you can't drive a live browser, attach the before/after screenshots you captured instead.
+- If useful and available, show the browser behavior; a live demo or screenshots are optional.
 - Give them the click-through: a short table of the feature's routes — the URL to open and what to look for (what renders instantly, which fallbacks appear, what streams in) — so they can verify each one themselves.
-- The question: "Want to open this feature as a PR and move on to the next, or stop here?" Wait for the answer.
+- Continue with other requested work without a check-in between routes; pause only for an actual product or security decision.
 
 **Trivial features can skip the check-in.** If adopting a feature only meant removing its `// TODO: Cache Components adoption` opt-out (no `<Suspense>` added, no `'use cache'` introduced, no render order change), the user sees nothing different. Move on to the next feature without stopping; mention it in passing the next time you do check in.
 
-When the loop has run on every feature — every remaining `instant = false` sits under a reason comment, `grep -rln "TODO: Cache Components adoption" app` returns nothing — point the user at [further reading](#further-reading) if they want to push the experience further, or stop and ship.
+Finish the requested migration scope when the intended behavior is in place and the relevant available checks are complete. Report deferred routes, remaining opt-outs, and unverified behavior as context; do not use a TODO grep or source-marker inventory as a completion gate.
 
 ### route table glyphs
 

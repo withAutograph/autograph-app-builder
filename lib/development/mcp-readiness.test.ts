@@ -42,7 +42,7 @@ describe("development MCP readiness", () => {
     expect(methods).toEqual(["initialize", "notifications/initialized", "tools/list"]);
   });
 
-  it("retries an endpoint that is still starting, then proves exactly five tools", async () => {
+  it("retries an endpoint that is still starting, then returns discovery", async () => {
     let attempt = 0;
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetcher = vi.fn(async (_input, init) => {
@@ -77,7 +77,8 @@ describe("development MCP readiness", () => {
     ).resolves.toEqual([...TOOL_NAMES]);
   });
 
-  it("fails closed as soon as a live endpoint advertises another contract", async () => {
+  it("accepts reordered discovery with additional tools", async () => {
+    const names = [...TOOL_NAMES].toReversed().concat("development_inspect");
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetcher = vi.fn(async (_input, init) => {
       const request = JSON.parse(String(init?.body)) as {
@@ -93,7 +94,7 @@ describe("development MCP readiness", () => {
       return response({
         id: request.id,
         jsonrpc: "2.0",
-        result: { tools: [{ name: "eve_start" }] },
+        result: { tools: names.map((name) => ({ name })) },
       });
     }) as typeof fetch;
     await expect(
@@ -103,6 +104,6 @@ describe("development MCP readiness", () => {
         intervalMs: 1,
         timeoutMs: 100,
       }),
-    ).rejects.toThrow("must expose exactly autograph_start");
+    ).resolves.toEqual(names);
   });
 });

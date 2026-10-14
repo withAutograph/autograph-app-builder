@@ -34,9 +34,9 @@ export const targetIdentitySchema = z.object({
   appId,
   appSpecPath: repositoryPath,
   appSpecSourcePath: repositoryPath,
-  baseRoutes: z.tuple([z.string().startsWith("/"), z.string().startsWith("/")]),
+  baseRoutes: z.tuple([z.string().startsWith("/")]).rest(z.string().startsWith("/")),
   cueSourcePath: repositoryPath,
-  packageName: z.string().regex(/^@autograph\/[a-z][a-z0-9-]*$/u),
+  packageName: z.string().min(1),
   projectName: appId,
   schemaCuePath: repositoryPath,
   title: z.string().min(1),
@@ -64,7 +64,7 @@ const targetCreationProposalSchemaForTopology = (topologyOwner: string) =>
         appSpec: appSpecBindingSchema,
       }),
       source: z.strictObject({
-        packageName: z.string().regex(/^@autograph\/[a-z][a-z0-9-]*$/u),
+        packageName: z.string().min(1),
         runtime: z.literal("nextjs"),
         schema: z.discriminatedUnion("kind", [
           z.strictObject({ kind: z.literal("none") }),
@@ -76,7 +76,7 @@ const targetCreationProposalSchemaForTopology = (topologyOwner: string) =>
         assetRoute: z.string().startsWith("/").optional(),
         configPath: z.literal(topologyOwner),
         currentDigest: digest.optional(),
-        packageName: z.string().regex(/^@autograph\/[a-z][a-z0-9-]*$/u),
+        packageName: z.string().min(1),
         projectName: appId,
         proposedDigest: digest.optional(),
         routes: z.array(z.string().startsWith("/")),
@@ -473,16 +473,10 @@ export const executeTargetIdentityAndPlanning = async (input: {
     targetIdentitySchema,
     "Target identity command",
   );
-  const expectedIdentity = conventionalIdentity(input.appId);
-  for (const key of Object.keys(expectedIdentity) as (keyof TargetIdentity)[]) {
-    // The target repository owns its provider project name. It need only be a
-    // safe identifier; the Builder's fixture convention is not authoritative.
-    if (key === "projectName") {
-      continue;
-    }
-    if (JSON.stringify(identity[key]) !== JSON.stringify(expectedIdentity[key])) {
-      throw new Error("Target identity did not match the accepted app id.");
-    }
+  // The repository owns app metadata and layout; only the selected app id
+  // binds this command result to the requested application.
+  if (identity.appId !== input.appId) {
+    throw new Error("Target identity did not match the accepted app id.");
   }
   // Discover the actual prepared checkout. Authored changes may describe a
   // new app, and existing apps do not need a package manifest to be iterable.
