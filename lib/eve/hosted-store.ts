@@ -1,3 +1,10 @@
+import { digest } from "./hosted-operation-identifiers";
+import type { NativeDeliveryState, SendDelivery } from "./native-delivery-state";
+import {
+  nativeDeliveryStateSchema,
+  sendDeliverySchema,
+  provesNativeDelivery,
+} from "./native-delivery-state";
 import {
   internalSessionLimitResponseSchema,
   provesSessionLimitResponse,
@@ -96,6 +103,7 @@ export const hostedSessionCheckpointSchema = z
     // New checkpoints and every public projection omit this retired field.
     implementationPlan: z.unknown().optional(),
     inputRequests: z.array(publicInputRequestSchema).max(32).optional(),
+    nativeDeliveryState: nativeDeliveryStateSchema.optional(),
     privateInputState: privateInputStateSchema.optional(),
     prototype: publicPrototypeSchema.optional(),
     status: sessionStatusSchema,
@@ -476,6 +484,7 @@ const hostedOperationCommonShape = {
   principal: hostedPrincipalSchema,
   requestDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
   resumeSessionId: z.string().min(1).max(200).optional(),
+  sendDelivery: sendDeliverySchema.optional(),
   startAlias: hostedStartAliasSchema.optional(),
   updatedAtEpochMs: z.number().int().nonnegative(),
   version: z.literal(1),
@@ -574,6 +583,14 @@ export const hostedOperationRecordSchema = z
   .refine(
     (record) => record.internalSessionLimitResponse === undefined || record.kind === "respond",
     "Only RESPOND can bind framework continuation input.",
+  )
+  .refine(
+    (record) =>
+      record.sendDelivery === undefined ||
+      (record.kind === "send" &&
+        record.sessionId === record.sendDelivery.sessionId &&
+        record.requestDigest === record.sendDelivery.requestDigest),
+    "A delivery acknowledgement must bind its exact canonical SEND.",
   );
 
 export type HostedOperationRecord = z.infer<typeof hostedOperationRecordSchema>;
@@ -669,10 +686,70 @@ export const isProvedSessionLimitResponse = (
   );
 };
 
-const maySettleHostedOperation = (operation: HostedOperationRecord): boolean =>
-  operation.state === "reserved" ||
-  (operation.kind === "start" && operation.state === "submission_unknown") ||
-  isDeliveredInternalContinuation(operation);
+const SEND_BINDING_UNAVAILABLE = "Canonical SEND acknowledgement binding is unavailable.";
+export const bindSendDelivery = (
+  operation: HostedOperationRecord,
+  current: HostedSessionRecord | null,
+  marker: SendDelivery,
+): HostedOperationRecord => {
+  const delivery = sendDeliverySchema.parse(marker);
+  if (
+    operation.kind !== "send" ||
+    operation.internalBuildContinuation !== undefined ||
+    current === null
+  )
+    throw new Error(SEND_BINDING_UNAVAILABLE);
+  if (
+    operation.sessionId !== delivery.sessionId ||
+    operation.requestDigest !== delivery.requestDigest ||
+    current.sessionId !== delivery.sessionId
+  )
+    throw new Error(SEND_BINDING_UNAVAILABLE);
+  if (
+    tenantKeyFor(operation.principal) !== tenantKeyFor(current.principal) ||
+    (operation.state !== "reserved" && operation.state !== "submission_unknown")
+  )
+    throw new Error(SEND_BINDING_UNAVAILABLE);
+  const durable = toDurableHostedSessionRecord(current);
+  if (
+    durable.adapterSessionId !== delivery.adapterSessionId ||
+    durable.adapterGeneration !== delivery.adapterGeneration
+  )
+    throw new Error("Canonical SEND acknowledgement binding changed.");
+  if (operation.sendDelivery !== undefined && digest(operation.sendDelivery) !== digest(delivery))
+    throw new Error("Canonical SEND acknowledgement binding changed.");
+  return hostedOperationRecordSchema.parse({ ...operation, sendDelivery: delivery });
+};
+export const isProvedSendDelivery = (
+  operation: HostedOperationRecord,
+  current: HostedSessionRecord | null,
+  proof: NativeDeliveryState | undefined,
+): boolean => {
+  const marker = operation.sendDelivery;
+  if (operation.kind !== "send" || marker === undefined || current === null) return false;
+  if (
+    operation.sessionId !== current.sessionId ||
+    marker.requestDigest !== operation.requestDigest ||
+    marker.sessionId !== operation.sessionId
+  )
+    return false;
+  if (tenantKeyFor(operation.principal) !== tenantKeyFor(current.principal)) return false;
+  const durable = toDurableHostedSessionRecord(current);
+  return (
+    durable.adapterSessionId === marker.adapterSessionId &&
+    durable.adapterGeneration === marker.adapterGeneration &&
+    provesNativeDelivery(marker, proof)
+  );
+};
+
+const maySettleHostedOperation = (
+  operation: HostedOperationRecord,
+  provedResolution = false,
+): boolean => {
+  if (operation.state === "reserved" || isDeliveredInternalContinuation(operation)) return true;
+  if (operation.state !== "submission_unknown") return false;
+  return operation.kind === "start" || provedResolution;
+};
 
 export const withoutHostedOperationError = (operation: HostedOperationRecord) => {
   if (operation.state !== "submission_unknown") {
@@ -762,6 +839,12 @@ export interface HostedEveStore {
     principal: z.infer<typeof hostedPrincipalSchema>,
     candidate: HostedOperationRecord,
   ) => Promise<ReserveOperationResult>;
+  recordSendDelivery?: (input: {
+    principal: HostedPrincipal;
+    operationId: string;
+    delivery: SendDelivery;
+    nowEpochMs: number;
+  }) => Promise<HostedOperationRecord>;
   settleSucceeded: (input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
     operationId: string;
@@ -769,6 +852,7 @@ export interface HostedEveStore {
     result: z.infer<typeof eveSessionResultSchema>;
     session?: HostedSessionRecord;
     sessionLimitResolution?: z.infer<typeof privateInputStateSchema>;
+    sendDeliveryResolution?: NativeDeliveryState;
     nowEpochMs: number;
   }) => Promise<HostedOperationRecord>;
   settleSucceededPaged?: (input: {
@@ -980,6 +1064,21 @@ export class InMemoryHostedEveStore implements HostedEveStore {
   }
 
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+  async recordSendDelivery(
+    input: Parameters<NonNullable<HostedEveStore["recordSendDelivery"]>>[0],
+  ): Promise<HostedOperationRecord> {
+    const key = InMemoryHostedEveStore.operationKey(input.principal, input.operationId);
+    const operation = this.operations.get(key);
+    if (operation === undefined) throw new Error("Canonical SEND is unavailable.");
+    const current = await this.getSession(input.principal, input.delivery.sessionId);
+    const updated = hostedOperationRecordSchema.parse({
+      ...bindSendDelivery(operation, current, input.delivery),
+      updatedAtEpochMs: input.nowEpochMs,
+    });
+    this.operations.set(key, structuredClone(updated));
+    return structuredClone(updated);
+  }
+
   async settleSucceeded(
     input: Parameters<HostedEveStore["settleSucceeded"]>[0],
   ): Promise<HostedOperationRecord> {
@@ -989,14 +1088,11 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     if (operation === undefined || operation.requestDigest !== input.requestDigest) {
       throw new Error("Hosted operation cannot settle at this digest.");
     }
-    const provedResponse = await this.provedSessionLimitResponse(
-      operation,
-      input.sessionLimitResolution,
-    );
-    if (
-      !maySettleHostedOperation(operation) &&
-      !(operation.state === "submission_unknown" && provedResponse)
-    ) {
+    const [provedResponse, provedSend] = await Promise.all([
+      this.provedSessionLimitResponse(operation, input.sessionLimitResolution),
+      this.provedSendDelivery(operation, input.sendDeliveryResolution),
+    ]);
+    if (!maySettleHostedOperation(operation, provedResponse || provedSend)) {
       throw new Error("Hosted operation cannot settle at this digest.");
     }
     const result = eveSessionResultSchema.parse(input.result);
@@ -1312,6 +1408,21 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     });
     this.sessions.set(key, structuredClone(replaced));
     return structuredClone(replaced);
+  }
+
+  private async provedSendDelivery(
+    operation: HostedOperationRecord,
+    proof: NativeDeliveryState | undefined,
+  ): Promise<boolean> {
+    if (operation.kind !== "send" || operation.internalBuildContinuation !== undefined)
+      return false;
+    const current =
+      operation.sessionId === undefined
+        ? null
+        : await this.getSession(operation.principal, operation.sessionId);
+    const proved = isProvedSendDelivery(operation, current, proof);
+    if (!proved) throw new Error("Canonical SEND delivery is not proved.");
+    return proved;
   }
 
   private async provedSessionLimitResponse(

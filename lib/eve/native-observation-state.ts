@@ -1,3 +1,4 @@
+import { nativeDeliveryStateSchema } from "./native-delivery-state";
 import { privateInputStateSchema } from "./session-limit-input";
 import { z } from "zod";
 import {
@@ -30,6 +31,7 @@ export const nativeObservationStateSchema = z.strictObject({
   boundary: sessionStatusSchema,
   currentTurnId: z.string().optional(),
   invalidInput: z.boolean(),
+  nativeDeliveryState: nativeDeliveryStateSchema.optional(),
   nextNativeIndex: z.number().int().nonnegative(),
   pendingRequests: z.array(publicInputRequestSchema),
   privateInputState: privateInputStateSchema.optional(),

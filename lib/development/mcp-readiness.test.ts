@@ -78,7 +78,7 @@ describe("development MCP readiness", () => {
   });
 
   it("accepts reordered discovery with additional tools", async () => {
-    const names = [...TOOL_NAMES].toReversed().concat("development_inspect");
+    const names = [...TOOL_NAMES.toReversed(), "development_inspect"];
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetcher = vi.fn(async (_input, init) => {
       const request = JSON.parse(String(init?.body)) as {

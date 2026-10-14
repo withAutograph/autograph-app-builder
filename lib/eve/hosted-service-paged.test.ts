@@ -8,7 +8,10 @@ import { describe, expect, it, vi } from "vitest";
 import { stableId } from "./hosted-operation-identifiers";
 import { hostedEveOperationScopes, tenantKeyFor } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
-import { createHostedEveSessionService, HostedSessionNotFoundError } from "./hosted-service";
+import {
+  createHostedEveSessionService as createHostedService,
+  HostedSessionNotFoundError,
+} from "./hosted-service";
 import { HostedAdapterSessionUnavailableError } from "./hosted-errors";
 import { HostedSessionReadTimeoutError } from "./hosted-session-read-timeout-error";
 import type { HostedEveTransport } from "./hosted-service";
@@ -33,6 +36,20 @@ import {
   operatorPlanDigest,
 } from "../provisioning/hosted-operator-contract";
 
+const createHostedEveSessionService = (input: Parameters<typeof createHostedService>[0]) =>
+  // oxlint-disable-next-line eslint/require-await -- This owner fixture has the asynchronous authority contract.
+  createHostedService({ assertSendDeliveryOwner: async () => {}, ...input });
+const sendProof = {
+  turns: [
+    {
+      boundary: "turn.completed" as const,
+      boundaryDeliveryIds: ["fixture-delivery"],
+      deliveryIds: ["fixture-delivery"],
+      turnId: "turn_1",
+    },
+  ],
+  version: 1 as const,
+};
 const nativeState = (input: {
   adapterSessionId: string;
   nextNativeIndex: number;
@@ -204,6 +221,7 @@ const fixture = async (observe: NonNullable<HostedEveTransport["observe"]>, curr
     observeSessionPaged,
     readCheckpointPage,
     recordPrivateApprovalReceipts: base.recordPrivateApprovalReceipts.bind(base),
+    recordSendDelivery: base.recordSendDelivery.bind(base),
     replaceSessionAdapter: base.replaceSessionAdapter.bind(base),
     replaceSessionAdapterPaged,
     reserveOperation: base.reserveOperation.bind(base),
@@ -1016,20 +1034,35 @@ describe("paged hosted session observation", () => {
     expect(adapter.cancel).not.toHaveBeenCalled();
   });
 
-  it("settles an accepted send only after a fresh paged checkpoint is durable", async () => {
-    const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async ({ onEvent }) => {
-      await onEvent({ index: 0, text: "accepted", turnId: "turn_1", type: "assistant.message" });
-      return {
-        artifactProjectionRequiresLegacyReadback: false,
-        installedEventCount: 1,
-        pendingRequests: [],
-        publicEventCount: 1,
-        status: "waiting",
-      };
-    });
+  it("settles an accepted send only after its ACK turn boundary is durable", async () => {
+    let acknowledged = false;
+    const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(
+      async ({ onEvent, nativeObservationState }) => {
+        const index = nativeObservationState?.publicEventCount ?? 0;
+        await onEvent({ index, text: "accepted", turnId: "turn_1", type: "assistant.message" });
+        return {
+          artifactProjectionRequiresLegacyReadback: false,
+          installedEventCount: index + 1,
+          nativeObservationState: {
+            ...nativeState({
+              adapterSessionId: "adapter_1",
+              nextNativeIndex: index + 1,
+              publicEventCount: index + 1,
+            }),
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This fixture adds ACK evidence only after the actual acceptance callback.
+            ...(acknowledged ? { nativeDeliveryState: sendProof } : {}),
+          },
+          nextNativeIndex: index + 1,
+          pendingRequests: [],
+          publicEventCount: index + 1,
+          status: "waiting",
+        };
+      },
+    );
     const { adapter, service, sessionId } = await fixture(observe);
-    adapter.sendAccepted = vi.fn(async () => {
-      await Promise.resolve();
+    adapter.sendAccepted = vi.fn<NonNullable<HostedEveTransport["sendAccepted"]>>(async (input) => {
+      acknowledged = true;
+      await input.onAccepted?.("fixture-delivery");
     });
     const result = await service.send({
       clientRequestId: randomUUID(),
@@ -1365,12 +1398,14 @@ describe("send preflight dispatch classification", () => {
         });
       });
       const { adapter, base, service, sessionId } = await fixture(observe);
-      adapter.sendAccepted = vi.fn(async () => {
-        if (failure === "post") {
-          throw new Error("mutation response unknown");
-        }
-        await Promise.resolve();
-      });
+      adapter.sendAccepted = vi.fn<NonNullable<HostedEveTransport["sendAccepted"]>>(
+        async (input) => {
+          if (failure === "post") {
+            throw new Error("mutation response unknown");
+          }
+          await input.onAccepted?.("fixture-delivery");
+        },
+      );
       const request = { clientRequestId: randomUUID(), message: "continue", sessionId };
       await expect(service.send(request)).rejects.toMatchObject({
         name: "HostedSubmissionUnknownError",
@@ -1563,9 +1598,10 @@ it("does not continue approved work during a conflict-recovered mutation preflig
   });
   const continuation = vi.spyOn(approvedBuildController, "continueApprovedHostedBuild");
   // oxlint-disable-next-line eslint/require-await -- Preserve the native asynchronous send contract.
-  vi.mocked(f.adapter.send).mockImplementation(async () => {
+  vi.mocked(f.adapter.send).mockImplementation(async (input) => {
     expect(continuation).not.toHaveBeenCalled();
-    return emptySnapshot;
+    await input.onAccepted?.("fixture-delivery");
+    return { ...emptySnapshot, nativeDeliveryState: sendProof };
   });
   f.observeSessionPaged.mockRejectedValueOnce(new HostedCheckpointObservationConflictError());
   try {

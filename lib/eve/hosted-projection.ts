@@ -1,3 +1,4 @@
+import { nativeDeliveryStateSchema } from "./native-delivery-state";
 import { privateInputStateSchema } from "./session-limit-input";
 import { z } from "zod";
 
@@ -20,6 +21,7 @@ import type { InternalEveEvent } from "./public-events";
 const hostedSnapshotSchema = z
   .object({
     events: z.array(z.unknown()),
+    nativeDeliveryState: nativeDeliveryStateSchema.optional(),
     privateInputState: privateInputStateSchema.optional(),
     prototype: publicPrototypeSchema.optional(),
     status: sessionStatusSchema,

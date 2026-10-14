@@ -1,4 +1,10 @@
 import {
+  emptyNativeDeliveryState,
+  nativeDeliveryForEvents,
+  reduceNativeDelivery,
+  retainedNativeDeliveryState,
+} from "./native-delivery-state";
+import {
   emptyPrivateInputState,
   matchesReservedGuardResponse,
   provesSessionLimitResponse,
@@ -746,6 +752,9 @@ export async function observeSameOriginEveStream(
     ) {
       retainedRequests = await reconcileHistoricalAuthorizations({ ...input, readSignal }, state);
     }
+    const nativeDeliveryState = structuredClone(
+      state?.nativeDeliveryState ?? emptyNativeDeliveryState(),
+    );
     const privateInputState = structuredClone(state?.privateInputState ?? emptyPrivateInputState());
     const pending = new Map<string, PublicInputRequest>(
       retainedRequests.map((request) => [request.requestId, request]),
@@ -790,6 +799,7 @@ export async function observeSameOriginEveStream(
         artifactReadback.accept(event);
         prototype.observe(event);
         prototypeReference.accept(event);
+        reduceNativeDelivery(nativeDeliveryState, event);
         reducePrivateInput(privateInputState, event);
         input.onInstalledEvent?.(event);
         readTrace.enter("private_callback");
@@ -907,6 +917,9 @@ export async function observeSameOriginEveStream(
         artifactReadback: artifactReadback.checkpoint(),
         boundary,
         invalidInput,
+        ...(retainedNativeDeliveryState(nativeDeliveryState) === undefined
+          ? {}
+          : { nativeDeliveryState }),
         nextNativeIndex: installedEventCount,
         pendingRequests: [...pending.values()],
         privateInputState,
@@ -957,11 +970,13 @@ async function readInstalledSnapshot(
   const uiPreview = latestInstalledUiPreview(events);
   const workingPreview = latestInstalledWorkingPreview(events);
   const privateInputState = retainedPrivateInputState(privateInputForEvents(events));
+  const nativeDeliveryState = retainedNativeDeliveryState(nativeDeliveryForEvents(events));
   return {
     installed: events,
     snapshot: {
       events: projected,
       ...(privateInputState === undefined ? {} : { privateInputState }),
+      ...(nativeDeliveryState === undefined ? {} : { nativeDeliveryState }),
       status: deriveInstalledEveStatus(events),
       ...(prototype === undefined ? {} : { prototype }),
       ...(uiPreview === undefined ? {} : { uiPreview }),
@@ -984,6 +999,9 @@ async function readSnapshot(
     onInstalledEvent: prototype.observe,
   });
   const latest = prototype.current();
+  const nativeDeliveryState = retainedNativeDeliveryState(
+    observation.nativeObservationState.nativeDeliveryState,
+  );
   const privateInputState =
     observation.nativeObservationState.privateInputState === undefined
       ? undefined
@@ -991,6 +1009,7 @@ async function readSnapshot(
   return {
     events,
     ...(privateInputState === undefined ? {} : { privateInputState }),
+    ...(nativeDeliveryState === undefined ? {} : { nativeDeliveryState }),
     status: observation.status,
     ...(latest === undefined ? {} : { prototype: latest }),
     ...(observation.uiPreview === undefined ? {} : { uiPreview: observation.uiPreview }),
@@ -1588,6 +1607,10 @@ export function createSameOriginEveTransport(input: {
       if (accepted.sessionId !== request.adapterSessionId) {
         throw new SubmissionOutcomeUnknownError();
       }
+      if (accepted.deliveryId === undefined) {
+        throw new SubmissionOutcomeUnknownError();
+      }
+      await request.onAccepted?.(accepted.deliveryId);
       return readSnapshot({ ...common, sessionId: request.adapterSessionId });
     },
     async sendAccepted(request) {
@@ -1601,6 +1624,10 @@ export function createSameOriginEveTransport(input: {
       if (accepted.sessionId !== request.adapterSessionId) {
         throw new SubmissionOutcomeUnknownError();
       }
+      if (accepted.deliveryId === undefined) {
+        throw new SubmissionOutcomeUnknownError();
+      }
+      await request.onAccepted?.(accepted.deliveryId);
     },
     async start(request) {
       const accepted = await postMutation({

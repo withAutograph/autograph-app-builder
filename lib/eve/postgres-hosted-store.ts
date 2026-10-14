@@ -1,5 +1,7 @@
 import {
   isProvedSessionLimitResponse,
+  isProvedSendDelivery,
+  bindSendDelivery,
   hostedOperationRecordSchema,
   hostedCheckpointRefSchema,
   durableHostedSessionRecordSchema,
@@ -662,6 +664,37 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       });
     },
 
+    // oxlint-disable-next-line eslint/require-await -- Keep the canonical asynchronous transaction API, including validation rejection.
+    async recordSendDelivery(input) {
+      const principal = hostedPrincipalSchema.parse(input.principal);
+      return database.transaction(async (transaction) => {
+        const operation = await operationById(transaction, principal, input.operationId, true);
+        if (operation === null) {
+          throw new Error(OPERATION_CANNOT_SETTLE);
+        }
+        const current = await sessionById(transaction, principal, input.delivery.sessionId, true);
+        const updated = hostedOperationRecordSchema.parse({
+          ...bindSendDelivery(operation, current, input.delivery),
+          updatedAtEpochMs: input.nowEpochMs,
+        });
+        const rows = await transaction
+          .update(agentOperations)
+          .set(operationValues(updated))
+          .where(
+            and(
+              tenantPredicate(principal),
+              eq(agentOperations.operationId, input.operationId),
+              eq(agentOperations.requestDigest, input.delivery.requestDigest),
+            ),
+          )
+          .returning();
+        if (rows.length !== 1) {
+          throw new Error(OPERATION_CANNOT_SETTLE);
+        }
+        return parseHostedOperationRow(rows[0]);
+      });
+    },
+
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async replaceSessionAdapter(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
@@ -999,7 +1032,8 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           operation.internalBuildContinuation?.deliveredTurnId !== undefined &&
           operation.internalBuildContinuation.deliveredMessageSequence !== undefined;
         const current =
-          operation.internalSessionLimitResponse !== undefined && operation.sessionId !== undefined
+          (operation.internalSessionLimitResponse !== undefined || operation.kind === "send") &&
+          operation.sessionId !== undefined
             ? await sessionById(transaction, principal, operation.sessionId, true)
             : null;
         const provedResponse = isProvedSessionLimitResponse(
@@ -1007,11 +1041,19 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           current,
           input.sessionLimitResolution,
         );
+        const provedSend = isProvedSendDelivery(operation, current, input.sendDeliveryResolution);
+        if (
+          operation.kind === "send" &&
+          operation.internalBuildContinuation === undefined &&
+          !provedSend
+        ) {
+          throw new Error("Canonical SEND delivery is not proved.");
+        }
         if (
           operation.state !== "reserved" &&
           !replayableStart &&
           !deliveredInternal &&
-          !(operation.state === "submission_unknown" && provedResponse)
+          !(operation.state === "submission_unknown" && (provedResponse || provedSend))
         ) {
           throw new Error(OPERATION_CANNOT_SETTLE);
         }
