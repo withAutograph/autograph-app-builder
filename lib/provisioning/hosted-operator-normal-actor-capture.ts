@@ -64,6 +64,7 @@ export interface NormalActorCapturePorts {
   pending: (input: { ownerSessionId: string; nonceSha256: string }) => Promise<{
     context: HostedOperatorContext;
     actorKey: string;
+    organizationId?: string;
     link: PendingRealmIdentityLink;
     resource: z.infer<typeof realmPhysicalResourceSchema>;
     getKey: JWTVerifyGetKey;
@@ -187,6 +188,7 @@ export const createNormalActorCaptureHandler =
       if (input.phase === "authorize") {
         await ports.journal.authorizeCapture(context, {
           actorKey: pending.actorKey,
+          organizationId: pending.organizationId,
           nonceSha256,
           proofSha256,
           expiresAt: new Date(
@@ -249,6 +251,7 @@ export const createNormalActorCaptureHandler =
         version: 1,
         actorKey: pending.actorKey,
         nonceSha256,
+        organizationId: pending.organizationId,
         proofSha256,
         proof: input.proof,
         session,

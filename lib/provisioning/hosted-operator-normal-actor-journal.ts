@@ -50,6 +50,7 @@ const captureReferenceSchema = z
   .strictObject({
     reference: z.uuid(),
     actorKey,
+    organizationId: z.string().min(1).max(512).optional(),
     nonceSha256: digest,
     proofSha256: digest,
     expiresAt: z.iso.datetime({ offset: true }),
@@ -75,6 +76,7 @@ export type NormalActorAccountProvenance = Omit<
 export const normalActorCapturedPayloadSchema = z.strictObject({
   version: z.literal(1),
   actorKey,
+  organizationId: z.string().min(1).max(512).optional(),
   nonceSha256: digest,
   proofSha256: digest,
   proof: z.string().min(1).max(16_384),
@@ -144,6 +146,7 @@ const captureAad = (
     nonceSha256: capture.nonceSha256,
     proofSha256: capture.proofSha256,
     actorKey: capture.actorKey,
+    ...(capture.organizationId === undefined ? {} : { organizationId: capture.organizationId }),
     reference: capture.reference,
     purpose: "normal-auth-capture-v1",
   });
@@ -323,7 +326,13 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
     },
     async authorizeCapture(
       context: HostedOperatorContext,
-      input: { actorKey: string; nonceSha256: string; proofSha256: string; expiresAt: string },
+      input: {
+        actorKey: string;
+        organizationId?: string;
+        nonceSha256: string;
+        proofSha256: string;
+        expiresAt: string;
+      },
     ) {
       const preparation = await mutate(context, (row) => {
         const prior = row.record.accountPreparation;
@@ -331,7 +340,13 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
           prior === undefined ||
           !prior.program.actors.some(
             (actor) => actor.actorKey === input.actorKey && actor.account === "capture-existing",
-          )
+          ) ||
+          (input.organizationId !== undefined &&
+            !prior.program.memberships.some(
+              (member) =>
+                member.actorKey === input.actorKey &&
+                member.organizationId === input.organizationId,
+            ))
         ) {
           throw new Error("normal_actor_capture_unavailable");
         }
@@ -341,6 +356,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
         if (existing !== undefined) {
           if (
             existing.actorKey !== input.actorKey ||
+            existing.organizationId !== input.organizationId ||
             existing.proofSha256 !== input.proofSha256 ||
             Date.parse(existing.expiresAt) <= ports.now()
           ) {
@@ -365,6 +381,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
           prior === undefined ||
           capture === undefined ||
           capture.actorKey !== payload.actorKey ||
+          capture.organizationId !== payload.organizationId ||
           capture.proofSha256 !== payload.proofSha256 ||
           payload.session.reference !== capture.reference ||
           Date.parse(capture.expiresAt) <= ports.now() ||
@@ -424,6 +441,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
         );
         if (
           payload.actorKey !== capture.actorKey ||
+          payload.organizationId !== capture.organizationId ||
           payload.nonceSha256 !== capture.nonceSha256 ||
           payload.proofSha256 !== capture.proofSha256 ||
           normalActorCaptureCookieDigest(payload.normalCookie) !== capture.normalCookieSha256
