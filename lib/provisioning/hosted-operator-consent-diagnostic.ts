@@ -85,6 +85,7 @@ const operatorExecutionFailure = operatorPlanningFailure
   .extend({
     stage: operatorExecutionStage,
     mode: z.enum(["inspect", "execute"]).optional(),
+    httpStatus: z.number().int().min(100).max(599).optional(),
     commandExit: z.enum(["zero", "nonzero"]).optional(),
     protocol: z.enum(["incomplete", "unknown"]).optional(),
     workerFailure: z
@@ -468,7 +469,7 @@ export const observeOperatorExecutionStage = async <T>(
   sink?: HostedOperatorConsentDiagnosticSink,
   execution?: Pick<
     OperatorExecutionFailure,
-    "stage" | "mode" | "commandExit" | "protocol" | "workerFailure"
+    "stage" | "mode" | "commandExit" | "protocol" | "workerFailure" | "httpStatus"
   >,
 ): Promise<T> => {
   try {

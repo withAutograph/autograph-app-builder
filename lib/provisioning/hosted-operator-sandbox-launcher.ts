@@ -29,7 +29,7 @@ import type {
 
 type LauncherExecution = Pick<
   OperatorExecutionFailure,
-  "stage" | "mode" | "commandExit" | "protocol" | "workerFailure"
+  "stage" | "mode" | "commandExit" | "protocol" | "workerFailure" | "httpStatus"
 >;
 
 const MAX_PROTOCOL_FRAME_BYTES = 1024 * 1024;
@@ -1673,6 +1673,18 @@ const runSandboxWorker = async (
       return observed;
     }
   } catch (error) {
+    try {
+      for (const field of ["status", "statusCode"]) {
+        const status: unknown = Object.getOwnPropertyDescriptor(error, field)?.value;
+        const parsed = z.number().int().min(100).max(599).safeParse(status);
+        if (parsed.success) {
+          execution.httpStatus = parsed.data;
+          break;
+        }
+      }
+    } catch {
+      /* Diagnostic extraction cannot change SDK failure handling. */
+    }
     operationError = error instanceof HostedOperatorError ? error : unavailable();
     throw operationError;
   } finally {

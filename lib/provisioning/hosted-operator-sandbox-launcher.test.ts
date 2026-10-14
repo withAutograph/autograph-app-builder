@@ -1142,3 +1142,58 @@ it("reports only the worker's fixed lifecycle failure class", async () => {
   });
   expect(JSON.stringify(f.diagnostics.mock.calls)).not.toContain("installer private diagnostic");
 });
+
+it.each(["status", "statusCode"])(
+  "reports only the SDK's own numeric %s property",
+  async (field) => {
+    const f = makeFixture();
+    const error = Object.assign(new Error("private SDK response body"), {
+      [field]: 403,
+      body: "private-body",
+      cause: new Error("private-cause"),
+    });
+    f.createSandbox.mockRejectedValueOnce(error);
+    await expect(f.launcher.execute(f.input)).rejects.toMatchObject({
+      code: "operator_unavailable",
+    });
+    expect(f.diagnostics.mock.calls[0]?.[0].executionFailure).toMatchObject({
+      stage: "sandbox_create",
+      httpStatus: 403,
+    });
+    expect(JSON.stringify(f.diagnostics.mock.calls)).not.toContain("private");
+  },
+);
+it.each([99, 600, 403.5, "403", null, undefined, Number.NaN, Number.POSITIVE_INFINITY])(
+  "ignores an invalid SDK HTTP status %s",
+  async (status) => {
+    const f = makeFixture();
+    f.createSandbox.mockRejectedValueOnce(
+      Object.assign(new Error("private SDK error"), { status }),
+    );
+    await expect(f.launcher.execute(f.input)).rejects.toMatchObject({
+      code: "operator_unavailable",
+    });
+    expect(f.diagnostics.mock.calls[0]?.[0].executionFailure).not.toHaveProperty("httpStatus");
+  },
+);
+it("does not invoke hostile HTTP-status getters or inspect inherited status", async () => {
+  const f = makeFixture();
+  const getter = vi.fn(() => {
+    throw new Error("private getter");
+  });
+  const error = new Error("private SDK error");
+  Object.defineProperty(error, "status", { get: getter });
+  Object.defineProperty(error, "statusCode", { get: getter });
+  f.createSandbox.mockRejectedValueOnce(error);
+  await expect(f.launcher.execute(f.input)).rejects.toMatchObject({ code: "operator_unavailable" });
+  expect(getter).not.toHaveBeenCalled();
+  expect(f.diagnostics.mock.calls[0]?.[0].executionFailure).not.toHaveProperty("httpStatus");
+  const inherited = makeFixture();
+  inherited.createSandbox.mockRejectedValueOnce(Object.create({ status: 403 }));
+  await expect(inherited.launcher.execute(inherited.input)).rejects.toMatchObject({
+    code: "operator_unavailable",
+  });
+  expect(inherited.diagnostics.mock.calls[0]?.[0].executionFailure).not.toHaveProperty(
+    "httpStatus",
+  );
+});
