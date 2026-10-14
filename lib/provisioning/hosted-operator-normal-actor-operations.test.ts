@@ -1,3 +1,4 @@
+import { createNormalActorJournalAuthority } from "./hosted-operator-normal-actor-authority";
 /* oxlint-disable eslint/require-await, unicorn/no-useless-undefined -- Local CAS fixture preserves the asynchronous production port contract. */
 import { randomUUID } from "node:crypto";
 import {
@@ -8,7 +9,11 @@ import { betterAuth } from "better-auth";
 import { organization as organizationPlugin } from "better-auth/plugins";
 import { z } from "zod";
 import { describe, expect, it } from "vitest";
-import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
+import {
+  HostedOperatorError,
+  hostedOperatorPlanSchema,
+  operatorPlanDigest,
+} from "./hosted-operator-contract";
 import {
   normalActorProgramSchema,
   proposeResolvedNormalActorAccess,
@@ -135,13 +140,13 @@ const plan = hostedOperatorPlanSchema.parse({
     },
   },
 });
-const fixture = (captureExisting = false) => {
+const fixture = (captureExisting = false, selectedProgram = program) => {
   const actualProgram = captureExisting
     ? normalActorProgramSchema.parse({
         ...program,
         actors: program.actors.map((actor) => ({ ...actor, account: "capture-existing" })),
       })
-    : program;
+    : selectedProgram;
   const actualPlan = hostedOperatorPlanSchema.parse({ ...plan, normalActorProgram: actualProgram });
   let row: HostedRuntimeJournalRow = {
     revision: 1,
@@ -393,6 +398,7 @@ const fixture = (captureExisting = false) => {
   };
   return {
     operations,
+    journalPorts,
     preflight,
     effect,
     requests,
@@ -597,4 +603,133 @@ describe("normal actor operations", () => {
     f.revoke();
     await expect(f.operations.readNormalActorPreparation(context)).rejects.toThrow("owner_revoked");
   });
+});
+
+describe("safe save-wrapper observation outside journal CAS", () => {
+  it("reduces only four full save-wrapper checks with the same real journal and outward Auth calls", async () => {
+    const actors = Array.from({ length: 8 }, (_, index) => ({
+      actorKey: `actor-${index}`,
+      email: `actor${index}@example.com`,
+      name: `Actor ${index}`,
+      account: "create-email-password" as const,
+    }));
+    const selectedProgram = normalActorProgramSchema.parse({
+      ...program,
+      actors,
+      organizations: program.organizations.map((organization) => ({
+        ...organization,
+        ownerActorKey: "actor-0",
+      })),
+      memberships: program.organizations.flatMap((organization) =>
+        actors.map((actor, index) => ({
+          actorKey: actor.actorKey,
+          organizationId: organization.organizationId,
+          role: index === 0 ? "owner" : "member",
+        })),
+      ),
+      appAccess: [],
+    });
+    const run = async (observe: boolean) => {
+      const f = fixture(false, selectedProgram);
+      await f.operations.ensureNormalActorCapture(f.preflight);
+      const { leaseId } = f.row.record;
+      if (leaseId === undefined || f.row.record.operator === undefined) {
+        throw new Error("Missing owned fixture lease");
+      }
+      f.effect.leaseId = leaseId;
+      f.row.record.leaseExpiresAt = "2030-01-01T00:00:00.000Z";
+      f.row.record.operator.fenceGeneration = f.effect.fenceGeneration;
+      let fullService = 0;
+      let fullJournal = 0;
+      let observations = 0;
+      let checkpoints = 0;
+      const canonical = f.journalPorts.assertAuthorized;
+      const current = f.effect.assertCurrent;
+      const checkpoint = f.effect.checkpointAccountPreparation;
+      const ports = createNormalActorJournalAuthority({
+        store: f.journalPorts.store,
+        keyring: f.journalPorts.keyring,
+        now: Date.now,
+        assertCanonicalOwner: canonical,
+        assertApprovedOwner: async (ownedContext) => {
+          fullJournal += 1;
+          await canonical(ownedContext);
+        },
+        readApproval: async (input) => ({
+          action: input.action,
+          approvalId: "initial-approval",
+          approved: true,
+          callId: input.callId,
+          planDigest: input.planDigest,
+        }),
+      });
+      Object.assign(f.journalPorts, ports);
+      f.effect.assertCurrent = async () => {
+        fullService += 1;
+        await current();
+      };
+      if (observe) {
+        f.effect.assertCurrentObservation = async () => {
+          observations += 1;
+          await current();
+          if (
+            f.row.record.leaseId !== leaseId ||
+            Date.parse(f.row.record.leaseExpiresAt ?? "") <= Date.now()
+          ) {
+            throw new HostedOperatorError("operation_in_progress");
+          }
+          // Model the real service guard's lease renewal/revision write outside journal CAS.
+          f.row = {
+            ...f.row,
+            revision: f.row.revision + 1,
+            record: {
+              ...f.row.record,
+              leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+            },
+          };
+        };
+      }
+      f.effect.checkpointAccountPreparation = async (preparation) => {
+        checkpoints += 1;
+        // The real service's fifth full checkpoint guard remains unchanged.
+        await f.effect.assertCurrent();
+        if (checkpoint === undefined) {
+          throw new Error("Missing service checkpoint");
+        }
+        await checkpoint(preparation);
+      };
+      const state = await f.operations.prepareNormalActorAccounts(f.effect);
+      expect(state.actors.every((actor) => actor.signup === "complete")).toBe(true);
+      return {
+        fullService,
+        fullJournal,
+        observations,
+        checkpoints,
+        paths: f.requests.map((request) => new URL(request.url).pathname),
+      };
+    };
+    const fallback = await run(false);
+    const observed = await run(true);
+    expect(observed.checkpoints).toBe(fallback.checkpoints);
+    expect(observed.paths).toEqual(fallback.paths);
+    expect(observed.fullJournal).toBe(fallback.fullJournal);
+    expect(observed.fullJournal).toBe(observed.checkpoints * 2);
+    expect(observed.observations).toBe(observed.checkpoints * 4);
+    expect(fallback.fullService - observed.fullService).toBe(observed.observations);
+    expect(observed.fullService).toBeGreaterThan(observed.checkpoints);
+  });
+  it.each(["authorization_required", "operation_in_progress"] as const)(
+    "rejects %s observation before writing account state",
+    async (code) => {
+      const f = fixture();
+      await f.operations.ensureNormalActorCapture(f.preflight);
+      const initial = f.row;
+      f.effect.assertCurrentObservation = async () => {
+        throw new HostedOperatorError(code);
+      };
+      await expect(f.operations.prepareNormalActorAccounts(f.effect)).rejects.toThrow(code);
+      expect(f.row).toEqual(initial);
+      expect(f.requests).toEqual([]);
+    },
+  );
 });

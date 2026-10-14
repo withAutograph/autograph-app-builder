@@ -78,6 +78,16 @@ const createCredentials = () => ({
   runtimePassword: randomBytes(32).toString("base64url"),
 });
 
+/** Confirm the exact sealed checkpoint without treating JSON property order as authority. */
+export const assertResourceCredentialCheckpoint = (
+  observed: HostedRuntimeJournalRecord["privateState"],
+  expected: NonNullable<HostedRuntimeJournalRecord["privateState"]>,
+) => {
+  if (!isDeepStrictEqual(observed, expected)) {
+    throw new HostedOperatorError("operation_in_progress");
+  }
+};
+
 export type ProtectedResourceDatabase = "appDatabase" | "authDatabase";
 
 export type ResourceCredentialInput = HostedOperatorContext & {

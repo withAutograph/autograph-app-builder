@@ -250,16 +250,18 @@ export const createHostedOperatorNormalActorOperations = (
     if (input.checkpointAccountPreparation === undefined) {
       throw new HostedOperatorError("operation_in_progress");
     }
-    await input.assertCurrent();
+    const assertSaveCurrent = input.assertCurrentObservation ?? input.assertCurrent;
+    await assertSaveCurrent();
     const saved = await journal.checkpoint(input, state);
     await input.checkpointAccountPreparation(saved);
-    await input.assertCurrent();
+    await assertSaveCurrent();
   };
   const accountPorts = async (
     input: HostedOperatorEffectContext,
     preparation: NormalActorAccountPreparation,
   ) => {
     const fetch = await transport(input, preparation.program);
+    const assertObservation = input.assertCurrentObservation;
     return {
       assertCurrent: async (scope: { operationRef: string; programDigest: string }) => {
         if (
@@ -271,6 +273,23 @@ export const createHostedOperatorNormalActorOperations = (
         await deps.assertCurrentPlan(input);
         await input.assertCurrent();
       },
+      ...(assertObservation === undefined
+        ? {}
+        : {
+            assertCurrentObservation: async (scope: {
+              operationRef: string;
+              programDigest: string;
+            }) => {
+              if (
+                scope.operationRef !== preparation.accountOperationRef ||
+                scope.programDigest !== preparation.programDigest
+              ) {
+                throw mismatch();
+              }
+              await deps.assertCurrentPlan(input);
+              await assertObservation();
+            },
+          }),
       checkpoint: async (state: NormalActorState) => {
         await checkpoint(input, state);
       },
