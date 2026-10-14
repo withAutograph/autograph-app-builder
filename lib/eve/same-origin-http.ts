@@ -1,3 +1,11 @@
+import {
+  emptyPrivateInputState,
+  matchesReservedGuardResponse,
+  provesSessionLimitResponse,
+  internalSessionLimitResponseSchema,
+  reducePrivateInput,
+  privateInputForEvents,
+} from "./session-limit-input";
 import { createHostedReadTrace } from "./hosted-read-diagnostic";
 import type { HostedReadTrace } from "./hosted-read-diagnostic";
 import { createHash } from "node:crypto";
@@ -737,6 +745,7 @@ export async function observeSameOriginEveStream(
     ) {
       retainedRequests = await reconcileHistoricalAuthorizations({ ...input, readSignal }, state);
     }
+    const privateInputState = structuredClone(state?.privateInputState ?? emptyPrivateInputState());
     const pending = new Map<string, PublicInputRequest>(
       retainedRequests.map((request) => [request.requestId, request]),
     );
@@ -780,6 +789,7 @@ export async function observeSameOriginEveStream(
         artifactReadback.accept(event);
         prototype.observe(event);
         prototypeReference.accept(event);
+        reducePrivateInput(privateInputState, event);
         input.onInstalledEvent?.(event);
         readTrace.enter("private_callback");
         await input.onPrivateEvent?.(event);
@@ -898,6 +908,7 @@ export async function observeSameOriginEveStream(
         invalidInput,
         nextNativeIndex: installedEventCount,
         pendingRequests: [...pending.values()],
+        privateInputState,
         prototypeProjector: prototype.checkpoint(),
         prototypeReference: prototypeReference.checkpoint(),
         publicEventCount,
@@ -948,6 +959,7 @@ async function readInstalledSnapshot(
     installed: events,
     snapshot: {
       events: projected,
+      privateInputState: privateInputForEvents(events),
       status: deriveInstalledEveStatus(events),
       ...(prototype === undefined ? {} : { prototype }),
       ...(uiPreview === undefined ? {} : { uiPreview }),
@@ -972,6 +984,7 @@ async function readSnapshot(
   const latest = prototype.current();
   return {
     events,
+    privateInputState: observation.nativeObservationState.privateInputState,
     status: observation.status,
     ...(latest === undefined ? {} : { prototype: latest }),
     ...(observation.uiPreview === undefined ? {} : { uiPreview: observation.uiPreview }),
@@ -1070,6 +1083,9 @@ async function readRespondSettlement(input: {
   fetchImplementation: typeof fetch;
   sessionId: string;
   requestIds: readonly string[];
+  internalSessionLimitResponse?: Parameters<
+    HostedEveTransport["respond"]
+  >[0]["internalSessionLimitResponse"];
 }): Promise<HostedEngineSnapshot> {
   const readSignal = AbortSignal.timeout(SESSION_READ_TIMEOUT_MS);
   while (true) {
@@ -1080,8 +1096,14 @@ async function readRespondSettlement(input: {
     const observed = await readInstalledSnapshot({ ...input, readSignal });
     const outstanding = outstandingRequestIds(observed.installed);
     if (
-      observed.snapshot.status !== "input_required" ||
-      input.requestIds.every((requestId) => !outstanding.has(requestId))
+      input.internalSessionLimitResponse?.decision === "stop"
+        ? observed.snapshot.privateInputState !== undefined &&
+          provesSessionLimitResponse(
+            input.internalSessionLimitResponse,
+            observed.snapshot.privateInputState,
+          )
+        : observed.snapshot.status !== "input_required" ||
+          input.requestIds.every((requestId) => !outstanding.has(requestId))
     ) {
       return observed.snapshot;
     }
@@ -1120,6 +1142,9 @@ async function readRespondSettlementIncremental(input: {
   fetchImplementation: typeof fetch;
   sessionId: string;
   requestIds: readonly string[];
+  internalSessionLimitResponse?: Parameters<
+    HostedEveTransport["respond"]
+  >[0]["internalSessionLimitResponse"];
   nativeObservationState?: NativeObservationState;
 }): Promise<void> {
   let { nativeObservationState } = input;
@@ -1146,8 +1171,14 @@ async function readRespondSettlementIncremental(input: {
     }
     const outstanding = new Set(observed.pendingRequests.map((request) => request.requestId));
     if (
-      (!seeded && observed.status !== "input_required") ||
-      input.requestIds.every((requestId) => !outstanding.has(requestId))
+      input.internalSessionLimitResponse?.decision === "stop"
+        ? observed.nativeObservationState.privateInputState !== undefined &&
+          provesSessionLimitResponse(
+            input.internalSessionLimitResponse,
+            observed.nativeObservationState.privateInputState,
+          )
+        : (!seeded && observed.status !== "input_required") ||
+          input.requestIds.every((requestId) => !outstanding.has(requestId))
     ) {
       return;
     }
@@ -1445,6 +1476,26 @@ export function createSameOriginEveTransport(input: {
     get: (request) =>
       readSnapshot({ ...common, readDeadline: true, sessionId: request.adapterSessionId }),
     async respond(request) {
+      if (request.internalSessionLimitResponse !== undefined) {
+        const marker = internalSessionLimitResponseSchema.parse(
+          request.internalSessionLimitResponse,
+        );
+        const before = await readInstalledSnapshot({
+          ...common,
+          sessionId: request.adapterSessionId,
+        });
+        if (
+          marker.adapterSessionId !== request.adapterSessionId ||
+          before.snapshot.privateInputState === undefined ||
+          !matchesReservedGuardResponse(
+            before.snapshot.privateInputState,
+            marker,
+            request.responses,
+          )
+        ) {
+          throw new SubmissionRejectedBeforeDispatchError("input_batch_changed");
+        }
+      }
       const accepted = await postMutation({
         ...common,
         body: { inputResponses: responsePayload(request.responses) },
@@ -1457,6 +1508,9 @@ export function createSameOriginEveTransport(input: {
       }
       return readRespondSettlement({
         ...common,
+        ...(request.internalSessionLimitResponse === undefined
+          ? {}
+          : { internalSessionLimitResponse: request.internalSessionLimitResponse }),
         requestIds: request.responses.map(({ requestId }) => requestId),
         sessionId: request.adapterSessionId,
       });
@@ -1467,9 +1521,28 @@ export function createSameOriginEveTransport(input: {
           ? nativeObservationStateSchema.parse(request.nativeObservationState)
           : undefined;
       if (nativeObservationState !== undefined) {
-        const pending = nativeObservationState.pendingRequests
-          .filter((item) => item.kind !== "authorization")
-          .map((item) => item.requestId);
+        const marker =
+          request.internalSessionLimitResponse === undefined
+            ? undefined
+            : internalSessionLimitResponseSchema.parse(request.internalSessionLimitResponse);
+        if (
+          marker !== undefined &&
+          (marker.adapterSessionId !== request.adapterSessionId ||
+            nativeObservationState.privateInputState === undefined ||
+            !matchesReservedGuardResponse(
+              nativeObservationState.privateInputState,
+              marker,
+              request.responses,
+            ))
+        ) {
+          throw new SubmissionRejectedBeforeDispatchError("input_batch_changed");
+        }
+        const pending =
+          marker?.decision === "stop"
+            ? marker.responses.map((response) => response.requestId)
+            : nativeObservationState.pendingRequests
+                .filter((item) => item.kind !== "authorization")
+                .map((item) => item.requestId);
         if (
           nativeObservationState.adapterSessionId !== request.adapterSessionId ||
           pending.length !== request.responses.length ||
@@ -1490,6 +1563,9 @@ export function createSameOriginEveTransport(input: {
       }
       await readRespondSettlementIncremental({
         nativeObservationState,
+        ...(request.internalSessionLimitResponse === undefined
+          ? {}
+          : { internalSessionLimitResponse: request.internalSessionLimitResponse }),
         ...common,
         requestIds: request.responses.map(({ requestId }) => requestId),
         sessionId: request.adapterSessionId,

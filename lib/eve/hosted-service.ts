@@ -1,3 +1,23 @@
+import {
+  guardRequestIds,
+  pendingFrameworkGuardIds,
+  presentSessionLimitState,
+  sessionLimitCancelledTurns,
+  frameworkGuardBatches,
+  matchesReservedGuardResponse,
+  resolvedGuardRequestIds,
+  isLegacySessionLimitRequest,
+  mergeSessionLimitResponses,
+  nativeResponses,
+  omitControlledGuardQuestions,
+  provesSessionLimitResponse,
+  internalSessionLimitResponseSchema,
+} from "./session-limit-input";
+import type {
+  PrivateInputState,
+  InternalSessionLimitResponse,
+  NativeInputBatch,
+} from "./session-limit-input";
 import { HostedCheckpointObservationConflictError } from "./hosted-checkpoint-observation-conflict-error";
 import { continueApprovedHostedBuild } from "./approved-build-controller";
 import { assertHostedBuildDecisionOwner } from "./approved-build-owner";
@@ -87,6 +107,7 @@ import type {
   HostedSubmissionPhase,
 } from "./hosted-submission-diagnostic";
 
+const guardDecisions: readonly ("continue" | "stop")[] = ["continue", "stop"];
 const projectSnapshot = projectHostedSnapshot;
 const HOSTED_START_REQUEST_TIMEOUT_MS = 300_000;
 const HOSTED_IDLE_RESERVATION_GRACE_MS = 300_000;
@@ -159,6 +180,7 @@ export interface HostedEveTransport {
   sendAccepted?: (input: Parameters<HostedEveTransport["send"]>[0]) => Promise<void>;
   respond: (input: {
     nativeObservationState?: NativeObservationState;
+    internalSessionLimitResponse?: InternalSessionLimitResponse;
     principal: HostedPrincipal;
     operationId: string;
     adapterSessionId: string;
@@ -432,6 +454,9 @@ function checkpointForSnapshot(
       }
       const candidate = hostedSessionCheckpointSchema.safeParse({
         capturedAtEpochMs,
+        ...(snapshot.privateInputState === undefined
+          ? {}
+          : { privateInputState: snapshot.privateInputState }),
         events: retainedEvents,
         ...(snapshot.workingPreview === undefined
           ? {}
@@ -622,6 +647,9 @@ const checkpointMetadataForSnapshot = (
   const inputRequests = outstandingInternalEveRequests(internalEvents);
   return {
     capturedAtEpochMs,
+    ...(snapshot.privateInputState === undefined
+      ? {}
+      : { privateInputState: snapshot.privateInputState }),
     ...(inputRequests.length === 0 ? {} : { inputRequests }),
     ...(snapshot.prototype === undefined ? {} : { prototype: snapshot.prototype }),
     status: snapshot.status,
@@ -769,6 +797,29 @@ async function* readSpoolEvents(spool: PagedEventSpool) {
   }
 }
 
+const assertCompletePrivateBatch = (state: PrivateInputState, result: EveSessionResult) => {
+  const ids = state.pending.flatMap((batch) => batch.requests.map((request) => request.requestId));
+  const pending = (result.inputRequests ?? []).filter(
+    (request) => request.kind !== "authorization",
+  );
+  if (
+    pending.length !== ids.length ||
+    pending.some((request, index) => request.requestId !== ids[index])
+  ) {
+    throw new SubmissionRejectedBeforeDispatchError("input_batch_changed");
+  }
+};
+const guardClientRequestId = (
+  session: HostedSessionRecord,
+  batch: NativeInputBatch,
+  decision: "continue" | "stop" = "continue",
+) =>
+  stableId(decision === "stop" ? "framework_stop" : "framework_usage", {
+    adapterGeneration: toDurableHostedSessionRecord(session).adapterGeneration,
+    adapterSessionId: session.adapterSessionId,
+    batch,
+    sessionId: session.sessionId,
+  });
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createHostedEveSessionService(input: {
   principal: HostedPrincipal;
@@ -780,6 +831,7 @@ export function createHostedEveSessionService(input: {
     adapterSessionId: string;
     sourceHandoffId?: string;
   }) => Promise<void>;
+  assertSessionLimitOwner?: typeof assertHostedBuildDecisionOwner;
   now?: () => number;
   onSubmissionDiagnostic?: HostedSubmissionDiagnosticSink;
   sessionTimeoutPolicy?: HostedSessionTimeoutPolicy;
@@ -883,17 +935,282 @@ export function createHostedEveSessionService(input: {
     }
   }
 
+  const assertSessionLimitOwner = async (session: HostedSessionRecord) => {
+    await (input.assertSessionLimitOwner ?? assertHostedBuildDecisionOwner)(
+      toDurableHostedSessionRecord(session),
+    );
+  };
+  const privateInputsForSession = async (
+    session: HostedSessionRecord,
+  ): Promise<PrivateInputState | undefined> => {
+    const durable = toDurableHostedSessionRecord(session);
+    // oxlint-disable-next-line eslint/no-use-before-define -- The checkpoint reader is initialized before any service call.
+    const metadata = await readCheckpointMetadata(session);
+    return (
+      metadata?.nativeObservationState?.privateInputState ??
+      metadata?.privateInputState ??
+      durable.checkpoint?.privateInputState
+    );
+  };
+  const respondOperationId = (clientRequestId: string) =>
+    stableId("op", {
+      clientRequestId,
+      kind: "respond",
+      tenant: [principal.issuer, principal.audience, principal.workspaceId, principal.ownerUserId],
+    });
+  const reconcileSessionLimitOperation = async (
+    operation: HostedOperationRecord,
+    result: EveSessionResult,
+  ): Promise<EveSessionResult | undefined> => {
+    const marker = operation.internalSessionLimitResponse;
+    if (
+      operation.kind !== "respond" ||
+      marker === undefined ||
+      operation.sessionId !== result.sessionId ||
+      tenantKeyFor(operation.principal) !== tenantKeyFor(principal) ||
+      !["reserved", "submission_unknown"].includes(operation.state)
+    ) {
+      return undefined;
+    }
+    const session = toDurableHostedSessionRecord(await requireSession(result.sessionId));
+    await assertSessionLimitOwner(session);
+    const state = await privateInputsForSession(session);
+    if (
+      session.adapterSessionId !== marker.adapterSessionId ||
+      session.adapterGeneration !== marker.adapterGeneration ||
+      state === undefined ||
+      !provesSessionLimitResponse(marker, state)
+    ) {
+      return undefined;
+    }
+    const settled = await input.store.settleSucceeded({
+      nowEpochMs: now(),
+      operationId: operation.operationId,
+      principal,
+      requestDigest: operation.requestDigest,
+      result,
+      sessionLimitResolution: state,
+    });
+    const verified = requireOwnedOperation(settled, {
+      clientRequestId: operation.clientRequestId,
+      kind: "respond",
+      operationId: operation.operationId,
+      requestDigest: operation.requestDigest,
+      sessionId: operation.sessionId,
+    });
+    return verified.state === "succeeded" ? verified.result : undefined;
+  };
+  const continueSessionLimitGuard = async (
+    sessionId: string,
+    result: EveSessionResult,
+  ): Promise<EveSessionResult> => {
+    const session = await requireSession(sessionId);
+    const state = await privateInputsForSession(session);
+    if (state === undefined || input.store.getPrivateOperation === undefined) {
+      return result;
+    }
+    const ids = guardRequestIds(state);
+    const controlledIds = resolvedGuardRequestIds(state);
+    const reconciliation = state.resolved.flatMap((resolved) =>
+      resolved.batch.requests.every(isLegacySessionLimitRequest)
+        ? guardDecisions.map((decision) => ({ batch: resolved.batch, decision }))
+        : [],
+    );
+    for (const { batch, decision } of reconciliation) {
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Settle canonical responses in the observed native order.
+      const operation = await input.store.getPrivateOperation(
+        principal,
+        respondOperationId(guardClientRequestId(session, batch, decision)),
+      );
+      if (operation?.internalSessionLimitResponse === undefined) {
+        continue;
+      }
+      const settled =
+        operation.state === "succeeded"
+          ? operation.result
+          : // oxlint-disable-next-line eslint/no-await-in-loop -- Settle this exact native cancellation before advancing.
+            await reconcileSessionLimitOperation(operation, result);
+      if (
+        settled === undefined &&
+        operation.internalSessionLimitResponse.decision === "stop" &&
+        (operation.state === "reserved" || operation.state === "submission_unknown")
+      ) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Retain current ownership while waiting for this exact stop operation.
+        await assertSessionLimitOwner(session);
+        return {
+          ...omitControlledGuardQuestions(
+            result,
+            guardRequestIds({
+              pending: operation.internalSessionLimitResponse.batches,
+              resolved: [],
+              version: 1,
+            }),
+          ),
+          error: {
+            code: "framework_stop_settling",
+            message:
+              "Builder is reconciling your stop request. Keep this session and read it again; no product decision is required.",
+          },
+          status: "working",
+        };
+      }
+      if (settled !== undefined) {
+        controlledIds.push(
+          ...guardRequestIds({
+            pending: operation.internalSessionLimitResponse.batches,
+            resolved: [],
+            version: 1,
+          }),
+        );
+      }
+    }
+    if (["cancelled", "completed", "failed"].includes(result.status)) {
+      if (controlledIds.length > 0) {
+        await assertSessionLimitOwner(session);
+      }
+      return omitControlledGuardQuestions(result, controlledIds);
+    }
+    if (controlledIds.length > 0) {
+      await assertSessionLimitOwner(session);
+      const filtered = omitControlledGuardQuestions(result, controlledIds);
+      return ids.length === 0
+        ? filtered
+        : // oxlint-disable-next-line eslint/no-use-before-define -- The continuation helper is initialized before public service calls.
+          await continuePendingSessionLimitGuard(session, state, filtered, ids);
+    }
+    if (ids.length === 0) {
+      return result;
+    }
+    // oxlint-disable-next-line eslint/no-use-before-define -- The continuation helper is initialized before public service calls.
+    return await continuePendingSessionLimitGuard(session, state, result, ids);
+  };
+  const continuePendingSessionLimitGuard = async (
+    session: HostedSessionRecord,
+    state: PrivateInputState,
+    result: EveSessionResult,
+    ids: string[],
+  ): Promise<EveSessionResult> => {
+    const { sessionId } = session;
+    await assertSessionLimitOwner(session);
+    const [firstGuardBatch] = frameworkGuardBatches(state);
+    if (firstGuardBatch !== undefined && input.store.getPrivateOperation !== undefined) {
+      const stop = await input.store.getPrivateOperation(
+        principal,
+        respondOperationId(guardClientRequestId(session, firstGuardBatch, "stop")),
+      );
+      if (stop?.internalSessionLimitResponse?.decision === "stop") {
+        if (stop.state === "succeeded") {
+          return omitControlledGuardQuestions(
+            {
+              ...result,
+              inputRequests: stop.result.inputRequests ?? [],
+              status: stop.result.status,
+            },
+            ids,
+          );
+        }
+        return {
+          ...omitControlledGuardQuestions(result, ids),
+          error: {
+            code: "framework_stop_settling",
+            message:
+              "Builder is reconciling your stop request. Keep this session and read it again; no product decision is required.",
+          },
+          status: "working",
+        };
+      }
+    }
+    assertCompletePrivateBatch(state, result);
+    if (result.inputRequests?.some((request) => request.kind === "authorization") === true) {
+      return omitControlledGuardQuestions(result, ids);
+    }
+    if (
+      state.pending.some((batch) =>
+        batch.requests.some((request) => !isLegacySessionLimitRequest(request)),
+      )
+    ) {
+      return omitControlledGuardQuestions(result, ids);
+    }
+    const [batch] = state.pending;
+    if (batch === undefined) {
+      return result;
+    }
+    try {
+      // oxlint-disable-next-line eslint/no-use-before-define -- Shared hoisted canonical RESPOND path.
+      const next = await respondRequest(
+        {
+          clientRequestId: guardClientRequestId(session, batch),
+          responses: mergeSessionLimitResponses(state, []),
+          sessionId,
+        },
+        {
+          adapterGeneration: toDurableHostedSessionRecord(session).adapterGeneration,
+          adapterSessionId: session.adapterSessionId,
+          batches: state.pending,
+        },
+      );
+      // Preserve this read's public cursor and event page; the continuation's pending state is current.
+      return omitControlledGuardQuestions(
+        {
+          ...result,
+          inputRequests: next.inputRequests ?? [],
+          status: next.status,
+          ...(next.error === undefined ? {} : { error: next.error }),
+        },
+        ids,
+      );
+    } catch (error) {
+      if (!(error instanceof HostedSubmissionUnknownError)) {
+        throw error;
+      }
+      return {
+        ...omitControlledGuardQuestions(result, ids),
+        error: {
+          code: "framework_continuation_settling",
+          message:
+            "Builder is reconciling its saved continuation. Keep this session and read it again; no product decision is required.",
+        },
+        status: "working",
+      };
+    }
+  };
+
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   const continueApprovedWork = async (
     sessionId: string,
     result: EveSessionResult,
   ): Promise<EveSessionResult> => {
     try {
+      const controlled = await continueSessionLimitGuard(sessionId, result);
+      const current = toDurableHostedSessionRecord(await requireSession(sessionId));
+      const inputs = await privateInputsForSession(current);
+      if (inputs !== undefined && pendingFrameworkGuardIds(inputs).length > 0) {
+        return presentSessionLimitState(controlled, inputs);
+      }
+      const stoppedTurns = inputs === undefined ? [] : sessionLimitCancelledTurns(inputs);
+      if (current.privateBuildDecision !== undefined && inputs !== undefined) {
+        for (const resolved of inputs.resolved) {
+          if (resolved.stopSettled !== true) {
+            continue;
+          }
+          // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Reconcile ordered cancellation receipts under current ownership.
+          const stop = await input.store.getPrivateOperation?.(
+            principal,
+            respondOperationId(guardClientRequestId(current, resolved.batch, "stop")),
+          );
+          if (stop?.internalSessionLimitResponse?.stoppedBuildTurnId !== undefined) {
+            stoppedTurns.push(stop.internalSessionLimitResponse.stoppedBuildTurnId);
+          }
+        }
+        if (stoppedTurns.includes(current.privateBuildDecision.turnId)) {
+          return controlled;
+        }
+      }
       return await continueApprovedHostedBuild({
         assertCurrentOwner: assertHostedBuildDecisionOwner,
         now,
         principal,
-        result,
+        result: controlled,
         sessionId,
         store: input.store,
         transport: input.transport,
@@ -916,6 +1233,7 @@ export function createHostedEveSessionService(input: {
     request: T;
     sessionId?: string;
     resumeSessionId?: string;
+    internalSessionLimitResponse?: InternalSessionLimitResponse;
     dispatch: (operationId: string) => Promise<{
       result: EveSessionResult;
       newSession?: z.infer<typeof hostedSessionRecordSchema>;
@@ -948,6 +1266,9 @@ export function createHostedEveSessionService(input: {
       clientRequestId: options.request.clientRequestId,
       createdAtEpochMs: timestamp,
       kind: options.kind,
+      ...(options.internalSessionLimitResponse === undefined
+        ? {}
+        : { internalSessionLimitResponse: options.internalSessionLimitResponse }),
       operationId,
       principal,
       requestDigest,
@@ -1025,6 +1346,22 @@ export function createHostedEveSessionService(input: {
             }
             case "submission_unknown":
             case "reserved": {
+              if (
+                operation.kind === "respond" &&
+                operation.internalSessionLimitResponse !== undefined
+              ) {
+                // oxlint-disable-next-line eslint/no-use-before-define -- Canonical reconciliation calls the hoisted observer without continuing work.
+                const result = await readSession({
+                  continueWork: false,
+                  cursor: 0,
+                  limit: 100,
+                  sessionId: operation.sessionId ?? "",
+                });
+                const settled = await reconcileSessionLimitOperation(operation, result);
+                if (settled !== undefined) {
+                  return settled;
+                }
+              }
               // Canonical Eve session creation is idempotent for this principal
               // and operationId while its first run remains resumable. Once Eve
               // expires that ownership, an exact retry may begin a new run.
@@ -1558,7 +1895,11 @@ export function createHostedEveSessionService(input: {
             ? undefined
             : nativeObservationStateSchema.parse(storedNativeState);
         const nativeObservationState =
-          parsedNativeState?.adapterSessionId === session.adapterSessionId
+          parsedNativeState?.adapterSessionId === session.adapterSessionId &&
+          !(
+            parsedNativeState.pendingRequests.length > 0 &&
+            parsedNativeState.privateInputState === undefined
+          )
             ? parsedNativeState
             : undefined;
         if (
@@ -1838,10 +2179,16 @@ export function createHostedEveSessionService(input: {
       if (observed.status === "cancelled") {
         const durable = toDurableHostedSessionRecord(await requireSession(sessionId));
         if (durable.checkpoint) {
-          return resultFromHostedCheckpoint(sessionId, durable.checkpoint, cursor, limit);
+          const result = resultFromHostedCheckpoint(sessionId, durable.checkpoint, cursor, limit);
+          return inputValue.continueWork === false
+            ? result
+            : await continueApprovedWork(sessionId, result);
         }
         if (durable.checkpointRef !== undefined) {
-          return resultFromDurableCheckpoint(sessionId, durable, cursor, limit);
+          const result = await resultFromDurableCheckpoint(sessionId, durable, cursor, limit);
+          return inputValue.continueWork === false
+            ? result
+            : await continueApprovedWork(sessionId, result);
         }
       }
       const result = projectSnapshot(sessionId, snapshot, cursor, limit);
@@ -1850,7 +2197,9 @@ export function createHostedEveSessionService(input: {
         !progressUnchanged ||
         observedAt - session.lastProgressAtEpochMs < HOSTED_PROGRESS_NOTICE_MS
       ) {
-        return await continueApprovedWork(sessionId, result);
+        return inputValue.continueWork === false
+          ? result
+          : await continueApprovedWork(sessionId, result);
       }
       const operation = pendingBuilderOperation(publicSnapshotEvents(snapshot));
       const elapsedMinutes = Math.max(
@@ -1899,7 +2248,7 @@ export function createHostedEveSessionService(input: {
     sessionId: string,
     previousCheckpointDigest: string | undefined,
   ): Promise<EveSessionResult> {
-    const result = await readSession({ cursor: 0, limit: 100, sessionId });
+    const result = await readSession({ continueWork: false, cursor: 0, limit: 100, sessionId });
     const current = toDurableHostedSessionRecord(await requireSession(sessionId));
     if (
       result.error?.code === "session_read_delayed" ||
@@ -1939,7 +2288,237 @@ export function createHostedEveSessionService(input: {
     };
   };
 
-  return {
+  // oxlint-disable-next-line eslint/func-style -- Native response preflight and controller share this hoisted canonical helper.
+  async function respondRequest(
+    request: Parameters<EveSessionService["respond"]>[0],
+    expectedBinding?: Pick<
+      InternalSessionLimitResponse,
+      "adapterGeneration" | "adapterSessionId" | "batches"
+    >,
+    stopGuardOnly = false,
+  ) {
+    requireHostedOperationScope(principal, "respond");
+    let session = await requireSession(request.sessionId);
+    const retainedState = await privateInputsForSession(session);
+    const initial =
+      retainedState !== undefined && guardRequestIds(retainedState).length > 0
+        ? await readMutationPreflight(request.sessionId)
+        : undefined;
+    if (initial !== undefined) {
+      ({ session } = initial);
+    }
+    const state = initial === undefined ? retainedState : await privateInputsForSession(session);
+    const guardIds = state === undefined ? [] : guardRequestIds(state);
+    if (
+      expectedBinding !== undefined &&
+      (session.adapterSessionId !== expectedBinding.adapterSessionId ||
+        toDurableHostedSessionRecord(session).adapterGeneration !==
+          expectedBinding.adapterGeneration ||
+        state === undefined ||
+        digest(stopGuardOnly ? frameworkGuardBatches(state) : state.pending) !==
+          digest(expectedBinding.batches))
+    ) {
+      throw new SubmissionRejectedBeforeDispatchError("input_batch_changed");
+    }
+    let { responses } = request;
+    let marker: InternalSessionLimitResponse | undefined;
+    if (state !== undefined && guardIds.length > 0) {
+      await assertSessionLimitOwner(session);
+      if (initial === undefined) {
+        throw new SubmissionRejectedBeforeDispatchError("input_batch_changed");
+      }
+      assertCompletePrivateBatch(state, initial.result);
+      if (
+        initial.result.inputRequests?.some((pending) => pending.kind === "authorization") === true
+      ) {
+        throw new SubmissionRejectedBeforeDispatchError("authorization_required");
+      }
+      // Already explicit native guard responses remain compatible; normal public replies omit them.
+      if (
+        !stopGuardOnly &&
+        !guardIds.every((id) => responses.some((response) => response.requestId === id))
+      ) {
+        responses = mergeSessionLimitResponses(state, responses);
+      }
+      if (
+        stopGuardOnly ||
+        guardIds.every((id) =>
+          responses.some(
+            (entry) =>
+              entry.requestId === id &&
+              entry.response.kind === "answer" &&
+              entry.response.optionId === "continue",
+          ),
+        )
+      ) {
+        marker = internalSessionLimitResponseSchema.parse({
+          adapterGeneration: toDurableHostedSessionRecord(session).adapterGeneration,
+          adapterSessionId: session.adapterSessionId,
+          batches: stopGuardOnly ? frameworkGuardBatches(state) : state.pending,
+          decision: stopGuardOnly ? "stop" : "continue",
+          ...(stopGuardOnly &&
+          toDurableHostedSessionRecord(session).privateBuildDecision !== undefined
+            ? {
+                stoppedBuildTurnId:
+                  toDurableHostedSessionRecord(session).privateBuildDecision?.turnId,
+              }
+            : {}),
+          responses: nativeResponses(responses),
+        });
+      }
+    }
+    return mutate({
+      ...(marker === undefined ? {} : { internalSessionLimitResponse: marker }),
+      async dispatch(operationId) {
+        const paged =
+          input.transport.observe !== undefined &&
+          input.transport.respondAccepted !== undefined &&
+          input.store.observeSessionPaged !== undefined &&
+          input.store.readCheckpointPage !== undefined;
+        const preflight = paged ? await readMutationPreflight(request.sessionId) : undefined;
+        if (preflight) {
+          ({ session } = preflight);
+        }
+        if (marker !== undefined) {
+          const current = toDurableHostedSessionRecord(session);
+          const actual = await privateInputsForSession(session);
+          if (
+            current.adapterSessionId !== marker.adapterSessionId ||
+            current.adapterGeneration !== marker.adapterGeneration ||
+            actual === undefined ||
+            !matchesReservedGuardResponse(actual, marker, responses)
+          ) {
+            throw new SubmissionRejectedBeforeDispatchError("input_batch_changed");
+          }
+          await assertSessionLimitOwner(session);
+        }
+        const before = preflight?.persisted
+          ? undefined
+          : await input.transport.get({
+              adapterSessionId: session.adapterSessionId,
+              principal,
+            });
+        if (
+          marker !== undefined &&
+          before !== undefined &&
+          (before.privateInputState === undefined ||
+            !matchesReservedGuardResponse(before.privateInputState, marker, responses))
+        ) {
+          throw new SubmissionRejectedBeforeDispatchError("input_batch_changed");
+        }
+        const pendingRequests = preflight?.persisted
+          ? (preflight?.result.inputRequests ?? [])
+          : outstandingInternalEveRequests(
+              (before?.events ?? []).filter(
+                (event): event is InternalEveEvent => event !== null && typeof event === "object",
+              ),
+            );
+        const expected =
+          stopGuardOnly && marker !== undefined
+            ? marker.responses.map((response) => response.requestId)
+            : pendingRequests.flatMap((pending) =>
+                pending.kind === "authorization" ? [] : [pending.requestId],
+              );
+        if (
+          expected.length !== responses.length ||
+          expected.some((requestId, index) => responses[index]?.requestId !== requestId)
+        ) {
+          throw new SubmissionRejectedBeforeDispatchError("input_batch_changed");
+        }
+        const responseInput = {
+          adapterSessionId: session.adapterSessionId,
+          ...(marker === undefined ? {} : { internalSessionLimitResponse: marker }),
+          ...(preflight?.nativeObservationState === undefined
+            ? {}
+            : {
+                nativeObservationState: preflight.nativeObservationState,
+              }),
+          operationId,
+          principal,
+          responses,
+          ...(session.version === 2 && session.sourceHandoffId
+            ? { sourceHandoffId: session.sourceHandoffId }
+            : {}),
+        };
+        if (preflight?.persisted) {
+          await input.transport.respondAccepted?.(responseInput);
+          const result = await readAcceptedMutation(
+            request.sessionId,
+            session.version === 2 ? session.checkpointDigest : undefined,
+          );
+          const actual = await privateInputsForSession(await requireSession(request.sessionId));
+          if (
+            marker?.decision === "stop" &&
+            (actual === undefined || !provesSessionLimitResponse(marker, actual))
+          ) {
+            throw new HostedSubmissionUnknownError();
+          }
+          return { result };
+        }
+        const snapshot = await input.transport.respond(responseInput);
+        const result = await observeSnapshot(request.sessionId, snapshot);
+        if (
+          marker?.decision === "stop" &&
+          (snapshot.privateInputState === undefined ||
+            !provesSessionLimitResponse(marker, snapshot.privateInputState))
+        ) {
+          throw new HostedSubmissionUnknownError();
+        }
+        return { result };
+      },
+      kind: "respond",
+      request,
+      sessionId: request.sessionId,
+    });
+  }
+
+  // oxlint-disable-next-line eslint/func-style -- Cancel uses the same canonical RESPOND journal without answering other requests.
+  async function stopParkedSessionLimitGuard(
+    sessionId: string,
+    turnId: string | undefined,
+    preflight: Awaited<ReturnType<typeof readMutationPreflight>>,
+  ): Promise<EveSessionResult | undefined> {
+    const { session } = preflight;
+    const state = await privateInputsForSession(session);
+    if (state === undefined) {
+      return undefined;
+    }
+    const batches = frameworkGuardBatches(state);
+    const [batch] = batches;
+    if (batch === undefined) {
+      return undefined;
+    }
+    if (turnId !== undefined && batches.some((entry) => entry.turnId !== turnId)) {
+      throw new SubmissionRejectedBeforeDispatchError("turn_changed");
+    }
+    if (
+      batches.some((entry) => entry.requests.some((request) => !request.optionIds.includes("stop")))
+    ) {
+      throw new SubmissionRejectedBeforeDispatchError("input_batch_changed");
+    }
+    await assertSessionLimitOwner(session);
+    assertCompletePrivateBatch(state, preflight.result);
+    return await respondRequest(
+      {
+        clientRequestId: guardClientRequestId(session, batch, "stop"),
+        responses: batches.flatMap((entry) =>
+          entry.requests.map((request) => ({
+            requestId: request.requestId,
+            response: { kind: "answer", optionId: "stop", value: "stop" },
+          })),
+        ),
+        sessionId,
+      },
+      {
+        adapterGeneration: toDurableHostedSessionRecord(session).adapterGeneration,
+        adapterSessionId: session.adapterSessionId,
+        batches,
+      },
+      true,
+    );
+  }
+
+  const service = {
     async bindStartAlias(request) {
       requireHostedOperationScope(principal, "start");
       if (request.clientRequestId === request.canonicalClientRequestId) {
@@ -1996,10 +2575,26 @@ export function createHostedEveSessionService(input: {
         input.store.readCheckpointPage !== undefined;
       let snapshot: HostedEngineSnapshot;
       try {
-        const preflight = paged ? await readMutationPreflight(sessionId) : undefined;
+        const retainedInputs = await privateInputsForSession(session);
+        const preflight =
+          paged ||
+          session.status === "input_required" ||
+          (retainedInputs !== undefined && guardRequestIds(retainedInputs).length > 0)
+            ? await readMutationPreflight(sessionId)
+            : undefined;
+        if (!paged && preflight !== undefined && preflight.activeTurnId === undefined) {
+          const stopped = await stopParkedSessionLimitGuard(sessionId, turnId, preflight);
+          if (stopped !== undefined) {
+            return stopped;
+          }
+        }
         if (preflight && (preflight.persisted || preflight.nativeObservationState !== undefined)) {
           ({ session } = preflight);
           if (preflight.activeTurnId === undefined) {
+            const stopped = await stopParkedSessionLimitGuard(sessionId, turnId, preflight);
+            if (stopped !== undefined) {
+              return stopped;
+            }
             if (turnId !== undefined) {
               throw new SubmissionRejectedBeforeDispatchError("no_active_turn");
             }
@@ -2010,7 +2605,12 @@ export function createHostedEveSessionService(input: {
               principal,
               sessionId,
             });
-            const result = await readSession({ cursor: 0, limit: 100, sessionId });
+            const result = await readSession({
+              continueWork: false,
+              cursor: 0,
+              limit: 100,
+              sessionId,
+            });
             return settledCount
               ? eveSessionResultSchema.parse({
                   ...result,
@@ -2135,74 +2735,7 @@ export function createHostedEveSessionService(input: {
       requireHostedOperationScope(principal, "start");
       return readSession(request);
     }, // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-    async respond(request) {
-      requireHostedOperationScope(principal, "respond");
-      let session = await requireSession(request.sessionId);
-      return mutate({
-        async dispatch(operationId) {
-          const paged =
-            input.transport.observe !== undefined &&
-            input.transport.respondAccepted !== undefined &&
-            input.store.observeSessionPaged !== undefined &&
-            input.store.readCheckpointPage !== undefined;
-          const preflight = paged ? await readMutationPreflight(request.sessionId) : undefined;
-          if (preflight) {
-            ({ session } = preflight);
-          }
-          const before = preflight?.persisted
-            ? undefined
-            : await input.transport.get({
-                adapterSessionId: session.adapterSessionId,
-                principal,
-              });
-          const expected = (
-            preflight?.persisted
-              ? (preflight?.result.inputRequests ?? [])
-              : outstandingInternalEveRequests(
-                  (before?.events ?? []).filter(
-                    (event): event is InternalEveEvent =>
-                      event !== null && typeof event === "object",
-                  ),
-                )
-          ).flatMap((pending) => (pending.kind === "authorization" ? [] : [pending.requestId]));
-          if (
-            expected.length !== request.responses.length ||
-            expected.some((requestId, index) => request.responses[index]?.requestId !== requestId)
-          ) {
-            throw new SubmissionRejectedBeforeDispatchError("input_batch_changed");
-          }
-          const responseInput = {
-            adapterSessionId: session.adapterSessionId,
-            ...(preflight?.nativeObservationState === undefined
-              ? {}
-              : {
-                  nativeObservationState: preflight.nativeObservationState,
-                }),
-            operationId,
-            principal,
-            responses: request.responses,
-            ...(session.version === 2 && session.sourceHandoffId
-              ? { sourceHandoffId: session.sourceHandoffId }
-              : {}),
-          };
-          if (preflight?.persisted) {
-            await input.transport.respondAccepted?.(responseInput);
-            return {
-              result: await readAcceptedMutation(
-                request.sessionId,
-                session.version === 2 ? session.checkpointDigest : undefined,
-              ),
-            };
-          }
-          const snapshot = await input.transport.respond(responseInput);
-          const result = await observeSnapshot(request.sessionId, snapshot);
-          return { result };
-        },
-        kind: "respond",
-        request,
-        sessionId: request.sessionId,
-      });
-    },
+    respond: respondRequest,
     async send(request) {
       requireHostedOperationScope(principal, "send");
       let session = await requireSession(request.sessionId);
@@ -2708,6 +3241,26 @@ export function createHostedEveSessionService(input: {
         request,
       });
     },
+  } satisfies EveSessionService;
+  const present = async (result: EveSessionResult): Promise<EveSessionResult> => {
+    if (result.sessionId === "") {
+      return result;
+    }
+    return presentSessionLimitState(
+      result,
+      await privateInputsForSession(await requireSession(result.sessionId)),
+    );
+  };
+  // Keep canonical mutation/preflight results complete privately; sanitize every public result.
+  return {
+    ...service,
+    cancel: async (request) => present(await service.cancel(request)),
+    get: async (request) => present(await service.get(request)),
+    getStart: async (request) => present(await service.getStart(request)),
+    recoverStart: async (request) => present(await service.recoverStart(request)),
+    respond: async (request) => present(await service.respond(request)),
+    send: async (request) => present(await service.send(request)),
+    start: async (request) => present(await service.start(request)),
   };
 }
 

@@ -1,3 +1,4 @@
+import { isFrameworkSessionLimitInput } from "./session-limit-input";
 import { createHash } from "node:crypto";
 
 import {
@@ -31,6 +32,7 @@ export interface InternalEveEvent {
   label?: string;
   state?: string;
   request?: PublicInputRequest;
+  frameworkSessionLimit?: boolean;
   code?: string;
   message?: string;
   status?: EveSessionStatus;
@@ -1283,7 +1285,8 @@ export const projectInstalledEveEvent = (
             },
             { index, status: "failed", type: "status" },
           ]
-        : projectedRequests.map((request) => ({
+        : projectedRequests.map((request, requestIndex) => ({
+            frameworkSessionLimit: isFrameworkSessionLimitInput(event.data.requests[requestIndex]),
             index,
             request,
             type: "input.requested" as const,
@@ -1561,7 +1564,7 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
         : null;
     }
     case "input.requested": {
-      return event.request
+      return event.request && event.frameworkSessionLimit !== true
         ? { index: event.index, request: event.request, type: "input_required" }
         : null;
     }

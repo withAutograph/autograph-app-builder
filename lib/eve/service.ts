@@ -1,4 +1,24 @@
-import { continueApprovedLocalBuild } from "../agent/local-build-continuation";
+import {
+  guardRequestIds,
+  pendingFrameworkGuardIds,
+  presentSessionLimitState,
+  sessionLimitCancelledTurns,
+  matchesPendingGuardStop,
+  frameworkGuardBatches,
+  resolvedGuardRequestIds,
+  isLegacySessionLimitRequest,
+  mergeSessionLimitResponses,
+  omitControlledGuardQuestions,
+  privateInputForEvents,
+  provesSessionLimitResponse,
+  nativeResponses,
+} from "./session-limit-input";
+import type { InternalSessionLimitResponse, PrivateInputState } from "./session-limit-input";
+import { digest, stableId } from "./hosted-operation-identifiers";
+import {
+  continueApprovedLocalBuild,
+  readLocalBuildDecision,
+} from "../agent/local-build-continuation";
 import { Client, ClientError, parseInputResponses } from "eve/client";
 import type { ClientSession, MessageStreamEvent } from "eve/client";
 import { setTimeout as delay } from "node:timers/promises";
@@ -130,6 +150,15 @@ interface LocalEveRuntimeState {
   /** The Eve child that was serving when this state was last observed. */
   restartGeneration?: string;
   requests: Map<string, string>;
+  guardOperations: Map<
+    string,
+    {
+      marker: InternalSessionLimitResponse;
+      requestDigest: string;
+      sessionId: string;
+      state: "reserved" | "succeeded";
+    }
+  >;
   sessionEvents: Map<string, MessageStreamEvent[]>;
   sessionHandles: Map<string, ClientSession>;
   activeResponses: Map<string, CancellableResponse>;
@@ -196,6 +225,7 @@ function localRuntimeState(generation: string): LocalEveRuntimeState {
   const existing = localRuntimeGlobal[localEveRuntimeStateKey];
   if (existing !== undefined && existing.generation === generation) {
     existing.continuationPumps ??= new Map();
+    existing.guardOperations ??= new Map();
     existing.tailControllers ??= new Map();
     existing.unavailableSessions ??= new Set();
     return existing;
@@ -204,6 +234,7 @@ function localRuntimeState(generation: string): LocalEveRuntimeState {
     activeResponses: new Map(),
     continuationPumps: new Map(),
     generation,
+    guardOperations: new Map(),
     metadata: new Map(),
     modelInterruptions: new Map(),
     recoveries: new Map(),
@@ -696,9 +727,7 @@ export function createLocalEveSessionService(
       const snapshot = await readLocalSnapshot(resumeSessionId);
       localSessionEvents.set(resumeSessionId, [...snapshot.events]);
       touchSession(resumeSessionId);
-      return resultForEvents(resumeSessionId, snapshot.events, 0, 100, {
-        status: state.restartInterrupted.has(resumeSessionId) ? "waiting" : undefined,
-      });
+      return await service.get({ cursor: 0, limit: 100, sessionId: resumeSessionId });
     }
     if (prompt === undefined) {
       throw new Error("A new App Builder session requires a prompt.");
@@ -800,6 +829,20 @@ export function createLocalEveSessionService(
     const work = async () => {
       const snapshot = await readLocalSnapshot(sessionId);
       const status = deriveInstalledEveStatus(snapshot.events);
+      const inputs = privateInputForEvents(snapshot.events);
+      const stoppedTurns = sessionLimitCancelledTurns(inputs);
+      for (const operation of state.guardOperations.values()) {
+        if (
+          operation.sessionId === sessionId &&
+          operation.marker.stoppedBuildTurnId !== undefined &&
+          provesSessionLimitResponse(operation.marker, inputs)
+        )
+          stoppedTurns.push(operation.marker.stoppedBuildTurnId);
+      }
+      if (stoppedTurns.length > 0) {
+        const decision = await readLocalBuildDecision(sessionId);
+        if (decision !== undefined && stoppedTurns.includes(decision.turnId)) return false;
+      }
       return await continueApprovedLocalBuild({
         active: status === "working",
         dispatch: async (message) => await dispatchLocalBuildMessage(sessionId, message),
@@ -815,6 +858,107 @@ export function createLocalEveSessionService(
       if (state.continuationPumps.get(sessionId) === promise) {
         state.continuationPumps.delete(sessionId);
       }
+    }
+  };
+
+  const continueLocalSessionLimit = async (
+    sessionId: string,
+    result: EveSessionResult,
+  ): Promise<EveSessionResult> => {
+    const events = localSessionEvents.get(sessionId) ?? [];
+    const inputs = privateInputForEvents(events);
+    const ids = guardRequestIds(inputs);
+    for (const [key, operation] of state.guardOperations) {
+      if (
+        operation.sessionId === sessionId &&
+        provesSessionLimitResponse(operation.marker, inputs)
+      ) {
+        operation.state = "succeeded";
+        localRequests.set(key, sessionId);
+      }
+    }
+    const settledIds = resolvedGuardRequestIds(inputs);
+    for (const operation of state.guardOperations.values()) {
+      if (operation.sessionId === sessionId && operation.state === "succeeded")
+        settledIds.push(
+          ...guardRequestIds({ pending: operation.marker.batches, resolved: [], version: 1 }),
+        );
+    }
+    const stopAwaitingCancellation = [...state.guardOperations.values()].some(
+      (operation) =>
+        operation.sessionId === sessionId &&
+        operation.marker.decision === "stop" &&
+        !provesSessionLimitResponse(operation.marker, inputs),
+    );
+    if (stopAwaitingCancellation)
+      return {
+        ...omitControlledGuardQuestions(result, ids),
+        error: {
+          code: "framework_stop_settling",
+          message:
+            "Builder is reconciling your stop request. Keep this session and read it again; no product decision is required.",
+        },
+        status: "working",
+      };
+    if (ids.length === 0) return omitControlledGuardQuestions(result, settledIds);
+    const stopped = [...state.guardOperations.values()].some(
+      (operation) =>
+        operation.sessionId === sessionId && matchesPendingGuardStop(operation.marker, inputs),
+    );
+    if (stopped)
+      return {
+        ...omitControlledGuardQuestions(result, ids),
+        error: {
+          code: "framework_stop_settling",
+          message:
+            "Builder is reconciling your stop request. Keep this session and read it again; no product decision is required.",
+        },
+        status: "working",
+      };
+    const expected = outstandingInstalledEveRequests(events);
+    const nativeIds = inputs.pending.flatMap((batch) =>
+      batch.requests.map((request) => request.requestId),
+    );
+    if (
+      expected.some((request) => request.kind === "authorization") ||
+      expected.length !== nativeIds.length ||
+      expected.some((request, index) => request.requestId !== nativeIds[index])
+    )
+      return result;
+    if (
+      inputs.pending.some((batch) =>
+        batch.requests.some((request) => !isLegacySessionLimitRequest(request)),
+      )
+    )
+      return omitControlledGuardQuestions(result, ids);
+    if (localActiveResponses.has(sessionId))
+      return { ...omitControlledGuardQuestions(result, ids), status: "working" };
+    const clientRequestId = stableId("framework_usage", {
+      batch: inputs.pending[0],
+      generation: state.generation,
+      sessionId,
+    });
+    try {
+      const next = await service.respond({
+        clientRequestId,
+        responses: mergeSessionLimitResponses(inputs, []),
+        sessionId,
+      });
+      return {
+        ...omitControlledGuardQuestions(result, ids),
+        inputRequests: next.inputRequests ?? [],
+        status: next.status,
+      };
+    } catch {
+      return {
+        ...omitControlledGuardQuestions(result, ids),
+        error: {
+          code: "framework_continuation_settling",
+          message:
+            "Builder is reconciling its saved continuation. Keep this session and read it again; no product decision is required.",
+        },
+        status: "working",
+      };
     }
   };
 
@@ -839,14 +983,20 @@ export function createLocalEveSessionService(
       }
     }
     touchSession(sessionId);
-    const result = resultForEvents(
+    let result = resultForEvents(
       sessionId,
       localSessionEvents.get(sessionId) ?? [],
       cursor,
       limit,
       localResultOptions(sessionId),
     );
-    if (result.status === "waiting" && (await continueLocalApprovedWork(sessionId))) {
+    result = await continueLocalSessionLimit(sessionId, result);
+    if (
+      pendingFrameworkGuardIds(privateInputForEvents(localSessionEvents.get(sessionId) ?? []))
+        .length === 0 &&
+      result.status === "waiting" &&
+      (await continueLocalApprovedWork(sessionId))
+    ) {
       return { ...result, status: "working" };
     }
     return result;
@@ -889,7 +1039,80 @@ export function createLocalEveSessionService(
     touchSession(sessionId);
     return acceptedResult(sessionId, localSessionEvents.get(sessionId));
   };
-  service.respond = async ({ sessionId, responses, clientRequestId }) => {
+  const reconcileLocalGuardResponse = async (
+    key: string,
+    requestDigest: string,
+    sessionId: string,
+  ) => {
+    const retained = state.guardOperations.get(key);
+    if (retained !== undefined && retained.requestDigest !== requestDigest)
+      throw new Error("The framework response identity changed.");
+    if (retained !== undefined && retained.state === "reserved") {
+      await recoverDurableTail(sessionId);
+      const actual = privateInputForEvents(localSessionEvents.get(sessionId) ?? []);
+      if (!provesSessionLimitResponse(retained.marker, actual))
+        throw new Error("The framework continuation acceptance is still unknown.");
+      retained.state = "succeeded";
+      localRequests.set(key, sessionId);
+    }
+  };
+  const prepareLocalGuardResponses = (
+    sessionId: string,
+    requested: Parameters<EveSessionService["respond"]>[0]["responses"],
+    stopGuardOnly: boolean,
+  ) => {
+    let responses = requested;
+    const inputs = privateInputForEvents(localSessionEvents.get(sessionId) ?? []);
+    const ids = guardRequestIds(inputs);
+    if (
+      ids.length > 0 &&
+      !stopGuardOnly &&
+      !ids.every((id) => responses.some((response) => response.requestId === id))
+    )
+      responses = mergeSessionLimitResponses(inputs, responses);
+    const expected = stopGuardOnly
+      ? frameworkGuardBatches(inputs).flatMap((batch) =>
+          batch.requests.map((entry) => entry.requestId),
+        )
+      : outstandingInstalledEveRequests(localSessionEvents.get(sessionId) ?? []).map(
+          ({ requestId }) => requestId,
+        );
+    if (
+      expected.length !== responses.length ||
+      expected.some((requestId, index) => responses[index]?.requestId !== requestId)
+    ) {
+      throw new Error("The complete outstanding Eve input batch is required.");
+    }
+    return { ids, inputs, responses };
+  };
+  const localStoppedBuildDecision = async (sessionId: string, stopGuardOnly: boolean) =>
+    stopGuardOnly &&
+    process.env.APP_BUILDER_EXECUTION_MODE === DEVELOPMENT_MODE &&
+    process.env.APP_BUILDER_EXECUTION_BUNDLE === DEVELOPMENT_BUNDLE
+      ? await readLocalBuildDecision(sessionId)
+      : undefined;
+  const localGuardMarker = async (
+    sessionId: string,
+    inputs: PrivateInputState,
+    stopGuardOnly: boolean,
+    responses: Parameters<EveSessionService["respond"]>[0]["responses"],
+  ): Promise<InternalSessionLimitResponse> => {
+    const stoppedDecision = await localStoppedBuildDecision(sessionId, stopGuardOnly);
+    return {
+      adapterGeneration: 1,
+      adapterSessionId: sessionId,
+      batches: stopGuardOnly ? frameworkGuardBatches(inputs) : inputs.pending,
+      decision: stopGuardOnly ? "stop" : "continue",
+      ...(stoppedDecision === undefined ? {} : { stoppedBuildTurnId: stoppedDecision.turnId }),
+      responses: nativeResponses(responses),
+    };
+  };
+  const respondLocal = async (
+    request: Parameters<EveSessionService["respond"]>[0],
+    stopGuardOnly = false,
+  ) => {
+    const { sessionId, responses: requestedResponses, clientRequestId } = request;
+    let responses = requestedResponses;
     if (state.continuationPumps.has(sessionId)) {
       throw new Error("Another continuation is already active for this session.");
     }
@@ -897,27 +1120,82 @@ export function createLocalEveSessionService(
       throw new LocalSessionRecoveryUnavailableError();
     }
     const key = `respond:${sessionId}:${clientRequestId}`;
+    const requestDigest = digest({ clientRequestId, responses, sessionId });
+    await reconcileLocalGuardResponse(key, requestDigest, sessionId);
     if (!localRequests.has(key)) {
       await requireSettledModelTurn(sessionId);
-      const expected = outstandingInstalledEveRequests(localSessionEvents.get(sessionId) ?? []).map(
-        ({ requestId }) => requestId,
-      );
-      if (
-        expected.length !== responses.length ||
-        expected.some((requestId, index) => responses[index]?.requestId !== requestId)
-      ) {
-        throw new Error("The complete outstanding Eve input batch is required.");
+      const prepared = prepareLocalGuardResponses(sessionId, responses, stopGuardOnly);
+      const { ids, inputs } = prepared;
+      ({ responses } = prepared);
+      if (ids.length > 0)
+        state.guardOperations.set(key, {
+          marker: await localGuardMarker(sessionId, inputs, stopGuardOnly, responses),
+          requestDigest,
+          sessionId,
+          state: "reserved",
+        });
+      let result: CancellableResponse;
+      try {
+        result = await acceptLocalContinuation(
+          sessionId,
+          async () =>
+            await sessionAtBufferedTail(sessionId).respond(toEveInputResponses(responses)),
+        );
+      } catch (error) {
+        if (ids.length > 0) {
+          state.recoveryRequired.add(sessionId);
+          state.restartInterrupted.add(sessionId);
+        }
+        throw error;
       }
-      const result = await acceptLocalContinuation(
-        sessionId,
-        async () => await sessionAtBufferedTail(sessionId).respond(toEveInputResponses(responses)),
-      );
+      const operation = state.guardOperations.get(key);
+      if (operation !== undefined) operation.state = "succeeded";
       state.restartInterrupted.delete(sessionId);
       consumeSessionResponse(sessionId, result);
       localRequests.set(key, sessionId);
     }
     touchSession(sessionId);
     return acceptedResult(sessionId, localSessionEvents.get(sessionId));
+  };
+  service.respond = respondLocal;
+  const stopLocalSessionLimitGuard = async (
+    sessionId: string,
+    turnId: string | undefined,
+  ): Promise<EveSessionResult | undefined> => {
+    const currentInputs = privateInputForEvents(localSessionEvents.get(sessionId) ?? []);
+    if (guardRequestIds(currentInputs).length > 0 || !localSessionEvents.has(sessionId)) {
+      const snapshot = await readLocalSnapshot(sessionId);
+      localSessionEvents.set(sessionId, [...snapshot.events]);
+      const inputs = privateInputForEvents(snapshot.events);
+      const batches = frameworkGuardBatches(inputs);
+      const [batch] = batches;
+      if (batch !== undefined) {
+        if (
+          batches.some((entry) =>
+            entry.requests.some((pending) => !pending.optionIds.includes("stop")),
+          )
+        )
+          throw new Error("The cancellation input batch changed.");
+        if (turnId !== undefined && batches.some((entry) => entry.turnId !== turnId))
+          throw new Error("The cancellation turn changed.");
+        const request = {
+          clientRequestId: stableId("framework_stop", {
+            batch,
+            generation: state.generation,
+            sessionId,
+          }),
+          responses: batches.flatMap((entry) =>
+            entry.requests.map((pending) => ({
+              requestId: pending.requestId,
+              response: { kind: "answer" as const, optionId: "stop", value: "stop" },
+            })),
+          ),
+          sessionId,
+        };
+        return await respondLocal(request, true);
+      }
+    }
+    return undefined;
   };
   service.cancel = async ({ sessionId, turnId }) => {
     if (state.unavailableSessions.has(sessionId)) {
@@ -929,6 +1207,8 @@ export function createLocalEveSessionService(
         status: "waiting",
       });
     }
+    const stopped = await stopLocalSessionLimitGuard(sessionId, turnId);
+    if (stopped !== undefined) return stopped;
     const active = localActiveResponses.get(sessionId);
     if (turnId === undefined && active !== undefined) {
       try {
@@ -955,7 +1235,26 @@ export function createLocalEveSessionService(
     touchSession(sessionId);
     return resultForEvents(sessionId, localSessionEvents.get(sessionId) ?? []);
   };
-  return service;
+  const { getStart } = service;
+  const present = (result: EveSessionResult): EveSessionResult =>
+    presentSessionLimitState(
+      result,
+      privateInputForEvents(localSessionEvents.get(result.sessionId) ?? []),
+    );
+  return {
+    ...service,
+    cancel: async (request) => present(await service.cancel(request)),
+    get: async (request) => present(await service.get(request)),
+    ...(getStart === undefined
+      ? {}
+      : {
+          getStart: async (request: Parameters<NonNullable<EveSessionService["getStart"]>>[0]) =>
+            present(await getStart(request)),
+        }),
+    respond: async (request) => present(await service.respond(request)),
+    send: async (request) => present(await service.send(request)),
+    start: async (request) => present(await service.start(request)),
+  };
 }
 
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
