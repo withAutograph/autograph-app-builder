@@ -1,12 +1,15 @@
-import type { ToolInputRequest } from "eve/tools";
+import type { ToolInputRequest, ToolInputResponse, WorkflowToolContext } from "eve/tools";
 import type {
   OperatorPublicResult,
   HostedOperatorError,
 } from "../provisioning/hosted-operator-contract";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { prepareHostedRuntimeWithOperator } from "./prepare-app-hosted-runtime-step";
+import type { prepareHostedRuntimeStep } from "./prepare-app-hosted-runtime-step";
 import {
+  continueHostedRuntimePreparation,
   hostedRuntimeApprovalInputSchema,
+  participantIdentityInputQuestion,
   realmIdentityInputQuestion,
 } from "../../agent/tools/prepare-app-hosted-runtime";
 import {
@@ -16,6 +19,8 @@ import {
   sameOperatorSelection,
 } from "../provisioning/hosted-operator-contract";
 import type { PreparedRuntimeSelection } from "./prepared-runtime-selection";
+
+const stepMocks = { step: vi.fn<typeof prepareHostedRuntimeStep>() };
 
 const plan = hostedOperatorPlanSchema.parse({
   access: [],
@@ -154,9 +159,73 @@ const contract = {
   sameSelection: (left: typeof plan.selection, right: typeof plan.selection) =>
     sameOperatorSelection(left, right),
 };
+const participantPlan = hostedOperatorPlanSchema.parse({
+  ...plan,
+  stage: "auth-participants",
+  gatewayBindings: undefined,
+  normalActorProgram: {
+    version: 1,
+    appId: plan.selection.appId,
+    origin: plan.deploymentBoundary?.verification.publicOrigin,
+    actors: [
+      {
+        actorKey: "owner",
+        email: "owner@example.test",
+        name: "Owner",
+        account: "capture-existing",
+      },
+    ],
+    organizations: [],
+    memberships: [],
+    appAccess: [],
+  },
+  effects: [
+    { id: "normal-accounts", kind: "normal-accounts", description: "Connect the approved account" },
+  ],
+});
+const participantInput = {
+  ...input,
+  plan: participantPlan,
+  planDigest: operatorPlanDigest(participantPlan),
+};
+const participantBlocked = {
+  appId: input.appId,
+  authenticatedBehavior: "unassessed" as const,
+  operationRef,
+  status: "blocked" as const,
+  code: "auth_identity_required" as const,
+};
+const identityLink = {
+  browserUrl: "https://auth.example/link",
+  expiresAt: "2027-01-01T00:00:00Z",
+  operationRef,
+  sessionId: "public-session",
+};
+const workflowContext = (response: ToolInputResponse) => {
+  const ask = vi.fn<WorkflowToolContext["ask"]>().mockResolvedValue(response);
+  const context: WorkflowToolContext = {
+    ...ctx,
+    toolName: "prepare-app-hosted-runtime",
+    session: {
+      id: ctx.session.id,
+      auth: { current: null, initiator: null },
+      turn: { id: "turn", sequence: 0 },
+    },
+    ask,
+    agents: {},
+    agent: async () => await Promise.reject(new Error("No agent call is expected")),
+    getToken: async () => await Promise.reject(new Error("No provider token is expected")),
+    requireAuth: () => {
+      throw new Error("No provider authorization is expected");
+    },
+  };
+  return { context, ask };
+};
+
 describe("hosted runtime Auth identity handoff", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    stepMocks.step.mockReset();
     order.length = 0;
   });
   it("keeps the approval envelope strict while deferring the Node-backed plan parse", () => {
@@ -220,6 +289,194 @@ describe("hosted runtime Auth identity handoff", () => {
     expect(order).toEqual(["lease-released", "selection"]);
   });
 
+  it.each(["dto", "error"])(
+    "requests the approved participant sign-in link after real preflight denial %s",
+    async (mode) => {
+      if (mode === "dto") {
+        operator.request.mockResolvedValueOnce(participantBlocked);
+      } else {
+        operator.request.mockRejectedValueOnce(
+          new HostedOperatorErrorClass("auth_identity_required"),
+        );
+      }
+      const value = await prepareHostedRuntimeWithOperator(
+        participantInput,
+        ctx,
+        operator,
+        vi.fn<(selection: PreparedRuntimeSelection) => void>(),
+        contract,
+      );
+      expect(value.result).toMatchObject({ status: "blocked", code: "auth_identity_required" });
+      expect(value.identityInput).toEqual(identityLink);
+      expect(operator.authIdentityInput).toHaveBeenCalledWith(
+        { action: "auth-identity-input", operationRef, selection: participantPlan.selection },
+        ctx.abortSignal,
+      );
+      expect(operator.request).toHaveBeenCalledTimes(1);
+    },
+  );
+  it("skips the legacy owner handoff when Auth bootstrap retains a participant program", async () => {
+    const bootstrapWithProgram = hostedOperatorPlanSchema.parse({
+      ...plan,
+      normalActorProgram: participantPlan.normalActorProgram,
+      stage: "auth-bootstrap",
+      access: [],
+      authSchema: {
+        targetDigest: "c".repeat(64),
+        artifactRef: "fixture-auth-plan",
+        planDigest: "d".repeat(64),
+        installer: { reference: "auth-worker", sha256: "e".repeat(64) },
+      },
+      bootstrap: {
+        endpointId: "ep-fixture",
+        maintenanceDatabase: "postgres",
+        role: "maintenance_owner",
+      },
+      resourcesInstaller: { reference: "resource-worker", sha256: "f".repeat(64) },
+      effects: [
+        {
+          description: "auth resources",
+          id: "auth-resources",
+          kind: "resources",
+          resourceId: plan.authDatabase.resourceId,
+        },
+        {
+          description: "app resources",
+          id: "app-resources",
+          kind: "resources",
+          resourceId: plan.appDatabase.resourceId,
+        },
+        { description: "install Auth", id: "auth-install", kind: "install" },
+        ...plan.effects.filter((effect) => effect.kind === "gateway-bindings"),
+      ],
+    });
+    const value = await prepareHostedRuntimeWithOperator(
+      {
+        ...input,
+        plan: bootstrapWithProgram,
+        planDigest: operatorPlanDigest(bootstrapWithProgram),
+      },
+      ctx,
+      operator,
+      () => {},
+      contract,
+    );
+    expect(value.result.status).toBe("auth-schema-prepared");
+    expect(value.identityInput).toBeNull();
+    expect(operator.authIdentityInput).not.toHaveBeenCalled();
+  });
+  it("keeps the legacy bootstrap question without resuming it as participant preparation", async () => {
+    stepMocks.step.mockResolvedValueOnce({
+      result: {
+        appId: input.appId,
+        authenticatedBehavior: "unassessed",
+        operationRef,
+        status: "auth-schema-prepared",
+      },
+      identityInput: identityLink,
+    });
+    const value = workflowContext({ status: "answered", optionId: "continue" });
+    const result = await continueHostedRuntimePreparation(input, value.context, stepMocks.step);
+    expect(result).toMatchObject({ status: "auth-schema-prepared", identityResponse: "answered" });
+    expect(value.ask).toHaveBeenCalledWith(realmIdentityInputQuestion(identityLink));
+    expect(stepMocks.step).toHaveBeenCalledTimes(1);
+  });
+  it("reports a real participant identity-link denial without requesting it again", async () => {
+    operator.request.mockResolvedValueOnce(participantBlocked);
+    operator.authIdentityInput.mockRejectedValueOnce(
+      new HostedOperatorErrorClass("auth_identity_required"),
+    );
+    const value = await prepareHostedRuntimeWithOperator(
+      participantInput,
+      ctx,
+      operator,
+      () => {},
+      contract,
+    );
+    expect(value.identityInput).toBeNull();
+    expect(value.result).toMatchObject({ status: "blocked", code: "auth_identity_required" });
+    expect(operator.authIdentityInput).toHaveBeenCalledTimes(1);
+  });
+  it("does not request participant sign-in for an unrelated authority denial", async () => {
+    operator.request.mockRejectedValueOnce(new HostedOperatorErrorClass("authorization_required"));
+    const value = await prepareHostedRuntimeWithOperator(
+      participantInput,
+      ctx,
+      operator,
+      () => {},
+      contract,
+    );
+    expect(value.result).toMatchObject({ status: "blocked", code: "authorization_required" });
+    expect(operator.authIdentityInput).not.toHaveBeenCalled();
+  });
+  it("resumes the same approved workflow input and call after the human answers normal sign-in", async () => {
+    stepMocks.step
+      .mockResolvedValueOnce({ result: participantBlocked, identityInput: identityLink })
+      .mockResolvedValueOnce({
+        result: {
+          appId: input.appId,
+          authenticatedBehavior: "unassessed",
+          operationRef,
+          status: "participants-prepared",
+        },
+        identityInput: null,
+      });
+    const value = workflowContext({ status: "answered", optionId: "continue" });
+    const result = await continueHostedRuntimePreparation(
+      participantInput,
+      value.context,
+      stepMocks.step,
+    );
+    expect(result).toMatchObject({ status: "participants-prepared", identityResponse: "answered" });
+    expect(value.ask).toHaveBeenCalledWith(participantIdentityInputQuestion(identityLink));
+    expect(stepMocks.step.mock.calls).toEqual([
+      [participantInput, value.context],
+      [participantInput, value.context],
+    ]);
+    expect(value.context.callId).toBe(ctx.callId);
+  });
+  it.each(["dismissed", "unavailable"] as const)(
+    "keeps the actual blocked result when normal sign-in is %s",
+    async (status) => {
+      stepMocks.step.mockResolvedValueOnce({
+        result: participantBlocked,
+        identityInput: identityLink,
+      });
+      const value = workflowContext({ status });
+      const result = await continueHostedRuntimePreparation(
+        participantInput,
+        value.context,
+        stepMocks.step,
+      );
+      expect(result).toMatchObject({
+        status: "blocked",
+        code: "auth_identity_required",
+        identityResponse: status,
+      });
+      expect(stepMocks.step).toHaveBeenCalledTimes(1);
+    },
+  );
+  it("keeps waiting for real capture rather than treating a human answer as identity evidence", async () => {
+    stepMocks.step
+      .mockResolvedValueOnce({ result: participantBlocked, identityInput: identityLink })
+      .mockResolvedValueOnce({ result: participantBlocked, identityInput: identityLink });
+    const value = workflowContext({ status: "answered", text: "I signed in" });
+    value.ask
+      .mockResolvedValueOnce({ status: "answered", text: "I signed in" })
+      .mockResolvedValueOnce({ status: "dismissed" });
+    const result = await continueHostedRuntimePreparation(
+      participantInput,
+      value.context,
+      stepMocks.step,
+    );
+    expect(result).toMatchObject({
+      status: "blocked",
+      code: "auth_identity_required",
+      identityResponse: "dismissed",
+    });
+    expect(stepMocks.step).toHaveBeenCalledTimes(2);
+    expect(value.ask).toHaveBeenCalledTimes(2);
+  });
   it("asks the user to complete the prepared Auth identity link", () => {
     const question = realmIdentityInputQuestion({
       browserUrl: "https://auth.example/link",

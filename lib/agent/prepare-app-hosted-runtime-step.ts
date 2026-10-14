@@ -43,6 +43,7 @@ const noHostedOperatorError: HostedOperatorErrorClassifier = (
   _value: unknown,
 ): _value is HostedOperatorErrorType => false;
 
+// oxlint-disable-next-line eslint/complexity -- Legacy readiness and participant preflight retain their separate approval-bound identity handoffs.
 export const prepareHostedRuntimeWithOperator = async (
   input: HostedRuntimeInput,
   ctx: HostedRuntimeContext,
@@ -51,6 +52,20 @@ export const prepareHostedRuntimeWithOperator = async (
   contract: HostedRuntimeContract,
 ) => {
   const { createResourceMismatch, digest, isOperatorError, sameSelection } = contract;
+  const participantPlan =
+    input.plan.stage === "auth-participants" && input.plan.normalActorProgram !== undefined;
+  let identityRequested = false;
+  const requestIdentity = async () => {
+    identityRequested = true;
+    return await operator.authIdentityInput(
+      {
+        action: "auth-identity-input",
+        operationRef: input.operationRef,
+        selection: input.plan.selection,
+      },
+      ctx.abortSignal,
+    );
+  };
   try {
     const { plan } = input;
     const selection = {
@@ -92,28 +107,34 @@ export const prepareHostedRuntimeWithOperator = async (
         sessionId: operator.sessionId ?? ctx.session.id,
       });
     }
-    const identityInput =
-      result.status === "auth-schema-prepared"
-        ? await operator.authIdentityInput(
-            {
-              action: "auth-identity-input",
-              operationRef: input.operationRef,
-              selection: plan.selection,
-            },
-            ctx.abortSignal,
-          )
-        : null;
+    const legacyIdentityMissing =
+      result.status === "auth-schema-prepared" && plan.normalActorProgram === undefined;
+    const participantIdentityMissing =
+      participantPlan && result.status === "blocked" && result.code === "auth_identity_required";
+    const needsIdentity = legacyIdentityMissing || participantIdentityMissing;
+    const identityInput = needsIdentity ? await requestIdentity() : null;
     return { identityInput, result };
   } catch (error) {
-    return {
-      identityInput: null,
-      result: {
-        appId: input.appId,
-        authenticatedBehavior: "unassessed" as const,
-        code: isOperatorError(error) ? error.code : "operator_unavailable",
-        status: "blocked" as const,
-      },
+    const result = {
+      appId: input.appId,
+      authenticatedBehavior: "unassessed" as const,
+      code: isOperatorError(error) ? error.code : "operator_unavailable",
+      status: "blocked" as const,
     };
+    if (participantPlan && result.code === "auth_identity_required" && !identityRequested) {
+      try {
+        return { identityInput: await requestIdentity(), result };
+      } catch (identityError) {
+        return {
+          identityInput: null,
+          result: {
+            ...result,
+            code: isOperatorError(identityError) ? identityError.code : "operator_unavailable",
+          },
+        };
+      }
+    }
+    return { identityInput: null, result };
   }
 };
 
