@@ -25,7 +25,7 @@ const currentSpec = {
   appId: "spend-review",
   appSpecDigest: "a".repeat(64),
   sessionId: "adapter-session",
-  workspaceId: "workspace",
+  workspaceId: "repository-execution-workspace",
 };
 const selected = compiledOperatorReleaseSelectionSchema.parse({
   appId: "spend-review",
@@ -79,23 +79,48 @@ describe("real owner-scoped planning projection", () => {
       context,
       currentSpec.appSpecDigest,
     );
-    expect(f.controlPlane.readCurrentPlanningOwner).toHaveBeenCalledTimes(2);
+    expect(f.controlPlane.readCurrentPlanningOwner).toHaveBeenCalledWith(context);
   });
-  it.each(["appId", "sessionId", "workspaceId"] as const)(
-    "denies a cross-scope accepted %s",
-    async (field) => {
-      const f = fixture();
-      const decision = f.session.privateBuildDecision;
-      if (decision?.currentSpec === undefined) {
-        throw new Error("Missing fixture projection");
-      }
-      decision.currentSpec[field] = "foreign";
-      await expect(
-        readOwnedOperatorPlanningSelection({ context, controlPlane: f.controlPlane }),
-      ).rejects.toMatchObject({ code: "operator_unavailable" });
-      expect(f.controlPlane.readGeneratedSelection).not.toHaveBeenCalled();
-    },
-  );
+  it.each(["appId", "sessionId"] as const)("denies a cross-scope accepted %s", async (field) => {
+    const f = fixture();
+    const decision = f.session.privateBuildDecision;
+    if (decision?.currentSpec === undefined) {
+      throw new Error("Missing fixture projection");
+    }
+    decision.currentSpec[field] = "foreign";
+    await expect(
+      readOwnedOperatorPlanningSelection({ context, controlPlane: f.controlPlane }),
+    ).rejects.toMatchObject({ code: "operator_unavailable" });
+    expect(f.controlPlane.readGeneratedSelection).not.toHaveBeenCalled();
+  });
+  it("denies a canonical owner principal in another tenant workspace before reading artifacts", async () => {
+    const f = fixture();
+    f.session.principal.workspaceId = "other-tenant";
+    await expect(
+      readOwnedOperatorPlanningSelection({ context, controlPlane: f.controlPlane }),
+    ).rejects.toMatchObject({ code: "operator_unavailable" });
+    expect(f.controlPlane.readGeneratedSelection).not.toHaveBeenCalled();
+  });
+  it("preserves current owner revocation before artifact access", async () => {
+    const f = fixture();
+    f.controlPlane.readCurrentPlanningOwner.mockRejectedValue(new Error("revoked owner"));
+    await expect(
+      readOwnedOperatorPlanningSelection({ context, controlPlane: f.controlPlane }),
+    ).rejects.toThrow("revoked owner");
+    expect(f.controlPlane.readGeneratedSelection).not.toHaveBeenCalled();
+  });
+  it("revalidates owner authority after reading the scoped artifact", async () => {
+    const f = fixture();
+    f.controlPlane.readGeneratedSelection.mockImplementation(async () => {
+      f.controlPlane.readCurrentPlanningOwner.mockRejectedValue(
+        new Error("owner revoked during artifact lookup"),
+      );
+      return await Promise.resolve(selected);
+    });
+    await expect(
+      readOwnedOperatorPlanningSelection({ context, controlPlane: f.controlPlane }),
+    ).rejects.toThrow("owner revoked during artifact lookup");
+  });
   it("requires actual private accepted state without a latest-artifact fallback", async () => {
     const f = fixture();
     delete f.session.privateBuildDecision;

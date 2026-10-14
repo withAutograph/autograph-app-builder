@@ -18,6 +18,7 @@ export const approvedBuildDecisionSchema = z.strictObject({
       appSpecDigest: digest,
       proposalDigest: digest.optional(),
       sessionId: z.string(),
+      // Repository execution workspace, distinct from the authenticated tenant workspace.
       workspaceId: z.string(),
     })
     .optional(),

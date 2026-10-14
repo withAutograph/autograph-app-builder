@@ -23,10 +23,12 @@ export const readOwnedOperatorPlanningSelection = async (input: {
   if (currentSpec === undefined || decision === undefined) {
     throw new HostedOperatorError("operator_unavailable");
   }
+  // currentSpec.workspaceId names the repository execution workspace. Tenant ownership
+  // comes from the canonical owner principal and authority, not that Sandbox identity.
   const matchesOwner = [
     decision.adapterSessionId === owned.session.adapterSessionId,
     currentSpec.sessionId === owned.session.adapterSessionId,
-    currentSpec.workspaceId === context.authority.workspaceId,
+    owned.session.principal.workspaceId === context.authority.workspaceId,
     currentSpec.appId === context.target.appId,
   ].every(Boolean);
   if (!matchesOwner) {

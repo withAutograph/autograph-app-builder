@@ -39,6 +39,10 @@ membership and current provider project access; it performs no resource effects
 and needs no compiled release. Repository deployment metadata cannot substitute
 for this target. An explicit conflicting project or branch remains rejected,
 with only the authorized target returned privately for recovery.
+The accepted spec's workspace ID identifies the repository execution workspace.
+The canonical session principal and owner authority identify the tenant workspace;
+artifact reads retain that tenant scope and the original public session. Do not
+compare the repository workspace ID with the tenant workspace ID.
 Existing Gateway signing and Better Auth secrets, actual provider-injected
 `VERCEL_DEPLOYMENT_ID`, and independently observed
 `AUTH_PRODUCTION_DATABASE_IDENTITY` are setup prerequisites. No Production
