@@ -193,11 +193,14 @@ describe("owned compiled artifact workflow hook", () => {
     expect(input.sandbox.run).not.toHaveBeenCalled();
     expect(input.sandbox.readBinaryFile).not.toHaveBeenCalled();
   });
-  it("does not require compiled storage for a descriptor-classified static app", async () => {
+  it("returns the static no-op without compiled workflow markers or hosted storage", async () => {
     const input = frame();
+    mocks.state = null;
     const result = await recordPublishedOperatorSourceForSession({
       ...input,
       backendKind: "static",
+      root: "/private/static-preview",
+      appSpecDigest: "f".repeat(64),
       publishedSource: {
         branch: "reviewed-static",
         changeSetDigest: digest,

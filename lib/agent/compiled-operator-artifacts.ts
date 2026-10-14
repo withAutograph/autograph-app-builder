@@ -193,7 +193,6 @@ export const recordPublishedOperatorSourceForSession = async (
   { status: "not-required" } | { status: "recorded"; selection: CompiledOperatorReleaseSelection }
 > => {
   if (input.backendKind === "static") {
-    assertApprovedCompilation(input);
     return { status: "not-required" };
   }
   const binding = await resolveCompiledArtifactSession(input);
