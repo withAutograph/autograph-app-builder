@@ -5,6 +5,8 @@ import postgres from "postgres";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { z } from "zod";
 import { createNormalActorJournalAuthority } from "./hosted-operator-normal-actor-authority";
+import { createNormalActorJournal } from "./hosted-operator-normal-actor-journal";
+import { confirmNormalActorCapture } from "./hosted-operator-normal-actor-confirmation";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { and, eq, sql } from "drizzle-orm";
 
@@ -598,6 +600,7 @@ export const createHostedOperatorControlPlane = async (input: {
       assertApprovedOwner: owner.assertAuthorized,
       readApproval,
     });
+    const normalActorJournal = createNormalActorJournal(normalActorJournalPorts);
     const sharedAuth = createHostedOperatorSharedAuthAdoption({
       assertAuthorized: owner.assertAuthorized,
       assertPlanningAuthorized: owner.assertPlanningAuthorized,
@@ -708,6 +711,17 @@ export const createHostedOperatorControlPlane = async (input: {
         proofSha256: string;
       }) {
         await owner.assertPlanningAuthorized(linkInput.context);
+        const current = await store.read(linkInput.context);
+        const pending = current?.record.operator?.identityLink;
+        const capture = current?.record.accountPreparation?.captures.find(
+          (candidate) =>
+            candidate.nonceSha256 === linkInput.nonceSha256 &&
+            candidate.proofSha256 === linkInput.proofSha256,
+        );
+        const capturePayload =
+          pending?.browserSession === undefined || capture === undefined
+            ? undefined
+            : await normalActorJournal.readCapture(linkInput.context, capture.reference);
         const saved = await updateHostedRuntimeJournal({
           ...linkInput.context,
           now: Date.now,
@@ -716,6 +730,21 @@ export const createHostedOperatorControlPlane = async (input: {
             const link = record.operator?.identityLink;
             if (link === undefined || record.operator === undefined) {
               throw new HostedOperatorError("authorization_required");
+            }
+            if (link.browserSession !== undefined) {
+              if (capturePayload === undefined) {
+                throw new HostedOperatorError("auth_identity_required");
+              }
+              return confirmNormalActorCapture({
+                context: linkInput.context,
+                record,
+                nonceSha256: linkInput.nonceSha256,
+                proofRef: linkInput.proofRef,
+                proofSha256: linkInput.proofSha256,
+                payload: capturePayload,
+                keyring: tokenKeyring,
+                now: Date.now(),
+              });
             }
             const currentLink = [
               link.nonceSha256 === linkInput.nonceSha256,
