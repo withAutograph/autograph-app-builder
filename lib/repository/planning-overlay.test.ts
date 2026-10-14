@@ -139,7 +139,7 @@ describe("planning from the current checkout", () => {
   });
 
   it.each([
-    { field: undefined, value: undefined },
+    { field: null, value: null },
     { field: "appId", value: "other" },
     { field: "workspacePath", value: "products/stock-exceptions" },
     { field: "appSpecPath", value: "products/stock-exceptions/design.md" },
@@ -166,7 +166,7 @@ describe("planning from the current checkout", () => {
           ...targetIdentitySchema.parse(JSON.parse(result.stdout)),
           producerMetadata: "additional metadata",
         };
-        if (changedField !== undefined) {
+        if (changedField !== null) {
           Object.assign(parsed, {
             [changedField]: value,
           });
@@ -196,11 +196,16 @@ describe("planning from the current checkout", () => {
         executor,
         sandbox,
       });
-      if (changedField !== "appId") {
+      if (changedField === "appId") {
+        await expect(planning).rejects.toThrow(
+          "Target identity did not match the accepted app id.",
+        );
+        expect(executor.mock.calls.map(([request]) => request.command)).toEqual(["identity"]);
+      } else {
         const result = await planning;
         expect(result.identity).not.toHaveProperty("producerMetadata");
         expect(result.proposal.contract.appId).toBe("stock-exceptions");
-        if (changedField !== undefined) {
+        if (changedField !== null) {
           expect(result.identity).toHaveProperty(changedField, value);
         }
         if (changedField === "workspacePath" || changedField === "packageName") {
@@ -209,11 +214,6 @@ describe("planning from the current checkout", () => {
         if (changedField === "baseRoutes") {
           expect(result.proposal.plan.topology.routes).toEqual(value);
         }
-      } else {
-        await expect(planning).rejects.toThrow(
-          "Target identity did not match the accepted app id.",
-        );
-        expect(executor.mock.calls.map(([request]) => request.command)).toEqual(["identity"]);
       }
     },
   );

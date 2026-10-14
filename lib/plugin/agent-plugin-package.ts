@@ -408,7 +408,7 @@ export const validateAgentPluginPackage = async ({
     name: plugin.name as string,
     packageKind,
     specification: SPEC_VERSION,
-    version: plugin.version as string,
+    version: plugin.version,
   };
 };
 
