@@ -362,6 +362,17 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
   with the same selected app, project and branch. Preserve recoverable resources
   across ordinary turn stops. Another runtime's shared branch Auth bindings
   block preparation; do not replace them.
+  A current `pending` status means the approved work is unfinished. Reading
+  status does not execute work or prove that a worker is running. Treat a prior
+  failed attempt as historical evidence, not a current refusal. After an
+  ordinary factual reply that the prerequisite was repaired, continue the same
+  original session and accepted participant program through the existing
+  preparation, reconciliation or planning path. Retry an unchanged preparation
+  with its retained approval; resolve a changed plan, including changed worker
+  inputs, through the existing planner and required approval before execution.
+  A current authority, credential, isolation or provider refusal remains a
+  blocker; never treat that fresh refusal as stale or infer readiness from a
+  repair report.
   Keep credentials out of inputs and output. Never mutate `amp.yaml`,
   deploy, promote, alias, activate, or claim admission or Production readiness.
 - When accepted requirements need several authenticated participants, derive
