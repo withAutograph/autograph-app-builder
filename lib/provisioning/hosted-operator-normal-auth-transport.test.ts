@@ -179,6 +179,40 @@ describe("normal Auth native transport", () => {
     ).rejects.toThrow("resource_mismatch");
     expect(calls.fetch).not.toHaveBeenCalled();
   });
+  it("sends the supported normal owner proof form without following a callback", async () => {
+    const calls = io();
+    const transport = await createHostedOperatorNormalAuthTransport(dependencies(), calls);
+    const form = new URLSearchParams({
+      nonce: "a".repeat(64),
+      ownerSessionId: "builder-owner-session",
+      bootstrapPlanDigest: "sha256:approved-auth-bootstrap",
+      authResourceId: "approved-auth-resource",
+    });
+    await transport(`${origin}/api/auth/platform/operator-link`, {
+      method: "POST",
+      headers: {
+        ...requestHeaders,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: form,
+    });
+    const sent = new Request(
+      calls.fetch.mock.calls[0]?.[0] ?? "https://unused.example.com",
+      calls.fetch.mock.calls[0]?.[1],
+    );
+    expect(await sent.text()).toBe(form.toString());
+    expect(sent.headers.get("cookie")).toBe(requestHeaders.cookie);
+    expect(sent.headers.get("x-vercel-trusted-oidc-idp-token")).toBe("private-native-token");
+    expect(sent.redirect).toBe("error");
+    await expect(
+      transport(`${origin}/api/auth/platform/operator-link?callback=https://other.example.com`, {
+        method: "POST",
+        headers: requestHeaders,
+        body: form,
+      }),
+    ).rejects.toThrow("resource_mismatch");
+    expect(calls.fetch).toHaveBeenCalledTimes(1);
+  });
   it("keeps the actual POST body and fixed method for Request inputs", async () => {
     const calls = io();
     const transport = await createHostedOperatorNormalAuthTransport(dependencies(), calls);

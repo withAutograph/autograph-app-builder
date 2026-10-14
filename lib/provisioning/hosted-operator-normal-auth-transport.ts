@@ -10,6 +10,7 @@ interface NormalAuthRoute {
 const routes = new Map<string, NormalAuthRoute>([
   ["/api/auth/sign-up/email", { method: "POST", query: new Set() }],
   ["/api/auth/sign-in/email", { method: "POST", query: new Set() }],
+  ["/api/auth/platform/operator-link", { method: "POST", query: new Set() }],
   [
     "/api/auth/get-session",
     { method: "GET", query: new Set(["disableRefresh", "disableCookieCache"]) },
