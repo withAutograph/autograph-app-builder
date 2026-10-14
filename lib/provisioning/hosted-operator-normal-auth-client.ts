@@ -1,3 +1,4 @@
+import { setTimeout as delay } from "node:timers/promises";
 import { Cookie, CookieJar } from "tough-cookie";
 import { z } from "zod";
 import type { NormalBrowserStorageState } from "./hosted-operator-normal-actor-program";
@@ -97,6 +98,7 @@ type Failure =
   | "invalid_input"
   | "approval_required"
   | "transport_failed"
+  | "deadline_exceeded"
   | "auth_rejected"
   | "invalid_response";
 
@@ -106,6 +108,7 @@ export class NormalAuthClientError extends Error {
   readonly operation?: NormalAuthOperation;
   readonly httpStatus?: number;
   readonly authCode?: z.infer<typeof errorCodes>;
+  readonly retryAfterMs?: number;
 
   constructor(
     code: Failure,
@@ -113,6 +116,7 @@ export class NormalAuthClientError extends Error {
       operation?: NormalAuthOperation;
       httpStatus?: number;
       authCode?: z.infer<typeof errorCodes>;
+      retryAfterMs?: number;
     } = {},
   ) {
     super(`Normal Auth operation failed (${code}).`);
@@ -121,6 +125,9 @@ export class NormalAuthClientError extends Error {
     this.operation = details.operation;
     this.httpStatus = details.httpStatus;
     this.authCode = details.authCode;
+    if (Number.isSafeInteger(details.retryAfterMs) && (details.retryAfterMs ?? -1) >= 0) {
+      this.retryAfterMs = details.retryAfterMs;
+    }
   }
 }
 
@@ -133,6 +140,25 @@ const parseInput = <T>(schema: z.ZodType<T>, value: T, operation: NormalAuthOper
 };
 
 const maximumResponseBytes = 128 * 1024;
+const operationBudgetMs = 20_000;
+const retryTiming = (headers: Headers, now: number): number | undefined => {
+  const preferred = headers.get("x-retry-after");
+  const value = preferred ?? headers.get("retry-after");
+  if (value === null) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  let timing = Number.NaN;
+  if (/^\d+$/u.test(trimmed)) {
+    timing = Number(trimmed) * 1000;
+  } else if (preferred === null && /[A-Za-z]/u.test(trimmed)) {
+    timing = Math.max(0, Date.parse(trimmed) - now);
+  }
+  return Number.isSafeInteger(timing) && timing >= 0 ? timing : undefined;
+};
+const waitForRetry = async (delayMs: number, signal: AbortSignal): Promise<void> => {
+  await delay(delayMs, undefined, { signal });
+};
 const readJson = async <T>(response: Response, schema: z.ZodType<T>): Promise<T> => {
   if (!response.body) {
     throw new Error("Missing body");
@@ -225,6 +251,9 @@ export const createHostedOperatorNormalAuthClient = (options: {
   storageState?: NormalBrowserStorageState;
   fetch?: typeof fetch;
   assertApprovedEffect?: (operation: NormalAuthOperation) => Promise<void>;
+  /** Private deterministic clock/wait ports for focused request fixtures. */
+  now?: () => number;
+  wait?: (delayMs: number, signal: AbortSignal) => Promise<void>;
 }): NormalAuthClient => {
   let origin: URL;
   try {
@@ -278,7 +307,20 @@ export const createHostedOperatorNormalAuthClient = (options: {
     for (const [key, value] of Object.entries(query ?? {})) {
       url.searchParams.set(key, value);
     }
-    if (input !== undefined) {
+    const now = options.now ?? Date.now;
+    const deadline = now() + operationBudgetMs;
+    const signal = AbortSignal.timeout(operationBudgetMs);
+    const body = input === undefined ? undefined : JSON.stringify(input);
+    let retryAfterMs: number | undefined;
+    const assertDeadline = () => {
+      if (signal.aborted || now() >= deadline) {
+        throw new NormalAuthClientError("deadline_exceeded", { operation, retryAfterMs });
+      }
+    };
+    const assertApproval = async () => {
+      if (input === undefined) {
+        return;
+      }
       if (!options.assertApprovedEffect) {
         throw new NormalAuthClientError("approval_required", { operation });
       }
@@ -287,42 +329,109 @@ export const createHostedOperatorNormalAuthClient = (options: {
       } catch {
         throw new NormalAuthClientError("approval_required", { operation });
       }
-    }
-    const headers = new Headers({ accept: "application/json", origin: origin.origin });
-    const cookie = jar.getCookieStringSync(url.href, { sameSiteContext: "strict" });
-    if (cookie) {
-      headers.set("cookie", cookie);
-    }
-    if (input !== undefined) {
-      headers.set("content-type", "application/json");
-    }
-    let response: Response;
-    try {
-      response = await (options.fetch ?? fetch)(url, {
-        method: input === undefined ? "GET" : "POST",
-        headers,
-        ...(input === undefined ? {} : { body: JSON.stringify(input) }),
-        cache: "no-store",
-        redirect: "error",
-        signal: AbortSignal.timeout(20_000),
-      });
-      if (response.redirected || (response.url && new URL(response.url).origin !== origin.origin)) {
-        throw new Error("Unexpected redirect");
+    };
+    const attempt = async (): Promise<Response> => {
+      assertDeadline();
+      await assertApproval();
+      assertDeadline();
+      const headers = new Headers({ accept: "application/json", origin: origin.origin });
+      const cookie = jar.getCookieStringSync(url.href, { sameSiteContext: "strict" });
+      if (cookie) {
+        headers.set("cookie", cookie);
       }
-    } catch {
-      throw new NormalAuthClientError("transport_failed", { operation });
-    }
-    receiveCookies(jar, response, url);
-    if (!response.ok) {
-      throw await rejectedResponse(response, operation);
-    }
-    try {
-      return await readJson(response, schema);
-    } catch {
-      throw new NormalAuthClientError("invalid_response", {
-        operation,
-        httpStatus: response.status,
-      });
+      if (body !== undefined) {
+        headers.set("content-type", "application/json");
+      }
+      let response: Response;
+      try {
+        response = await (options.fetch ?? fetch)(url, {
+          method: input === undefined ? "GET" : "POST",
+          headers,
+          ...(body === undefined ? {} : { body }),
+          cache: "no-store",
+          redirect: "error",
+          signal,
+        });
+        if (
+          response.redirected ||
+          (response.url && new URL(response.url).origin !== origin.origin)
+        ) {
+          throw new Error("Unexpected redirect");
+        }
+      } catch {
+        assertDeadline();
+        throw new NormalAuthClientError("transport_failed", { operation });
+      }
+      receiveCookies(jar, response, url);
+      assertDeadline();
+      return response;
+    };
+    const retryRejection = async (response: Response): Promise<boolean> => {
+      if (response.status !== 429) {
+        return false;
+      }
+      retryAfterMs = retryTiming(response.headers, now());
+      if (retryAfterMs === undefined) {
+        return false;
+      }
+      try {
+        // Discard untrusted rejection bytes before the provider-directed wait.
+        await response.body?.cancel();
+      } catch {
+        assertDeadline();
+        throw new NormalAuthClientError("transport_failed", { operation, retryAfterMs });
+      }
+      assertDeadline();
+      if (retryAfterMs === 0) {
+        throw new NormalAuthClientError("auth_rejected", {
+          operation,
+          httpStatus: 429,
+          retryAfterMs,
+        });
+      }
+      if (retryAfterMs >= deadline - now()) {
+        throw new NormalAuthClientError("deadline_exceeded", {
+          operation,
+          httpStatus: 429,
+          retryAfterMs,
+        });
+      }
+      try {
+        await (options.wait ?? waitForRetry)(retryAfterMs, signal);
+      } catch {
+        throw new NormalAuthClientError("deadline_exceeded", {
+          operation,
+          httpStatus: 429,
+          retryAfterMs,
+        });
+      }
+      return true;
+    };
+    for (;;) {
+      // oxlint-disable-next-line no-await-in-loop -- each actual attempt obtains fresh approval and shares the original deadline.
+      const response = await attempt();
+      // oxlint-disable-next-line no-await-in-loop -- replay only an explicit 429 with actual provider timing.
+      if (await retryRejection(response)) {
+        continue;
+      }
+      if (!response.ok) {
+        // oxlint-disable-next-line no-await-in-loop -- terminal responses are read once and never replayed.
+        const failure = await rejectedResponse(response, operation);
+        assertDeadline();
+        throw failure;
+      }
+      try {
+        // oxlint-disable-next-line no-await-in-loop -- successful responses are read once.
+        const result = await readJson(response, schema);
+        assertDeadline();
+        return result;
+      } catch {
+        assertDeadline();
+        throw new NormalAuthClientError("invalid_response", {
+          operation,
+          httpStatus: response.status,
+        });
+      }
     }
   };
 
