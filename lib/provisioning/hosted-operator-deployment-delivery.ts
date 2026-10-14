@@ -63,7 +63,6 @@ const pageSchema = z.object({
 });
 const projectSchema = z.object({
   accountId: id,
-  framework: z.literal("nextjs").nullable(),
   id,
   link: z.object({ repoId: z.union([z.number(), id]), type: z.literal("github") }),
   name: id,
@@ -309,7 +308,6 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         project.id === reader.delivery.projectId,
         project.accountId === input.target.scopeId,
         String(project.link.repoId) === reader.delivery.repoId,
-        project.framework === (deps.target === "gateway" ? null : "nextjs"),
         reader.delivery.gitSha !== undefined,
       ].every(Boolean);
       if (!exactProject) {

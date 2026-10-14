@@ -66,6 +66,14 @@ const plan = hostedOperatorPlanSchema.parse({
   selection,
   version: 1,
 });
+interface DeliveryProjectFixture {
+  accountId: string;
+  framework?: string | null;
+  id: string;
+  link: { repoId: string; type: string };
+  name: string;
+}
+
 const fixture = (deliveryPlan = plan) => {
   let ready = "BUILDING";
   let count = 0;
@@ -98,6 +106,24 @@ const fixture = (deliveryPlan = plan) => {
     autograph_operator_operation: input.operationRef,
     autograph_operator_plan: operatorPlanDigest(deliveryPlan),
   };
+  const project: DeliveryProjectFixture = {
+    accountId: "team",
+    framework: "nextjs",
+    id: "prj_app",
+    link: { repoId: "repo", type: "github" },
+    name: "app",
+  };
+  const deployment = {
+    customEnvironment: null,
+    gitSource: { ref: deliveryPlan.delivery?.branch, repoId: "repo", sha, type: "github" },
+    id: "dpl_new",
+    meta,
+    oidcTokenClaims: { environment: "preview" },
+    ownerId: "team",
+    projectId: "prj_app",
+    target: "staging",
+    url: "new-native.vercel.app",
+  };
   const fetcher: typeof fetch = async (url, init) => {
     await Promise.resolve();
     const path = new URL(url instanceof Request ? url.url : url).pathname;
@@ -114,13 +140,7 @@ const fixture = (deliveryPlan = plan) => {
       });
     }
     if (path === "/v9/projects/prj_app") {
-      return Response.json({
-        accountId: "team",
-        framework: "nextjs",
-        id: "prj_app",
-        link: { repoId: "repo", type: "github" },
-        name: "app",
-      });
+      return Response.json(project);
     }
     if (path === "/v2/teams/team") {
       return Response.json({ id: "team", slug: "team-slug" });
@@ -131,18 +151,7 @@ const fixture = (deliveryPlan = plan) => {
       return Response.json({ id: "dpl_new" });
     }
     if (path === "/v13/deployments/dpl_new") {
-      return Response.json({
-        customEnvironment: null,
-        gitSource: { ref: deliveryPlan.delivery?.branch, repoId: "repo", sha, type: "github" },
-        id: "dpl_new",
-        meta,
-        oidcTokenClaims: { environment: "preview" },
-        ownerId: "team",
-        projectId: "prj_app",
-        readyState: ready,
-        target: "staging",
-        url: "new-native.vercel.app",
-      });
+      return Response.json({ ...deployment, readyState: ready });
     }
     throw new Error("Unexpected native request");
   };
@@ -171,6 +180,8 @@ const fixture = (deliveryPlan = plan) => {
   });
   return {
     calls,
+    project,
+    deployment,
     checkpoint,
     input,
     revoke: () => {
@@ -245,3 +256,73 @@ it("denies after current authority is revoked before POST", async () => {
   await expect(f.writer.deliver(f.input)).rejects.toThrow();
   expect(f.calls.some((call) => call.method === "POST")).toBe(false);
 });
+
+it.each(["services", "nextjs", null, "future-provider-framework", undefined])(
+  "delivers the approved source through BUILDING to READY with framework metadata %s",
+  async (framework) => {
+    const f = fixture();
+    f.project.framework = framework;
+    const building = await f.writer.deliver(f.input);
+    expect(building.status).toBe("unknown");
+    expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({
+      project: plan.selection.projectId,
+      gitSource: { repoId: plan.delivery?.repoId, ref: plan.delivery?.branch, sha },
+    });
+    f.setReady("READY");
+    const result = await f.writer.reconcile(f.input);
+    expect(result.status).toBe("applied");
+    if (result.status === "applied") {
+      expect(result.selected).toMatchObject({
+        projectId: plan.selection.projectId,
+        repoId: plan.delivery?.repoId,
+        branch: plan.delivery?.branch,
+        readyState: "READY",
+      });
+    }
+  },
+);
+it("retains an actual provider build failure as retryable delivery", async () => {
+  const f = fixture();
+  f.project.framework = "services";
+  f.setReady("ERROR");
+  const delivered = await f.writer.deliver(f.input);
+  const reconciled = await f.writer.reconcile(f.input);
+  expect(delivered.status).toBe("retryable");
+  expect(reconciled.status).toBe("retryable");
+});
+it.each(["owner", "repository"])(
+  "rejects an actual wrong project %s before deployment",
+  async (mismatch) => {
+    const f = fixture();
+    f.project.framework = "services";
+    if (mismatch === "owner") {
+      f.project.accountId = "another-team";
+    } else {
+      f.project.link.repoId = "another-repo";
+    }
+    await expect(f.writer.deliver(f.input)).rejects.toMatchObject({ code: "resource_mismatch" });
+    expect(f.calls.some((call) => call.method === "POST")).toBe(false);
+  },
+);
+it.each(["owner", "repository", "branch", "commit"])(
+  "rejects actual deployment %s mismatch",
+  async (mismatch) => {
+    const f = fixture();
+    f.project.framework = null;
+    if (mismatch === "owner") {
+      f.deployment.ownerId = "another-team";
+    }
+    if (mismatch === "repository") {
+      f.deployment.gitSource.repoId = "another-repo";
+    }
+    if (mismatch === "branch") {
+      f.deployment.gitSource.ref = "another-branch";
+    }
+    if (mismatch === "commit") {
+      f.deployment.gitSource.sha = "d".repeat(40);
+    }
+    f.setReady("READY");
+    await expect(f.writer.deliver(f.input)).rejects.toMatchObject({ code: "resource_mismatch" });
+    expect(f.checkpoint).not.toHaveBeenCalled();
+  },
+);
