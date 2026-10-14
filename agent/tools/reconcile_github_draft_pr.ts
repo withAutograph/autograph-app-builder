@@ -99,7 +99,8 @@ export default defineTool({
         adapterSessionId: ctx.session.id,
         sessionAuth: ctx.session.auth,
         callId: ctx.callId,
-        review,
+        review: state.reviewReceipt,
+        reconciliationReview: review,
         publication,
       });
       return { ...publication, appSourceRecording: { status: "recorded" as const } };

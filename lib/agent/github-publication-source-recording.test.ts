@@ -35,7 +35,7 @@ const hooks = vi.hoisted(() => {
     },
     candidate: {
       proposal,
-      review: { ...review, digest, changeSetDigest: "d".repeat(64) },
+      review: { appId: "spend-review", digest, baseChanges: [] },
       validation: { resolvedTree: "tree" },
       githubSourceDigest: digest,
       originalReviewDigest: digest,
@@ -130,7 +130,12 @@ describe("publication records actual source for its compiled app release", () =>
         adapterSessionId: ctx.session.id,
         sessionAuth: ctx.session.auth,
         callId: ctx.callId,
-        review: entry.tool === reconcileTool ? hooks.candidate.review : hooks.state.reviewReceipt,
+        review: hooks.state.reviewReceipt,
+        ...(entry.tool === reconcileTool
+          ? {
+              reconciliationReview: hooks.candidate.review,
+            }
+          : {}),
         publication,
       });
       expect(hooks.record.mock.invocationCallOrder[0]).toBeGreaterThan(
@@ -149,12 +154,12 @@ describe("publication records actual source for its compiled app release", () =>
         ...publication,
         appSourceRecording: { status: "unavailable", recoveryRequired: true },
       });
-      expect(result.appSourceRecording).toHaveProperty(
-        "nextAction",
+      expect(result).toHaveProperty(
+        "appSourceRecording.nextAction",
         expect.stringContaining("already succeeded"),
       );
-      expect(result.appSourceRecording).toHaveProperty(
-        "nextAction",
+      expect(result).toHaveProperty(
+        "appSourceRecording.nextAction",
         expect.stringContaining("unavailable until recording succeeds"),
       );
       expect(JSON.stringify(result)).not.toContain("private artifact detail");

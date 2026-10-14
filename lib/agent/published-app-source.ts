@@ -1,3 +1,4 @@
+import type { ReconciliationReviewReceipt } from "../repository/github-draft-reconciliation";
 import type { ExistingDraftObservation } from "../repository/github-draft-update";
 import type { DraftPullRequestSuccessReceipt } from "../repository/github-publication";
 import type { ReviewedChangeSetReceipt } from "../repository/reviewed-change-set";
@@ -39,15 +40,21 @@ export const recordPublishedAppSourceForSession = async (
   input: CompiledOperatorArtifactSessionInput & {
     publication: PublishedAppSourceResult;
     review: PublishedAppSourceReview;
+    reconciliationReview?: Pick<ReconciliationReviewReceipt, "digest">;
   },
 ) => {
   if (input.review.appSpecDigest !== input.appSpecDigest) {
     throw operatorArtifactUnavailable();
   }
+  const publishedSource = publishedAppSourceFromResult(input.review, input.publication);
   return await recordPublishedOperatorSourceForSession({
     ...input,
     // A retained initial receipt must reuse its original marker instead of becoming a newer source on retry.
     callId: "kind" in input.publication ? input.publication.approvedByCallId : input.callId,
-    publishedSource: publishedAppSourceFromResult(input.review, input.publication),
+    // The app review identifies the compiled app; the reconciliation review identifies the approved merged source.
+    publishedSource:
+      input.reconciliationReview === undefined
+        ? publishedSource
+        : { ...publishedSource, reviewDigest: input.reconciliationReview.digest },
   });
 };

@@ -133,4 +133,25 @@ describe("actual published app source recording", () => {
     ).rejects.toThrow("artifact is unavailable");
     expect(record).not.toHaveBeenCalled();
   });
+  it("associates the reconciled head with the actual app review and merged-source approval", async () => {
+    const record = vi
+      .spyOn(compiledArtifacts, "recordPublishedOperatorSourceForSession")
+      .mockResolvedValue(selected);
+    const reconciliationReview = { digest: "d".repeat(64) };
+    await recordPublishedAppSourceForSession({
+      ...session,
+      review,
+      reconciliationReview,
+      publication: updated,
+    });
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appSpecDigest: review.appSpecDigest,
+        publishedSource: {
+          ...publishedAppSourceFromResult(review, updated),
+          reviewDigest: reconciliationReview.digest,
+        },
+      }),
+    );
+  });
 });
