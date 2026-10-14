@@ -3871,6 +3871,13 @@ const followupFindingOverrides: { files: string[]; rules: Record<string, "off"> 
 
 export default defineConfig({
   extends: [core, next, jsPlugins, nextJsPlugins, antiSlop],
+  rules: {
+    // These spelling preferences do not protect behavior. In particular,
+    // undefined is a supported environment input whose omission needs coverage.
+    "anti-slop/no-conditional-empty-object-spread": "off",
+    "eslint/sort-keys": "off",
+    "sonarjs/no-undefined-assignment": "off",
+  },
   ignorePatterns: core.ignorePatterns,
   jsPlugins: jsPlugins.jsPlugins,
   options: {

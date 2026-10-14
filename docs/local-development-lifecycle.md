@@ -25,6 +25,12 @@ refactor must not break a test whose protected behavior still works. Exact
 identity, cursor, or ordering assertions belong only to a real functional or
 security contract.
 
+Lint must not reject ordinary changes for object-key order, equivalent object
+construction, or a blanket preference for null over undefined. Missing and
+undefined inputs have real semantics and need coverage. Keep checks that detect
+invalid values, unsafe operations, type errors, or broken behavior; remove
+style-only restrictions instead of rewriting a valid behavior test around them.
+
 Do not respond to a brittle test by pinning the implementation or adding a new
 gate. Remove its incidental expectation and retain the behavior check. If the
 behavior fails, repair it. Keep authentication, credential protection, ownership,
