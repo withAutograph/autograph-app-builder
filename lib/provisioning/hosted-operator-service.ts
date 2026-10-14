@@ -1,4 +1,7 @@
-import { createHostedOperatorConsentDiagnostic } from "./hosted-operator-consent-diagnostic";
+import {
+  createHostedOperatorConsentDiagnostic,
+  reportOperatorPlanningMismatch,
+} from "./hosted-operator-consent-diagnostic";
 import type { HostedOperatorConsentOwner } from "./hosted-operator-consent-owner";
 import {
   neonAuthorizationInputSchema,
@@ -255,11 +258,13 @@ const handlePlanOperation = async (
   const plan = hostedOperatorPlanSchema.parse(
     await deps.plan({ ...context, action: input.operation }),
   );
-  if (
-    plan.action !== input.operation ||
-    !sameOperatorSelection(plan.selection, input.selection) ||
-    !hasRequiredGatewayPlan(input.operation, plan)
-  ) {
+  const failed = {
+    plan_action: plan.action !== input.operation,
+    plan_selection: !sameOperatorSelection(plan.selection, input.selection),
+    gateway_plan: !hasRequiredGatewayPlan(input.operation, plan),
+  };
+  if (Object.values(failed).some(Boolean)) {
+    reportOperatorPlanningMismatch(context.target.sessionId, "plan_result", failed);
     throw new HostedOperatorError("resource_mismatch");
   }
   await deps.assertAuthorized({ ...context, plan });

@@ -3,6 +3,7 @@ import { isNativePreviewDeployment } from "./hosted-operator-deployment-delivery
 import type { readPreparedVercelAccess } from "../agent/prepared-provider-context";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { HostedOperatorError } from "./hosted-operator-contract";
+import { reportOperatorPlanningMismatch } from "./hosted-operator-consent-diagnostic";
 import type { HostedOperatorContext } from "./hosted-operator-service";
 import { readVercelManagedNeonResource } from "./hosted-runtime-marketplace-resource";
 import type { MarketplaceJsonValue } from "./hosted-runtime-marketplace-resource";
@@ -161,16 +162,22 @@ export const readHostedOperatorProviderInventory = async (input: {
     const authority = hostedTenantAuthoritySchema.parse(input.context.authority);
     const { target } = input.context;
     const config = input.configuration;
-    const invalidConfiguration = [
-      new Set([config.app.projectId, config.gateway.projectId, config.operator.projectId]).size !==
-        3,
-      config.app.projectId !== target.projectId,
-      config.app.branch !== target.branch,
-      config.gateway.branch !== target.branch,
-      config.app.environment !== "preview",
-      config.gateway.environment !== "preview",
-    ].some(Boolean);
-    if (invalidConfiguration) {
+    const invalidConfiguration = {
+      project_separation:
+        new Set([config.app.projectId, config.gateway.projectId, config.operator.projectId])
+          .size !== 3,
+      app_project: config.app.projectId !== target.projectId,
+      app_branch: config.app.branch !== target.branch,
+      gateway_branch: config.gateway.branch !== target.branch,
+      app_environment: config.app.environment !== "preview",
+      gateway_environment: config.gateway.environment !== "preview",
+    };
+    if (Object.values(invalidConfiguration).some(Boolean)) {
+      reportOperatorPlanningMismatch(
+        target.sessionId,
+        "inventory_configuration",
+        invalidConfiguration,
+      );
       throw new HostedOperatorError("resource_mismatch");
     }
     await input.assertCurrentOwner();
@@ -231,7 +238,12 @@ export const readHostedOperatorProviderInventory = async (input: {
       const project = projectSchema.parse(
         await request(`/v9/projects/${encodeURIComponent(reference.projectId)}`),
       );
-      if (project.id !== reference.projectId || project.accountId !== target.scopeId) {
+      const invalidProject = {
+        project_identity: project.id !== reference.projectId,
+        project_owner: project.accountId !== target.scopeId,
+      };
+      if (Object.values(invalidProject).some(Boolean)) {
+        reportOperatorPlanningMismatch(target.sessionId, "inventory_project", invalidProject);
         throw new HostedOperatorError("resource_mismatch");
       }
       let deployment: z.infer<typeof deploymentSchema> | undefined;
@@ -241,20 +253,30 @@ export const readHostedOperatorProviderInventory = async (input: {
             withGitRepoInfo: "true",
           }),
         );
-        const invalidDeployment = [
-          deployment.projectId !== project.id,
-          deployment.id !== reference.deploymentId,
-          deployment.ownerId !== undefined && deployment.ownerId !== target.scopeId,
-          deployment.readyState !== "READY",
-          reference.environment === "production"
-            ? deployment.target !== "production"
-            : !isNativePreviewDeployment(deployment),
-          branch !== undefined && deployment.gitSource?.ref !== branch,
-        ].some(Boolean);
-        if (invalidDeployment) {
+        const invalidDeployment = {
+          deployment_project: deployment.projectId !== project.id,
+          deployment_identity: deployment.id !== reference.deploymentId,
+          deployment_owner:
+            deployment.ownerId !== undefined && deployment.ownerId !== target.scopeId,
+          deployment_ready: deployment.readyState !== "READY",
+          deployment_environment:
+            reference.environment === "production"
+              ? deployment.target !== "production"
+              : !isNativePreviewDeployment(deployment),
+          deployment_branch: branch !== undefined && deployment.gitSource?.ref !== branch,
+        };
+        if (Object.values(invalidDeployment).some(Boolean)) {
+          reportOperatorPlanningMismatch(
+            target.sessionId,
+            "inventory_deployment",
+            invalidDeployment,
+          );
           throw new HostedOperatorError("resource_mismatch");
         }
       } else if (!allowUndelivered || input.phase !== "bootstrap-planning") {
+        reportOperatorPlanningMismatch(target.sessionId, "inventory_deployment", {
+          deployment_missing: true,
+        });
         throw new HostedOperatorError("resource_mismatch");
       }
       const query: Record<string, string> = {};
@@ -305,7 +327,12 @@ export const readHostedOperatorProviderInventory = async (input: {
         origin(`https://${gateway.deployment.url}`),
         ...aliases.aliases.map((alias) => origin(`https://${alias.alias}`)),
       ]);
-      if (!ownedOrigins.has(publicOrigin) || !ownedOrigins.has(gatewayOrigin)) {
+      const invalidOrigins = {
+        public_origin: !ownedOrigins.has(publicOrigin),
+        gateway_origin: !ownedOrigins.has(gatewayOrigin),
+      };
+      if (Object.values(invalidOrigins).some(Boolean)) {
+        reportOperatorPlanningMismatch(target.sessionId, "gateway_origin", invalidOrigins);
         throw new HostedOperatorError("resource_mismatch");
       }
     }
@@ -332,7 +359,12 @@ export const readHostedOperatorProviderInventory = async (input: {
     if (configurations.length === 1 && configurations[0] !== undefined) {
       nativeResource = await readVercelManagedNeonResource({
         configurationId: configurations[0],
-        fail: () => new HostedOperatorError("resource_mismatch"),
+        fail: () => {
+          reportOperatorPlanningMismatch(target.sessionId, "inventory_project", {
+            native_store_binding: true,
+          });
+          return new HostedOperatorError("resource_mismatch");
+        },
         projectId: config.operator.projectId,
         request,
         scopeId: target.scopeId,
