@@ -8,6 +8,7 @@ import { prepareHostedRuntimeWithOperator } from "./prepare-app-hosted-runtime-s
 import type { prepareHostedRuntimeStep } from "./prepare-app-hosted-runtime-step";
 import {
   continueHostedRuntimePreparation,
+  evaluateHostedRuntimePreparationApproval,
   hostedRuntimeApprovalInputSchema,
   participantIdentityInputQuestion,
   realmIdentityInputQuestion,
@@ -486,4 +487,64 @@ describe("hosted runtime Auth identity handoff", () => {
     expect(question.prompt).toContain("https://auth.example/link");
     expect(question.prompt).toContain("2027-01-01T00:00:00Z");
   });
+});
+
+it("reports execute-stage failure without changing the public blocked result or exposing the error", async () => {
+  const logs = vi.spyOn(console, "info").mockImplementation(() => {});
+  const privateMessage = "private-token and provider URL";
+  operator.request.mockRejectedValueOnce(new TypeError(privateMessage));
+  try {
+    const value = await prepareHostedRuntimeWithOperator(input, ctx, operator, retain, contract);
+    expect(value.result).toMatchObject({ status: "blocked", code: "operator_unavailable" });
+    expect(logs).toHaveBeenCalledWith(
+      "[builder:hosted-neon-consent]",
+      expect.objectContaining({
+        boundary: "builder",
+        preparationFailure: { stage: "operator_execute", errorClass: "type_error" },
+      }),
+    );
+    expect(JSON.stringify(logs.mock.calls)).not.toContain(privateMessage);
+  } finally {
+    logs.mockRestore();
+  }
+});
+
+it("reports actual approval evaluator entry and preserves its denied response", async () => {
+  const logs = vi.spyOn(console, "info").mockImplementation(() => {});
+  const error = new HostedOperatorErrorClass("resource_mismatch");
+  try {
+    const readPrior = async () => await Promise.reject(error);
+    const value = await evaluateHostedRuntimePreparationApproval(
+      {
+        ...ctx,
+        toolInput: input,
+        session: {
+          ...ctx.session,
+          auth: { current: null, initiator: null },
+          turn: { id: "test-turn", sequence: 1 },
+        },
+        approvedTools: new Set(),
+        toolName: "prepare-app-hosted-runtime",
+        getSandbox: async () => await Promise.reject(new Error("No Sandbox in diagnostic fixture")),
+      },
+      readPrior,
+    );
+    expect(value).toMatchObject({ type: "denied" });
+    expect(logs).toHaveBeenCalledWith(
+      "[builder:hosted-neon-consent]",
+      expect.objectContaining({ preparationStage: "approval_evaluation", outcome: "started" }),
+    );
+    expect(logs).toHaveBeenCalledWith(
+      "[builder:hosted-neon-consent]",
+      expect.objectContaining({
+        preparationFailure: {
+          stage: "approval_evaluation",
+          errorClass: "operator_error",
+          code: "resource_mismatch",
+        },
+      }),
+    );
+  } finally {
+    logs.mockRestore();
+  }
 });
