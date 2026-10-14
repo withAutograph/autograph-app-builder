@@ -1,3 +1,4 @@
+import { nativeDeliveryStateSchema } from "./native-delivery-state";
 import { privateInputStateSchema } from "./session-limit-input";
 import { createHash, randomUUID } from "node:crypto";
 
@@ -50,6 +51,7 @@ export const pagedCheckpointMetadataSchema = z.strictObject({
   inputRequests: z.array(publicInputRequestSchema).optional(),
   // Private, owner-scoped reducer snapshots live in chunked metadata and are
   // published atomically with the complete public event prefix.
+  nativeDeliveryState: nativeDeliveryStateSchema.optional(),
   nativeObservationState: nativeObservationStateSchema.optional(),
   privateApprovalCaptureState: privateHostedApprovalCaptureStateSchema.optional(),
   privateInputState: privateInputStateSchema.optional(),

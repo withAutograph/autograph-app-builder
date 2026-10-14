@@ -5,7 +5,7 @@ import { eveRespondInputSchema } from "../mcp/contracts";
 import { hostedEveOperationScopes, HostedAuthorizationError } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
 import {
-  createHostedEveSessionService,
+  createHostedEveSessionService as createHostedService,
   hostedEveProjectionForTesting,
   HostedAdapterSessionUnavailableError,
   HostedIdempotencyConflictError,
@@ -27,6 +27,9 @@ import type {
   HostedSessionTimeoutPolicy,
 } from "./hosted-store";
 import type { EveSessionService } from "./service";
+
+const createHostedEveSessionService = (input: Parameters<typeof createHostedService>[0]) =>
+  createHostedService({ assertSendDeliveryOwner: () => Promise.resolve(), ...input });
 
 const principal: HostedPrincipal = {
   audience: "autograph-app-builder",
@@ -51,12 +54,30 @@ const snapshot: HostedEngineSnapshot = {
   status: "waiting",
 };
 
+const deliveredSnapshot = (deliveryId = "fixture-delivery"): HostedEngineSnapshot => ({
+  ...snapshot,
+  nativeDeliveryState: {
+    turns: [
+      {
+        boundary: "turn.completed",
+        boundaryDeliveryIds: [deliveryId],
+        deliveryIds: [deliveryId],
+        turnId: "fixture-send-turn",
+      },
+    ],
+    version: 1,
+  },
+});
+
 const transport = function transport(overrides: Partial<HostedEveTransport> = {}) {
   const base: HostedEveTransport = {
     cancel: vi.fn(() => Promise.resolve(snapshot)),
     get: vi.fn(() => Promise.resolve(snapshot)),
     respond: vi.fn(() => Promise.resolve(snapshot)),
-    send: vi.fn(() => Promise.resolve(snapshot)),
+    send: vi.fn<HostedEveTransport["send"]>(async (input) => {
+      await input.onAccepted?.("fixture-delivery");
+      return deliveredSnapshot();
+    }),
     start: vi.fn(() => Promise.resolve({ adapterSessionId: "eve_1", snapshot })),
   };
   return { ...base, ...overrides };
@@ -1399,9 +1420,10 @@ describe("hosted Eve service core", () => {
   it("allows only one mutating continuation for a session", async () => {
     let completeSend = false;
     const adapter = transport({
-      send: vi.fn(async () => {
+      send: vi.fn<HostedEveTransport["send"]>(async (input) => {
+        await input.onAccepted?.("fixture-delivery");
         await vi.waitFor(() => expect(completeSend).toBe(true));
-        return snapshot;
+        return deliveredSnapshot();
       }),
     });
     const first = await started({ transport: adapter });
