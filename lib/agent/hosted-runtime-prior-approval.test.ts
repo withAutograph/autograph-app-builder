@@ -118,6 +118,8 @@ const fixture = async () => {
   const requests: ReturnType<typeof operatorRequestSchema.parse>[] = [];
   let statusAvailable = true;
   let currentDigest = input.planDigest;
+  let recovery: string | null = null;
+  let recoveryStatusCount = 0;
   const http: typeof fetch = async (target, init) => {
     const request = new Request(target, init);
     const body: unknown = await request.json();
@@ -125,6 +127,37 @@ const fixture = async () => {
     requests.push(parsed);
     if (!statusAvailable) {
       throw new Error("Private technical outage");
+    }
+    if (recovery !== null) {
+      if (parsed.action === "status") {
+        recoveryStatusCount += 1;
+        if (recoveryStatusCount === 1 || recovery === "status") {
+          return Response.json({
+            appId: input.appId,
+            authenticatedBehavior: "unassessed",
+            status: "blocked",
+            code: "resource_mismatch",
+          });
+        }
+      }
+      if (parsed.action === "plan") {
+        if (recovery === "denied") {
+          return Response.json({
+            appId: input.appId,
+            authenticatedBehavior: "unassessed",
+            status: "blocked",
+            code: "authorization_required",
+          });
+        }
+        return Response.json({
+          appId: input.appId,
+          authenticatedBehavior: "unassessed",
+          status: "planned",
+          operationRef: recovery === "operation" ? randomUUID() : input.operationRef,
+          planDigest: recovery === "digest" ? "d".repeat(64) : input.planDigest,
+          plan: input.plan,
+        });
+      }
     }
     return Response.json({
       appId: input.appId,
@@ -225,6 +258,9 @@ const fixture = async () => {
     reader,
     read,
     approve,
+    recover: (mode = "same") => {
+      recovery = mode;
+    },
     unavailable: () => {
       statusAvailable = false;
     },
@@ -344,6 +380,36 @@ describe("owned hosted runtime prior approval", () => {
     expect(f.requests.map((request) => request.action)).toEqual(["status"]);
   });
 
+  it("automatically restores only the original approved operation through normal planning", async () => {
+    const f = await fixture();
+    await f.approve();
+    f.recover();
+    expect(await f.read(f.input, f.context)).toEqual({
+      approvalId: "original-request",
+      callId: "original-call",
+    });
+    expect(f.requests.map((request) => request.action)).toEqual(["status", "plan", "status"]);
+    expect(f.requests[1]).toMatchObject({
+      action: "plan",
+      operation: "prepare",
+      selection: f.input.plan.selection,
+    });
+    expect(f.requests.some((request) => request.action === "execute")).toBe(false);
+  });
+  it.each(["digest", "operation", "status", "denied"] as const)(
+    "denies changed or unavailable recovery %s",
+    async (mode) => {
+      const f = await fixture();
+      await f.approve();
+      f.recover(mode);
+      await expect(f.read(f.input, f.context)).rejects.toThrow();
+      expect(f.requests.map((request) => request.action)).toEqual(
+        mode === "status" ? ["status", "plan", "status"] : ["status", "plan"],
+      );
+      expect(f.requests.some((request) => request.action === "execute")).toBe(false);
+    },
+  );
+
   it("denies a cancellation of the same scope and a nonowner responder", async () => {
     const f = await fixture();
     await f.approve();
@@ -353,9 +419,11 @@ describe("owned hosted runtime prior approval", () => {
       callId: "cancelled-call",
       sequence: 10,
     });
+    f.recover();
     expect(await evaluateHostedRuntimePreparationApproval(f.context, f.read)).toMatchObject({
       type: "denied",
     });
+    expect(f.requests).toEqual([]);
     const other = await fixture();
     await other.approve({ responderPrincipalId: "another-owner" });
     expect(await evaluateHostedRuntimePreparationApproval(other.context, other.read)).toMatchObject(
