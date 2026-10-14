@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { HostedOperatorError, operatorPlanDigest } from "./hosted-operator-contract";
 import type { HostedOperatorPlan } from "./hosted-operator-contract";
 import type { HostedRuntimeJournalRecord, HostedRuntimeJournalRow } from "./hosted-runtime-journal";
@@ -63,7 +64,7 @@ export const requireFinalResourceBindingPhase = (
   if (
     !complete ||
     record.privateState === undefined ||
-    JSON.stringify(input.privateState) !== JSON.stringify(record.privateState)
+    !isDeepStrictEqual(input.privateState, record.privateState)
   ) {
     throw new HostedOperatorError("operation_in_progress");
   }
