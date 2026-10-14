@@ -29,7 +29,7 @@ See the [database target and safe sequence](plans/2026-10-07-hosted-operator-dep
 
 The deployment-owned configuration selects three distinct projects: app-only
 Next, Gateway/Auth-only, and private operator. It supplies exact native project,
-branch, repository and commit references; native Neon store/project/branch/endpoint;
+branch references; native Neon store/project/branch/endpoint;
 actual operator/workload OIDC identities; immutable Sandbox image and worker
 IDs/SHA256s; Auth/app database and role names; public browser/issuer origins;
 and restricted application roles. Secrets and SQL URLs are never plan inputs.
@@ -39,7 +39,15 @@ Existing Gateway signing and Better Auth secrets, actual provider-injected
 connection string is supplied to the Preview realm or generated app.
 
 Fresh app and Gateway projects need no seed deployments. Their configuration
-retains exact team-owned project, Preview branch, repository and commit inputs;
+retains exact team-owned project and Preview branch inputs. Gateway repository
+and commit inputs remain required. The app's repository and commit may be absent
+during Auth/database bootstrap, so unpublished app source does not block those
+approved effects. Before constructing an app delivery plan, supply its actual
+repository and commit from the original Builder's tenant-owned successful
+publication receipt and provider readback. Never substitute a baseline or
+Builder commit, or invent publication values.
+
+For both projects,
 `deploymentId` is optional until a deployment is observed. Bootstrap planning
 reads project ownership and Preview environment inventory even when delivery
 has not happened. Configured origins are intended routing inputs, not observed

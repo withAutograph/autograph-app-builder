@@ -78,10 +78,13 @@ export const hostedOperatorSourceConfigurationSchema = z.strictObject({
       authAdoptionSource: hostedOperatorAuthAdoptionSourceSchema.optional(),
       branch: id,
       deploymentId: id.optional(),
-      gitSha: z.string().regex(/^[a-f0-9]{40}$/u),
+      gitSha: z
+        .string()
+        .regex(/^[a-f0-9]{40}$/u)
+        .optional(),
       organizationProposal: z.strictObject({ name: id, organizationId: id, slug: id }).optional(),
       projectId: id,
-      repoId: id,
+      repoId: id.optional(),
     }),
   ),
   authDatabase: resource,
