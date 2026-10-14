@@ -9,6 +9,8 @@ import { builderAppIdSchema } from "./names";
 import { hostedOperatorRecordSchema, retainedOperatorAuthSchema } from "./hosted-operator-contract";
 import type { RetainedOperatorAuth } from "./hosted-operator-contract";
 
+import { normalActorAccountPreparationSchema } from "./hosted-operator-normal-actor-journal";
+
 export const hostedRuntimeTargetSchema = z.strictObject({
   appId: builderAppIdSchema,
   branch: z
@@ -50,6 +52,7 @@ const encryptedStateSchema = z.strictObject({
 
 export const hostedRuntimeJournalRecordSchema = z.strictObject({
   approvedByCallId: z.string().min(1),
+  accountPreparation: normalActorAccountPreparationSchema.optional(),
   cleanupApprovedByCallId: z.string().min(1).optional(),
   credentialReference: z
     .strictObject({
@@ -66,7 +69,7 @@ export const hostedRuntimeJournalRecordSchema = z.strictObject({
   proof: hostedRuntimeProofSchema.optional(),
   request: hostedRuntimeTargetSchema,
   retainedAuth: retainedOperatorAuthSchema.optional(),
-  status: z.enum(["pending", "prepared", "failed", "cleaning", "cleaned"]),
+  status: z.enum(["pending", "participants-prepared", "prepared", "failed", "cleaning", "cleaned"]),
   step: z.enum([
     "reserved",
     "planned",
