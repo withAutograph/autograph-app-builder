@@ -74,6 +74,22 @@ export const isFrameworkSessionLimitInput = (request: {
   uncappedBuilderPolicy() &&
   request.kind === sessionLimitKind &&
   request.action?.toolName === "session_limit_continuation";
+/** Omit empty reducer metadata from legacy snapshots; retain every actual private input fact. */
+export const retainedPrivateInputState = (
+  state: PrivateInputState,
+): PrivateInputState | undefined => {
+  if (state.activeTurn !== undefined || state.pending.length > 0 || state.resolved.length > 0) {
+    return state;
+  }
+  if (
+    (state.frameworkSessionLimitIds?.length ?? 0) > 0 ||
+    (state.pendingFrameworkSessionLimitIds?.length ?? 0) > 0
+  ) {
+    return state;
+  }
+  return undefined;
+};
+
 /** Keep framework request kinds and the exact original batch private across native cursor reads. */
 const observeStopCancellation = (state: PrivateInputState, event: MessageStreamEvent): void => {
   if (event.type === "turn.cancelled") {

@@ -5,6 +5,7 @@ import {
   internalSessionLimitResponseSchema,
   reducePrivateInput,
   privateInputForEvents,
+  retainedPrivateInputState,
 } from "./session-limit-input";
 import { createHostedReadTrace } from "./hosted-read-diagnostic";
 import type { HostedReadTrace } from "./hosted-read-diagnostic";
@@ -955,11 +956,12 @@ async function readInstalledSnapshot(
   const prototype = latestInstalledPrototype(events);
   const uiPreview = latestInstalledUiPreview(events);
   const workingPreview = latestInstalledWorkingPreview(events);
+  const privateInputState = retainedPrivateInputState(privateInputForEvents(events));
   return {
     installed: events,
     snapshot: {
       events: projected,
-      privateInputState: privateInputForEvents(events),
+      ...(privateInputState === undefined ? {} : { privateInputState }),
       status: deriveInstalledEveStatus(events),
       ...(prototype === undefined ? {} : { prototype }),
       ...(uiPreview === undefined ? {} : { uiPreview }),
@@ -982,9 +984,13 @@ async function readSnapshot(
     onInstalledEvent: prototype.observe,
   });
   const latest = prototype.current();
+  const privateInputState =
+    observation.nativeObservationState.privateInputState === undefined
+      ? undefined
+      : retainedPrivateInputState(observation.nativeObservationState.privateInputState);
   return {
     events,
-    privateInputState: observation.nativeObservationState.privateInputState,
+    ...(privateInputState === undefined ? {} : { privateInputState }),
     status: observation.status,
     ...(latest === undefined ? {} : { prototype: latest }),
     ...(observation.uiPreview === undefined ? {} : { uiPreview: observation.uiPreview }),
