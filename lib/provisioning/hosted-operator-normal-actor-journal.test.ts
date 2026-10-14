@@ -13,6 +13,7 @@ import {
 } from "./hosted-operator-normal-actor-journal";
 import { hostedRuntimeJournalRecordSchema } from "./hosted-runtime-journal";
 import type { HostedRuntimeJournalRow } from "./hosted-runtime-journal";
+import { createNormalActorJournalAuthority } from "./hosted-operator-normal-actor-authority";
 
 const accountOperationRef = "11111111-1111-4111-8111-111111111111";
 const authority = {
@@ -238,6 +239,55 @@ const fixture = (selectedPreparation = preparationInput) => {
 };
 
 describe("retained actual normal actor journal", () => {
+  it("checks the actual lease and fence without renewing or mutating the CAS snapshot", async () => {
+    const value = fixture();
+    const now = Date.now();
+    value.row = {
+      ...value.row,
+      record: hostedRuntimeJournalRecordSchema.parse({
+        ...value.row.record,
+        leaseExpiresAt: new Date(now + 60_000).toISOString(),
+        operator: { ...value.row.record.operator, fenceGeneration: 1 },
+      }),
+    };
+    const guard = createNormalActorJournalAuthority({
+      store: { read: async () => structuredClone(value.row), compareAndSet: async () => undefined },
+      keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
+      now: () => now,
+      assertCanonicalOwner: async () => undefined,
+      assertApprovedOwner: async () => undefined,
+      readApproval: async () => ({
+        approvalId: "initial-approval",
+        callId: "initial-call",
+        planDigest: operatorPlanDigest(plan),
+        action: "prepare",
+        approved: true,
+      }),
+    });
+    const effect = {
+      ...context,
+      effect: plan.effects[0],
+      operationRef: accountOperationRef,
+      plan,
+      fenceGeneration: 1,
+      leaseId: value.row.record.leaseId,
+    };
+    const snapshot = structuredClone(value.row);
+    await guard.assertMutationAuthority(effect, snapshot);
+    expect(value.row).toEqual(snapshot);
+    await expect(
+      guard.assertMutationAuthority(
+        { ...effect, leaseId: "55555555-5555-4555-8555-555555555555" },
+        snapshot,
+      ),
+    ).rejects.toThrow();
+    await expect(
+      guard.assertMutationAuthority({ ...effect, fenceGeneration: 2 }, snapshot),
+    ).rejects.toThrow();
+    await expect(guard.assertMutationAuthority(context, snapshot)).rejects.toThrow();
+    expect(value.writes).toBe(0);
+  });
+
   it("waits for every approved organization session before recording account completion", async () => {
     const selectedProgram = normalActorProgramSchema.parse({
       ...program,

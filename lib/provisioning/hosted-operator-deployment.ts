@@ -4,6 +4,7 @@ import { isDeepStrictEqual } from "node:util";
 import postgres from "postgres";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { z } from "zod";
+import { createNormalActorJournalAuthority } from "./hosted-operator-normal-actor-authority";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { and, eq, sql } from "drizzle-orm";
 
@@ -86,6 +87,7 @@ import {
   operatorPlanDigest,
   operatorRealmIdentityLinkSchema,
   projectPendingRealmIdentityLink,
+  selectHostedOperatorOwnedOrganizationSpec,
 } from "./hosted-operator-contract";
 import {
   prepareHostedOperatorResourceCredentials,
@@ -325,6 +327,16 @@ const requireFinalResourceBindingPhase = (
  * Neon resource effects, installer reconciliation, verification and bindings
  * still require their concrete owner-authorized provider implementations.
  */
+const membershipSpecForEffect = (input: HostedOperatorEffectContext) => {
+  if (input.plan.authMembership === undefined) {
+    throw new HostedOperatorError("auth_identity_required");
+  }
+  const membershipTarget = input.plan.normalActorProgram?.organizations.find(
+    (candidate) => input.effect.id === `auth-membership:${candidate.organizationId}`,
+  );
+  return selectHostedOperatorOwnedOrganizationSpec(input.plan.authMembership, membershipTarget);
+};
+
 export const createHostedOperatorControlPlane = async (input: {
   environment?: Readonly<Record<string, string | undefined>>;
   workloadPolicy: OperatorWorkloadPolicy;
@@ -578,6 +590,14 @@ export const createHostedOperatorControlPlane = async (input: {
       store,
     });
 
+    const normalActorJournalPorts = createNormalActorJournalAuthority({
+      store,
+      keyring: tokenKeyring,
+      now: Date.now,
+      assertCanonicalOwner: owner.assertArtifactAuthorized,
+      assertApprovedOwner: owner.assertAuthorized,
+      readApproval,
+    });
     const sharedAuth = createHostedOperatorSharedAuthAdoption({
       assertAuthorized: owner.assertAuthorized,
       assertPlanningAuthorized: owner.assertPlanningAuthorized,
@@ -609,6 +629,7 @@ export const createHostedOperatorControlPlane = async (input: {
     });
 
     return {
+      normalActorJournalPorts,
       assertAuthorized: owner.assertAuthorized,
       async assertMembershipCapture(inputContext: HostedOperatorEffectContext) {
         if (
@@ -624,7 +645,7 @@ export const createHostedOperatorControlPlane = async (input: {
           store,
         });
         const link = record.operator?.identityLink;
-        const capturedMembership = inputContext.plan.authMembership;
+        const capturedMembership = membershipSpecForEffect(inputContext);
         const matches = [
           link?.consumedAt === capturedMembership.identityCapture.capturedAt,
           link?.proofRef === capturedMembership.identityProof.reference,

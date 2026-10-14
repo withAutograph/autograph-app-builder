@@ -110,6 +110,8 @@ export type HostedOperatorDeploymentContext = HostedOperatorEffectContext & {
 };
 export type HostedOperatorEffectContext = Context & {
   effect: Effect;
+  /** Actual execution lease, retained privately for read-only journal CAS authority checks. */
+  leaseId?: string;
   fenceGeneration: number;
   operationRef: string;
   plan: HostedOperatorPlan;
@@ -953,6 +955,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
               }
               const effectInput: HostedOperatorEffectContext = {
                 ...context,
+                leaseId,
                 assertCurrent,
                 accountPreparation: record.accountPreparation,
                 checkpointAccountPreparation,
