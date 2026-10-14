@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  createHostedOperatorConsentDiagnostic,
+  observeOperatorPlanStage,
+} from "./hosted-operator-consent-diagnostic";
+import type { HostedOperatorConsentDiagnosticSink } from "./hosted-operator-consent-diagnostic";
+import type { MarketplaceResourceErrorCode } from "./hosted-runtime-marketplace-resource";
 import { readOwnerVercelProjectAccess } from "../agent/prepared-provider-context";
 import type { createHostedOperatorControlPlane } from "./hosted-operator-deployment";
 import {
@@ -8,7 +14,7 @@ import {
 } from "./hosted-operator-contract";
 import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
 import { hostedRuntimeIdentity, hostedRuntimeJournalRecordSchema } from "./hosted-runtime-journal";
-import { readVercelManagedNeonResource } from "./hosted-runtime-marketplace-resource";
+import { readVercelNativeNeonBinding } from "./hosted-runtime-native-neon-binding";
 import type {
   NativePreviewNeonDependencies,
   NativePreviewNeonStoreBinding,
@@ -29,6 +35,7 @@ interface Input<Effect extends HostedOperatorEffectContext> {
   effect: Effect;
   nativeStore: Readonly<NativePreviewNeonStoreBinding>;
   fetch?: typeof fetch;
+  diagnosticSink?: HostedOperatorConsentDiagnosticSink;
   now?: () => number;
 }
 type Callbacks = Pick<
@@ -66,6 +73,7 @@ const readVerifiedOwnerNativeStore = async (
     nativeStore: Readonly<NativePreviewNeonStoreBinding>;
     neonProjectId: string;
     fetch?: typeof fetch;
+    diagnosticSink?: HostedOperatorConsentDiagnosticSink;
   },
   context: HostedOperatorContext,
   binding: NativePreviewNeonStoreBinding,
@@ -91,56 +99,128 @@ const readVerifiedOwnerNativeStore = async (
     await input.assertCurrentOwner(context);
     return credential;
   };
-  const access = await readOwnerVercelProjectAccess({
-    authority: context.authority,
-    fetch: input.fetch ?? fetch,
-    installationId: context.target.installationId,
-    projectId: binding.sourceProjectId,
-    readCredential,
-  });
-  if (
-    access.status !== "ready" ||
-    access.project?.id !== binding.sourceProjectId ||
-    access.scope.id !== context.target.scopeId ||
-    access.scope.type !== context.target.scopeType
-  ) {
-    throw fail();
-  }
-  await input.assertCurrentOwner(context);
-  const native = await readVercelManagedNeonResource({
-    configurationId: binding.configurationId,
-    fail,
-    projectId: binding.sourceProjectId,
-    request: async (pathname) => {
-      await input.assertCurrentOwner(context);
-      const credential = await readCredential();
-      const url = new URL(pathname, "https://api.vercel.com");
-      if (context.target.scopeType === "team") {
-        url.searchParams.set("teamId", context.target.scopeId);
-      }
-      const response = await (input.fetch ?? fetch)(url, {
-        cache: "no-store",
-        headers: { Accept: "application/json", Authorization: `Bearer ${credential.token}` },
-        method: "GET",
-        redirect: "error",
-        signal: AbortSignal.timeout(20_000),
+  const verifiedAccess = await observeOperatorPlanStage(
+    context.target.sessionId,
+    "neon_source_project_access",
+    async () => {
+      const access = await readOwnerVercelProjectAccess({
+        authority: context.authority,
+        fetch: async (request, init) =>
+          await observeOperatorPlanStage(
+            context.target.sessionId,
+            "neon_source_project_access",
+            async () => {
+              const response = await (input.fetch ?? fetch)(request, init);
+              if (response.status !== 200) {
+                try {
+                  createHostedOperatorConsentDiagnostic(
+                    context.target.sessionId,
+                    input.diagnosticSink,
+                  )({
+                    boundary: "operator",
+                    phase: "inline",
+                    stage: "operator_request",
+                    outcome: "setup_unavailable",
+                    httpStatus: response.status,
+                    planningFailure: {
+                      stage: "neon_source_project_access",
+                      errorClass: "unexpected",
+                    },
+                  });
+                } catch {
+                  /* Diagnostics never change the provider request or response. */
+                }
+              }
+              return response;
+            },
+            input.diagnosticSink,
+          ),
+        installationId: context.target.installationId,
+        projectId: binding.sourceProjectId,
+        readCredential,
       });
-      try {
-        if (!response.ok) {
-          throw fail();
-        }
-        const raw: unknown = await response.json();
-        const value = z.json().parse(raw);
-        await input.assertCurrentOwner(context);
-        return value;
-      } finally {
-        if (!response.bodyUsed) {
-          await response.body?.cancel();
-        }
+      if (
+        access.status !== "ready" ||
+        access.project?.id !== binding.sourceProjectId ||
+        access.scope.id !== context.target.scopeId ||
+        access.scope.type !== context.target.scopeType
+      ) {
+        throw fail();
       }
+      return { ownerId: access.scope.id, projectId: access.project.id };
     },
-    scopeId: context.target.scopeId,
-  });
+    input.diagnosticSink,
+  );
+  await input.assertCurrentOwner(context);
+  const reportStoreFailure = (
+    nativeStoreFailure?: MarketplaceResourceErrorCode,
+    httpStatus?: number,
+  ) => {
+    try {
+      createHostedOperatorConsentDiagnostic(
+        context.target.sessionId,
+        input.diagnosticSink,
+      )({
+        boundary: "operator",
+        phase: "inline",
+        stage: "operator_request",
+        outcome: "setup_unavailable",
+        ...(httpStatus === undefined ? {} : { httpStatus }),
+        planningFailure: {
+          stage: "neon_native_store",
+          errorClass: "unexpected",
+          ...(nativeStoreFailure === undefined ? {} : { nativeStoreFailure }),
+        },
+      });
+    } catch {
+      /* Diagnostic failures preserve native authorization behavior. */
+    }
+  };
+  const native = await observeOperatorPlanStage(
+    context.target.sessionId,
+    "neon_native_store",
+    async () =>
+      await readVercelNativeNeonBinding({
+        configurationId: binding.configurationId,
+        fail: (reason) => {
+          reportStoreFailure(reason);
+          return fail();
+        },
+        sourceProjectId: binding.sourceProjectId,
+        resourceId: binding.resourceId,
+        neonProjectId: input.neonProjectId,
+        request: async (pathname) => {
+          await input.assertCurrentOwner(context);
+          const credential = await readCredential();
+          const url = new URL(pathname, "https://api.vercel.com");
+          if (context.target.scopeType === "team") {
+            url.searchParams.set("teamId", context.target.scopeId);
+          }
+          const response = await (input.fetch ?? fetch)(url, {
+            cache: "no-store",
+            headers: { Accept: "application/json", Authorization: `Bearer ${credential.token}` },
+            method: "GET",
+            redirect: "error",
+            signal: AbortSignal.timeout(20_000),
+          });
+          try {
+            if (!response.ok) {
+              reportStoreFailure(undefined, response.status);
+              throw fail();
+            }
+            const raw: unknown = await response.json();
+            const value = z.json().parse(raw);
+            await input.assertCurrentOwner(context);
+            return value;
+          } finally {
+            if (!response.bodyUsed) {
+              await response.body?.cancel();
+            }
+          }
+        },
+      }),
+    input.diagnosticSink,
+  );
   if (native.resourceId !== binding.resourceId || native.neonProjectId !== input.neonProjectId) {
     throw fail();
   }
@@ -148,9 +228,9 @@ const readVerifiedOwnerNativeStore = async (
   return {
     configurationId: binding.configurationId,
     neonProjectId: native.neonProjectId,
-    ownerId: access.scope.id,
+    ownerId: verifiedAccess.ownerId,
     resourceId: native.resourceId,
-    vercelProjectId: access.project.id,
+    vercelProjectId: verifiedAccess.projectId,
   };
 };
 
@@ -261,6 +341,7 @@ const createAuthority = (
         {
           assertCurrentOwner: assertPhase,
           fetch: input.fetch,
+          diagnosticSink: input.diagnosticSink,
           nativeStore: expectedStore,
           neonProjectId: plan.neon.projectId,
           readCredential: input.controlPlane.readCredential,
@@ -292,6 +373,7 @@ export const createNativePreviewNeonPlanningAuthority = (input: {
   nativeStore: Readonly<NativePreviewNeonStoreBinding>;
   scope: Readonly<NativePreviewNeonScope>;
   fetch?: typeof fetch;
+  diagnosticSink?: HostedOperatorConsentDiagnosticSink;
 }) => {
   const context = structuredClone({
     authority: input.context.authority,
@@ -337,6 +419,7 @@ export const createNativePreviewNeonPlanningAuthority = (input: {
         {
           assertCurrentOwner,
           fetch: input.fetch,
+          diagnosticSink: input.diagnosticSink,
           nativeStore,
           neonProjectId: scope.projectId,
           readCredential: input.controlPlane.readCredential,

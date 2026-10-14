@@ -31,6 +31,11 @@ import {
 import type { OperatorWorkloadPolicy } from "./hosted-operator-workload";
 import { normalActorProgramDigest } from "./hosted-operator-normal-actor-program";
 
+import type {
+  HostedOperatorConsentDiagnostic,
+  HostedOperatorConsentDiagnosticSink,
+} from "./hosted-operator-consent-diagnostic";
+
 const handoffId = "851d5dd6-0983-4f91-ae80-797fd61cfd4f";
 const principal: HostedPrincipal = {
   audience: "https://builder.example/mcp",
@@ -174,6 +179,7 @@ const makeFixture = (
   sessionOverride?: HostedSessionRecord,
   missingHandoff = false,
   activeMember = true,
+  diagnosticSink?: HostedOperatorConsentDiagnosticSink,
 ) => {
   const currentSession = durableHostedSessionRecordSchema.parse({
     adapterGeneration: 1,
@@ -278,7 +284,7 @@ const makeFixture = (
     };
   });
   // oxlint-disable-next-line eslint/require-await -- provider response fixture is produced locally.
-  const fetch = vi.fn(async () =>
+  const fetch = vi.fn<typeof globalThis.fetch>(async () =>
     Response.json({
       accountId: "team_1",
       id: selection.projectId,
@@ -291,6 +297,7 @@ const makeFixture = (
   });
   const authority = createHostedOperatorOwnerAuthority({
     apiOrigin: "https://vercel.example",
+    diagnosticSink,
     eve,
     fetch,
     handoffs,
@@ -628,6 +635,136 @@ describe("hosted operator artifact ownership", () => {
       vi.mocked(fixture.readVercelCredential).mockResolvedValue(undefined);
       await expect(fixture.authority.assertPlanningAuthorized(context)).rejects.toThrow();
       expect(fixture.fetch).not.toHaveBeenCalled();
+    },
+  );
+});
+
+describe("owner project access diagnostics", () => {
+  it.each([
+    ["direct", 403],
+    ["direct", 429],
+    ["handoff", 403],
+    ["handoff", 429],
+  ] as const)(
+    "observes %s owner HTTP %s without exposing private request or response data",
+    async (kind, status) => {
+      const diagnostics: HostedOperatorConsentDiagnostic[] = [];
+      const fixture = makeFixture(
+        kind === "direct" ? directSessionRecord() : undefined,
+        false,
+        true,
+        (event) => {
+          diagnostics.push(event);
+        },
+      );
+      const response = Response.json(
+        { privateToken: "never-log-response", uri: "postgres://private-password@private-host/db" },
+        { status, headers: { "private-header": "never-log-header" } },
+      );
+      const readJson = vi.spyOn(response, "json");
+      const readText = vi.spyOn(response, "text");
+      fixture.fetch.mockImplementation(async (providerRequest, init) => {
+        await Promise.resolve();
+        const url = new URL(
+          providerRequest instanceof Request ? providerRequest.url : providerRequest,
+        );
+        expect(url.pathname).toBe(`/v9/projects/${selection.projectId}`);
+        expect(url.searchParams.get("teamId")).toBe("team_1");
+        expect(init?.method).toBe("GET");
+        expect(init?.redirect).toBe("error");
+        expect(init?.headers).toMatchObject({ Authorization: "Bearer credential-never-exposed" });
+        return response;
+      });
+      await expect(
+        fixture.authority.authorize(
+          request(),
+          selection,
+          kind === "direct" ? directOwnerContext : ownerContext,
+        ),
+      ).rejects.toMatchObject({ code: "resource_mismatch" });
+      expect(diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            httpStatus: status,
+            planningFailure: { stage: "plan_owner_authorization", errorClass: "unexpected" },
+          }),
+        ]),
+      );
+      expect(fixture.fetch).toHaveBeenCalledTimes(1);
+      expect(readJson).not.toHaveBeenCalled();
+      expect(readText).not.toHaveBeenCalled();
+      const serialized = JSON.stringify(diagnostics);
+      for (const privateValue of [
+        "never-log-response",
+        "never-log-header",
+        "private-password",
+        "private-host",
+        "credential-never-exposed",
+        selection.projectId,
+        ownerContext.sessionId,
+        ownerContext.authority.ownerUserId,
+      ]) {
+        expect(serialized).not.toContain(privateValue);
+      }
+    },
+  );
+
+  it.each(["direct", "handoff"] as const)(
+    "preserves %s owner denial when the diagnostic sink throws",
+    async (kind) => {
+      const fixture = makeFixture(
+        kind === "direct" ? directSessionRecord() : undefined,
+        false,
+        true,
+        () => {
+          throw new Error("sink unavailable");
+        },
+      );
+      fixture.fetch.mockResolvedValue(Response.json({}, { status: 403 }));
+      await expect(
+        fixture.authority.authorize(
+          request(),
+          selection,
+          kind === "direct" ? directOwnerContext : ownerContext,
+        ),
+      ).rejects.toMatchObject({ code: "resource_mismatch" });
+      expect(fixture.fetch).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(["direct", "handoff"] as const)(
+    "observes %s transport categories before existing access normalization",
+    async (kind) => {
+      const diagnostics: HostedOperatorConsentDiagnostic[] = [];
+      const fixture = makeFixture(
+        kind === "direct" ? directSessionRecord() : undefined,
+        false,
+        true,
+        (event) => {
+          diagnostics.push(event);
+        },
+      );
+      fixture.fetch.mockRejectedValue(
+        new TypeError("credential-never-exposed private transport failure"),
+      );
+      await expect(
+        fixture.authority.authorize(
+          request(),
+          selection,
+          kind === "direct" ? directOwnerContext : ownerContext,
+        ),
+      ).rejects.toMatchObject({ code: "resource_mismatch" });
+      expect(diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            planningFailure: { stage: "plan_owner_authorization", errorClass: "type_error" },
+          }),
+        ]),
+      );
+      expect(diagnostics.some((event) => event.httpStatus !== undefined)).toBe(false);
+      expect(JSON.stringify(diagnostics)).not.toContain("credential-never-exposed");
+      expect(JSON.stringify(diagnostics)).not.toContain("private transport failure");
+      expect(fixture.fetch).toHaveBeenCalledTimes(1);
     },
   );
 });

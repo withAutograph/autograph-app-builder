@@ -37,6 +37,12 @@ import {
 } from "../eve/private-hosted-approval";
 import type { HostedEveTransport } from "../eve/hosted-service";
 
+import {
+  createHostedOperatorConsentDiagnostic,
+  observeOperatorPlanStage,
+} from "./hosted-operator-consent-diagnostic";
+import type { HostedOperatorConsentDiagnosticSink } from "./hosted-operator-consent-diagnostic";
+
 type Authority = OperatorOwnerContext["authority"];
 type AccessReader = Parameters<typeof readPreparedVercelAccess>[0]["readCredential"];
 type VerifierKeyResolver = Parameters<typeof createOperatorWorkloadVerifier>[1];
@@ -52,6 +58,7 @@ export interface HostedOperatorOwnerDependencies {
   ) => Promise<readonly Pick<VercelInstallationBinding, "active" | "installationId">[]>;
   readVercelCredential: AccessReader;
   fetch?: typeof fetch;
+  diagnosticSink?: HostedOperatorConsentDiagnosticSink;
   apiOrigin?: string;
 }
 
@@ -130,6 +137,36 @@ const assertDirectOwnerIdentity = (
   }
 };
 
+const observeOwnerProjectFetch =
+  (deps: HostedOperatorOwnerDependencies, selection: OperatorSelection): typeof fetch =>
+  async (request, init) =>
+    await observeOperatorPlanStage(
+      selection.sessionId,
+      "plan_owner_authorization",
+      async () => {
+        const response = await (deps.fetch ?? fetch)(request, init);
+        if (response.status !== 200) {
+          try {
+            createHostedOperatorConsentDiagnostic(
+              selection.sessionId,
+              deps.diagnosticSink,
+            )({
+              boundary: "operator",
+              phase: "inline",
+              stage: "operator_request",
+              outcome: "setup_unavailable",
+              httpStatus: response.status,
+              planningFailure: { stage: "plan_owner_authorization", errorClass: "unexpected" },
+            });
+          } catch {
+            /* Diagnostics never change the provider request or response. */
+          }
+        }
+        return response;
+      },
+      deps.diagnosticSink,
+    );
+
 const readDirectOwnerTarget = async (
   deps: HostedOperatorOwnerDependencies,
   owner: OperatorOwnerContext,
@@ -155,9 +192,7 @@ const readDirectOwnerTarget = async (
         projectId: selection.projectId,
         readCredential: deps.readVercelCredential,
       };
-      if (deps.fetch !== undefined) {
-        accessInput.fetch = deps.fetch;
-      }
+      accessInput.fetch = observeOwnerProjectFetch(deps, selection);
       if (deps.apiOrigin !== undefined) {
         accessInput.apiOrigin = deps.apiOrigin;
       }
@@ -254,9 +289,7 @@ const readHandoffOwnerTarget = async (
     intent: handoff.data.intent,
     readCredential: deps.readVercelCredential,
   };
-  if (deps.fetch !== undefined) {
-    accessInput.fetch = deps.fetch;
-  }
+  accessInput.fetch = observeOwnerProjectFetch(deps, selection);
   if (deps.apiOrigin !== undefined) {
     accessInput.apiOrigin = deps.apiOrigin;
   }
