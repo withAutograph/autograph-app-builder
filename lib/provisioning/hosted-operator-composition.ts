@@ -1015,7 +1015,7 @@ export const composeHostedOperatorDependencies = (
           projectId: native.projectId,
           source: "synthetic-only",
         },
-        publicGateway: createHostedOperatorPublicGateway(inventory),
+        publicGateway: createHostedOperatorPublicGateway(inventory, configuration.gateway.branch),
         release: {
           artifactRef: selection.artifactRef,
           id: selection.releaseId,
