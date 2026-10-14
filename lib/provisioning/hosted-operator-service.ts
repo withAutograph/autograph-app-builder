@@ -121,6 +121,8 @@ export type HostedOperatorEffectContext = Context & {
   checkpointManagedEnvironment?: (rows: readonly ManagedOperatorEnvironmentRow[]) => Promise<void>;
   workerCheckpoints: WorkerEffectCheckpoint[];
   assertCurrent: () => Promise<void>;
+  /** Fresh canonical owner, actual approval, execution lease and physical fence for private reads. */
+  assertCurrentObservation?: () => Promise<void>;
   checkpoint: (state: PrivateState) => Promise<void>;
 };
 export type RecordWorkerCheckpoint = (frame: WorkerEffectCheckpointFrame) => Promise<void>;
@@ -151,6 +153,8 @@ export interface ProtectedHostedOperatorDependencies {
   plan: (context: Context & { action: "prepare" | "cleanup" }) => Promise<HostedOperatorPlan>;
   /** Re-read membership, owner connection and provider grants. No ambient Neon authority. */
   assertAuthorized: (context: Context & { plan: HostedOperatorPlan }) => Promise<void>;
+  /** Canonical session/member/app/adapter authority; provider grants remain full at observation boundaries and mutations. */
+  assertCanonicalOwner?: (context: Context) => Promise<void>;
   /** Read the durable authenticated approval outcome and exact tool input from Eve's authoritative store. */
   readApproval: (
     context: Context & { callId: string; planDigest: string; action: "prepare" | "cleanup" },
@@ -694,9 +698,11 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
       if (input.planDigest !== planDigest) {
         throw new HostedOperatorError("resource_mismatch");
       }
-      const assertApproval = async () => {
+      const assertApproval = async (observation = false) => {
         assertUnexpired(plan, now());
-        await deps.assertAuthorized({ ...context, plan });
+        await (observation && deps.assertCanonicalOwner !== undefined
+          ? deps.assertCanonicalOwner(context)
+          : deps.assertAuthorized({ ...context, plan }));
         const approval = await deps.readApproval({
           ...context,
           action: plan.action,
@@ -789,6 +795,14 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
               await assertFence();
               await ownedUpdate((record) => record);
             };
+            const assertCurrentObservation = async () => {
+              const currentApproval = await assertApproval(true);
+              if (currentApproval.approvalId !== approval.approvalId) {
+                throw new HostedOperatorError("authorization_required");
+              }
+              await assertFence();
+              await ownedUpdate((record) => record);
+            };
             let { record } = claimed;
             for (const effect of plan.effects) {
               await assertCurrent();
@@ -805,6 +819,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
               const effectInput: HostedOperatorEffectContext = {
                 ...context,
                 assertCurrent,
+                assertCurrentObservation,
                 checkpoint: async (privateState) => {
                   await assertCurrent();
                   record = (await ownedUpdate((value) => ({ ...value, privateState }))).record;
