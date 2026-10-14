@@ -101,6 +101,26 @@ its protected environment and session files are injected by Builder into app
 validation and Preview startup. Author `test-e2e` to consume `APP_TEST_IDENTITIES_FILE`
 and exercise real browser submissions with those sessions. Backend validation
 runs this task after repository checks and reports missing tasks as blocked.
+The shared `@autograph/playwright-config` configuration uses `APP_TEST_BASE_URL`
+for the prepared Preview and omits its local server when that origin is supplied.
+Where the selected repository exposes `@autograph/playwright-config/normal-actors`,
+import its `test` and `expect` for authenticated product tests. Select
+`actorContext({ actorKey, organizationId })` from the private manifest; the same
+account may have separate sessions in several organizations. Open a page on that
+context and exercise the accepted journey. Keep actors with `roles: []` available
+for assignment-denial cases. The fixture preserves actual cookie files and
+closes the contexts; do not copy credentials, rewrite cookie domains, or insert
+workload tokens into browser requests. Improve a missing shared capability in the
+repository workflow instead of making the evaluator implement it or duplicating
+it in each generated app.
+
+Assertions should cover the accepted product behavior and access boundaries.
+Do not require incidental DOM positions, exact opaque IDs, file names, internal
+call counts or event ordering. Additional valid actors, ordinary UI revisions and
+normal source changes must not become admission gates. A shared fixture supplies
+sessions; app-owned tests still need to exercise the full accepted actor and
+organization scenarios.
+
 No passing command substitutes for observed hosted readback after a restart and
 a new native deployment. Legacy app-owned roles must be recorded explicitly;
 authenticated runtime preparation cannot guess the accepted role policy.

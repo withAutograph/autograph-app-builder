@@ -374,6 +374,14 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
   stages. Keep passwords and session state out of tool inputs and conversation.
   Read `docs/hosted-app-runtime.md` for the normal-account handoff. Do not invent
   actor quotas, source-layout assertions or regular-app-change gates.
+  For authenticated `test-e2e`, use the target repository's shared normal-actor
+  fixture when exposed at `@autograph/playwright-config/normal-actors`. Select by
+  `actorKey` and `organizationId`, preserve no-assignment actors, and exercise
+  every accepted actor/organization journey. Its context uses the prepared
+  `APP_TEST_BASE_URL` and unchanged private session files. Improve missing shared
+  support through the repository workflow; never ask the evaluator to copy
+  cookies or repair the app. Keep assertions about product behavior and access,
+  without exact internal call counts, opaque IDs or incidental DOM positions.
 - If the complete command reports stale, conflicting, or ambiguous recovery
   state, reconcile it automatically when safe. Otherwise translate the visible
   product effect into one recommended product choice or an unavailable outcome
