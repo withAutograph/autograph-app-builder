@@ -331,6 +331,12 @@ const hostedOperatorPlanDataSchema = z.strictObject({
   stage: z.enum([AUTH_BOOTSTRAP_STAGE, AUTH_PARTICIPANTS_STAGE, "app"]).optional(),
   version: z.literal(1),
 });
+const plannedAppBranch = (plan: z.infer<typeof hostedOperatorPlanDataSchema>) =>
+  plan.deploymentBoundary?.app.branch ?? plan.selection.branch;
+const boundaryAppBranch = (plan: z.infer<typeof hostedOperatorPlanDataSchema>) =>
+  plan.action === "cleanup"
+    ? plannedAppBranch(plan)
+    : (plan.delivery?.branch ?? plan.selection.branch);
 const validatePlanStage = (
   plan: z.infer<typeof hostedOperatorPlanDataSchema>,
   ctx: z.RefinementCtx,
@@ -338,7 +344,7 @@ const validatePlanStage = (
   if (
     plan.delivery !== undefined &&
     (plan.delivery.projectId !== plan.selection.projectId ||
-      plan.delivery.branch !== plan.selection.branch)
+      plan.delivery.branch !== plannedAppBranch(plan))
   ) {
     ctx.addIssue({
       code: "custom",
@@ -597,7 +603,7 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
       new Set([boundary.app.projectId, boundary.gateway.projectId, boundary.operator.projectId])
         .size !== 3,
       boundary.app.projectId !== plan.selection.projectId,
-      boundary.app.branch !== plan.selection.branch,
+      boundary.app.branch !== boundaryAppBranch(plan),
       boundary.gateway.branch !== plan.publicGateway?.branch,
       plan.publicGateway === undefined,
       boundary.gateway.projectId !== plan.publicGateway?.projectId,
@@ -861,7 +867,7 @@ const validateOperatorMetadata = (
     candidates.some(
       (value) =>
         value.projectId !== operator.plan.selection.projectId ||
-        value.branch !== operator.plan.selection.branch,
+        value.branch !== plannedAppBranch(operator.plan),
     )
   ) {
     context.addIssue({
@@ -903,7 +909,7 @@ export const hostedOperatorRecordSchema = hostedOperatorRecordDataSchema.superRe
       environmentRows.some(
         (row) =>
           row.projectId !== operator.plan.selection.projectId ||
-          row.branch !== operator.plan.selection.branch ||
+          row.branch !== plannedAppBranch(operator.plan) ||
           !ownedKeys.has(row.key) ||
           row.comment !== `App Builder protected operator ${row.operationRef}`,
       )

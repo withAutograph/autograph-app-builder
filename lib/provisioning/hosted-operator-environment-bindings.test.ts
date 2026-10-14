@@ -362,6 +362,47 @@ it("updates only exact previously journaled installation-attributed IDs across o
   expect(f.requests.filter((row) => row.method === "PATCH")).toHaveLength(3);
   expect(f.requests.filter((row) => row.method === "POST")).toHaveLength(5);
 });
+it("binds and cleans the approved publication branch without changing the resource target", async () => {
+  const f = fixture();
+  const boundary = f.input.plan.deploymentBoundary!;
+  const publicationBranch = "codex/generated-spend-review";
+  f.input.plan = hostedOperatorPlanSchema.parse({
+    ...f.input.plan,
+    deploymentBoundary: { ...boundary, app: { ...boundary.app, branch: publicationBranch } },
+    delivery: {
+      branch: publicationBranch,
+      gitSha: "c".repeat(40),
+      projectId: target.projectId,
+      repoId: "12345",
+    },
+    effects: [
+      ...f.input.plan.effects,
+      { description: "Deliver published source", id: "delivery", kind: "delivery" },
+    ],
+  });
+  const result = await f.writer.bind(f.input, values);
+  expect(f.input.target.branch).toBe(selection.branch);
+  expect(result.rows.every((row) => row.branch === publicationBranch)).toBe(true);
+  expect(
+    f.requests
+      .filter((request) => request.method === "POST")
+      .every((request) => request.body?.gitBranch === publicationBranch),
+  ).toBe(true);
+  const { delivery, ...retained } = f.input.plan;
+  void delivery;
+  f.input.plan = hostedOperatorPlanSchema.parse({
+    ...retained,
+    action: "cleanup",
+    effects: [
+      { description: "Revoke", id: "revoke", kind: "revoke" },
+      { description: "Remove", id: "remove", kind: "remove-bindings" },
+      { description: "Retire", id: "retire", kind: "retire" },
+    ],
+  });
+  f.input.effect = f.input.plan.effects[1]!;
+  expect(await f.writer.remove(f.input, values)).toEqual({ rows: [] });
+  expect(f.rows.map((row) => row.id)).toEqual(["unrelated"]);
+});
 it("removes only journaled IDs under cleanup while preserving foreign rows", async () => {
   const f = fixture();
   await f.writer.bind(f.input, values);

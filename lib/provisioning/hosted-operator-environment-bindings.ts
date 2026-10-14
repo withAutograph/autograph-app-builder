@@ -41,12 +41,13 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
       !boundary ||
       target.environment !== "preview" ||
       target.projectId !== boundary.app.projectId ||
-      target.branch !== boundary.app.branch ||
       target.scopeId !== boundary.teamId ||
       target.scopeType !== "team"
     ) {
       throw unavailable();
     }
+    // The approved publication ref is independent of the resource journal's branch.
+    const deploymentTarget = { ...target, branch: boundary.app.branch };
     const comment = `App Builder protected operator ${input.operationRef}`;
     const guard = async () => {
       await input.assertCurrent();
@@ -109,12 +110,14 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
         .parse(await request(`/v10/projects/${encodeURIComponent(target.projectId)}/env`)).envs;
     const relevant = (row: ProviderRow) =>
       row.target.includes("preview") &&
-      (row.gitBranch === null || row.gitBranch === undefined || row.gitBranch === target.branch) &&
+      (row.gitBranch === null ||
+        row.gitBranch === undefined ||
+        row.gitBranch === deploymentTarget.branch) &&
       Object.hasOwn(expected, row.key);
     const owned = (row: ProviderRow) =>
       row.target.length === 1 &&
       row.target[0] === "preview" &&
-      row.gitBranch === target.branch &&
+      row.gitBranch === deploymentTarget.branch &&
       (row.configurationId === undefined ||
         row.configurationId === null ||
         row.configurationId === "" ||
@@ -125,7 +128,7 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
           (known) => known.id === row.id && known.key === row.key && known.comment === row.comment,
         ));
     const reference = (row: ProviderRow): ManagedOperatorEnvironmentRow => ({
-      branch: target.branch,
+      branch: deploymentTarget.branch,
       comment: z.string().min(1).parse(row.comment),
       id: row.id,
       key: row.key,
@@ -141,7 +144,7 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
         new Set(known.map((row) => row.key)).size !== known.length ||
         known.some(
           (row) =>
-            row.branch !== target.branch ||
+            row.branch !== deploymentTarget.branch ||
             row.projectId !== target.projectId ||
             row.comment !== `App Builder protected operator ${row.operationRef}` ||
             !Object.hasOwn(expected, row.key),
@@ -181,7 +184,16 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
       await input.checkpointManagedEnvironment(rows.map(reference));
       await guard();
     };
-    return { checkpoint, comment, expected, guard, inspect, reference, request, target };
+    return {
+      checkpoint,
+      comment,
+      expected,
+      guard,
+      inspect,
+      reference,
+      request,
+      target: deploymentTarget,
+    };
   };
   return {
     async bind(input: HostedOperatorManagedEnvironmentContext, values: ProtectedAppEnvironment) {
