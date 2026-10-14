@@ -1007,6 +1007,7 @@ describe("native composition adoption boundary", () => {
         }),
     );
     const controlPlane: Awaited<ReturnType<typeof createHostedOperatorControlPlane>> = {
+      readApprovedPlan: unavailable,
       assertCanonicalOwner: unavailable,
       normalActorJournalPorts: {
         assertAuthorized: unavailable,
