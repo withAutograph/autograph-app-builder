@@ -292,6 +292,134 @@ const fixture = () => {
   };
 };
 describe("concrete native Preview owner and approval callbacks", () => {
+  it.each([403, 429])(
+    "reports observed source-project HTTP %s without inspecting private payloads",
+    async (status) => {
+      const f = fixture();
+      const diagnostics: HostedOperatorConsentMetadata[] = [];
+      const response = Response.json(
+        { privateToken: "must-not-log-response", credential: "postgres://secret@private" },
+        { status, headers: { "private-provider-header": "must-not-log-header" } },
+      );
+      const readJson = vi.spyOn(response, "json");
+      const readText = vi.spyOn(response, "text");
+      const fetcher = vi.fn<typeof fetch>(async (request, init) => {
+        await Promise.resolve();
+        const url = new URL(request instanceof Request ? request.url : request);
+        expect(url.pathname).toBe(`/v9/projects/${nativeStore.sourceProjectId}`);
+        expect(url.searchParams.get("teamId")).toBe(target.scopeId);
+        expect(init?.method).toBe("GET");
+        expect(init?.redirect).toBe("error");
+        expect(init?.headers).toMatchObject({ Authorization: "Bearer synthetic-owner-oauth" });
+        return response;
+      });
+      const reader = createNativePreviewNeonPlanningAuthority({
+        context: f.effect,
+        controlPlane: {
+          assertPlanningAuthorized: async () => {
+            await Promise.resolve();
+          },
+          readCredential: f.controlPlane.readCredential,
+        },
+        fetch: fetcher,
+        diagnosticSink: (event) => {
+          diagnostics.push(event);
+        },
+        nativeStore,
+        scope,
+      });
+      await expect(reader.readCurrentOwnerNativeStore(f.effect, nativeStore)).rejects.toMatchObject(
+        { code: "authorization_required" },
+      );
+      expect(diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            httpStatus: status,
+            planningFailure: { stage: "neon_source_project_access", errorClass: "unexpected" },
+          }),
+        ]),
+      );
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(readJson).not.toHaveBeenCalled();
+      expect(readText).not.toHaveBeenCalled();
+      const serialized = JSON.stringify(diagnostics);
+      for (const privateValue of [
+        "must-not-log-response",
+        "must-not-log-header",
+        "postgres://secret@private",
+        "synthetic-owner-oauth",
+        target.sessionId,
+        nativeStore.sourceProjectId,
+      ]) {
+        expect(serialized).not.toContain(privateValue);
+      }
+    },
+  );
+
+  it("preserves source-project denial when the diagnostic sink throws", async () => {
+    const f = fixture();
+    const fetcher = vi.fn<typeof fetch>(
+      async () => await Promise.resolve(Response.json({}, { status: 403 })),
+    );
+    const reader = createNativePreviewNeonPlanningAuthority({
+      context: f.effect,
+      controlPlane: {
+        assertPlanningAuthorized: async () => {
+          await Promise.resolve();
+        },
+        readCredential: f.controlPlane.readCredential,
+      },
+      fetch: fetcher,
+      diagnosticSink: () => {
+        throw new Error("sink unavailable");
+      },
+      nativeStore,
+      scope,
+    });
+    await expect(reader.readCurrentOwnerNativeStore(f.effect, nativeStore)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports transport error categories before project access normalizes the failure", async () => {
+    const f = fixture();
+    const diagnostics: HostedOperatorConsentMetadata[] = [];
+    const fetcher = vi.fn<typeof fetch>(async () => {
+      await Promise.resolve();
+      throw new TypeError("private transport error synthetic-owner-oauth");
+    });
+    const reader = createNativePreviewNeonPlanningAuthority({
+      context: f.effect,
+      controlPlane: {
+        assertPlanningAuthorized: async () => {
+          await Promise.resolve();
+        },
+        readCredential: f.controlPlane.readCredential,
+      },
+      fetch: fetcher,
+      diagnosticSink: (event) => {
+        diagnostics.push(event);
+      },
+      nativeStore,
+      scope,
+    });
+    await expect(reader.readCurrentOwnerNativeStore(f.effect, nativeStore)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          planningFailure: { stage: "neon_source_project_access", errorClass: "type_error" },
+        }),
+      ]),
+    );
+    expect(diagnostics.some((event) => event.httpStatus !== undefined)).toBe(false);
+    expect(JSON.stringify(diagnostics)).not.toContain("private transport error");
+    expect(JSON.stringify(diagnostics)).not.toContain("synthetic-owner-oauth");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
   it("reports only the observed failed store HTTP status and preserves authorization denial", async () => {
     const f = fixture();
     const diagnostics: HostedOperatorConsentMetadata[] = [];

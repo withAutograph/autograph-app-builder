@@ -105,7 +105,36 @@ const readVerifiedOwnerNativeStore = async (
     async () => {
       const access = await readOwnerVercelProjectAccess({
         authority: context.authority,
-        fetch: input.fetch ?? fetch,
+        fetch: async (request, init) =>
+          await observeOperatorPlanStage(
+            context.target.sessionId,
+            "neon_source_project_access",
+            async () => {
+              const response = await (input.fetch ?? fetch)(request, init);
+              if (response.status !== 200) {
+                try {
+                  createHostedOperatorConsentDiagnostic(
+                    context.target.sessionId,
+                    input.diagnosticSink,
+                  )({
+                    boundary: "operator",
+                    phase: "inline",
+                    stage: "operator_request",
+                    outcome: "setup_unavailable",
+                    httpStatus: response.status,
+                    planningFailure: {
+                      stage: "neon_source_project_access",
+                      errorClass: "unexpected",
+                    },
+                  });
+                } catch {
+                  /* Diagnostics never change the provider request or response. */
+                }
+              }
+              return response;
+            },
+            input.diagnosticSink,
+          ),
         installationId: context.target.installationId,
         projectId: binding.sourceProjectId,
         readCredential,
