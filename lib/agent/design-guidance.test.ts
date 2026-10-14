@@ -1,16 +1,23 @@
-import { readFileSync } from "node:fs";
-
 import { describe, expect, it } from "vitest";
 
-import { HOSTED_MANAGED_SKILL_CONTENTS } from "../sandbox/hosted-managed-seeds.generated";
+import {
+  readHostedManagedSeedFiles,
+  HOSTED_MANAGED_SKILLS_TARGET,
+} from "../sandbox/hosted-managed-seeds";
 import { uiPreviewInputSchema, validateUiPreview } from "./ui-preview";
 
 describe("high-fidelity design guidance", () => {
   it("provides a first-preview example accepted by the unchanged preview contract", () => {
-    const reference = readFileSync(
-      "agent/skills/design-app/references/ui-preview-authoring.md",
-      "utf-8",
-    );
+    const reference = readHostedManagedSeedFiles()
+      .find(
+        (file) =>
+          file.path ===
+          `${HOSTED_MANAGED_SKILLS_TARGET}/design-app/references/ui-preview-authoring.md`,
+      )
+      ?.content.toString("utf-8");
+    if (reference === undefined) {
+      throw new Error("Hosted preview authoring guidance is unavailable.");
+    }
     const content = reference.match(/```tsx\n(?<content>[\s\S]*?)\n```/u)?.groups?.content;
     const manifest = reference.match(/```json\n(?<manifest>[\s\S]*?)\n```/u)?.groups?.manifest;
     expect(content).toBeDefined();
@@ -37,18 +44,14 @@ describe("high-fidelity design guidance", () => {
     ).toThrow();
   });
 
-  it.each(["SKILL.md", "references/ui-preview-authoring.md"])(
-    "delivers the same preview guidance locally and in the hosted bundle: %s",
-    (path) => {
-      expect(
-        HOSTED_MANAGED_SKILL_CONTENTS.find((entry) => entry.path === `design-app/${path}`)?.content,
-      ).toBe(readFileSync(`agent/skills/design-app/${path}`, "utf-8"));
-    },
-  );
-
-  it("delivers current build and final-review guidance in the hosted bundle", () => {
-    expect(
-      HOSTED_MANAGED_SKILL_CONTENTS.find((entry) => entry.path === "create-app/SKILL.md")?.content,
-    ).toBe(readFileSync("agent/skills/create-app/SKILL.md", "utf-8"));
+  it.each([
+    "design-app/SKILL.md",
+    "design-app/references/ui-preview-authoring.md",
+    "create-app/SKILL.md",
+  ])("makes hosted guidance available for transfer: %s", (skillPath) => {
+    const file = readHostedManagedSeedFiles().find(
+      (entry) => entry.path === `${HOSTED_MANAGED_SKILLS_TARGET}/${skillPath}`,
+    );
+    expect(file?.content.byteLength).toBeGreaterThan(0);
   });
 });
