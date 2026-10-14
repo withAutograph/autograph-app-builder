@@ -6,9 +6,16 @@ import {
   resolveFullPlan,
 } from "./hosted-operator-composition";
 import { readHostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
+import {
+  initialNormalActorState,
+  normalActorProgramDigest,
+  normalActorProgramSchema,
+} from "./hosted-operator-normal-actor-program";
+import type { NormalActorAccountPreparation } from "./hosted-operator-normal-actor-journal";
 
-import { hostedOperatorPlanSchema } from "./hosted-operator-contract";
+import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
 import type { HostedOperatorContext } from "./hosted-operator-service";
+import type { HostedOperatorNormalActorPlanningPorts } from "./hosted-operator-composition";
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy only on the independent verified identity boundary.
 import * as realmIdentity from "./hosted-operator-auth-identity";
 
@@ -437,5 +444,194 @@ describe("configured owner-authorized Preview target metadata", () => {
     await expect(f.resolve(request(), identity, context.ownerContext)).rejects.toThrow(
       "owner revoked during lookup",
     );
+  });
+});
+
+const participantResolutionFixture = () => {
+  const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+  const program = normalActorProgramSchema.parse({
+    version: 1,
+    appId: context.target.appId,
+    origin: f.configuration.gateway.publicOrigin,
+    actors: [
+      {
+        actorKey: "owner",
+        name: "Owner",
+        email: "owner@example.test",
+        account: "create-email-password",
+      },
+    ],
+    organizations: [
+      { organizationId: "first-org", ownerActorKey: "owner", name: "First", slug: "first" },
+      { organizationId: "second-org", ownerActorKey: "owner", name: "Second", slug: "second" },
+    ],
+    memberships: [
+      { organizationId: "first-org", actorKey: "owner", role: "owner" },
+      { organizationId: "second-org", actorKey: "owner", role: "owner" },
+    ],
+    appAccess: [
+      { organizationId: "first-org", actorKey: "owner", roles: ["member"] },
+      { organizationId: "second-org", actorKey: "owner", roles: ["member"] },
+    ],
+  });
+  const base = hostedOperatorPlanSchema.parse({
+    ...bootstrapPlan(),
+    normalActorProgram: program,
+    publicGateway: { projectId: "gateway", branch: "gateway-actual", origin: program.origin },
+    deploymentBoundary: {
+      authority,
+      teamId: "team",
+      app: {
+        projectId: context.target.projectId,
+        deploymentId: "app-deployment",
+        branch: context.target.branch,
+        environment: "preview",
+      },
+      gateway: {
+        projectId: "gateway",
+        deploymentId: "gateway-deployment",
+        branch: "gateway-actual",
+        environment: "preview",
+      },
+      operator: {
+        projectId: "operator",
+        deploymentId: "operator-deployment",
+        environment: "preview",
+      },
+      verification: {
+        gatewayOrigin: "https://gateway.example",
+        jwksUrl: "https://gateway.example/_platform/jwks.json",
+        publicOrigin: program.origin,
+      },
+    },
+  });
+  const accountPlan = hostedOperatorPlanSchema.parse({
+    ...base,
+    stage: "auth-participants",
+    effects: [{ id: "normal-accounts", kind: "normal-accounts", description: "Accounts only" }],
+  });
+  const operation = "00000000-0000-4000-8000-000000000011";
+  const state = initialNormalActorState(program, operation);
+  state.actors[0] = {
+    actorKey: "owner",
+    signup: "complete",
+    session: {
+      reference: "00000000-0000-4000-8000-000000000012",
+      actorId: "normal-owner-from-session",
+      realmSessionId: "normal-owner-session",
+      origin: program.origin,
+      expiresAt: "2027-01-01T00:00:00.000Z",
+    },
+    storageState: { cookies: [], origins: [] },
+  };
+  const preparation: NormalActorAccountPreparation = {
+    program,
+    programDigest: normalActorProgramDigest(program),
+    accountOperationRef: operation,
+    accountPlan,
+    accountPlanDigest: operatorPlanDigest(accountPlan),
+    accountApprovalId: "first-account-approval",
+    accountApprovedByCallId: "first-account-call",
+    sealedState: {
+      encryptedToken: "private-account-state",
+      keyVersion: "fixture",
+      tokenIv: "fixture",
+      tokenTag: "fixture",
+    },
+    captures: [],
+    accountsCompletedAt: "2026-10-14T12:00:00.000Z",
+  };
+  const organizations = program.organizations.map((organization, index) => ({
+    kind: "create-owned-organization" as const,
+    organizationId: organization.organizationId,
+    name: organization.name,
+    slug: organization.slug,
+    actorId: "normal-owner-from-session",
+    bootstrapPlanDigest: "a".repeat(64),
+    identityCapture: {
+      capturedAt: "2026-10-14T12:00:00.000Z",
+      realmSessionId: "normal-owner-session",
+    },
+    identityNonceSha256: (index === 0 ? "b" : "c").repeat(64),
+    identityProof: {
+      reference: `private-proof-${index}`,
+      sha256: (index === 0 ? "d" : "e").repeat(64),
+    },
+    identityVerification: {
+      audience: "https://operator.example",
+      issuer: program.origin,
+      jwksUrl: "https://gateway.example/_platform/jwks.json",
+      transportSource: f.configuration.nativeNeon.configuration.operator,
+    },
+  }));
+  const ports = {
+    ...f.controlPlane,
+    assertPlanningAuthorized: vi.fn(async () => {
+      await Promise.resolve();
+    }),
+    readNormalActorPreparation: vi.fn<
+      HostedOperatorNormalActorPlanningPorts["readNormalActorPreparation"]
+    >(async () => await Promise.resolve({ preparation, state })),
+    readNormalActorOrganizationProofs: vi.fn(async () => await Promise.resolve(organizations)),
+  };
+  return { ...f, ports, base, program, accountPlan, state, preparation, organizations };
+};
+
+describe("participant plan resolution", () => {
+  it("retains the accepted program during bootstrap and never starts the legacy singular identity path", async () => {
+    const f = participantResolutionFixture();
+    expect(await resolveFullPlan(f.base, context, f.configuration, f.ports)).toEqual(f.base);
+    expect(f.readCapturedRealmIdentity).not.toHaveBeenCalled();
+    expect(f.ports.readNormalActorPreparation).not.toHaveBeenCalled();
+  });
+  it("freezes only account effects after actual bootstrap readiness", async () => {
+    const f = participantResolutionFixture();
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Vitest requires an explicit optional result argument.
+    f.ports.readNormalActorPreparation.mockResolvedValue(undefined);
+    const result = await resolveFullPlan(f.base, context, f.configuration, f.ports, {}, true);
+    expect(result.stage).toBe("auth-participants");
+    expect(result.effects.map((effect) => effect.kind)).toEqual(["normal-accounts"]);
+    expect(result.access).toEqual([]);
+    expect(result.authMembership).toBeUndefined();
+    expect(f.readCapturedRealmIdentity).not.toHaveBeenCalled();
+    expect(f.ports.readNormalActorOrganizationProofs).not.toHaveBeenCalled();
+  });
+  it("resumes the first account plan until participant completion rather than replacing its operation or approval", async () => {
+    const f = participantResolutionFixture();
+    const result = await resolveFullPlan(
+      f.base,
+      context,
+      f.configuration,
+      f.ports,
+      {},
+      true,
+      false,
+    );
+    expect(result).toEqual(f.accountPlan);
+    expect(f.ports.readNormalActorOrganizationProofs).not.toHaveBeenCalled();
+  });
+  it("proposes actual captured actors and both organizations in one full approval, with separate worker checkpoints", async () => {
+    const f = participantResolutionFixture();
+    const result = await resolveFullPlan(f.base, context, f.configuration, f.ports, {}, true, true);
+    expect(result.stage).toBe("app");
+    expect(result.access).toEqual([
+      { actorId: "normal-owner-from-session", organizationId: "first-org", roles: ["member"] },
+      { actorId: "normal-owner-from-session", organizationId: "second-org", roles: ["member"] },
+    ]);
+    expect(result.authMembership).toEqual({
+      kind: "create-owned-organizations",
+      organizations: f.organizations,
+    });
+    expect(
+      result.effects
+        .filter((effect) => effect.kind === "auth-membership")
+        .map((effect) => effect.id),
+    ).toEqual(["auth-membership:first-org", "auth-membership:second-org"]);
+    expect(result.normalActorPreparation?.accountOperationRef).toBe(
+      f.preparation.accountOperationRef,
+    );
+    expect(result.normalActorPreparation?.accountApprovalId).toBe("first-account-approval");
+    expect(f.readCapturedRealmIdentity).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain("private-account-state");
   });
 });
