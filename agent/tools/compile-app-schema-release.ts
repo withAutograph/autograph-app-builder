@@ -1,6 +1,7 @@
 import { defineTool } from "eve/tools";
 import type { SandboxSession } from "eve/sandbox";
 import { publishCompiledOperatorArtifactsForSession } from "@/lib/agent/compiled-operator-artifacts";
+import { safeCommandOutput } from "@/lib/agent/command-output";
 import { z } from "zod";
 import { refreshPlanningSource } from "@/lib/agent/refresh-planning-source";
 import { invalidateProductBehaviorEvidence } from "@/lib/agent/product-behavior-state";
@@ -22,24 +23,6 @@ const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 export const appSchemaReleaseCommand = (appId: string): string =>
   `mise run app:compile ${appIdSchema.parse(appId)}`;
 
-const safeOutput = (value: string): string => {
-  const cleaned = value
-    .replaceAll(/\p{Cc}/gu, (character) =>
-      character === "\n" || character === "\t" ? character : "",
-    )
-    .replaceAll(/Bearer\s+[^\s,;]+/giu, "Bearer [REDACTED]")
-    .replaceAll(
-      /\b(?<key>authorization|cookie|password|passwd|secret|token|api[-_]?key)\s*[:=]\s*[^\s,;]+/giu,
-      "$<key>=[REDACTED]",
-    )
-    .replaceAll(
-      /\b(?:gh[oprsu]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{12,})\b/gu,
-      "[REDACTED]",
-    )
-    .trim();
-  return cleaned;
-};
-
 export const compileAppSchemaRelease = async (input: {
   appId: string;
   root: string;
@@ -58,8 +41,8 @@ export const compileAppSchemaRelease = async (input: {
       request.abortSignal = input.signal;
     }
     const result = await input.sandbox.run(request);
-    const stdout = safeOutput(result.stdout);
-    const stderr = safeOutput(result.stderr);
+    const stdout = safeCommandOutput(result.stdout);
+    const stderr = safeCommandOutput(result.stderr);
     if (result.exitCode !== 0) {
       return {
         command,
@@ -100,7 +83,7 @@ export const compileAppSchemaRelease = async (input: {
     }
     return { command, exitCode: 0, status: "compiled" as const, stderr, stdout };
   } catch (error) {
-    const detail = safeOutput(error instanceof Error ? error.message : String(error));
+    const detail = safeCommandOutput(error instanceof Error ? error.message : String(error));
     return {
       command,
       exitCode: null,
