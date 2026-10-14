@@ -14,7 +14,7 @@ import {
 } from "./hosted-operator-contract";
 import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
 import { hostedRuntimeIdentity, hostedRuntimeJournalRecordSchema } from "./hosted-runtime-journal";
-import { readVercelManagedNeonResource } from "./hosted-runtime-marketplace-resource";
+import { readVercelNativeNeonBinding } from "./hosted-runtime-native-neon-binding";
 import type {
   NativePreviewNeonDependencies,
   NativePreviewNeonStoreBinding,
@@ -151,13 +151,15 @@ const readVerifiedOwnerNativeStore = async (
     context.target.sessionId,
     "neon_native_store",
     async () =>
-      await readVercelManagedNeonResource({
+      await readVercelNativeNeonBinding({
         configurationId: binding.configurationId,
         fail: (reason) => {
           reportStoreFailure(reason);
           return fail();
         },
-        projectId: binding.sourceProjectId,
+        sourceProjectId: binding.sourceProjectId,
+        resourceId: binding.resourceId,
+        neonProjectId: input.neonProjectId,
         request: async (pathname) => {
           await input.assertCurrentOwner(context);
           const credential = await readCredential();
@@ -187,7 +189,6 @@ const readVerifiedOwnerNativeStore = async (
             }
           }
         },
-        scopeId: context.target.scopeId,
       }),
     input.diagnosticSink,
   );
