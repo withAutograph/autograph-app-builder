@@ -63,7 +63,9 @@ export const privateHostedApprovalReceiptSchema = z
     sequence: z.number().int().nonnegative(),
     toolInput: hostedRuntimeToolInputSchema,
     toolName: hostedRuntimeToolName,
-    turnId: z.string().min(1),
+    // Eve emits settlements between turns with its empty-string sentinel.
+    // Preserve that native coordinate; approval authority is the bound request and plan.
+    turnId: z.union([z.string().min(1), z.literal("")]),
   })
   .superRefine((receipt, context) => {
     if (!matchesToolInput(receipt.toolName, receipt.toolInput)) {

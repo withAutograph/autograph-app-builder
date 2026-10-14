@@ -192,6 +192,87 @@ const recordReceipts = async (
 };
 
 describe("private hosted approval receipts", () => {
+  it.each(["approved", "cancelled"] as const)(
+    "recovers a native between-turn %s settlement without inventing a turn",
+    async (outcome) => {
+      const { sessionId: savedSessionId, store } = await startedStore();
+      const original = createPrivateHostedApprovalRecorder({
+        principal,
+        sessionId: savedSessionId,
+        store,
+      });
+      const requested = inputRequested(
+        "between-turn-request",
+        "prepare-app-hosted-runtime",
+        receipt(savedSessionId).toolInput,
+      );
+      await original.observe(requested);
+      const resumed = createPrivateHostedApprovalRecorder({
+        principal,
+        sessionId: savedSessionId,
+        state: hydratePrivateHostedApprovalCaptureState(
+          savedSessionId,
+          serializePrivateHostedApprovalCaptureState(original.snapshot()),
+        ),
+        store,
+      });
+      const settled = approvalSettled("between-turn-request", outcome);
+      if (settled.type !== "approval.settled") throw new Error("Expected native settlement");
+      settled.data.turnId = "";
+      await resumed.observe(settled);
+      const savedReceipt = {
+        ...receipt(savedSessionId, outcome),
+        requestId: "between-turn-request",
+        turnId: "",
+      };
+      expect(resumed.values()).toEqual([savedReceipt]);
+      expect(resumed.snapshot().pendingRequests).toEqual([]);
+      expect(
+        hydratePrivateHostedApprovalCaptureState(
+          savedSessionId,
+          serializePrivateHostedApprovalCaptureState(resumed.snapshot()),
+        ).receipts,
+      ).toEqual([savedReceipt]);
+      expect(
+        await readPrivateHostedApproval({
+          action: "prepare",
+          callId: savedReceipt.callId,
+          planDigest: savedReceipt.toolInput.planDigest,
+          principal,
+          requestId: savedReceipt.requestId,
+          selection: savedReceipt.toolInput.plan.selection,
+          sessionId: savedSessionId,
+          store,
+        }),
+      ).toEqual(savedReceipt);
+      expect(projectInstalledEveEvent(settled, 1)).toEqual([
+        { index: 1, requestIds: ["between-turn-request"], type: "input.resolved" },
+      ]);
+      expect(
+        privateHostedApprovalReceiptSchema.safeParse({ ...savedReceipt, turnId: undefined })
+          .success,
+      ).toBe(false);
+      expect(
+        privateHostedApprovalReceiptSchema.safeParse({ ...savedReceipt, responderPrincipalId: "" })
+          .success,
+      ).toBe(false);
+      expect(
+        privateHostedApprovalReceiptSchema.safeParse({ ...savedReceipt, requestId: "" }).success,
+      ).toBe(false);
+      expect(
+        privateHostedApprovalReceiptSchema.safeParse({ ...savedReceipt, callId: "" }).success,
+      ).toBe(false);
+      expect(
+        privateHostedApprovalReceiptSchema.safeParse({ ...savedReceipt, sequence: -1 }).success,
+      ).toBe(false);
+      expect(
+        privateHostedApprovalReceiptSchema.safeParse({
+          ...savedReceipt,
+          toolInput: { ...savedReceipt.toolInput, planDigest: "0".repeat(64) },
+        }).success,
+      ).toBe(false);
+    },
+  );
   it("captures only exact hosted-runtime tool requests and authoritative Eve settlement", () => {
     const capture = createPrivateHostedApprovalCapture(sessionId);
     capture.observe(inputRequested("request_fixture"));
