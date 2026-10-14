@@ -762,7 +762,12 @@ export const createHostedOperatorGatewayBindings = (deps: {
         const io = open(input);
         let { expected, known, rows, values } = await io.inspect(false);
         await io.checkpoint(rows, known, values, expected);
-        for (const keyText of Object.keys(expected)) {
+        // A replay with current values needs only the fresh final observation.
+        // Changed values still use the complete per-write ownership and checkpoint path.
+        const currentValues = Object.entries(expected).every(([key, value]) =>
+          rows.some((row) => row.key === key && values.get(row.id) === value),
+        );
+        for (const keyText of currentValues ? [] : Object.keys(expected)) {
           ({ expected, known, rows, values } = await io.inspect(false));
           const key = managedKeySchema.parse(keyText);
           const value = expected[key];

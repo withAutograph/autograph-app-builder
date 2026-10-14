@@ -487,6 +487,49 @@ it.each([undefined, null, "", target.installationId])(
   },
 );
 
+it("replays current Gateway values with two fresh inventories and no per-key inspection loop", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input);
+  f.requests.length = 0;
+  f.readAuthRuntimeUrl.mockClear();
+  const result = await f.writer.bind(f.input);
+  expect(result.rows).toHaveLength(5);
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+  expect(f.requests).toHaveLength(29);
+  expect(f.requests.filter((request) => request.path.startsWith("/v10/"))).toHaveLength(2);
+  expect(f.readAuthRuntimeUrl).toHaveBeenCalledTimes(2);
+});
+
+it("rejects a Gateway value changed after the replay's initial checkpoint", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input);
+  f.requests.length = 0;
+  f.checkpointGatewayEnvironment.mockImplementationOnce(async () => {
+    const row = f.rows.find((item) => item.key === "PLATFORM_AUTH_DATABASE_URL");
+    if (!row) {
+      throw new Error("Missing fixture row");
+    }
+    row.value = "changed-after-observation";
+  });
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+});
+
+it("rechecks a revoked credential after the replay's initial checkpoint", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input);
+  f.requests.length = 0;
+  f.checkpointGatewayEnvironment.mockImplementationOnce(async () => {
+    const credential = await f.readCredential();
+    f.readCredential.mockResolvedValue({
+      ...credential,
+      binding: { ...credential.binding, active: false },
+    });
+  });
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+});
+
 it("preserves sibling policy and patches only the previously journaled installation-attributed row", async () => {
   const f = fixture(target.installationId);
   const priorValue = JSON.stringify(["catalog-sibling"]);
