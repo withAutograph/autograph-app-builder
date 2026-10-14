@@ -79,9 +79,9 @@ export const prepareHostedRuntimeWithOperator = async (
     );
     if (
       result.operationRef !== undefined &&
-      (result.status === "prepared" ||
-        result.status === "pending" ||
-        result.status === "auth-schema-prepared")
+      ["prepared", "pending", "auth-schema-prepared", "participants-prepared"].includes(
+        result.status,
+      )
     ) {
       retain({
         appId: input.appId,

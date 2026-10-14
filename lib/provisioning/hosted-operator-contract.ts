@@ -2,6 +2,10 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { hostedPrincipalSchema } from "../eve/hosted-auth";
+import {
+  normalActorProgramDigest,
+  normalActorProgramSchema,
+} from "./hosted-operator-normal-actor-program";
 
 const id = z.string().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -112,6 +116,89 @@ const deploymentBoundarySchema = z.strictObject({
 
 /** Resolved by the protected planner from independently verified owner/provider/artifact state. */
 const AUTH_BOOTSTRAP_STAGE = "auth-bootstrap";
+const AUTH_PARTICIPANTS_STAGE = "auth-participants";
+const CREATE_OWNED_ORGANIZATION = "create-owned-organization";
+export const hostedOperatorOwnedOrganizationSpecSchema = z.strictObject({
+  actorId: id,
+  bootstrapPlanDigest: digest,
+  identityCapture: z.strictObject({
+    capturedAt: z.iso.datetime({ offset: true }),
+    realmSessionId: id,
+  }),
+  identityNonceSha256: digest,
+  identityProof: z.strictObject({ reference: id, sha256: digest }),
+  identityVerification: z.strictObject({
+    audience: httpsPublicOrigin,
+    issuer: httpsPublicOrigin,
+    jwksUrl: z.url(),
+    transportSource: z.strictObject({
+      audience: z.url(),
+      environment: z.enum(["preview", "production"]),
+      issuer: z.url(),
+      ownerId: id,
+      projectId: id,
+    }),
+  }),
+  kind: z.literal(CREATE_OWNED_ORGANIZATION),
+  name: id,
+  organizationId: id,
+  slug: id,
+});
+export type HostedOperatorOwnedOrganizationSpec = z.infer<
+  typeof hostedOperatorOwnedOrganizationSpecSchema
+>;
+export const hostedOperatorAuthMembershipSchema = z.union([
+  hostedOperatorOwnedOrganizationSpecSchema,
+  z
+    .strictObject({
+      kind: z.literal("create-owned-organizations"),
+      organizations: z.array(hostedOperatorOwnedOrganizationSpecSchema).min(1),
+    })
+    .superRefine((membership, ctx) => {
+      const { organizations } = membership;
+      if (
+        new Set(organizations.map((organization) => organization.organizationId)).size !==
+          organizations.length ||
+        new Set(organizations.map((organization) => organization.slug)).size !==
+          organizations.length
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Approved organization identities must be unique.",
+        });
+      }
+    }),
+]);
+export type HostedOperatorAuthMembership = z.infer<typeof hostedOperatorAuthMembershipSchema>;
+/** A private target selects one entry without changing the approved whole-plan digest. */
+export const selectHostedOperatorOwnedOrganizationSpec = (
+  membershipInput: HostedOperatorAuthMembership,
+  target?: { organizationId: string },
+): HostedOperatorOwnedOrganizationSpec => {
+  const membership = hostedOperatorAuthMembershipSchema.parse(membershipInput);
+  if (membership.kind === CREATE_OWNED_ORGANIZATION) {
+    if (target !== undefined && target.organizationId !== membership.organizationId) {
+      throw new Error("auth_membership_target_mismatch");
+    }
+    return membership;
+  }
+  const selected = membership.organizations.find(
+    (organization) => organization.organizationId === target?.organizationId,
+  );
+  if (selected === undefined) {
+    throw new Error("auth_membership_target_mismatch");
+  }
+  return selected;
+};
+/** Public references to the durable first approval; authority is independently read from that journal. */
+export const normalActorPreparationSchema = z.strictObject({
+  accountOperationRef: z.uuid(),
+  programDigest: digest,
+  accountPlanDigest: digest,
+  accountApprovalId: id,
+  accountApprovedByCallId: id,
+});
+export type NormalActorPreparation = z.infer<typeof normalActorPreparationSchema>;
 const hostedOperatorPlanDataSchema = z.strictObject({
   access: z.array(
     z.strictObject({ actorId: id, organizationId: id, roles: z.array(sqlName).min(1) }),
@@ -120,34 +207,7 @@ const hostedOperatorPlanDataSchema = z.strictObject({
   appDatabase: databaseResource,
   authAdoption: sharedAuthAdoptionSchema.optional(),
   authDatabase: databaseResource,
-  authMembership: z
-    .strictObject({
-      actorId: id,
-      bootstrapPlanDigest: digest,
-      identityCapture: z.strictObject({
-        capturedAt: z.iso.datetime({ offset: true }),
-        realmSessionId: id,
-      }),
-      identityNonceSha256: digest,
-      identityProof: z.strictObject({ reference: id, sha256: digest }),
-      identityVerification: z.strictObject({
-        audience: httpsPublicOrigin,
-        issuer: httpsPublicOrigin,
-        jwksUrl: z.url(),
-        transportSource: z.strictObject({
-          audience: z.url(),
-          environment: z.enum(["preview", "production"]),
-          issuer: z.url(),
-          ownerId: id,
-          projectId: id,
-        }),
-      }),
-      kind: z.literal("create-owned-organization"),
-      name: id,
-      organizationId: id,
-      slug: id,
-    })
-    .optional(),
+  authMembership: hostedOperatorAuthMembershipSchema.optional(),
   authSchema: z
     .strictObject({
       artifactRef: id,
@@ -189,6 +249,7 @@ const hostedOperatorPlanDataSchema = z.strictObject({
           "gateway-delivery",
           "access",
           "auth-membership",
+          "normal-accounts",
           "bindings",
           "delivery",
           "revoke",
@@ -252,6 +313,8 @@ const hostedOperatorPlanDataSchema = z.strictObject({
     projectId: id,
     source: z.literal("synthetic-only"),
   }),
+  normalActorProgram: normalActorProgramSchema.optional(),
+  normalActorPreparation: normalActorPreparationSchema.optional(),
   // Optional only when parsing persisted protected-operator-v1 records created before
   // native Gateway origins were part of the verified plan.
   publicGateway: z
@@ -265,7 +328,7 @@ const hostedOperatorPlanDataSchema = z.strictObject({
   resourcesInstaller: z.strictObject({ reference: id, sha256: digest }).optional(),
   retention: z.strictObject({ expiresAt: z.iso.datetime({ offset: true }), policy: id }),
   selection: operatorSelectionSchema,
-  stage: z.enum([AUTH_BOOTSTRAP_STAGE, "app"]).optional(),
+  stage: z.enum([AUTH_BOOTSTRAP_STAGE, AUTH_PARTICIPANTS_STAGE, "app"]).optional(),
   version: z.literal(1),
 });
 const validatePlanStage = (
@@ -331,7 +394,103 @@ const validatePlanStage = (
     });
   }
 };
+const validateNormalActorPlan = (
+  plan: z.infer<typeof hostedOperatorPlanDataSchema>,
+  ctx: z.RefinementCtx,
+) => {
+  const program = plan.normalActorProgram;
+  const participantStage = plan.stage === AUTH_PARTICIPANTS_STAGE;
+  if (program === undefined) {
+    if (participantStage || plan.normalActorPreparation !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Participant authority requires its approved program.",
+      });
+    }
+    return;
+  }
+  const sameScope = [
+    program.appId === plan.selection.appId,
+    program.origin === plan.deploymentBoundary?.verification.publicOrigin,
+    plan.publicGateway?.origin === program.origin,
+  ].every(Boolean);
+  if (!sameScope) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Participant program must bind the selected app and verified native public origin.",
+    });
+  }
+  if (plan.stage === AUTH_BOOTSTRAP_STAGE) {
+    if (plan.normalActorPreparation !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Auth bootstrap cannot claim completed participant approval.",
+      });
+    }
+    return;
+  }
+  if (participantStage) {
+    const accountOnly = [
+      plan.action === "prepare",
+      plan.access.length === 0,
+      plan.authMembership === undefined,
+      plan.normalActorPreparation === undefined,
+    ].every(Boolean);
+    if (!accountOnly) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "Participant preparation authorizes normal accounts only, before the resolved organization and access approval.",
+      });
+    }
+    return;
+  }
+  const preparation = plan.normalActorPreparation;
+  if (
+    plan.stage !== "app" ||
+    preparation === undefined ||
+    preparation.programDigest !== normalActorProgramDigest(program)
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message:
+        "Resolved participant plans require their original account approval and unchanged program.",
+    });
+  }
+  const membership = plan.authMembership;
+  let organizations: HostedOperatorOwnedOrganizationSpec[] = [];
+  if (membership !== undefined) {
+    organizations =
+      membership.kind === CREATE_OWNED_ORGANIZATION ? [membership] : membership.organizations;
+  }
+  const approvedOrganizations = organizations.every((organization) =>
+    program.organizations.some((approved) =>
+      [
+        approved.organizationId === organization.organizationId,
+        approved.name === organization.name,
+        approved.slug === organization.slug,
+      ].every(Boolean),
+    ),
+  );
+  const approvedRoles = plan.access.every((grant) =>
+    program.appAccess.some(
+      (approved) =>
+        approved.organizationId === grant.organizationId &&
+        grant.roles.every((role) => approved.roles.includes(role)),
+    ),
+  );
+  if (!approvedOrganizations || !approvedRoles) {
+    ctx.addIssue({
+      code: "custom",
+      message:
+        "Resolved organization and role effects must remain inside the original participant program.",
+    });
+  }
+};
 const authorizationPhases = (plan: z.infer<typeof hostedOperatorPlanDataSchema>) => {
+  if (plan.stage === AUTH_PARTICIPANTS_STAGE) {
+    return ["normal-accounts"];
+  }
   let phases = ["revoke", "remove-bindings", "retire"];
   if (plan.action === "prepare") {
     phases = ["resources", "install"];
@@ -403,7 +562,7 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
       databases.some((database) =>
         ["postgres", "neondb", bootstrap.maintenanceDatabase].includes(database.database),
       ),
-      plan.action === "prepare" && !orderedResources,
+      plan.action === "prepare" && plan.stage !== AUTH_PARTICIPANTS_STAGE && !orderedResources,
       plan.effects.some(
         (effect) =>
           !["resources", "retire"].includes(effect.kind) && effect.resourceId !== undefined,
@@ -467,6 +626,7 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
     }
   }
   validatePlanStage(plan, ctx);
+  validateNormalActorPlan(plan, ctx);
   // Each phase has an observed receipt, including a no-op verification for already-existing resources.
   // Authority is opened only after install/grant verification, and closed before retirement.
   const phases = authorizationPhases(plan);
@@ -909,6 +1069,7 @@ export const operatorRequestSchema = z.discriminatedUnion("action", [
   }),
   z.strictObject({
     action: z.literal("plan"),
+    normalActorProgram: normalActorProgramSchema.optional(),
     operation: z.enum(["prepare", "cleanup"]),
     ownerContext: operatorOwnerContextSchema.optional(),
     selection: operatorSelectionSchema,
@@ -967,7 +1128,15 @@ export const operatorPublicResultSchema = z.strictObject({
   operationRef: z.uuid().optional(),
   plan: hostedOperatorPlanSchema.optional(),
   planDigest: digest.optional(),
-  status: z.enum(["planned", "pending", "prepared", "cleaned", "blocked", "auth-schema-prepared"]),
+  status: z.enum([
+    "planned",
+    "pending",
+    "prepared",
+    "cleaned",
+    "blocked",
+    "auth-schema-prepared",
+    "participants-prepared",
+  ]),
 });
 export type OperatorPublicResult = z.infer<typeof operatorPublicResultSchema>;
 export class HostedOperatorError extends Error {

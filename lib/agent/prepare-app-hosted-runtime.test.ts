@@ -197,7 +197,7 @@ describe("hosted runtime Auth identity handoff", () => {
     );
   });
 
-  it.each(["pending", "prepared", "blocked"] as const)(
+  it.each(["pending", "prepared", "blocked", "participants-prepared"] as const)(
     "does not request identity or resend execution for %s",
     async (status) => {
       operator.request.mockResolvedValueOnce({
