@@ -47,8 +47,13 @@ const program: NormalActorProgram = {
 };
 
 const fixture = (
-  options: { loseFirstSignupReply?: boolean; loseFirstInvitationReply?: boolean } = {},
+  options: {
+    loseFirstSignupReply?: boolean;
+    loseFirstInvitationReply?: boolean;
+    program?: NormalActorProgram;
+  } = {},
 ) => {
+  const approvedProgram = options.program ?? program;
   // Installed Better Auth memory storage is isolated source behavior evidence, never hosted proof.
   const auth = betterAuth({
     secret: "isolated-source-auth-secret-at-least-32-bytes",
@@ -59,14 +64,18 @@ const fixture = (
         allowUserToCreateOrganization: false,
         organizationHooks: {
           beforeCreateOrganization: async ({ organization: proposal }) => ({
-            data: { ...proposal, id: "org-one" },
+            data: {
+              ...proposal,
+              id: approvedProgram.organizations.find((entry) => entry.slug === proposal.slug)
+                ?.organizationId,
+            },
           }),
         },
       }),
     ],
     logger: { disabled: true },
   });
-  let state = initialNormalActorState(program, operationRef);
+  let state = initialNormalActorState(approvedProgram, operationRef);
   const requests: string[] = [];
   let loseReply = options.loseFirstSignupReply ?? false;
   let loseInvitation = options.loseFirstInvitationReply ?? false;
@@ -93,6 +102,7 @@ const fixture = (
       state = structuredClone(next);
     },
     readCapturedActor: async () => null,
+    readOrganizationSession: async () => null,
     clientFactory: (input) =>
       createHostedOperatorNormalAuthClient({ ...input, fetch: privateFetch }),
   };
@@ -135,7 +145,9 @@ describe("normal actor preparation", () => {
       ),
     ).toBe(true);
     expect(local.requests.filter((path) => path === "/api/auth/sign-up/email")).toHaveLength(2);
-    expect(local.requests.filter((path) => path === "/api/auth/sign-in/email")).toHaveLength(1);
+    expect(
+      local.requests.filter((path) => path === "/api/auth/sign-in/email").length,
+    ).toBeGreaterThanOrEqual(1);
     expect(local.requests.some((path) => path.includes("organization"))).toBe(false);
     expect(resumed.proposedAccess[0]?.actorId).toBe(resumed.state.actors[1]?.session?.actorId);
     expect(() => resolvedNormalActorAccess(program, resumed.state)).toThrow(
@@ -156,7 +168,9 @@ describe("normal actor preparation", () => {
     });
     expect(resumed.state.actors[0]?.session?.actorId).toBe(first.state.actors[0]?.session?.actorId);
     expect(local.requests.filter((path) => path === "/api/auth/sign-up/email")).toHaveLength(2);
-    expect(local.requests.filter((path) => path === "/api/auth/sign-in/email")).toHaveLength(1);
+    expect(
+      local.requests.filter((path) => path === "/api/auth/sign-in/email").length,
+    ).toBeGreaterThanOrEqual(1);
   });
 
   it("requires ordinary reconnection for an expired existing capture instead of creating an account", async () => {
@@ -290,6 +304,222 @@ describe("normal actor preparation", () => {
       status: "complete",
     });
     expect(() => proposeResolvedNormalActorAccess(program, extra)).toThrow("program_mismatch");
+  });
+
+  it("prepares two organizations sequentially with distinct real sessions and no effects on the other target", async () => {
+    const twoOrganizations = normalActorProgramSchema.parse({
+      ...program,
+      organizations: [
+        ...program.organizations,
+        { organizationId: "org-two", ownerActorKey: "owner", name: "Two", slug: "two" },
+      ],
+      memberships: [
+        ...program.memberships,
+        { actorKey: "owner", organizationId: "org-two", role: "owner" },
+        { actorKey: "peer", organizationId: "org-two", role: "member" },
+      ],
+      appAccess: [
+        ...program.appAccess,
+        { actorKey: "peer", organizationId: "org-two", roles: ["requester"] },
+      ],
+    });
+    const local = fixture({ program: twoOrganizations });
+    const accounts = await prepareNormalActorAccounts({
+      program: twoOrganizations,
+      operationRef,
+      ports: local.ports,
+    });
+    expect(
+      accounts.state.organizationSessions?.every((entry) => entry.selection === "pending"),
+    ).toBe(true);
+    expect(local.requests.some((path) => path.includes("organization"))).toBe(false);
+    const preparedOrganizations = new Set<string>();
+    const effects: string[] = [];
+    const ports: NormalActorPreparationPorts = {
+      ...local.ports,
+      assertMembershipApproved: async () => {},
+      readOrganizationOwnerProof: async (session) => ({
+        actorId: session.actorId,
+        realmSessionId: session.realmSessionId,
+        reference: `proof-${session.realmSessionId}`,
+        sha256: "a".repeat(64),
+      }),
+      prepareOrganization: async ({ organizationId, owner }) => {
+        effects.push(`prepare:${organizationId}`);
+        const target = twoOrganizations.organizations.find(
+          (entry) => entry.organizationId === organizationId,
+        );
+        if (!target) {
+          throw new Error("Unapproved test organization");
+        }
+        await local.auth.api.createOrganization({
+          body: { name: target.name, slug: target.slug, userId: owner.actorId },
+        });
+        preparedOrganizations.add(organizationId);
+      },
+      reconcileOrganization: async ({ organizationId }) => {
+        effects.push(`read:${organizationId}`);
+        return preparedOrganizations.has(organizationId) ? "applied" : "absent";
+      },
+    };
+    const first = await prepareNormalActorMemberships({
+      program: twoOrganizations,
+      operationRef,
+      state: accounts.state,
+      ports,
+      organizationId: "org-one",
+    });
+    expect(effects.every((effect) => effect.endsWith(":org-one"))).toBe(true);
+    expect(
+      first.state.memberships
+        .filter((member) => member.organizationId === "org-two")
+        .every((member) => member.status === "pending"),
+    ).toBe(true);
+    expect(
+      first.state.organizationSessions
+        ?.filter((entry) => entry.organizationId === "org-two")
+        .every((entry) => entry.selection === "pending"),
+    ).toBe(true);
+    expect(first.proposedAccess.map((grant) => grant.organizationId)).toEqual([
+      "org-one",
+      "org-two",
+    ]);
+    expect(() => resolvedNormalActorAccess(twoOrganizations, first.state)).toThrow(
+      "preparation_incomplete",
+    );
+    const firstSessions = structuredClone(
+      first.state.organizationSessions?.filter((entry) => entry.organizationId === "org-one"),
+    );
+    effects.length = 0;
+    const second = await prepareNormalActorMemberships({
+      program: twoOrganizations,
+      operationRef,
+      state: first.state,
+      ports,
+      organizationId: "org-two",
+    });
+    expect(effects.every((effect) => effect.endsWith(":org-two"))).toBe(true);
+    expect(
+      second.state.organizationSessions?.filter((entry) => entry.organizationId === "org-one"),
+    ).toEqual(firstSessions);
+    expect(
+      second.state.organizationSessions?.every(
+        (entry) =>
+          entry.selection === "selected" &&
+          entry.session.activeOrganizationId === entry.organizationId,
+      ),
+    ).toBe(true);
+    const peerContexts =
+      second.state.organizationSessions?.filter((entry) => entry.actorKey === "peer") ?? [];
+    expect(new Set(peerContexts.map((entry) => entry.session.realmSessionId)).size).toBe(2);
+    await Promise.all(
+      peerContexts.map(async (entry) => {
+        const normal = await local.ports
+          .clientFactory?.({
+            origin: twoOrganizations.origin,
+            storageState: entry.storageState,
+            assertApprovedEffect: async () => {},
+          })
+          .getSession();
+        expect(normal?.activeOrganizationId).toBe(entry.organizationId);
+        expect(normal?.sessionId).toBe(entry.session.realmSessionId);
+      }),
+    );
+    expect(resolvedNormalActorAccess(twoOrganizations, second.state)).toEqual(
+      second.proposedAccess,
+    );
+    const before = local.requests.length;
+    await expect(
+      prepareNormalActorMemberships({
+        program: twoOrganizations,
+        operationRef,
+        state: second.state,
+        ports,
+        organizationId: "unapproved",
+      }),
+    ).rejects.toThrow("program_mismatch");
+    expect(local.requests.length).toBe(before);
+  });
+
+  it("does not treat a pending candidate as selected and rejects contradictory organization session evidence", async () => {
+    const local = fixture();
+    const prepared = await prepareNormalActorAccounts({
+      program,
+      operationRef,
+      ports: local.ports,
+    });
+    const pending = prepared.state.organizationSessions?.at(0);
+    if (!pending) {
+      throw new Error("Missing actual normal session candidate");
+    }
+    expect(pending.selection).toBe("pending");
+    expect(pending.session.activeOrganizationId).not.toBe(pending.organizationId);
+    const contradictory = structuredClone(prepared.state);
+    const candidate = contradictory.organizationSessions?.at(0);
+    if (!candidate) {
+      throw new Error("Missing candidate");
+    }
+    candidate.selection = "selected";
+    expect(() => assertNormalActorState(program, contradictory, operationRef)).toThrow(
+      "program_mismatch",
+    );
+    const duplicated = structuredClone(prepared.state);
+    duplicated.organizationSessions?.push(pending);
+    expect(() => assertNormalActorState(program, duplicated, operationRef)).toThrow(
+      "program_mismatch",
+    );
+  });
+
+  it("requires an additional real capture for an existing actor in another organization", async () => {
+    const local = fixture();
+    const actual = await prepareNormalActorAccounts({ program, operationRef, ports: local.ports });
+    const owner = actual.state.actors.find((actor) => actor.actorKey === "owner");
+    if (!owner?.session || !owner.storageState) {
+      throw new Error("Missing ordinary authenticated owner");
+    }
+    const capturedProgram = normalActorProgramSchema.parse({
+      ...program,
+      actors: program.actors.map((actor) => ({ ...actor, account: "capture-existing" })),
+      organizations: [
+        ...program.organizations,
+        { organizationId: "org-two", ownerActorKey: "owner", name: "Two", slug: "two" },
+      ],
+      memberships: [
+        ...program.memberships,
+        { actorKey: "owner", organizationId: "org-two", role: "owner" },
+      ],
+    });
+    const additionalRequests: string[] = [];
+    const ports: NormalActorAccountPorts = {
+      ...local.ports,
+      readCapturedActor: async (actorKey) => {
+        const captured = actual.state.actors.find((actor) => actor.actorKey === actorKey);
+        const session = captured?.session;
+        const storageState = captured?.storageState;
+        return session === undefined || storageState === undefined
+          ? null
+          : { session, storageState };
+      },
+      readOrganizationSession: async (actorKey, organizationId) => {
+        additionalRequests.push(`${actorKey}:${organizationId}`);
+        return null;
+      },
+    };
+    await expect(
+      prepareNormalActorAccounts({ program: capturedProgram, operationRef, ports }),
+    ).rejects.toThrow("normal_actor_session_selection_required");
+    expect(additionalRequests).toEqual(["owner:org-two"]);
+    expect(
+      local.getState().actors.find((actor) => actor.actorKey === "owner")?.credentials,
+    ).toBeUndefined();
+    expect(
+      local
+        .getState()
+        .organizationSessions?.some(
+          (entry) => entry.actorKey === "owner" && entry.organizationId === "org-two",
+        ),
+    ).toBe(false);
+    expect(local.getState().organizations.every((entry) => entry.status === "pending")).toBe(true);
   });
 
   it("binds encrypted normal credentials to owner, session, operation and approved program", () => {

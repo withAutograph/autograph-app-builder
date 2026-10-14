@@ -7,7 +7,6 @@ import {
   normalActorSessionRefSchema,
   normalBrowserStorageStateSchema,
   proposeResolvedNormalActorAccess,
-  resolvedNormalActorAccess,
 } from "./hosted-operator-normal-actor-program";
 import type {
   NormalActorProgram,
@@ -26,6 +25,14 @@ export interface NormalActorOrganizationOwnerProof {
   sha256: string;
 }
 export interface NormalActorAccountPorts {
+  /** Additional owner-confirmed normal capture, before organization creation when necessary. */
+  readOrganizationSession: (
+    actorKey: string,
+    organizationId: string,
+  ) => Promise<{
+    session: NormalActorSessionRef;
+    storageState: NormalBrowserStorageState;
+  } | null>;
   /** Re-read durable approval for this exact program and the existing resource lease/fence. */
   assertCurrent: (input: { operationRef: string; programDigest: string }) => Promise<void>;
   /** Existing owner-journal CAS; encrypt state with encryptNormalActorState before writing. */
@@ -74,6 +81,7 @@ interface NormalActorAccountInput {
   ports: NormalActorAccountPorts;
 }
 interface NormalActorMembershipInput extends Omit<NormalActorAccountInput, "ports" | "state"> {
+  organizationId?: string;
   state: NormalActorState;
   ports: NormalActorPreparationPorts;
 }
@@ -91,6 +99,15 @@ const prepareNormalActorStage = async (input: StageInput) => {
     input.state ?? initialNormalActorState(program, input.operationRef),
     input.operationRef,
   );
+  const targetOrganizationId = input.stage === "memberships" ? input.organizationId : undefined;
+  if (
+    targetOrganizationId !== undefined &&
+    !program.organizations.some(
+      (organization) => organization.organizationId === targetOrganizationId,
+    )
+  ) {
+    throw new Error("normal_actor_program_mismatch");
+  }
   const programDigest = normalActorProgramDigest(program);
   const assertCurrent = async () => {
     await input.ports.assertCurrent({ operationRef: input.operationRef, programDigest });
@@ -149,6 +166,7 @@ const prepareNormalActorStage = async (input: StageInput) => {
       expiresAt: session.expiresAt,
       reference: checkpoint.session?.reference ?? randomUUID(),
       origin: program.origin,
+      activeOrganizationId: session.activeOrganizationId,
     });
     checkpoint.storageState = normalBrowserStorageStateSchema.parse(client.exportStorageState());
     checkpoint.signup = "complete";
@@ -232,12 +250,147 @@ const prepareNormalActorStage = async (input: StageInput) => {
     }
     await retainSession(actor.actorKey, client);
   };
-  for (const actor of program.actors) {
+  const selectedActors =
+    input.stage === "accounts" || targetOrganizationId === undefined
+      ? program.actors
+      : program.actors.filter((actor) =>
+          program.memberships.some(
+            (membership) =>
+              membership.organizationId === targetOrganizationId &&
+              membership.actorKey === actor.actorKey,
+          ),
+        );
+  for (const actor of selectedActors) {
     // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Each actor effect shares the same durable journal checkpoint and fence.
     await prepareAccount(actor);
   }
 
+  const candidateStorage = async (
+    actor: NormalActorProgram["actors"][number],
+    session: NormalActorSessionRef,
+    baseStorage: NormalBrowserStorageState | undefined,
+    organizationId: string,
+    existing: NonNullable<NormalActorState["organizationSessions"]>[number] | undefined,
+  ) => {
+    if (actor.account !== CAPTURE_EXISTING || existing !== undefined) {
+      return {
+        storageState: existing?.storageState,
+        expectedSessionId: existing?.session.realmSessionId,
+      };
+    }
+    const another =
+      state.organizationSessions?.some(
+        (entry) => entry.actorKey === actor.actorKey && entry.organizationId !== organizationId,
+      ) ?? false;
+    if (!another) {
+      return { storageState: baseStorage, expectedSessionId: session.realmSessionId };
+    }
+    await assertCurrent();
+    const captured = await input.ports.readOrganizationSession(actor.actorKey, organizationId);
+    if (
+      !captured ||
+      captured.session.actorId !== session.actorId ||
+      captured.session.origin !== program.origin
+    ) {
+      throw new Error("normal_actor_session_selection_required");
+    }
+    return {
+      storageState: captured.storageState,
+      expectedSessionId: captured.session.realmSessionId,
+    };
+  };
+  const prepareOrganizationCandidate = async (
+    membership: NormalActorState["memberships"][number],
+  ) => {
+    const actor = program.actors.find((candidate) => candidate.actorKey === membership.actorKey);
+    const checkpoint = checkpointFor(membership.actorKey);
+    if (!actor || !checkpoint.session) {
+      throw new Error("normal_actor_preparation_incomplete");
+    }
+    state.organizationSessions ??= [];
+    const existing = state.organizationSessions.find(
+      (entry) =>
+        entry.actorKey === membership.actorKey &&
+        entry.organizationId === membership.organizationId,
+    );
+    const candidate = await candidateStorage(
+      actor,
+      checkpoint.session,
+      checkpoint.storageState,
+      membership.organizationId,
+      existing,
+    );
+    const { storageState } = candidate;
+    let { expectedSessionId } = candidate;
+    const client = (input.ports.clientFactory ?? createHostedOperatorNormalAuthClient)({
+      origin: program.origin,
+      storageState,
+      assertApprovedEffect: assertCurrent,
+    });
+    await assertCurrent();
+    let normal = await client.getSession();
+    if (normal === null) {
+      if (actor.account === CAPTURE_EXISTING || checkpoint.credentials === undefined) {
+        throw new Error("normal_actor_session_selection_required");
+      }
+      await save();
+      await assertCurrent();
+      await client.signIn({ email: actor.email, password: checkpoint.credentials.password });
+      normal = await client.getSession();
+      expectedSessionId = normal?.sessionId;
+    }
+    if (normal === null) {
+      throw new Error("normal_actor_session_selection_required");
+    }
+    if (
+      ![
+        normal.actorId === checkpoint.session.actorId,
+        normal.email.toLowerCase() === actor.email.toLowerCase(),
+        normal.sessionId === expectedSessionId,
+        Date.parse(normal.expiresAt) > Date.now(),
+      ].every(Boolean)
+    ) {
+      throw new Error("normal_actor_session_selection_required");
+    }
+    const otherSession = state.organizationSessions.some(
+      (entry) =>
+        entry.actorKey === actor.actorKey &&
+        entry.organizationId !== membership.organizationId &&
+        entry.session.realmSessionId === normal.sessionId,
+    );
+    if (otherSession) {
+      throw new Error("normal_actor_session_selection_required");
+    }
+    const retained: NonNullable<NormalActorState["organizationSessions"]>[number] = {
+      actorKey: actor.actorKey,
+      organizationId: membership.organizationId,
+      selection:
+        existing?.selection === "selected" &&
+        normal.activeOrganizationId === membership.organizationId
+          ? "selected"
+          : "pending",
+      session: normalActorSessionRefSchema.parse({
+        actorId: normal.actorId,
+        realmSessionId: normal.sessionId,
+        origin: program.origin,
+        expiresAt: normal.expiresAt,
+        reference: existing?.session.reference ?? randomUUID(),
+        activeOrganizationId: normal.activeOrganizationId,
+      }),
+      storageState: normalBrowserStorageStateSchema.parse(client.exportStorageState()),
+    };
+    if (existing === undefined) {
+      state.organizationSessions.push(retained);
+    } else {
+      Object.assign(existing, retained);
+    }
+    await save();
+  };
   if (input.stage === "accounts") {
+    for (const membership of state.memberships) {
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Each real login candidate is encrypted in the same journal before preparing another.
+      await prepareOrganizationCandidate(membership);
+    }
     await assertCurrent();
     return {
       state: structuredClone(state),
@@ -257,7 +410,11 @@ const prepareNormalActorStage = async (input: StageInput) => {
     const checkpoint = state.organizations.find(
       (candidate) => candidate.organizationId === organization.organizationId,
     );
-    const owner = checkpointFor(organization.ownerActorKey).session;
+    const owner = state.organizationSessions?.find(
+      (entry) =>
+        entry.actorKey === organization.ownerActorKey &&
+        entry.organizationId === organization.organizationId,
+    )?.session;
     if (!checkpoint || !owner) {
       throw new Error("normal_actor_preparation_incomplete");
     }
@@ -298,7 +455,11 @@ const prepareNormalActorStage = async (input: StageInput) => {
     checkpoint.status = "complete";
     await save();
   };
-  for (const organization of program.organizations) {
+  const selectedOrganizations = program.organizations.filter(
+    (organization) =>
+      targetOrganizationId === undefined || organization.organizationId === targetOrganizationId,
+  );
+  for (const organization of selectedOrganizations) {
     // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Organization writes and uncertainty readbacks share one fenced journal.
     await prepareOrganization(organization);
   }
@@ -395,15 +556,75 @@ const prepareNormalActorStage = async (input: StageInput) => {
     membership.status = "complete";
     await save();
   };
-  for (const membership of state.memberships) {
+  const selectedMemberships = state.memberships.filter(
+    (membership) =>
+      targetOrganizationId === undefined || membership.organizationId === targetOrganizationId,
+  );
+  for (const membership of selectedMemberships) {
     // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Invite, acceptance and readback checkpoint one membership before the next.
     await prepareMembership(membership);
+  }
+  const selectOrganizationSession = async (membership: NormalActorState["memberships"][number]) => {
+    if (membership.status !== "complete") {
+      throw new Error("normal_actor_preparation_incomplete");
+    }
+    const retained = state.organizationSessions?.find(
+      (entry) =>
+        entry.actorKey === membership.actorKey &&
+        entry.organizationId === membership.organizationId,
+    );
+    const checkpoint = checkpointFor(membership.actorKey);
+    if (!retained || !checkpoint.session) {
+      throw new Error("normal_actor_session_selection_required");
+    }
+    const client = (input.ports.clientFactory ?? createHostedOperatorNormalAuthClient)({
+      origin: program.origin,
+      storageState: retained.storageState,
+      assertApprovedEffect: assertMembershipCurrent,
+    });
+    await assertMembershipCurrent();
+    let normal = await client.getSession();
+    if (
+      normal === null ||
+      normal.actorId !== checkpoint.session.actorId ||
+      normal.sessionId !== retained.session.realmSessionId
+    ) {
+      throw new Error("normal_actor_session_selection_required");
+    }
+    if (normal.activeOrganizationId !== membership.organizationId) {
+      await save();
+      await assertMembershipCurrent();
+      await client.setActiveOrganization({ organizationId: membership.organizationId });
+      normal = await client.getSession();
+    }
+    if (normal === null) {
+      throw new Error("normal_actor_session_selection_required");
+    }
+    if (
+      ![
+        normal.activeOrganizationId === membership.organizationId,
+        normal.actorId === checkpoint.session.actorId,
+        normal.sessionId === retained.session.realmSessionId,
+        Date.parse(normal.expiresAt) > Date.now(),
+      ].every(Boolean)
+    ) {
+      throw new Error("normal_actor_session_selection_required");
+    }
+    retained.selection = "selected";
+    retained.session.activeOrganizationId = normal.activeOrganizationId;
+    retained.session.expiresAt = normal.expiresAt;
+    retained.storageState = normalBrowserStorageStateSchema.parse(client.exportStorageState());
+    await save();
+  };
+  for (const membership of selectedMemberships) {
+    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Each actual organization selection is checkpointed before preparing the next context.
+    await selectOrganizationSession(membership);
   }
   await assertCurrent();
   // No role-grant client is present: returned actual IDs require the existing fresh access approval.
   return {
     state: structuredClone(state),
-    proposedAccess: resolvedNormalActorAccess(program, state),
+    proposedAccess: proposeResolvedNormalActorAccess(program, state),
   };
 };
 

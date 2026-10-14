@@ -135,6 +135,7 @@ export const normalActorSessionRefSchema = z.strictObject({
   realmSessionId: id,
   origin,
   expiresAt: z.iso.datetime({ offset: true }),
+  activeOrganizationId: id.nullable().optional(),
 });
 export type NormalActorSessionRef = z.infer<typeof normalActorSessionRefSchema>;
 const stepSchema = z.enum(["pending", "attempted", "complete"]);
@@ -151,6 +152,17 @@ export const normalActorStateSchema = z.strictObject({
   operationRef: z.uuid(),
   programDigest: digest,
   actors: z.array(normalActorCheckpointSchema),
+  organizationSessions: z
+    .array(
+      z.strictObject({
+        actorKey,
+        organizationId: id,
+        selection: z.enum(["pending", "selected"]),
+        session: normalActorSessionRefSchema,
+        storageState: normalBrowserStorageStateSchema,
+      }),
+    )
+    .optional(),
   organizations: z.array(z.strictObject({ organizationId: id, status: stepSchema })),
   memberships: z.array(
     z.strictObject({
@@ -174,6 +186,7 @@ export const initialNormalActorState = (
     operationRef,
     programDigest: normalActorProgramDigest(program),
     actors: program.actors.map((actor) => ({ actorKey: actor.actorKey, signup: "pending" })),
+    organizationSessions: [],
     organizations: program.organizations.map((organization) => ({
       organizationId: organization.organizationId,
       status: "pending",
@@ -226,6 +239,37 @@ export const assertNormalActorState = (
   ].every(Boolean);
   if (!matches) {
     throw new Error("normal_actor_program_mismatch");
+  }
+  const organizationSessions = state.organizationSessions ?? [];
+  const uniqueContexts = new Set(
+    organizationSessions.map((entry) => `${entry.organizationId}:${entry.actorKey}`),
+  );
+  const validContexts = organizationSessions.every((entry) => {
+    const actor = state.actors.find((candidate) => candidate.actorKey === entry.actorKey);
+    return [
+      state.memberships.some(
+        (membership) =>
+          membership.actorKey === entry.actorKey &&
+          membership.organizationId === entry.organizationId,
+      ),
+      actor?.session?.actorId === entry.session.actorId,
+      entry.session.origin === program.origin,
+      entry.selection !== "selected" || entry.session.activeOrganizationId === entry.organizationId,
+    ].every(Boolean);
+  });
+  if (uniqueContexts.size !== organizationSessions.length || !validContexts) {
+    throw new Error("normal_actor_program_mismatch");
+  }
+  const sharedSession = organizationSessions.some((entry) =>
+    organizationSessions.some(
+      (other) =>
+        other.actorKey === entry.actorKey &&
+        other.organizationId !== entry.organizationId &&
+        other.session.realmSessionId === entry.session.realmSessionId,
+    ),
+  );
+  if (sharedSession) {
+    throw new Error("normal_actor_session_selection_required");
   }
   return state;
 };
