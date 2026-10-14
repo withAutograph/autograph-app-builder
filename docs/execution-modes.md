@@ -34,14 +34,15 @@ keyed independently by exact Arrusted lock/config digests, platform, and pinned
 tool versions. Ordinary source edits reuse dependencies; a lockfile, relevant
 tool, or platform change creates a new closure.
 
-The task starts loopback Eve and `/mcp`, then proves that endpoint exposes
-exactly `autograph_start`, `autograph_get`, `autograph_send`,
-`autograph_respond`, and `autograph_cancel`. Only after that proof does it
-replace its stable, ignored `autograph-dev` local Codex marketplace registration
-and install `app-builder@autograph-dev` in the active Codex profile. Keep the
-task running and open a fresh Codex task after the ready message. The package
-has no MCP App. Open prototype links returned by the loopback workflow in the
-integrated ChatGPT Browser; no MCP App preview surface is part of this mode.
+Use the loopback Eve and `/mcp` endpoints for local iteration. Exact-five public
+tool discovery is an acceptance and release check for the public MCP contract;
+do not make a fresh discovery or Codex plugin installation prerequisite for
+ordinary source edits. When performing that acceptance check, verify the
+contract's five public tools before registering or installing the local
+development package. Keep the task running and open a fresh Codex task after the
+ready message. The package has no MCP App. Open prototype links returned by the
+loopback workflow in the integrated ChatGPT Browser; no MCP App preview surface
+is part of this mode.
 
 Development runs fail closed for checkout or branch publication, GitHub
 mutation, registry upload, deployment, hosted marketplace mutation, provider

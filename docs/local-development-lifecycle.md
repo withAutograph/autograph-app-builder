@@ -8,6 +8,35 @@ Dependency setup is runtime work, not a source-integrity proof. Reuse caches whe
 
 Only protect credentials and cross-user session data, obtain approval before outward effects, and report actual Sandbox/GitHub/Git/repository-command failures. There are no exact template, SHA/tree, package-layout, tool-version, manifest, path, receipt, digest, quota, or cache gates in local development. Inspection is best-effort and must not become a blocker.
 
+## Checks follow functionality
+
+Normal app changes are supported input, including new files, routes, metadata,
+package names, schemas, and layouts. Builder consumes the repository's actual
+command results instead of comparing them with fixture conventions. Missing or
+stale caches trigger ordinary setup or recovery; optional inspection does not
+decide whether work may proceed.
+
+CI should verify executed commands and user behavior: task completion,
+persistence, authentication, tenant isolation, approvals, cancellation, retries,
+and recovery. Assertions should describe those outcomes. Source spelling, prose,
+CSS selectors, complete metadata shapes, fixed archive sizes, and the last
+internal mock call are not substitutes for them. Extra diagnostic fields or a
+refactor must not break a test whose protected behavior still works. Exact
+identity, cursor, or ordering assertions belong only to a real functional or
+security contract.
+
+Do not respond to a brittle test by pinning the implementation or adding a new
+gate. Remove its incidental expectation and retain the behavior check. If the
+behavior fails, repair it. Keep authentication, credential protection, ownership,
+effect approval, and persistence checks intact.
+
+Skill-specific tools, production rigs, baseline tests, and per-route builds are
+optional diagnostic methods. They do not block unrelated changes or require a
+fresh install or tool upgrade. Use available supported tools, run focused checks
+for concrete repairs, and report unverified behavior honestly. Public MCP
+contract discovery and release evidence belong to their dedicated acceptance
+work, not every startup or edit.
+
 Use the integrated Browser for loopback prototypes, never an MCP App preview. Run one final local walkthrough when ready; let CI perform broad verification.
 
 ## Interrupted public sessions

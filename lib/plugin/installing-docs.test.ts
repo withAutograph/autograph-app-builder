@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import nodePath from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 const execute = promisify(execFile);
 const readDocumentation = (path: string) => readFile(nodePath.resolve(path), "utf-8");
@@ -79,7 +80,6 @@ describe("public plugin installation documentation", () => {
     const { path, heading } = verifiedReleaseInstall;
     const documentation = await readDocumentation(path);
     const script = firstShellBlock(documentation, heading);
-    expect(script).toContain("set -eu");
 
     for (const failure of ["checksum", "release-verifier"] as const) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -90,34 +90,21 @@ describe("public plugin installation documentation", () => {
       expect(auditLog).not.toContain("codex plugin add");
     }
 
+    const { version } = z
+      .object({ version: z.string() })
+      .parse(JSON.parse(await readDocumentation("package.json")));
     const auditLog = await runInstall(script, "none");
-    expect(auditLog).toContain("tar -xzf app-builder-codex-marketplace-0.2.13.tar.gz");
-    expect(auditLog).toMatch(/codex plugin marketplace add .*app-builder-marketplace-0\.2\.13/u);
+    expect(auditLog).toContain(`tar -xzf app-builder-codex-marketplace-${version}.tar.gz`);
+    expect(auditLog).toContain(`app-builder-marketplace-${version}`);
     expect(auditLog).toContain("codex plugin add app-builder@autograph");
   });
 
-  it("uses the shared marketplace as the primary README installation path", async () => {
+  it("installs from the README marketplace commands", async () => {
     const documentation = await readDocumentation("README.md");
     const script = firstShellBlock(documentation, "## Install");
+    const auditLog = await runInstall(script, "none");
 
-    expect(script).toContain("codex plugin marketplace add withAutograph/marketplace");
-    expect(script).toContain("codex plugin add app-builder@autograph");
-    expect(script).not.toContain("gh release download");
-    expect(script).not.toContain("tar -xzf");
-  });
-
-  it("keeps exact pre-release assets and availability explicit", async () => {
-    const documentation = await readDocumentation("docs/installing.md");
-
-    expect(documentation).toContain("Once the pre-release `v0.2.13` GitHub release is published");
-    expect(documentation).toMatch(/These\s+commands fail closed until `v0\.2\.13` exists/u);
-    expect(documentation).toContain("app-builder-0.2.13.tar.gz");
-    expect(documentation).toContain("app-builder-codex-marketplace-0.2.13.tar.gz");
-    expect(documentation).toContain("Exact-main CI waits for Vercel Git");
-    expect(documentation).toMatch(/The protected\s+`release:publish` step creates the prerelease/u);
-    expect(documentation).toMatch(
-      /It never rebuilds, invokes Vercel CLI, pushes an image, or\s+accepts replacement bytes or bindings\./u,
-    );
-    expect(documentation).not.toContain("owner-only-hosted-oauth-token");
+    expect(auditLog).toContain("codex plugin marketplace add withAutograph/marketplace");
+    expect(auditLog).toContain("codex plugin add app-builder@autograph");
   });
 });

@@ -2,7 +2,11 @@ import { cp, mkdtemp, mkdir, readFile, symlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildAgentPluginPackage, validateAgentPluginPackage } from "./agent-plugin-package";
+import {
+  AUTOGRAPH_PACKAGE_VERSION,
+  buildAgentPluginPackage,
+  validateAgentPluginPackage,
+} from "./agent-plugin-package";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "../..");
 const portableEntries = ["plugin.json", "mcp.json", "skills", "LICENSE"];
@@ -54,7 +58,7 @@ describe("Agent Plugins package", () => {
       name: "app-builder",
       packageKind: "generated-artifact",
       specification: "1.0.0",
-      version: "0.2.13",
+      version: AUTOGRAPH_PACKAGE_VERSION,
     });
     await expect(readFile(path.resolve(output, "plugin.json"), "utf-8")).resolves.toBe(
       await readFile(path.resolve(repositoryRoot, "plugin.json"), "utf-8"),
@@ -90,11 +94,12 @@ describe("Agent Plugins package", () => {
     ).rejects.toThrow("deployed HTTPS endpoint");
   });
 
-  it.each(["0.1.0", "0.2.0", "1.0.0"])("rejects package version %s", async (version) => {
+  it("rejects a package version that differs from the package manifest", async () => {
+    const version = `${AUTOGRAPH_PACKAGE_VERSION}-mismatch`;
     const root = await copyPortablePackage();
     await writePluginVersion(root, version);
     await expect(validateAgentPluginPackage({ pluginRoot: root, repositoryRoot })).rejects.toThrow(
-      "version must be exactly 0.2.13",
+      `version must be exactly ${AUTOGRAPH_PACKAGE_VERSION}`,
     );
   });
 

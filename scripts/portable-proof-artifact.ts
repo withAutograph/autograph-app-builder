@@ -5,7 +5,10 @@ import { gunzipSync } from "node:zlib";
 
 import { z } from "zod";
 
-import { validateAgentPluginPackage } from "../lib/plugin/agent-plugin-package";
+import {
+  AUTOGRAPH_PACKAGE_VERSION,
+  validateAgentPluginPackage,
+} from "../lib/plugin/agent-plugin-package";
 import {
   deterministicGzip,
   deterministicTar,
@@ -46,7 +49,7 @@ export const portableReleaseReceiptSchema = z
       z.literal("autograph_respond"),
       z.literal("autograph_cancel"),
     ]),
-    version: z.literal("0.2.13"),
+    version: z.string().min(1),
   })
   .strict();
 
@@ -145,6 +148,9 @@ export async function verifyPortableProofArtifact(input: {
   const receiptPath = nodePath.join(releaseRoot, "release-receipt.json");
   const receiptBytes = await regularFile(receiptPath);
   const receipt = portableReleaseReceiptSchema.parse(JSON.parse(receiptBytes.toString("utf-8")));
+  if (receipt.version !== AUTOGRAPH_PACKAGE_VERSION) {
+    throw new Error("Release receipt version did not match the package manifest.");
+  }
   const origin = releaseEndpoint(new URL(receipt.endpoint).origin);
   if (receipt.endpoint !== `${origin}/mcp`) {
     throw new Error("Release endpoint must bind the exact /mcp resource.");
@@ -239,11 +245,11 @@ export async function verifyPortableProofArtifact(input: {
   const codexManifest = JSON.parse(Buffer.from(codexManifestBytes).toString("utf-8"));
   if (
     codexManifest.name !== receipt.name ||
-    codexManifest.version !== "0.2.13" ||
+    codexManifest.version !== receipt.version ||
     codexManifest.mcpServers !== "./.mcp.json"
   ) {
     throw new Error(
-      "Codex marketplace manifest was not bound to package 0.2.13 and its sole MCP adapter.",
+      "Codex marketplace manifest was not bound to the receipt version and its sole MCP adapter.",
     );
   }
   const codexMarketplaceAssetPaths: string[] = [];

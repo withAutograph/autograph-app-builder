@@ -1,18 +1,28 @@
 ---
 name: next-dev-loop
 description: >
-  Verify Next.js runtime behavior after editing app code. Use this
-  skill to confirm a change actually works in a running app — not
-  just that it compiles or type-checks. Combines /_next/mcp
-  (Next.js's view) with agent-browser (the browser's view).
-  Requires a running `next dev`.
+  Optionally inspect Next.js runtime behavior in a running app. Use the
+  available framework and browser diagnostics that help verify the changed
+  behavior; this workflow is not required for unrelated source edits.
 ---
 
 # next-dev-loop
 
-The edit/verify rhythm during `next dev` — make a change, then
-confirm it actually works at runtime, not only that the types or
-the build are happy.
+## project policy and scope
+
+Use this workflow only as a task-relevant way to inspect Next.js behavior. The
+repository's local-development and focused-validation policy takes precedence:
+no source edit, route layout, framework version, cache state, receipt, or exact
+tool shape is a gate for unrelated work. CI should verify task-relevant
+functionality and security properties, not incidental source shapes. Keep
+credential, tenant-isolation, and approval protections intact.
+
+This is an optional diagnostic workflow for changes whose behavior benefits
+from Next.js runtime introspection. Follow the repository's supported local
+development and validation policy first. For an ordinary edit, keep working
+with the running development app and the focused checks relevant to that edit;
+missing optional tools or diagnostics do not block source work. Report what was
+and was not verified.
 
 You verify through two views of the same running app:
 
@@ -28,29 +38,34 @@ You verify through two views of the same running app:
 
 The two views cross-check each other.
 
-## requires
+## optional diagnostics
 
-- Next.js **16.3+** with **Turbopack** — `/_next/mcp` plus the
+- Next.js **16.3+** with **Turbopack** provides `/_next/mcp` plus the
   proactive compile check via `get_compilation_issues`.
-- `agent-browser` **>= 0.31.1** — React introspection, worktree-scoped
+- `agent-browser` **>= 0.31.1** provides React introspection, worktree-scoped
   `session id`, idempotent `--restore`, and launch flag reconciliation.
 
-These are hard floors, not soft preferences. If anything is missing,
-tell the user how to upgrade and stop. Don't fall back to grepping
-source or to a weaker probe — this skill assumes both views are live
-at the versions above.
+These versions describe the capabilities covered by this workflow, not gates
+for ordinary edits. If a capability is unavailable, use a supported browser,
+existing test, direct observation, or focused source check that can establish
+the changed behavior. Identify the narrower evidence in your report; do not
+upgrade frameworks or install tools solely to satisfy this optional workflow.
 
-- Upgrade Next.js: `pnpm next upgrade` (or `npx next upgrade`).
+- If a requested Next.js feature itself requires an unavailable framework
+  capability, explain that feature-specific limitation and ask before an
+  upgrade that changes project dependencies. Do not upgrade to run this optional
+  diagnostic workflow.
   Docs: https://nextjs.org/docs/app/getting-started/upgrading
   (version-16 guide:
   https://nextjs.org/docs/app/guides/upgrading/version-16)
-- Install or upgrade `agent-browser`: `npm i -g agent-browser@latest`.
-  If the CLI isn't on `PATH`, install it before continuing — preflight
-  expects to invoke it directly.
+- Use `agent-browser` when it is already available and useful. Do not install a
+  global CLI for this workflow; the integrated Browser or the project's
+  existing Playwright setup can provide browser evidence.
 
 ## preflight
 
-Once per session, confirm both views are live.
+When these diagnostics are useful and available, confirm the views you plan to
+use. Skip unavailable optional probes and continue with the best focused check.
 
 1. **Open `agent-browser` at the target URL, restoring saved
    login state when present.** First derive one stable session id for
@@ -86,12 +101,15 @@ Once per session, confirm both views are live.
    `next dev` banner; if it isn't 3000, set
    `NEXT_MCP_URL=http://localhost:<port>/_next/mcp` before probing:
    - Unreachable → either `next dev` isn't running, or Next.js is
-     below 16.3. Check `package.json` to disambiguate, then refuse.
+     below 16.3. Check `package.json` if that distinction matters to the
+     diagnostic; otherwise use the available browser or project check.
    - `get_compilation_issues` not in the list → Next.js below 16.3.
-     Refuse and tell the user to upgrade.
+     The diagnostic is unavailable on this version; continue with other
+     relevant verification.
 3. `get_compilation_issues` doubles as a Turbopack probe. An error
    response of `"Turbopack project is not available..."` means the
-   user is on webpack. Refuse — Turbopack is required.
+   user is on webpack. Skip this Turbopack-only probe and use other available
+   diagnostics.
 4. `get_routes` → your route map for the rest of the session.
 
 ## loop
@@ -160,8 +178,9 @@ manual rather than from memory.
 
 ## reference
 
-All tools below are present once preflight passes. If `tools/list`
-is missing any of them, preflight should have refused — re-check.
+The following tools may be available in `/_next/mcp`; use only the diagnostics
+that this app version exposes. A missing optional tool does not block the edit
+or other verification.
 
 ```
 # /_next/mcp                 notes
