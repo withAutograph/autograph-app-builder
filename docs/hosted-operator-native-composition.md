@@ -71,10 +71,21 @@ Fresh app and Gateway projects need no seed deployments. Their configuration
 retains exact team-owned project and Preview branch inputs. Gateway repository
 and commit inputs remain required. The app's repository and commit may be absent
 during Auth/database bootstrap, so unpublished app source does not block those
-approved effects. Before constructing an app delivery plan, supply its actual
-repository and commit from the original Builder's tenant-owned successful
-publication receipt and provider readback. Never substitute a baseline or
-Builder commit, or invent publication values.
+approved effects. After ordinary approved Git publication, update, or
+reconciliation, Builder automatically associates the independently observed
+repository, branch, commit, and tree with the original owned session's selected
+compiled release. Generated app delivery consumes this `publishedSource`
+association; it never substitutes configured starter source, a baseline commit,
+or a latest-repository guess. An update records its newly observed head, while
+replaying the original publication retains its original completion marker.
+
+If association recording fails after Git publication succeeds, preserve that
+success and use the same approved publication's supported recovery. Do not issue
+another outward effect merely to record the source. The resource journal's
+selected branch keeps its identity; the approved app delivery and its
+branch-scoped environment rows use the actual published branch. Ordinary
+recompilation remains a new planning input, not a source-drift failure or a
+reason to rebuild the Sandbox dependency closure.
 
 For both projects,
 `deploymentId` is optional until a deployment is observed. Bootstrap planning
