@@ -107,11 +107,10 @@ const readCurrentOwnedSession = async (
   return { session, sessionVersion };
 };
 
-const readDirectOwnerTarget = async (
-  deps: HostedOperatorOwnerDependencies,
+const assertDirectOwnerIdentity = (
   owner: OperatorOwnerContext,
   principal: HostedPrincipal,
-  selection: OperatorSelection,
+  selection: Pick<OperatorSelection, "appId">,
   session: ReturnType<typeof toDurableHostedSessionRecord>,
   sessionVersion: HostedSessionVersion,
 ) => {
@@ -129,6 +128,17 @@ const readDirectOwnerTarget = async (
   if (session.appId === undefined || session.appId !== selection.appId) {
     throw resourceMismatch();
   }
+};
+
+const readDirectOwnerTarget = async (
+  deps: HostedOperatorOwnerDependencies,
+  owner: OperatorOwnerContext,
+  principal: HostedPrincipal,
+  selection: OperatorSelection,
+  session: ReturnType<typeof toDurableHostedSessionRecord>,
+  sessionVersion: HostedSessionVersion,
+) => {
+  assertDirectOwnerIdentity(owner, principal, selection, session, sessionVersion);
   const { listVercelInstallations } = deps;
   const installations = await listVercelInstallations(owner.authority);
   const installationIds = new Set<string>();
@@ -179,11 +189,11 @@ const readDirectOwnerTarget = async (
   return { session, target };
 };
 
-const readHandoffOwnerTarget = async (
+const readHandoffOwnerIdentity = async (
   deps: HostedOperatorOwnerDependencies,
   owner: OperatorOwnerContext & { kind: "handoff" },
   principal: HostedPrincipal,
-  selection: OperatorSelection,
+  selection: Pick<OperatorSelection, "appId">,
   session: ReturnType<typeof toDurableHostedSessionRecord>,
   sessionVersion: HostedSessionVersion,
 ) => {
@@ -214,6 +224,26 @@ const readHandoffOwnerTarget = async (
   if (!sessionMatches) {
     throw unavailable();
   }
+
+  return handoff;
+};
+
+const readHandoffOwnerTarget = async (
+  deps: HostedOperatorOwnerDependencies,
+  owner: OperatorOwnerContext & { kind: "handoff" },
+  principal: HostedPrincipal,
+  selection: OperatorSelection,
+  session: ReturnType<typeof toDurableHostedSessionRecord>,
+  sessionVersion: HostedSessionVersion,
+) => {
+  const handoff = await readHandoffOwnerIdentity(
+    deps,
+    owner,
+    principal,
+    selection,
+    session,
+    sessionVersion,
+  );
 
   const vercel = handoff.data.intent.provisioning?.vercel;
   if (vercel?.status !== "succeeded" || vercel.projectId !== selection.projectId) {
@@ -279,6 +309,7 @@ const readOwnedState = async (
  * Server-only delegated authority for the exact Builder workload. The owner tuple
  * is only a lookup hint: every call re-reads the owner-scoped handoff, Eve row,
  * active membership, and Vercel grant before exposing an operator context.
+ * Artifact reads recheck canonical ownership independently of provider grants.
  */
 export const createHostedOperatorOwnerAuthority = (deps: HostedOperatorOwnerDependencies) => {
   const verifyWorkload = createOperatorWorkloadVerifier(deps.workloadPolicy, deps.keyResolver);
@@ -315,6 +346,27 @@ export const createHostedOperatorOwnerAuthority = (deps: HostedOperatorOwnerDepe
     }
     return current;
   };
+  /** Recheck canonical artifact ownership without borrowing deployment authority. */
+  const assertArtifactAuthorized = async (input: HostedOperatorContext): Promise<void> => {
+    const { owner, principal } = ownerContextFromHint(input.ownerContext);
+    if (
+      !sameAuthority(input.authority, owner.authority) ||
+      input.target.sessionId !== owner.sessionId
+    ) {
+      throw unavailable();
+    }
+    const { session, sessionVersion } = await readCurrentOwnedSession(deps, principal, owner);
+    if (
+      !(await deps.membership.isMember({ principal, workspaceId: owner.authority.workspaceId }))
+    ) {
+      throw unavailable();
+    }
+    if (owner.kind === "direct") {
+      assertDirectOwnerIdentity(owner, principal, input.target, session, sessionVersion);
+    } else {
+      await readHandoffOwnerIdentity(deps, owner, principal, input.target, session, sessionVersion);
+    }
+  };
   const assertPlanningAuthorized = async (input: HostedOperatorContext): Promise<void> => {
     await readCurrentPlanningOwner(input);
   };
@@ -333,6 +385,7 @@ export const createHostedOperatorOwnerAuthority = (deps: HostedOperatorOwnerDepe
     await assertPlanningAuthorized(input);
   };
   return {
+    assertArtifactAuthorized,
     assertAuthorized,
     assertPlanningAuthorized,
     authorize: resolve,
