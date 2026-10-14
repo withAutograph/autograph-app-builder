@@ -487,6 +487,78 @@ it.each([undefined, null, "", target.installationId])(
   },
 );
 
+it("creates Gateway rows with fresh metadata and only selected row reads before each write", async () => {
+  const f = fixture();
+  const result = await f.writer.bind(f.input);
+  expect(result.rows).toHaveLength(5);
+  expect(f.requests).toHaveLength(47);
+  expect(f.requests.filter((request) => request.method === "POST")).toHaveLength(5);
+  expect(
+    f.requests.filter((request) => request.path.startsWith("/v10/") && request.method === "GET"),
+  ).toHaveLength(17);
+  expect(f.readAuthRuntimeUrl).toHaveBeenCalledTimes(7);
+});
+
+it("rejects an earlier created row changed while a later row is checkpointed", async () => {
+  const f = fixture();
+  const checkpoint = f.checkpointGatewayEnvironment.getMockImplementation()!;
+  f.checkpointGatewayEnvironment.mockImplementation(async (rows) => {
+    await checkpoint(rows);
+    if (rows.length === 2) {
+      const row = f.rows.find((item) => item.key === "AUTH_DATABASE_RESOURCE");
+      if (!row) {
+        throw new Error("Missing fixture row");
+      }
+      row.value = "changed-during-creation";
+    }
+  });
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests.filter((request) => request.method === "PATCH")).toHaveLength(0);
+});
+
+it("replays current Gateway values with two fresh inventories and no per-key inspection loop", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input);
+  f.requests.length = 0;
+  f.readAuthRuntimeUrl.mockClear();
+  const result = await f.writer.bind(f.input);
+  expect(result.rows).toHaveLength(5);
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+  expect(f.requests).toHaveLength(29);
+  expect(f.requests.filter((request) => request.path.startsWith("/v10/"))).toHaveLength(2);
+  expect(f.readAuthRuntimeUrl).toHaveBeenCalledTimes(2);
+});
+
+it("rejects a Gateway value changed after the replay's initial checkpoint", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input);
+  f.requests.length = 0;
+  f.checkpointGatewayEnvironment.mockImplementationOnce(async () => {
+    const row = f.rows.find((item) => item.key === "PLATFORM_AUTH_DATABASE_URL");
+    if (!row) {
+      throw new Error("Missing fixture row");
+    }
+    row.value = "changed-after-observation";
+  });
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+});
+
+it("rechecks a revoked credential after the replay's initial checkpoint", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input);
+  f.requests.length = 0;
+  f.checkpointGatewayEnvironment.mockImplementationOnce(async () => {
+    const credential = await f.readCredential();
+    f.readCredential.mockResolvedValue({
+      ...credential,
+      binding: { ...credential.binding, active: false },
+    });
+  });
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+});
+
 it("preserves sibling policy and patches only the previously journaled installation-attributed row", async () => {
   const f = fixture(target.installationId);
   const priorValue = JSON.stringify(["catalog-sibling"]);

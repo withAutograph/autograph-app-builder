@@ -149,6 +149,112 @@ const fixture = () => {
 };
 
 describe("private read-only operator provider inventory", () => {
+  it("accepts null provider configuration IDs without inventing native integration proof", async () => {
+    const f = fixture();
+    f.payloads.set("/v10/projects/prj_app/env", {
+      envs: [
+        {
+          key: "PLATFORM_JWKS_URL",
+          configurationId: null,
+          target: ["preview"],
+          value: "private-app-value",
+        },
+      ],
+    });
+    f.payloads.set("/v10/projects/prj_operator/env", {
+      envs: [
+        {
+          key: "DATABASE_URL_UNPOOLED",
+          configurationId: null,
+          target: ["production"],
+          value: "postgres://private-password@private-host/db",
+        },
+      ],
+    });
+    const observed = await readHostedOperatorProviderInventory(f.input);
+    expect(observed.app.projectEnvironmentKeys).toContain("PLATFORM_JWKS_URL");
+    expect(observed.operator.projectEnvironmentKeys).toContain("DATABASE_URL_UNPOOLED");
+    expect(observed.nativeResource).toBeNull();
+    const providerPaths = f.fetcher.mock.calls.map(
+      ([url]) => new URL(url instanceof Request ? url.url : url.toString()).pathname,
+    );
+    expect(providerPaths).not.toContain("/v1/storage/stores");
+    expect(JSON.stringify(observed)).not.toContain("private-app-value");
+    expect(JSON.stringify(observed)).not.toContain("private-password");
+  });
+
+  it("retains inherited Preview variables on main and excludes foreign branches without requesting exact-branch metadata", async () => {
+    const f = fixture();
+    f.payloads.set("/v10/projects/prj_app/env", {
+      envs: [
+        {
+          key: "PLATFORM_JWKS_URL",
+          configurationId: null,
+          gitBranch: null,
+          target: ["preview"],
+          value: "private-inherited-value",
+        },
+        {
+          key: "APP_MODE",
+          gitBranch: "main",
+          target: ["preview"],
+          value: "private-matching-value",
+        },
+        {
+          key: "BETTER_AUTH_SECRET",
+          configurationId: null,
+          target: ["preview"],
+          value: "private-app-secret",
+        },
+        {
+          key: "PGUSER",
+          gitBranch: "foreign",
+          target: ["preview"],
+          value: "private-foreign-value",
+        },
+        { key: "PRODUCTION_ONLY", target: ["production"], value: "private-production-value" },
+      ],
+    });
+    for (const role of ["app", "gateway"] as const) {
+      const deployment = `/v13/deployments/${configuration[role].deploymentId}`;
+      f.payloads.set(deployment, { ...f.payloads.get(deployment), gitSource: { ref: "main" } });
+    }
+    const read = f.fetcher.getMockImplementation();
+    if (read === undefined) {
+      throw new Error("Missing fixture fetch.");
+    }
+    f.fetcher.mockImplementation(async (url, options) => {
+      const parsed = new URL(url instanceof Request ? url.url : url);
+      if (parsed.pathname.endsWith("/env") && parsed.searchParams.has("gitBranch")) {
+        return Response.json({ envs: [] });
+      }
+      return await read(url, options);
+    });
+    const observed = await readHostedOperatorProviderInventory({
+      ...f.input,
+      context: { ...context, target: { ...context.target, branch: "main" } },
+      configuration: {
+        ...configuration,
+        app: { ...configuration.app, branch: "main" },
+        gateway: { ...configuration.gateway, branch: "main" },
+      },
+    });
+    expect(observed.app.projectEnvironmentKeys).toEqual([
+      "APP_MODE",
+      "BETTER_AUTH_SECRET",
+      "PLATFORM_JWKS_URL",
+    ]);
+    expect(observed.appEnvironment.forbiddenKeys).toEqual(["BETTER_AUTH_SECRET"]);
+    const envRequests = f.fetcher.mock.calls
+      .map(([url]) => new URL(url instanceof Request ? url.url : url.toString()))
+      .filter((url) => url.pathname.endsWith("/env"));
+    expect(envRequests.every((url) => !url.searchParams.has("gitBranch"))).toBe(true);
+    expect(JSON.stringify(observed)).not.toContain("private-inherited-value");
+    expect(JSON.stringify(observed)).not.toContain("private-matching-value");
+    expect(JSON.stringify(observed)).not.toContain("private-app-secret");
+    expect(JSON.stringify(observed)).not.toContain("private-foreign-value");
+  });
+
   it("recognizes native staging deployments only with Preview claims and no custom environment", async () => {
     const f = fixture();
     const previewConfig = {
