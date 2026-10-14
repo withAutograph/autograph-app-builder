@@ -88,7 +88,9 @@ describe("canonical schema predecessor recovery", () => {
       expect.objectContaining({ lookup: { releaseId: "original-v2", schemaSha256: schemaHash } }),
     );
     expect(input.sandbox.run).toHaveBeenCalledWith(
-      expect.objectContaining({ command: "mise run app:runtime installed spend-review local" }),
+      expect.objectContaining({
+        command: "mise run app:runtime resume-installed spend-review local",
+      }),
     );
     const external = z
       .array(z.string())
@@ -163,7 +165,7 @@ describe("canonical schema predecessor recovery", () => {
     await expect(prepareCanonicalSchemaPredecessorsForSession(input)).rejects.toMatchObject({
       code: "canonical_schema_predecessor_unavailable",
       recovery: {
-        command: "mise run app:runtime installed spend-review local",
+        command: "mise run app:runtime resume-installed spend-review local",
         diagnostic: "private runtime unavailable",
         diagnosticLength: 27,
         diagnosticPresent: true,
@@ -222,7 +224,7 @@ describe("canonical schema predecessor recovery", () => {
       throw new Error("Expected predecessor probe failure.");
     }
     expect(failure.recovery).toMatchObject({
-      command: "mise run app:runtime installed spend-review local",
+      command: "mise run app:runtime resume-installed spend-review local",
       diagnosticPresent: true,
       diagnosticTruncated: true,
       exitCode: 1,
@@ -264,7 +266,7 @@ describe("canonical schema predecessor recovery", () => {
     input.sandbox.run.mockResolvedValue({ exitCode: 1, stderr: "", stdout: "" });
     await expect(prepareCanonicalSchemaPredecessorsForSession(input)).rejects.toMatchObject({
       recovery: {
-        command: "mise run app:runtime installed spend-review local",
+        command: "mise run app:runtime resume-installed spend-review local",
         diagnosticLength: 0,
         diagnosticPresent: false,
         diagnosticTruncated: false,
@@ -329,7 +331,7 @@ describe("canonical schema predecessor recovery", () => {
       throw new Error("Expected predecessor probe failure.");
     }
     expect(failure.recovery).toMatchObject({
-      command: "mise run app:runtime installed spend-review local",
+      command: "mise run app:runtime resume-installed spend-review local",
       diagnosticPresent: true,
       diagnosticTruncated: false,
       exitCode: null,
@@ -359,7 +361,7 @@ describe("canonical schema predecessor recovery", () => {
       input.sandbox.run.mockResolvedValue({ exitCode: 0, stderr: "", stdout });
       await expect(prepareCanonicalSchemaPredecessorsForSession(input)).rejects.toMatchObject({
         recovery: {
-          command: "mise run app:runtime installed spend-review local",
+          command: "mise run app:runtime resume-installed spend-review local",
           exitCode: 0,
           reason: kind === "foreign-app" ? "app-mismatch" : "invalid-receipt",
           stage: "receipt",
@@ -390,7 +392,7 @@ describe("canonical schema predecessor recovery", () => {
     });
     expect(input.sandbox.run).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({
-        command: "mise run app:runtime installed spend-review local",
+        command: "mise run app:runtime resume-installed spend-review local",
       }),
     );
   });

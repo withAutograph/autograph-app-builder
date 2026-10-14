@@ -177,7 +177,8 @@ export const prepareCanonicalSchemaPredecessorsForSession = async (
   const selectedApp = appId.parse(input.appId);
   const environmentFile = localRuntimeEnvironmentPath(input.root, selectedApp);
   const directory = path.posix.dirname(environmentFile);
-  const command = `mise run app:runtime installed ${selectedApp} local`;
+  // Resume only the recorded local cluster before reading its actual installed schema identity.
+  const command = `mise run app:runtime resume-installed ${selectedApp} local`;
   let observed;
   try {
     observed = await input.sandbox.run({
