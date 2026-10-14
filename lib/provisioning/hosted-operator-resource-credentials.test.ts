@@ -219,9 +219,9 @@ describe("sealed resource credential checkpoint acknowledgment", () => {
       privateState: prepared.privateState,
     });
     expect(JSON.stringify(persisted.privateState)).not.toBe(JSON.stringify(prepared.privateState));
-    expect(() =>
-      assertResourceCredentialCheckpoint(persisted.privateState, prepared.privateState),
-    ).not.toThrow();
+    expect(() => {
+      assertResourceCredentialCheckpoint(persisted.privateState, prepared.privateState);
+    }).not.toThrow();
     expect(
       prepareHostedOperatorResourceCredentials({ ...input, record: persisted }).credentialsBytes,
     ).toBe(prepared.credentialsBytes);
