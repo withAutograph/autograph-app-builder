@@ -1,3 +1,4 @@
+import { normalActorProgramDigest } from "./hosted-operator-normal-actor-program";
 /* oxlint-disable typescript/no-non-null-assertion, eslint/no-use-before-define, eslint/sort-keys, eslint/require-await, eslint/prefer-const -- Provider fixtures deliberately preserve source-shaped rows and async callbacks. */
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -1129,3 +1130,63 @@ it.each([
     expect(f.requests.every((request) => request.method === "GET")).toBe(true);
   },
 );
+
+it("keeps absent-program Realm link config byte-for-byte unchanged", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input);
+  const link = f.rows.find((row) => row.key === "PLATFORM_REALM_OPERATOR_LINK_CONFIG");
+  expect(link?.value).toBe(
+    JSON.stringify({
+      browserOrigin: gateway.authBrowserOrigin,
+      builderCallbackOrigin: gateway.builderCallbackOrigin,
+      builderCallbackPath: "/api/hosted-operator/realm-identity",
+      operatorOrigin: gateway.operatorOrigin,
+    }),
+  );
+});
+
+it("activates normal browser capture with the exact frozen native sender workload", async () => {
+  const f = fixture();
+  const program = {
+    version: 1 as const,
+    appId: selection.appId,
+    origin: gateway.publicOrigin,
+    actors: [
+      {
+        actorKey: "owner",
+        email: "owner@example.test",
+        name: "Owner",
+        account: "capture-existing" as const,
+      },
+    ],
+    organizations: [],
+    memberships: [],
+    appAccess: [],
+  };
+  f.input.plan = hostedOperatorPlanSchema.parse({
+    ...plan,
+    stage: "app",
+    access: [],
+    normalActorProgram: program,
+    normalActorPreparation: {
+      accountOperationRef: "11111111-1111-4111-8111-111111111111",
+      programDigest: normalActorProgramDigest(program),
+      accountPlanDigest: "d".repeat(64),
+      accountApprovalId: "actual-initial-approval",
+      accountApprovedByCallId: "initial-call",
+    },
+  });
+  await f.writer.bind(f.input);
+  const link = f.rows.find((row) => row.key === "PLATFORM_REALM_OPERATOR_LINK_CONFIG");
+  const config = z.record(z.string(), z.json()).parse(JSON.parse(z.string().parse(link?.value)));
+  expect(config.browserSessionCapture).toEqual({
+    path: "/api/hosted-operator/realm-browser-session",
+    sender: gateway.sourceWorkload,
+  });
+  expect(config.browserOrigin).toBe(gateway.authBrowserOrigin);
+  expect(config.builderCallbackOrigin).toBe(gateway.builderCallbackOrigin);
+  expect(config.operatorOrigin).toBe(gateway.operatorOrigin);
+  expect(link?.type).toBe("encrypted");
+  expect(link?.gitBranch).toBe(gateway.branch);
+  expect(JSON.stringify(config)).not.toContain("fixture-private-password");
+});

@@ -486,6 +486,14 @@ export const createHostedOperatorGatewayBindings = (deps: {
           builderCallbackPath: "/api/hosted-operator/realm-identity",
           operatorOrigin: exactHttpsOrigin(gateway.operatorOrigin),
           readonlyAttesters: input.plan.gatewayBindings?.readonlyAttesters,
+          ...(input.plan.normalActorProgram === undefined
+            ? {}
+            : {
+                browserSessionCapture: {
+                  path: "/api/hosted-operator/realm-browser-session",
+                  sender: gateway.sourceWorkload,
+                },
+              }),
         }),
       };
     };
