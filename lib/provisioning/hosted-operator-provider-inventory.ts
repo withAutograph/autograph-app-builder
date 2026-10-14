@@ -24,7 +24,10 @@ const deploymentSchema = z.object({
   url: id,
 });
 const variableSchema = z.object({
-  configurationId: z.string().optional(),
+  configurationId: z
+    .string()
+    .nullish()
+    .transform((value) => value ?? undefined),
   gitBranch: z.string().nullable().optional(),
   key: z.string(),
   target: z.array(z.string()),
@@ -279,12 +282,8 @@ export const readHostedOperatorProviderInventory = async (input: {
         });
         throw new HostedOperatorError("resource_mismatch");
       }
-      const query: Record<string, string> = {};
-      if (branch !== undefined) {
-        query.gitBranch = branch;
-      }
       const variables = variablesSchema.parse(
-        await request(`/v10/projects/${encodeURIComponent(project.id)}/env`, query),
+        await request(`/v10/projects/${encodeURIComponent(project.id)}/env`),
       );
       const projected = variables.envs.filter((variable) => {
         if (!variable.target.includes(reference.environment)) {
