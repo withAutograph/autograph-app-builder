@@ -86,6 +86,46 @@ const selection = (letter: string): CompiledOperatorReleaseSelection => ({
   schemaSha256: letter.repeat(64),
   version: 1,
 });
+
+describe("published source selection persistence", () => {
+  it("retains actual source fields and does not promote an old initial publication on replay", async () => {
+    const f = await fixture();
+    await contextStorage.run(f.container, async () => {
+      const storage = await createLocalOperatorArtifactStorage(f);
+      const initial = {
+        ...selection("a"),
+        publishedSource: {
+          branch: "app-builder/actual-fixture",
+          changeSetDigest: "b".repeat(64),
+          gitSha: "c".repeat(40),
+          gitTree: "d".repeat(40),
+          repositoryId: "4242",
+          reviewDigest: "e".repeat(64),
+        },
+      };
+      const updated = {
+        ...initial,
+        publishedSource: {
+          ...initial.publishedSource,
+          gitSha: "f".repeat(40),
+          reviewDigest: "a".repeat(64),
+        },
+      };
+      await storage.selections.record(f.context, "actual-initial-approval", initial);
+      await storage.selections.record(f.context, "actual-update-call", updated);
+      await storage.selections.record(f.context, "actual-initial-approval", initial);
+      expect(await storage.selections.read(f.context, initial.appSpecDigest)).toEqual(updated);
+      await expect(
+        storage.selections.record(f.context, "actual-initial-approval", updated),
+      ).rejects.toThrow();
+      expect(await storage.selections.read(f.context, initial.appSpecDigest)).toEqual(updated);
+      await storage.selections.record(f.context, "ordinary-new-compilation", selection("b"));
+      expect(await storage.selections.read(f.context, initial.appSpecDigest)).toEqual(
+        selection("b"),
+      );
+    });
+  });
+});
 describe("owner-bound local private operator artifacts", () => {
   it("reads exact retained history across accepted specs without substituting latest", async () => {
     const f = await fixture();

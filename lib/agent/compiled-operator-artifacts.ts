@@ -23,6 +23,7 @@ import {
 import type {
   CompiledOperatorReleaseSelection,
   ExactCompiledOperatorReleaseLookup,
+  PublishedAppSource,
 } from "../provisioning/hosted-operator-artifact-selection";
 import { describeSelectedApp } from "../repository/app-description";
 
@@ -179,6 +180,23 @@ const openCompiledArtifactStorage = async (
     });
   }
   return storage;
+};
+
+/** Associate the verified Git result with the same owned selected release; no Git or deployment effect. */
+export const recordPublishedOperatorSourceForSession = async (
+  input: CompiledOperatorArtifactSessionInput & { publishedSource: PublishedAppSource },
+): Promise<CompiledOperatorReleaseSelection> => {
+  const binding = await resolveCompiledArtifactSession(input);
+  const storage = await openCompiledArtifactStorage(binding);
+  const selected = await storage.selections.read(binding.context, input.appSpecDigest);
+  if (selected === undefined) {
+    throw operatorArtifactUnavailable();
+  }
+  await binding.assertCurrentOwner(binding.context);
+  return await storage.selections.record(binding.context, input.callId, {
+    ...selected,
+    publishedSource: input.publishedSource,
+  });
 };
 
 /** Read only the exact retained release named by actual installed identity or a saved owned reference. */

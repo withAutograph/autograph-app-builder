@@ -18,11 +18,21 @@ import { createOperatorArtifactPublication } from "./hosted-operator-artifacts";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const appId = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
+export const publishedAppSourceSchema = z.strictObject({
+  branch: z.string().min(1),
+  changeSetDigest: digest,
+  gitSha: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u),
+  gitTree: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u),
+  repositoryId: z.string().min(1),
+  reviewDigest: digest,
+});
+export type PublishedAppSource = z.infer<typeof publishedAppSourceSchema>;
 export const compiledOperatorReleaseSelectionSchema = z.strictObject({
   appId,
   appSpecDigest: digest,
   artifactRef: operatorArtifactReferenceSchema,
   manifestSha256: digest,
+  publishedSource: publishedAppSourceSchema.optional(),
   releaseId: z.string().min(1),
   schemaSha256: digest,
   version: z.literal(1),
