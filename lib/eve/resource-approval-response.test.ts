@@ -1,9 +1,10 @@
 // oxlint-disable eslint/require-await, typescript/promise-function-async -- Terminal async doubles return settled Promises.
 import { createHash } from "node:crypto";
-import { getTableName } from "drizzle-orm";
-import type { SQL } from "drizzle-orm";
-import type { PgTable } from "drizzle-orm/pg-core";
-import { PgDialect } from "drizzle-orm/pg-core";
+import { PgDialect, PgTransaction } from "drizzle-orm/pg-core";
+import type { ExtractTablesWithRelations } from "drizzle-orm";
+import { z } from "zod";
+import { drizzle } from "drizzle-orm/postgres-js";
+import type { PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js";
 import { createPostgresHostedEveStore } from "./postgres-hosted-store";
 import { describe, expect, it, vi } from "vitest";
 import { hostedEveOperationScopes } from "./hosted-auth";
@@ -547,51 +548,57 @@ const postgresSettlementFixture = (changedSession = session, changedMetadata = m
     ],
   ]);
   const dialect = new PgDialect();
-  const transaction = {
-    select: () => ({
-      from: (table: PgTable) => ({
-        where: (predicate: SQL) => {
-          const name = getTableName(table);
-          queries.push({ table: name, params: dialect.sqlToQuery(predicate).params });
-          const values = rows.get(name) ?? [];
-          return {
-            limit: () =>
-              Object.assign(Promise.resolve(values), {
-                for: async (mode: string) => {
-                  expect(mode).toBe("update");
-                  locks.push(name);
-                  return values;
-                },
-              }),
-            orderBy: async () => values,
-          };
-        },
-      }),
-    }),
-    update: (table: PgTable) => ({
-      set: (values: Record<string, string | Date | typeof operation | null>) => ({
-        where: (_predicate: SQL) => ({
-          returning: async () => {
-            update(getTableName(table), values);
-            return [{ ...operationRow, ...values }];
+  type DatabaseSchema = Parameters<typeof createPostgresHostedEveStore>[0]["_"]["fullSchema"];
+  const database = drizzle.mock<DatabaseSchema>();
+  const { session: drizzleSession } = database._;
+  const prepareQuery = drizzleSession.prepareQuery.bind(drizzleSession);
+  vi.spyOn(drizzleSession, "prepareQuery").mockImplementation((query) => {
+    const prepared = prepareQuery(query, undefined, undefined, false);
+    vi.spyOn(prepared, "execute").mockImplementation(async () => {
+      const table = /(?:from|update) "(?<table>agent_[a-z_]+)"/u.exec(query.sql)?.groups?.table;
+      if (table === undefined) {
+        throw new Error("Unexpected fixture query.");
+      }
+      if (query.sql.startsWith("update ")) {
+        const record = z
+          .string()
+          .parse(query.params.find((value) => z.string().startsWith("{").safeParse(value).success));
+        const settled = hostedOperationRecordSchema.parse(JSON.parse(record));
+        update(table, query.params);
+        return [
+          {
+            ...operationRow,
+            record: settled,
+            state: settled.state,
+            updatedAt: new Date(settled.updatedAtEpochMs),
           },
-        }),
-      }),
-    }),
-  };
-  const database = {
-    transaction: async <T>(callback: (reader: typeof transaction) => Promise<T>) =>
-      await callback(transaction),
-    select: () => {
-      throw new Error("Proof read escaped the locked transaction");
-    },
-  };
-  // SAFETY: This terminal double implements the SELECT, row-lock, transaction and UPDATE chains exercised by settlement.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The test implements only the exercised database methods.
-  const store = createPostgresHostedEveStore(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: All exercised transaction methods are implemented above.
-    database as Parameters<typeof createPostgresHostedEveStore>[0],
+        ];
+      }
+      queries.push({ table, params: query.params });
+      if (query.sql.endsWith("for update")) {
+        locks.push(table);
+      }
+      return rows.get(table) ?? [];
+    });
+    return prepared;
+  });
+  class FixtureTransaction extends PgTransaction<
+    PostgresJsQueryResultHKT,
+    DatabaseSchema,
+    ExtractTablesWithRelations<DatabaseSchema>
+  > {
+    async transaction<T>(callback: (transaction: FixtureTransaction) => Promise<T>): Promise<T> {
+      return await callback(this);
+    }
+  }
+  const transaction = new FixtureTransaction(dialect, database._.session, undefined);
+  vi.spyOn(database, "transaction").mockImplementation(
+    async (callback) => await callback(transaction),
   );
+  vi.spyOn(database, "select").mockImplementation(() => {
+    throw new Error("Proof read escaped the locked transaction");
+  });
+  const store = createPostgresHostedEveStore(database);
   return { store, locks, queries, update };
 };
 
