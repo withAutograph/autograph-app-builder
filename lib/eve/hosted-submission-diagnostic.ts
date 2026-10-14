@@ -18,6 +18,8 @@ export type HostedSubmissionPhase =
   | "checkpoint_cleanup"
   | "transport_dispatch"
   | "transport_acceptance"
+  | "send_accepted_readback"
+  | "send_delivery_boundary"
   | "transport_start_confirmation";
 
 const sqlStateCategories = {
@@ -89,6 +91,19 @@ const rejectedReasonSchema = z.enum([
   "prompt_required",
 ]);
 
+const sendReadFailureCategories = [
+  "native_read_failed",
+  "native_read_delayed",
+  "delivery_binding_changed",
+  "delivery_boundary_unobserved",
+] as const;
+export type SendReadFailureCategory = (typeof sendReadFailureCategories)[number];
+const nonStorageCategorySchema = z.enum([
+  ...sendReadFailureCategories,
+  "unclassified_failure",
+  "rejected_before_dispatch",
+]);
+
 export interface HostedSubmissionDiagnostic {
   event: "builder.hosted_submission_uncertain" | "builder.hosted_submission_rejected";
   phase: HostedSubmissionPhase;
@@ -97,10 +112,7 @@ export interface HostedSubmissionDiagnostic {
   operationIdHash?: string;
   adapterSessionIdHash?: string;
   savedState?: "reserved" | "submission_unknown";
-  category:
-    | (typeof sqlStateCategories)[SqlState]
-    | "unclassified_failure"
-    | "rejected_before_dispatch";
+  category: (typeof sqlStateCategories)[SqlState] | z.infer<typeof nonStorageCategorySchema>;
   sqlState?: SqlState;
   rejectedReason?: z.infer<typeof rejectedReasonSchema>;
 }
@@ -146,6 +158,7 @@ export const reportHostedSubmissionDiagnostic = (input: {
   operationId?: string;
   adapterSessionId?: string;
   savedState?: HostedSubmissionDiagnostic["savedState"];
+  failureCategory?: SendReadFailureCategory;
   error?: unknown;
   sink?: HostedSubmissionDiagnosticSink;
 }): void => {
@@ -156,7 +169,9 @@ export const reportHostedSubmissionDiagnostic = (input: {
       : undefined;
     const sqlState = rejected ? undefined : sqlStateFor(input.error);
     const uncertainCategory =
-      sqlState === undefined ? "unclassified_failure" : sqlStateCategories[sqlState];
+      sqlState === undefined
+        ? (input.failureCategory ?? "unclassified_failure")
+        : sqlStateCategories[sqlState];
     const diagnostic: HostedSubmissionDiagnostic = {
       category: rejected ? "rejected_before_dispatch" : uncertainCategory,
       event: rejected

@@ -50,6 +50,7 @@ const operationId = (clientRequestId: string) =>
   });
 const fixture = async (options: { acknowledge?: boolean; failReadback?: boolean } = {}) => {
   const store = new InMemoryHostedEveStore();
+  const diagnostics = vi.fn();
   let events: MessageStreamEvent[] = [waiting()];
   let failReadback = options.failReadback ?? false;
   // oxlint-disable-next-line eslint/require-await -- The authority fixture preserves its asynchronous contract.
@@ -76,6 +77,7 @@ const fixture = async (options: { acknowledge?: boolean; failReadback?: boolean 
   const create = () =>
     createHostedEveSessionService({
       assertSendDeliveryOwner: owner,
+      onSubmissionDiagnostic: diagnostics,
       principal,
       store,
       transport: adapter,
@@ -85,6 +87,7 @@ const fixture = async (options: { acknowledge?: boolean; failReadback?: boolean 
   return {
     adapter,
     create,
+    diagnostics,
     operation: async () =>
       await store.getPrivateOperation(principal, operationId(request.clientRequestId)),
     owner,
@@ -143,6 +146,13 @@ describe("canonical SEND delivery acknowledgement", () => {
     await expect(f.create().send(f.request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
     expect(await f.operation()).toMatchObject({ state: "submission_unknown" });
     expect(f.send).toHaveBeenCalledOnce();
+    expect(f.diagnostics).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: "delivery_boundary_unobserved",
+        operationKind: "send",
+        phase: "send_delivery_boundary",
+      }),
+    );
   });
   it("requires a matching boundary, not just ACK membership in a running turn", async () => {
     const f = await fixture();
@@ -321,9 +331,11 @@ describe("canonical SEND delivery acknowledgement", () => {
         order.push("read");
         throw new Error("Read failed");
       });
+      const diagnostics = vi.fn();
       const adapter = createSameOriginEveTransport({
         config: { baseUrl: "https://builder.example.test" },
         fetchImplementation,
+        onSubmissionDiagnostic: diagnostics,
         // oxlint-disable-next-line eslint/require-await -- The synthetic workload identity has the asynchronous token contract.
         workloadIdentity: { token: async () => "synthetic-oidc" },
       });
@@ -341,6 +353,19 @@ describe("canonical SEND delivery acknowledgement", () => {
         ? expect(adapter.send(input)).rejects.toThrow()
         : adapter.sendAccepted?.(input));
       expect(order[0]).toBe("exact-ack");
+      if (method === "send") {
+        expect(diagnostics).toHaveBeenCalledWith(
+          expect.objectContaining({
+            category: "native_read_failed",
+            operationKind: "send",
+            phase: "send_accepted_readback",
+          }),
+        );
+        expect(JSON.stringify(diagnostics.mock.calls)).not.toContain("Read failed");
+        expect(JSON.stringify(diagnostics.mock.calls)).not.toContain("exact-ack");
+      } else {
+        expect(diagnostics).not.toHaveBeenCalled();
+      }
       expect(
         fetchImplementation.mock.calls.filter(([, init]) => init?.method === "POST"),
       ).toHaveLength(1);
