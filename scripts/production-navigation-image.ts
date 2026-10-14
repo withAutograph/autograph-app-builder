@@ -1,7 +1,8 @@
 import { setTimeout as delay } from "node:timers/promises";
 
-export const PRODUCTION_NAVIGATION_POSTGRES_IMAGE =
-  "public.ecr.aws/docker/library/postgres@sha256:48c8ad3a7284b82be4482a52076d47d879fd6fb084a1cbfccbd551f9331b0e40";
+const postgresDigest = "sha256:48c8ad3a7284b82be4482a52076d47d879fd6fb084a1cbfccbd551f9331b0e40";
+export const PRODUCTION_NAVIGATION_POSTGRES_IMAGE = `public.ecr.aws/docker/library/postgres@${postgresDigest}`;
+export const PRODUCTION_NAVIGATION_POSTGRES_FALLBACK_IMAGE = `docker.io/library/postgres@${postgresDigest}`;
 
 interface ImageCommandResult {
   exitCode: number;
@@ -20,20 +21,19 @@ interface ImagePreflightInput {
 
 const deadlineMessage = "Production navigation image preparation exceeded its deadline.";
 
-const missingPinnedImage = (result: ImageCommandResult): boolean =>
+const missingPinnedImage = (result: ImageCommandResult, image: string): boolean =>
   result.exitCode === 1 &&
-  result.stderr.trim() ===
-    `Error response from daemon: No such image: ${PRODUCTION_NAVIGATION_POSTGRES_IMAGE}`;
+  result.stderr.trim() === `Error response from daemon: No such image: ${image}`;
 
 const registryThrottled = (result: ImageCommandResult): boolean =>
   /\btoomanyrequests\b|\bHTTP(?:\/\d(?:\.\d)?)?\s+429\b|\b429\s+Too Many Requests\b|\bstatus code\s*:?\s*429\b/iu.test(
     result.stderr,
   );
 
-/** Retry only an observed registry throttle before the single container creation. */
+/** Recover an observed registry throttle using the same immutable image, before container creation. */
 export const ensureProductionNavigationImage = async (
   input: ImagePreflightInput,
-): Promise<void> => {
+): Promise<string> => {
   const now = input.now ?? Date.now;
   const wait =
     input.wait ?? (async (milliseconds, signal) => await delay(milliseconds, null, { signal }));
@@ -54,38 +54,54 @@ export const ensureProductionNavigationImage = async (
     }
     return result;
   };
-  const inspected = await command(
-    ["image", "inspect", PRODUCTION_NAVIGATION_POSTGRES_IMAGE],
-    10_000,
-  );
-  if (inspected.exitCode === 0) {
-    return;
-  }
-  if (!missingPinnedImage(inspected)) {
-    throw new Error("Production navigation could not inspect the pinned PostgreSQL image.");
+  const present = async (image: string) => {
+    const inspected = await command(["image", "inspect", image], 10_000);
+    if (inspected.exitCode === 0) {
+      return true;
+    }
+    if (!missingPinnedImage(inspected, image)) {
+      throw new Error("Production navigation could not inspect the pinned PostgreSQL image.");
+    }
+    return false;
+  };
+  let image = PRODUCTION_NAVIGATION_POSTGRES_IMAGE;
+  if (await present(image)) {
+    return image;
   }
   const backoffs = [10_000, 20_000, 40_000];
-  for (let attempt = 0; attempt <= backoffs.length; attempt += 1) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- Only a registry throttle retries this same pinned image.
-    const pulled = await command(["pull", PRODUCTION_NAVIGATION_POSTGRES_IMAGE], 60_000);
+  let retry = 0;
+  for (;;) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Only observed registry throttling retries the immutable image within its existing deadline.
+    const pulled = await command(["pull", image], 60_000);
     if (pulled.exitCode === 0) {
-      return;
+      return image;
     }
     if (!registryThrottled(pulled)) {
       throw new Error("Production navigation could not pull the pinned PostgreSQL image.");
     }
-    const backoff = backoffs[attempt];
-    if (backoff === undefined) {
-      throw new Error(
-        "Production navigation image registry remained throttled after four attempts.",
-      );
+    if (image === PRODUCTION_NAVIGATION_POSTGRES_IMAGE) {
+      // The canonical registry supplies the identical digest when the public mirror is throttled.
+      image = PRODUCTION_NAVIGATION_POSTGRES_FALLBACK_IMAGE;
+    } else {
+      const backoff = backoffs[Math.min(retry, backoffs.length - 1)];
+      if (backoff === undefined) {
+        throw new Error(deadlineMessage);
+      }
+      retry += 1;
+      input.signal.throwIfAborted();
+      const remaining = deadline - now();
+      if (remaining <= 0) {
+        throw new Error(deadlineMessage);
+      }
+      // Docker's observed diagnostics do not expose Retry-After; keep the existing backoff and deadline.
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Abortable backoff follows only an observed registry throttle.
+      await wait(Math.min(backoff, remaining), input.signal);
+      input.signal.throwIfAborted();
     }
-    input.signal.throwIfAborted();
-    if (deadline - now() <= backoff) {
-      throw new Error(deadlineMessage);
+    // Another local pull may have completed while we waited. Inspect before asking a registry again.
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Local cache recheck precedes only an observed throttle recovery.
+    if (await present(image)) {
+      return image;
     }
-    // oxlint-disable-next-line eslint/no-await-in-loop -- Abortable bounded backoff only follows registry throttling.
-    await wait(backoff, input.signal);
-    input.signal.throwIfAborted();
   }
 };

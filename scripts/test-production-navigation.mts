@@ -1,8 +1,5 @@
 import { navigationReporterOptions } from "../evals/support/self-reproduction-navigation-command";
-import {
-  ensureProductionNavigationImage,
-  PRODUCTION_NAVIGATION_POSTGRES_IMAGE,
-} from "./production-navigation-image";
+import { ensureProductionNavigationImage } from "./production-navigation-image";
 import { randomBytes } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
@@ -266,7 +263,7 @@ try {
     throw new Error("Missing TLS port.");
   }
   const origin = `https://localhost:${address.port}`;
-  await ensureProductionNavigationImage({
+  const postgresImage = await ensureProductionNavigationImage({
     async runCommand(args, { signal, timeoutMs }) {
       assertRunning();
       try {
@@ -303,7 +300,7 @@ try {
     `POSTGRES_DB=${databaseName}`,
     "--publish",
     "127.0.0.1::5432",
-    PRODUCTION_NAVIGATION_POSTGRES_IMAGE,
+    postgresImage,
   ]);
   const deadline = Date.now() + 60_000;
   while (true) {

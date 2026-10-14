@@ -195,6 +195,25 @@ export const operatorOwnerStoreImportErrorCodeSchema = z.enum([
   "ERR_UNSUPPORTED_ESM_URL_SCHEME",
 ]);
 
+export const maintenanceUriMismatchSchema = z.enum([
+  "url",
+  "protocol",
+  "hostname",
+  "pooled_hostname",
+  "port",
+  "role",
+  "password",
+  "database",
+  "fragment",
+  "tls_mode",
+  "tls_count",
+  "query_keys",
+  "channel_binding_count",
+  "channel_binding_value",
+  "encoding",
+]);
+export type OperatorMaintenanceUriMismatch = z.infer<typeof maintenanceUriMismatchSchema>;
+
 const neonMcpFailureSchema = z.strictObject({
   phase: z.enum([
     "tool_request",
@@ -218,6 +237,7 @@ const neonMcpFailureSchema = z.strictObject({
     ])
     .optional(),
   httpStatus: z.number().int().min(100).max(599).optional(),
+  uriMismatch: z.array(maintenanceUriMismatchSchema).optional(),
 });
 export type OperatorNeonMcpFailure = z.infer<typeof neonMcpFailureSchema>;
 
@@ -475,9 +495,13 @@ export const reportOperatorNeonMcpFailure = (
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- SDK exceptions are untrusted; only own numeric fields enter closed diagnostic schemas.
   error?: unknown,
   sink?: HostedOperatorConsentDiagnosticSink,
+  uriMismatch?: OperatorMaintenanceUriMismatch[],
 ): void => {
   try {
     const failure: OperatorNeonMcpFailure = { phase: failurePhase };
+    if (uriMismatch !== undefined) {
+      failure.uriMismatch = maintenanceUriMismatchSchema.array().parse(uriMismatch);
+    }
     // oxlint-disable-next-line anti-slop/no-unknown-returns -- Keep descriptor values untrusted until the closed numeric schemas below parse them.
     const ownValue = (name: string): unknown => {
       try {

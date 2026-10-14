@@ -231,7 +231,7 @@ beforeAll(async () => {
             databaseName: scope.maintenanceDatabase,
             projectId: scope.projectId,
             roleName: wrongCredential ? "other_role" : scope.maintenanceRole,
-            uri,
+            uri: uri.replace(".", "-pooler."),
           };
         } else {
           res.writeHead(400);

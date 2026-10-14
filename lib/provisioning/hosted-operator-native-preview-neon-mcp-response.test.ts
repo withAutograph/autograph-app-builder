@@ -139,3 +139,85 @@ describe("private Neon MCP connection response", () => {
     );
   });
 });
+
+describe("Neon MCP owned pooler maintenance URI", () => {
+  const pooledUri = credential.uri.replace(scope.hostname, scope.hostname.replace(".", "-pooler."));
+  const options = { allowOwnedPooler: true };
+  it("rejects the SDK's default pooled fixture under the prior policy and normalizes the exact endpoint only for MCP", () => {
+    expect(() => privateMaintenanceUrl(pooledUri, scope)).toThrow();
+    const normalized = new URL(privateMaintenanceUrl(pooledUri, scope, options));
+    expect(normalized.hostname).toBe(scope.hostname);
+    expect(normalized.username).toBe(scope.maintenanceRole);
+    expect(normalized.password).toBe("synthetic-private-password");
+    expect(normalized.pathname).toBe(`/${scope.maintenanceDatabase}`);
+    expect(normalized.searchParams.get("sslmode")).toBe("verify-full");
+    expect(privateMaintenanceUrl(credential.uri, scope, options)).toBe(
+      privateMaintenanceUrl(credential.uri, scope),
+    );
+  });
+
+  it.each([
+    "ep-other-pooler.us-east-1.aws.neon.tech",
+    "ep-synthetic-pooler.us-west-2.aws.neon.tech",
+    "ep-synthetic-pooler.us-east-1.aws.neon.tech.attacker.example",
+    "ep-synthetic-pooler-pooler.us-east-1.aws.neon.tech",
+    "ep-synthetic.us-east-1-pooler.aws.neon.tech",
+  ])("rejects a pooler outside the exact verified endpoint pair", (hostname) => {
+    const invalid = new URL(pooledUri);
+    invalid.hostname = hostname;
+    expect(() => privateMaintenanceUrl(invalid.href, scope, options)).toThrow();
+  });
+
+  it.each([
+    ["role", pooledUri.replace("bootstrap_owner:", "other_role:")],
+    ["database", pooledUri.replace("/neondb?", "/other?")],
+    ["port", pooledUri.replace("/neondb?", ":6543/neondb?")],
+    ["password", pooledUri.replace(":synthetic-private-password@", "@")],
+    ["tls_mode", pooledUri.replace("sslmode=require", "sslmode=disable")],
+    ["tls_count", `${pooledUri}&sslmode=require`],
+    ["query_keys", `${pooledUri}&options=private-provider-input`],
+    ["channel_binding_count", `${pooledUri}&channel_binding=require&channel_binding=require`],
+    ["channel_binding_value", `${pooledUri}&channel_binding=disable`],
+    ["fragment", `${pooledUri}#private-provider-input`],
+  ] as const)("preserves the %s guard and reports only its fixed label", (field, invalidUri) => {
+    const mismatches = vi.fn<(fields: string[]) => void>();
+    expect(() =>
+      privateMaintenanceUrl(invalidUri, scope, { ...options, reportMismatch: mismatches }),
+    ).toThrow(/^Protected native Preview credential is unavailable\.$/u);
+    expect(mismatches).toHaveBeenCalledWith(expect.arrayContaining([field]));
+    expect(JSON.stringify(mismatches.mock.calls)).not.toContain(invalidUri);
+    expect(JSON.stringify(mismatches.mock.calls)).not.toContain("synthetic-private-password");
+  });
+
+  it("reports closed parsing failures and ignores a throwing diagnostic callback", () => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    expect(() =>
+      privateMaintenanceUrl("invalid-private-uri", scope, {
+        ...options,
+        reportMismatch: (fields) => {
+          reportOperatorNeonMcpFailure(
+            "private-owner-session",
+            "credential_uri",
+            undefined,
+            sink,
+            fields,
+          );
+        },
+      }),
+    ).toThrow();
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        neonMcpFailure: { phase: "credential_uri", uriMismatch: ["url"] },
+      }),
+    );
+    expect(JSON.stringify(sink.mock.calls)).not.toContain("invalid-private-uri");
+    expect(() =>
+      privateMaintenanceUrl("invalid-private-uri", scope, {
+        ...options,
+        reportMismatch: () => {
+          throw new Error("private-callback-error");
+        },
+      }),
+    ).toThrow(/^Protected native Preview credential is unavailable\.$/u);
+  });
+});

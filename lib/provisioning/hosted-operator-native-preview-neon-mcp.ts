@@ -406,7 +406,18 @@ const runReader = async <T>(
         throw unavailable();
       }
       try {
-        return privateMaintenanceUrl(credential.uri, scope);
+        return privateMaintenanceUrl(credential.uri, scope, {
+          allowOwnedPooler: true,
+          reportMismatch: (fields) => {
+            reportOperatorNeonMcpFailure(
+              context.target.sessionId,
+              "credential_uri",
+              undefined,
+              deps.diagnosticSink,
+              fields,
+            );
+          },
+        });
       } catch (error) {
         reportCredentialFailure("credential_uri");
         throw error;
