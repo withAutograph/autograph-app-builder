@@ -48,16 +48,53 @@ const installedStatus = z.discriminatedUnion("state", [
     version: z.literal(1),
   }),
 ]);
+/* oxlint-disable sonarjs/max-union-size -- Closed recovery stages and concrete reasons diagnose actual operations without untrusted payloads. */
+export interface SchemaPredecessorRecovery {
+  stage: "probe" | "receipt" | "retained-lookup" | "match" | "restore";
+  reason:
+    | "command-failed"
+    | "execution-failed"
+    | "invalid-receipt"
+    | "app-mismatch"
+    | "lookup-failed"
+    | "missing-history"
+    | "artifact-mismatch"
+    | "invalid-release-path"
+    | "write-failed";
+  command?: string;
+  exitCode?: number | null;
+}
+/* oxlint-enable sonarjs/max-union-size */
+const recoveryProblem = (recovery: SchemaPredecessorRecovery | undefined): string => {
+  if (recovery === undefined || recovery.reason === "missing-history") {
+    return "The exact installed schema predecessor is unavailable under this app's current owner and saved session. Restore its previously recorded immutable compiled release or owned source history; do not reconstruct its bytes or replace its database.";
+  }
+  const problems: Record<SchemaPredecessorRecovery["stage"], string> = {
+    match:
+      "The retained compiled release does not match the exact installed release identity and artifact hash. Restore the matching immutable release; do not guess its bytes or replace its database.",
+    probe:
+      "The installed-runtime observation command failed before schema compilation. Restore private runtime command execution, then retry this saved app; this failure does not establish missing artifact history.",
+    receipt:
+      "The installed-runtime observation returned an invalid or mismatched installation receipt before schema compilation. Restore a valid receipt for this app, then retry.",
+    restore:
+      "Restoring the exact retained schema predecessor into the private checkout failed. Restore its writable checkout and exact release path before compiling; do not replace its database.",
+    "retained-lookup":
+      "The retained compiled release lookup failed under the current owner and saved session. Restore private artifact access, then retry; this failure does not establish missing artifact history.",
+  };
+  return problems[recovery.stage];
+};
 export class SchemaPredecessorError extends Error {
   readonly code: "canonical_schema_predecessor_unavailable" | "schema_release_identity_reused";
-  constructor(code: SchemaPredecessorError["code"]) {
+  readonly recovery?: SchemaPredecessorRecovery;
+  constructor(code: SchemaPredecessorError["code"], recovery?: SchemaPredecessorRecovery) {
     super(
       code === "schema_release_identity_reused"
         ? "The installed release ID already belongs to different schema bytes. Author a new schema release ID in the accepted app source, then compile and validate again. The exact installed checked release has been restored."
-        : "The exact installed schema predecessor is unavailable under this app's current owner and saved session. Restore its previously recorded immutable compiled release or owned source history; do not reconstruct its bytes or replace its database.",
+        : recoveryProblem(recovery),
     );
     this.name = "SchemaPredecessorError";
     this.code = code;
+    this.recovery = recovery;
   }
 }
 export interface CanonicalSchemaPredecessor {
@@ -86,15 +123,26 @@ export const restoreCanonicalCheckedRelease = async (input: {
     path.posix.normalize(releaseRoot) !== releaseRoot ||
     !releaseRoot.startsWith(prefix)
   ) {
-    throw new SchemaPredecessorError("canonical_schema_predecessor_unavailable");
-  }
-  await runSequentially(Object.entries(input.predecessor.files), async ([member, content]) => {
-    await input.sandbox.writeBinaryFile({
-      abortSignal: input.signal,
-      content,
-      path: `${relativeRoot}/${releaseRoot}/${member}`,
+    throw new SchemaPredecessorError("canonical_schema_predecessor_unavailable", {
+      reason: "invalid-release-path",
+      stage: "restore",
     });
-  });
+  }
+  try {
+    await runSequentially(Object.entries(input.predecessor.files), async ([member, content]) => {
+      await input.sandbox.writeBinaryFile({
+        abortSignal: input.signal,
+        content,
+        path: `${relativeRoot}/${releaseRoot}/${member}`,
+      });
+    });
+  } catch {
+    input.signal?.throwIfAborted();
+    throw new SchemaPredecessorError("canonical_schema_predecessor_unavailable", {
+      reason: "write-failed",
+      stage: "restore",
+    });
+  }
 };
 
 /** A real local installation identifies its exact canonical compiler input; labels alone cannot select history. */
@@ -104,18 +152,50 @@ export const prepareCanonicalSchemaPredecessorsForSession = async (
   const selectedApp = appId.parse(input.appId);
   const environmentFile = localRuntimeEnvironmentPath(input.root, selectedApp);
   const directory = path.posix.dirname(environmentFile);
-  const observed = await input.sandbox.run({
-    abortSignal: input.signal,
-    command: `mise run app:runtime installed ${selectedApp} local`,
-    env: { APP_RUNTIME_STATE_DIR: directory },
-    workingDirectory: input.root,
-  });
-  if (observed.exitCode !== 0) {
-    throw new SchemaPredecessorError("canonical_schema_predecessor_unavailable");
+  const command = `mise run app:runtime installed ${selectedApp} local`;
+  let observed;
+  try {
+    observed = await input.sandbox.run({
+      abortSignal: input.signal,
+      command,
+      env: { APP_RUNTIME_STATE_DIR: directory },
+      workingDirectory: input.root,
+    });
+  } catch {
+    input.signal?.throwIfAborted();
+    throw new SchemaPredecessorError("canonical_schema_predecessor_unavailable", {
+      command,
+      exitCode: null,
+      reason: "execution-failed",
+      stage: "probe",
+    });
   }
-  const receipt = installedStatus.parse(JSON.parse(observed.stdout));
+  if (observed.exitCode !== 0) {
+    throw new SchemaPredecessorError("canonical_schema_predecessor_unavailable", {
+      command,
+      exitCode: observed.exitCode,
+      reason: "command-failed",
+      stage: "probe",
+    });
+  }
+  let receipt;
+  try {
+    receipt = installedStatus.parse(JSON.parse(observed.stdout));
+  } catch {
+    throw new SchemaPredecessorError("canonical_schema_predecessor_unavailable", {
+      command,
+      exitCode: 0,
+      reason: "invalid-receipt",
+      stage: "receipt",
+    });
+  }
   if (receipt.appId !== selectedApp) {
-    throw new SchemaPredecessorError("canonical_schema_predecessor_unavailable");
+    throw new SchemaPredecessorError("canonical_schema_predecessor_unavailable", {
+      command,
+      exitCode: 0,
+      reason: "app-mismatch",
+      stage: "receipt",
+    });
   }
   if (receipt.state === "not-prepared") {
     return { environment: {}, predecessors: [] };
@@ -144,15 +224,32 @@ export const prepareCanonicalSchemaPredecessorsForSession = async (
       retained === undefined
         ? { releaseId: installation.releaseId, schemaSha256: installation.baseArtifactHash }
         : { artifactRef: retained.artifactRef };
-    const predecessor = await readExactCompiledOperatorReleaseForSession({ ...input, lookup });
+    let predecessor;
+    try {
+      predecessor = await readExactCompiledOperatorReleaseForSession({ ...input, lookup });
+    } catch {
+      input.signal?.throwIfAborted();
+      throw new SchemaPredecessorError("canonical_schema_predecessor_unavailable", {
+        reason: "lookup-failed",
+        stage: "retained-lookup",
+      });
+    }
+    if (predecessor === undefined) {
+      throw new SchemaPredecessorError("canonical_schema_predecessor_unavailable", {
+        reason: "missing-history",
+        stage: "retained-lookup",
+      });
+    }
     if (
-      predecessor === undefined ||
       predecessor.selection.releaseId !== installation.releaseId ||
       predecessor.selection.schemaSha256 !== installation.baseArtifactHash ||
       createHash("sha256").update(predecessor.files["app-artifact.json"]).digest("hex") !==
         installation.baseArtifactHash
     ) {
-      throw new SchemaPredecessorError("canonical_schema_predecessor_unavailable");
+      throw new SchemaPredecessorError("canonical_schema_predecessor_unavailable", {
+        reason: "artifact-mismatch",
+        stage: "match",
+      });
     }
     rememberCanonicalSchemaRelease(predecessor.selection);
     const file = path.posix.join(
@@ -163,19 +260,30 @@ export const prepareCanonicalSchemaPredecessorsForSession = async (
       installation.baseArtifactHash,
       "app-artifact.json",
     );
-    await input.sandbox.writeBinaryFile({
-      abortSignal: input.signal,
-      content: predecessor.files["app-artifact.json"],
-      path: file,
-    });
-    paths.push(path.posix.join("/workspace", file));
-    await restoreCanonicalCheckedRelease({
-      appId: selectedApp,
-      predecessor,
-      root: input.root,
-      sandbox: input.sandbox,
-      signal: input.signal,
-    });
+    try {
+      await input.sandbox.writeBinaryFile({
+        abortSignal: input.signal,
+        content: predecessor.files["app-artifact.json"],
+        path: file,
+      });
+      paths.push(path.posix.join("/workspace", file));
+      await restoreCanonicalCheckedRelease({
+        appId: selectedApp,
+        predecessor,
+        root: input.root,
+        sandbox: input.sandbox,
+        signal: input.signal,
+      });
+    } catch (error) {
+      input.signal?.throwIfAborted();
+      if (error instanceof SchemaPredecessorError) {
+        throw error;
+      }
+      throw new SchemaPredecessorError("canonical_schema_predecessor_unavailable", {
+        reason: "write-failed",
+        stage: "restore",
+      });
+    }
     predecessors.push(predecessor);
   });
   return {

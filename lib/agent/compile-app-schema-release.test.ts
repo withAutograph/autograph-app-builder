@@ -185,4 +185,73 @@ describe("private app schema release compilation", () => {
     });
     expect(result.stderr).toBe(detail);
   });
+
+  it.each([
+    {
+      command: "mise run app:runtime installed spend-review local",
+      exitCode: 7,
+      reason: "command-failed" as const,
+      stage: "probe" as const,
+    },
+    {
+      command: "mise run app:runtime installed spend-review local",
+      exitCode: 0,
+      reason: "invalid-receipt" as const,
+      stage: "receipt" as const,
+    },
+    { reason: "missing-history" as const, stage: "retained-lookup" as const },
+    { reason: "artifact-mismatch" as const, stage: "match" as const },
+    { reason: "write-failed" as const, stage: "restore" as const },
+  ])(
+    "reports predecessor recovery $stage without claiming the app compiler ran",
+    async (recovery) => {
+      hooks.predecessor.mockRejectedValue(
+        new SchemaPredecessorError("canonical_schema_predecessor_unavailable", recovery),
+      );
+      const sandbox = { run: vi.fn(), writeBinaryFile: vi.fn() };
+      const ctx = {
+        abortSignal: new AbortController().signal,
+        callId: "predecessor-diagnostic",
+        getSandbox: async () => await Promise.resolve(sandbox),
+        session: { auth: { owned: "private-session" }, id: "saved-private-session" },
+      };
+      // SAFETY: The existing identity defineTool fixture exposes the real execute method; every consumed context field is supplied.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The production compile tool never reads other Eve context fields in this fixture.
+      const result = await compileTool.execute({}, ctx as never);
+      expect(result).toMatchObject({
+        code: "canonical_schema_predecessor_unavailable",
+        command: "command" in recovery ? recovery.command : null,
+        compilerExecuted: false,
+        exitCode: "exitCode" in recovery ? recovery.exitCode : null,
+        recovery,
+        status: "failed",
+        stderr: "",
+        stdout: "",
+      });
+      expect(sandbox.run).not.toHaveBeenCalled();
+      expect(sandbox.writeBinaryFile).not.toHaveBeenCalled();
+      expect(hooks.publish).not.toHaveBeenCalled();
+      expect(JSON.stringify(result)).not.toContain("private-session");
+    },
+  );
+  it("retains restoration diagnostics after the compiler has actually completed", async () => {
+    const recovery = { reason: "write-failed" as const, stage: "restore" as const };
+    const result = await compileAppSchemaRelease({
+      appId: "spend-review",
+      onCompiled: async () => {
+        await Promise.reject(
+          new SchemaPredecessorError("canonical_schema_predecessor_unavailable", recovery),
+        );
+      },
+      root: "/workspace/repository",
+      sandbox: { run: vi.fn().mockResolvedValue({ exitCode: 0, stderr: "", stdout: "compiled" }) },
+    });
+    expect(result).toMatchObject({
+      command: "mise run app:compile spend-review",
+      compilerExecuted: true,
+      exitCode: 0,
+      recovery,
+      status: "failed",
+    });
+  });
 });

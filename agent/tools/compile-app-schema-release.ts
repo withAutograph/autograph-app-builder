@@ -78,8 +78,10 @@ export const compileAppSchemaRelease = async (input: {
           return {
             code: error.code,
             command,
+            compilerExecuted: true,
             exitCode: 0,
             problem: error.message,
+            recovery: error.recovery,
             status: "failed" as const,
             stderr,
             stdout,
@@ -170,12 +172,15 @@ export default defineTool({
     } catch (error) {
       return {
         code: "canonical_schema_predecessor_unavailable" as const,
-        command: appSchemaReleaseCommand(session.appId),
-        exitCode: null,
+        command: error instanceof SchemaPredecessorError ? (error.recovery?.command ?? null) : null,
+        compilerExecuted: false,
+        exitCode:
+          error instanceof SchemaPredecessorError ? (error.recovery?.exitCode ?? null) : null,
         problem:
           error instanceof SchemaPredecessorError
             ? error.message
             : "The installed schema predecessor could not be read and restored under current owner/session authority. Retry this saved app after restoring its exact runtime and retained compiled artifact access.",
+        recovery: error instanceof SchemaPredecessorError ? error.recovery : undefined,
         status: "failed" as const,
         stderr: "",
         stdout: "",
