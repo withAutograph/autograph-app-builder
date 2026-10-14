@@ -49,6 +49,23 @@ const capturedActors = () => ({
 });
 
 describe("private normal actor browser state", () => {
+  it("preserves a captured parent Domain cookie without treating host-only cookies as parent-scoped", () => {
+    const captured = capturedActors();
+    const storage = z
+      .looseObject({
+        cookies: z.array(z.looseObject({ domain: z.string() })),
+      })
+      .parse(JSON.parse(captured.files["member.storage.json"]));
+    storage.cookies[0].domain = ".example.test";
+    captured.files["member.storage.json"] = JSON.stringify(storage);
+    const prepared = normalActorBrowserFiles(captured, "/private-state", captured.origin);
+    expect(prepared.files[0]?.content).toBe(captured.files["member.storage.json"]);
+    storage.cookies[0].domain = "example.test";
+    captured.files["member.storage.json"] = JSON.stringify(storage);
+    expect(() => normalActorBrowserFiles(captured, "/private-state", captured.origin)).toThrow(
+      "normal_actor_browser_origin_mismatch",
+    );
+  });
   it("keeps actual captured bytes and maps the identities manifest to private runtime files", () => {
     const captured = capturedActors();
     const prepared = normalActorBrowserFiles(captured, "/private-state", captured.origin);

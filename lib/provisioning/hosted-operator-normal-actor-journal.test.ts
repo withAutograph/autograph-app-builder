@@ -131,7 +131,7 @@ const normalCookie = {
   sameSite: "Lax" as const,
   hostOnly: true,
 };
-const fixture = () => {
+const fixture = (selectedPreparation = preparationInput) => {
   let row: HostedRuntimeJournalRow = {
     revision: 1,
     record: hostedRuntimeJournalRecordSchema.parse({
@@ -145,8 +145,8 @@ const fixture = () => {
       operator: {
         mode: "protected-operator-v1",
         operationRef: accountOperationRef,
-        plan,
-        planDigest: operatorPlanDigest(plan),
+        plan: selectedPreparation.accountPlan,
+        planDigest: selectedPreparation.accountPlanDigest,
         approvalId: "initial-approval",
         receipts: [],
       },
@@ -180,7 +180,7 @@ const fixture = () => {
       if (
         !approved ||
         preparation.accountApprovalId !== "initial-approval" ||
-        preparation.accountPlanDigest !== preparationInput.accountPlanDigest ||
+        preparation.accountPlanDigest !== selectedPreparation.accountPlanDigest ||
         preparation.accountOperationRef !== accountOperationRef
       ) {
         throw new Error("approval_revoked");
@@ -238,6 +238,56 @@ const fixture = () => {
 };
 
 describe("retained actual normal actor journal", () => {
+  it("waits for every approved organization session before recording account completion", async () => {
+    const selectedProgram = normalActorProgramSchema.parse({
+      ...program,
+      organizations: [
+        { organizationId: "org-one", ownerActorKey: "owner", name: "One", slug: "one" },
+      ],
+      memberships: [{ actorKey: "owner", organizationId: "org-one", role: "owner" }],
+    });
+    const selectedPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      normalActorProgram: selectedProgram,
+    });
+    const selectedPreparation = {
+      ...preparationInput,
+      program: selectedProgram,
+      programDigest: normalActorProgramDigest(selectedProgram),
+      accountPlan: selectedPlan,
+      accountPlanDigest: operatorPlanDigest(selectedPlan),
+    };
+    const value = fixture(selectedPreparation);
+    await value.journal.retain(context, selectedPreparation);
+    const state = initialNormalActorState(selectedProgram, accountOperationRef);
+    const session = {
+      reference: "22222222-2222-4222-8222-222222222222",
+      actorId: "actual-actor",
+      realmSessionId: "base-session",
+      origin: program.origin,
+      expiresAt: "2030-01-01T00:00:00.000Z",
+    };
+    const storageState = { cookies: [], origins: [] };
+    state.actors = [{ actorKey: "owner", signup: "complete", session, storageState }];
+    const baseOnly = await value.journal.checkpoint(context, state);
+    expect(baseOnly.accountsCompletedAt).toBeUndefined();
+    state.organizationSessions = [
+      {
+        actorKey: "owner",
+        organizationId: "org-one",
+        selection: "pending",
+        session: {
+          ...session,
+          reference: "55555555-5555-4555-8555-555555555555",
+          realmSessionId: "org-session",
+        },
+        storageState,
+      },
+    ];
+    const allSessions = await value.journal.checkpoint(context, state);
+    expect(allSessions.accountsCompletedAt).toBeDefined();
+  });
+
   it("keeps the original account approval and encryption scope across app replanning and CAS retry", async () => {
     const value = fixture();
     value.conflictOnce();

@@ -44,7 +44,12 @@ export const normalActorBrowserFiles = (
         throw new Error("normal_actor_browser_state_invalid");
       }
       if (
-        storage.cookies.some((cookie) => cookie.domain.replace(/^\./u, "") !== hostname) ||
+        storage.cookies.some((cookie) => {
+          const domain = cookie.domain.replace(/^\./u, "");
+          return cookie.domain.startsWith(".")
+            ? hostname !== domain && !hostname.endsWith(`.${domain}`)
+            : hostname !== domain;
+        }) ||
         storage.origins.some((entry) => entry.origin !== browserOrigin)
       ) {
         throw new Error("normal_actor_browser_origin_mismatch");

@@ -162,6 +162,24 @@ const captureReference = (
   return capture.reference;
 };
 
+const hasOrganizationAccountSessions = (
+  preparation: NormalActorAccountPreparation,
+  state: NormalActorState,
+) => {
+  const accountActorIds = new Map(
+    state.actors.map((actor) => [actor.actorKey, actor.session?.actorId]),
+  );
+  return preparation.program.memberships.every(
+    (membership) =>
+      state.organizationSessions?.some(
+        (candidate) =>
+          candidate.actorKey === membership.actorKey &&
+          candidate.organizationId === membership.organizationId &&
+          accountActorIds.get(candidate.actorKey) === candidate.session.actorId,
+      ) === true,
+  );
+};
+
 /** Actual owner journal CAS; raw normal sessions are decrypted only in this private capability. */
 export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
   const read = async (context: HostedOperatorContext) => {
@@ -275,12 +293,14 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
           state,
           preparation.accountOperationRef,
         );
-        const complete = checked.actors.every(
+        const baseAccountsComplete = checked.actors.every(
           (actor) =>
             actor.signup === "complete" &&
             actor.session !== undefined &&
             actor.storageState !== undefined,
         );
+        const organizationSessionsComplete = hasOrganizationAccountSessions(preparation, checked);
+        const complete = baseAccountsComplete && organizationSessionsComplete;
         const next = {
           ...preparation,
           sealedState: encryptNormalActorState({
