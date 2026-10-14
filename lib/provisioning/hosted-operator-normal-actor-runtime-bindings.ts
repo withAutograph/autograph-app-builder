@@ -54,6 +54,7 @@ export const createNormalActorRuntimeBindings = (
     if (
       [
         normalActorProgramDigest(input.plan.normalActorProgram) === preparation.programDigest,
+        frozen.programDigest === preparation.programDigest,
         frozen.accountOperationRef === preparation.accountOperationRef,
         frozen.accountPlanDigest === preparation.accountPlanDigest,
         frozen.accountApprovalId === preparation.accountApprovalId,
