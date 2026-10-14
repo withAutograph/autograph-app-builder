@@ -11,6 +11,7 @@ import { AnonymousBuilder } from "./anonymous-builder";
 import { AuthenticatedBuilder as AppBuilderComponent } from "./authenticated-builder";
 import { Header } from "./builder-shell";
 import * as draftOutbox from "./builder-draft-outbox";
+import * as draftAutosave from "./use-builder-draft-autosave";
 import styles from "./app-builder.module.css";
 import type { BuilderDraftPageData } from "../../lib/builder-drafts/contracts";
 
@@ -291,6 +292,42 @@ const waitForFrame = () => {
   return frame.promise;
 };
 
+const remoteDraft = (revision: number, brief: string): BuilderDraftPageData => ({
+  draftId: "d1210e56-ded0-436d-a6b8-ae96ddec17e0",
+  record: {
+    draft: {
+      appNameEditedByUser: true,
+      connectedConnections: [],
+      focusOrigin: "github",
+      form: {
+        appName: "Remote App",
+        brief,
+        buildDestination: "codex",
+        connections: [],
+        modelId: "openai/gpt-6-luna",
+        privateRepository: true,
+        repository: "remote-app",
+      },
+      gitScope: "101",
+      model: "openai/gpt-6-luna",
+      repositoryEditedByUser: true,
+      search: "",
+      showMoreConnections: false,
+      team: "vercel-pylee",
+      version: 1,
+      zdrOnly: false,
+    },
+    version: 1,
+  },
+  revision,
+  updatedAt: `2030-01-01T00:00:0${revision}.000Z`,
+});
+
+const changeVisibility = (value: "hidden" | "visible") => {
+  Object.defineProperty(document, "visibilityState", { configurable: true, value });
+  document.dispatchEvent(new Event("visibilitychange"));
+};
+
 afterEach(async () => {
   vi.useRealTimers();
   if (root) {
@@ -315,6 +352,168 @@ afterEach(async () => {
 });
 
 describe("Vercel-faithful App Builder flow", () => {
+  it("preserves edits when a restarted effect joins an older draft read", async () => {
+    vi.useFakeTimers();
+    const useActualAutosave = draftAutosave.useBuilderDraftAutosave;
+    let restartEffect = false;
+    let restartedDiscard: ReturnType<typeof useActualAutosave>["discardSupersededByRemoteRevision"];
+    vi.spyOn(draftAutosave, "useBuilderDraftAutosave").mockImplementation((options) => {
+      const autosave = useActualAutosave(options);
+      if (!restartEffect) {
+        return autosave;
+      }
+      restartedDiscard ??= (revision) => autosave.discardSupersededByRemoteRevision(revision);
+      return { ...autosave, discardSupersededByRemoteRevision: restartedDiscard };
+    });
+    const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
+    builderActions.loadActiveBuilderDraft
+      .mockImplementationOnce(() => pending.promise)
+      .mockResolvedValueOnce(remoteDraft(3, "Fresh remote brief.") as never);
+    // oxlint-disable-next-line eslint/require-await -- Preserve the Server Action test interface.
+    builderActions.saveActiveBuilderDraft.mockImplementation(async (input) => ({
+      draftId: input.draftId,
+      revision: input.expectedRevision + 1,
+      updatedAt: "2030-01-01T00:00:01.000Z",
+    }));
+    const view = await render(<AppBuilder authenticated />);
+    const brief = requireElement(view.querySelector<HTMLTextAreaElement>("#app-brief"));
+    // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    await fill(brief, "Newer local edit.");
+    // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
+    await act(async () => vi.advanceTimersByTimeAsync(500));
+    restartEffect = true;
+    // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
+    await act(async () => root?.render(<AppBuilder authenticated />));
+    // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    expect(builderActions.loadActiveBuilderDraft).toHaveBeenCalledTimes(1);
+    // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
+    await act(async () => pending.resolve(remoteDraft(2, "Stale remote brief.")));
+    expect(brief.value).toBe("Newer local edit.");
+    // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    expect(builderActions.loadActiveBuilderDraft).toHaveBeenCalledTimes(2);
+    expect(brief.value).toBe("Fresh remote brief.");
+  });
+
+  it("coalesces slow draft polls through timer ticks and rerenders", async () => {
+    vi.useFakeTimers();
+    const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
+    builderActions.loadActiveBuilderDraft.mockImplementationOnce(() => pending.promise);
+    await render(<AppBuilder authenticated />);
+    // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    expect(builderActions.loadActiveBuilderDraft).toHaveBeenCalledTimes(1);
+    // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
+    await act(async () => root?.render(<AppBuilder authenticated />));
+    // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
+    await act(async () => vi.advanceTimersByTimeAsync(30_000));
+    expect(builderActions.loadActiveBuilderDraft).toHaveBeenCalledTimes(1);
+    // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
+    await act(async () => pending.resolve(globalThis.undefined));
+    // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    expect(builderActions.loadActiveBuilderDraft).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves edits made while remote outbox reconciliation is pending", async () => {
+    vi.useFakeTimers();
+    const useActualAutosave = draftAutosave.useBuilderDraftAutosave;
+    const reconciliation = Promise.withResolvers<null>();
+    const enteredReconciliation = vi.fn();
+    let delayedDiscard: ReturnType<typeof useActualAutosave>["discardSupersededByRemoteRevision"];
+    vi.spyOn(draftAutosave, "useBuilderDraftAutosave").mockImplementation((options) => {
+      const autosave = useActualAutosave(options);
+      delayedDiscard ??= async (revision) => {
+        const discarded = await autosave.discardSupersededByRemoteRevision(revision);
+        enteredReconciliation();
+        await reconciliation.promise;
+        return discarded;
+      };
+      return { ...autosave, discardSupersededByRemoteRevision: delayedDiscard };
+    });
+    builderActions.loadActiveBuilderDraft.mockResolvedValueOnce(
+      remoteDraft(2, "Remote brief before the local edit.") as never,
+    );
+    const view = await render(<AppBuilder authenticated />);
+    const brief = requireElement(view.querySelector<HTMLTextAreaElement>("#app-brief"));
+    // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    expect(enteredReconciliation).toHaveBeenCalledTimes(1);
+    await fill(brief, "Local edit during outbox work.");
+    // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
+    await act(async () => reconciliation.resolve(null));
+    expect(brief.value).toBe("Local edit during outbox work.");
+  });
+
+  it("coalesces visibility events while preserving a fresh read after return", async () => {
+    const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
+    builderActions.loadActiveBuilderDraft
+      .mockImplementationOnce(() => pending.promise)
+      .mockResolvedValueOnce(remoteDraft(3, "Newest remote brief.") as never);
+    const view = await render(<AppBuilder authenticated />);
+    // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
+    await act(async () => {
+      changeVisibility("hidden");
+      changeVisibility("visible");
+      changeVisibility("visible");
+      changeVisibility("hidden");
+      changeVisibility("visible");
+      changeVisibility("visible");
+    });
+    expect(builderActions.loadActiveBuilderDraft).toHaveBeenCalledTimes(1);
+    // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
+    await act(async () => pending.resolve(remoteDraft(2, "Older remote brief.")));
+    expect(builderActions.loadActiveBuilderDraft).toHaveBeenCalledTimes(2);
+    expect(requireElement(view.querySelector<HTMLTextAreaElement>("#app-brief")).value).toBe(
+      "Newest remote brief.",
+    );
+    // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
+    await act(async () => changeVisibility("visible"));
+    expect(builderActions.loadActiveBuilderDraft).toHaveBeenCalledTimes(2);
+  });
+
+  it("releases a failed draft read so the next poll retries normally", async () => {
+    vi.useFakeTimers();
+    const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
+    builderActions.loadActiveBuilderDraft
+      .mockImplementationOnce(() => pending.promise)
+      .mockResolvedValueOnce(remoteDraft(2, "Recovered remote brief.") as never);
+    const view = await render(<AppBuilder authenticated />);
+    // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
+    await act(async () => pending.reject(new Error("read-unavailable")));
+    // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    expect(builderActions.loadActiveBuilderDraft).toHaveBeenCalledTimes(2);
+    expect(requireElement(view.querySelector<HTMLTextAreaElement>("#app-brief")).value).toBe(
+      "Recovered remote brief.",
+    );
+  });
+
+  it("does not refresh or apply a pending draft after unmount", async () => {
+    vi.useFakeTimers();
+    const pending = Promise.withResolvers<BuilderDraftPageData | undefined>();
+    builderActions.loadActiveBuilderDraft.mockImplementationOnce(() => pending.promise);
+    await render(<AppBuilder authenticated />);
+    // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
+    await act(async () => {
+      changeVisibility("hidden");
+      changeVisibility("visible");
+      root?.unmount();
+      root = undefined;
+    });
+    // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
+    await act(async () => pending.resolve(remoteDraft(2, "Late remote brief.")));
+    // oxlint-disable-next-line eslint/require-await -- React act flushes queued async updates.
+    await act(async () => vi.advanceTimersByTimeAsync(30_000));
+    expect(builderActions.loadActiveBuilderDraft).toHaveBeenCalledTimes(1);
+  });
+
   it("hides Coming soon elements by default", async () => {
     const view = await render(<AppBuilderComponent integrations={integrationState} />);
 

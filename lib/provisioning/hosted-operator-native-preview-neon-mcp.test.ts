@@ -308,15 +308,23 @@ const fixtureFetch: typeof fetch = async (input, init) => {
 const fixture = (
   ioOverrides: Partial<NonNullable<PreviewNeonMcpDependencies["io"]>> = {},
   diagnosticSink?: HostedOperatorConsentDiagnosticSink,
+  useLocalPlanningOwner = false,
 ) => {
   vi.stubGlobal("fetch", fixtureFetch);
+  const events: string[] = [];
+  const planningOwner = vi.fn(async () => {
+    events.push("local-owner");
+    await Promise.resolve();
+  });
   const approved = vi.fn(async () => {
     await Promise.resolve();
   });
   const planning = vi.fn(async () => {
+    events.push("provider-scope");
     await Promise.resolve();
   });
   const owner = vi.fn(async () => {
+    events.push("native-store");
     await Promise.resolve();
     return {
       configurationId: configuration.nativeStore.configurationId,
@@ -330,7 +338,18 @@ const fixture = (
     await Promise.resolve();
   });
   const io: NonNullable<PreviewNeonMcpDependencies["io"]> = {
-    createAuthProvider: connectAuthProvider,
+    createAuthProvider: (...args) => {
+      const broker = connectAuthProvider(...args);
+      return {
+        ...broker,
+        tokens: async () => {
+          events.push("token-start");
+          const tokens = await broker.tokens();
+          events.push("token-end");
+          return tokens;
+        },
+      };
+    },
     createClient: async (config) => {
       if (!("url" in config.transport)) {
         throw new Error("Unexpected fixture transport");
@@ -344,9 +363,22 @@ const fixture = (
       close.mockImplementation(async () => {
         await client.close();
       });
-      return { callTool: client.callTool.bind(client), close };
+      return {
+        callTool: async (
+          input: Parameters<Awaited<ReturnType<typeof createMCPClient>>["callTool"]>[0],
+        ) => {
+          events.push(`tool-start:${input.name}`);
+          const result = await client.callTool(input);
+          events.push(`tool-end:${input.name}`);
+          return result;
+        },
+        close,
+      };
     },
-    getOidc: async () => await Promise.resolve(projectOidc),
+    getOidc: async () => {
+      events.push("oidc-start");
+      return await Promise.resolve(projectOidc);
+    },
     readSqlIdentity: async (privateUrl) => {
       expect(privateUrl).toContain("sslmode=verify-full");
       return await Promise.resolve({
@@ -355,17 +387,21 @@ const fixture = (
       });
     },
     verifyOidc: async () => {
+      events.push("oidc-end");
       await Promise.resolve();
     },
   };
   return {
     approved,
     close,
+    events,
     owner,
+    planningOwner,
     planning,
     reader: createPreviewNeonMcpReader({
       assertApprovedScope: approved,
       assertPlanningScope: planning,
+      assertPlanningOwner: useLocalPlanningOwner ? planningOwner : undefined,
       configuration,
       diagnosticSink,
       io: { ...io, ...ioOverrides },
@@ -558,6 +594,106 @@ describe("private Neon reader failure diagnostics", () => {
       /^Protected Preview Neon MCP credential is unavailable\.$/u,
     );
     expect(called).toEqual([]);
+  });
+});
+
+describe("metadata owner observation boundaries", () => {
+  it("freshly checks full provider scope around each observation and local ownership around every tool and token", async () => {
+    const f = fixture({}, undefined, true);
+    await expect(f.reader.inspectPlanningTarget(context, scope)).resolves.toEqual({
+      initSource: "schema-only",
+      scope,
+    });
+    expect(f.planning).toHaveBeenCalledTimes(2);
+    expect(f.owner).toHaveBeenCalledTimes(2);
+    expect(f.events.slice(0, 2)).toEqual(["provider-scope", "native-store"]);
+    expect(f.events.slice(-2)).toEqual(["provider-scope", "native-store"]);
+    for (const [index, event] of f.events.entries()) {
+      if (event.startsWith("tool-start:") || event === "token-start" || event === "oidc-start") {
+        expect(f.events[index - 1]).toBe("local-owner");
+      }
+      if (event.startsWith("tool-end:") || event === "token-end" || event === "oidc-end") {
+        expect(f.events[index + 1]).toBe("local-owner");
+      }
+    }
+    expect(f.events).toContain("token-start");
+    expect(f.events).toContain("oidc-start");
+    expect(f.planningOwner).toHaveBeenCalledWith(context, scope, configuration.nativeStore);
+    expect(f.approved).not.toHaveBeenCalled();
+    expect(called.some((call) => call.name === "get_connection_string")).toBe(false);
+    await f.reader.inspectPlanningTarget(context, scope);
+    expect(f.planning).toHaveBeenCalledTimes(4);
+    expect(f.owner).toHaveBeenCalledTimes(4);
+  });
+
+  it("denies metadata when final provider ownership is revoked", async () => {
+    const f = fixture({}, undefined, true);
+    f.planning
+      .mockImplementationOnce(async () => {
+        await Promise.resolve();
+      })
+      .mockRejectedValueOnce(new Error("revoked"));
+    await expect(f.reader.inspectPlanningTarget(context, scope)).rejects.toThrow(
+      /^Protected Preview Neon MCP credential is unavailable\.$/u,
+    );
+    expect(called.map((call) => call.name)).toContain("get_postgres_role");
+    expect(f.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("denies metadata when the final native binding changes", async () => {
+    const f = fixture({}, undefined, true);
+    f.owner
+      .mockResolvedValueOnce({
+        configurationId: configuration.nativeStore.configurationId,
+        neonProjectId: scope.projectId,
+        ownerId: "team-owner",
+        resourceId: configuration.nativeStore.resourceId,
+        vercelProjectId: configuration.nativeStore.sourceProjectId,
+      })
+      .mockRejectedValueOnce(new Error("binding revoked"));
+    await expect(f.reader.inspectPlanningTarget(context, scope)).rejects.toThrow();
+    expect(called.map((call) => call.name)).toContain("get_postgres_role");
+    expect(f.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("denies a revoked local owner before obtaining tokens or tools", async () => {
+    const f = fixture({}, undefined, true);
+    f.planningOwner.mockRejectedValue(new Error("revoked"));
+    await expect(f.reader.inspectPlanningTarget(context, scope)).rejects.toThrow();
+    expect(f.planning).toHaveBeenCalledTimes(1);
+    expect(called).toEqual([]);
+    expect(f.events).not.toContain("token-start");
+  });
+
+  it("denies metadata when local ownership is revoked during a tool call", async () => {
+    const f = fixture({}, undefined, true);
+    f.planningOwner.mockImplementation(async () => {
+      await Promise.resolve();
+      if (called.some((call) => call.name === "get_postgres_role")) {
+        throw new Error("revoked during observation");
+      }
+    });
+    await expect(f.reader.inspectPlanningTarget(context, scope)).rejects.toThrow();
+    expect(called.at(-1)?.name).toBe("get_postgres_role");
+    expect(f.planning).toHaveBeenCalledTimes(1);
+    expect(f.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains approved scope and native binding checks for credential acquisition", async () => {
+    const f = fixture({}, undefined, true);
+    f.planningOwner.mockRejectedValue(new Error("metadata guard cannot grant credentials"));
+    await expect(
+      f.reader.withMaintenanceCredential(
+        context,
+        scope,
+        async () => await Promise.resolve("ready"),
+      ),
+    ).resolves.toBe("ready");
+    expect(f.planningOwner).not.toHaveBeenCalled();
+    expect(f.planning).not.toHaveBeenCalled();
+    expect(f.approved.mock.calls.length).toBeGreaterThan(2);
+    expect(f.owner).toHaveBeenCalledTimes(f.approved.mock.calls.length);
+    expect(called.at(-1)?.name).toBe("get_connection_string");
   });
 });
 

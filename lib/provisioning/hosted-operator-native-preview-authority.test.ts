@@ -291,6 +291,179 @@ const fixture = () => {
     store,
   };
 };
+describe("native Preview canonical planning owner", () => {
+  const planningFixture = () => {
+    const f = fixture();
+    const assertPlanningAuthorized = vi.fn(async () => {
+      await Promise.resolve();
+    });
+    const assertCanonicalOwner = vi.fn(async () => {
+      await f.controlPlane.assertAuthorized(f.effect);
+    });
+    const reader = createNativePreviewNeonPlanningAuthority({
+      context: f.effect,
+      controlPlane: {
+        assertPlanningAuthorized,
+        assertCanonicalOwner,
+        readCredential: f.controlPlane.readCredential,
+      },
+      nativeStore,
+      scope,
+      fetch: f.fetcher,
+    });
+    return { ...f, assertPlanningAuthorized, assertCanonicalOwner, reader };
+  };
+
+  it("refreshes canonical ownership and the active installation on every metadata guard without HTTP", async () => {
+    const f = planningFixture();
+    await f.reader.assertPlanningOwner(f.effect, scope, nativeStore);
+    await f.reader.assertPlanningOwner(f.effect, scope);
+    expect(f.assertCanonicalOwner).toHaveBeenCalled();
+    expect(f.controlPlane.readCredential).toHaveBeenCalledWith(authority, target.installationId);
+    expect(f.assertPlanningAuthorized).not.toHaveBeenCalled();
+    expect(f.fetcher).not.toHaveBeenCalled();
+    f.setMember(false);
+    await expect(f.reader.assertPlanningOwner(f.effect, scope)).rejects.toThrow("Owner revoked");
+    expect(f.fetcher).not.toHaveBeenCalled();
+  });
+
+  it("denies a deactivated installation between metadata checks", async () => {
+    const f = planningFixture();
+    await f.reader.assertPlanningOwner(f.effect, scope);
+    f.setCredential(false);
+    await expect(f.reader.assertPlanningOwner(f.effect, scope)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(f.fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each(["scopeId", "scopeType", "installationId", "active"])(
+    "denies changed installation %s before or after the local scope check",
+    async (field) => {
+      const f = planningFixture();
+      const credential = await f.controlPlane.readCredential(authority, target.installationId);
+      if (credential === undefined) {
+        throw new Error("Missing fixture credential.");
+      }
+      const changed = { ...credential, binding: { ...credential.binding } };
+      const changedIdentity = field === "scopeType" ? "user" : "foreign";
+      Reflect.set(changed.binding, field, field === "active" ? false : changedIdentity);
+      vi.mocked(f.controlPlane.readCredential)
+        .mockResolvedValueOnce(credential)
+        .mockResolvedValueOnce(changed);
+      await expect(f.reader.assertPlanningOwner(f.effect, scope)).rejects.toMatchObject({
+        code: "authorization_required",
+      });
+      expect(f.fetcher).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects canonical revocation while the installation record is read", async () => {
+    const f = planningFixture();
+    f.assertCanonicalOwner
+      .mockImplementationOnce(async () => {
+        await Promise.resolve();
+      })
+      .mockRejectedValue(new Error("Owner revoked"));
+    await expect(f.reader.assertPlanningOwner(f.effect, scope)).rejects.toThrow("Owner revoked");
+    expect(f.fetcher).not.toHaveBeenCalled();
+  });
+
+  it("keeps exact context, scope and native store selection bound during local checks", async () => {
+    const f = planningFixture();
+    await expect(
+      f.reader.assertPlanningOwner(
+        { ...f.effect, target: { ...target, projectId: "foreign" } },
+        scope,
+      ),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    await expect(
+      f.reader.assertPlanningOwner(f.effect, { ...scope, branchId: "foreign" }),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    await expect(
+      f.reader.assertPlanningOwner(f.effect, scope, { ...nativeStore, resourceId: "foreign" }),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    expect(f.fetcher).not.toHaveBeenCalled();
+  });
+
+  it("keeps the original owner adapter generation pinned across metadata guards", async () => {
+    const f = fixture();
+    const ownerContext = {
+      kind: "direct" as const,
+      authority,
+      principal: { ...authority, scopes: ["autograph:session"] },
+      adapterSessionId: "fixture-adapter",
+      adapterGeneration: 1,
+      sessionId: target.sessionId,
+    };
+    const bound = { ...f.effect, ownerContext };
+    const reader = createNativePreviewNeonPlanningAuthority({
+      context: bound,
+      controlPlane: {
+        assertCanonicalOwner: async () => {
+          await f.controlPlane.assertAuthorized(f.effect);
+        },
+        assertPlanningAuthorized: async () => {
+          await f.controlPlane.assertAuthorized(f.effect);
+        },
+        readCredential: f.controlPlane.readCredential,
+      },
+      nativeStore,
+      scope,
+      fetch: f.fetcher,
+    });
+    await reader.assertPlanningOwner(bound, scope);
+    await expect(
+      reader.assertPlanningOwner(
+        { ...bound, ownerContext: { ...ownerContext, adapterGeneration: 2 } },
+        scope,
+      ),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    await expect(
+      reader.assertPlanningOwner(
+        { ...bound, ownerContext: { ...ownerContext, adapterSessionId: "foreign" } },
+        scope,
+      ),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    expect(f.fetcher).not.toHaveBeenCalled();
+  });
+
+  it("retains fresh full owner/provider boundaries alongside local metadata guards", async () => {
+    const f = planningFixture();
+    await f.reader.assertPlanningOwner(f.effect, scope);
+    await f.reader.assertPlanningScope(f.effect, scope);
+    await f.reader.readCurrentOwnerNativeStore(f.effect, nativeStore);
+    expect(f.assertPlanningAuthorized).toHaveBeenCalled();
+    expect(f.fetcher).toHaveBeenCalled();
+    f.fetcher.mockClear();
+    f.fetcher.mockResolvedValue(Response.json({}, { status: 403 }));
+    await expect(f.reader.readCurrentOwnerNativeStore(f.effect, nativeStore)).rejects.toMatchObject(
+      { code: "authorization_required" },
+    );
+    expect(f.fetcher).toHaveBeenCalled();
+  });
+
+  it("keeps the full planning authorization fallback when no canonical port is supplied", async () => {
+    const f = fixture();
+    const assertPlanningAuthorized = vi.fn(async () => {
+      await Promise.resolve();
+    });
+    const reader = createNativePreviewNeonPlanningAuthority({
+      context: f.effect,
+      controlPlane: { assertPlanningAuthorized, readCredential: f.controlPlane.readCredential },
+      nativeStore,
+      scope,
+      fetch: f.fetcher,
+    });
+    await reader.assertPlanningOwner(f.effect, scope);
+    expect(assertPlanningAuthorized).toHaveBeenCalled();
+    assertPlanningAuthorized.mockRejectedValue(new Error("Full authorization revoked"));
+    await expect(reader.assertPlanningOwner(f.effect, scope)).rejects.toThrow(
+      "Full authorization revoked",
+    );
+  });
+});
+
 describe("concrete native Preview owner and approval callbacks", () => {
   it.each([403, 429])(
     "reports observed source-project HTTP %s without inspecting private payloads",

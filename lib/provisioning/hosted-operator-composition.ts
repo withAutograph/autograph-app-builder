@@ -700,6 +700,7 @@ export const composeHostedOperatorDependencies = (
   };
   const gatewayEnvironment = createHostedOperatorGatewayBindings({
     assertAuthorized: controlPlane.assertAuthorized,
+    assertCanonicalOwner: controlPlane.assertCanonicalOwner,
     readAuthRuntimeUrl: async (input) => {
       const observed = await privateBindings(input);
       return observed.authDatabase.runtimeUrl;
@@ -1743,6 +1744,7 @@ export const composeHostedOperatorDependencies = (
   };
   return {
     assertAuthorized: controlPlane.assertAuthorized,
+    assertCanonicalOwner: controlPlane.assertCanonicalOwner,
     authIdentityInput,
     authorize: controlPlane.authorize,
     authorizeNeonConsent: consentOwner.authorize,

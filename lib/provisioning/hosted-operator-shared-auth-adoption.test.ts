@@ -1007,6 +1007,7 @@ describe("native composition adoption boundary", () => {
         }),
     );
     const controlPlane: Awaited<ReturnType<typeof createHostedOperatorControlPlane>> = {
+      assertCanonicalOwner: unavailable,
       assertAuthorized: f.assertAuthorized,
       assertMembershipCapture: unavailable,
       assertPlanningAuthorized: unavailable,

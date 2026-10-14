@@ -207,6 +207,7 @@ const referenceRow = (
 
 export const createHostedOperatorGatewayBindings = (deps: {
   assertAuthorized: ProtectedHostedOperatorDependencies["assertAuthorized"];
+  assertCanonicalOwner?: ProtectedHostedOperatorDependencies["assertCanonicalOwner"];
   readCredential: CredentialReader;
   readAuthRuntimeUrl: (input: GatewayManagedEnvironmentContext) => Promise<string>;
   /** Reauthorize and reread the approved source journal; never infer ownership from provider comments. */
@@ -236,9 +237,17 @@ export const createHostedOperatorGatewayBindings = (deps: {
     const approvedCanonical = structuredClone(input.plan.authAdoption?.gatewayEnvironment);
     // Written values are accepted only for writes acknowledged by this invocation, until checkpointed.
     const acknowledgedValues = new Map<string, string>();
-    const guard = async () => {
+    const fullGuard = async () => {
       await input.assertCurrent();
       await deps.assertAuthorized(input);
+    };
+    const guard = async () => {
+      if (input.assertCurrentObservation === undefined || deps.assertCanonicalOwner === undefined) {
+        await fullGuard();
+        return;
+      }
+      await input.assertCurrentObservation();
+      await deps.assertCanonicalOwner(input);
     };
     const request = async (
       route: string,
@@ -252,7 +261,8 @@ export const createHostedOperatorGatewayBindings = (deps: {
         value: string;
       },
     ) => {
-      await guard();
+      const requestGuard = method === "GET" ? guard : fullGuard;
+      await requestGuard();
       const credential = await deps.readCredential(input.authority, target.installationId);
       if (
         credential?.binding.active !== true ||
@@ -262,7 +272,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
       ) {
         throw new HostedOperatorError("authorization_required");
       }
-      await guard();
+      await requestGuard();
       const url = new URL(route, "https://api.vercel.com");
       url.searchParams.set("teamId", target.scopeId);
       const options: RequestInit = {
@@ -281,7 +291,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
       }
       const response = await (deps.fetch ?? fetch)(url, options);
       try {
-        await guard();
+        await requestGuard();
         if (!response.ok) {
           throw unavailable();
         }
@@ -289,7 +299,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
           return null;
         }
         const value: unknown = await response.json();
-        await guard();
+        await requestGuard();
         return value;
       } finally {
         if (!response.bodyUsed) {
@@ -638,7 +648,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
       }
       return reference;
     };
-    const inspectOwnership = async (canonicalOnly = false) => {
+    const inspectOwnership = async (canonicalOnly = false, selectedKey?: keyof GatewayValues) => {
       const known = await knownRows();
       // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Source ownership must be established before provider readback.
       const listed = await list();
@@ -653,7 +663,9 @@ export const createHostedOperatorGatewayBindings = (deps: {
         throw unavailable();
       }
       const values = new Map<string, string>();
-      for (const row of rows) {
+      for (const row of rows.filter(
+        (candidate) => selectedKey === undefined || candidate.key === selectedKey,
+      )) {
         const { value } = providerValue.parse(
           await request(
             `/v1/projects/${encodeURIComponent(projectId)}/env/${encodeURIComponent(row.id)}`,
@@ -711,6 +723,52 @@ export const createHostedOperatorGatewayBindings = (deps: {
       }
       return { expected, known, rows, values };
     };
+    const inspectIteration = async (
+      key: keyof GatewayValues,
+      prior: Awaited<ReturnType<typeof inspect>>,
+      creatingRows: boolean,
+    ) => {
+      if (!creatingRows) {
+        return await inspect(false);
+      }
+      // Metadata and the selected row remain fresh around each new-row write.
+      // The final full observation checks every value again before completion.
+      const selected = await inspectOwnership(false, key);
+      const values = new Map(prior.values);
+      for (const [id, value] of selected.values) {
+        values.set(id, value);
+      }
+      return { expected: prior.expected, known: selected.known, rows: selected.rows, values };
+    };
+    const readSelectedValue = async (
+      row: ProviderRow,
+      values: ReadonlyMap<string, string>,
+      creatingRows: boolean,
+    ) => {
+      if (creatingRows) {
+        return values.get(row.id);
+      }
+      return providerValue.parse(
+        await request(
+          `/v1/projects/${encodeURIComponent(projectId)}/env/${encodeURIComponent(row.id)}`,
+        ),
+      ).value;
+    };
+    const writeRow = async (key: keyof GatewayValues, value: string, existing?: ProviderRow) =>
+      await (existing
+        ? request(
+            `/v9/projects/${encodeURIComponent(projectId)}/env/${encodeURIComponent(existing.id)}`,
+            "PATCH",
+            { type: "encrypted", value },
+          )
+        : request(`/v10/projects/${encodeURIComponent(projectId)}/env`, "POST", {
+            comment,
+            gitBranch: branch,
+            key,
+            target: ["preview"],
+            type: "encrypted",
+            value,
+          }));
     const prepareWrite = async (
       existing: ProviderRow | undefined,
       rows: ProviderRow[],
@@ -718,9 +776,21 @@ export const createHostedOperatorGatewayBindings = (deps: {
       values: ReadonlyMap<string, string>,
       expected: GatewayValues,
       value: string,
+      selectedKey?: keyof GatewayValues,
     ) => {
-      const fresh = await inspectOwnership();
-      if (!isDeepStrictEqual(fresh.rows, rows) || !isDeepStrictEqual(fresh.values, values)) {
+      const fresh = await inspectOwnership(false, selectedKey);
+      const selectedValues =
+        selectedKey === undefined
+          ? values
+          : new Map(
+              [...values].filter(([id]) =>
+                rows.some((row) => row.id === id && row.key === selectedKey),
+              ),
+            );
+      if (
+        !isDeepStrictEqual(fresh.rows, rows) ||
+        !isDeepStrictEqual(fresh.values, selectedValues)
+      ) {
         throw unavailable();
       }
       if (existing !== undefined && input.plan.authAdoption !== undefined) {
@@ -728,10 +798,10 @@ export const createHostedOperatorGatewayBindings = (deps: {
           id: existing.id,
           valueSha256: valueDigest(value),
         });
-        const acknowledged = await inspectOwnership();
+        const acknowledged = await inspectOwnership(false, selectedKey);
         if (
           !isDeepStrictEqual(acknowledged.rows, rows) ||
-          !isDeepStrictEqual(acknowledged.values, values)
+          !isDeepStrictEqual(acknowledged.values, selectedValues)
         ) {
           throw unavailable();
         }
@@ -743,13 +813,17 @@ export const createHostedOperatorGatewayBindings = (deps: {
       branch,
       checkpoint,
       comment,
+      fullGuard,
       guard,
       inspect,
+      inspectIteration,
       inspectOwnership,
       prepareWrite,
       projectId,
+      readSelectedValue,
       referenceRows,
       request,
+      writeRow,
     };
   };
 
@@ -760,20 +834,27 @@ export const createHostedOperatorGatewayBindings = (deps: {
           throw unavailable();
         }
         const io = open(input);
+        await io.fullGuard();
         let { expected, known, rows, values } = await io.inspect(false);
+        const creatingRows = rows.length === 0;
         await io.checkpoint(rows, known, values, expected);
-        for (const keyText of Object.keys(expected)) {
-          ({ expected, known, rows, values } = await io.inspect(false));
+        // A replay with current values needs only the fresh final observation.
+        // Changed values still use the complete per-write ownership and checkpoint path.
+        const currentValues = Object.entries(expected).every(([key, value]) =>
+          rows.some((row) => row.key === key && values.get(row.id) === value),
+        );
+        for (const keyText of currentValues ? [] : Object.keys(expected)) {
           const key = managedKeySchema.parse(keyText);
+          ({ expected, known, rows, values } = await io.inspectIteration(
+            key,
+            { expected, known, rows, values },
+            creatingRows,
+          ));
           const value = expected[key];
           const rowsByKey = new Map(rows.map((row) => [row.key, row]));
           const existing = rowsByKey.get(key);
           const current = existing
-            ? providerValue.parse(
-                await io.request(
-                  `/v1/projects/${encodeURIComponent(io.projectId)}/env/${encodeURIComponent(existing.id)}`,
-                ),
-              ).value
+            ? await io.readSelectedValue(existing, values, creatingRows)
             : undefined;
           if (existing !== undefined && current !== values.get(existing.id)) {
             throw unavailable();
@@ -781,41 +862,36 @@ export const createHostedOperatorGatewayBindings = (deps: {
           if (current === value) {
             continue;
           }
-          await io.prepareWrite(existing, rows, known, values, expected, value);
-          const effect = existing
-            ? io.request(
-                `/v9/projects/${encodeURIComponent(io.projectId)}/env/${encodeURIComponent(existing.id)}`,
-                "PATCH",
-                { type: "encrypted", value },
-              )
-            : io.request(`/v10/projects/${encodeURIComponent(io.projectId)}/env`, "POST", {
-                comment: io.comment,
-                gitBranch: io.branch,
-                key,
-                target: ["preview"],
-                type: "encrypted",
-                value,
-              });
-          await effect;
+          await io.prepareWrite(
+            existing,
+            rows,
+            known,
+            values,
+            expected,
+            value,
+            creatingRows ? key : undefined,
+          );
+          await io.writeRow(key, value, existing);
           if (existing !== undefined) {
             io.acknowledgedValues.set(existing.id, valueDigest(value));
           }
-          ({ expected, known, rows, values } = await io.inspect(false));
+          ({ expected, known, rows, values } = await io.inspectIteration(
+            key,
+            { expected, known, rows, values },
+            creatingRows,
+          ));
           const observed = new Map(rows.map((row) => [row.key, row])).get(key);
           if (!observed) {
             throw unavailable();
           }
-          const actual = providerValue.parse(
-            await io.request(
-              `/v1/projects/${encodeURIComponent(io.projectId)}/env/${encodeURIComponent(observed.id)}`,
-            ),
-          );
-          if (actual.value !== expected[key]) {
+          const actual = await io.readSelectedValue(observed, values, creatingRows);
+          if (actual !== expected[key]) {
             throw unavailable();
           }
           await io.checkpoint(rows, known, values, expected);
         }
         ({ known, rows, values } = await io.inspect(true));
+        await io.fullGuard();
         return {
           rows: io.referenceRows(rows, known, values),
         };
@@ -831,7 +907,9 @@ export const createHostedOperatorGatewayBindings = (deps: {
     > {
       try {
         const io = open(input);
+        await io.fullGuard();
         const { expected, known, rows, values } = await io.inspect(true);
+        await io.fullGuard();
         if (rows.length === 0) {
           return { status: "absent" };
         }
@@ -850,6 +928,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
     async verifyCanonicalOwnership(input: GatewayManagedEnvironmentContext) {
       try {
         const io = open(input, true);
+        await io.fullGuard();
         if (io.approvedCanonical === undefined) {
           throw unavailable();
         }
@@ -857,7 +936,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
         if (rows.length !== managedKeys.length) {
           throw unavailable();
         }
-        await io.guard();
+        await io.fullGuard();
         return { rows: structuredClone(io.approvedCanonical) };
       } catch {
         throw unavailable();
@@ -868,11 +947,12 @@ export const createHostedOperatorGatewayBindings = (deps: {
         throw unavailable();
       }
       const io = open(input);
+      await io.fullGuard();
       const { rows, known, expected, values } = await io.inspect(true);
       if (rows.length !== Object.keys(expected).length) {
         throw unavailable();
       }
-      await io.guard();
+      await io.fullGuard();
       return {
         rows: io.referenceRows(rows, known, values),
       };

@@ -916,6 +916,8 @@ export const createHostedOperatorControlPlane = async (input: {
         }
         await owner.assertAuthorized(inputContext);
       },
+      // Fresh canonical ownership for read-only metadata; provider grants are checked at observation boundaries.
+      assertCanonicalOwner: owner.assertArtifactAuthorized,
       assertPlanningAuthorized: owner.assertPlanningAuthorized,
       authorize: owner.authorize,
       checkpointSharedAuthAdoption: async (
