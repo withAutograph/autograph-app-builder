@@ -1611,7 +1611,23 @@ export function createSameOriginEveTransport(input: {
         throw new SubmissionOutcomeUnknownError();
       }
       await request.onAccepted?.(accepted.deliveryId);
-      return readSnapshot({ ...common, sessionId: request.adapterSessionId });
+      try {
+        return await readSnapshot({ ...common, sessionId: request.adapterSessionId });
+      } catch (error) {
+        reportHostedSubmissionDiagnostic({
+          adapterSessionId: request.adapterSessionId,
+          error,
+          failureCategory:
+            error instanceof HostedSessionReadTimeoutError
+              ? "native_read_delayed"
+              : "native_read_failed",
+          operationId: request.operationId,
+          operationKind: "send",
+          phase: "send_accepted_readback",
+          sink: input.onSubmissionDiagnostic,
+        });
+        throw error;
+      }
     },
     async sendAccepted(request) {
       const accepted = await postMutation({

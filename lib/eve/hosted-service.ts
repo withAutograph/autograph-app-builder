@@ -108,6 +108,7 @@ import { reportHostedSubmissionDiagnostic } from "./hosted-submission-diagnostic
 import type {
   HostedSubmissionDiagnosticSink,
   HostedSubmissionPhase,
+  SendReadFailureCategory,
 } from "./hosted-submission-diagnostic";
 
 const guardDecisions: readonly ("continue" | "stop")[] = ["continue", "stop"];
@@ -2387,28 +2388,53 @@ export function createHostedEveSessionService(input: {
     sessionId: string,
     previousCheckpointDigest: string | undefined,
     sendDelivery?: SendDelivery,
+    sendDiagnostic?: { clientRequestId: string; operationId: string },
   ): Promise<EveSessionResult> {
-    const result = await readSession({ continueWork: false, cursor: 0, limit: 100, sessionId });
-    const current = toDurableHostedSessionRecord(await requireSession(sessionId));
-    if (sendDelivery !== undefined) {
-      const proof = await nativeDeliveriesForSession(current);
+    let phase: HostedSubmissionPhase = "send_accepted_readback";
+    let failureCategory: SendReadFailureCategory = "native_read_failed";
+    try {
+      const result = await readSession({ continueWork: false, cursor: 0, limit: 100, sessionId });
+      const current = toDurableHostedSessionRecord(await requireSession(sessionId));
+      if (sendDelivery !== undefined) {
+        const proof = await nativeDeliveriesForSession(current);
+        const bindingChanged =
+          current.adapterSessionId !== sendDelivery.adapterSessionId ||
+          current.adapterGeneration !== sendDelivery.adapterGeneration;
+        if (bindingChanged || !provesNativeDelivery(sendDelivery, proof)) {
+          phase = "send_delivery_boundary";
+          failureCategory = "delivery_boundary_unobserved";
+          if (bindingChanged) {
+            failureCategory = "delivery_binding_changed";
+          } else if (result.error?.code === "session_read_delayed") {
+            phase = "send_accepted_readback";
+            failureCategory = "native_read_delayed";
+          }
+          throw new HostedSubmissionUnknownError();
+        }
+        return result;
+      }
       if (
-        current.adapterSessionId !== sendDelivery.adapterSessionId ||
-        current.adapterGeneration !== sendDelivery.adapterGeneration ||
-        !provesNativeDelivery(sendDelivery, proof)
+        result.error?.code === "session_read_delayed" ||
+        current.checkpointDigest === undefined ||
+        current.checkpointDigest === previousCheckpointDigest
       ) {
         throw new HostedSubmissionUnknownError();
       }
       return result;
+    } catch (error) {
+      if (sendDiagnostic !== undefined && sendDelivery !== undefined) {
+        reportHostedSubmissionDiagnostic({
+          ...sendDiagnostic,
+          adapterSessionId: sendDelivery.adapterSessionId,
+          error,
+          failureCategory,
+          operationKind: "send",
+          phase,
+          sink: input.onSubmissionDiagnostic,
+        });
+      }
+      throw error;
     }
-    if (
-      result.error?.code === "session_read_delayed" ||
-      current.checkpointDigest === undefined ||
-      current.checkpointDigest === previousCheckpointDigest
-    ) {
-      throw new HostedSubmissionUnknownError();
-    }
-    return result;
   }
 
   // eslint-disable-next-line eslint/func-style -- Mutation preflight shares local session-service state.
@@ -2965,6 +2991,7 @@ export function createHostedEveSessionService(input: {
               request.sessionId,
               session.version === 2 ? session.checkpointDigest : undefined,
               sendDelivery,
+              { clientRequestId: request.clientRequestId, operationId },
             );
             return {
               result,
@@ -2985,6 +3012,22 @@ export function createHostedEveSessionService(input: {
               sendDelivery.adapterGeneration ||
             !provesNativeDelivery(sendDelivery, proof)
           ) {
+            if (sendDelivery !== undefined) {
+              reportHostedSubmissionDiagnostic({
+                adapterSessionId: sendDelivery.adapterSessionId,
+                clientRequestId: request.clientRequestId,
+                failureCategory:
+                  current.adapterSessionId !== sendDelivery.adapterSessionId ||
+                  toDurableHostedSessionRecord(current).adapterGeneration !==
+                    sendDelivery.adapterGeneration
+                    ? "delivery_binding_changed"
+                    : "delivery_boundary_unobserved",
+                operationId,
+                operationKind: "send",
+                phase: "send_delivery_boundary",
+                sink: input.onSubmissionDiagnostic,
+              });
+            }
             throw new HostedSubmissionUnknownError();
           }
           await assertSendOwner(current);

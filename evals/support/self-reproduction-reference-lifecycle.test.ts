@@ -17,6 +17,7 @@ it("exercises service recreation and continuation idempotency without claiming g
   expect(result.generationEvidence).toBe(false);
   expect(result.browserParityEvidence).toBe(false);
   expect(result.counts).toEqual({ cancels: 1, sends: 1, starts: 2 });
+  expect(result.assertions.every((row) => row.passed)).toBe(true);
   expect(result.assertions.find((row) => row.id === "continuation-result-persists")?.passed).toBe(
     true,
   );

@@ -9,6 +9,7 @@ import type { HostedPrincipal } from "../../lib/eve/hosted-auth";
 import { createHostedEveSessionService } from "../../lib/eve/hosted-service";
 import type { HostedEngineSnapshot, HostedEveTransport } from "../../lib/eve/hosted-service";
 import type { HostedEveStore } from "../../lib/eve/hosted-store";
+import { toDurableHostedSessionRecord } from "../../lib/eve/hosted-store";
 import { createPostgresHostedEveStore } from "../../lib/eve/postgres-hosted-store";
 import { sanitizeEvidence } from "./self-reproduction-evidence";
 
@@ -39,11 +40,26 @@ export const exerciseReferenceLifecycle = async (input: {
       return Promise.resolve(value);
     },
     respond: () => Promise.reject(new Error("This fixture does not support approval responses.")),
-    send: ({ adapterSessionId }) => {
+    send: async ({ adapterSessionId, onAccepted }) => {
       counts.sends += 1;
-      const value = snapshot("completed");
+      const deliveryId = randomUUID();
+      await onAccepted?.(deliveryId);
+      const value: HostedEngineSnapshot = {
+        ...snapshot("completed"),
+        nativeDeliveryState: {
+          turns: [
+            {
+              boundary: "session.completed",
+              boundaryDeliveryIds: [deliveryId],
+              deliveryIds: [deliveryId],
+              turnId: randomUUID(),
+            },
+          ],
+          version: 1,
+        },
+      };
       snapshots.set(adapterSessionId, value);
-      return Promise.resolve(value);
+      return value;
     },
     start: () => {
       counts.starts += 1;
@@ -53,7 +69,25 @@ export const exerciseReferenceLifecycle = async (input: {
       return Promise.resolve({ adapterSessionId, snapshot: value });
     },
   };
-  const service = () => createHostedEveSessionService({ ...input, transport });
+  const service = () =>
+    createHostedEveSessionService({
+      ...input,
+      assertSendDeliveryOwner: async (session) => {
+        const current = await input.store.getSession(input.principal, session.sessionId);
+        if (!current) {
+          throw new Error("Controlled continuation owner is unavailable.");
+        }
+        const binding = toDurableHostedSessionRecord(current);
+        if (
+          binding.adapterSessionId !== session.adapterSessionId ||
+          binding.adapterGeneration !== session.adapterGeneration ||
+          !snapshots.has(binding.adapterSessionId)
+        ) {
+          throw new Error("Controlled continuation ownership changed.");
+        }
+      },
+      transport,
+    });
   const cancellation = await service().start({
     clientRequestId: randomUUID(),
     prompt: "Controlled pending reference operation",
