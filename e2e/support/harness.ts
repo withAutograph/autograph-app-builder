@@ -240,7 +240,8 @@ export async function selectProviderIdentity(page: Page, provider: EmulatedProvi
     await expect(page.getByText("Authorize GitHub connection")).toBeVisible();
     await page.getByRole("button", { name: "Authorize emulated GitHub" }).click();
   }
-  await expect(page).toHaveURL(new RegExp(`^${appOrigin}/`, "u"), {
+  // Approval pages share the app origin; wait for the actual Builder return.
+  await expect(page).toHaveURL((url) => url.origin === appOrigin && url.pathname === "/", {
     timeout: 30_000,
   });
   await waitForBuilderReady(page);
