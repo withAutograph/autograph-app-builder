@@ -43,6 +43,37 @@ input. The [native operator host](operator-native-host.md) separately wires the
 trusted [Preview composition](hosted-operator-native-composition.md). Source
 wiring does not establish deployed configuration or successful provider effects.
 
+## Approved normal participants
+
+Builder supplies `normalActorProgram` when the accepted app requires multiple
+accounts or organization contexts. Use the verified native public origin and
+the accepted account, membership and app-role requirements. The read-only plan
+first prepares the named resource/Auth/Gateway effects. Once that bootstrap is
+observed, the next plan names normal account preparation. Its approval remains
+bound to the original operation while ordinary sign-in requests are answered.
+At `participants-prepared`, plan again with the same program and original public
+session to resolve actual organization owners, invitations, memberships, app
+access and app delivery before approving those effects.
+
+Normal sign-up/sign-in and the protected organization worker own these effects.
+Private capture stages actual cookie bytes under the configured native sender
+and pending owner scope; the ordinary original-owner callback confirms them.
+Each organization uses its own real selected Realm session. The prepared runtime
+freshly checks these sessions and memberships before delivering private browser
+storage through authenticated bindings. It never exposes passwords or cookies
+as tool text or environment variables. See
+[owner and normal-account authority](hosted-operator-owner-authority.md).
+
+The evaluator submits product replies and approvals through the existing public
+workflow. It does not insert users, patch organization grants or steer private
+stages. Preserve pending operations and their approvals across replies and
+recovery. Keep actual credential, approval, tenant and lease/fence protections;
+normal source edits or a different number of legitimate participants do not
+justify new gates or quotas. Source/CI evidence does not establish hosted Auth
+behavior; report the actual sign-in and app acceptance results separately.
+
+## Durable effect journal
+
 The existing PostgreSQL `builderProvisioningJournals` row is the sole effect
 journal. The optional `operator.mode = protected-operator-v1` discriminator
 preserves v1 target identity, parser compatibility and encryption associated

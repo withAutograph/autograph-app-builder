@@ -70,6 +70,56 @@ const fixture = async () => {
   };
 };
 describe("private Realm identity bridge", () => {
+  it("binds a normal-browser session proof to the approved pending program and operation", async () => {
+    const f = await fixture();
+    const browserSession = {
+      operationRef: "42dfd18b-9779-4ab6-97a5-5c31d7b98a01",
+      participantProgramDigest: "d".repeat(64),
+    };
+    const proof = await new SignJWT({
+      ...f.claims,
+      browserSession: { ...browserSession, normalCookieSha256: "e".repeat(64) },
+    })
+      .setProtectedHeader({
+        alg: "EdDSA",
+        kid: "actual-native-key",
+        typ: "platform-realm-operator-link+jwt",
+      })
+      .sign(keys.privateKey);
+    const bound = { ...f, proof, pending: { ...f.pending, browserSession } };
+    expect((await verifyRealmIdentityLinkProof(bound)).browserSession).toMatchObject(
+      browserSession,
+    );
+    await expect(verifyRealmIdentityLinkProof({ ...f, proof })).rejects.toThrow();
+    await expect(verifyRealmIdentityLinkProof({ ...bound, proof: f.proof })).rejects.toThrow();
+    await expect(
+      verifyRealmIdentityLinkProof({
+        ...bound,
+        pending: {
+          ...bound.pending,
+          browserSession: { ...browserSession, participantProgramDigest: "f".repeat(64) },
+        },
+      }),
+    ).rejects.toThrow();
+    await expect(
+      verifyRealmIdentityLinkProof({
+        ...bound,
+        pending: {
+          ...bound.pending,
+          browserSession: {
+            ...browserSession,
+            operationRef: "beca1fc4-7cba-43ab-982b-982dbfa695fa",
+          },
+        },
+      }),
+    ).rejects.toThrow();
+    const url = new URL(createRealmIdentityBrowserUrl({ link: bound.pending, nonce }));
+    expect(url.searchParams.get("operationRef")).toBe(browserSession.operationRef);
+    expect(url.searchParams.get("participantProgramDigest")).toBe(
+      browserSession.participantProgramDigest,
+    );
+    expect(url.searchParams.has("normalCookieSha256")).toBe(false);
+  });
   it("validates exact pending nonce, physical resource, owner session and separate signed purpose", async () => {
     const f = await fixture();
     expect(await verifyRealmIdentityLinkProof(f)).toMatchObject({

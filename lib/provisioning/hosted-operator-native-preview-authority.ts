@@ -29,7 +29,10 @@ import type {
 type ControlPlane = Pick<
   Awaited<ReturnType<typeof createHostedOperatorControlPlane>>,
   "store" | "assertAuthorized" | "readApproval" | "readCredential"
->;
+> &
+  Partial<
+    Pick<Awaited<ReturnType<typeof createHostedOperatorControlPlane>>, "assertCanonicalOwner">
+  >;
 interface Input<Effect extends HostedOperatorEffectContext> {
   controlPlane: ControlPlane;
   effect: Effect;
@@ -41,7 +44,14 @@ interface Input<Effect extends HostedOperatorEffectContext> {
 type Callbacks = Pick<
   NativePreviewNeonDependencies,
   "assertApprovedScope" | "readCurrentOwnerNativeStore"
->;
+> & {
+  /** Approved credential metadata only; absent unless both real observation and canonical owner ports exist. */
+  assertApprovedOwner?: (
+    context: HostedOperatorContext,
+    scope: NativePreviewNeonScope,
+    binding: Readonly<NativePreviewNeonStoreBinding>,
+  ) => Promise<void>;
+};
 const fail = () => new HostedOperatorError("authorization_required");
 const sameStore = (left: NativePreviewNeonStoreBinding, right: NativePreviewNeonStoreBinding) =>
   left.configurationId === right.configurationId &&
@@ -249,12 +259,32 @@ const createAuthority = (
   const now = input.now ?? Date.now;
   const identity = hostedRuntimeIdentity(effect.authority, effect.target).digest;
   const planDigest = operatorPlanDigest(plan);
-  const assertPhase = async (context: HostedOperatorContext) => {
+  const assertFullOwner = async () => {
+    await effect.assertCurrent();
+    await input.controlPlane.assertAuthorized(effect);
+  };
+  const observeCurrent = effect.assertCurrentObservation;
+  const canonicalOwner = input.controlPlane.assertCanonicalOwner;
+  const assertObservationOwner =
+    observeCurrent !== undefined && canonicalOwner !== undefined
+      ? async () => {
+          await observeCurrent();
+          await canonicalOwner(effect);
+        }
+      : undefined;
+  const bootstrapPhase = effect.effect.kind === "resources" && plan.action === "prepare";
+  const retirementPhase =
+    effect.effect.kind === "retire" &&
+    plan.action === "cleanup" &&
+    effect.effect.resourceId === plan.appDatabase.resourceId;
+  const assertPhase = async (
+    context: HostedOperatorContext,
+    assertOwner: () => Promise<void> = assertFullOwner,
+  ) => {
     if (hostedRuntimeIdentity(context.authority, context.target).digest !== identity) {
       throw fail();
     }
-    await effect.assertCurrent();
-    await input.controlPlane.assertAuthorized(effect);
+    await assertOwner();
     const row = await input.controlPlane.store.read(effect);
     const parsed = hostedRuntimeJournalRecordSchema.safeParse(row?.record);
     if (!parsed.success) {
@@ -269,13 +299,9 @@ const createAuthority = (
     ) {
       throw fail();
     }
-    const bootstrapPhase = effect.effect.kind === "resources" && plan.action === "prepare";
-    const retirementPhase =
-      effect.effect.kind === "retire" &&
-      plan.action === "cleanup" &&
-      effect.effect.resourceId === plan.appDatabase.resourceId;
     const validPhase = [
       Date.parse(record.leaseExpiresAt) > now(),
+      effect.leaseId === undefined || record.leaseId === effect.leaseId,
       operator.operationRef === effect.operationRef,
       operator.fenceGeneration === effect.fenceGeneration,
       operator.planDigest === planDigest,
@@ -309,14 +335,9 @@ const createAuthority = (
     if (!approved.every(Boolean)) {
       throw fail();
     }
-    await effect.assertCurrent();
-    await input.controlPlane.assertAuthorized(effect);
+    await assertOwner();
   };
-  const assertApprovedScope = async (
-    context: HostedOperatorContext,
-    scope: NativePreviewNeonScope,
-  ) => {
-    await assertPhase(context);
+  const assertScope = (scope: NativePreviewNeonScope) => {
     const { bootstrap } = plan;
     if (bootstrap === undefined) {
       throw fail();
@@ -332,14 +353,61 @@ const createAuthority = (
     if (!matches.every(Boolean)) {
       throw fail();
     }
+  };
+  const assertApprovedScope = async (
+    context: HostedOperatorContext,
+    scope: NativePreviewNeonScope,
+  ) => {
+    await assertPhase(context);
+    assertScope(scope);
     await assertPhase(context);
   };
+  const assertApprovedObservationPhase =
+    assertObservationOwner === undefined
+      ? undefined
+      : async (context: HostedOperatorContext) => {
+          await assertPhase(context, assertObservationOwner);
+        };
+  const assertApprovedOwner =
+    assertApprovedObservationPhase === undefined || canonicalOwner === undefined
+      ? undefined
+      : async (
+          context: HostedOperatorContext,
+          scope: NativePreviewNeonScope,
+          binding: Readonly<NativePreviewNeonStoreBinding>,
+        ) => {
+          await assertApprovedObservationPhase(context);
+          assertScope(scope);
+          if (
+            !sameStore(binding, expectedStore) ||
+            binding.sourceProjectId === effect.target.projectId
+          ) {
+            throw fail();
+          }
+          await canonicalOwner(effect);
+          const credential = await input.controlPlane.readCredential(
+            effect.authority,
+            effect.target.installationId,
+          );
+          const activeInstallation = [
+            credential?.binding.active === true,
+            credential?.binding.installationId === effect.target.installationId,
+            credential?.binding.scopeId === effect.target.scopeId,
+            credential?.binding.scopeType === effect.target.scopeType,
+          ].every(Boolean);
+          if (!activeInstallation) {
+            throw fail();
+          }
+          await canonicalOwner(effect);
+          await assertApprovedObservationPhase(context);
+        };
   return {
     assertApprovedScope,
+    ...(assertApprovedOwner === undefined ? {} : { assertApprovedOwner }),
     async readCurrentOwnerNativeStore(context, binding) {
       return await readVerifiedOwnerNativeStore(
         {
-          assertCurrentOwner: assertPhase,
+          assertCurrentOwner: assertApprovedObservationPhase ?? assertPhase,
           fetch: input.fetch,
           diagnosticSink: input.diagnosticSink,
           nativeStore: expectedStore,

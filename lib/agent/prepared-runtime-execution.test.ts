@@ -16,6 +16,41 @@ import {
 } from "../provisioning/hosted-operator-contract";
 import { HostedRuntimeProviderError } from "../provisioning/hosted-runtime-provider";
 
+const capturedActors = () => ({
+  origin: "https://apps-preview.example.test",
+  identities: {
+    version: 1 as const,
+    actors: [
+      {
+        actorKey: "member",
+        actorId: "actual-member-id",
+        organizationId: "actual-org-id",
+        roles: ["member"],
+        storageState: "member.storage.json",
+      },
+    ],
+  },
+  files: {
+    "member.storage.json": JSON.stringify({
+      cookies: [
+        {
+          name: "session",
+          domain: "apps-preview.example.test",
+          value: "captured-private-session",
+          path: "/",
+          secure: true,
+        },
+      ],
+      origins: [
+        {
+          origin: "https://apps-preview.example.test",
+          localStorage: [{ name: "selected-org", value: "captured-private-org" }],
+        },
+      ],
+    }),
+  },
+});
+
 const mocks = {
   assertAuthority: vi.fn<PreparedRuntimeExecutionDependencies["assertAuthority"]>(),
   getProvider: vi.fn<PreparedRuntimeExecutionDependencies["getProvider"]>(),
@@ -345,6 +380,103 @@ describe("approved hosted runtime consumers", () => {
       );
     },
   );
+  it("restores captured normal actors in replacement sandboxes and only supplies the private path to browser tasks", async () => {
+    const captured = capturedActors();
+    await Promise.all(
+      ["first", "replacement"].map(async (sandbox) => {
+        const fixture = transport(descriptor, [
+          "captured-private-",
+          "session actual-member-id captured-private-org",
+        ]);
+        const retainedBinding = binding();
+        const runtime = await restorePreparedRuntimeExecution({
+          appId: context.appId,
+          binding: retainedBinding,
+          browserTestBaseUrl: captured.origin,
+          normalActors: captured,
+          observeInstallation: async () => ({
+            actors: proof.actors,
+            artifactHash: proof.artifactHash,
+            authenticatedBehavior: proof.authenticatedBehavior,
+            releaseId: proof.releaseId,
+            tenants: proof.tenants,
+          }),
+          provider: fixture.provider,
+          root: `/workspace/${sandbox}`,
+        });
+        expect(
+          fixture.provider.writeFiles.mock.calls.flatMap(([written]) => written),
+        ).toContainEqual({
+          content: captured.files["member.storage.json"],
+          mode: 0o600,
+          path: "/private-state/normal-actors/member.storage.json",
+        });
+        const result = await runtime.runTask({
+          task: "test-e2e",
+          environment: {
+            APP_TEST_BASE_URL: "https://untrusted.example.test",
+            APP_TEST_IDENTITIES_FILE: "/untrusted",
+          },
+        });
+        expect(result.stdout).not.toContain("captured-private-");
+        expect(result.stdout).not.toContain("actual-member-id");
+        expect(fixture.provider.runCommand).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            env: {
+              APP_RUNTIME_STATE_DIR: "/private-state",
+              APP_TEST_BASE_URL: captured.origin,
+              APP_TEST_IDENTITIES_FILE: "/private-state/normal-actors/identities.json",
+            },
+          }),
+        );
+        await runtime.runTask({ task: "repository-check" });
+        expect(fixture.provider.runCommand).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            env: { APP_RUNTIME_STATE_DIR: "/private-state" },
+          }),
+        );
+        expect(JSON.stringify(fixture.provider.runCommand.mock.calls)).not.toContain(
+          "captured-private-session",
+        );
+        await expect(
+          runtime.prepareAuthenticatedOrigin("https://replacement.vercel.run"),
+        ).rejects.toThrow("normal_actor_browser_origin_mismatch");
+        await runtime.prepareAuthenticatedOrigin(captured.origin);
+        expect(retainedBinding.persistFiles).not.toHaveBeenCalled();
+      }),
+    );
+  });
+  it("redacts captured credentials from private file and command provider errors", async () => {
+    const captured = capturedActors();
+    const fixture = transport();
+    const restore = async () =>
+      await restorePreparedRuntimeExecution({
+        appId: context.appId,
+        binding: binding(),
+        normalActors: captured,
+        browserTestBaseUrl: captured.origin,
+        provider: fixture.provider,
+        root: context.root,
+        observeInstallation: async () => ({
+          actors: proof.actors,
+          artifactHash: proof.artifactHash,
+          authenticatedBehavior: proof.authenticatedBehavior,
+          releaseId: proof.releaseId,
+          tenants: proof.tenants,
+        }),
+      });
+    fixture.provider.writeFiles.mockRejectedValueOnce(
+      new Error("write failed captured-private-session actual-member-id"),
+    );
+    await expect(restore()).rejects.toThrow("write failed [REDACTED] [REDACTED]");
+    const runtime = await restore();
+    fixture.provider.runCommand.mockRejectedValueOnce(
+      new Error("command failed captured-private-org"),
+    );
+    await expect(runtime.runTask({ task: "test-e2e" })).rejects.toThrow(
+      "command failed [REDACTED]",
+    );
+  });
   it("never falls back to legacy credential decryption when the operator is unavailable", async () => {
     const operatorClient = vi.fn(() => {
       throw new Error("protected_operator_required");

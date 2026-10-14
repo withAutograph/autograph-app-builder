@@ -7,7 +7,11 @@ import type { Command } from "@vercel/sandbox";
 import { getVercelOidcToken } from "@vercel/oidc";
 import { z } from "zod";
 
-import { HostedOperatorError, operatorPlanDigest } from "./hosted-operator-contract";
+import {
+  HostedOperatorError,
+  operatorPlanDigest,
+  selectHostedOperatorOwnedOrganizationSpec,
+} from "./hosted-operator-contract";
 import { hostedOperatorSandboxSourceOptions } from "./hosted-operator-sandbox-source";
 import type { HostedOperatorSandboxSource } from "./hosted-operator-sandbox-source";
 import type { HostedOperatorPlan, WorkerEffectCheckpointFrame } from "./hosted-operator-contract";
@@ -206,7 +210,7 @@ interface PrivateSandboxWorkerInput {
   generatedRelease?: { artifactRef: string; files: GeneratedAppReleaseFiles };
   /** Private reviewed Auth plan resolved from plan.authSchema.artifactRef. */
   authSchemaPlan?: { artifactRef: string; content: Buffer };
-  membershipProof?: { proof: string; oidcToken: string };
+  membershipProof?: { proof: string; oidcToken: string; organizationId?: string };
   accessConnections?: {
     appMigrator: string;
     appRuntime: string;
@@ -1007,7 +1011,12 @@ const runSandboxWorker = async (
     }
     context.release = {
       id: operatorPlanDigest(input.plan),
-      sha256: input.plan.authMembership.identityProof.sha256,
+      sha256: selectHostedOperatorOwnedOrganizationSpec(
+        input.plan.authMembership,
+        input.membershipProof.organizationId === undefined
+          ? undefined
+          : { organizationId: input.membershipProof.organizationId },
+      ).identityProof.sha256,
     };
     context.installer = { id: worker.id, sha256: worker.sha256 };
     if (sha256(Buffer.from(input.membershipProof.proof, "utf-8")) !== context.release.sha256) {
@@ -1443,6 +1452,17 @@ const runSandboxWorker = async (
     if (membership && input.membershipProof !== undefined) {
       await sandbox.writeFiles(
         [
+          ...(input.plan.authMembership?.kind === "create-owned-organizations"
+            ? [
+                {
+                  content: Buffer.from(
+                    JSON.stringify({ organizationId: input.membershipProof.organizationId }),
+                  ),
+                  mode: 0o600,
+                  path: path.posix.join(startup, "membership-target.json"),
+                },
+              ]
+            : []),
           {
             content: Buffer.from(JSON.stringify(input.plan)),
             mode: 0o600,

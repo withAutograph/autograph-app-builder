@@ -29,6 +29,7 @@ import {
   type HostedRuntimeJournalStore,
 } from "./hosted-runtime-journal";
 import type { OperatorWorkloadPolicy } from "./hosted-operator-workload";
+import { normalActorProgramDigest } from "./hosted-operator-normal-actor-program";
 
 import type {
   HostedOperatorConsentDiagnostic,
@@ -769,6 +770,90 @@ describe("owner project access diagnostics", () => {
 });
 
 describe("hosted operator owner authority", () => {
+  it("verifies the original account approval after a new app operation replaces the plan", async () => {
+    const retained = retainedApprovalFixture();
+    const program = {
+      version: 1 as const,
+      appId: selection.appId,
+      origin: "https://apps.example.test",
+      actors: [
+        {
+          actorKey: "owner",
+          email: "owner@example.test",
+          name: "Owner",
+          account: "capture-existing" as const,
+        },
+      ],
+      organizations: [],
+      memberships: [],
+      appAccess: [],
+    };
+    const accountPlan = hostedOperatorPlanSchema.parse({
+      ...retained.prepareReceipt.toolInput.plan,
+      stage: "auth-participants",
+      access: [],
+      normalActorProgram: program,
+      publicGateway: { branch: selection.branch, origin: program.origin, projectId: "prj_gateway" },
+      deploymentBoundary: {
+        authority: ownerContext.authority,
+        teamId: "team_1",
+        app: {
+          branch: selection.branch,
+          deploymentId: "dpl_app",
+          environment: "preview",
+          projectId: selection.projectId,
+        },
+        gateway: {
+          branch: selection.branch,
+          deploymentId: "dpl_gateway",
+          environment: "preview",
+          projectId: "prj_gateway",
+        },
+        operator: {
+          deploymentId: "dpl_operator",
+          environment: "preview",
+          projectId: "prj_operator",
+        },
+        verification: {
+          gatewayOrigin: "https://gateway.example.test",
+          jwksUrl: "https://gateway.example.test/_platform/jwks.json",
+          publicOrigin: program.origin,
+        },
+      },
+      effects: [
+        {
+          id: "normal-accounts",
+          kind: "normal-accounts",
+          description: "Connect approved accounts",
+        },
+      ],
+    });
+    const planDigest = operatorPlanDigest(accountPlan);
+    retained.prepareReceipt.toolInput.plan = accountPlan;
+    retained.prepareReceipt.toolInput.planDigest = planDigest;
+    retained.prepareInput.planDigest = planDigest;
+    retained.record.accountPreparation = {
+      program,
+      programDigest: normalActorProgramDigest(program),
+      accountOperationRef: retained.prepareReceipt.toolInput.operationRef,
+      accountPlan,
+      accountPlanDigest: planDigest,
+      accountApprovalId: retained.prepareReceipt.requestId,
+      accountApprovedByCallId: retained.prepareReceipt.callId,
+      sealedState: { encryptedToken: "private", keyVersion: "v1", tokenIv: "iv", tokenTag: "tag" },
+      captures: [],
+    };
+    await expect(retained.readApproval(retained.prepareInput)).resolves.toMatchObject({
+      approved: true,
+      approvalId: retained.prepareReceipt.requestId,
+      planDigest,
+    });
+    retained.record.accountPreparation.accountOperationRef =
+      retained.cleanupReceipt.toolInput.operationRef;
+    await expect(retained.readApproval(retained.prepareInput)).rejects.toThrow();
+    expect(retained.observe).not.toHaveBeenCalled();
+  });
+
   it("reads the original exact prepare approval after source app cleanup", async () => {
     const retained = retainedApprovalFixture();
     await expect(retained.readApproval(retained.prepareInput)).resolves.toEqual({

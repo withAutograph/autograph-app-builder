@@ -430,6 +430,24 @@ const approvalCheckpoint = (
   record: HostedRuntimeJournalRecord | undefined,
   context: { action: "prepare" | "cleanup"; callId: string; planDigest: string },
 ) => {
+  const accounts = record?.accountPreparation;
+  if (
+    context.action === "prepare" &&
+    accounts?.accountPlanDigest === context.planDigest &&
+    accounts.accountApprovedByCallId === context.callId
+  ) {
+    // Replanning creates a new app operation. The original account approval
+    // remains verifiable against its retained frozen plan and real Eve receipt.
+    return {
+      current: {
+        approvalId: accounts.accountApprovalId,
+        operationRef: accounts.accountOperationRef,
+        plan: accounts.accountPlan,
+        planDigest: accounts.accountPlanDigest,
+      },
+      retainedPrepare: true,
+    };
+  }
   const retained = record?.retainedAuth;
   const retainedPrepare =
     context.action === "prepare" &&

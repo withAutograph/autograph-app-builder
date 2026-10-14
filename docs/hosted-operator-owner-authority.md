@@ -21,3 +21,41 @@ terminal approval by the current owner and its closed tool input must bind the
 current operation reference, selected action, selection, and exact frozen plan
 digest. Missing, denied, conflicting, or stale approvals do not authorize an
 effect.
+
+## Normal accounts and organization sessions
+
+For apps requiring several participants, Builder derives `normalActorProgram`
+from the accepted product requirements. The program names the accounts,
+organizations, memberships and app roles; it contains no passwords or cookies.
+Planning remains read-only. Resource/Auth/Gateway preparation, normal account
+preparation, and the subsequently resolved membership/access/app delivery plan
+retain their concrete effect approvals. Continue the original public session;
+the evaluator does not create fixture users, edit grants or invoke private stages.
+
+Account preparation uses ordinary Auth sign-up/sign-in. An existing account uses
+the normal browser sign-in request. Its private session capture requires the
+configured native sender, canonical pending nonce, pinned Gateway proof and
+actual same-cookie GetSession. Capture stages private bytes first; the original
+Builder owner confirms the callback before those bytes can become retained
+account state. An ordinary reply resumes the same approved operation and does
+not itself establish an identity. Credentials and browser state remain encrypted
+in owner-scoped private records and never enter model context or public results.
+
+Each organization context uses its own actual Realm session. The protected
+organization worker receives the unchanged approved full plan and the selected
+organization's retained identity proof. Ordinary invitations, acceptance and
+active-organization selection establish membership. A single Realm session is
+not relabeled to represent multiple organizations.
+
+The private prepared-runtime handoff freshly reads GetSession for each selected
+session and the actual membership role for each organization, then rechecks the
+current plan approval. Only the authenticated private bindings response carries
+the resulting storage files; they are not environment variables or tool text.
+Keep approval, credential, tenant, lease and physical-fence checks. Do not add
+source-layout, version, receipt-count, actor-count or regular-app-change gates.
+Legacy plans without a participant program retain their existing path.
+
+Source tests, CI and a READY deployment establish their respective boundaries.
+Authenticated Preview still requires actual sign-in, submission, reviewer
+decision, persistence and the full isolation/recovery acceptance evidence in
+[the Spend Review qualification plan](plans/2026-10-07-hosted-operator-deployment-and-spend-review-qualification.md).

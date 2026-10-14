@@ -4,10 +4,11 @@ import { z } from "zod";
 import { hostedOperatorClientForSession } from "@/lib/provisioning/hosted-operator-client";
 import type { OperatorSelection } from "@/lib/provisioning/hosted-operator-contract";
 import { HostedOperatorError } from "@/lib/provisioning/hosted-operator-contract";
+import { normalActorProgramSchema } from "@/lib/provisioning/hosted-operator-normal-actor-program";
 
 export default defineTool({
   description:
-    "Read the protected operator's concrete Preview resource/access plan before asking for effect approval. Returns named targets, roles, effects, cost ownership, retention and an opaque operation reference. Supply appId; omit projectId and branch to resolve the configured owner-authorized Preview target. Explicit project or branch choices must match that target. Does not allocate hosted resources or execute repository code. Missing protected operator or explicit owner-authorized synthetic Neon context remains blocked.",
+    "Read the protected operator's concrete Preview resource/access plan before asking for effect approval. Returns named targets, roles, effects, cost ownership, retention and an opaque operation reference. Supply appId; omit projectId and branch to resolve the configured owner-authorized Preview target. Explicit project or branch choices must match that target. For accepted product requirements needing several authenticated participants, derive normalActorProgram from the accepted account, organization, membership and app-role requirements and supply that program. Its origin must be the operator's verified native public origin. First approve normal account preparation; after participants-prepared, plan again using the same program and session to obtain the resolved organization, invitation, membership and app access approval before those writes. The Builder owns this preparation; ordinary public product replies supply its requirements. This planning call does not allocate resources or create accounts.",
   async execute(input, ctx) {
     const blocked = (code: HostedOperatorError["code"], selection?: OperatorSelection) => ({
       appId: input.appId,
@@ -48,6 +49,9 @@ export default defineTool({
       return await operator.request(
         {
           action: "plan",
+          ...(input.normalActorProgram === undefined
+            ? {}
+            : { normalActorProgram: input.normalActorProgram }),
           operation,
           selection,
         },
@@ -62,6 +66,7 @@ export default defineTool({
     branch: z.string().min(1).optional(),
     environment: z.literal("preview"),
     operation: z.enum(["prepare", "cleanup"]),
+    normalActorProgram: normalActorProgramSchema.optional(),
     projectId: z.string().min(1).optional(),
   }),
 });

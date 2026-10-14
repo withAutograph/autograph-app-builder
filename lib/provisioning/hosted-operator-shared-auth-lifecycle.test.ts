@@ -384,6 +384,33 @@ const composed = (active = true) => {
   });
   const controlPlane: ControlPlane = {
     assertCanonicalOwner: unavailable,
+    normalActorJournalPorts: {
+      assertAuthorized: unavailable,
+      assertAccountApproval: unavailable,
+      assertMutationAuthority: unavailable,
+      now: unavailable,
+      keyring: {
+        get tokenKey() {
+          return unavailable();
+        },
+        get tokenKeyVersion() {
+          return unavailable();
+        },
+      },
+      store: { read: unavailable, compareAndSet: unavailable },
+    },
+    readNormalActorRuntimeBindings: unavailable,
+    readNormalActorPreparation: unavailable,
+    readNormalActorOrganizationProofs: unavailable,
+    ensureNormalActorCapture: unavailable,
+    normalActorAuthIdentityInput: unavailable,
+    prepareNormalActorAccounts: unavailable,
+    verifyNormalActorAccounts: unavailable,
+    prepareNormalActorMemberships: unavailable,
+    verifyNormalActorMemberships: unavailable,
+    reconcileNormalActorMemberships: unavailable,
+    prepareNormalActorCapture: unavailable,
+    readPendingNormalActorCapture: unavailable,
     assertAuthorized,
     assertMembershipCapture: unavailable,
     assertPlanningAuthorized: unavailable,

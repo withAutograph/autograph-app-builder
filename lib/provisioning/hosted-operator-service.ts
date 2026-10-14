@@ -1,3 +1,4 @@
+import type { projectNormalActorRuntime } from "./hosted-operator-normal-actor-runtime-projection";
 import {
   createHostedOperatorConsentDiagnostic,
   reportOperatorPlanningMismatch,
@@ -50,6 +51,13 @@ import {
   workerEffectCheckpointFrameSchema,
   workerEffectCheckpointSchema,
 } from "./hosted-operator-contract";
+import {
+  assertNormalActorState,
+  normalActorProgramDigest,
+} from "./hosted-operator-normal-actor-program";
+import type { NormalActorProgram, NormalActorState } from "./hosted-operator-normal-actor-program";
+import { normalActorAccountPreparationSchema } from "./hosted-operator-normal-actor-journal";
+import type { NormalActorAccountPreparation } from "./hosted-operator-normal-actor-journal";
 import type {
   HostedOperatorPlan,
   OperatorPublicResult,
@@ -71,6 +79,8 @@ export interface HostedOperatorContext {
   ownerContext?: OperatorOwnerContext;
 }
 const AUTH_BOOTSTRAP_STAGE = "auth-bootstrap";
+const AUTH_PARTICIPANTS_STAGE = "auth-participants";
+const PARTICIPANTS_PREPARED = "participants-prepared";
 type Context = HostedOperatorContext;
 type PrivateState = NonNullable<HostedRuntimeJournalRecord["privateState"]>;
 type Effect = HostedOperatorPlan["effects"][number];
@@ -101,10 +111,14 @@ export type HostedOperatorDeploymentContext = HostedOperatorEffectContext & {
 };
 export type HostedOperatorEffectContext = Context & {
   effect: Effect;
+  /** Actual execution lease, retained privately for read-only journal CAS authority checks. */
+  leaseId?: string;
   fenceGeneration: number;
   operationRef: string;
   plan: HostedOperatorPlan;
   privateState?: PrivateState;
+  accountPreparation?: NormalActorAccountPreparation;
+  checkpointAccountPreparation?: (preparation: NormalActorAccountPreparation) => Promise<void>;
   deliveryCandidates?: OperatorDeploymentCandidate[];
   gatewayDeliveryCandidates?: OperatorDeploymentCandidate[];
   checkpointGatewayDelivery?: (
@@ -150,7 +164,12 @@ export interface ProtectedHostedOperatorDependencies {
    * Gateway origin for its exact Preview project and branch, never a request/model value or
    * private Sandbox origin.
    */
-  plan: (context: Context & { action: "prepare" | "cleanup" }) => Promise<HostedOperatorPlan>;
+  plan: (
+    context: Context & {
+      action: "prepare" | "cleanup";
+      normalActorProgram?: NormalActorProgram;
+    },
+  ) => Promise<HostedOperatorPlan>;
   /** Re-read membership, owner connection and provider grants. No ambient Neon authority. */
   assertAuthorized: (context: Context & { plan: HostedOperatorPlan }) => Promise<void>;
   /** Canonical session/member/app/adapter authority; provider grants remain full at observation boundaries and mutations. */
@@ -180,6 +199,10 @@ export interface ProtectedHostedOperatorDependencies {
   >;
   /** Pinned trusted installer + verified declarative artifact only. Guard immediately before every effect; checkpoint credentials before allocation. */
   executeEffect: (input: HostedOperatorWorkerEffectContext) => Promise<OperatorReceipt>;
+  /** Private actual normal sessions only, after prepared approval and native Preview verification. */
+  normalActorRuntimeBindings?: (
+    input: Context & { plan: HostedOperatorPlan; operationRef: string },
+  ) => Promise<ReturnType<typeof projectNormalActorRuntime> | undefined>;
   /** Independently read installed identities/release/provider bindings, with no mutation. */
   verify: (
     input: Context & { plan: HostedOperatorPlan; privateState?: PrivateState },
@@ -192,6 +215,25 @@ export interface ProtectedHostedOperatorDependencies {
       assertCurrent: () => Promise<void>;
     },
   ) => Promise<OperatorAuthSchemaPreparation>;
+  /** Mandatory for participant plans: current normal sessions, with the original encrypted account scope. */
+  verifyNormalActorAccounts?: (
+    input: Context & {
+      plan: HostedOperatorPlan;
+      assertCurrent: () => Promise<void>;
+      accountPreparation: NormalActorAccountPreparation;
+      checkpointAccountPreparation: (preparation: NormalActorAccountPreparation) => Promise<void>;
+    },
+  ) => Promise<NormalActorState>;
+  /** Called after real first approval and before claiming an account-effect lease. */
+  ensureNormalActorCapture?: (
+    input: Context & {
+      plan: HostedOperatorPlan;
+      operationRef: string;
+      callId: string;
+      approvalId: string;
+      planDigest: string;
+    },
+  ) => Promise<"ready" | "required">;
   authIdentityInput?: (
     input: Context & { operationRef: string; plan: HostedOperatorPlan },
   ) => Promise<z.infer<typeof operatorAuthIdentityInputSchema>>;
@@ -271,7 +313,14 @@ const handlePlanOperation = async (
   const proposed = await observeOperatorPlanStage(
     context.target.sessionId,
     "plan_composition",
-    async () => await deps.plan({ ...context, action: input.operation }),
+    async () =>
+      await deps.plan({
+        ...context,
+        action: input.operation,
+        ...(input.normalActorProgram === undefined
+          ? {}
+          : { normalActorProgram: input.normalActorProgram }),
+      }),
   );
   const plan = await observeOperatorPlanStage(context.target.sessionId, "plan_validation", () =>
     hostedOperatorPlanSchema.parse(proposed),
@@ -350,13 +399,18 @@ const handlePlanOperation = async (
           (effect) =>
             record.operator?.receipts.some((receipt) => receipt.effectId === effect.id) === true,
         );
+      const participantsCompleted =
+        record.status === PARTICIPANTS_PREPARED &&
+        record.operator.plan.stage === AUTH_PARTICIPANTS_STAGE &&
+        record.accountPreparation !== undefined;
       if (
         record.leaseId !== undefined ||
         record.operator.pendingEffectId !== undefined ||
         record.operator.pendingEffectAttempt !== undefined ||
         (record.operator.receipts.length > 0 &&
           !["prepared", "cleaned"].includes(record.status) &&
-          !authStageCompleted)
+          !authStageCompleted &&
+          !participantsCompleted)
       ) {
         throw new HostedOperatorError("operation_in_progress");
       }
@@ -377,6 +431,27 @@ const handlePlanOperation = async (
         throw new HostedOperatorError("operation_in_progress");
       }
       const retainedAuth = record.retainedAuth ?? retainedCandidate;
+      if (record.accountPreparation !== undefined) {
+        const preparation = record.accountPreparation;
+        if (
+          plan.normalActorProgram === undefined ||
+          preparation.programDigest !== normalActorProgramDigest(plan.normalActorProgram)
+        ) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        if (plan.stage === "app") {
+          const proposedPreparation = plan.normalActorPreparation;
+          if (
+            proposedPreparation === undefined ||
+            proposedPreparation.accountOperationRef !== preparation.accountOperationRef ||
+            proposedPreparation.accountPlanDigest !== preparation.accountPlanDigest ||
+            proposedPreparation.accountApprovalId !== preparation.accountApprovalId ||
+            proposedPreparation.accountApprovedByCallId !== preparation.accountApprovedByCallId
+          ) {
+            throw new HostedOperatorError("resource_mismatch");
+          }
+        }
+      }
       // Same-resource release changes keep credentials; old proof never attests the new plan.
       const nextOperator: ReturnType<typeof requireOperator> = { ...operator };
       if (sameAuthPreparation(record.operator.plan, plan)) {
@@ -488,11 +563,6 @@ const handleBindingsOperation = async (input: {
     await deps.bindings({ ...context, plan, privateState: current.record.privateState }),
     context.authority,
   );
-  await deps.assertAuthorized({ ...context, plan });
-  const latest = await read();
-  if (latest?.revision !== current.revision) {
-    throw new HostedOperatorError("operation_in_progress");
-  }
   const app = operator.deliveryCandidates?.find(
     (candidate) => candidate.deploymentId === operator.deliveredDeploymentId,
   );
@@ -514,9 +584,36 @@ const handleBindingsOperation = async (input: {
       : undefined;
   if (nativePreview) {
     assertOperatorNativePreview(nativePreview, plan, operationRef, input.now());
-    return response({ environment, nativePreview, operationRef, plan, proof });
   }
-  return response({ environment, operationRef, plan, proof });
+  let normalActors: ReturnType<typeof projectNormalActorRuntime> | undefined;
+  if (plan.normalActorProgram !== undefined) {
+    if (nativePreview === undefined || deps.normalActorRuntimeBindings === undefined) {
+      throw new HostedOperatorError("auth_identity_required");
+    }
+    if (plan.normalActorProgram.origin !== nativePreview.publicOrigin) {
+      throw new HostedOperatorError("resource_mismatch");
+    }
+    normalActors = await deps.normalActorRuntimeBindings({ ...context, plan, operationRef });
+    if (normalActors === undefined) {
+      throw new HostedOperatorError("auth_identity_required");
+    }
+    if (normalActors.origin !== nativePreview.publicOrigin) {
+      throw new HostedOperatorError("resource_mismatch");
+    }
+  }
+  await deps.assertAuthorized({ ...context, plan });
+  const latest = await read();
+  if (latest?.revision !== current.revision) {
+    throw new HostedOperatorError("operation_in_progress");
+  }
+  return response({
+    environment,
+    ...(nativePreview === undefined ? {} : { nativePreview }),
+    ...(normalActors === undefined ? {} : { normalActors }),
+    operationRef,
+    plan,
+    proof,
+  });
 };
 
 const normalizeOperatorContext = (authorized: Context): Context => {
@@ -654,7 +751,11 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
       await deps.assertAuthorized({ ...context, plan });
       const publicStatus = (record: HostedRuntimeJournalRecord): OperatorPublicResult => {
         let status: OperatorPublicResult["status"] = "pending";
-        if (record.status === "prepared" || record.status === "cleaned") {
+        if (
+          record.status === "prepared" ||
+          record.status === "cleaned" ||
+          record.status === PARTICIPANTS_PREPARED
+        ) {
           status = record.status;
         }
         if (
@@ -666,6 +767,9 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
         return { appId, authenticatedBehavior: "unassessed", operationRef, planDigest, status };
       };
       if (input.action === "auth-identity-input") {
+        if (plan.normalActorProgram !== undefined && plan.stage !== AUTH_PARTICIPANTS_STAGE) {
+          throw new HostedOperatorError("auth_identity_required");
+        }
         if (deps.authIdentityInput === undefined) {
           throw new HostedOperatorError("operator_unavailable");
         }
@@ -680,7 +784,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
       }
       assertUnexpired(plan, now());
       if (input.action === "bindings") {
-        if (plan.stage === AUTH_BOOTSTRAP_STAGE) {
+        if (plan.stage === AUTH_BOOTSTRAP_STAGE || plan.stage === AUTH_PARTICIPANTS_STAGE) {
           throw new HostedOperatorError("auth_identity_required");
         }
         return await handleBindingsOperation({
@@ -721,6 +825,43 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
         return approval;
       };
       const approval = await assertApproval();
+      if (plan.stage === AUTH_PARTICIPANTS_STAGE) {
+        if (deps.ensureNormalActorCapture === undefined) {
+          throw new HostedOperatorError("operator_unavailable");
+        }
+        // Retain real approval provenance before idle owner capture; no account-effect lease exists yet.
+        await update((value) => {
+          const savedOperator = requireOperator(value);
+          if (
+            savedOperator.operationRef !== operationRef ||
+            savedOperator.planDigest !== planDigest ||
+            value.leaseId !== undefined ||
+            savedOperator.pendingEffectId !== undefined ||
+            savedOperator.pendingEffectAttempt !== undefined
+          ) {
+            throw new HostedOperatorError("operation_in_progress");
+          }
+          if (value.accountPreparation !== undefined) {
+            return value;
+          }
+          return {
+            ...value,
+            approvedByCallId: input.callId,
+            operator: { ...savedOperator, approvalId: approval.approvalId },
+          };
+        });
+        const capture = await deps.ensureNormalActorCapture({
+          ...context,
+          plan,
+          operationRef,
+          callId: input.callId,
+          approvalId: approval.approvalId,
+          planDigest,
+        });
+        if (capture !== "ready") {
+          throw new HostedOperatorError("auth_identity_required");
+        }
+      }
       const leaseId = randomUUID();
       let claimed = await update((record) => {
         if (
@@ -804,6 +945,43 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
               await ownedUpdate((record) => record);
             };
             let { record } = claimed;
+            const checkpointAccountPreparation = async (
+              supplied: NormalActorAccountPreparation,
+            ) => {
+              await assertCurrent();
+              const preparation = normalActorAccountPreparationSchema.parse(supplied);
+              if (
+                plan.normalActorProgram === undefined ||
+                preparation.programDigest !== normalActorProgramDigest(plan.normalActorProgram)
+              ) {
+                throw new HostedOperatorError("resource_mismatch");
+              }
+              record = (
+                await ownedUpdate((value) => {
+                  const prior = value.accountPreparation;
+                  if (prior === undefined) {
+                    if (
+                      plan.stage !== AUTH_PARTICIPANTS_STAGE ||
+                      preparation.accountOperationRef !== operationRef ||
+                      preparation.accountPlanDigest !== planDigest ||
+                      preparation.accountApprovalId !== approval.approvalId ||
+                      preparation.accountApprovedByCallId !== input.callId
+                    ) {
+                      throw new HostedOperatorError("authorization_required");
+                    }
+                  } else if (
+                    preparation.accountOperationRef !== prior.accountOperationRef ||
+                    preparation.accountPlanDigest !== prior.accountPlanDigest ||
+                    preparation.accountApprovalId !== prior.accountApprovalId ||
+                    preparation.accountApprovedByCallId !== prior.accountApprovedByCallId ||
+                    preparation.programDigest !== prior.programDigest
+                  ) {
+                    throw new HostedOperatorError("resource_mismatch");
+                  }
+                  return { ...value, accountPreparation: preparation };
+                })
+              ).record;
+            };
             for (const effect of plan.effects) {
               await assertCurrent();
               const priorReceipt = requireOperator(record).receipts.find(
@@ -818,7 +996,10 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
               }
               const effectInput: HostedOperatorEffectContext = {
                 ...context,
+                leaseId,
                 assertCurrent,
+                accountPreparation: record.accountPreparation,
+                checkpointAccountPreparation,
                 assertCurrentObservation,
                 checkpoint: async (privateState) => {
                   await assertCurrent();
@@ -1161,6 +1342,51 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
               ).record;
             }
             await assertCurrent();
+            if (plan.stage === AUTH_PARTICIPANTS_STAGE) {
+              const latest = await read();
+              if (latest === undefined) {
+                throw new HostedOperatorError("operation_in_progress");
+              }
+              record = latest.record;
+              const preparation = record.accountPreparation;
+              const program = plan.normalActorProgram;
+              if (
+                deps.verifyNormalActorAccounts === undefined ||
+                preparation === undefined ||
+                program === undefined
+              ) {
+                throw new HostedOperatorError("operator_unavailable");
+              }
+              const state = assertNormalActorState(
+                program,
+                await deps.verifyNormalActorAccounts({
+                  ...context,
+                  plan,
+                  assertCurrent,
+                  accountPreparation: preparation,
+                  checkpointAccountPreparation,
+                }),
+                preparation.accountOperationRef,
+              );
+              if (
+                state.actors.some(
+                  (actor) =>
+                    actor.signup !== "complete" ||
+                    actor.session === undefined ||
+                    actor.storageState === undefined,
+                )
+              ) {
+                throw new HostedOperatorError("reconciliation_required");
+              }
+              await assertCurrent();
+              const complete = await ownedUpdate((value) => ({
+                ...value,
+                environmentBound: false,
+                status: PARTICIPANTS_PREPARED,
+                step: "reserved",
+              }));
+              return response(operatorPublicResultSchema.parse(publicStatus(complete.record)));
+            }
             if (plan.stage === AUTH_BOOTSTRAP_STAGE) {
               if (deps.verifyAuthReadiness === undefined) {
                 throw new HostedOperatorError("operator_unavailable");
