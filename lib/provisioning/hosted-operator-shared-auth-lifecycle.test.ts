@@ -383,6 +383,7 @@ const composed = (active = true) => {
     return preparedCredentials(input);
   });
   const controlPlane: ControlPlane = {
+    assertCanonicalOwner: unavailable,
     assertAuthorized,
     assertMembershipCapture: unavailable,
     assertPlanningAuthorized: unavailable,
