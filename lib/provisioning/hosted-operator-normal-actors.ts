@@ -35,6 +35,11 @@ export interface NormalActorAccountPorts {
   } | null>;
   /** Re-read durable approval for this exact program and the existing resource lease/fence. */
   assertCurrent: (input: { operationRef: string; programDigest: string }) => Promise<void>;
+  /** Actual current approval/owner/lease/fence observation for internal save wrappers only. */
+  assertCurrentObservation?: (input: {
+    operationRef: string;
+    programDigest: string;
+  }) => Promise<void>;
   /** Existing owner-journal CAS; encrypt state with encryptNormalActorState before writing. */
   checkpoint: (state: NormalActorState) => Promise<void>;
   /** Only the approved, normal-owner Gateway capture adapter may supply an existing session. */
@@ -112,11 +117,18 @@ const prepareNormalActorStage = async (input: StageInput) => {
   const assertCurrent = async () => {
     await input.ports.assertCurrent({ operationRef: input.operationRef, programDigest });
   };
+  const assertSaveCurrent = async () => {
+    if (input.ports.assertCurrentObservation === undefined) {
+      await assertCurrent();
+      return;
+    }
+    await input.ports.assertCurrentObservation({ operationRef: input.operationRef, programDigest });
+  };
   const save = async () => {
     assertNormalActorState(program, state, input.operationRef);
-    await assertCurrent();
+    await assertSaveCurrent();
     await input.ports.checkpoint(structuredClone(state));
-    await assertCurrent();
+    await assertSaveCurrent();
   };
   const clients = new Map<string, NormalAuthClient>();
   if (input.stage === "memberships") {

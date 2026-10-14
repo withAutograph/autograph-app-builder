@@ -15,6 +15,7 @@ import {
   assertNormalActorState,
   initialNormalActorState,
   normalActorProgramSchema,
+  normalActorProgramDigest,
   proposeResolvedNormalActorAccess,
   resolvedNormalActorAccess,
 } from "./hosted-operator-normal-actor-program";
@@ -556,4 +557,53 @@ describe("normal actor preparation", () => {
       decryptNormalActorState({ ...scope, sealed, program: { ...program, appId: "other-app" } }),
     ).toThrow("state_unavailable");
   });
+});
+
+describe("internal actor save observation wrappers", () => {
+  it("uses observations for save wrappers while retaining full outward guards and fallback behavior", async () => {
+    const run = async (observed: boolean) => {
+      const local = fixture();
+      let full = 0;
+      let observation = 0;
+      let checkpoints = 0;
+      const originalCheckpoint = local.ports.checkpoint;
+      local.ports.assertCurrent = async () => {
+        full += 1;
+      };
+      if (observed) {
+        local.ports.assertCurrentObservation = async (scope) => {
+          expect(scope.operationRef).toBe(operationRef);
+          expect(scope.programDigest).toBe(normalActorProgramDigest(program));
+          observation += 1;
+        };
+      }
+      local.ports.checkpoint = async (state) => {
+        checkpoints += 1;
+        await originalCheckpoint(state);
+      };
+      await prepareNormalActorAccounts({ program, operationRef, ports: local.ports });
+      return { full, observation, checkpoints, requests: local.requests };
+    };
+    const fallback = await run(false);
+    const observed = await run(true);
+    expect(observed.checkpoints).toBe(fallback.checkpoints);
+    expect(observed.requests).toEqual(fallback.requests);
+    expect(observed.observation).toBe(observed.checkpoints * 2);
+    expect(fallback.full - observed.full).toBe(observed.observation);
+    expect(observed.full).toBeGreaterThan(0);
+  });
+  it.each(["owner_revoked", "lease_expired"])(
+    "blocks checkpoint before save when observation rejects %s",
+    async (reason) => {
+      const local = fixture();
+      local.ports.assertCurrentObservation = async () => {
+        throw new Error(reason);
+      };
+      await expect(
+        prepareNormalActorAccounts({ program, operationRef, ports: local.ports }),
+      ).rejects.toThrow(reason);
+      expect(local.requests).toEqual([]);
+      expect(local.getState().actors.every((actor) => actor.credentials === undefined)).toBe(true);
+    },
+  );
 });
