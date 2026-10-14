@@ -8,6 +8,7 @@ import {
 } from "./hosted-operator-contract";
 import type { HostedOperatorOwnedOrganizationSpec } from "./hosted-operator-contract";
 import { createHostedOperatorPublicGateway } from "./hosted-operator-public-gateway";
+import type { readHostedOperatorProviderInventory } from "./hosted-operator-provider-inventory";
 import {
   normalActorProgramDigest,
   normalActorProgramSchema,
@@ -146,7 +147,7 @@ describe("public Gateway origin projection", () => {
     const observed = structuredClone(inventory);
     const result = hostedOperatorPlanSchema.parse({
       ...plan,
-      publicGateway: createHostedOperatorPublicGateway(inventory),
+      publicGateway: createHostedOperatorPublicGateway(inventory, "configured-branch"),
       normalActorProgram: { ...program, origin: publicOrigin },
       deploymentBoundary: { ...plan.deploymentBoundary, verification: inventory.verification },
     });
@@ -165,11 +166,39 @@ describe("public Gateway origin projection", () => {
     expect(
       hostedOperatorPlanSchema.safeParse({
         ...plan,
-        publicGateway: createHostedOperatorPublicGateway(inventory),
+        publicGateway: createHostedOperatorPublicGateway(inventory, "configured-branch"),
         normalActorProgram: { ...program, origin: generatedOrigin },
         deploymentBoundary: { ...plan.deploymentBoundary, verification: inventory.verification },
       }).success,
     ).toBe(false);
+  });
+
+  it("uses the configured branch when native deployment metadata has no Git branch", () => {
+    const plan = participantPlan();
+    const nativeBranch: Awaited<
+      ReturnType<typeof readHostedOperatorProviderInventory>
+    >["gateway"]["branch"] = null;
+    const observed = {
+      ...inventory,
+      gateway: { ...inventory.gateway, branch: nativeBranch },
+    };
+    const result = hostedOperatorPlanSchema.parse({
+      ...plan,
+      publicGateway: createHostedOperatorPublicGateway(observed, "configured-branch"),
+      normalActorProgram: { ...program, origin: publicOrigin },
+      deploymentBoundary: {
+        ...plan.deploymentBoundary,
+        gateway: { ...plan.deploymentBoundary?.gateway, branch: "configured-branch" },
+        verification: observed.verification,
+      },
+    });
+    expect(result.publicGateway).toEqual({
+      branch: "configured-branch",
+      projectId: "gateway-project",
+      origin: publicOrigin,
+    });
+    expect(result.deploymentBoundary?.verification.gatewayOrigin).toBe(generatedOrigin);
+    expect(observed.gateway.branch).toBeNull();
   });
 });
 const organization = (

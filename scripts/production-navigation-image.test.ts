@@ -77,6 +77,99 @@ describe("production navigation pinned image preparation", () => {
       expect(f.wait).not.toHaveBeenCalled();
     },
   );
+  it.each([
+    ["full", `Error response from daemon: No such image: ${fallbackImage}`],
+    [
+      "familiar",
+      `Error response from daemon: No such image: ${fallbackImage.replace("docker.io/library/", "")}`,
+    ],
+    [
+      "namespace",
+      `Error response from daemon: No such image: ${fallbackImage.replace("docker.io/", "")}`,
+    ],
+    [
+      "implicit namespace",
+      `Error response from daemon: No such image: ${fallbackImage.replace("library/", "")}`,
+    ],
+    [
+      "legacy domain",
+      `Error response from daemon: No such image: ${fallbackImage.replace("docker.io/", "index.docker.io/")}`,
+    ],
+    ["error prefix", `Error: No such image: ${fallbackImage.replace("docker.io/library/", "")}`],
+    ["daemon message", `No such image: ${fallbackImage.replace("docker.io/library/", "")}`],
+    [
+      "warning",
+      `WARNING: Error parsing config file (/tmp/synthetic-docker/config.json): unexpected end of JSON input\nError response from daemon: No such image: ${fallbackImage.replace("docker.io/library/", "")}\n`,
+    ],
+    [
+      "warning after",
+      `Error response from daemon: No such image: ${fallbackImage.replace("docker.io/library/", "")}\r\nWARNING: Error parsing config file (/tmp/synthetic-docker/config.json): unexpected end of JSON input\r\n`,
+    ],
+  ])(
+    "pulls the requested immutable fallback after its semantic missing-image diagnostic: %s",
+    async (_label, stderr) => {
+      const f = fixture();
+      f.runCommand
+        .mockResolvedValueOnce(missing)
+        .mockResolvedValueOnce(throttled)
+        .mockResolvedValueOnce({ exitCode: 1, stderr })
+        .mockResolvedValueOnce(success);
+      await expect(ensureProductionNavigationImage(f.input)).resolves.toBe(fallbackImage);
+      expect(f.runCommand).toHaveBeenNthCalledWith(4, ["pull", fallbackImage], {
+        signal: f.controller.signal,
+        timeoutMs: 60_000,
+      });
+      expect(f.wait).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    [
+      "wrong image",
+      "Error response from daemon: No such image: another-image",
+      "missing_reference_mismatch",
+    ],
+    [
+      "wrong digest",
+      `Error response from daemon: No such image: postgres@sha256:${"a".repeat(64)}`,
+      "missing_reference_mismatch",
+    ],
+    [
+      "daemon unavailable",
+      "Cannot connect to the Docker daemon at unix:///private-sensitive-location. Is the docker daemon running?",
+      "daemon_unavailable",
+    ],
+    [
+      "authorization failed",
+      "Error response from daemon: permission denied: private-sensitive-credential",
+      "authorization_failed",
+    ],
+    [
+      "transport failed",
+      "error during connect: x509: certificate signed by unknown authority: private-sensitive-endpoint",
+      "daemon_unavailable",
+    ],
+    [
+      "other fatal diagnostic",
+      `Error response from daemon: No such image: ${fallbackImage}\nError response from daemon: unauthorized: private-sensitive-credential`,
+      "authorization_failed",
+    ],
+    ["unknown diagnostic", "private-sensitive-command-failure", "unrecognized_diagnostic"],
+  ])(
+    "fails fallback inspection immediately with a closed reason: %s",
+    async (_label, stderr, reason) => {
+      const f = fixture();
+      f.runCommand
+        .mockResolvedValueOnce(missing)
+        .mockResolvedValueOnce(throttled)
+        .mockResolvedValueOnce({ exitCode: 1, stderr });
+      const failure = ensureProductionNavigationImage(f.input);
+      await expect(failure).rejects.toThrow(reason);
+      await expect(failure).rejects.not.toThrow("private-sensitive");
+      expect(f.runCommand).toHaveBeenCalledTimes(3);
+      expect(f.wait).not.toHaveBeenCalled();
+    },
+  );
+
   it("reuses the exact fallback image when it is already present", async () => {
     const f = fixture();
     f.runCommand.mockResolvedValueOnce(missing).mockResolvedValueOnce(throttled);

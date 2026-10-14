@@ -21,9 +21,51 @@ interface ImagePreflightInput {
 
 const deadlineMessage = "Production navigation image preparation exceeded its deadline.";
 
-const missingPinnedImage = (result: ImageCommandResult, image: string): boolean =>
-  result.exitCode === 1 &&
-  result.stderr.trim() === `Error response from daemon: No such image: ${image}`;
+// Docker displays official Docker Hub images without the default registry and library namespace.
+const familiarImageReference = (value: string) =>
+  value
+    .trim()
+    .replace(/^(?:index\.)?docker\.io\//u, "")
+    .replace(/^library\//u, "");
+const missingImageReference = (line: string) =>
+  /^(?:(?:Error response from daemon|Error):\s*)?No such image:\s*(?<reference>\S+)\s*$/iu.exec(
+    line,
+  )?.groups?.reference;
+const missingPinnedImage = (result: ImageCommandResult, image: string): boolean => {
+  if (result.exitCode !== 1) {
+    return false;
+  }
+  const lines = result.stderr
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const expected = familiarImageReference(image);
+  const missing = (line: string) => {
+    const reference = missingImageReference(line);
+    return reference !== undefined && familiarImageReference(reference) === expected;
+  };
+  return lines.some(missing) && lines.every((line) => missing(line) || /^WARNING:/iu.test(line));
+};
+const inspectFailureReason = (stderr: string) => {
+  const reasons = [
+    {
+      reason: "daemon_unavailable",
+      pattern:
+        /cannot connect to the docker daemon|is the docker daemon running|connection refused|error during connect/iu,
+    },
+    {
+      reason: "authorization_failed",
+      pattern: /unauthorized|authentication required|permission denied|forbidden/iu,
+    },
+    {
+      reason: "transport_failed",
+      pattern:
+        /x509|certificate|tls handshake|network is unreachable|i\/o timeout|context deadline exceeded|no such host/iu,
+    },
+    { reason: "missing_reference_mismatch", pattern: /no such image:/iu },
+  ];
+  return reasons.find(({ pattern }) => pattern.test(stderr))?.reason ?? "unrecognized_diagnostic";
+};
 
 const registryThrottled = (result: ImageCommandResult): boolean =>
   /\btoomanyrequests\b|\bHTTP(?:\/\d(?:\.\d)?)?\s+429\b|\b429\s+Too Many Requests\b|\bstatus code\s*:?\s*429\b/iu.test(
@@ -60,7 +102,9 @@ export const ensureProductionNavigationImage = async (
       return true;
     }
     if (!missingPinnedImage(inspected, image)) {
-      throw new Error("Production navigation could not inspect the pinned PostgreSQL image.");
+      throw new Error(
+        `Production navigation could not inspect the pinned PostgreSQL image (${inspectFailureReason(inspected.stderr)}; exit ${inspected.exitCode}).`,
+      );
     }
     return false;
   };
