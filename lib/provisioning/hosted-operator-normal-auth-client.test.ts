@@ -422,3 +422,246 @@ describe("normal Auth client", () => {
     await expect(client.getSession()).rejects.toMatchObject({ code: "invalid_response" });
   });
 });
+
+const rejection = (headers: HeadersInit = {}) =>
+  Response.json({ message: "private server rejection" }, { status: 429, headers });
+
+describe("normal Auth rate limit recovery", () => {
+  const fixture = (responses: (Response | Error)[]) => {
+    let currentTime = Date.parse("2026-10-14T12:00:00.000Z");
+    const attempts: RequestInit[] = [];
+    const waits: number[] = [];
+    const permissions: string[] = [];
+    const pending = [...responses];
+    const typedFetch: typeof fetch = async (_target, init) => {
+      attempts.push(init ?? {});
+      const response = pending.shift();
+      if (response instanceof Error) {
+        throw response;
+      }
+      if (!response) {
+        throw new Error("Unexpected request");
+      }
+      return await Promise.resolve(response);
+    };
+    const options = {
+      origin,
+      fetch: typedFetch,
+      now: () => currentTime,
+      wait: async (delayMs: number, signal: AbortSignal) => {
+        expect(signal).toBe(attempts[0]?.signal);
+        waits.push(delayMs);
+        currentTime += delayMs;
+        await Promise.resolve();
+      },
+      assertApprovedEffect: async (operation: string) => {
+        permissions.push(operation);
+        await Promise.resolve();
+      },
+    };
+    return {
+      options,
+      attempts,
+      waits,
+      permissions,
+      advance: (ms: number) => {
+        currentTime += ms;
+      },
+    };
+  };
+  const successfulAccount = () => Response.json({ user: session().user });
+
+  it.each(["signUp", "signIn"] as const)(
+    "retries %s only after the actual delay with fresh approval and the same body/jar",
+    async (method) => {
+      const retry = rejection({
+        "x-retry-after": "2",
+        "set-cookie": "challenge=private-rate-cookie; Path=/; Secure; HttpOnly",
+      });
+      const f = fixture([retry, successfulAccount()]);
+      const client = createHostedOperatorNormalAuthClient(f.options);
+      await client[method]({ email: "member@example.com", password, name: "Member" });
+      expect(f.waits).toEqual([2000]);
+      expect(f.permissions).toEqual([
+        method === "signUp" ? "sign_up" : "sign_in",
+        method === "signUp" ? "sign_up" : "sign_in",
+      ]);
+      expect(f.attempts).toHaveLength(2);
+      expect(f.attempts[1]?.body).toBe(f.attempts[0]?.body);
+      expect(f.attempts[1]?.signal).toBe(f.attempts[0]?.signal);
+      expect(new Headers(f.attempts[1]?.headers).get("cookie")).toBe(
+        "challenge=private-rate-cookie",
+      );
+      expect(retry.body?.locked).toBe(false);
+      expect(retry.bodyUsed).toBe(true);
+    },
+  );
+
+  it.each<{ headers: Record<string, string>; delay: number }>([
+    { headers: { "x-retry-after": "2", "retry-after": "8" }, delay: 2000 },
+    { headers: { "retry-after": "3" }, delay: 3000 },
+    { headers: { "retry-after": "Wed, 14 Oct 2026 12:00:04 GMT" }, delay: 4000 },
+  ])("honors X timing precedence and standard delta/date timing", async ({ headers, delay }) => {
+    const f = fixture([rejection(headers), successfulAccount()]);
+    await createHostedOperatorNormalAuthClient(f.options).signIn({
+      email: "member@example.com",
+      password,
+    });
+    expect(f.waits).toEqual([delay]);
+    expect(f.attempts).toHaveLength(2);
+  });
+
+  it("denies a revoked approval after waiting without sending another POST", async () => {
+    const f = fixture([rejection({ "x-retry-after": "1" }), successfulAccount()]);
+    let approvalLive = true;
+    const client = createHostedOperatorNormalAuthClient({
+      ...f.options,
+      wait: async (delayMs, signal) => {
+        await f.options.wait(delayMs, signal);
+        approvalLive = false;
+      },
+      assertApprovedEffect: async () => {
+        if (!approvalLive) {
+          throw new Error("private revoked authority");
+        }
+        await Promise.resolve();
+      },
+    });
+    await expect(
+      client.signUp({ email: "member@example.com", password, name: "Member" }),
+    ).rejects.toMatchObject({ code: "approval_required" });
+    expect(f.attempts).toHaveLength(1);
+    expect(f.waits).toEqual([1000]);
+  });
+
+  it.each<Record<string, string>>([
+    {},
+    { "x-retry-after": "invalid" },
+    { "x-retry-after": "-1" },
+    { "x-retry-after": "0" },
+    { "x-retry-after": "invalid", "retry-after": "1" },
+    { "retry-after": "invalid date" },
+  ])("does not replay absent, invalid or immediate timing", async (headers) => {
+    const f = fixture([rejection(headers), successfulAccount()]);
+    await expect(
+      createHostedOperatorNormalAuthClient(f.options).signIn({
+        email: "member@example.com",
+        password,
+      }),
+    ).rejects.toMatchObject({ code: "auth_rejected", httpStatus: 429 });
+    expect(f.attempts).toHaveLength(1);
+    expect(f.waits).toEqual([]);
+  });
+
+  it.each([401, 409, 500, 503])(
+    "does not replay non-429 status %s even with timing",
+    async (status) => {
+      const f = fixture([
+        Response.json(
+          { code: "INVALID_EMAIL_OR_PASSWORD" },
+          { status, headers: { "x-retry-after": "1" } },
+        ),
+        successfulAccount(),
+      ]);
+      await expect(
+        createHostedOperatorNormalAuthClient(f.options).signUp({
+          email: "member@example.com",
+          password,
+          name: "Member",
+        }),
+      ).rejects.toMatchObject({ code: "auth_rejected", httpStatus: status });
+      expect(f.attempts).toHaveLength(1);
+      expect(f.waits).toEqual([]);
+    },
+  );
+
+  it("does not replay an uncertain transport failure", async () => {
+    const f = fixture([new Error("private uncertain signup"), successfulAccount()]);
+    await expect(
+      createHostedOperatorNormalAuthClient(f.options).signUp({
+        email: "member@example.com",
+        password,
+        name: "Member",
+      }),
+    ).rejects.toMatchObject({ code: "transport_failed" });
+    expect(f.attempts).toHaveLength(1);
+    expect(f.waits).toEqual([]);
+  });
+
+  it("does not truncate a provider delay beyond the existing whole-operation deadline", async () => {
+    const f = fixture([rejection({ "x-retry-after": "30" }), successfulAccount()]);
+    await expect(
+      createHostedOperatorNormalAuthClient(f.options).signIn({
+        email: "member@example.com",
+        password,
+      }),
+    ).rejects.toMatchObject({ code: "deadline_exceeded", httpStatus: 429, retryAfterMs: 30_000 });
+    expect(f.attempts).toHaveLength(1);
+    expect(f.waits).toEqual([]);
+  });
+
+  it("shares the original deadline across repeated rejections and counts response time", async () => {
+    const f = fixture([
+      rejection({ "x-retry-after": "10" }),
+      rejection({ "x-retry-after": "10" }),
+      successfulAccount(),
+    ]);
+    const client = createHostedOperatorNormalAuthClient({
+      ...f.options,
+      fetch: async (target, init) => {
+        const response = await f.options.fetch(target, init);
+        f.advance(1000);
+        return response;
+      },
+    });
+    await expect(client.signIn({ email: "member@example.com", password })).rejects.toMatchObject({
+      code: "deadline_exceeded",
+      retryAfterMs: 10_000,
+    });
+    expect(f.attempts).toHaveLength(2);
+    expect(f.waits).toEqual([10_000]);
+  });
+
+  it("closes when the delay consumes the deadline and exposes only sanitized timing", async () => {
+    const f = fixture([rejection({ "x-retry-after": "1" }), successfulAccount()]);
+    const client = createHostedOperatorNormalAuthClient({
+      ...f.options,
+      wait: async () => {
+        f.advance(20_000);
+        await Promise.resolve();
+      },
+    });
+    let error: unknown;
+    try {
+      await client.signIn({ email: "member@example.com", password });
+    } catch (caughtError) {
+      error = caughtError;
+    }
+    expect(error).toBeInstanceOf(NormalAuthClientError);
+    expect(error).toMatchObject({ code: "deadline_exceeded", retryAfterMs: 1000 });
+    expect(JSON.stringify(error)).not.toContain("private");
+    expect(f.attempts).toHaveLength(1);
+  });
+
+  it("cancels an untrusted rejection body before the wait", async () => {
+    let cancelled = false;
+    const response = new Response(
+      new ReadableStream({
+        cancel() {
+          cancelled = true;
+        },
+      }),
+      { status: 429, headers: { "x-retry-after": "1" } },
+    );
+    const f = fixture([response, successfulAccount()]);
+    const client = createHostedOperatorNormalAuthClient({
+      ...f.options,
+      wait: async (delayMs, signal) => {
+        expect(cancelled).toBe(true);
+        await f.options.wait(delayMs, signal);
+      },
+    });
+    await client.signIn({ email: "member@example.com", password });
+    expect(cancelled).toBe(true);
+  });
+});
