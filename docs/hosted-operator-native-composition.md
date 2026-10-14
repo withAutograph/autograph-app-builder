@@ -87,6 +87,14 @@ branch-scoped environment rows use the actual published branch. Ordinary
 recompilation remains a new planning input, not a source-drift failure or a
 reason to rebuild the Sandbox dependency closure.
 
+A later publication on another branch preserves earlier owned deployment
+provenance and environment rows in private delivery history. Active delivery
+uses the new branch. Returning to an earlier branch restores its latest actual
+row state, so a provider-confirmed removed row is not resurrected from an older
+snapshot. Cleanup lists the exact saved owned row IDs, branches, and tags in its
+concrete plan before approval. It re-observes each row before deletion and retains
+unconfirmed rows after partial or unknown failure.
+
 For both projects,
 `deploymentId` is optional until a deployment is observed. Bootstrap planning
 reads project ownership and Preview environment inventory even when delivery
