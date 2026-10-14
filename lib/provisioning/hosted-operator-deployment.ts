@@ -1,3 +1,4 @@
+import { requireFinalResourceBindingPhase } from "./hosted-operator-resource-binding-phase";
 import { createHash, randomBytes } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 /* oxlint-disable sonarjs/no-nested-functions -- Owner authorization and journal CAS closures share the actual opened private database. */
@@ -122,7 +123,6 @@ import {
 } from "./hosted-operator-shared-gateway";
 import type {
   HostedRuntimeJournalRecord,
-  HostedRuntimeJournalRow,
   HostedRuntimeJournalStore,
 } from "./hosted-runtime-journal";
 import { createPostgresOperatorArtifactStore } from "./hosted-operator-artifact-store";
@@ -285,58 +285,6 @@ const readCurrentResourceCredentialRecord = async (input: {
 type ResourceBindingContext = HostedOperatorContext & {
   plan: ResourceCredentialEffect["plan"];
   privateState?: HostedRuntimeJournalRecord["privateState"];
-};
-
-const requireFinalResourceBindingPhase = (
-  row: HostedRuntimeJournalRow | undefined,
-  input: ResourceBindingContext,
-) => {
-  if (row === undefined || row.record.operator === undefined) {
-    throw new HostedOperatorError("operation_in_progress");
-  }
-  const { record } = row;
-  const { operator } = row.record;
-  if (
-    operator.plan.action !== "prepare" ||
-    input.plan.action !== "prepare" ||
-    operator.approvalId === undefined
-  ) {
-    throw new HostedOperatorError("authorization_required");
-  }
-  if (
-    operator.fenceGeneration === undefined ||
-    operator.pendingEffectId !== undefined ||
-    operator.pendingEffectAttempt !== undefined
-  ) {
-    throw new HostedOperatorError("operation_in_progress");
-  }
-  if (
-    operator.planDigest !== operatorPlanDigest(input.plan) ||
-    operator.planDigest !== operatorPlanDigest(operator.plan)
-  ) {
-    throw new HostedOperatorError("resource_mismatch");
-  }
-  const complete = operator.plan.effects.every((effect) =>
-    operator.receipts.some(
-      (receipt) =>
-        receipt.effectId === effect.id &&
-        (effect.kind !== "access" || receipt.fenceGeneration === operator.fenceGeneration),
-    ),
-  );
-  if (!complete || JSON.stringify(input.privateState) !== JSON.stringify(record.privateState)) {
-    throw new HostedOperatorError("operation_in_progress");
-  }
-  const leasedFinalVerification =
-    record.status === "pending" &&
-    record.leaseId !== undefined &&
-    record.leaseExpiresAt !== undefined &&
-    Date.parse(record.leaseExpiresAt) > Date.now();
-  const preparedRead =
-    record.status === "prepared" && record.step === "bound" && record.leaseId === undefined;
-  if (!leasedFinalVerification && !preparedRead) {
-    throw new HostedOperatorError("operation_in_progress");
-  }
-  return row;
 };
 
 /**

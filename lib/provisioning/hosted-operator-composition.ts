@@ -1104,9 +1104,23 @@ export const composeHostedOperatorDependencies = (
         repoId: configuration.gateway.repoId,
       },
     });
-    const participantsBootstrapPrepared =
+    let participantsBootstrapPrepared = false;
+    if (
       gatewayPlan.normalActorProgram !== undefined &&
-      inspectParticipantBootstrapPreparation(gatewayPlan, current?.record).gatewayPrepared;
+      inspectParticipantBootstrapPreparation(gatewayPlan, current?.record).gatewayPrepared &&
+      current?.record.operator !== undefined
+    ) {
+      const verification = {
+        ...context,
+        plan: current.record.operator.plan,
+        privateState: current.record.privateState,
+        assertCurrent: async () => {
+          await controlPlane.assertPlanningAuthorized(context);
+        },
+      };
+      await authReadiness.verify(verification);
+      participantsBootstrapPrepared = true;
+    }
     return await observe(
       "identity_plan_resolution",
       async () =>
