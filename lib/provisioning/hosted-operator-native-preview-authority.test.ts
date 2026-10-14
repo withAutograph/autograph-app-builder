@@ -158,6 +158,7 @@ const fixture = () => {
     step: "planned",
     version: 1,
   });
+  effect.leaseId = record.leaseId;
   const { operator } = record;
   if (operator === undefined || operator.pendingEffectAttempt === undefined) {
     throw new Error("Missing fixture operator");
@@ -209,6 +210,12 @@ const fixture = () => {
       reserveFenceGeneration: forbidden,
     },
   };
+  const canonicalOwner = vi.fn(async () => {
+    if (!member) {
+      throw new Error("Canonical owner revoked");
+    }
+    await Promise.resolve();
+  });
   let duringGet: (() => void) | undefined;
   const store = {
     connectionString: "must-never-return-private-material",
@@ -270,6 +277,7 @@ const fixture = () => {
         now: () => now,
       }),
     controlPlane,
+    canonicalOwner,
     duringGet: (run: () => void) => {
       duringGet = run;
     },
@@ -900,4 +908,216 @@ it("rejects a different owner context before any provider request", async () => 
       ),
   ).rejects.toThrow();
   expect(f.fetcher).not.toHaveBeenCalled();
+});
+
+describe("approved native credential observation authority", () => {
+  const observationFixture = () => {
+    const f = fixture();
+    const assertCurrentObservation = vi.fn(async () => {
+      await Promise.resolve();
+    });
+    f.effect.assertCurrentObservation = assertCurrentObservation;
+    const callbacks = createNativePreviewNeonExecutionAuthority({
+      controlPlane: { ...f.controlPlane, assertCanonicalOwner: f.canonicalOwner },
+      effect: f.effect,
+      nativeStore,
+      fetch: f.fetcher,
+      now: () => f.now,
+    });
+    const { assertApprovedOwner } = callbacks;
+    if (assertApprovedOwner === undefined) {
+      throw new Error("Actual observation callbacks required by fixture");
+    }
+    return { ...f, callbacks, assertApprovedOwner, assertCurrentObservation };
+  };
+
+  it("rechecks the original approved effect and active installation without provider calls or caching", async () => {
+    const f = observationFixture();
+    await f.assertApprovedOwner(f.effect, scope, nativeStore);
+    await f.assertApprovedOwner(f.effect, scope, nativeStore);
+    expect(f.assertCurrentObservation).toHaveBeenCalledTimes(8);
+    expect(f.controlPlane.readApproval).toHaveBeenCalledTimes(4);
+    expect(f.controlPlane.readCredential).toHaveBeenCalledTimes(2);
+    expect(f.canonicalOwner).toHaveBeenCalledTimes(12);
+    expect(f.controlPlane.assertAuthorized).not.toHaveBeenCalled();
+    expect(f.effect.assertCurrent).not.toHaveBeenCalled();
+    expect(f.fetcher).not.toHaveBeenCalled();
+    f.setCredential(false);
+    await expect(f.assertApprovedOwner(f.effect, scope, nativeStore)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+  });
+
+  it("keeps full just-in-time scope checks while removing nested provider authorization from the three native binding GETs", async () => {
+    const f = observationFixture();
+    await f.callbacks.assertApprovedScope(f.effect, scope);
+    expect(f.controlPlane.assertAuthorized).toHaveBeenCalled();
+    expect(f.effect.assertCurrent).toHaveBeenCalled();
+    vi.mocked(f.controlPlane.assertAuthorized).mockClear();
+    vi.mocked(f.effect.assertCurrent).mockClear();
+    await f.callbacks.readCurrentOwnerNativeStore(f.effect, nativeStore);
+    await f.callbacks.readCurrentOwnerNativeStore(f.effect, nativeStore);
+    expect(f.fetcher).toHaveBeenCalledTimes(6);
+    expect(f.controlPlane.readCredential).toHaveBeenCalledTimes(6);
+    expect(f.assertCurrentObservation).toHaveBeenCalled();
+    expect(f.controlPlane.assertAuthorized).not.toHaveBeenCalled();
+    expect(f.effect.assertCurrent).not.toHaveBeenCalled();
+    await f.callbacks.assertApprovedScope(f.effect, scope);
+    expect(f.controlPlane.assertAuthorized).toHaveBeenCalled();
+    expect(f.effect.assertCurrent).toHaveBeenCalled();
+  });
+
+  it.each(["neither", "observation-only", "canonical-only"])(
+    "preserves full fallback when real callbacks are incomplete: %s",
+    async (available) => {
+      const f = fixture();
+      const assertCurrentObservation = vi.fn(async () => {
+        await Promise.resolve();
+      });
+      if (available === "observation-only") {
+        f.effect.assertCurrentObservation = assertCurrentObservation;
+      }
+      const controlPlane =
+        available === "canonical-only"
+          ? { ...f.controlPlane, assertCanonicalOwner: f.canonicalOwner }
+          : f.controlPlane;
+      const callbacks = createNativePreviewNeonExecutionAuthority({
+        controlPlane,
+        effect: f.effect,
+        nativeStore,
+        fetch: f.fetcher,
+        now: () => f.now,
+      });
+      expect(callbacks.assertApprovedOwner).toBeUndefined();
+      await callbacks.readCurrentOwnerNativeStore(f.effect, nativeStore);
+      expect(f.controlPlane.assertAuthorized).toHaveBeenCalled();
+      expect(f.effect.assertCurrent).toHaveBeenCalled();
+      expect(assertCurrentObservation).not.toHaveBeenCalled();
+      expect(f.canonicalOwner).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    "approval",
+    "approval-id",
+    "operation",
+    "fence",
+    "lease",
+    "expiry",
+    "pending-effect",
+    "pending-attempt",
+    "canonical",
+    "physical-fence",
+  ])("fails closed on actual approval or execution state changes: %s", async (change) => {
+    const f = observationFixture();
+    if (change === "approval") {
+      f.setApproved(false);
+    }
+    if (change === "approval-id") {
+      f.operator.approvalId = "replacement-approval";
+    }
+    if (change === "operation") {
+      f.operator.operationRef = randomUUID();
+    }
+    if (change === "fence") {
+      f.operator.fenceGeneration = f.effect.fenceGeneration + 1;
+    }
+    if (change === "lease") {
+      f.record.leaseId = randomUUID();
+    }
+    if (change === "expiry") {
+      f.record.leaseExpiresAt = new Date(f.now - 1).toISOString();
+    }
+    if (change === "pending-effect") {
+      f.operator.pendingEffectId = "app-resources";
+    }
+    if (change === "pending-attempt") {
+      f.pendingAttempt.id = randomUUID();
+    }
+    if (change === "canonical") {
+      f.setMember(false);
+    }
+    if (change === "physical-fence") {
+      f.assertCurrentObservation.mockRejectedValueOnce(new Error("Physical lock lost"));
+    }
+    await expect(f.assertApprovedOwner(f.effect, scope, nativeStore)).rejects.toThrow();
+    expect(f.fetcher).not.toHaveBeenCalled();
+    expect(f.controlPlane.assertAuthorized).not.toHaveBeenCalled();
+  });
+
+  it.each(["scopeId", "scopeType", "installationId", "active"])(
+    "rejects a fresh installation binding mismatch: %s",
+    async (field) => {
+      const f = observationFixture();
+      const current = await f.controlPlane.readCredential(authority, target.installationId);
+      if (current === undefined) {
+        throw new Error("Fixture credential missing");
+      }
+      const changed = { ...current, binding: { ...current.binding } };
+      const changedScope = field === "scopeType" ? "user" : "foreign";
+      Reflect.set(changed.binding, field, field === "active" ? false : changedScope);
+      vi.mocked(f.controlPlane.readCredential).mockResolvedValueOnce(changed);
+      await expect(f.assertApprovedOwner(f.effect, scope, nativeStore)).rejects.toMatchObject({
+        code: "authorization_required",
+      });
+      expect(f.fetcher).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["approval", "canonical", "fence", "lease", "attempt"])(
+    "rechecks authority after awaiting the fresh installation: %s",
+    async (change) => {
+      const f = observationFixture();
+      const credential = await f.controlPlane.readCredential(authority, target.installationId);
+      vi.mocked(f.controlPlane.readCredential).mockImplementationOnce(async () => {
+        if (change === "approval") {
+          f.setApproved(false);
+        }
+        if (change === "canonical") {
+          f.setMember(false);
+        }
+        if (change === "fence") {
+          f.operator.fenceGeneration = f.effect.fenceGeneration + 1;
+        }
+        if (change === "lease") {
+          f.record.leaseId = randomUUID();
+        }
+        if (change === "attempt") {
+          f.pendingAttempt.id = randomUUID();
+        }
+        return await Promise.resolve(credential);
+      });
+      await expect(f.assertApprovedOwner(f.effect, scope, nativeStore)).rejects.toThrow();
+      expect(f.fetcher).not.toHaveBeenCalled();
+    },
+  );
+
+  it("pins the approved scope, owner and native store before reading any credential", async () => {
+    const f = observationFixture();
+    await expect(
+      f.assertApprovedOwner(
+        { ...f.effect, authority: { ...authority, ownerUserId: "foreign" } },
+        scope,
+        nativeStore,
+      ),
+    ).rejects.toThrow();
+    await expect(
+      f.assertApprovedOwner(f.effect, { ...scope, branchId: "foreign" }, nativeStore),
+    ).rejects.toThrow();
+    await expect(
+      f.assertApprovedOwner(f.effect, scope, { ...nativeStore, resourceId: "foreign" }),
+    ).rejects.toThrow();
+    expect(f.controlPlane.readCredential).not.toHaveBeenCalled();
+    expect(f.fetcher).not.toHaveBeenCalled();
+  });
+
+  it("rechecks observation authority after an actual native-store provider response", async () => {
+    const f = observationFixture();
+    f.duringGet(() => {
+      f.setApproved(false);
+    });
+    await expect(f.callbacks.readCurrentOwnerNativeStore(f.effect, nativeStore)).rejects.toThrow();
+    expect(f.fetcher).toHaveBeenCalledTimes(1);
+    expect(f.controlPlane.assertAuthorized).not.toHaveBeenCalled();
+  });
 });
