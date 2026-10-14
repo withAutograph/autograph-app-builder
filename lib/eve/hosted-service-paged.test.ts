@@ -1,3 +1,4 @@
+import { nativeDeliveryForEvents } from "./native-delivery-state";
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Observe the native continuation boundary without replacing its implementation.
 import * as approvedBuildController from "./approved-build-controller";
 import { HostedCheckpointObservationConflictError } from "./hosted-checkpoint-observation-conflict-error";
@@ -1072,6 +1073,62 @@ describe("paged hosted session observation", () => {
     expect(result.events[0]).toMatchObject({ text: "accepted" });
     expect(adapter.sendAccepted).toHaveBeenCalledOnce();
     expect(adapter.send).not.toHaveBeenCalled();
+  });
+
+  it("settles the SEND acknowledgement from a durable stamped start while preserving working status", async () => {
+    let acknowledged = false;
+    const proof = nativeDeliveryForEvents([
+      {
+        type: "turn.started",
+        data: { sequence: 1, turnId: "turn_1" },
+        meta: {
+          at: "2026-10-14T00:00:00Z",
+          id: "native-turn-start",
+          deliveryIds: ["fixture-delivery"],
+        },
+      },
+    ]);
+    const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(
+      async ({ onEvent, nativeObservationState }) => {
+        const index = nativeObservationState?.publicEventCount ?? 0;
+        await onEvent({ index, text: "running", turnId: "turn_1", type: "assistant.message" });
+        return {
+          artifactProjectionRequiresLegacyReadback: false,
+          installedEventCount: index + 1,
+          nativeObservationState: {
+            ...nativeState({
+              adapterSessionId: "adapter_1",
+              nextNativeIndex: index + 1,
+              publicEventCount: index + 1,
+            }),
+            // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- The private native start is observed only after the real acknowledgement callback.
+            ...(acknowledged
+              ? {
+                  nativeDeliveryState: proof,
+                  currentTurnId: "turn_1",
+                  boundary: "working" as const,
+                }
+              : {}),
+          },
+          nextNativeIndex: index + 1,
+          pendingRequests: [],
+          publicEventCount: index + 1,
+          status: acknowledged ? "working" : "waiting",
+        };
+      },
+    );
+    const { adapter, service, sessionId } = await fixture(observe);
+    adapter.sendAccepted = vi.fn<NonNullable<HostedEveTransport["sendAccepted"]>>(async (input) => {
+      acknowledged = true;
+      await input.onAccepted?.("fixture-delivery");
+    });
+    const request = { clientRequestId: randomUUID(), message: "continue", sessionId };
+    const result = await service.send(request);
+    expect(result.status).toBe("working");
+    expect(await service.send(request)).toEqual(result);
+    expect(adapter.sendAccepted).toHaveBeenCalledOnce();
+    expect(adapter.send).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain("fixture-delivery");
   });
 
   it("shows the saved page with a retry instruction when Eve readback times out", async () => {

@@ -13,6 +13,7 @@ export const nativeDeliveryStateSchema = z.strictObject({
   currentTurnId: z.string().min(1).optional(),
   turns: z.array(
     z.strictObject({
+      startedDeliveryIds: z.array(z.string().min(1)).optional(),
       boundary: boundarySchema.optional(),
       boundaryDeliveryIds: z.array(z.string().min(1)).optional(),
       deliveryIds: z.array(z.string().min(1)),
@@ -54,6 +55,9 @@ export const reduceNativeDelivery = (
       state.turns.push(turn);
     }
     turn.deliveryIds = [...new Set([...turn.deliveryIds, ...deliveryIds])];
+    if (event.type === "turn.started") {
+      turn.startedDeliveryIds = [...new Set([...(turn.startedDeliveryIds ?? []), ...deliveryIds])];
+    }
   }
   const boundary = boundarySchema.safeParse(event.type);
   if (!boundary.success || state.currentTurnId === undefined) {
@@ -76,13 +80,14 @@ export const nativeDeliveryForEvents = (
   }
   return state;
 };
+/** A stamped native turn start proves delivery acceptance; it does not prove completed work. */
 export const provesNativeDelivery = (
   marker: SendDelivery,
   state: NativeDeliveryState | undefined,
 ): boolean =>
-  state?.turns.some(
-    (turn) =>
-      turn.boundary !== undefined &&
-      turn.deliveryIds.includes(marker.deliveryId) &&
-      turn.boundaryDeliveryIds?.includes(marker.deliveryId) === true,
-  ) === true;
+  state?.turns.some((turn) => {
+    const started = turn.startedDeliveryIds?.includes(marker.deliveryId) === true;
+    const ended =
+      turn.boundary !== undefined && turn.boundaryDeliveryIds?.includes(marker.deliveryId) === true;
+    return turn.deliveryIds.includes(marker.deliveryId) && (started || ended);
+  }) === true;

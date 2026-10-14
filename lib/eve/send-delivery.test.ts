@@ -154,13 +154,43 @@ describe("canonical SEND delivery acknowledgement", () => {
       }),
     );
   });
-  it("requires a matching boundary, not just ACK membership in a running turn", async () => {
+  it("acknowledges the exact native turn start while work is running and never posts the same CID again", async () => {
     const f = await fixture();
     f.setEvents([turnEvent("turn.started", "ours", ["ack", "neighbor"])]);
+    const result = await f.create().send(f.request);
+    expect(result.status).toBe("working");
+    expect(await f.operation()).toMatchObject({
+      state: "succeeded",
+      result: { status: "working" },
+    });
+    expect(await f.create().send(f.request)).toEqual(result);
+    expect(f.send).toHaveBeenCalledOnce();
+    expect(JSON.stringify(result)).not.toContain('"deliveryId"');
+    expect(f.diagnostics).not.toHaveBeenCalled();
+  });
+  it("reconciles a delayed native turn start after ACK readback failed without another POST", async () => {
+    const f = await fixture({ failReadback: true });
+    await expect(f.create().send(f.request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    f.setEvents([turnEvent("turn.started", "ours", ["ack"])]);
+    await expect(f.create().send(f.request)).resolves.toMatchObject({ status: "working" });
+    expect(await f.operation()).toMatchObject({ state: "succeeded" });
+    expect(f.send).toHaveBeenCalledOnce();
+  });
+  it("does not infer native acceptance from generic running-turn membership", async () => {
+    const f = await fixture();
+    f.setEvents([
+      turnEvent("turn.started", "ours", ["neighbor"]),
+      {
+        type: "message.received",
+        data: { message: "Continue", sequence: 1, turnId: "ours" },
+        meta: { at: "2026-10-14T00:00:00Z", deliveryIds: ["ack"], id: "message-received" },
+      },
+    ]);
     await expect(f.create().send(f.request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
     f.setEvents([
-      turnEvent("turn.started", "ours", ["ack", "neighbor"]),
-      waiting(["ack", "neighbor"]),
+      turnEvent("turn.started", "ours", ["neighbor"]),
+      turnEvent("turn.completed", "ours", ["ack", "neighbor"]),
+      waiting(),
     ]);
     await expect(f.create().send(f.request)).resolves.toMatchObject({ status: "waiting" });
     expect(f.send).toHaveBeenCalledOnce();
@@ -260,7 +290,7 @@ describe("canonical SEND delivery acknowledgement", () => {
       }),
     ).rejects.toThrow();
   });
-  it("retains ACK membership and exact boundary across actual incremental native cursor reads", async () => {
+  it("retains native start acceptance and exact terminal metadata across incremental native cursor reads", async () => {
     let events = [turnEvent("turn.started", "ours", ["ack", "neighbor"])];
     // oxlint-disable-next-line eslint/require-await -- The local NDJSON response preserves the native fetch contract.
     const fetchImplementation = vi.fn<typeof fetch>(async (url) => {
@@ -300,8 +330,10 @@ describe("canonical SEND delivery acknowledgement", () => {
       sessionId: "public",
     };
     expect(provesNativeDelivery(marker, first.nativeObservationState.nativeDeliveryState)).toBe(
-      false,
+      true,
     );
+    expect(first.status).toBe("working");
+    expect(first.nativeObservationState.nativeDeliveryState?.turns[0].boundary).toBeUndefined();
     events = [...events, waiting(["neighbor", "ack"])];
     const second = await observeSameOriginEveStream({
       ...common,
@@ -311,6 +343,34 @@ describe("canonical SEND delivery acknowledgement", () => {
       true,
     );
     expect(second.nativeObservationState.nextNativeIndex).toBe(2);
+  });
+  it("preserves old terminal-only proofs and refuses legacy membership without a boundary", () => {
+    const marker = {
+      adapterGeneration: 1,
+      adapterSessionId: "native",
+      deliveryId: "ack",
+      requestDigest: `sha256:${"a".repeat(64)}`,
+      sessionId: "public",
+    };
+    expect(
+      provesNativeDelivery(marker, {
+        version: 1,
+        turns: [{ turnId: "ours", deliveryIds: ["ack"] }],
+      }),
+    ).toBe(false);
+    expect(
+      provesNativeDelivery(marker, {
+        version: 1,
+        turns: [
+          {
+            turnId: "ours",
+            deliveryIds: ["ack"],
+            boundary: "turn.completed",
+            boundaryDeliveryIds: ["ack"],
+          },
+        ],
+      }),
+    ).toBe(true);
   });
   it.each(["send", "sendAccepted"] as const)(
     "passes the exact %s ACK to private storage before any readback",
