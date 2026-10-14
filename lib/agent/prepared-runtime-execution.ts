@@ -67,6 +67,7 @@ export interface PreparedRuntimeExecution {
   runTask: (input: {
     task: "test-e2e" | "repository-check" | "repository-test";
     shard?: string;
+    environment?: Readonly<Record<string, string | undefined>>;
     onChunk?: (channel: "stdout" | "stderr", content: string) => Promise<void>;
     signal?: AbortSignal;
   }) => Promise<{ exitCode: number; stdout: string; stderr: string }>;
@@ -228,7 +229,7 @@ export const restorePreparedRuntimeExecution = async (input: {
       await input.binding.persistFiles(files);
       await restore();
     },
-    async runTask({ task, shard, onChunk, signal }) {
+    async runTask({ task, shard, environment, onChunk, signal }) {
       const command = await input.provider.runCommand({
         args: [
           "run",
@@ -241,7 +242,14 @@ export const restorePreparedRuntimeExecution = async (input: {
         cmd: "mise",
         cwd: input.root,
         detached: true,
-        env: { APP_RUNTIME_STATE_DIR: input.binding.stateDirectory },
+        env: {
+          ...Object.fromEntries(
+            Object.entries(environment ?? {}).filter(
+              (entry): entry is [string, string] => entry[1] !== undefined,
+            ),
+          ),
+          APP_RUNTIME_STATE_DIR: input.binding.stateDirectory,
+        },
         signal: signal ?? input.signal,
       });
       let stdout = "";

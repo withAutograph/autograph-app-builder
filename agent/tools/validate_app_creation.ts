@@ -9,6 +9,7 @@ import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { prepareValidationLocalData } from "./prepare-app-local-preview";
+import { prepareCompiledSchemaPredecessorsForValidationForSession } from "@/lib/agent/compiled-schema-validation-input";
 
 import {
   applyImplementationFiles,
@@ -89,11 +90,40 @@ const backendValidationStatus = (status: string) =>
   status === "failed" || status === "blocked" ? ("needs_repair" as const) : ("validated" as const);
 
 export interface AppValidationRuntime {
+  prepareSchemaInput?: typeof prepareCompiledSchemaPredecessorsForValidationForSession;
   captureRelease: typeof captureValidatedRelease;
   describeApp: typeof describeValidationApp;
   executeValidation: typeof executeProposalBoundValidation;
   validateBackend: typeof validatePersistentBackend;
 }
+const prepareSchemaValidationInput = async (input: {
+  fixture: boolean;
+  parameters: Parameters<typeof prepareCompiledSchemaPredecessorsForValidationForSession>[0];
+  port?: typeof prepareCompiledSchemaPredecessorsForValidationForSession;
+}) => {
+  const prepare =
+    input.port ??
+    (input.fixture ? undefined : prepareCompiledSchemaPredecessorsForValidationForSession);
+  if (prepare === undefined) {
+    return { environment: {}, ok: true as const };
+  }
+  try {
+    const prepared = await prepare(input.parameters);
+    return { environment: prepared.environment, ok: true as const };
+  } catch {
+    input.parameters.signal?.throwIfAborted();
+    return {
+      ok: false as const,
+      result: {
+        problem:
+          "The saved compilation's predecessor artifacts could not be restored under this session's owner. Restore the retained compiled artifacts and retry validation.",
+        reason: "schema-validation-input",
+        status: "needs_repair" as const,
+      },
+    };
+  }
+};
+
 const appValidationRuntime: AppValidationRuntime = {
   captureRelease: captureValidatedRelease,
   describeApp: describeValidationApp,
@@ -161,6 +191,23 @@ export const createAppValidationTool = (
       // than Turbo's captured test pipe, which would keep Turbo waiting after
       // the tests themselves have finished.
       let runtime: Awaited<ReturnType<typeof prepareValidationLocalData>> = null;
+      const schemaInput = await prepareSchemaValidationInput({
+        fixture,
+        parameters: {
+          adapterSessionId: ctx.session.id,
+          appId: current.appSpec.appId,
+          callId: ctx.callId,
+          root: current.applyReceipt.applyRoot,
+          sandbox,
+          sessionAuth: ctx.session.auth,
+          signal: ctx.abortSignal,
+        },
+        port: executionPorts.prepareSchemaInput,
+      });
+      if (!schemaInput.ok) {
+        appBuilderWorkflowState.update(() => ({ ...base, phase: "applied" }));
+        return schemaInput.result;
+      }
       if (!fixture) {
         validationPhase(ctx.callId, "preparing_declared_local_data");
         try {
@@ -204,6 +251,7 @@ export const createAppValidationTool = (
         apply: current.applyReceipt,
         attempt,
         dependencyLayout: current.dependencyReceipt.dependencyLayout,
+        environment: schemaInput.environment,
         executor: fixture
           ? fixtureValidationCommandExecutor()
           : sandboxValidationCommandExecutor({ runtime }),

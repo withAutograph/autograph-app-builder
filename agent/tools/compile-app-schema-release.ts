@@ -10,7 +10,10 @@ import {
   prepareCanonicalSchemaPredecessorsForSession,
   SchemaPredecessorError,
 } from "@/lib/agent/schema-predecessor";
-import { rememberCanonicalSchemaRelease } from "@/lib/agent/schema-predecessor-state";
+import {
+  rememberCanonicalSchemaRelease,
+  rememberCompiledSchemaPredecessors,
+} from "@/lib/agent/schema-predecessor-state";
 
 import {
   APP_BUILDER_WORKFLOW_VERSION,
@@ -190,6 +193,11 @@ export default defineTool({
         if (result.status === "published") {
           rememberCanonicalSchemaRelease(result.selection);
         }
+        rememberCompiledSchemaPredecessors(
+          session.appId,
+          prepared.predecessors.map(({ selection }) => selection),
+          result.status === "published" ? result.selection : undefined,
+        );
       },
       root: session.root,
       sandbox,

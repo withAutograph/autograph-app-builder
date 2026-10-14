@@ -33,6 +33,7 @@ export type ValidationCommandExecutor = (input: {
   appId: string;
   command: TargetValidationCommand;
   validationRoot: string;
+  environment?: Readonly<Record<string, string | undefined>>;
   onChunk?: (channel: ValidationLogChannel, content: string) => Promise<void>;
   abortSignal?: AbortSignal;
 }) => Promise<ApplyCommandResult>;
@@ -405,7 +406,7 @@ const attemptBinding = (attempt: TargetValidationAttemptReceipt): TargetValidati
 
 export const sandboxValidationCommandExecutor =
   (options?: { runtime?: PreparedRuntimeExecution | null }): ValidationCommandExecutor =>
-  async ({ sandbox, appId, command, validationRoot, onChunk, abortSignal }) => {
+  async ({ sandbox, appId, command, validationRoot, environment, onChunk, abortSignal }) => {
     if (!supportedValidationCommands(appId).some((planned) => planned.command === command)) {
       throw new Error("The repository validation command is not supported.");
     }
@@ -417,13 +418,21 @@ export const sandboxValidationCommandExecutor =
     if (options?.runtime) {
       return await options.runtime.runTask({
         task: runtimeTask,
+        environment,
         ...(shard ? { shard: shard.trim() } : {}),
         onChunk,
         signal: abortSignal,
       });
     }
     const environmentPath = localRuntimeEnvironmentPath(validationRoot, appId);
-    const env = { APP_RUNTIME_STATE_DIR: nodePath.posix.dirname(environmentPath) };
+    const env = {
+      ...Object.fromEntries(
+        Object.entries(environment ?? {}).filter(
+          (entry): entry is [string, string] => entry[1] !== undefined,
+        ),
+      ),
+      APP_RUNTIME_STATE_DIR: nodePath.posix.dirname(environmentPath),
+    };
     const executionCommand = `if [ -f '${environmentPath}' ]; then mise run app:runtime run ${appId} ${runtimeTask}${shard}; else ${command}; fi`;
     const detachedCommand = `set +e
 log=$(mktemp /tmp/app-builder-validation.XXXXXX) || exit $?
@@ -589,6 +598,7 @@ export const executeProposalBoundValidation = (input: {
         abortSignal: input.abortSignal,
         appId: input.appId,
         command: planned.command,
+        environment: input.environment,
         sandbox: input.sandbox,
         validationRoot: planned.validationRoot,
         ...(stdoutLog === undefined || stderrLog === undefined

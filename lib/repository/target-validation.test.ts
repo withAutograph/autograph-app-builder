@@ -124,6 +124,32 @@ const memoryValidationLogStore = (): ValidationLogStore => {
 };
 
 describe("target validation", () => {
+  it("preserves compiler operation inputs across the check and test commands", async () => {
+    const { sandbox } = sandboxFixture();
+    const environment = {
+      APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["/private-state/original-predecessor.json"]',
+      OPTIONAL_INPUT: undefined,
+    };
+    const executor = vi
+      .fn<ValidationCommandExecutor>()
+      .mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
+    const attempt = createTargetValidationAttempt(apply, "compiler-environment");
+    const result = await executeProposalBoundValidation({
+      appId: "example",
+      apply,
+      attempt,
+      environment,
+      executor,
+      sandbox,
+    });
+    expect(result.ok).toBe(true);
+    expect(executor).toHaveBeenCalledTimes(attempt.commands.length);
+    expect(attempt.commands.map(({ name }) => name)).toEqual(["check-build", "test"]);
+    for (const [index, planned] of attempt.commands.entries()) {
+      expect(executor.mock.calls[index]?.[0]).toMatchObject({ command: planned.command });
+      expect(executor.mock.calls[index]?.[0].environment).toBe(environment);
+    }
+  });
   it("returns late kernel and assertion details from streamed durable logs and times each command", async () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
     vi.useFakeTimers({ toFake: ["Date", "performance"] });
@@ -268,43 +294,51 @@ describe("target validation", () => {
     }
   });
 
-  it("uses the owned hosted execution for repository checks rather than probing a local environment", async () => {
-    const { sandbox } = sandboxFixture();
-    const runTask = vi
-      .fn<PreparedRuntimeExecution["runTask"]>()
-      .mockResolvedValue({ exitCode: 0, stderr: "", stdout: "checks passed" });
-    const runtime: PreparedRuntimeExecution = {
-      environmentPath: "/private-state/environment.json",
-      installationProof: {
-        actors: 8,
+  it.each([
+    ["mise run --skip-tools app:check example", "repository-check", undefined],
+    ["mise run --skip-tools app:test example 1/1", "repository-test", "1/1"],
+  ] as const)(
+    "forwards compiler inputs to owned hosted execution: %s",
+    async (command, task, shard) => {
+      const { sandbox } = sandboxFixture();
+      const runTask = vi
+        .fn<PreparedRuntimeExecution["runTask"]>()
+        .mockResolvedValue({ exitCode: 0, stderr: "", stdout: "checks passed" });
+      const runtime: PreparedRuntimeExecution = {
+        environmentPath: "/private-state/environment.json",
+        installationProof: {
+          actors: 8,
+          appId: "example",
+          artifactHash: "a".repeat(64),
+          authenticatedBehavior: "unassessed",
+          branch: "builder/example",
+          environment: "preview",
+          observation: "database-verification",
+          observedAt: "2026-09-29T12:00:00Z",
+          releaseId: "release_1",
+          tenants: 2,
+        },
+        prepareAuthenticatedOrigin: vi.fn(),
+        runTask,
+        stateDirectory: "/private-state",
+      };
+      const executor = sandboxValidationCommandExecutor({ runtime });
+      const onChunk = vi.fn();
+      const environment = { APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]' };
+      const result = await executor({
         appId: "example",
-        artifactHash: "a".repeat(64),
-        authenticatedBehavior: "unassessed",
-        branch: "builder/example",
-        environment: "preview",
-        observation: "database-verification",
-        observedAt: "2026-09-29T12:00:00Z",
-        releaseId: "release_1",
-        tenants: 2,
-      },
-      prepareAuthenticatedOrigin: vi.fn(),
-      runTask,
-      stateDirectory: "/private-state",
-    };
-    const executor = sandboxValidationCommandExecutor({ runtime });
-    const onChunk = vi.fn();
-    const result = await executor({
-      appId: "example",
-      command: "mise run --skip-tools app:check example",
-      onChunk,
-      sandbox,
-      validationRoot: "/workspace/repository",
-    });
-    expect(result).toMatchObject({ exitCode: 0, stdout: "checks passed" });
-    expect(runTask).toHaveBeenCalledWith(
-      expect.objectContaining({ onChunk, task: "repository-check" }),
-    );
-  });
+        command,
+        environment,
+        onChunk,
+        sandbox,
+        validationRoot: "/workspace/repository",
+      });
+      expect(result).toMatchObject({ exitCode: 0, stdout: "checks passed" });
+      expect(runTask).toHaveBeenCalledWith(
+        expect.objectContaining({ environment, onChunk, task, ...(shard ? { shard } : {}) }),
+      );
+    },
+  );
   it("links a filtered failure receipt to its complete sanitized durable log", async () => {
     const { sandbox } = sandboxFixture();
     const chunks = new Map<string, { content: string; digest: string }>();
@@ -717,7 +751,7 @@ exit "$status"`,
     [true, "mise run --skip-tools app:check example", "repository-check"],
     [true, "mise run --skip-tools app:test example 1/1", "repository-test 1/1"],
   ] as const)(
-    "hands the prepared state directory to mise with streaming=%s for %s",
+    "hands compiler inputs and the prepared state directory to mise with streaming=%s for %s",
     async (streaming, validationCommand, runtimeTask) => {
       const directory = mkdtempSync(path.join(tmpdir(), "builder-runtime-handoff-"));
       const environmentPath = localRuntimeEnvironmentPath(directory, "example");
@@ -731,6 +765,7 @@ exit "$status"`,
 if [ "$*" != "run app:runtime run example ${runtimeTask}" ]; then exit 21; fi
 if [ "$APP_RUNTIME_STATE_DIR" != '${stateDirectory}' ]; then exit 22; fi
 if [ ! -f "$APP_RUNTIME_STATE_DIR/environment.json" ]; then exit 23; fi
+if [ "$APP_SCHEMA_TRANSITION_PREDECESSOR_FILES" != '["original.json"]' ]; then exit 24; fi
 printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
 `,
         { mode: 0o755 },
@@ -770,6 +805,11 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
         const result = await sandboxValidationCommandExecutor()({
           appId: "example",
           command: validationCommand,
+          environment: {
+            APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
+            APP_RUNTIME_STATE_DIR: "/untrusted-state-directory",
+            OPTIONAL_INPUT: undefined,
+          },
           onChunk: streaming
             ? (_channel, content) => {
                 chunks.push(content);
@@ -782,6 +822,10 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
         expect(result.exitCode).toBe(0);
         expect(streaming ? chunks.join("") : result.stdout).toContain(stateDirectory);
         expect(streaming ? spawn : run).toHaveBeenCalledOnce();
+        expect((streaming ? spawn : run).mock.calls[0]?.[0].env).toEqual({
+          APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
+          APP_RUNTIME_STATE_DIR: stateDirectory,
+        });
         expect(streaming ? run : spawn).not.toHaveBeenCalled();
       } finally {
         rmSync(stateDirectory, { force: true, recursive: true });

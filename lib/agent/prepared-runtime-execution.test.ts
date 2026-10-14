@@ -147,6 +147,42 @@ beforeEach(() => {
 });
 
 describe("approved hosted runtime consumers", () => {
+  it.each([
+    ["repository-check", undefined],
+    ["repository-test", "1/1"],
+  ] as const)("forwards compiler operation inputs to the provider for %s", async (task, shard) => {
+    const fixture = transport();
+    const runtime = await restorePreparedRuntimeExecution({
+      appId: context.appId,
+      binding: binding(),
+      observeInstallation: async () =>
+        await mocks.observeInstallation({
+          ...context,
+          files: files(),
+          stateDirectory: "/private-state",
+        }),
+      provider: fixture.provider,
+      root: context.root,
+    });
+    await runtime.runTask({
+      task,
+      shard,
+      environment: {
+        APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
+        APP_RUNTIME_STATE_DIR: "/untrusted-state-directory",
+        OPTIONAL_INPUT: undefined,
+      },
+    });
+    expect(fixture.provider.runCommand).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        args: ["run", "app:runtime", "run", context.appId, task, ...(shard ? [shard] : [])],
+        env: {
+          APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
+          APP_RUNTIME_STATE_DIR: "/private-state",
+        },
+      }),
+    );
+  });
   it("never falls back to legacy credential decryption when the operator is unavailable", async () => {
     const operatorClient = vi.fn(() => {
       throw new Error("protected_operator_required");

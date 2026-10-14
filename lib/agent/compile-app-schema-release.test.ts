@@ -14,6 +14,7 @@ const hooks = vi.hoisted(() => ({
   publish: vi.fn(),
   releaseIdentity: vi.fn(),
   remember: vi.fn(),
+  rememberInputs: vi.fn(),
   state: {
     appSpec: { appId: "spend-review", digest: "a".repeat(64) },
     applyReceipt: { applyRoot: "/workspace/repository" },
@@ -34,6 +35,7 @@ vi.mock("./schema-predecessor", async (importOriginal) => ({
 vi.mock("./schema-predecessor-state", () => ({
   canonicalSchemaPredecessorState: { get: () => [] },
   rememberCanonicalSchemaRelease: hooks.remember,
+  rememberCompiledSchemaPredecessors: hooks.rememberInputs,
 }));
 vi.mock("./product-behavior-state", () => ({
   invalidateProductBehaviorEvidence: hooks.invalidate,
@@ -112,6 +114,35 @@ describe("private app schema release compilation", () => {
       }),
     );
   });
+  it("retains original prepared references only after successful capture", async () => {
+    const selection = { appId: "spend-review", releaseId: "original-v13" };
+    hooks.predecessor.mockResolvedValue({ environment: {}, predecessors: [{ selection }] });
+    hooks.publish.mockResolvedValue({ selection: { releaseId: "new-v14" }, status: "published" });
+    const sandbox = { run: vi.fn().mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" }) };
+    const ctx = {
+      callId: "compile",
+      getSandbox: async () => await Promise.resolve(sandbox),
+      session: { auth: {}, id: "saved-session" },
+    };
+    // SAFETY: The identity defineTool fixture exposes the real tool with every consumed context field.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The fixture supplies the complete consumed execution context.
+    expect(await compileTool.execute({}, ctx as never)).toMatchObject({ status: "compiled" });
+    expect(hooks.rememberInputs).toHaveBeenCalledWith("spend-review", [selection], {
+      releaseId: "new-v14",
+    });
+    hooks.rememberInputs.mockClear();
+    hooks.publish.mockRejectedValue(new Error("capture unavailable"));
+    // SAFETY: The same context fixture is used above for the real execute boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- All consumed execution fields are supplied.
+    expect(await compileTool.execute({}, ctx as never)).toMatchObject({ status: "failed" });
+    expect(hooks.rememberInputs).not.toHaveBeenCalled();
+    sandbox.run.mockResolvedValue({ exitCode: 1, stderr: "invalid CUE", stdout: "" });
+    // SAFETY: The same context fixture is used above for the real execute boundary.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- All consumed execution fields are supplied.
+    expect(await compileTool.execute({}, ctx as never)).toMatchObject({ status: "failed" });
+    expect(hooks.rememberInputs).not.toHaveBeenCalled();
+  });
+
   it("returns a typed reused-identity outcome instead of calling it a storage failure", async () => {
     const identityFailure = new SchemaPredecessorError("schema_release_identity_reused");
     expect(identityFailure.code).toBe("schema_release_identity_reused");
