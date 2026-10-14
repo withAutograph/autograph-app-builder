@@ -84,6 +84,39 @@ const completed = () => {
     status: "complete",
     invitationId: "private-invitation",
   }));
+  state.organizationSessions = approved.memberships.map((membership, index) => ({
+    actorKey: membership.actorKey,
+    organizationId: membership.organizationId,
+    selection: "selected",
+    session: {
+      reference: `44444444-4444-4444-8444-${String(index + 1).padStart(12, "0")}`,
+      actorId: `verified-${membership.actorKey}-id`,
+      activeOrganizationId: membership.organizationId,
+      realmSessionId: `private-scoped-${index}`,
+      origin: approved.origin,
+      expiresAt: "2030-01-01T00:00:00.000Z",
+    },
+    storageState: {
+      cookies: [
+        {
+          name: "normal-auth-session",
+          value: `actual-scoped-cookie-${index}`,
+          domain: "actual-preview.example.test",
+          path: "/",
+          expires: -1,
+          httpOnly: true,
+          secure: true,
+          sameSite: "Lax",
+        },
+      ],
+      origins: [
+        {
+          origin: approved.origin,
+          localStorage: [{ name: "selection", value: `actual-scoped-local-${index}` }],
+        },
+      ],
+    },
+  }));
   return { program: approved, state, operationRef };
 };
 
@@ -120,18 +153,22 @@ describe("actual normal actor runtime projection", () => {
       { organizationId: "actual-first-org", roles: ["requester"] },
       { organizationId: "actual-second-org", roles: ["auditor"] },
     ]);
-    expect(new Set(shared.map((actor) => actor.storageState)).size).toBe(1);
+    expect(new Set(shared.map((actor) => actor.storageState)).size).toBe(2);
     expect(rows).toHaveLength(6);
-    expect(Object.keys(projection.files)).toHaveLength(5);
+    expect(Object.keys(projection.files)).toHaveLength(6);
   });
   it("retains captured cookie and local-storage bytes without projecting account credentials or private workflow metadata", () => {
     const fixture = completed();
     const projection = projectNormalActorRuntime(fixture);
-    for (const actor of fixture.state.actors) {
-      const row = projection.identities.actors.find((entry) => entry.actorKey === actor.actorKey);
-      expect(projection.files[row?.storageState ?? "missing"]).toBe(
-        JSON.stringify(actor.storageState),
-      );
+    for (const row of projection.identities.actors) {
+      const captured =
+        row.organizationId === null
+          ? fixture.state.actors.find((actor) => actor.actorKey === row.actorKey)?.storageState
+          : fixture.state.organizationSessions?.find(
+              (entry) =>
+                entry.actorKey === row.actorKey && entry.organizationId === row.organizationId,
+            )?.storageState;
+      expect(projection.files[row.storageState]).toBe(JSON.stringify(captured));
     }
     expect(JSON.stringify(projection)).not.toContain("private-signup-password");
     expect(JSON.stringify(projection)).not.toContain("private-realm-");
@@ -152,6 +189,45 @@ describe("actual normal actor runtime projection", () => {
       expect.objectContaining({ actorKey: "unassigned", organizationId: null, roles: [] }),
     ]);
   });
+  it("requires actual organization sessions instead of projecting base-account cookies", () => {
+    const fixture = completed();
+    delete fixture.state.organizationSessions;
+    expect(() => projectNormalActorRuntime(fixture)).toThrow("auth_identity_required");
+  });
+  it("requires real selection after candidate sessions exist", () => {
+    const fixture = completed();
+    fixture.state.organizationSessions = fixture.state.organizationSessions?.map((entry) => ({
+      ...entry,
+      selection: "pending",
+      session: { ...entry.session, activeOrganizationId: null },
+    }));
+    expect(() => projectNormalActorRuntime(fixture)).toThrow("auth_identity_required");
+  });
+  it("rejects one real session reused across two organization contexts", () => {
+    const fixture = completed();
+    fixture.state.organizationSessions = fixture.state.organizationSessions?.map((entry) =>
+      entry.actorKey === "shared"
+        ? { ...entry, session: { ...entry.session, realmSessionId: "same-real-session" } }
+        : entry,
+    );
+    expect(() => projectNormalActorRuntime(fixture)).toThrow("auth_identity_required");
+  });
+  it.each(["actor", "origin", "active-organization"])(
+    "rejects a scoped session with a changed actual %s",
+    (kind) => {
+      const fixture = completed();
+      fixture.state.organizationSessions = fixture.state.organizationSessions?.map((entry) => ({
+        ...entry,
+        session: {
+          ...entry.session,
+          ...(kind === "actor" ? { actorId: "other-real-user" } : {}),
+          ...(kind === "origin" ? { origin: "https://other.example.test" } : {}),
+          ...(kind === "active-organization" ? { activeOrganizationId: "other-real-org" } : {}),
+        },
+      }));
+      expect(() => projectNormalActorRuntime(fixture)).toThrow("normal_actor_program_mismatch");
+    },
+  );
   it.each(["actor", "membership", "organization"])(
     "reports incomplete actual %s state with a sanitized error",
     (kind) => {
