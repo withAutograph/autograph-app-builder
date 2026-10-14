@@ -709,8 +709,10 @@ try {
   };
   const full = await resolveFullPlan(plan, context, configuration, cp, transportIo);
   assert.equal(full.stage, "app");
-  assert.equal(full.authMembership?.actorId, realm.identity.actorId);
-  assert.equal(full.authMembership?.identityCapture.capturedAt, captured.consumedAt);
+  const membership = full.authMembership;
+  assert.ok(membership?.kind === "create-owned-organization");
+  assert.equal(membership.actorId, realm.identity.actorId);
+  assert.equal(membership.identityCapture.capturedAt, captured.consumedAt);
   assert.deepEqual(full.access, [
     { actorId: realm.identity.actorId, organizationId: "org_owned", roles: ["owner"] },
   ]);
