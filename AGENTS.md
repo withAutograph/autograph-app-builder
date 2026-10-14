@@ -56,6 +56,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   Do not substitute source-string scans, prose matching, exact CSS selectors,
   fixed file/tool counts, archive sizes, complete metadata object equality,
   snapshots of incidental fields, or the last internal mock call for behavior.
+- Do not make object-key order, equivalent object construction, or a blanket
+  preference for null over undefined a CI requirement. Keep checks for actual
+  invalid values, type errors, unsafe operations, and broken behavior. Preserve
+  tests of supported missing or undefined inputs rather than changing their
+  semantics to satisfy a style rule.
 - Assert exact values or ordering only where they implement a real contract,
   such as the selected app/tenant, authorized effect, public cursor, or replay
   identity. Optional fields and harmless extra internal reads must not fail
