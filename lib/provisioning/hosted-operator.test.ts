@@ -1943,13 +1943,15 @@ describe("closed operator access response diagnostics", () => {
       const result = await f.client.request({ action: "plan", operation: "prepare", selection });
       expect(result.code).toBe("authorization_required");
       const sessionIdHash = `sha256:${createHash("sha256").update(selection.sessionId).digest("hex")}`;
-      expect(log.mock.calls[0]?.[1]).toEqual(
+      expect(log.mock.calls).toContainEqual([
+        "[builder:hosted-neon-consent]",
         expect.objectContaining({
           boundary: "operator",
+          outcome: "started",
           sessionIdHash,
           stage: "operator_ingress",
         }),
-      );
+      ]);
       expect(log.mock.calls).toContainEqual([
         "[builder:hosted-neon-consent]",
         expect.objectContaining({
@@ -2019,18 +2021,33 @@ describe("closed operator access response diagnostics", () => {
         expect(fetchResponse.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(
           1,
         );
-        expect(log.mock.calls[0]?.[1]).toEqual(
-          expect.objectContaining({
-            accessClass: "upstream_auth_denied",
-            httpStatus: status,
-            sessionIdHash: `sha256:${createHash("sha256").update(selection.sessionId).digest("hex")}`,
-          }),
-        );
+        const responseDiagnostics = log.mock.calls.flatMap(([, value]) => {
+          const parsed = z
+            .object({
+              boundary: z.literal("builder"),
+              stage: z.literal("operator_request"),
+              operatorAction: z.literal("plan"),
+              accessClass: z.literal("upstream_auth_denied"),
+              outcome: z.literal("operator_access_denied"),
+              httpStatus: z.literal(status),
+              sessionIdHash: z.string(),
+              vercelError: z.literal("TRUSTED_SOURCES_ENVIRONMENT_MISMATCH").optional(),
+            })
+            .safeParse(value);
+          return parsed.success ? [parsed.data] : [];
+        });
+        expect(responseDiagnostics).toHaveLength(1);
+        const [responseDiagnostic] = responseDiagnostics;
+        expect(responseDiagnostic).toMatchObject({
+          accessClass: "upstream_auth_denied",
+          httpStatus: status,
+          sessionIdHash: `sha256:${createHash("sha256").update(selection.sessionId).digest("hex")}`,
+        });
         expect(JSON.stringify(log.mock.calls)).not.toContain(secret);
         if (status === 401) {
-          expect(log.mock.calls[0]?.[1]).not.toHaveProperty("vercelError");
+          expect(responseDiagnostic).not.toHaveProperty("vercelError");
         } else {
-          expect(log.mock.calls[0]?.[1]).toHaveProperty(
+          expect(responseDiagnostic).toHaveProperty(
             "vercelError",
             "TRUSTED_SOURCES_ENVIRONMENT_MISMATCH",
           );
@@ -2058,12 +2075,17 @@ describe("closed operator access response diagnostics", () => {
         await (status === 200
           ? expect(result).resolves.toMatchObject({ status: "pending" })
           : expect(result).rejects.toMatchObject({ code: "operator_unavailable" }));
-        expect(log.mock.calls[0]?.[1]).toEqual(
+        expect(log.mock.calls).toContainEqual([
+          "[builder:hosted-neon-consent]",
           expect.objectContaining({
+            boundary: "builder",
+            stage: "operator_request",
+            operatorAction: "plan",
+            outcome: status === 200 ? "verified" : "setup_unavailable",
             accessClass: status === 200 ? "ok" : "other_failed",
             httpStatus: status,
           }),
-        );
+        ]);
       } finally {
         log.mockRestore();
       }

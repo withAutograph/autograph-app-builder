@@ -1,3 +1,7 @@
+import {
+  reportRuntimePreparationFailure,
+  reportRuntimePreparationStarted,
+} from "../provisioning/hosted-operator-consent-diagnostic";
 import type { ToolInputRequest, ToolInputResponse, WorkflowToolContext } from "eve/tools";
 import type {
   OperatorPublicResult,
@@ -494,7 +498,12 @@ it("reports execute-stage failure without changing the public blocked result or 
   const privateMessage = "private-token and provider URL";
   operator.request.mockRejectedValueOnce(new TypeError(privateMessage));
   try {
-    const value = await prepareHostedRuntimeWithOperator(input, ctx, operator, retain, contract);
+    const value = await prepareHostedRuntimeWithOperator(input, ctx, operator, retain, {
+      ...contract,
+      onFailure: (stage, caught) => {
+        reportRuntimePreparationFailure(ctx.session.id, stage, caught);
+      },
+    });
     expect(value.result).toMatchObject({ status: "blocked", code: "operator_unavailable" });
     expect(logs).toHaveBeenCalledWith(
       "[builder:hosted-neon-consent]",
@@ -528,6 +537,14 @@ it("reports actual approval evaluator entry and preserves its denied response", 
         getSandbox: async () => await Promise.reject(new Error("No Sandbox in diagnostic fixture")),
       },
       readPrior,
+      {
+        onStarted: () => {
+          reportRuntimePreparationStarted(ctx.session.id, "approval_evaluation");
+        },
+        onFailure: (caught) => {
+          reportRuntimePreparationFailure(ctx.session.id, "approval_evaluation", caught);
+        },
+      },
     );
     expect(value).toMatchObject({ type: "denied" });
     expect(logs).toHaveBeenCalledWith(

@@ -1,4 +1,4 @@
-import {
+import type {
   reportRuntimePreparationFailure,
   reportRuntimePreparationStarted,
 } from "../../lib/provisioning/hosted-operator-consent-diagnostic";
@@ -77,16 +77,26 @@ export const continueHostedRuntimePreparation = async (
 export const evaluateHostedRuntimePreparationApproval = async (
   ctx: ApprovalContext<HostedRuntimeApprovalEnvelope>,
   readPrior: typeof readHostedRuntimePriorApproval,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Injected reporter alone parses caught exceptions into closed diagnostic metadata.
+  diagnostic?: { onStarted?: () => void; onFailure?: (error: unknown) => void },
 ): Promise<ApprovalStatus> => {
   if (ctx.toolInput === undefined) {
     return "user-approval";
   }
-  reportRuntimePreparationStarted(ctx.session.id, "approval_evaluation");
+  try {
+    diagnostic?.onStarted?.();
+  } catch {
+    /* Diagnostics cannot change approval evaluation. */
+  }
   try {
     const retained = await readPrior(ctx.toolInput, ctx);
     return retained === null ? "user-approval" : "not-applicable";
   } catch (error) {
-    reportRuntimePreparationFailure(ctx.session.id, "approval_evaluation", error);
+    try {
+      diagnostic?.onFailure?.(error);
+    } catch {
+      /* Preserve the original denial. */
+    }
     return {
       type: "denied",
       reason:
@@ -100,15 +110,28 @@ export async function hostedRuntimePreparationApproval(
   ctx: ApprovalContext<HostedRuntimeApprovalEnvelope>,
 ): Promise<ApprovalStatus> {
   "use step";
-  reportRuntimePreparationStarted(ctx.session.id, "approval_module_loading");
+  let diagnostic:
+    | {
+        reportRuntimePreparationFailure: typeof reportRuntimePreparationFailure;
+        reportRuntimePreparationStarted: typeof reportRuntimePreparationStarted;
+      }
+    | undefined;
   try {
+    diagnostic = await import("../../lib/provisioning/hosted-operator-consent-diagnostic");
+    diagnostic.reportRuntimePreparationStarted(ctx.session.id, "approval_module_loading");
     const prior = await import("../../lib/agent/hosted-runtime-prior-approval");
     return await evaluateHostedRuntimePreparationApproval(
       ctx,
       prior.readHostedRuntimePriorApproval,
+      {
+        onStarted: () =>
+          diagnostic?.reportRuntimePreparationStarted(ctx.session.id, "approval_evaluation"),
+        onFailure: (error) =>
+          diagnostic?.reportRuntimePreparationFailure(ctx.session.id, "approval_evaluation", error),
+      },
     );
   } catch (error) {
-    reportRuntimePreparationFailure(ctx.session.id, "approval_module_loading", error);
+    diagnostic?.reportRuntimePreparationFailure(ctx.session.id, "approval_module_loading", error);
     return {
       type: "denied",
       reason: "Saved preparation authority is unavailable. Retry when access is restored.",
