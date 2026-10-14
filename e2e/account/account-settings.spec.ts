@@ -5,6 +5,7 @@ import { VirtualAuthenticator } from "../auth/virtual-authenticator";
 import {
   appOrigin,
   applicationCounts,
+  currentSession,
   databaseUrl,
   finishOAuth,
   registerPasskey,
@@ -29,8 +30,24 @@ test("stock account menu updates the profile and signs out", async ({ page }) =>
   await page.goto("/");
   await page.getByRole("button", { name: "Account" }).click();
   await expect(page.getByText("Autograph E2E User")).toBeVisible();
+  const signOutResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      url.origin === appOrigin &&
+      url.pathname === "/api/auth/sign-out" &&
+      response.request().method() === "POST"
+    );
+  });
   await page.getByRole("menuitem", { name: "Sign out" }).click();
+  const signedOut = await signOutResponse;
+  expect(signedOut.status()).toBe(200);
   await expect(page).toHaveURL(/\/auth\/sign-in/u);
+  await expect
+    .poll(async () => {
+      const session: unknown = await currentSession(page);
+      return session;
+    })
+    .toBeNull();
 });
 
 test("passkeys are added, renamed, and protected through stock settings UI", async ({
