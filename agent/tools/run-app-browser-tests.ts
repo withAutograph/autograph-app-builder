@@ -51,7 +51,13 @@ export const runAppBrowserTests = async (input: {
       (input.execution ? await resolvePreparedRuntimeExecution(input.execution) : null);
     const runTask = async () => {
       if (runtime) {
-        return await runtime.runTask({ signal: input.signal, task: "test-e2e" });
+        return await runtime.runTask({
+          signal: input.signal,
+          task: "test-e2e",
+          ...(runtime.browserTestBaseUrl === undefined
+            ? {}
+            : { environment: { APP_TEST_BASE_URL: runtime.browserTestBaseUrl } }),
+        });
       }
       const env = {
         APP_RUNTIME_STATE_DIR: path.posix.dirname(

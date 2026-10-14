@@ -49,6 +49,8 @@ export interface PreparedRuntimeExecutionContext {
   signal?: AbortSignal;
 }
 export interface PreparedRuntimeExecution {
+  /** Canonical native browser origin from the protected bindings read, for test commands only. */
+  readonly browserTestBaseUrl?: string;
   installationProof: {
     appId: string;
     branch: string;
@@ -117,6 +119,7 @@ export const runtimeFilesForOrigin = (files: PrivateRuntimeFiles, origin: string
 /** Server-only capability. Do not expose this object or its private paths in tool results. */
 export const restorePreparedRuntimeExecution = async (input: {
   appId: string;
+  browserTestBaseUrl?: string;
   root: string;
   binding: NonNullable<Awaited<ReturnType<typeof readHostedRuntimeExecutionBinding>>>;
   provider: RuntimeTransport;
@@ -217,6 +220,9 @@ export const restorePreparedRuntimeExecution = async (input: {
     return safe;
   };
   return {
+    ...(input.browserTestBaseUrl === undefined
+      ? {}
+      : { browserTestBaseUrl: input.browserTestBaseUrl }),
     environmentPath,
     installationProof: {
       ...proof,
@@ -470,6 +476,7 @@ export const resolvePreparedRuntimeExecution = async (
   const provider = await dependencies.getProvider(input.sandboxId, input.signal);
   return await restorePreparedRuntimeExecution({
     appId: input.appId,
+    browserTestBaseUrl: projection?.nativePreview?.publicOrigin,
     binding,
     observeInstallation: async (files) =>
       projection

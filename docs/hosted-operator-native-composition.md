@@ -43,6 +43,12 @@ The accepted spec's workspace ID identifies the repository execution workspace.
 The canonical session principal and owner authority identify the tenant workspace;
 artifact reads retain that tenant scope and the original public session. Do not
 compare the repository workspace ID with the tenant workspace ID.
+Private planning failures report only a closed stage, error class, known code,
+and hashed session identity. They preserve the original result or error and never
+log error messages, stacks, provider responses, credentials, or app content.
+Browser acceptance receives `APP_TEST_BASE_URL` only for `test-e2e`, from the same
+owner-verified native Preview projection used to prepare runtime execution. This
+URL handoff supplies no actors, sessions, roles, or authenticated behavior proof.
 Existing Gateway signing and Better Auth secrets, actual provider-injected
 `VERCEL_DEPLOYMENT_ID`, and independently observed
 `AUTH_PRODUCTION_DATABASE_IDENTITY` are setup prerequisites. No Production

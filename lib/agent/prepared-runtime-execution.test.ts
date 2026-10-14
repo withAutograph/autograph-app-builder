@@ -10,6 +10,10 @@ import {
   restorePreparedRuntimeExecution,
   runtimeFilesForOrigin,
 } from "./prepared-runtime-execution";
+import {
+  hostedOperatorPlanSchema,
+  operatorPlanDigest,
+} from "../provisioning/hosted-operator-contract";
 import { HostedRuntimeProviderError } from "../provisioning/hosted-runtime-provider";
 
 const mocks = {
@@ -118,7 +122,11 @@ const transport = (description = descriptor, chunks = ["8 passed synthetic-auth-
   return {
     close,
     command,
-    provider: { fs: { mkdir: vi.fn(), rm: vi.fn() }, runCommand, writeFiles: vi.fn() },
+    provider: {
+      fs: { mkdir: vi.fn(), rm: vi.fn() },
+      runCommand,
+      writeFiles: vi.fn<RuntimeTransport["writeFiles"]>(),
+    },
   };
 };
 const context = {
@@ -135,6 +143,95 @@ const selection = {
   projectId: "prj_owned",
   sessionId: context.sessionId,
 };
+const operatorPlan = hostedOperatorPlanSchema.parse({
+  access: [{ actorId: "synthetic-reviewer", organizationId: "synthetic-org", roles: ["reviewer"] }],
+  action: "prepare",
+  appDatabase: {
+    database: "spend",
+    migratorRole: "spend_owner",
+    resourceId: "app-resource",
+    runtimeRole: "spend_runtime",
+  },
+  authDatabase: {
+    database: "shared_auth",
+    migratorRole: "shared_auth_owner",
+    resourceId: "auth-resource",
+    runtimeRole: "shared_auth_runtime",
+  },
+  contextId: "synthetic-context",
+  cost: {
+    class: "shared-recovery-group",
+    description: "Approved disposable compute",
+    owner: "Fixture owner",
+  },
+  deploymentBoundary: {
+    app: {
+      branch: selection.branch,
+      deploymentId: "dpl_app",
+      environment: "preview",
+      projectId: selection.projectId,
+    },
+    authority: {
+      audience: "https://builder.example/mcp",
+      issuer: "https://builder.example/api/auth",
+      ownerUserId: "owner",
+      workspaceId: "workspace",
+    },
+    gateway: {
+      branch: selection.branch,
+      deploymentId: "dpl_gateway",
+      environment: "preview",
+      projectId: "prj_gateway",
+    },
+    operator: {
+      deploymentId: "dpl_operator",
+      environment: "production",
+      projectId: "prj_operator",
+    },
+    teamId: "team_fixture",
+    verification: {
+      gatewayOrigin: "https://gateway-preview.example.test",
+      jwksUrl: "https://gateway-preview.example.test/_platform/jwks.json",
+      publicOrigin: "https://apps-preview.example.test",
+    },
+  },
+  effects: [
+    {
+      description: "Verify selected resources and their roles",
+      id: "resources",
+      kind: "resources",
+    },
+
+    { description: "Install the selected checked release", id: "install", kind: "install" },
+    { description: "Grant approved Auth app access after install", id: "access", kind: "access" },
+    {
+      description: "Bind restricted app and shared Auth credentials",
+      id: "bind",
+      kind: "bindings",
+    },
+  ],
+  installer: { reference: "trusted-toolchain", sha256: "a".repeat(64) },
+  neon: {
+    branchId: "br_synthetic",
+    connectionRef: "explicit-owner-connection",
+    endpoint: "ep-fixture.us-east-1.aws.neon.tech",
+    projectId: "synthetic-project",
+    source: "synthetic-only",
+  },
+  publicGateway: {
+    branch: selection.branch,
+    origin: "https://apps-preview.example.test",
+    projectId: "prj_gateway",
+  },
+  release: { artifactRef: "verified-artifact", id: proof.releaseId, sha256: "b".repeat(64) },
+  retention: {
+    expiresAt: "2027-01-01T00:00:00.000Z",
+    policy: "Retain while context consumers exist",
+  },
+  selection: { ...selection, environment: "preview" },
+  version: 1,
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.observeInstallation.mockResolvedValue({
@@ -183,6 +280,71 @@ describe("approved hosted runtime consumers", () => {
       }),
     );
   });
+  it.each([undefined, "https://apps-preview.example.test"])(
+    "preserves the verified native browser origin %s without adding runtime bindings",
+    async (publicOrigin) => {
+      const fixture = transport();
+      const operationRef = "11111111-1111-4111-8111-111111111111";
+      const environment = {
+        SPEND_REVIEW_DATABASE_URL:
+          "postgres://spend_runtime:synthetic@ep-fixture.neon.tech/spend?sslmode=verify-full",
+        PLATFORM_PUBLIC_ORIGIN: "https://apps-preview.example.test",
+        PLATFORM_ORIGIN: "https://gateway-preview.example.test",
+        PLATFORM_JWKS_URL: "https://gateway-preview.example.test/_platform/jwks.json",
+      };
+      const bindings = vi.fn().mockResolvedValue({
+        environment,
+        nativePreview: publicOrigin === undefined ? undefined : { publicOrigin },
+        operationRef,
+        plan: operatorPlan,
+        proof: {
+          actors: proof.actors,
+          artifactHash: proof.artifactHash,
+          authenticatedBehavior: proof.authenticatedBehavior,
+          releaseId: proof.releaseId,
+          tenants: proof.tenants,
+        },
+      });
+      const operatorClient = vi.fn().mockResolvedValue({ sessionId: context.sessionId, bindings });
+      mocks.getProvider.mockResolvedValue(fixture.provider);
+      const runtime = await resolvePreparedRuntimeExecution(
+        context,
+        {
+          ...selection,
+          operationRef,
+          planDigest: operatorPlanDigest(operatorPlan),
+        },
+        { ...mocks, operatorClient },
+      );
+      expect(runtime?.browserTestBaseUrl).toBe(publicOrigin);
+      const restoredEnvironment = fixture.provider.writeFiles.mock.calls
+        .flatMap(([restored]) => restored)
+        .find((file) => file.path.endsWith("/environment.json"));
+      expect(JSON.parse(String(restoredEnvironment?.content))).toEqual(environment);
+      expect(mocks.readBinding).not.toHaveBeenCalled();
+      expect(mocks.observeInstallation).not.toHaveBeenCalled();
+      await runtime?.runTask({ task: "repository-check" });
+      expect(fixture.provider.runCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          args: ["run", "app:runtime", "run", context.appId, "repository-check"],
+          env: { APP_RUNTIME_STATE_DIR: `/tmp/app-builder-operator/${operationRef}` },
+        }),
+      );
+      await runtime?.runTask({
+        task: "test-e2e",
+        environment: publicOrigin === undefined ? undefined : { APP_TEST_BASE_URL: publicOrigin },
+      });
+      expect(fixture.provider.runCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          args: ["run", "app:runtime", "run", context.appId, "test-e2e"],
+          env: {
+            APP_RUNTIME_STATE_DIR: `/tmp/app-builder-operator/${operationRef}`,
+            ...(publicOrigin === undefined ? {} : { APP_TEST_BASE_URL: publicOrigin }),
+          },
+        }),
+      );
+    },
+  );
   it("never falls back to legacy credential decryption when the operator is unavailable", async () => {
     const operatorClient = vi.fn(() => {
       throw new Error("protected_operator_required");

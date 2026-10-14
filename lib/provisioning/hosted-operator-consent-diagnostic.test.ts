@@ -1,15 +1,19 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
+import { HostedOperatorError, operatorPublicResultSchema } from "./hosted-operator-contract";
 import {
   createHostedOperatorConsentDiagnostic,
   operatorOwnerStoreImportErrorCodeSchema,
   reportOperatorPlanningMismatch,
+  observeOperatorPlanStage,
 } from "./hosted-operator-consent-diagnostic";
 import type {
   HostedOperatorConsentDiagnosticSink,
   HostedOperatorConsentMetadata,
   OperatorPlanningMismatchBoundary,
   OperatorPlanningMismatchField,
+  OperatorPlanStage,
 } from "./hosted-operator-consent-diagnostic";
 
 const secret = "private-owner repo https://vercel.com/consent?pkce=private bearer-secret";
@@ -178,6 +182,311 @@ describe("closed Neon consent diagnostics", () => {
     } finally {
       log.mockRestore();
     }
+  });
+});
+
+describe("private operator planning stage observer", () => {
+  it("executes once and returns the unchanged successful value without diagnostics", async () => {
+    const result = { providerPayload: secret };
+    const run = vi.fn(async () => {
+      await Promise.resolve();
+      return result;
+    });
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    expect(await observeOperatorPlanStage(secret, "journal_read", run, sink)).toBe(result);
+    expect(run).toHaveBeenCalledOnce();
+    expect(sink).not.toHaveBeenCalled();
+  });
+
+  it("returns synchronous successful values unchanged", async () => {
+    const result = { providerPayload: secret };
+    const run = vi.fn(() => result);
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    expect(await observeOperatorPlanStage(secret, "worker_selection", run, sink)).toBe(result);
+    expect(run).toHaveBeenCalledOnce();
+    expect(sink).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "28P01",
+    "42501",
+    "42P01",
+    "42703",
+    "23505",
+    "40001",
+    "40P01",
+    "53300",
+    "55000",
+    "08001",
+    "08006",
+  ])("reports only the allowlisted own SQL state %s", async (sqlState) => {
+    const rejection = new Error(secret);
+    rejection.stack = secret;
+    Object.defineProperty(rejection, "code", { value: sqlState });
+    Object.defineProperty(rejection, "providerPayload", { value: secret });
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    await expect(
+      observeOperatorPlanStage(
+        secret,
+        "journal_read",
+        () => {
+          throw rejection;
+        },
+        sink,
+      ),
+    ).rejects.toBe(rejection);
+    expect(sink.mock.calls[0]?.[0].planningFailure).toEqual({
+      stage: "journal_read",
+      errorClass: "unexpected",
+      sqlState,
+    });
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
+
+  it("omits arbitrary, inherited and getter SQL codes", async () => {
+    const getter = vi.fn(() => {
+      throw new Error(secret);
+    });
+    const hostile = new Error(secret);
+    Object.defineProperty(hostile, "code", { get: getter });
+    const inherited = new Error(secret);
+    Object.setPrototypeOf(inherited, Object.assign(new Error(secret), { code: "42501" }));
+    const arbitrary = new Error(secret);
+    Object.defineProperty(arbitrary, "code", { value: secret });
+    await Promise.all(
+      [hostile, inherited, arbitrary].map(async (rejection) => {
+        const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+        await expect(
+          observeOperatorPlanStage(
+            secret,
+            "journal_read",
+            () => {
+              throw rejection;
+            },
+            sink,
+          ),
+        ).rejects.toBe(rejection);
+        expect(sink.mock.calls[0]?.[0].planningFailure).toEqual({
+          stage: "journal_read",
+          errorClass: "unexpected",
+        });
+        expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+      }),
+    );
+    expect(getter).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "journal_read",
+    "accepted_spec",
+    "release_selection",
+    "release_read",
+    "neon_planning",
+    "provider_inventory",
+    "shared_auth_read",
+    "auth_adoption_read",
+    "auth_schema_proposal",
+    "auth_schema_publish",
+    "worker_selection",
+    "plan_construction",
+    "identity_plan_resolution",
+    "plan_composition",
+    "plan_validation",
+    "plan_authorization",
+    "plan_reservation",
+  ] satisfies OperatorPlanStage[])("reports only closed metadata for %s", async (planStage) => {
+    const rejection = new Error(secret);
+    rejection.stack = secret;
+    Object.defineProperty(rejection, "providerPayload", { value: secret });
+    const run = vi.fn(async () => {
+      await Promise.resolve();
+      throw rejection;
+    });
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    await expect(observeOperatorPlanStage(secret, planStage, run, sink)).rejects.toBe(rejection);
+    expect(run).toHaveBeenCalledOnce();
+    expect(sink).toHaveBeenCalledExactlyOnceWith({
+      event: "builder.hosted_neon_consent",
+      sessionIdHash: `sha256:${createHash("sha256").update(secret).digest("hex")}`,
+      boundary: "operator",
+      phase: "inline",
+      stage: "operator_request",
+      outcome: "setup_unavailable",
+      planningFailure: { stage: planStage, errorClass: "unexpected" },
+    });
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
+
+  it("uses only the closed operator error codes", async () => {
+    await Promise.all(
+      operatorPublicResultSchema.shape.code.unwrap().options.map(async (code) => {
+        const rejection = new HostedOperatorError(code);
+        rejection.message = secret;
+        rejection.stack = secret;
+        const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+        await expect(
+          observeOperatorPlanStage(
+            secret,
+            "plan_composition",
+            () => {
+              throw rejection;
+            },
+            sink,
+          ),
+        ).rejects.toBe(rejection);
+        expect(sink.mock.calls[0]?.[0].planningFailure).toEqual({
+          stage: "plan_composition",
+          errorClass: "operator_error",
+          code,
+        });
+        expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+      }),
+    );
+    const rejection = new HostedOperatorError("operator_unavailable");
+    Object.defineProperty(rejection, "code", { value: secret });
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    await expect(
+      observeOperatorPlanStage(
+        secret,
+        "plan_validation",
+        () => {
+          throw rejection;
+        },
+        sink,
+      ),
+    ).rejects.toBe(rejection);
+    expect(sink.mock.calls[0]?.[0].planningFailure).toEqual({
+      stage: "plan_validation",
+      errorClass: "operator_error",
+    });
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
+
+  it("classifies validation and type errors without serializing private details", async () => {
+    const parsed = z.literal("valid").safeParse(secret);
+    expect(parsed.success).toBe(false);
+    if (parsed.success) {
+      throw new Error("Expected the invalid fixture to fail validation");
+    }
+    await Promise.all(
+      (
+        [
+          [parsed.error, "validation_error"],
+          [new TypeError(secret), "type_error"],
+          [new Error(secret), "unexpected"],
+        ] as const
+      ).map(async ([rejection, errorClass]) => {
+        const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+        await expect(
+          observeOperatorPlanStage(
+            secret,
+            "plan_validation",
+            () => {
+              throw rejection;
+            },
+            sink,
+          ),
+        ).rejects.toBe(rejection);
+        expect(sink.mock.calls[0]?.[0].planningFailure).toEqual({
+          stage: "plan_validation",
+          errorClass,
+        });
+        expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+      }),
+    );
+  });
+
+  it("preserves hostile rejections without reading code or message getters", async () => {
+    const rejection = new HostedOperatorError("resource_mismatch");
+    const getter = vi.fn(() => {
+      throw new Error(secret);
+    });
+    for (const field of ["code", "message", "stack", "cause", "providerPayload"]) {
+      Object.defineProperty(rejection, field, { get: getter });
+    }
+    const proxy = new Proxy(new Error(secret), {
+      getPrototypeOf() {
+        throw new Error(secret);
+      },
+    });
+    await Promise.all(
+      [rejection, proxy].map(async (error) => {
+        const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+        await expect(
+          observeOperatorPlanStage(
+            secret,
+            "provider_inventory",
+            () => {
+              throw error;
+            },
+            sink,
+          ),
+        ).rejects.toBe(error);
+        expect(sink).toHaveBeenCalledOnce();
+        expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+      }),
+    );
+    expect(getter).not.toHaveBeenCalled();
+  });
+
+  it("preserves the rejection when sinks or the default logger fail", async () => {
+    const rejection = new Error(secret);
+    await Promise.all(
+      [
+        () => {
+          throw new Error(secret);
+        },
+        async () => {
+          await Promise.resolve();
+          throw new Error(secret);
+        },
+      ].map(async (sink) => {
+        await expect(
+          observeOperatorPlanStage(
+            secret,
+            "plan_reservation",
+            () => {
+              throw rejection;
+            },
+            sink,
+          ),
+        ).rejects.toBe(rejection);
+      }),
+    );
+    const log = vi.spyOn(console, "info").mockImplementation(() => {
+      throw new Error(secret);
+    });
+    try {
+      await expect(
+        observeOperatorPlanStage(secret, "plan_reservation", () => {
+          throw rejection;
+        }),
+      ).rejects.toBe(rejection);
+      expect(log).toHaveBeenCalledOnce();
+      expect(JSON.stringify(log.mock.calls)).not.toContain(secret);
+    } finally {
+      log.mockRestore();
+    }
+    await Promise.resolve();
+  });
+
+  it("rejects arbitrary failure fields and runtime labels", () => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    const report = createHostedOperatorConsentDiagnostic(secret, sink);
+    for (const [field, invalid] of [
+      ["stage", secret],
+      ["errorClass", secret],
+      ["code", secret],
+      ["message", secret],
+    ] as const) {
+      const metadata: HostedOperatorConsentMetadata = {
+        ...value,
+        planningFailure: { stage: "plan_validation", errorClass: "unexpected" },
+      };
+      Object.defineProperty(metadata.planningFailure, field, { enumerable: true, value: invalid });
+      report(metadata);
+    }
+    expect(sink).not.toHaveBeenCalled();
   });
 });
 
@@ -396,4 +705,28 @@ describe("operator planning mismatch diagnostics", () => {
     }
     await Promise.resolve();
   });
+});
+
+it("preserves a plan owner authorization rejection with only the fixed private stage", async () => {
+  const error = new HostedOperatorError("authorization_required");
+  const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+  await expect(
+    observeOperatorPlanStage(
+      "private-owner-session",
+      "plan_owner_authorization",
+      () => {
+        throw error;
+      },
+      sink,
+    ),
+  ).rejects.toBe(error);
+  expect(sink).toHaveBeenCalledWith(
+    expect.objectContaining({
+      planningFailure: {
+        stage: "plan_owner_authorization",
+        errorClass: "operator_error",
+        code: "authorization_required",
+      },
+    }),
+  );
 });
