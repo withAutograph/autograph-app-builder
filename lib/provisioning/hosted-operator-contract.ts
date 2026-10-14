@@ -968,6 +968,16 @@ export const operatorPlanDigest = (input: HostedOperatorPlan) =>
   createHash("sha256")
     .update(JSON.stringify(hostedOperatorPlanSchema.parse(input)))
     .digest("hex");
+/** Only the planner's generated expiry may differ; every approved effect remains exact. */
+export const sameOperatorPlanExceptExpiry = (
+  original: HostedOperatorPlan,
+  proposed: HostedOperatorPlan,
+) =>
+  operatorPlanDigest(original) ===
+  operatorPlanDigest({
+    ...proposed,
+    retention: { ...proposed.retention, expiresAt: original.retention.expiresAt },
+  });
 /** Completed Auth ownership survives replacement of the app's current operation.
  * This is non-secret provenance; current owner and original approval are re-read
  * before the retained encrypted credentials may be used. */

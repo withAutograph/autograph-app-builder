@@ -17,6 +17,7 @@ import {
   operatorPlanDigest,
   retainedOperatorAuthSchema,
   sameOperatorSelection,
+  sameOperatorPlanExceptExpiry,
 } from "./hosted-operator-contract";
 import type {
   OperatorOwnerContext,
@@ -34,6 +35,7 @@ import type { HostedOperatorContext } from "./hosted-operator-service";
 import {
   createPrivateHostedApprovalRecorder,
   readPrivateHostedApproval,
+  privateHostedApprovalReceiptSchema,
 } from "../eve/private-hosted-approval";
 import type { HostedEveTransport } from "../eve/hosted-service";
 
@@ -90,7 +92,7 @@ const ownerContextFromHint = (hint: OperatorOwnerContext | undefined) => {
 };
 
 const readCurrentOwnedSession = async (
-  deps: HostedOperatorOwnerDependencies,
+  deps: { eve: Pick<HostedEveStore, "getSession"> },
   principal: HostedPrincipal,
   owner: OperatorOwnerContext,
 ) => {
@@ -558,5 +560,72 @@ export const createHostedOperatorReadApproval =
       approved: true,
       callId: receipt.callId,
       planDigest: receipt.toolInput.planDigest,
+    };
+  };
+
+/** Select only an actual current-owner approval; proposed expiry never extends its authority. */
+export const createHostedOperatorReadApprovedPlan =
+  (input: {
+    eve: Pick<HostedEveStore, "getSession">;
+    assertCanonicalOwner: (context: HostedOperatorContext) => Promise<void>;
+  }) =>
+  async (
+    context: HostedOperatorContext & {
+      plan: HostedOperatorPlan;
+      currentOperation?: { operationRef: string; planDigest: string };
+      now: number;
+    },
+  ) => {
+    await input.assertCanonicalOwner(context);
+    const owner = operatorOwnerContextSchema.parse(context.ownerContext);
+    const { session } = await readCurrentOwnedSession(input, owner.principal, owner);
+    if (
+      session.adapterSessionId !== owner.adapterSessionId ||
+      session.adapterGeneration !== owner.adapterGeneration ||
+      !samePrincipal(session.principal, owner.principal)
+    ) {
+      throw unavailable();
+    }
+    const receipts = (session.privateApprovalReceipts ?? []).map((value) =>
+      privateHostedApprovalReceiptSchema.parse(value),
+    );
+    const scoped = receipts.filter(
+      (receipt) =>
+        receipt.toolName === "prepare-app-hosted-runtime" &&
+        sameOperatorSelection(receipt.toolInput.plan.selection, context.plan.selection),
+    );
+    const candidates = scoped
+      .filter((receipt) => sameOperatorPlanExceptExpiry(receipt.toolInput.plan, context.plan))
+      .toSorted((left, right) => left.sequence - right.sequence);
+    const latest = candidates.at(-1);
+    if (latest === undefined) {
+      return null;
+    }
+    if (
+      latest.outcome !== "approved" ||
+      latest.responderPrincipalId !== owner.principal.ownerUserId
+    ) {
+      throw unavailable();
+    }
+    if (Date.parse(latest.toolInput.plan.retention.expiresAt) <= context.now) {
+      return null;
+    }
+    const current = context.currentOperation;
+    if (
+      current !== undefined &&
+      current.operationRef !== latest.toolInput.operationRef &&
+      scoped.some(
+        (receipt) =>
+          receipt.outcome === "approved" &&
+          receipt.toolInput.operationRef === current.operationRef &&
+          receipt.toolInput.planDigest === current.planDigest,
+      )
+    ) {
+      throw new HostedOperatorError("operation_in_progress");
+    }
+    return {
+      operationRef: latest.toolInput.operationRef,
+      plan: latest.toolInput.plan,
+      planDigest: latest.toolInput.planDigest,
     };
   };

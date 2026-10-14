@@ -1,3 +1,4 @@
+import { recoverOriginalApprovedPlan } from "./hosted-operator-approved-plan";
 import type { projectNormalActorRuntime } from "./hosted-operator-normal-actor-runtime-projection";
 import {
   createHostedOperatorConsentDiagnostic,
@@ -80,6 +81,7 @@ export interface HostedOperatorContext {
   target: HostedRuntimeTarget;
   ownerContext?: OperatorOwnerContext;
 }
+const UNAPPROVED_PLAN = "operator:unapproved-plan";
 const AUTH_BOOTSTRAP_STAGE = "auth-bootstrap";
 const AUTH_PARTICIPANTS_STAGE = "auth-participants";
 const PARTICIPANTS_PREPARED = "participants-prepared";
@@ -176,6 +178,14 @@ export interface ProtectedHostedOperatorDependencies {
   assertAuthorized: (context: Context & { plan: HostedOperatorPlan }) => Promise<void>;
   /** Canonical session/member/app/adapter authority; provider grants remain full at observation boundaries and mutations. */
   assertCanonicalOwner?: (context: Context) => Promise<void>;
+  /** Canonical current-owner original approval selection; never accepts model-supplied proof. */
+  readApprovedPlan?: (
+    context: Context & {
+      plan: HostedOperatorPlan;
+      currentOperation?: { operationRef: string; planDigest: string };
+      now: number;
+    },
+  ) => Promise<{ operationRef: string; plan: HostedOperatorPlan; planDigest: string } | null>;
   /** Read the durable authenticated approval outcome and exact tool input from Eve's authoritative store. */
   readApproval: (
     context: Context & { callId: string; planDigest: string; action: "prepare" | "cleanup" },
@@ -343,6 +353,10 @@ const handlePlanOperation = async (
     await deps.assertAuthorized({ ...context, plan });
   });
   assertUnexpired(plan, now());
+  const recovered = await recoverOriginalApprovedPlan(deps, context, input, appId, plan, now);
+  if (recovered !== null) {
+    return response(recovered);
+  }
   const planDigest = operatorPlanDigest(plan);
   const operator = {
     mode: "protected-operator-v1" as const,
@@ -357,7 +371,7 @@ const handlePlanOperation = async (
     async () =>
       await deps.store.reserve({
         ...context,
-        approvedByCallId: "operator:unapproved-plan",
+        approvedByCallId: UNAPPROVED_PLAN,
         now: new Date(now()),
         operator,
       }),
@@ -499,7 +513,7 @@ const handlePlanOperation = async (
       }
       const next = {
         ...record,
-        approvedByCallId: "operator:unapproved-plan",
+        approvedByCallId: UNAPPROVED_PLAN,
         environmentBound: false,
         operator: nextOperator,
         retainedAuth:

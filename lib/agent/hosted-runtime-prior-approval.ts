@@ -12,6 +12,7 @@ import {
   operatorPlanDigest,
   sameOperatorSelection,
 } from "../provisioning/hosted-operator-contract";
+import type { OperatorPublicResult } from "../provisioning/hosted-operator-contract";
 import type { hostedOperatorClientForSession } from "../provisioning/hosted-operator-client";
 import { readHostedOperatorOwnerReaderConfiguration } from "../provisioning/hosted-operator-owner-context";
 import type { HostedRuntimeApprovalEnvelope } from "./prepare-app-hosted-runtime-step";
@@ -52,6 +53,18 @@ const sameInput = (
     receipt.toolInput.branch === input.branch,
     receipt.toolInput.projectId === input.projectId,
     receipt.toolInput.environment === input.environment,
+  ].every(Boolean);
+
+const matchesRestoredApproval = (
+  restored: OperatorPublicResult,
+  original: z.infer<typeof hostedRuntimePreparationInputSchema>,
+) =>
+  [
+    restored.status === "planned",
+    restored.appId === original.appId,
+    restored.operationRef === original.operationRef,
+    restored.planDigest === original.planDigest,
+    restored.plan !== undefined && operatorPlanDigest(restored.plan) === original.planDigest,
   ].every(Boolean);
 
 /** Reuses only a real terminal receipt and independently checks the current protected operation. */
@@ -126,7 +139,7 @@ export const createHostedRuntimePriorApprovalReader =
     ) {
       throw new HostedOperatorError("authorization_required");
     }
-    const current = await operator.request(
+    let current = await operator.request(
       {
         action: "status",
         operationRef: parsed.operationRef,
@@ -134,6 +147,30 @@ export const createHostedRuntimePriorApprovalReader =
       },
       ctx.abortSignal,
     );
+    ctx.abortSignal.throwIfAborted();
+    if ([current.status === "blocked", current.code === "resource_mismatch"].every(Boolean)) {
+      const restored = await operator.request(
+        {
+          action: "plan",
+          operation: "prepare",
+          selection,
+          ...(parsed.plan.normalActorProgram === undefined
+            ? {}
+            : {
+                normalActorProgram: parsed.plan.normalActorProgram,
+              }),
+        },
+        ctx.abortSignal,
+      );
+      ctx.abortSignal.throwIfAborted();
+      if (!matchesRestoredApproval(restored, parsed)) {
+        throw new HostedOperatorError(restored.code ?? "resource_mismatch");
+      }
+      current = await operator.request(
+        { action: "status", operationRef: parsed.operationRef, selection },
+        ctx.abortSignal,
+      );
+    }
     ctx.abortSignal.throwIfAborted();
     if (
       current.status === "blocked" ||

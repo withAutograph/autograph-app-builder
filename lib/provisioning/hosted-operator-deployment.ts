@@ -94,6 +94,7 @@ import type { OperatorWorkloadPolicy } from "./hosted-operator-workload";
 import {
   createHostedOperatorOwnerAuthority,
   createHostedOperatorReadApproval,
+  createHostedOperatorReadApprovedPlan,
 } from "./hosted-operator-owner";
 import { createHostedOperatorOwnerContextResolver } from "./hosted-operator-owner-context";
 import type { HostedOperatorContext, HostedOperatorEffectContext } from "./hosted-operator-service";
@@ -459,6 +460,10 @@ export const createHostedOperatorControlPlane = async (input: {
       journal: store,
       observe: eveObserver.observe,
     });
+    const readApprovedPlan = createHostedOperatorReadApprovedPlan({
+      eve,
+      assertCanonicalOwner: owner.assertArtifactAuthorized,
+    });
     const withResourceLease = createPostgresHostedOperatorResourceLease({
       openLockClient: (onConnectionClosed) =>
         postgres(parseHostedDatabaseUrl(config.databaseUrl), {
@@ -812,6 +817,7 @@ export const createHostedOperatorControlPlane = async (input: {
     });
 
     const controlPlane = {
+      readApprovedPlan,
       normalActorJournalPorts,
       assertAuthorized: owner.assertAuthorized,
       async assertMembershipCapture(inputContext: HostedOperatorEffectContext) {
