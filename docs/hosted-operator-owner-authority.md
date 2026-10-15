@@ -22,6 +22,22 @@ current operation reference, selected action, selection, and exact frozen plan
 digest. Missing, denied, conflicting, or stale approvals do not authorize an
 effect.
 
+Fresh approval can settle before the background observer saves its private
+receipt. During execution, Builder reads the existing receipt first. Only when
+it is missing, Builder makes one owner-bound native observation using its own
+workload identity and the canonical Builder origin. The existing recorder saves
+actual native approval requests and terminal settlements. Builder then reruns
+the unchanged approval reader, including after an observation failure, so a real
+receipt saved concurrently can still authorize the existing operation. Stored
+approvals retain their fast path; this adds no polling or technical reapproval.
+
+Keep this capture on Builder. Eve's native route authentication does not enforce
+session ownership, and its authentication policy also covers mutation routes.
+A blanket Operator workload grant would expose unrelated native sessions and
+operations. Preserve the tenant, owner, adapter generation, operation, request,
+call, plan digest and cancellation checks. A recorded response or a tool
+invocation alone cannot substitute for the actual terminal approval receipt.
+
 ## Normal accounts and organization sessions
 
 For apps requiring several participants, Builder derives `normalActorProgram`
