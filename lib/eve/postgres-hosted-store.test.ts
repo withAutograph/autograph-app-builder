@@ -496,12 +496,14 @@ type CheckpointFixtureRow = Record<
   string | number | Date | null | HostedSessionRecord | readonly string[]
 >;
 
-const terminalReadRows = (rows: CheckpointFixtureRow[]) => ({
-  // oxlint-disable-next-line eslint/require-await -- Terminal database double preserves the async read contract.
-  limit: async (limit: number) => rows.slice(0, limit),
-  // oxlint-disable-next-line eslint/require-await -- Terminal database double preserves the async read contract.
-  orderBy: async () => rows,
-});
+const terminalReadRows = (rows: CheckpointFixtureRow[]) => {
+  const result = Object.assign(Promise.resolve(rows), {
+    // oxlint-disable-next-line eslint/require-await -- Terminal database double preserves the async read contract.
+    limit: async (limit: number) => rows.slice(0, limit),
+    orderBy: () => result,
+  });
+  return result;
+};
 
 /** Terminal query doubles exercise the real store, history reader, and Drizzle predicates. */
 const checkpointReadFixture = () => {
@@ -556,12 +558,27 @@ const checkpointReadFixture = () => {
     if (name !== "agent_session") {
       keys.push("checkpointId");
     }
-    if (name === "agent_session_checkpoint_item" || name === "agent_session_checkpoint_chunk") {
-      keys.push("itemIndex");
-    }
-    const selected = (rows.get(name) ?? []).filter((row) =>
-      keys.every((key, index) => row[key] === query.params[index]),
-    );
+    const itemIndexes = /"item_index" in \((?<indexes>[^)]+)\)/u.exec(query.sql);
+    const indexes =
+      itemIndexes === null
+        ? undefined
+        : [...(itemIndexes.groups?.indexes ?? "").matchAll(/\$(?<parameter>\d+)/gu)].map(
+            (match) => query.params[Number(match.groups?.parameter) - 1],
+          );
+    const afterItem = /"item_index" > \$(?<parameter>\d+)/u.exec(query.sql);
+    const afterPart = /"part_index" > \$(?<parameter>\d+)/u.exec(query.sql);
+    const selected = (rows.get(name) ?? []).filter((row) => {
+      if (!keys.every((key, index) => row[key] === query.params[index])) return false;
+      if (indexes !== undefined && !indexes.includes(row.itemIndex)) return false;
+      if (afterItem === null) return true;
+      const itemCursor = Number(query.params[Number(afterItem.groups?.parameter) - 1]);
+      return (
+        Number(row.itemIndex) > itemCursor ||
+        (row.itemIndex === itemCursor &&
+          afterPart !== null &&
+          Number(row.partIndex) > Number(query.params[Number(afterPart.groups?.parameter) - 1]))
+      );
+    });
     return terminalReadRows(selected);
   };
   const database = {
@@ -573,8 +590,9 @@ const checkpointReadFixture = () => {
   };
   // SAFETY: This terminal double implements every SELECT chain reached by these read-only store/history calls.
   const store = createPostgresHostedEveStore(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Writes and provider calls are not exercised by this fixture.
-    database as Parameters<typeof createPostgresHostedEveStore>[0],
+    // SAFETY: The read-only terminal fixture implements every exercised SELECT chain; writes and provider calls are not exercised.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- Deliberate partial database transport fixture.
+    database as unknown as Parameters<typeof createPostgresHostedEveStore>[0],
   );
   const read = async (
     overrides: Partial<Parameters<NonNullable<typeof store.readCheckpointPage>>[0]> = {},

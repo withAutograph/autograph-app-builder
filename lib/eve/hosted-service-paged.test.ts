@@ -1035,6 +1035,109 @@ describe("paged hosted session observation", () => {
     expect(adapter.cancel).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["send", 0],
+    ["send", 1],
+    ["send", 135],
+    ["respond", 0],
+    ["respond", 1],
+    ["respond", 135],
+  ] as const)(
+    "returns only the new bounded page after accepted %s with %i events",
+    async (kind, delta) => {
+      const baseline = 205;
+      const question = {
+        allowFreeform: true,
+        kind: "question" as const,
+        requestId: "product-choice",
+        title: "Choose a target",
+      };
+      let accepted = false;
+      const observe: NonNullable<HostedEveTransport["observe"]> = async (input) => {
+        const start = input.nativeObservationState?.publicEventCount ?? 0;
+        const total = baseline + (accepted ? delta : 0);
+        for (let index = start; index < total; index += 1) {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- Preserve native event order and callback backpressure.
+          await input.onEvent(
+            index === baseline - 1 && kind === "respond"
+              ? { index, request: question, type: "input.requested" }
+              : {
+                  index,
+                  text: index < baseline ? `history ${index}` : `new ${index}`,
+                  turnId: "turn_1",
+                  type: "assistant.message",
+                },
+          );
+        }
+        const pendingRequests = kind === "respond" && !accepted ? [question] : [];
+        const state = {
+          ...nativeState({
+            adapterSessionId: input.adapterSessionId,
+            nextNativeIndex: total + (accepted ? 1 : 0),
+            publicEventCount: total,
+          }),
+          pendingRequests,
+          ...(accepted && kind === "send" ? { nativeDeliveryState: sendProof } : {}),
+        };
+        return {
+          artifactProjectionRequiresLegacyReadback: false,
+          installedEventCount: state.nextNativeIndex,
+          nativeObservationState: state,
+          nextNativeIndex: state.nextNativeIndex,
+          pendingRequests,
+          publicEventCount: total,
+          status: pendingRequests.length ? "input_required" : "waiting",
+        };
+      };
+      const f = await fixture(observe);
+      await f.service.get({ sessionId: f.sessionId, cursor: 0, limit: 1 });
+      const sendAccepted = vi.fn<NonNullable<HostedEveTransport["sendAccepted"]>>(async (input) => {
+        accepted = true;
+        await input.onAccepted?.("fixture-delivery");
+      });
+      const respondAccepted = vi.fn<NonNullable<HostedEveTransport["respondAccepted"]>>(
+        async () => {
+          accepted = true;
+          await Promise.resolve();
+        },
+      );
+      f.adapter.sendAccepted = sendAccepted;
+      f.adapter.respondAccepted = respondAccepted;
+      const requestId = randomUUID();
+      const submit = () =>
+        kind === "send"
+          ? f.service.send({
+              clientRequestId: requestId,
+              sessionId: f.sessionId,
+              message: "Continue",
+            })
+          : f.service.respond({
+              clientRequestId: requestId,
+              sessionId: f.sessionId,
+              responses: [
+                { requestId: question.requestId, response: { kind: "answer", value: "Preview" } },
+              ],
+            });
+      const result = await submit();
+      expect(result.events.map((event) => event.index)).toEqual(
+        Array.from({ length: Math.min(delta, 100) }, (_, index) => baseline + index),
+      );
+      expect(result.cursor).toBe(baseline + Math.min(delta, 100));
+      expect(await submit()).toEqual(result);
+      expect(kind === "send" ? sendAccepted : respondAccepted).toHaveBeenCalledOnce();
+      const remainder = await f.service.get({
+        sessionId: f.sessionId,
+        cursor: result.cursor,
+        limit: 100,
+      });
+      expect(remainder.events.map((event) => event.index)).toEqual(
+        Array.from({ length: Math.max(0, delta - 100) }, (_, index) => baseline + 100 + index),
+      );
+      const history = await f.service.get({ sessionId: f.sessionId, cursor: 0, limit: 1 });
+      expect(history.events[0]).toMatchObject({ index: 0, text: "history 0" });
+    },
+  );
+
   it("settles an accepted send only after its ACK turn boundary is durable", async () => {
     let acknowledged = false;
     const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(

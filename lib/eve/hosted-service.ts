@@ -695,6 +695,24 @@ function* publicSnapshotEvents(snapshot: HostedEngineSnapshot) {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Capture the absolute public tail before dispatch, including retained legacy offsets.
+function mutationEventCursor(record: HostedSessionRecord) {
+  const durable = toDurableHostedSessionRecord(record);
+  return (
+    durable.checkpointRef?.eventCount ??
+    (durable.checkpoint?.truncatedBeforeIndex ?? 0) + (durable.checkpoint?.events.length ?? 0)
+  );
+}
+
+// eslint-disable-next-line eslint/func-style -- Count public history without materializing a second copy.
+function publicSnapshotEventCount(snapshot: HostedEngineSnapshot) {
+  let count = 0;
+  for (const event of publicSnapshotEvents(snapshot)) {
+    count = event.index + 1;
+  }
+  return count;
+}
+
 // eslint-disable-next-line eslint/func-style -- The spool is consumed only after Eve's durable tail is verified.
 async function spoolObservedSession(input: {
   transport: NonNullable<HostedEveTransport["observe"]>;
@@ -1850,8 +1868,9 @@ export function createHostedEveSessionService(input: {
       ? "terminal"
       : "live",
     capturedAtEpochMs = now(),
+    cursor = 0,
   ) {
-    const completeResult = projectSnapshot(sessionId, snapshot, 0, 100);
+    const completeResult = projectSnapshot(sessionId, snapshot, cursor, 100);
     if (
       input.store.observeSessionPaged !== undefined &&
       input.store.readCheckpointPage !== undefined
@@ -1923,7 +1942,7 @@ export function createHostedEveSessionService(input: {
     if (observed?.status === "cancelled") {
       const durable = toDurableHostedSessionRecord(observed);
       if (durable.checkpoint) {
-        return resultFromHostedCheckpoint(sessionId, durable.checkpoint, 0, 100);
+        return resultFromHostedCheckpoint(sessionId, durable.checkpoint, cursor, 100);
       }
     }
     return completeResult;
@@ -2470,13 +2489,14 @@ export function createHostedEveSessionService(input: {
   async function readAcceptedMutation(
     sessionId: string,
     previousCheckpointDigest: string | undefined,
+    cursor: number,
     sendDelivery?: SendDelivery,
     sendDiagnostic?: { clientRequestId: string; operationId: string },
   ): Promise<EveSessionResult> {
     let phase: HostedSubmissionPhase = "send_accepted_readback";
     let failureCategory: SendReadFailureCategory = "native_read_failed";
     try {
-      const result = await readSession({ continueWork: false, cursor: 0, limit: 100, sessionId });
+      const result = await readSession({ continueWork: false, cursor, limit: 100, sessionId });
       const current = toDurableHostedSessionRecord(await requireSession(sessionId));
       if (sendDelivery !== undefined) {
         const proof = await nativeDeliveriesForSession(current);
@@ -2701,6 +2721,8 @@ export function createHostedEveSessionService(input: {
         ) {
           throw new SubmissionRejectedBeforeDispatchError("input_batch_changed");
         }
+        const responseCursor =
+          before === undefined ? mutationEventCursor(session) : publicSnapshotEventCount(before);
         const responseInput = {
           adapterSessionId: session.adapterSessionId,
           ...(marker === undefined ? {} : { internalSessionLimitResponse: marker }),
@@ -2721,6 +2743,7 @@ export function createHostedEveSessionService(input: {
           const result = await readAcceptedMutation(
             request.sessionId,
             session.version === 2 ? session.checkpointDigest : undefined,
+            responseCursor,
           );
           const actual = await privateInputsForSession(await requireSession(request.sessionId));
           if (
@@ -2732,7 +2755,13 @@ export function createHostedEveSessionService(input: {
           return { result };
         }
         const snapshot = await input.transport.respond(responseInput);
-        const result = await observeSnapshot(request.sessionId, snapshot);
+        const result = await observeSnapshot(
+          request.sessionId,
+          snapshot,
+          undefined,
+          undefined,
+          responseCursor,
+        );
         if (
           marker?.decision === "stop" &&
           (snapshot.privateInputState === undefined ||
@@ -2903,7 +2932,7 @@ export function createHostedEveSessionService(input: {
             principal,
             ...(turnId === undefined ? {} : { turnId }),
           });
-          return readAcceptedMutation(sessionId, session.checkpointDigest);
+          return readAcceptedMutation(sessionId, session.checkpointDigest, 0);
         }
         snapshot = await input.transport.cancel({
           adapterSessionId: session.adapterSessionId,
@@ -3041,6 +3070,20 @@ export function createHostedEveSessionService(input: {
             throw new SubmissionRejectedBeforeDispatchError("send_owner_unavailable");
           }
           const binding = toDurableHostedSessionRecord(session);
+          // Snapshot transports need a fresh native tail; accepted transports already persisted preflight.
+          let responseCursor = mutationEventCursor(session);
+          if (!preflight?.persisted) {
+            let before: HostedEngineSnapshot;
+            try {
+              before = await input.transport.get({
+                adapterSessionId: session.adapterSessionId,
+                principal,
+              });
+            } catch {
+              throw new SubmissionRejectedBeforeDispatchError("send_preflight_unavailable");
+            }
+            responseCursor = publicSnapshotEventCount(before);
+          }
           const requestDigest = digest({ kind: "send", request, sessionId: request.sessionId });
           let sendDelivery: SendDelivery | undefined;
           const sendInput = {
@@ -3089,6 +3132,7 @@ export function createHostedEveSessionService(input: {
             const result = await readAcceptedMutation(
               request.sessionId,
               session.version === 2 ? session.checkpointDigest : undefined,
+              responseCursor,
               sendDelivery,
               { clientRequestId: request.clientRequestId, operationId },
             );
@@ -3100,7 +3144,13 @@ export function createHostedEveSessionService(input: {
             };
           }
           const snapshot = await input.transport.send(sendInput);
-          const result = await observeSnapshot(request.sessionId, snapshot);
+          const result = await observeSnapshot(
+            request.sessionId,
+            snapshot,
+            undefined,
+            undefined,
+            responseCursor,
+          );
           // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Ownership must be re-read after the preceding native snapshot was durably observed.
           const current = await requireSession(request.sessionId);
           const proof = snapshot.nativeDeliveryState;
