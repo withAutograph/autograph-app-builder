@@ -3,6 +3,7 @@ import hook from "../../agent/hooks/retain-product-request";
 import { productRequestState } from "./product-source-review-state";
 import type { RetainedProductRequest } from "./product-source-review-state";
 import type { HookContext, HookEvent } from "eve/hooks";
+import { sourceReviewBindingDigest } from "./product-source-review";
 
 afterEach(() => vi.restoreAllMocks());
 const receive = async (sequence: number, message: string) => {
@@ -36,7 +37,11 @@ const inputContext = (): HookContext =>
   // SAFETY: Input handlers only update session-bound state and do not access context services.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   ({ session: { turn: { sequence: 1 } } }) as HookContext;
-const requestInput = async (kind: "question" | "tool-approval", requestId = "scope") => {
+const requestInput = async (
+  kind: "question" | "tool-approval",
+  requestId = "scope",
+  toolName = "ask_question",
+) => {
   // SAFETY: Supplies every input request field used by the supported handler; event metadata is not read.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   const event = {
@@ -47,7 +52,7 @@ const requestInput = async (kind: "question" | "tool-approval", requestId = "sco
             callId: "call",
             input: { credential: "do-not-retain-action-input" },
             kind: "tool-call",
-            toolName: "ask_question",
+            toolName,
           },
           kind,
           options: [
@@ -174,4 +179,100 @@ it("does not carry pending question context into another session and retains exp
   });
   expect(state.clarifications[1]).toContain('"outcome":"denied"');
   expect(state.clarifications[1]).toContain("Do not publish");
+});
+
+it.each([
+  "prepare-app-hosted-runtime",
+  "cleanup-app-hosted-runtime",
+  "publish_github_draft_pr",
+  "publish-github-draft-pr",
+  "update_github_draft_pr",
+  "reconcile_github_draft_pr",
+])("keeps pure %s authorization out of requirements without changing review binding", async (toolName) => {
+  let state: RetainedProductRequest = {
+    clarifications: ["Keep all original product requirements"],
+    original: "Build an authenticated app",
+    sequences: [],
+  };
+  vi.spyOn(productRequestState, "update").mockImplementation((update) => {
+    state = update(state);
+  });
+  const binding = () =>
+    sourceReviewBindingDigest({
+      appSpecDigest: "accepted-spec",
+      clarifications: state.clarifications,
+      originalRequest: state.original,
+      sourceDigest: "unchanged-source",
+    });
+  const before = binding();
+  for (const outcome of ["approved", "denied"] as const) {
+    const requestId = `${toolName}-${outcome}`;
+    await requestInput("tool-approval", requestId, toolName);
+    expect(state.pendingInputs?.[0]?.authorizationOnly).toBe(true);
+    expect(JSON.stringify(state)).not.toContain("do-not-retain-action-input");
+    const resolution = {
+      kind: "tool-approval" as const,
+      outcome,
+      requestId,
+      response: { requestId },
+    };
+    await resolveInput(resolution);
+    await resolveInput(resolution);
+    expect(state.pendingInputs).toEqual([]);
+    expect(state.sequences.filter((sequence) => sequence === `input:${requestId}`)).toHaveLength(1);
+  }
+  expect(state.clarifications).toEqual(["Keep all original product requirements"]);
+  expect(binding()).toBe(before);
+  await receive(2, "Approved, but add reviewer comments");
+  expect(state.clarifications[1]).toBe("Approved, but add reviewer comments");
+  expect(binding()).not.toBe(before);
+});
+it("preserves mixed text, selected product choices and legacy effect approvals", async () => {
+  let state: RetainedProductRequest = { clarifications: [], original: "Original brief", sequences: [] };
+  vi.spyOn(productRequestState, "update").mockImplementation((update) => {
+    state = update(state);
+  });
+  await requestInput("tool-approval", "mixed", "publish_github_draft_pr");
+  await resolveInput({
+    kind: "tool-approval",
+    outcome: "denied",
+    requestId: "mixed",
+    response: { requestId: "mixed", text: "Do not publish; add reviewer comments first" },
+  });
+  await requestInput("tool-approval", "choice", "prepare-app-hosted-runtime");
+  await resolveInput({
+    kind: "tool-approval",
+    outcome: "approved",
+    requestId: "choice",
+    response: { requestId: "choice", optionId: "auth" },
+  });
+  await requestInput("question", "question", "prepare-app-hosted-runtime");
+  await resolveInput({
+    kind: "question",
+    outcome: "answered",
+    requestId: "question",
+    response: { requestId: "question", optionId: "public" },
+  });
+  await requestInput("tool-approval", "unknown-choice", "publish_github_draft_pr");
+  await resolveInput({
+    kind: "tool-approval",
+    outcome: "approved",
+    requestId: "unknown-choice",
+    response: { requestId: "unknown-choice", optionId: "unrecognized-product-choice" },
+  });
+  state.pendingInputs = [
+    {
+      kind: "tool-approval",
+      options: [],
+      prompt: "Publish the legacy request",
+      requestId: "legacy",
+    },
+  ];
+  await resolveInput({ kind: "tool-approval", outcome: "approved", requestId: "legacy" });
+  expect(state.clarifications).toHaveLength(5);
+  expect(state.clarifications[0]).toContain("add reviewer comments first");
+  expect(state.clarifications[1]).toContain("Require authentication");
+  expect(state.clarifications[2]).toContain("Public access");
+  expect(state.clarifications[3]).toContain("unrecognized-product-choice");
+  expect(state.clarifications[4]).toContain("Publish the legacy request");
 });
