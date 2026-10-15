@@ -435,6 +435,166 @@ const adoptedGatewayPlan = () => {
   });
 };
 
+const completedOwnerBootstrap = async (normalActors = false) => {
+  const f = fixture();
+  const gatewayPlan = adoptedGatewayPlan();
+  const bootstrapPlan = hostedOperatorPlanSchema.parse({
+    ...plan,
+    access: [],
+    authSchema: gatewayPlan.authSchema,
+    bootstrap: gatewayPlan.bootstrap,
+    gatewayBindings: gatewayPlan.gatewayBindings,
+    resourcesInstaller: gatewayPlan.resourcesInstaller,
+    stage: "auth-bootstrap",
+    effects: [
+      {
+        description: "Prepare Auth resource",
+        id: "resources:auth",
+        kind: "resources",
+        resourceId: plan.authDatabase.resourceId,
+      },
+      {
+        description: "Prepare app resource",
+        id: "resources:app",
+        kind: "resources",
+        resourceId: plan.appDatabase.resourceId,
+      },
+      { description: "Prepare Auth", id: "install:auth", kind: "install" },
+      { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
+    ],
+    ...(normalActors
+      ? {
+          normalActorProgram: {
+            version: 1,
+            appId: selection.appId,
+            origin: plan.publicGateway?.origin,
+            actors: [
+              {
+                actorKey: "owner",
+                account: "capture-existing",
+                email: "owner@example.test",
+                name: "Owner",
+              },
+            ],
+            organizations: [],
+            memberships: [],
+            appAccess: [],
+          },
+        }
+      : {}),
+  });
+  f.deps.plan = async () => bootstrapPlan;
+  f.deps.verifyAuthReadiness = async () => ({
+    assetSha256: "1".repeat(64),
+    catalogFingerprint: "2".repeat(64),
+    database: plan.authDatabase.database,
+    runtimeRole: plan.authDatabase.runtimeRole,
+    targetDigest: z.string().parse(bootstrapPlan.authSchema?.targetDigest),
+    observedAt: new Date().toISOString(),
+  });
+  const request = await prepared(f);
+  f.approve();
+  expect((await f.client.request(request)).status).toBe("auth-schema-prepared");
+  const current = f.row;
+  if (current?.record.operator === undefined) {
+    throw new Error("Missing bootstrap journal");
+  }
+  const identityLink = {
+    audience: z.string().parse(bootstrapPlan.gatewayBindings?.operatorOrigin),
+    authResourceId: bootstrapPlan.authDatabase.resourceId,
+    bootstrapPlanDigest: request.planDigest,
+    browserOrigin: z.string().parse(bootstrapPlan.gatewayBindings?.authBrowserOrigin),
+    endpointOrigin: z.string().parse(bootstrapPlan.deploymentBoundary?.verification.gatewayOrigin),
+    issuer: z.string().parse(bootstrapPlan.deploymentBoundary?.verification.publicOrigin),
+    ownerSessionId: selection.sessionId,
+    organizationId: null,
+    nonceSha256: "d".repeat(64),
+    expiresAt: "2026-10-01T00:00:00Z",
+    consumedAt: "2026-09-30T23:59:00Z",
+    proofRef: "canonical-owner-proof",
+    proofSha256: "e".repeat(64),
+  };
+  f.row = {
+    ...current,
+    record: hostedRuntimeJournalRecordSchema.parse({
+      ...current.record,
+      operator: { ...current.record.operator, identityLink },
+    }),
+  };
+  return { f, request, identityLink };
+};
+
+describe("legacy owner bootstrap public readiness", () => {
+  it("finishes the same approved owner phase after canonical proof consumption without claiming app readiness", async () => {
+    const { f, request } = await completedOwnerBootstrap();
+    const result = await f.client.request(request);
+    expect(result).toMatchObject({
+      status: "prepared",
+      authenticatedBehavior: "unassessed",
+      operationRef: request.operationRef,
+    });
+    expect(result).not.toHaveProperty("appUrl");
+    expect(result).not.toHaveProperty("nativePreview");
+    expect(result).not.toHaveProperty("proof");
+    await expect(
+      f.client.bindings({ action: "bindings", operationRef: request.operationRef, selection }),
+    ).rejects.toMatchObject({ code: "auth_identity_required" });
+  });
+
+  it("keeps a pending owner identity link at Auth schema readiness", async () => {
+    const { f, request } = await completedOwnerBootstrap();
+    const link = f.row?.record.operator?.identityLink;
+    if (link === undefined) {
+      throw new Error("Missing identity link");
+    }
+    delete link.consumedAt;
+    delete link.proofRef;
+    delete link.proofSha256;
+    expect((await f.client.request(request)).status).toBe("auth-schema-prepared");
+  });
+
+  it("preserves the normal actor program stage handoff after owner capture", async () => {
+    const { f, request } = await completedOwnerBootstrap(true);
+    expect((await f.client.request(request)).status).toBe("auth-schema-prepared");
+  });
+
+  it("does not reuse proof captured for a different approved plan", async () => {
+    const { f, request } = await completedOwnerBootstrap();
+    const link = f.row?.record.operator?.identityLink;
+    if (link === undefined) {
+      throw new Error("Missing identity link");
+    }
+    link.bootstrapPlanDigest = "f".repeat(64);
+    expect((await f.client.request(request)).status).toBe("auth-schema-prepared");
+  });
+
+  it.each([
+    "ownerSessionId",
+    "authResourceId",
+    "browserOrigin",
+    "proofRef",
+    "proofSha256",
+  ] as const)(
+    "refuses owner readiness when canonical %s is missing or mismatched",
+    async (field) => {
+      const { f, request } = await completedOwnerBootstrap();
+      const link = f.row?.record.operator?.identityLink;
+      if (link === undefined) {
+        throw new Error("Missing identity link");
+      }
+      if (field === "proofRef") {
+        delete link.proofRef;
+      } else if (field === "proofSha256") {
+        delete link.proofSha256;
+      } else {
+        link[field] =
+          field === "browserOrigin" ? "https://other.example.test" : "other-owner-resource";
+      }
+      expect((await f.client.request(request)).status).toBe("blocked");
+    },
+  );
+});
+
 describe("protected hosted operator boundary", () => {
   it("serves consent-only setup before full resource configuration and refuses planning/effects", async () => {
     const f = fixture();

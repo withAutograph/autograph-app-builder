@@ -874,6 +874,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
         await deps.assertAuthorized({ ...context, plan });
       });
       const publicStatus = (record: HostedRuntimeJournalRecord): OperatorPublicResult => {
+        const currentOperator = requireOperator(record);
         let status: OperatorPublicResult["status"] = "pending";
         if (
           record.status === "prepared" ||
@@ -883,10 +884,22 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           status = record.status;
         }
         if (
-          operator.plan.stage === AUTH_BOOTSTRAP_STAGE &&
-          requireOperator(record).authPreparation !== undefined
+          currentOperator.plan.stage === AUTH_BOOTSTRAP_STAGE &&
+          currentOperator.authPreparation !== undefined
         ) {
-          status = "auth-schema-prepared";
+          const link = currentOperator.identityLink;
+          const capturedOwner =
+            currentOperator.plan.normalActorProgram === undefined &&
+            currentOperator.operationRef === operationRef &&
+            currentOperator.planDigest === planDigest &&
+            link?.bootstrapPlanDigest === planDigest &&
+            link.ownerSessionId === context.target.sessionId &&
+            link.authResourceId === currentOperator.plan.authDatabase.resourceId &&
+            link.browserSession === undefined &&
+            link.consumedAt !== undefined &&
+            link.proofRef !== undefined &&
+            link.proofSha256 !== undefined;
+          status = capturedOwner ? "prepared" : "auth-schema-prepared";
         }
         const signupPolicy = operator.plan.authSignupPolicy;
         const policyInstalled =
