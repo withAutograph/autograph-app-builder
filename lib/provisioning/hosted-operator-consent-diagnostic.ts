@@ -455,9 +455,12 @@ export const projectOperatorGatewayProviderFailure = (payload: unknown) => {
     }
     const fields = new Set<z.infer<typeof gatewayValidationField>>();
     for (const detail of entries) {
+      const nestedError = ownProviderDetail(detail, "error");
       messages.push(
         ...providerMessages(detail),
         ...providerMessages(ownProviderDetail(detail, "message")),
+        ...providerMessages(nestedError),
+        ...providerMessages(ownProviderDetail(nestedError, "message")),
       );
       const path = ownProviderDetail(detail, "path");
       const stringPath = z.string().safeParse(path);

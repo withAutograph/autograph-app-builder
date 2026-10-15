@@ -1532,6 +1532,61 @@ it("observes literal error terms and validation fields on a rejected POST withou
   }
 });
 
+it("observes nested per-environment error messages without copying private details or nested codes", async () => {
+  const f = fixture();
+  f.fetcher.mockResolvedValueOnce(
+    Response.json(
+      {
+        error: {
+          code: "bad_request",
+          details: [
+            {
+              path: ["gitBranch"],
+              error: { code: "FORBIDDEN", message: `branch production ${privateAuthUrl}` },
+              key: "fixture-better-auth-secret",
+            },
+            { path: "/target", error: "preview target permission fixture-owner-oauth" },
+          ],
+        },
+      },
+      { status: 400 },
+    ),
+  );
+  expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
+  expect(f.fetcher).toHaveBeenCalledOnce();
+  expect(f.diagnostics.mock.calls[0]?.[0].gatewayBindings).toMatchObject({
+    providerCode: "BAD_REQUEST",
+    providerTerms: ["branch", "production", "preview", "target", "permission"],
+    validationFields: ["gitBranch", "target"],
+    result: "unknown",
+  });
+  const serialized = JSON.stringify(f.diagnostics.mock.calls);
+  for (const secret of [
+    privateAuthUrl,
+    "fixture-owner-oauth",
+    "fixture-better-auth-secret",
+    "FORBIDDEN",
+    selection.sessionId,
+  ]) {
+    expect(serialized).not.toContain(secret);
+  }
+  const getter = vi.fn(() => {
+    throw new Error(privateAuthUrl);
+  });
+  expect(
+    projectOperatorGatewayProviderFailure({
+      error: {
+        code: "bad_request",
+        details: [
+          Object.defineProperty({}, "error", { get: getter }),
+          { error: Object.defineProperty({}, "message", { get: getter }) },
+        ],
+      },
+    }),
+  ).toEqual({ providerCode: "BAD_REQUEST" });
+  expect(getter).not.toHaveBeenCalled();
+});
+
 it("does not classify unknown codes, arbitrary fields, request echoes, or substrings as provider reasons", () => {
   expect(
     projectOperatorGatewayProviderFailure({
