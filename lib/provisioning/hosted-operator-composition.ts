@@ -934,8 +934,10 @@ export const composeHostedOperatorDependencies = (
         candidate.deploymentId === current.record.operator?.deliveredGatewayDeploymentId &&
         candidate.readyState === "READY",
     );
+    // Explicit deployment-owned configuration selects the next planning target.
+    // A retained receipt is a fallback, never an override of that target.
     const gatewayReference =
-      recordedGateway === undefined
+      configuration.gateway.deploymentId !== undefined || recordedGateway === undefined
         ? configuration.gateway
         : {
             ...configuration.gateway,

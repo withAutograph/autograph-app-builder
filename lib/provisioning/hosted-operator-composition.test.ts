@@ -1011,6 +1011,65 @@ describe("existing populated Auth workflow planning", () => {
       expect(JSON.stringify(plan)).not.toContain("private-fixture");
     },
   );
+  it.each([
+    {
+      configuredDeploymentId: "configured-gateway",
+      recordedState: "READY",
+      expectedDeploymentId: "configured-gateway",
+      expectedOrigin: "https://gateway.example",
+    },
+    {
+      configuredDeploymentId: undefined,
+      recordedState: "READY",
+      expectedDeploymentId: "retained-gateway",
+      expectedOrigin: "https://retained-gateway.example",
+    },
+    {
+      configuredDeploymentId: undefined,
+      recordedState: "BUILDING",
+      expectedDeploymentId: undefined,
+      expectedOrigin: "https://gateway.example",
+    },
+  ] as const)(
+    "plans against the configured Gateway target with a READY journal fallback: $configuredDeploymentId / $recordedState",
+    async ({ configuredDeploymentId, recordedState, expectedDeploymentId, expectedOrigin }) => {
+      const f = setup("current");
+      f.configuration.gateway.deploymentId = configuredDeploymentId;
+      const operator = f.original.operator!;
+      operator.deliveredGatewayDeploymentId = "retained-gateway";
+      operator.gatewayDeliveryCandidates = [
+        {
+          branch: f.configuration.gateway.branch,
+          deploymentId: "retained-gateway",
+          operationRef: operator.operationRef,
+          origin: "https://retained-gateway.example",
+          projectId: f.configuration.gateway.projectId,
+          readyState: recordedState,
+          repoId: f.configuration.gateway.repoId,
+        },
+      ];
+      const { approvalId, planDigest } = operator;
+      await f.dependencies.plan({ ...context, action: "prepare" });
+      const observedTargets = vi
+        .mocked(providerInventory.readHostedOperatorProviderInventory)
+        .mock.calls.map(([{ configuration }]) => ({
+          deploymentId: configuration.gateway.deploymentId,
+          gatewayOrigin: configuration.verification.gatewayOrigin,
+          publicOrigin: configuration.verification.publicOrigin,
+        }));
+      expect(observedTargets).toContainEqual({
+        deploymentId: expectedDeploymentId,
+        gatewayOrigin: expectedOrigin,
+        publicOrigin: f.configuration.gateway.publicOrigin,
+      });
+      expect(operator.deliveredGatewayDeploymentId).toBe("retained-gateway");
+      expect(operator.gatewayDeliveryCandidates[0]?.origin).toBe(
+        "https://retained-gateway.example",
+      );
+      expect(operator.approvalId).toBe(approvalId);
+      expect(operator.planDigest).toBe(planDigest);
+    },
+  );
   it("preserves the approved source artifact and read-only adoption authority", async () => {
     const f = setup("adopted");
     const plan = await f.dependencies.plan({ ...context, action: "prepare" });

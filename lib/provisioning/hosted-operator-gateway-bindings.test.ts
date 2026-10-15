@@ -963,6 +963,31 @@ it("converges an acknowledged owned legacy Realm Config through PATCH without re
   expect(f.requests.every((request) => request.method === "GET")).toBe(true);
   expect(f.checkpointGatewayEnvironment).not.toHaveBeenCalled();
   await f.writer.bind(f.input);
+  const unchangedRows = f.input.gatewayEnvironmentRows!.filter((row) =>
+    ["AUTH_DATABASE_RESOURCE", "PLATFORM_AUTH_DATABASE_URL"].includes(row.key),
+  );
+  const unchangedPaths = new Set(
+    unchangedRows.map((row) => `/v1/projects/${gateway.projectId}/env/${row.id}`),
+  );
+  const observed = new Set<string>();
+  const selectedUnchangedRows: string[] = [];
+  for (const request of f.requests) {
+    if (request.method === "PATCH") {
+      break;
+    }
+    if (request.path === `/v10/projects/${gateway.projectId}/env`) {
+      observed.clear();
+    }
+    if (unchangedPaths.has(request.path)) {
+      if (observed.has(request.path)) {
+        selectedUnchangedRows.push(request.path);
+      }
+      observed.add(request.path);
+    }
+  }
+  // Unchanged rows participate in complete inventories, without a separate
+  // selected-row read for a mutation that is already known to be unnecessary.
+  expect(selectedUnchangedRows).toEqual([]);
   expect(f.requests.filter((request) => request.method !== "GET")).toEqual([
     {
       method: "PATCH",
@@ -978,6 +1003,44 @@ it("converges an acknowledged owned legacy Realm Config through PATCH without re
   expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "applied" });
   await f.writer.bind(f.input);
   expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+});
+
+it("rechecks the selected legacy Config after initial observation before writing", async () => {
+  const f = await ownedLegacyRealmLinkFixture();
+  const save = f.checkpointGatewayEnvironment.getMockImplementation()!;
+  let initialCheckpointed = false;
+  f.checkpointGatewayEnvironment.mockImplementation(async (rows) => {
+    await save(rows);
+    initialCheckpointed = true;
+  });
+  f.readAuthRuntimeUrl.mockImplementation(async () => {
+    if (initialCheckpointed) {
+      f.link.value = "concurrent-unacknowledged-config";
+    }
+    return privateAuthUrl;
+  });
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+});
+
+it("verifies an initially unchanged row again after the changed Config is checkpointed", async () => {
+  const f = await ownedLegacyRealmLinkFixture();
+  const save = f.checkpointGatewayEnvironment.getMockImplementation()!;
+  const unrelated = f.rows.find((row) => row.key === "AUTH_DATABASE_RESOURCE")!;
+  f.checkpointGatewayEnvironment.mockImplementation(async (rows) => {
+    await save(rows);
+    if (f.link.value === f.desired) {
+      unrelated.value = "changed-after-config-checkpoint";
+    }
+  });
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests.filter((request) => request.method !== "GET")).toEqual([
+    {
+      method: "PATCH",
+      path: `/v9/projects/${gateway.projectId}/env/${z.string().parse(f.link.id)}`,
+      body: { type: "encrypted", value: f.desired },
+    },
+  ]);
 });
 
 it.each([
