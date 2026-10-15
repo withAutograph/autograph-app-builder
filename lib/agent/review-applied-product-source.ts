@@ -123,6 +123,8 @@ export const reviewObservedProductSource = async (
   return assessment;
 };
 
+const applicationCompletedKind = "application-completed";
+
 /** Canonical owner-authorized application reuse precedes every completed cache return. */
 export const reviewApplicationWithJournal = async (
   input: {
@@ -141,7 +143,7 @@ export const reviewApplicationWithJournal = async (
   const retained = await input.journal.read(key);
   signal?.throwIfAborted();
   const reusable =
-    retained?.kind === "application-completed" &&
+    retained?.kind === applicationCompletedKind &&
     retained.assessment.bindingDigest === sourceReviewBindingDigest(input.reviewInput);
   const options: ApplicationSourceReviewOptions = {
     ...input.options,
@@ -171,11 +173,11 @@ export const reviewApplicationWithJournal = async (
   }
   const { invocation, ...durableAssessment } = assessment;
   const recorded = await input.journal.put(key, {
-    kind: "application-completed",
+    kind: applicationCompletedKind,
     assessment: durableAssessment,
   });
   signal?.throwIfAborted();
-  if (recorded.kind !== "application-completed") {
+  if (recorded.kind !== applicationCompletedKind) {
     throw new Error("Completed application review could not be retained.");
   }
   return { ...recorded.assessment, ...(invocation === undefined ? {} : { invocation }) };
@@ -276,9 +278,8 @@ export const reviewAppliedProductSource = async (input: {
       reviewInput: currentInput,
       sandbox,
       visiblePaths: visibility.paths,
-      ...(input.appSpec.version !== 2
-        ? {}
-        : {
+      ...(input.appSpec.version === 2
+        ? {
             appSpecParts: () =>
               acceptedAppSpecTextParts({
                 accepted: input.appSpec,
@@ -286,7 +287,8 @@ export const reviewAppliedProductSource = async (input: {
                 sessionAuth: input.sessionAuth,
                 sessionId: input.sessionId ?? "",
               }),
-          }),
+          }
+        : {}),
     });
     const options: ApplicationSourceReviewOptions = {
       abortSignal: input.abortSignal,

@@ -1,21 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { ReviewedChangeSetReceipt } from "../repository/reviewed-change-set";
 import { reviewedChangeSetSummary } from "./review-result-summaries";
 import type { ReviewedChangeSetSummaryInput } from "./review-result-summaries";
 import {
   EVE_REVIEW_DETAIL_HISTORY_CHARACTERS,
   readOwnedReviewDetailPage,
-} from "./review-detail-pages";
-import type { ReviewDetailCursor } from "./review-detail-pages";
+} from "./review-detail-page";
+import type { ReviewDetailCursor } from "./review-detail-page";
 import { serializedNativeActionResultBytes } from "../eve/payload-envelope";
-
-// These pure paging/summary tests do not run an Eve session or resolve live review state.
-vi.mock("./product-source-review-state", () => ({
-  currentProductSourceAssessment: vi.fn(),
-  productRequestState: { get: vi.fn() },
-  retainedProductSourceAssessmentForReference: vi.fn(),
-}));
-vi.mock("./product-behavior-state", () => ({ currentProductBehaviorEvidence: vi.fn() }));
 
 const receipt: ReviewedChangeSetReceipt = {
   appSpecDigest: "spec",

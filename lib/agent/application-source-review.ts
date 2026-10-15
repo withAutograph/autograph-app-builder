@@ -152,6 +152,7 @@ const reviewTools = (
   guard: () => Promise<void>,
   signal?: AbortSignal,
 ) => {
+  const changedPaths = new Set(evidence.changedPaths);
   const read = async <T>(
     operation: () => Promise<T>,
   ): Promise<T | ApplicationReviewSelectionError> => {
@@ -167,7 +168,7 @@ const reviewTools = (
         return error;
       }
       state.evidenceFailed = true;
-      throw new Error("Application review evidence is unavailable.");
+      throw new Error("Application review evidence is unavailable.", { cause: error });
     }
   };
   return {
@@ -187,7 +188,7 @@ const reviewTools = (
               : evidence.sourceFiles.filter(
                   ({ path }) =>
                     (prefix === undefined || path.startsWith(prefix)) &&
-                    (kind !== "changes" || evidence.changedPaths.includes(path)),
+                    (kind !== "changes" || changedPaths.has(path)),
                 );
           const page = items.slice(cursor, cursor + 200);
           return Promise.resolve({
@@ -338,6 +339,18 @@ const assessmentFor = (
   invocation,
 });
 
+const reviewCapacityFailure = (error: unknown) => {
+  if (!(error instanceof Error)) {
+    return { contextRejected: false, outputRejected: false };
+  }
+  return {
+    contextRejected: providerContextRejected(error),
+    outputRejected: providerReviewFailureReason(error).startsWith(
+      "The model provider exhausted source review output capacity.",
+    ),
+  };
+};
+
 /** One independent read-only application review; interrupted incomplete work may rerun. */
 export const assessApplicationSource = async (
   input: ProductSourceReviewInput,
@@ -352,7 +365,7 @@ export const assessApplicationSource = async (
   try {
     options.abortSignal?.throwIfAborted();
     if (
-      options.mockModel ||
+      options.mockModel === true ||
       input.originalRequest === null ||
       input.originalRequest.trim() === ""
     ) {
@@ -427,8 +440,9 @@ export const assessApplicationSource = async (
         invocation.requestAttempts += 1;
         invocation.requestsWithIncompleteUsage += 1;
       },
-      onLanguageModelCallEnd: (event) =>
-        recordSourceReviewRequest({ invocation, onRequest: options.onRequest }, event),
+      onLanguageModelCallEnd: (event) => {
+        recordSourceReviewRequest({ invocation, onRequest: options.onRequest }, event);
+      },
       onStepEnd: (step) => {
         if (step.finishReason === "length") {
           state.outputRejected = true;
@@ -443,12 +457,9 @@ export const assessApplicationSource = async (
         await agent.generate({ messages, abortSignal: options.abortSignal });
       } catch (error) {
         options.abortSignal?.throwIfAborted();
-        contextRejected = error instanceof Error && providerContextRejected(error);
-        state.outputRejected ||=
-          error instanceof Error &&
-          providerReviewFailureReason(error).startsWith(
-            "The model provider exhausted source review output capacity.",
-          );
+        const capacityFailure = reviewCapacityFailure(error);
+        contextRejected = capacityFailure.contextRejected;
+        state.outputRejected ||= capacityFailure.outputRejected;
         if (!contextRejected && !state.outputRejected) {
           return blocked(
             "Independent application source review was unavailable. No provider details or runtime verdict were inferred.",
