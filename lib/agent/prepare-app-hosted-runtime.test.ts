@@ -565,3 +565,80 @@ it("reports actual approval evaluator entry and preserves its denied response", 
     logs.mockRestore();
   }
 });
+
+describe("confirmed Gateway build failure recovery", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+  it.each(["returned", "thrown"])(
+    "requests normal replanning only after a %s confirmed failure",
+    async (mode) => {
+      if (mode === "returned") {
+        operator.request.mockResolvedValueOnce({
+          appId: input.appId,
+          authenticatedBehavior: "unassessed",
+          operationRef,
+          status: "blocked",
+          code: "gateway_delivery_failed",
+        });
+      } else {
+        operator.request.mockRejectedValueOnce(
+          new HostedOperatorErrorClass("gateway_delivery_failed"),
+        );
+      }
+      const frozen = structuredClone(participantInput);
+      const value = await prepareHostedRuntimeWithOperator(
+        participantInput,
+        ctx,
+        operator,
+        retain,
+        contract,
+      );
+      expect(value.identityInput).toBeNull();
+      expect(value.result).toMatchObject({
+        status: "blocked",
+        code: "gateway_delivery_failed",
+        nextAction: {
+          tool: "plan-app-hosted-runtime",
+          approval: "normal-plan-approval",
+          input: {
+            appId: input.appId,
+            branch: input.branch,
+            projectId: input.projectId,
+            environment: "preview",
+            operation: "prepare",
+            normalActorProgram: participantInput.plan.normalActorProgram,
+          },
+        },
+      });
+      expect(participantInput).toEqual(frozen);
+      expect(operator.request).toHaveBeenCalledOnce();
+      expect(operator.request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "execute",
+          operationRef: input.operationRef,
+          planDigest: participantInput.planDigest,
+        }),
+        ctx.abortSignal,
+      );
+      expect(operator.authIdentityInput).not.toHaveBeenCalled();
+    },
+  );
+  it.each(["reconciliation_required", "operator_unavailable", "operation_in_progress"] as const)(
+    "preserves %s without suggesting successor planning",
+    async (code) => {
+      const blocked = {
+        appId: input.appId,
+        authenticatedBehavior: "unassessed" as const,
+        operationRef,
+        status: "blocked" as const,
+        code,
+      };
+      operator.request.mockResolvedValueOnce(blocked);
+      const value = await prepareHostedRuntimeWithOperator(input, ctx, operator, retain, contract);
+      expect(value.result).toEqual(blocked);
+      expect(value.result).not.toHaveProperty("nextAction");
+      expect(operator.request).toHaveBeenCalledOnce();
+    },
+  );
+});
