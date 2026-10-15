@@ -1481,15 +1481,42 @@ export const composeHostedOperatorDependencies = (
       const observed = await authReadiness.verify(input);
       return { receipt: receipt(input, observed.catalogFingerprint), status: "applied" };
     }
-    try {
-      const observed = await authReadiness.verify(input);
-      return { receipt: receipt(input, observed.catalogFingerprint), status: "applied" };
-    } catch {
-      // The owned fixed catalog inspection below distinguishes genesis from an unreadable or partial migration.
-      const urls = await privateBindings(input);
-      const empty = await inspectEmptyAuthNamespace(urls.authDatabase.runtimeUrl, input);
-      return empty ? { status: "absent" } : { status: "unknown" };
+    const migration = await authReadiness.reconcileMigration(input, async (frozen) => {
+      const current = { ...input, ...frozen, assertCurrent: input.assertCurrent };
+      const urls = await privateBindings(current);
+      const proposed = await proposal({
+        assertCurrentOwner: async () => {
+          await current.assertCurrent();
+          const live = await privateBindings(current);
+          if (live.authDatabase.migrationUrl !== urls.authDatabase.migrationUrl) {
+            throw new HostedOperatorError(RESOURCE_MISMATCH);
+          }
+        },
+        directMigrationUrl: urls.authDatabase.migrationUrl,
+        resource: {
+          version: 1,
+          environment: "preview",
+          hostname: current.plan.neon.endpoint,
+          port: 5432,
+          database: current.plan.authDatabase.database,
+          schema: "public",
+          runtimeRole: current.plan.authDatabase.runtimeRole,
+          migratorRole: current.plan.authDatabase.migratorRole,
+          neon: { branchId: current.plan.neon.branchId, projectId: current.plan.neon.projectId },
+        },
+      });
+      return proposed.content;
+    });
+    if (migration.status === "applied") {
+      return { receipt: receipt(input, migration.observed.catalogFingerprint), status: "applied" };
     }
+    if (migration.status === "retryable") {
+      return migration;
+    }
+    // A populated or partial target is never treated as absent. Only observed empty genesis may install without a prior publication.
+    const urls = await privateBindings(input);
+    const empty = await inspectEmptyAuthNamespace(urls.authDatabase.runtimeUrl, input);
+    return empty ? { status: "absent" } : { status: "unknown" };
   };
   const reconcileAppWorker = async (
     input: HostedOperatorEffectContext,

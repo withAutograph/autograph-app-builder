@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import nativeEntryPoint from "./hosted-operator-function";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Focused read-only reconciliation boundary spy.
+import * as authReadiness from "./hosted-operator-auth-readiness";
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Focused planning boundary spies.
 import * as authProposal from "./hosted-operator-auth-proposal";
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Focused planning boundary spies.
@@ -31,7 +33,7 @@ import {
 import type { NormalActorAccountPreparation } from "./hosted-operator-normal-actor-journal";
 
 import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
-import type { HostedOperatorContext } from "./hosted-operator-service";
+import type { HostedOperatorContext, HostedOperatorEffectContext } from "./hosted-operator-service";
 import type { HostedOperatorNormalActorPlanningPorts } from "./hosted-operator-composition";
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy only on the independent verified identity boundary.
 import * as realmIdentity from "./hosted-operator-auth-identity";
@@ -984,6 +986,57 @@ describe("existing populated Auth workflow planning", () => {
       readResourceBindings,
     };
   };
+  it("reproposes the approved migration with the existing private binding and current fence", async () => {
+    const reconcileMigration = vi.fn<
+      ReturnType<typeof authReadiness.createHostedOperatorAuthReadiness>["reconcileMigration"]
+    >(async (input, repropose) => {
+      const proposed = await repropose(input);
+      expect(proposed.toString("utf-8")).toBe("observed-existing-plan");
+      return { status: "retryable", resourceVersion: "d".repeat(64) };
+    });
+    vi.spyOn(authReadiness, "createHostedOperatorAuthReadiness").mockReturnValue({
+      reconcileMigration,
+      verify: vi.fn(),
+      verifyPublication: vi.fn(),
+    });
+    const f = setup("current");
+    Object.assign(f.controlPlane, { assertAuthorized: vi.fn(async () => {}) });
+    const original = f.original.operator!;
+    const input: HostedOperatorEffectContext = {
+      ...context,
+      assertCurrent: vi.fn(async () => {}),
+      checkpoint: vi.fn(async () => {}),
+      effect: { id: "auth-schema", kind: "install", description: "Install approved Auth schema" },
+      fenceGeneration: 1,
+      operationRef: original.operationRef,
+      plan: original.plan,
+      privateState: f.original.privateState,
+      workerCheckpoints: [],
+    };
+    expect(await f.dependencies.reconcile(input)).toEqual({
+      status: "retryable",
+      resourceVersion: "d".repeat(64),
+    });
+    expect(reconcileMigration).toHaveBeenCalledOnce();
+    const observed = f.propose.mock.calls[0]?.[0];
+    expect(observed?.directMigrationUrl).toBe(f.migrationUrl);
+    expect(observed?.resource).toEqual({
+      version: 1,
+      environment: "preview",
+      hostname: original.plan.neon.endpoint,
+      port: 5432,
+      database: original.plan.authDatabase.database,
+      schema: "public",
+      runtimeRole: original.plan.authDatabase.runtimeRole,
+      migratorRole: original.plan.authDatabase.migratorRole,
+      neon: { branchId: original.plan.neon.branchId, projectId: original.plan.neon.projectId },
+    });
+    expect(input.assertCurrent).toHaveBeenCalled();
+    expect(
+      f.readResourceBindings.mock.calls.every(([binding]) => binding.plan === input.plan),
+    ).toBe(true);
+    expect(f.controlPlane.publishAuthPlan).not.toHaveBeenCalled();
+  });
   it.each(["current", "retained"] as const)(
     "replans %s Auth with the original owner and approval binding before publishing the next plan",
     async (mode) => {
