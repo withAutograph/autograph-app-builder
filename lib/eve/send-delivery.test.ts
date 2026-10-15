@@ -9,6 +9,7 @@ import {
   hostedOperationRecordSchema,
   InMemoryHostedEveStore,
   isProvedSendDelivery,
+  mayReviveCancelledSession,
   toDurableHostedSessionRecord,
 } from "./hosted-store";
 import { digest, stableId } from "./hosted-operation-identifiers";
@@ -102,6 +103,146 @@ const fixture = async (options: { acknowledge?: boolean; failReadback?: boolean 
 };
 
 describe("canonical SEND delivery acknowledgement", () => {
+  const cancelledFixture = async (failReadback = false) => {
+    const f = await fixture({ failReadback });
+    await f.store.observeSession({
+      checkpoint: { capturedAtEpochMs: 10, events: [], status: "cancelled", version: 1 },
+      nowEpochMs: Date.now(),
+      principal,
+      resumability: "terminal",
+      sessionId: f.request.sessionId,
+      stage: "needs_attention",
+    });
+    await f.store.recordCancellationIntent({
+      nowEpochMs: Date.now(),
+      principal,
+      sessionId: f.request.sessionId,
+    });
+    return f;
+  };
+  it("keeps ordinary reads and ACK alone cancelled, then resumes the same session from its delayed exact SEND proof", async () => {
+    const f = await cancelledFixture(true);
+    const before = await f.store.getSession(principal, f.request.sessionId);
+    await f.create().get({ cursor: 0, limit: 100, sessionId: f.request.sessionId });
+    expect(await f.store.getSession(principal, f.request.sessionId)).toMatchObject({
+      cancellationRevision: 1,
+      status: "cancelled",
+    });
+    await expect(f.create().send(f.request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    expect(await f.operation()).toMatchObject({
+      sendDelivery: { resumeCancellationRevision: 1 },
+      state: "submission_unknown",
+    });
+    expect(await f.store.getSession(principal, f.request.sessionId)).toMatchObject({
+      status: "cancelled",
+    });
+    f.setEvents([turnEvent("turn.started", "resumed", ["ack"])]);
+    await f.create().get({ cursor: 0, limit: 100, sessionId: f.request.sessionId });
+    expect(await f.store.getSession(principal, f.request.sessionId)).toMatchObject({
+      cancellationRevision: 1,
+      status: "cancelled",
+    });
+    await expect(f.create().send(f.request)).resolves.toMatchObject({
+      sessionId: f.request.sessionId,
+      status: "working",
+    });
+    expect(await f.store.getSession(principal, f.request.sessionId)).toMatchObject({
+      adapterGeneration: 1,
+      adapterSessionId: before?.adapterSessionId,
+      cancellationRevision: 1,
+      sessionId: f.request.sessionId,
+      status: "working",
+    });
+    expect(f.send).toHaveBeenCalledOnce();
+  });
+  it.each(["before ACK", "after ACK"])(
+    "lets a newer Stop win %s and on an exact SEND retry",
+    async (when) => {
+      const f = await cancelledFixture();
+      f.setEvents([turnEvent("turn.started", "resumed", ["ack"])]);
+      const stop = async () =>
+        await f.store.recordCancellationIntent({
+          nowEpochMs: Date.now(),
+          principal,
+          sessionId: f.request.sessionId,
+        });
+      f.send.mockImplementation(async (input) => {
+        if (when === "before ACK") {
+          await stop();
+        }
+        await input.onAccepted?.("ack");
+        if (when === "after ACK") {
+          await stop();
+        }
+        return snapshot([turnEvent("turn.started", "resumed", ["ack"])]);
+      });
+      await f
+        .create()
+        .send(f.request)
+        .catch(() => undefined);
+      await f
+        .create()
+        .send(f.request)
+        .catch(() => undefined);
+      expect(await f.store.getSession(principal, f.request.sessionId)).toMatchObject({
+        cancellationRevision: 2,
+        sessionId: f.request.sessionId,
+        status: "cancelled",
+      });
+      expect(f.send).toHaveBeenCalledOnce();
+    },
+  );
+  it("requires the same owner, adapter, cancellation revision and stamped delivery to revive", async () => {
+    const f = await cancelledFixture(true);
+    await expect(f.create().send(f.request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    const operation = hostedOperationRecordSchema.parse(await f.operation());
+    const stored = await f.store.getSession(principal, f.request.sessionId);
+    if (stored === null) {
+      throw new Error("Missing cancelled fixture session");
+    }
+    const current = toDurableHostedSessionRecord(stored);
+    const proof = nativeDeliveryForEvents([turnEvent("turn.started", "resumed", ["ack"])]);
+    expect(mayReviveCancelledSession(operation, current, proof)).toBe(true);
+    expect(mayReviveCancelledSession(null, current, proof)).toBe(false);
+    expect(mayReviveCancelledSession(operation, current, undefined)).toBe(false);
+    expect(
+      mayReviveCancelledSession(operation, { ...current, cancellationRevision: 2 }, proof),
+    ).toBe(false);
+    expect(
+      mayReviveCancelledSession(
+        operation,
+        { ...current, adapterGeneration: 2, adapterSessionId: "other" },
+        proof,
+      ),
+    ).toBe(false);
+    expect(
+      mayReviveCancelledSession(
+        operation,
+        { ...current, principal: { ...principal, ownerUserId: "other" } },
+        proof,
+      ),
+    ).toBe(false);
+    expect(
+      mayReviveCancelledSession(
+        hostedOperationRecordSchema.parse({
+          clientRequestId: operation.clientRequestId,
+          createdAtEpochMs: operation.createdAtEpochMs,
+          kind: "send",
+          operationId: operation.operationId,
+          principal,
+          requestDigest: operation.requestDigest,
+          sendDelivery: operation.sendDelivery,
+          sessionId: current.sessionId,
+          state: "succeeded",
+          updatedAtEpochMs: operation.updatedAtEpochMs,
+          version: 1,
+          result: { cursor: 0, events: [], sessionId: current.sessionId, status: "waiting" },
+        }),
+        current,
+        proof,
+      ),
+    ).toBe(false);
+  });
   it("keeps an ACK durable before readback failure, then settles only its delayed coalesced turn without another POST", async () => {
     const f = await fixture({ failReadback: true });
     await expect(f.create().send(f.request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);

@@ -17,8 +17,9 @@ or direct filesystem implementation.
    the conversation with `autograph_get({ sessionId, cursor })`, using its saved
    cursor when available. If the session is unknown or ambiguous, call
    `autograph_get` without a `sessionId` and offer relevant recent sessions for
-   selection. Resume the established or selected session with
-   `autograph_start({ resumeSessionId, clientRequestId })`. Start genuinely new
+   selection. For checkpoint recovery, resume the established or selected session
+   with `autograph_start({ resumeSessionId, clientRequestId })`; for an explicit
+   continuation after Stop, use the same-session SEND below. Start genuinely new
    work with `autograph_start({ prompt, clientRequestId })`. When the web App
    Builder supplies an opaque handoff ID, redeem it with
    `autograph_start({ handoffId, clientRequestId })`; never decode it or ask the
@@ -36,8 +37,14 @@ or direct filesystem implementation.
    A separate choice between already connected GitHub accounts is a normal
    product question: submit its exact option id in the full response batch.
    Repository scopes shown on an authorization card are read-only.
-5. Send unrelated follow-ups with `autograph_send` only while the app build is `waiting` and no input is unresolved.
-6. Treat cancellation as cooperative and poll for the resulting state.
+5. Send unrelated follow-ups with `autograph_send` only while the app build is
+   `waiting` and no input is unresolved. When the user explicitly wants to resume
+   stopped work, send that continuation to the same `sessionId`; confirmed native
+   delivery may advance the cancelled session. Ordinary reads never resume Stop.
+6. Treat cancellation as cooperative and poll for the resulting state. If a SEND
+   returns `submission_unknown`, retry the exact same call with the same
+   `clientRequestId`, session and message; do not send a new message or create a
+   child to bypass the unknown outcome. A later Stop wins.
 7. Treat the MCP App as an optional progress and input-control surface only. Never
    use it to display or embed the generated app preview.
 8. When Autograph provides a preview URL, open it in the integrated ChatGPT or

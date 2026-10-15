@@ -1073,13 +1073,16 @@ export function createHostedEveSessionService(input: {
       return undefined;
     }
     // oxlint-disable-next-line eslint/no-use-before-define -- Reconciliation uses the initialized canonical observer without sending again.
-    const result = await readSession({
-      continueWork: false,
-      cursor: 0,
-      limit: 100,
-      recoverUnavailable: false,
-      sessionId: operation.sessionId,
-    });
+    const result = await readSession(
+      {
+        continueWork: false,
+        cursor: 0,
+        limit: 100,
+        recoverUnavailable: false,
+        sessionId: operation.sessionId,
+      },
+      operation.operationId,
+    );
     const current = await requireSession(operation.sessionId);
     const proof = await nativeDeliveriesForSession(current);
     if (!isProvedSendDelivery(operation, current, proof)) {
@@ -1869,6 +1872,7 @@ export function createHostedEveSessionService(input: {
       : "live",
     capturedAtEpochMs = now(),
     cursor = 0,
+    explicitSendOperationId?: string,
   ) {
     const completeResult = projectSnapshot(sessionId, snapshot, cursor, 100);
     if (
@@ -1910,6 +1914,7 @@ export function createHostedEveSessionService(input: {
         });
         const observed = await input.store.observeSessionPaged({
           ...(summary.uiPreview?.appId === undefined ? {} : { appId: summary.uiPreview.appId }),
+          ...(explicitSendOperationId === undefined ? {} : { explicitSendOperationId }),
           events: readSpoolEvents(spool),
           expectedCheckpointDigest: current.checkpointDigest,
           metadata,
@@ -1919,8 +1924,9 @@ export function createHostedEveSessionService(input: {
           sessionId,
           stage: stageForResult(summary),
         });
-        if (observed.status === "cancelled") {
-          return completeResult;
+        if (observed.status === "cancelled" && explicitSendOperationId !== undefined) {
+          // oxlint-disable-next-line eslint/no-use-before-define -- The initialized canonical reader preserves a newer Stop over this SEND snapshot.
+          return resultFromDurableCheckpoint(sessionId, observed, cursor, 100);
         }
         return completeResult;
       } finally {
@@ -1930,6 +1936,7 @@ export function createHostedEveSessionService(input: {
     const checkpoint = checkpointForSnapshot(sessionId, snapshot, capturedAtEpochMs);
     const observed = await input.store.observeSession?.({
       checkpoint,
+      ...(explicitSendOperationId === undefined ? {} : { explicitSendOperationId }),
       ...(completeResult.uiPreview?.appId === undefined
         ? {}
         : { appId: completeResult.uiPreview.appId }),
@@ -2086,13 +2093,16 @@ export function createHostedEveSessionService(input: {
   }
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-  async function readSession(inputValue: {
-    sessionId: string;
-    cursor: number;
-    limit: number;
-    recoverUnavailable?: boolean;
-    continueWork?: boolean;
-  }) {
+  async function readSession(
+    inputValue: {
+      sessionId: string;
+      cursor: number;
+      limit: number;
+      recoverUnavailable?: boolean;
+      continueWork?: boolean;
+    },
+    explicitSendOperationId?: string,
+  ) {
     const { sessionId, cursor, limit } = inputValue;
     const session = toDurableHostedSessionRecord(await requireSession(sessionId));
     await input.beforeRead?.({
@@ -2230,6 +2240,9 @@ export function createHostedEveSessionService(input: {
             throw new HostedSessionRecoveryUnavailableError();
           }
           const stored = await input.store.observeSessionPaged({
+            ...(explicitSendOperationId === undefined
+              ? {}
+              : { explicitSendOperationId: explicitSendOperationId }),
             events: readCheckpointEvents(session),
             expectedCheckpointDigest: session.checkpointDigest,
             metadata: {
@@ -2319,6 +2332,9 @@ export function createHostedEveSessionService(input: {
               : { workingPreview: metadata.workingPreview }),
           });
           const stored = await input.store.observeSessionPaged({
+            ...(explicitSendOperationId === undefined
+              ? {}
+              : { explicitSendOperationId: explicitSendOperationId }),
             ...(summary.uiPreview?.appId === undefined ? {} : { appId: summary.uiPreview.appId }),
             events: orderedEvents,
             expectedCheckpointDigest: session.checkpointDigest,
@@ -2387,7 +2403,14 @@ export function createHostedEveSessionService(input: {
       } else if (session.resumability === "checkpoint" && snapshot.status === "working") {
         resumability = "checkpoint";
       }
-      const observed = await observeSnapshot(sessionId, snapshot, resumability, observedAt);
+      const observed = await observeSnapshot(
+        sessionId,
+        snapshot,
+        resumability,
+        observedAt,
+        0,
+        explicitSendOperationId,
+      );
       const current = toDurableHostedSessionRecord(await requireSession(sessionId));
       const progressUnchanged = canPageCheckpoint
         ? current.checkpointProgressDigest !== undefined &&
@@ -2496,7 +2519,15 @@ export function createHostedEveSessionService(input: {
     let phase: HostedSubmissionPhase = "send_accepted_readback";
     let failureCategory: SendReadFailureCategory = "native_read_failed";
     try {
-      const result = await readSession({ continueWork: false, cursor, limit: 100, sessionId });
+      const result = await readSession(
+        {
+          continueWork: false,
+          cursor,
+          limit: 100,
+          sessionId,
+        },
+        sendDelivery === undefined ? undefined : sendDiagnostic?.operationId,
+      );
       const current = toDurableHostedSessionRecord(await requireSession(sessionId));
       if (sendDelivery !== undefined) {
         const proof = await nativeDeliveriesForSession(current);
@@ -2873,6 +2904,13 @@ export function createHostedEveSessionService(input: {
     async cancel({ sessionId, turnId }) {
       requireHostedOperationScope(principal, "cancel");
       let session = await requireSession(sessionId);
+      if (input.store.recordCancellationIntent !== undefined) {
+        session = await input.store.recordCancellationIntent({
+          principal,
+          sessionId,
+          nowEpochMs: now(),
+        });
+      }
       const paged =
         input.transport.observe !== undefined &&
         input.transport.cancelAccepted !== undefined &&
@@ -3044,6 +3082,11 @@ export function createHostedEveSessionService(input: {
     async send(request) {
       requireHostedOperationScope(principal, "send");
       let session = await requireSession(request.sessionId);
+      const initialBinding = toDurableHostedSessionRecord(session);
+      const resumeCancellationRevision =
+        session.status === "cancelled" && input.store.recordCancellationIntent !== undefined
+          ? (initialBinding.cancellationRevision ?? 0)
+          : undefined;
       return mutate({
         async dispatch(operationId) {
           const paged =
@@ -3070,6 +3113,13 @@ export function createHostedEveSessionService(input: {
             throw new SubmissionRejectedBeforeDispatchError("send_owner_unavailable");
           }
           const binding = toDurableHostedSessionRecord(session);
+          if (
+            resumeCancellationRevision !== undefined &&
+            (binding.adapterSessionId !== initialBinding.adapterSessionId ||
+              binding.adapterGeneration !== initialBinding.adapterGeneration)
+          ) {
+            throw new SubmissionRejectedBeforeDispatchError("send_owner_unavailable");
+          }
           // Snapshot transports need a fresh native tail; accepted transports already persisted preflight.
           let responseCursor = mutationEventCursor(session);
           if (!preflight?.persisted) {
@@ -3091,6 +3141,7 @@ export function createHostedEveSessionService(input: {
             message: request.message,
             onAccepted: async (deliveryId: string) => {
               const marker: SendDelivery = {
+                ...(resumeCancellationRevision === undefined ? {} : { resumeCancellationRevision }),
                 adapterGeneration: binding.adapterGeneration,
                 adapterSessionId: binding.adapterSessionId,
                 deliveryId,
@@ -3150,6 +3201,7 @@ export function createHostedEveSessionService(input: {
             undefined,
             undefined,
             responseCursor,
+            operationId,
           );
           // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Ownership must be re-read after the preceding native snapshot was durably observed.
           const current = await requireSession(request.sessionId);

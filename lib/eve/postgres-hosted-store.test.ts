@@ -20,6 +20,7 @@ import {
   parseHostedOperationRow,
   parseHostedSessionRow,
 } from "./postgres-hosted-store";
+import { nativeDeliveryForEvents } from "./native-delivery-state";
 
 const principal: HostedPrincipal = {
   audience: "eve-hosted",
@@ -87,6 +88,161 @@ const sessionRow = {
   updatedAt: new Date(2000),
   workspaceId: principal.workspaceId,
 };
+
+const cancelledSendFixture = () => {
+  const record = {
+    ...toDurableHostedSessionRecord({ ...sessionRecord, status: "cancelled" }),
+    cancellationRevision: 1,
+  };
+  let row = {
+    ...sessionRow,
+    adapterGeneration: record.adapterGeneration,
+    lastProgressAt: new Date(record.lastProgressAtEpochMs),
+    record,
+    resumabilityState: record.resumability,
+    stage: record.stage,
+    title: record.title,
+  };
+  const operation = {
+    ...operationRecord,
+    kind: "send" as const,
+    sessionId: record.sessionId,
+    sendDelivery: {
+      adapterGeneration: record.adapterGeneration,
+      adapterSessionId: record.adapterSessionId,
+      deliveryId: "accepted-send",
+      requestDigest: operationRecord.requestDigest,
+      resumeCancellationRevision: 1,
+      sessionId: record.sessionId,
+    },
+  };
+  const sendRow = {
+    ...operationRow,
+    kind: operation.kind,
+    record: operation,
+    sessionId: record.sessionId,
+  };
+  const selected = (table: PgTable) => {
+    const rows = getTableName(table) === "agent_session" ? [row] : [sendRow];
+    return Object.assign(Promise.resolve(rows), {
+      // oxlint-disable-next-line eslint/require-await -- The terminal row-lock double preserves the database contract.
+      for: async () => rows,
+    });
+  };
+  const updates = vi.fn();
+  const transaction = {
+    select: () => ({
+      from: (table: PgTable) => ({ where: () => ({ limit: () => selected(table) }) }),
+    }),
+    update: () => ({
+      set: (values: typeof row) => ({
+        where: () => ({
+          // oxlint-disable-next-line eslint/require-await -- The terminal UPDATE double preserves the database contract.
+          returning: async () => {
+            updates(values);
+            row = { ...row, ...values };
+            return [row];
+          },
+        }),
+      }),
+    }),
+  };
+  const database = {
+    // oxlint-disable-next-line eslint/require-await -- The transaction double executes the real store's locked mutation.
+    transaction: async <T>(execute: (input: typeof transaction) => Promise<T>) =>
+      execute(transaction),
+  };
+  // SAFETY: The terminal double implements only the tenant-scoped locked reads and UPDATEs exercised below.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- Provider-free database fixture.
+  const store = createPostgresHostedEveStore(
+    database as unknown as Parameters<typeof createPostgresHostedEveStore>[0],
+  );
+  const proof = nativeDeliveryForEvents([
+    {
+      data: { sequence: 1, turnId: "resumed-turn" },
+      meta: {
+        at: "2026-10-15T00:00:00Z",
+        deliveryIds: ["accepted-send"],
+        id: "resumed-turn-start",
+      },
+      type: "turn.started",
+    },
+  ]);
+  const observe = (explicit = true, stamped = true) => {
+    if (store.observeSession === undefined) {
+      throw new Error("Expected the PostgreSQL observation writer");
+    }
+    return store.observeSession({
+      checkpoint: {
+        capturedAtEpochMs: 4000,
+        events: [],
+        ...(stamped ? { nativeDeliveryState: proof } : {}),
+        status: "working",
+        version: 1,
+      },
+      ...(explicit ? { explicitSendOperationId: operation.operationId } : {}),
+      nowEpochMs: 4000,
+      principal,
+      resumability: "live",
+      sessionId: record.sessionId,
+      stage: "planning",
+    });
+  };
+  return { observe, record, row: () => row, store, updates };
+};
+
+describe("PostgreSQL explicit SEND cancellation authority", () => {
+  it("records every later Stop even while cancelled without replacing its checkpoint or identity", async () => {
+    const f = cancelledSendFixture();
+    if (f.store.recordCancellationIntent === undefined) {
+      throw new Error("Expected the PostgreSQL cancellation intent writer");
+    }
+    await f.store.recordCancellationIntent({
+      nowEpochMs: 3000,
+      principal,
+      sessionId: f.record.sessionId,
+    });
+    await f.store.recordCancellationIntent({
+      nowEpochMs: 3000,
+      principal,
+      sessionId: f.record.sessionId,
+    });
+    expect(f.row().record).toMatchObject({
+      adapterSessionId: f.record.adapterSessionId,
+      cancellationRevision: 3,
+      sessionId: f.record.sessionId,
+      status: "cancelled",
+    });
+    expect(f.row().record.checkpointDigest).toBe(f.record.checkpointDigest);
+  });
+  it("requires explicit canonical operation authority and a stamped delivery, preserving the same IDs on revival", async () => {
+    const f = cancelledSendFixture();
+    expect(await f.observe(false)).toMatchObject({ status: "cancelled" });
+    expect(await f.observe(true, false)).toMatchObject({ status: "cancelled" });
+    expect(f.updates).not.toHaveBeenCalled();
+    expect(await f.observe()).toMatchObject({
+      adapterGeneration: f.record.adapterGeneration,
+      adapterSessionId: f.record.adapterSessionId,
+      cancellationRevision: 1,
+      resumability: "live",
+      sessionId: f.record.sessionId,
+      status: "working",
+    });
+  });
+  it("does not let a first or duplicate observation of an older SEND overrule a newer Stop", async () => {
+    const f = cancelledSendFixture();
+    if (f.store.recordCancellationIntent === undefined) {
+      throw new Error("Expected the PostgreSQL cancellation intent writer");
+    }
+    await f.store.recordCancellationIntent({
+      nowEpochMs: 3000,
+      principal,
+      sessionId: f.record.sessionId,
+    });
+    expect(await f.observe()).toMatchObject({ cancellationRevision: 2, status: "cancelled" });
+    expect(await f.observe()).toMatchObject({ cancellationRevision: 2, status: "cancelled" });
+  });
+});
 
 describe("PostgreSQL hosted Eve row authority", () => {
   it("accepts only an operation whose indexed authority matches its closed record", () => {

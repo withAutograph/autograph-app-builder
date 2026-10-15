@@ -2,6 +2,7 @@ import {
   isProvedSessionLimitResponse,
   isProvedResourceApprovalResponse,
   isProvedSendDelivery,
+  mayReviveCancelledSession,
   bindSendDelivery,
   hostedOperationRecordSchema,
   hostedCheckpointRefSchema,
@@ -442,8 +443,15 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           throw new Error(SESSION_NOT_FOUND);
         }
         const current = toDurableHostedSessionRecord(parseHostedSessionRow(rows[0]));
-        // Hold the row lock while refusing late observations after cancellation.
-        if (current.status === "cancelled") {
+        const explicitSend =
+          input.explicitSendOperationId === undefined
+            ? null
+            : await operationById(transaction, principal, input.explicitSendOperationId);
+        // Passive observations never undo Stop; exact native SEND proof is required.
+        if (
+          current.status === "cancelled" &&
+          !mayReviveCancelledSession(explicitSend, current, input.checkpoint.nativeDeliveryState)
+        ) {
           return current;
         }
         const checkpointDigest = hostedSessionCheckpointDigest(input.checkpoint);
@@ -502,7 +510,20 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
             throw new Error(SESSION_NOT_FOUND);
           }
           const durable = toDurableHostedSessionRecord(current);
-          if (durable.status === "cancelled") {
+          const explicitSend =
+            input.explicitSendOperationId === undefined
+              ? null
+              : await operationById(transaction, principal, input.explicitSendOperationId);
+          if (
+            durable.status === "cancelled" &&
+            !mayReviveCancelledSession(
+              explicitSend,
+              durable,
+              input.metadata.nativeObservationState?.nativeDeliveryState ??
+                input.metadata.coldReadProgress?.nativeObservationState.nativeDeliveryState ??
+                input.metadata.nativeDeliveryState,
+            )
+          ) {
             return durable;
           }
           if (durable.checkpointDigest !== input.expectedCheckpointDigest) {
@@ -662,6 +683,29 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           throw new Error("Private build decision was not durable.");
         }
         parseHostedSessionRow(rows[0]);
+      });
+    },
+
+    recordCancellationIntent(input) {
+      const principal = hostedPrincipalSchema.parse(input.principal);
+      return database.transaction(async (transaction) => {
+        const row = await sessionById(transaction, principal, input.sessionId, true);
+        if (row === null) throw new Error(SESSION_NOT_FOUND);
+        const current = toDurableHostedSessionRecord(row);
+        const updated = durableHostedSessionRecordSchema.parse({
+          ...current,
+          cancellationRevision: (current.cancellationRevision ?? 0) + 1,
+          updatedAtEpochMs: Math.max(current.updatedAtEpochMs, input.nowEpochMs),
+        });
+        const rows = await transaction
+          .update(agentSessions)
+          .set(sessionValues(updated))
+          .where(
+            and(sessionTenantPredicate(principal), eq(agentSessions.sessionId, input.sessionId)),
+          )
+          .returning();
+        if (rows.length !== 1) throw new Error("Cancellation intent was not durable.");
+        return parseHostedSessionRow(rows[0]);
       });
     },
 
