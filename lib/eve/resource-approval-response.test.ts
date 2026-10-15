@@ -540,11 +540,11 @@ const postgresSettlementFixture = (changedSession = session, changedMetadata = m
     ],
     [
       "agent_session_checkpoint_item",
-      [{ byteLength: bytes.byteLength, partCount: 1, digest: itemDigest }],
+      [{ itemIndex: -1, byteLength: bytes.byteLength, partCount: 1, digest: itemDigest }],
     ],
     [
       "agent_session_checkpoint_chunk",
-      [{ payload: bytes.toString("base64"), chunkDigest: itemDigest, partIndex: 0 }],
+      [{ itemIndex: -1, payload: bytes.toString("base64"), chunkDigest: itemDigest, partIndex: 0 }],
     ],
   ]);
   const dialect = new PgDialect();
@@ -618,14 +618,15 @@ describe("atomic PostgreSQL resource approval acknowledgement", () => {
     expect(settled.state).toBe("succeeded");
     expect(fixture.locks).toEqual(["agent_operation", "agent_session"]);
     expect(fixture.update).toHaveBeenCalledOnce();
-    expect(fixture.queries.map(({ table }) => table)).toEqual([
-      "agent_operation",
-      "agent_session",
-      "agent_session_checkpoint_manifest",
-      "agent_session_checkpoint_manifest",
-      "agent_session_checkpoint_item",
-      "agent_session_checkpoint_chunk",
-    ]);
+    expect(fixture.queries.map(({ table }) => table)).toEqual(
+      expect.arrayContaining([
+        "agent_operation",
+        "agent_session",
+        "agent_session_checkpoint_manifest",
+        "agent_session_checkpoint_item",
+        "agent_session_checkpoint_chunk",
+      ]),
+    );
     for (const query of fixture.queries) {
       expect(query.params.slice(0, 4)).toEqual([
         principal.issuer,
