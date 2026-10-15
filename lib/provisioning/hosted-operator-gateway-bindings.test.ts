@@ -438,6 +438,40 @@ it("rejects a generic Gateway row substituted for a saved branch-specific row", 
   expect(f.requests.every((request) => request.method === "GET")).toBe(true);
 });
 
+it("recovers an uncheckpointed logical-branch Gateway POST after production branch metadata changes", async () => {
+  const f = fixture();
+  f.setLosePostResponse(true);
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.input.gatewayEnvironmentRows).toEqual([]);
+  f.setLosePostResponse(false);
+  f.project.link.productionBranch = gateway.branch;
+  const result = await f.writer.bind(f.input);
+  const recovered = result.rows.find((row) => row.key === "AUTH_DATABASE_RESOURCE");
+  expect(recovered).toMatchObject({ branch: gateway.branch, operationRef: f.input.operationRef });
+  expect(recovered).not.toHaveProperty("gitBranch");
+  const posts = f.requests.filter((request) => request.method === "POST");
+  expect(posts.filter((request) => request.body?.key === "AUTH_DATABASE_RESOURCE")).toHaveLength(1);
+  expect(
+    posts
+      .filter((request) => request.body?.key !== "AUTH_DATABASE_RESOURCE")
+      .every((request) => !Object.hasOwn(request.body ?? {}, "gitBranch")),
+  ).toBe(true);
+});
+
+it("does not recover an uncheckpointed generic Gateway row when the mapped scope is branch-specific", async () => {
+  const f = fixture(undefined, false, gateway.branch);
+  for (const row of f.rows) {
+    row.gitBranch = null;
+  }
+  f.setLosePostResponse(true);
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  f.setLosePostResponse(false);
+  f.project.link.productionBranch = "another-branch";
+  f.requests.length = 0;
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+});
+
 it("rejects foreign project metadata before a Gateway environment write", async () => {
   const f = fixture(undefined, false, gateway.branch);
   f.project.accountId = "another-owner";

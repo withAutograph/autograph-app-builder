@@ -748,13 +748,20 @@ export const createHostedOperatorGatewayBindings = (deps: {
       newScope: string | null,
     ) => {
       const saved = known.find((item) => item.id === row.id);
+      // Earlier writers could complete a branch-specific POST before checkpointing it.
+      // Its current-operation tag and exact desired value still have to prove recovery below.
+      const matchesScope =
+        saved === undefined
+          ? matchesPreviewEnvironmentGitBranch(row.gitBranch, newScope) ||
+            matchesPreviewEnvironmentGitBranch(row.gitBranch, branch)
+          : matchesPreviewEnvironmentGitBranch(
+              row.gitBranch,
+              savedPreviewEnvironmentGitBranch(saved),
+            );
       return (
         row.target.length === 1 &&
         row.target[0] === "preview" &&
-        matchesPreviewEnvironmentGitBranch(
-          row.gitBranch,
-          saved === undefined ? newScope : savedPreviewEnvironmentGitBranch(saved),
-        ) &&
+        matchesScope &&
         (row.configurationId === null ||
           row.configurationId === undefined ||
           row.configurationId === "" ||
