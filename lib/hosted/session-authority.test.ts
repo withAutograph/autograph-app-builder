@@ -21,6 +21,11 @@ const auth = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe("exact forwarded session authority", () => {
+  it("continues denying a generic service with no specific sealed delegation", () => {
+    const candidate = { current: auth({ principalType: "service" }), initiator: auth() };
+    expect(() => exactForwardedSessionAuthority(candidate)).toThrow(HostedSessionAuthorityError);
+    expect(() => sourceHandoffIdForSessionAuth(candidate)).toThrow(HostedSessionAuthorityError);
+  });
   it("binds prepared context to both the initiating and current authority", () => {
     const handoffId = "123e4567-e89b-42d3-a456-426614174001";
     const prepared = auth({

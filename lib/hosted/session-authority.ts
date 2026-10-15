@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  readVerifiedRealmContinuationAuthority,
+  realmContinuationPrincipal,
+} from "./realm-continuation-authority";
+import type { RealmContinuationVerificationOptions } from "./realm-continuation-authority";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { hostedIdentifierSchema, hostedPrincipalSchema } from "../eve/hosted-auth";
@@ -32,6 +37,13 @@ const forwardedSessionAuthSchema = z
   })
   .strict();
 
+export interface RealmContinuationSessionAuthorityOptions {
+  realmContinuation: {
+    adapterSessionId: string;
+    verification?: RealmContinuationVerificationOptions;
+  };
+}
+
 export type HostedSessionTenantAuthority = z.infer<typeof hostedTenantAuthoritySchema>;
 
 export class HostedSessionAuthorityError extends Error {
@@ -46,14 +58,38 @@ export class HostedSessionAuthorityError extends Error {
 
 /**
  * Converts Eve's exact forwarded auth envelope into the one tenant authority
- * used by every hosted side effect. Current and initiating users must match;
- * callers cannot adopt ambient workspace or owner identifiers.
+ * used by every hosted side effect. Human current and initiating users must
+ * match. The purpose-sealed Realm service continuation derives the same owner
+ * from the pinned original initiator; it never adopts ambient owner identity.
  */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function exactForwardedSessionAuthority(sessionAuth: unknown): {
+export function exactForwardedSessionAuthority(
+  sessionAuth: unknown,
+  continuationOptions?: RealmContinuationSessionAuthorityOptions,
+): {
   authority: HostedSessionTenantAuthority;
   principal: HostedPrincipal;
 } {
+  let delegation;
+  try {
+    if (continuationOptions !== undefined) {
+      delegation = readVerifiedRealmContinuationAuthority(
+        sessionAuth,
+        continuationOptions.realmContinuation.verification,
+      );
+      if (
+        delegation !== undefined &&
+        delegation.adapterSessionId !== continuationOptions.realmContinuation.adapterSessionId
+      ) {
+        throw new HostedSessionAuthorityError("mismatch");
+      }
+    }
+  } catch {
+    throw new HostedSessionAuthorityError("invalid");
+  }
+  if (delegation !== undefined) {
+    return { authority: delegation.authority, principal: realmContinuationPrincipal(delegation) };
+  }
   const parsed = forwardedSessionAuthSchema.safeParse(sessionAuth);
   if (!parsed.success) {
     throw new HostedSessionAuthorityError("invalid");
@@ -95,13 +131,32 @@ export function exactForwardedSessionAuthority(sessionAuth: unknown): {
 
 /** A prepared app belongs to the initiating session, not a later message. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function sourceHandoffIdForSessionAuth(sessionAuth: unknown) {
+export function sourceHandoffIdForSessionAuth(
+  sessionAuth: unknown,
+  continuationOptions?: RealmContinuationSessionAuthorityOptions,
+) {
+  try {
+    if (continuationOptions !== undefined) {
+      const delegation = readVerifiedRealmContinuationAuthority(
+        sessionAuth,
+        continuationOptions.realmContinuation.verification,
+      );
+      if (delegation !== undefined) {
+        exactForwardedSessionAuthority(sessionAuth, continuationOptions);
+        return delegation.initiator.attributes["autograph:source-handoff-id"];
+      }
+    }
+  } catch {
+    throw new HostedSessionAuthorityError("invalid");
+  }
   const parsed = forwardedSessionAuthSchema.safeParse(sessionAuth);
   if (!parsed.success) {
     // Local sessions have no prepared hosted context. A malformed hosted
     // envelope must not silently become an unbound session.
-    const current = (sessionAuth as { current?: { authenticator?: string } } | null)?.current;
-    if (current?.authenticator === "mcp-oauth-jwks") {
+    const current = (
+      sessionAuth as { current?: { authenticator?: string; principalType?: string } } | null
+    )?.current;
+    if (current?.authenticator === "mcp-oauth-jwks" || current?.principalType === "service") {
       throw new HostedSessionAuthorityError("invalid");
     }
     return;

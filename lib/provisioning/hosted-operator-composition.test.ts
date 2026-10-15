@@ -1,6 +1,23 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import nativeEntryPoint from "./hosted-operator-function";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Focused planning boundary spies.
+import * as authProposal from "./hosted-operator-auth-proposal";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Focused planning boundary spies.
+import * as planningAuthority from "./hosted-operator-planning-authority";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Focused planning boundary spies.
+import * as nativePlanning from "./hosted-operator-native-preview-authority";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Focused planning boundary spies.
+import * as neonReader from "./hosted-operator-native-preview-neon-mcp";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Focused planning boundary spies.
+import * as providerInventory from "./hosted-operator-provider-inventory";
 import {
+  hostedRuntimeJournalRecordSchema,
+  retainedOperatorAuthFromJournal,
+} from "./hosted-runtime-journal";
+import { selectAuthPlanningResourceBindingRow } from "./hosted-operator-deployment";
+import { requireFinalResourceBindingPhase } from "./hosted-operator-resource-binding-phase";
+import {
+  composeHostedOperatorDependencies,
   createDependencies,
   createConfiguredPreviewTargetResolver,
   resolveFullPlan,
@@ -739,5 +756,345 @@ describe("participant plan resolution", () => {
     expect(kinds.indexOf("auth-signup-policy")).toBeLessThan(kinds.indexOf("access"));
     expect(kinds.indexOf("auth-signup-policy")).toBeLessThan(kinds.indexOf("delivery"));
     expect(f.readCapturedRealmIdentity).not.toHaveBeenCalled();
+  });
+});
+
+/* oxlint-disable eslint/require-await, typescript/no-non-null-assertion, anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion, typescript/no-unsafe-type-assertion, typescript/no-unnecessary-type-assertion, eslint/no-nested-ternary, sonarjs/no-nested-conditional, sonarjs/max-union-size, unicorn/no-useless-undefined -- Synthetic planning fixtures intentionally implement only read-only ports reached by these tests; schema parsers construct the original approved records. */
+// These spies isolate provider inventory while exercising the real workflow plan composition.
+
+const existingAuthRecord = (plan = bootstrapPlan()) =>
+  hostedRuntimeJournalRecordSchema.parse({
+    version: 1,
+    kind: "app-runtime",
+    approvedByCallId: "original-approval-call",
+    request: context.target,
+    status: "pending",
+    step: "reserved",
+    privateState: {
+      encryptedToken: "encrypted",
+      keyVersion: "fixture",
+      tokenIv: "iv",
+      tokenTag: "tag",
+    },
+    operator: {
+      mode: "protected-operator-v1",
+      approvalId: "original-approval",
+      operationRef: "00000000-0000-4000-8000-000000000001",
+      fenceGeneration: 1,
+      plan,
+      planDigest: operatorPlanDigest(plan),
+      authPreparation: {
+        assetSha256: "d".repeat(64),
+        catalogFingerprint: "e".repeat(64),
+        database: "auth",
+        runtimeRole: "auth_runtime",
+        targetDigest: plan.authSchema!.targetDigest,
+        observedAt: "2026-10-15T12:00:00Z",
+      },
+      receipts: plan.effects.map((effect) => ({
+        effectId: effect.id,
+        observedAt: "2026-10-15T12:00:00Z",
+        resourceVersion: "owned-observation",
+      })),
+    },
+  });
+
+describe("existing populated Auth workflow planning", () => {
+  const setup = (mode: "current" | "retained" | "adopted" | "empty") => {
+    const f = publicationFixture();
+    f.readCapturedRealmIdentity.mockResolvedValue(null);
+    const original = existingAuthRecord();
+    const row = { record: original, revision: 1 };
+    const sourceOwner = context.ownerContext;
+    if (sourceOwner === undefined) {
+      throw new Error("Fixture owner is missing.");
+    }
+    const sourceContext = {
+      ...context,
+      target: { ...context.target, appId: "source", sessionId: "source-session" },
+      ownerContext: { ...sourceOwner, sessionId: "source-session" },
+    };
+    const sourcePlan = {
+      ...original.operator!.plan,
+      selection: {
+        ...original.operator!.plan.selection,
+        appId: "source",
+        sessionId: "source-session",
+      },
+    };
+    const sourceRow = { record: existingAuthRecord(sourcePlan), revision: 2 };
+    if (mode === "retained") {
+      original.retainedAuth = retainedOperatorAuthFromJournal(original);
+      original.operator = {
+        ...original.operator!,
+        approvalId: undefined,
+        plan: {
+          ...original.operator!.plan,
+          action: "cleanup",
+          stage: "app",
+          contextId: "next-spec",
+          effects: [
+            { description: "revoke", id: "revoke", kind: "revoke" },
+            { description: "remove", id: "remove-bindings", kind: "remove-bindings" },
+            { description: "retire", id: "retire", kind: "retire", resourceId: "app-resource" },
+          ],
+        },
+      };
+      original.operator.planDigest = operatorPlanDigest(original.operator.plan);
+    }
+    if (mode === "adopted") {
+      f.configuration.applications.actual!.authAdoptionSource = {
+        ownerContext: sourceContext.ownerContext,
+        target: sourceContext.target,
+      };
+    }
+    const adopted =
+      mode === "adopted"
+        ? {
+            adoption: {
+              kind: "owned-journal-auth-v1" as const,
+              resource: {
+                authDatabase: resource("auth"),
+                branchId: "br-fixture",
+                endpoint: "ep-fixture.neon.tech",
+                endpointId: "ep-fixture",
+                projectId: "neon-fixture",
+              },
+              source: {
+                checkpointSha256: "1".repeat(64),
+                journalDigest: "2".repeat(64),
+                operationRef: sourceRow.record.operator!.operationRef,
+                planDigest: sourceRow.record.operator!.planDigest,
+                selection: sourcePlan.selection,
+              },
+            },
+            authSchema: sourcePlan.authSchema!,
+            content: Buffer.from("original-source-artifact"),
+          }
+        : undefined;
+    const migrationUrl =
+      "postgresql://auth_owner:private-fixture@ep-fixture.neon.tech/auth?sslmode=verify-full";
+    const readResourceBindings = vi.fn(
+      async (
+        _input: Parameters<
+          Parameters<typeof composeHostedOperatorDependencies>[1]["readResourceBindings"]
+        >[0],
+      ) => ({
+        authDatabase: { migrationUrl, runtimeUrl: "private-runtime" },
+        appDatabase: { migrationUrl: "private-app", runtimeUrl: "private-app-runtime" },
+      }),
+    );
+    const propose = vi.fn(
+      async (
+        input: Parameters<ReturnType<typeof authProposal.createHostedOperatorAuthProposal>>[0],
+      ) => {
+        await input.assertCurrentOwner();
+        return {
+          content: Buffer.from("observed-existing-plan"),
+          planDigest: "3".repeat(64),
+          targetDigest: "4".repeat(64),
+        };
+      },
+    );
+    vi.spyOn(authProposal, "createHostedOperatorAuthProposal").mockReturnValue(propose);
+    vi.spyOn(planningAuthority, "readOwnedOperatorPlanningSelection").mockResolvedValue({
+      currentSpec: { appSpecDigest: "new-spec" },
+      selection: {
+        artifactRef: "release-artifact",
+        releaseId: "release",
+        manifestSha256: "b".repeat(64),
+      },
+    } as Awaited<ReturnType<typeof planningAuthority.readOwnedOperatorPlanningSelection>>);
+    vi.spyOn(nativePlanning, "createNativePreviewNeonPlanningAuthority").mockReturnValue(
+      {} as ReturnType<typeof nativePlanning.createNativePreviewNeonPlanningAuthority>,
+    );
+    vi.spyOn(neonReader, "createPreviewNeonMcpReader").mockReturnValue({
+      inspectPlanningTarget: vi.fn(async () => {}),
+    } as unknown as ReturnType<typeof neonReader.createPreviewNeonMcpReader>);
+    vi.spyOn(providerInventory, "readHostedOperatorProviderInventory").mockResolvedValue({
+      app: {
+        deployedEnvironmentKeys: [],
+        projectEnvironmentKeys: [],
+        branch: context.target.branch,
+        projectId: context.target.projectId,
+        deploymentId: "app-deployment",
+        environment: "preview",
+      },
+      gateway: {
+        deployedEnvironmentKeys: [],
+        projectEnvironmentKeys: [],
+        branch: "gateway-actual",
+        projectId: "gateway",
+        deploymentId: "gateway-deployment",
+        environment: "preview",
+      },
+      operator: {
+        branch: null,
+        deployedEnvironmentKeys: [],
+        projectEnvironmentKeys: [],
+        projectId: "operator",
+        deploymentId: "operator-deployment",
+        environment: "preview",
+      },
+      verification: {
+        publicKeyIds: null,
+        gatewayOrigin: "https://gateway.example",
+        publicOrigin: "https://apps.example",
+        jwksUrl: "https://gateway.example/_platform/jwks.json",
+      },
+      appEnvironment: { deployedKeyInventory: "observed", forbiddenKeys: [] },
+      nativeResource: null,
+      previewBranch: { status: "unconfirmed", reason: "fixture" },
+      protectedAppGrantPolicy: "unconfirmed",
+      scopeId: "team",
+      scopeType: "team",
+    });
+    const controlPlane = {
+      ...f.controlPlane,
+      assertPlanningAuthorized: vi.fn(async () => {}),
+      store: {
+        read: vi.fn(async (input: HostedOperatorContext) =>
+          input.target.appId === "source"
+            ? sourceRow
+            : mode === "empty" || mode === "adopted"
+              ? undefined
+              : row,
+        ),
+      },
+      readGeneratedRelease: vi.fn(async () => ({})),
+      readActiveSharedAuth: vi.fn(async () => undefined),
+      readSharedAuthAdoption: vi.fn(async () => adopted),
+      readResourceBindings,
+      publishAuthPlan: vi.fn(async () => "new-observed-artifact"),
+    };
+    const dependencies = composeHostedOperatorDependencies(
+      f.configuration,
+      controlPlane as unknown as Parameters<typeof composeHostedOperatorDependencies>[1],
+    );
+    return {
+      ...f,
+      dependencies,
+      controlPlane,
+      original,
+      row,
+      sourceRow,
+      sourceContext,
+      propose,
+      migrationUrl,
+      readResourceBindings,
+    };
+  };
+  it.each(["current", "retained"] as const)(
+    "replans %s Auth with the original owner and approval binding before publishing the next plan",
+    async (mode) => {
+      const f = setup(mode);
+      const before = structuredClone(f.row);
+      const plan = await f.dependencies.plan({ ...context, action: "prepare" });
+      const binding = f.readResourceBindings.mock.calls[0]?.[0];
+      expect(binding).toMatchObject({
+        authority: context.authority,
+        target: context.target,
+        ownerContext: context.ownerContext,
+        plan: mode === "retained" ? f.original.retainedAuth!.plan : f.original.operator!.plan,
+        privateState: f.original.privateState,
+      });
+      expect(f.propose).toHaveBeenCalledWith(
+        expect.objectContaining({ directMigrationUrl: f.migrationUrl }),
+      );
+      expect(plan.authSchema).toMatchObject({
+        artifactRef: "new-observed-artifact",
+        targetDigest: "4".repeat(64),
+        planDigest: "3".repeat(64),
+      });
+      expect(plan.authAdoption).toBeUndefined();
+      expect(f.row).toEqual(before);
+      expect(JSON.stringify(plan)).not.toContain("private-fixture");
+    },
+  );
+  it("preserves the approved source artifact and read-only adoption authority", async () => {
+    const f = setup("adopted");
+    const plan = await f.dependencies.plan({ ...context, action: "prepare" });
+    expect(f.controlPlane.readSharedAuthAdoption).toHaveBeenCalledWith({
+      context: { ...context, action: "prepare" },
+      source: { ownerContext: f.sourceContext.ownerContext, target: f.sourceContext.target },
+    });
+    expect(f.readResourceBindings).not.toHaveBeenCalled();
+    expect(f.propose).not.toHaveBeenCalled();
+    expect(f.controlPlane.publishAuthPlan).toHaveBeenCalledWith(expect.anything(), {
+      content: Buffer.from("original-source-artifact"),
+      planDigest: f.sourceRow.record.operator!.plan.authSchema!.planDigest,
+      targetDigest: f.sourceRow.record.operator!.plan.authSchema!.targetDigest,
+    });
+    expect(plan.authSchema!.targetDigest).toBe(
+      f.sourceRow.record.operator!.plan.authSchema!.targetDigest,
+    );
+    expect(plan.authAdoption).toBeDefined();
+  });
+  it("keeps initial empty-target planning credential free", async () => {
+    const f = setup("empty");
+    await f.dependencies.plan({ ...context, action: "prepare" });
+    expect(f.readResourceBindings).not.toHaveBeenCalled();
+    expect(f.propose.mock.calls[0]?.[0]).not.toHaveProperty("directMigrationUrl");
+  });
+  it("does not turn a denied original binding into an empty proposal", async () => {
+    const f = setup("current");
+    f.readResourceBindings.mockRejectedValueOnce(new Error("original approval unavailable"));
+    await expect(f.dependencies.plan({ ...context, action: "prepare" })).rejects.toThrow(
+      "original approval unavailable",
+    );
+    expect(f.propose).not.toHaveBeenCalled();
+    expect(f.controlPlane.publishAuthPlan).not.toHaveBeenCalled();
+  });
+});
+
+describe("retained approved Auth binding selection", () => {
+  it("selects only the completed original prepare evidence without replacing the journal", () => {
+    const record = existingAuthRecord();
+    const originalPlan = record.operator!.plan;
+    record.retainedAuth = retainedOperatorAuthFromJournal(record);
+    record.operator = {
+      ...record.operator!,
+      authPreparation: undefined,
+      approvalId: undefined,
+      plan: { ...originalPlan, contextId: "replacement" },
+    };
+    record.operator.planDigest = operatorPlanDigest(record.operator.plan);
+    const row = { record, revision: 4 };
+    const selected = selectAuthPlanningResourceBindingRow(row, originalPlan)!;
+    const accepted = requireFinalResourceBindingPhase(selected, {
+      plan: originalPlan,
+      privateState: record.privateState,
+    });
+    expect(accepted.record.operator!.approvalId).toBe("original-approval");
+    expect(accepted.record.approvedByCallId).toBe("original-approval-call");
+    expect(accepted.record.operator!.planDigest).toBe(operatorPlanDigest(originalPlan));
+    expect(row.record.operator!.plan.contextId).toBe("replacement");
+    expect(() =>
+      requireFinalResourceBindingPhase(selected, { plan: originalPlan, privateState: undefined }),
+    ).toThrow();
+    expect(() =>
+      requireFinalResourceBindingPhase(
+        selectAuthPlanningResourceBindingRow(row, { ...originalPlan, contextId: "foreign" }),
+        { plan: originalPlan, privateState: record.privateState },
+      ),
+    ).toThrow();
+    const incomplete = structuredClone(row);
+    incomplete.record.retainedAuth!.receipts = [];
+    expect(() =>
+      requireFinalResourceBindingPhase(
+        selectAuthPlanningResourceBindingRow(incomplete, originalPlan),
+        { plan: originalPlan, privateState: record.privateState },
+      ),
+    ).toThrow();
+    const unapproved = structuredClone(selected);
+    unapproved.record.operator!.approvalId = undefined;
+    expect(() =>
+      requireFinalResourceBindingPhase(unapproved, {
+        plan: originalPlan,
+        privateState: record.privateState,
+      }),
+    ).toThrow();
+    record.leaseId = "active-lease";
+    expect(() => selectAuthPlanningResourceBindingRow(row, originalPlan)).toThrow();
   });
 });

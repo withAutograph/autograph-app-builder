@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { FaGithub } from "react-icons/fa";
 
 import { ChoiceCard, SectionShell } from "../../../components/create-app/choice-card";
@@ -6,7 +7,7 @@ import {
   githubConnectionPrompt,
   githubRepositoryAccessViewModel,
 } from "../../integrations/store-in-view-model";
-import type { EveSessionResult, PublicInputRequest } from "../contracts";
+import type { EveSessionResult, PublicIdentityInvitation, PublicInputRequest } from "../contracts";
 import { ApprovalRequest } from "./approval-request";
 import "./styles.css";
 
@@ -411,24 +412,90 @@ function SessionOutcome({
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function IdentityInvitation({
+  invitation,
+  canOpenLinks,
+  onOpenLink,
+}: {
+  invitation: PublicIdentityInvitation;
+  canOpenLinks: boolean;
+  onOpenLink: (url: string) => Promise<void>;
+}) {
+  if (Date.parse(invitation.expiresAt) <= Date.now()) {
+    return null;
+  }
+  return (
+    <section aria-label="Connect your account">
+      <p>
+        <a
+          href={invitation.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={
+            canOpenLinks
+              ? (event) => {
+                  event.preventDefault();
+                  void onOpenLink(invitation.url);
+                }
+              : undefined
+          }
+        >
+          Sign in to connect your account
+        </a>
+      </p>
+      <p>The approved preparation resumes automatically.</p>
+    </section>
+  );
+}
+
+const useIdentityInvitationTime = (invitations: PublicIdentityInvitation[]) => {
+  const [clock, setClock] = useState(Date.now);
+  const now = Math.max(clock, Date.now());
+  let nextExpiry = Infinity;
+  for (const { expiresAt } of invitations) {
+    const expiry = Date.parse(expiresAt);
+    if (expiry > now) {
+      nextExpiry = Math.min(nextExpiry, expiry);
+    }
+  }
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    if (Number.isFinite(nextExpiry)) {
+      timer = setTimeout(
+        () => setClock(Date.now()),
+        Math.min(nextExpiry - Date.now() + 1, 2_147_483_647),
+      );
+    }
+    return () => clearTimeout(timer);
+  }, [nextExpiry]);
+  return now;
+};
+
+const invitationOrOutcome = (invitations: ReactNode[], outcome: ReactNode) =>
+  invitations.length > 0 ? <main className="mcpApp shell">{invitations}</main> : outcome;
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function SessionAppView({
   canCallTools,
   canOpenLinks,
   onOpenLink,
   onRespond,
   result,
+  identityInvitations = [],
 }: {
   canCallTools: boolean;
   canOpenLinks: boolean;
   onOpenLink: (url: string) => Promise<void>;
   onRespond: (responses: SessionResponse[]) => Promise<void>;
   result?: EveSessionResult;
+  identityInvitations?: PublicIdentityInvitation[];
 }) {
   const [answers, setAnswers] = useState<Record<string, SessionAnswer>>({});
   const [state, setState] = useState<"idle" | "submitting" | "submitted">("idle");
   const [authorizationOpened, setAuthorizationOpened] = useState(false);
   const [submissionError, setSubmissionError] = useState("");
   const [decisionOutcome, setDecisionOutcome] = useState<DecisionOutcome>();
+  const invitationNow = useIdentityInvitationTime(identityInvitations);
   const requests = result?.inputRequests ?? [];
   const respondable = requests.filter((request) => request.kind !== "authorization");
   const complete = useMemo(
@@ -506,13 +573,25 @@ export function SessionAppView({
       submitted={state === "submitted"}
     />
   );
+  const invitations = identityInvitations.flatMap((invitation) =>
+    Date.parse(invitation.expiresAt) > invitationNow
+      ? [
+          <IdentityInvitation
+            key={invitation.callId}
+            invitation={invitation}
+            canOpenLinks={canOpenLinks}
+            onOpenLink={onOpenLink}
+          />,
+        ]
+      : [],
+  );
   if (
     result.status === "failed" ||
     decisionOutcome?.status === "failed" ||
     state === "submitted" ||
     result.status !== "input_required"
   ) {
-    return outcome;
+    return invitationOrOutcome(invitations, outcome);
   }
 
   const onlyRequest = requests.length === 1 ? requests[0] : undefined;
@@ -522,6 +601,7 @@ export function SessionAppView({
   if (singleAuthorization) {
     return (
       <main className="mcpApp shell authorization-shell">
+        {invitations}
         <div className="request-list">
           <AuthorizationControl
             request={singleAuthorization}
@@ -535,6 +615,7 @@ export function SessionAppView({
 
   return (
     <main className={`mcpApp shell${onlyDecision ? " approval-shell" : ""}`}>
+      {invitations}
       {onlyDecision ? null : (
         <header>
           <div>

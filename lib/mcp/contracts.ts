@@ -78,7 +78,23 @@ export const publicInputRequestSchema = z
 
 export type PublicInputRequest = z.infer<typeof publicInputRequestSchema>;
 
+export const publicIdentityInvitationSchema = z.object({
+  callId: z.string().min(1),
+  url: z.url().startsWith("https://"),
+  expiresAt: z.iso.datetime(),
+});
+export type PublicIdentityInvitation = z.infer<typeof publicIdentityInvitationSchema>;
+
 export const publicEveEventSchema = z.discriminatedUnion("type", [
+  publicIdentityInvitationSchema.extend({
+    index: z.number().int().nonnegative(),
+    type: z.literal("auth_identity_invitation"),
+  }),
+  z.object({
+    callId: z.string().min(1),
+    index: z.number().int().nonnegative(),
+    type: z.literal("auth_identity_invitation_resolved"),
+  }),
   z.object({
     index: z.number().int().nonnegative(),
     text: z.string(),

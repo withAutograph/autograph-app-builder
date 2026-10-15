@@ -988,9 +988,38 @@ export const composeHostedOperatorDependencies = (
     ) {
       throw new HostedOperatorError(RECONCILIATION_REQUIRED);
     }
-    let authSchema = activeAuth?.authSchema ?? current?.record.operator?.plan.authSchema;
+    let authSchema =
+      activeAuth?.authSchema ??
+      current?.record.operator?.plan.authSchema ??
+      current?.record.retainedAuth?.plan.authSchema;
+    // Read under the original completed approval before the next plan replaces it.
+    // Shared adoption keeps its source artifact and read-only execution contract.
+    const originalPlan =
+      current?.record.operator?.authPreparation !== undefined &&
+      current.record.operator.plan.action === "prepare"
+        ? current.record.operator.plan
+        : current?.record.retainedAuth?.plan;
+    const bindingPlan =
+      adopted === undefined && activeAuth === undefined && originalPlan?.authAdoption === undefined
+        ? originalPlan
+        : undefined;
+    if (activeAuth !== undefined && authSchema === undefined) {
+      throw new HostedOperatorError(RECONCILIATION_REQUIRED);
+    }
+    const existingBindings =
+      bindingPlan === undefined
+        ? undefined
+        : await observe(
+            "shared_auth_read",
+            async () =>
+              await privateBindings({
+                ...context,
+                plan: bindingPlan,
+                privateState: current?.record.privateState,
+              }),
+          );
+    const existingMigrationUrl = existingBindings?.authDatabase.migrationUrl;
     if (adopted !== undefined) {
-      // Re-envelope the exact source artifact through the existing target-owned artifact API.
       const artifactRef = await observe(
         "auth_schema_publish",
         async () =>
@@ -1001,14 +1030,27 @@ export const composeHostedOperatorDependencies = (
           }),
       );
       authSchema = { ...adopted.authSchema, artifactRef };
-    } else if (authSchema === undefined) {
+    } else if (existingMigrationUrl !== undefined || authSchema === undefined) {
       const proposed = await observe(
         "auth_schema_proposal",
         async () =>
           await proposal({
             assertCurrentOwner: async () => {
               await controlPlane.assertPlanningAuthorized(context);
+              if (bindingPlan !== undefined) {
+                const latest = await privateBindings({
+                  ...context,
+                  plan: bindingPlan,
+                  privateState: current?.record.privateState,
+                });
+                if (latest.authDatabase.migrationUrl !== existingMigrationUrl) {
+                  throw new HostedOperatorError(RESOURCE_MISMATCH);
+                }
+              }
             },
+            ...(existingMigrationUrl === undefined
+              ? {}
+              : { directMigrationUrl: existingMigrationUrl }),
             resource: {
               database: configuration.authDatabase.database,
               environment: "preview",

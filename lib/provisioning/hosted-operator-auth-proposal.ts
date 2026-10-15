@@ -1,6 +1,7 @@
 import { Sandbox } from "@vercel/sandbox";
 import { getVercelOidcToken } from "@vercel/oidc";
 import { z } from "zod";
+import { isDeepStrictEqual } from "node:util";
 import { HostedOperatorError } from "./hosted-operator-contract";
 import { hostedOperatorSandboxSourceOptions } from "./hosted-operator-sandbox-source";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
@@ -18,7 +19,7 @@ export const authProposalResourceSchema = z.strictObject({
   version: z.literal(1),
 });
 const proposalSchema = z.object({
-  proposal: z.literal("new-empty"),
+  proposal: z.literal("new-empty").optional(),
   resource: authProposalResourceSchema,
   schemaPlan: z.object({ planDigest: digest, targetDigest: digest }),
   version: z.literal(1),
@@ -26,7 +27,34 @@ const proposalSchema = z.object({
 type ProposalSandbox = Pick<Sandbox, "delete" | "runCommand" | "writeFiles">;
 type CreateOptions = Parameters<typeof Sandbox.create>[0];
 
-/** Credential-free proposal only; the fixed approved worker independently plans the actual database before DDL. */
+/** Private existing-target planning or credential-free genesis; execution independently replans before DDL. */
+export const assertAuthProposalMigrationUrl = (
+  value: string,
+  resource: z.infer<typeof authProposalResourceSchema>,
+) => {
+  try {
+    const url = new URL(value);
+    if (
+      [
+        !["postgres:", "postgresql:"].includes(url.protocol),
+        url.hostname !== resource.hostname,
+        url.hostname.includes("-pooler."),
+        Number(url.port || 5432) !== resource.port,
+        decodeURIComponent(url.pathname.slice(1)) !== resource.database,
+        decodeURIComponent(url.username) !== resource.migratorRole,
+        Boolean(url.hash),
+        [...url.searchParams.keys()].some((key) => !["sslmode", "channel_binding"].includes(key)),
+        url.searchParams.getAll("sslmode").length !== 1,
+        url.searchParams.getAll("channel_binding").length > 1,
+        url.searchParams.get("sslmode") !== "verify-full",
+      ].some(Boolean)
+    ) {
+      throw new Error("identity");
+    }
+  } catch {
+    throw new HostedOperatorError("resource_mismatch");
+  }
+};
 export const createHostedOperatorAuthProposal =
   (
     configuration: HostedOperatorSourceConfiguration,
@@ -38,8 +66,12 @@ export const createHostedOperatorAuthProposal =
   async (input: {
     assertCurrentOwner: () => Promise<void>;
     resource: z.infer<typeof authProposalResourceSchema>;
+    directMigrationUrl?: string;
   }) => {
     const resource = authProposalResourceSchema.parse(input.resource);
+    if (input.directMigrationUrl !== undefined) {
+      assertAuthProposalMigrationUrl(input.directMigrationUrl, resource);
+    }
     await input.assertCurrentOwner();
     const token = await (io.getOidc ?? getVercelOidcToken)({
       project: configuration.sandbox.projectId,
@@ -70,14 +102,31 @@ export const createHostedOperatorAuthProposal =
       }
       // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Task-owned ephemeral VM input is0600 and removed with VM.
       const inputPath = "/tmp/protected-auth-proposal-input.json";
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Private 0600 credential file in the task-owned VM.
+      const credentialPath = "/tmp/protected-auth-proposal-migration-url";
       await sandbox.writeFiles([
         {
           content: Buffer.from(
-            JSON.stringify({ catalogAppIds: configuration.catalogAppIds, resource }),
+            JSON.stringify({
+              catalogAppIds: configuration.catalogAppIds,
+              resource,
+              ...(input.directMigrationUrl === undefined
+                ? {}
+                : { directMigrationUrlFile: credentialPath }),
+            }),
           ),
           mode: 0o600,
           path: inputPath,
         },
+        ...(input.directMigrationUrl === undefined
+          ? []
+          : [
+              {
+                content: Buffer.from(input.directMigrationUrl),
+                mode: 0o600,
+                path: credentialPath,
+              },
+            ]),
       ]);
       await input.assertCurrentOwner();
       const result = await sandbox.runCommand({
@@ -93,7 +142,12 @@ export const createHostedOperatorAuthProposal =
         throw new HostedOperatorError("operator_unavailable");
       }
       const frame = proposalSchema.parse(JSON.parse(content.toString("utf-8")));
-      if (JSON.stringify(frame.resource) !== JSON.stringify(resource)) {
+      if (
+        !isDeepStrictEqual(frame.resource, resource) ||
+        (input.directMigrationUrl === undefined
+          ? frame.proposal !== "new-empty"
+          : frame.proposal !== undefined)
+      ) {
         throw new HostedOperatorError("resource_mismatch");
       }
       await input.assertCurrentOwner();

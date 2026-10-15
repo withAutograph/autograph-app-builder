@@ -290,7 +290,9 @@ export const hostedOperatorClientForSession = async (
     emit("verified");
     stage = "owner_authority";
     emit("started");
-    const { authority, principal } = exactForwardedSessionAuthority(sessionAuth);
+    const { authority, principal } = exactForwardedSessionAuthority(sessionAuth, {
+      realmContinuation: { adapterSessionId },
+    });
     emit("verified");
     stage = "owner_context";
     emit("started");

@@ -7,6 +7,14 @@ import type {
   HostedOperatorConsentMetadata,
 } from "./hosted-operator-consent-diagnostic";
 import { z } from "zod";
+import {
+  readVerifiedRealmContinuationAuthority,
+  realmContinuationAuthorityAttribute,
+} from "../hosted/realm-continuation-authority";
+import type {
+  RealmContinuationAuthority,
+  RealmContinuationVerificationOptions,
+} from "../hosted/realm-continuation-authority";
 import { parseHostedDatabaseUrl } from "../db/postgres-connection-policy";
 import {
   exactForwardedSessionAuthority,
@@ -24,6 +32,7 @@ import { HostedOperatorError } from "./hosted-operator-contract";
 import type { OperatorOwnerContext } from "./hosted-operator-contract";
 
 interface OwnerContextResolverDependencies {
+  realmContinuation?: RealmContinuationVerificationOptions;
   diagnosticSink?: HostedOperatorConsentDiagnosticSink;
   handoffs: Pick<BuilderHandoffStore, "read">;
   sessions: Pick<HostedEveStore, "getSession"> &
@@ -78,6 +87,40 @@ const resolveDirectOwnerContext = async (input: {
   };
 };
 
+const assertRealmAdapterBinding = (
+  delegation: RealmContinuationAuthority | undefined,
+  adapterSessionId: string,
+) => {
+  if (delegation !== undefined && delegation.adapterSessionId !== adapterSessionId) {
+    throw new HostedOperatorError("authorization_required");
+  }
+};
+
+const restrictRealmContinuationOwner = (
+  owner: OperatorOwnerContext,
+  delegation: RealmContinuationAuthority | undefined,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Reads the opaque field only after the full native auth verifier succeeds.
+  sessionAuth: unknown,
+): OperatorOwnerContext => {
+  if (delegation === undefined) {
+    return owner;
+  }
+  if (
+    delegation.adapterSessionId !== owner.adapterSessionId ||
+    delegation.ownerSessionId !== owner.sessionId
+  ) {
+    throw new HostedOperatorError("authorization_required");
+  }
+  const sealedAuthority = z
+    .object({
+      current: z.object({
+        attributes: z.object({ [realmContinuationAuthorityAttribute]: z.string() }),
+      }),
+    })
+    .parse(sessionAuth).current.attributes[realmContinuationAuthorityAttribute];
+  return { ...owner, realmContinuation: { sealedAuthority } };
+};
+
 /** Resolves only through exact tenant-scoped durable handoff or adapter bindings. */
 export const createHostedOperatorOwnerContextResolver =
   (dependencies: OwnerContextResolverDependencies) =>
@@ -102,8 +145,19 @@ export const createHostedOperatorOwnerContextResolver =
     };
     emit("started");
     try {
-      const handoffId = sourceHandoffIdForSessionAuth(input.sessionAuth);
-      const forwarded = exactForwardedSessionAuthority(input.sessionAuth);
+      const continuationOptions = {
+        realmContinuation: {
+          adapterSessionId: input.adapterSessionId,
+          verification: dependencies.realmContinuation,
+        },
+      };
+      const delegation = readVerifiedRealmContinuationAuthority(
+        input.sessionAuth,
+        dependencies.realmContinuation,
+      );
+      assertRealmAdapterBinding(delegation, input.adapterSessionId);
+      const handoffId = sourceHandoffIdForSessionAuth(input.sessionAuth, continuationOptions);
+      const forwarded = exactForwardedSessionAuthority(input.sessionAuth, continuationOptions);
       if (
         input.authority.issuer !== dependencies.issuer ||
         input.authority.audience !== dependencies.audience
@@ -129,8 +183,9 @@ export const createHostedOperatorOwnerContextResolver =
           principal: input.principal,
           sessions: dependencies.sessions,
         });
+        const restricted = restrictRealmContinuationOwner(result, delegation, input.sessionAuth);
         emit("verified");
-        return result;
+        return restricted;
       }
 
       const storedHandoff = await dependencies.handoffs.read({
@@ -172,15 +227,19 @@ export const createHostedOperatorOwnerContextResolver =
       }
 
       emit("verified");
-      return {
-        adapterGeneration: session.adapterGeneration,
-        adapterSessionId: session.adapterSessionId,
-        authority: hostedTenantAuthoritySchema.parse(input.authority),
-        kind: "handoff",
-        principal: hostedPrincipalSchema.parse(input.principal),
-        sessionId: session.sessionId,
-        sourceHandoffId: handoffId,
-      };
+      return restrictRealmContinuationOwner(
+        {
+          adapterGeneration: session.adapterGeneration,
+          adapterSessionId: session.adapterSessionId,
+          authority: hostedTenantAuthoritySchema.parse(input.authority),
+          kind: "handoff",
+          principal: hostedPrincipalSchema.parse(input.principal),
+          sessionId: session.sessionId,
+          sourceHandoffId: handoffId,
+        },
+        delegation,
+        input.sessionAuth,
+      );
     } catch (error) {
       emit(
         error instanceof HostedOperatorError && error.code === "authorization_required"

@@ -1,5 +1,6 @@
 /* oxlint-disable eslint/no-await-in-loop -- Bounded callback body is read sequentially; the reader cancels immediately at the byte limit. */
-import { createHash } from "node:crypto";
+import { verifyVercelOidcToken } from "@vercel/oidc";
+import { createHash, randomBytes } from "node:crypto";
 import { createRemoteJWKSet, customFetch } from "jose";
 import { z } from "zod";
 import {
@@ -9,6 +10,8 @@ import {
 import type { VercelTokenKeyringConfig } from "../integrations/vercel-installation";
 import type { openHostedOperatorCompositionResources } from "./hosted-operator-source-configuration";
 import type { HostedOperatorContext } from "./hosted-operator-service";
+import type { OperatorArtifactStore } from "./hosted-operator-artifact-store";
+import type { NormalActorCaptureSender } from "./hosted-operator-normal-actor-capture";
 import {
   readVerifiedRealmAccess,
   realmIdentityNonceSha256,
@@ -27,6 +30,21 @@ const bodySchema = z.strictObject({
   proof: z.string().min(1).max(16_384),
 });
 const stageSchema = bodySchema.extend({ expiresAt: z.number().int(), version: z.literal(1) });
+const privateStageRequestSchema = z.strictObject({
+  version: z.literal(1),
+  purpose: z.literal("realm-owner-identity-stage-v1"),
+  origin: z.url(),
+  nonce: bodySchema.shape.nonce,
+  proof: bodySchema.shape.proof,
+});
+const privateStageSchema = stageSchema.extend({ claimHash: bodySchema.shape.nonce });
+const routingTicketSchema = z.strictObject({
+  version: z.literal(1),
+  ownerSessionId: bodySchema.shape.ownerSessionId,
+  nonceSha256: bodySchema.shape.nonce,
+  claimSecret: bodySchema.shape.nonce,
+  expiresAt: z.number().int(),
+});
 const envelopeSchema = z.strictObject({
   encryptedToken: z.string(),
   keyVersion: z.string(),
@@ -53,6 +71,18 @@ export interface RealmIdentityCallbackPorts {
     context: HostedOperatorContext,
     proof: string,
   ) => Promise<{ proofRef: string; proofSha256: string }>;
+  identityHandoff?: {
+    verifySender: (request: Request) => Promise<void>;
+    context: (selector: {
+      ownerSessionId: string;
+      nonceSha256: string;
+    }) => Promise<HostedOperatorContext>;
+    artifacts: OperatorArtifactStore;
+  };
+  afterLinked?: (
+    context: HostedOperatorContext,
+    observed: { nonceSha256: string; proofRef: string; proofSha256: string },
+  ) => Promise<void>;
   consume: (input: {
     context: HostedOperatorContext;
     nonceSha256: string;
@@ -66,7 +96,7 @@ const cookieName = (sessionId: string) =>
   `${COOKIE}-${createHash("sha256").update(sessionId).digest("hex").slice(0, 24)}`;
 const cookieHeader = (value: string, seconds: number, sessionId: string) =>
   `${cookieName(sessionId)}=${value}; Path=${PATH}; Max-Age=${seconds}; Secure; HttpOnly; SameSite=Lax`;
-const readBody = async (request: Request): Promise<string> => {
+const readBody = async (request: Request, maximumBytes = 16_384): Promise<string> => {
   if (request.body === null) {
     throw new Error("realm_body_required");
   }
@@ -79,7 +109,7 @@ const readBody = async (request: Request): Promise<string> => {
       break;
     }
     size += next.value.byteLength;
-    if (size > 16_384) {
+    if (size > maximumBytes) {
       await reader.cancel();
       throw new Error("realm_body_too_large");
     }
@@ -126,101 +156,340 @@ const fromCookie = (request: Request, ports: RealmIdentityCallbackPorts, session
   }
   return stage;
 };
-/** The POST never grants identity. Normal-owner GET rechecks current Realm and canonical nonce before publication/CAS. */
+const seal = (ports: RealmIdentityCallbackPorts, associatedData: string, value: string) => ({
+  ...encryptVercelToken({ associatedData, key: ports.keyring.tokenKey, token: value }),
+  keyVersion: ports.keyring.tokenKeyVersion,
+});
+const unseal = (
+  ports: RealmIdentityCallbackPorts,
+  associatedData: string,
+  value: z.infer<typeof envelopeSchema>,
+) =>
+  decryptVersionedVercelToken({
+    ...value,
+    associatedData,
+    config: ports.keyring,
+  });
+const ticketAad = (origin: string) => `realm-owner-identity-handoff-v1:${origin}:${PATH}`;
+const privateStageAad = (origin: string, sessionId: string, claimHash: string) =>
+  `realm-owner-identity-stage-v1:${origin}:${PATH}:${sessionId}:${claimHash}`;
+const stageReference = (context: HostedOperatorContext, claimHash: string) =>
+  `_protected-operator/artifacts/realm-identity-stage/${context.target.appId}/${claimHash}`;
+const senderClaimsSchema = z.object({
+  iss: z.string(),
+  aud: z.string(),
+  owner_id: z.string(),
+  project_id: z.string(),
+  environment: z.string(),
+  sub: z.string(),
+});
+
+/** Accept only the configured native Gateway workload; a browser Origin header grants no staging authority. */
+export const createRealmIdentityHandoffSenderVerifier =
+  (
+    sender: NormalActorCaptureSender,
+    verify: (
+      token: string,
+      options: Parameters<typeof verifyVercelOidcToken>[1],
+    ) => Promise<{ payload: unknown }> = verifyVercelOidcToken,
+  ) =>
+  async (request: Request): Promise<void> => {
+    const bearer = request.headers
+      .get("authorization")
+      ?.match(/^Bearer (?<token>[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/u)?.groups?.token;
+    if (bearer === undefined || bearer.length > 16_384 || sender.environment !== "preview") {
+      throw new Error("realm_handoff_sender");
+    }
+    const verified = await verify(bearer, {
+      audience: sender.audience,
+      issuer: sender.issuer,
+      ownerId: sender.ownerId,
+      projectId: sender.projectId,
+      environment: sender.environment,
+      subject: sender.subject,
+    });
+    const claims = senderClaimsSchema.parse(verified.payload);
+    const matches = [
+      claims.iss === sender.issuer,
+      claims.aud === sender.audience,
+      claims.owner_id === sender.ownerId,
+      claims.project_id === sender.projectId,
+      claims.environment === sender.environment,
+      claims.sub === sender.subject,
+    ].every(Boolean);
+    if (!matches) {
+      throw new Error("realm_handoff_sender");
+    }
+  };
+
+const privateStage = async (ports: RealmIdentityCallbackPorts, request: Request) => {
+  const handoff = ports.identityHandoff;
+  if (handoff === undefined) {
+    throw new Error("realm_handoff_unavailable");
+  }
+  await handoff.verifySender(request);
+  const candidate = privateStageRequestSchema.parse(JSON.parse(await readBody(request, 32_768)));
+  const input = routing(candidate.nonce, candidate.proof);
+  const staging = await ports.staging({
+    nonceSha256: realmIdentityNonceSha256(input.nonce),
+    ownerSessionId: input.ownerSessionId,
+  });
+  if (candidate.origin !== staging.link.browserOrigin) {
+    throw new Error("realm_callback_origin");
+  }
+  const getKey = createRemoteJWKSet(new URL(staging.jwksUrl), { [customFetch]: ports.fetch });
+  const claims = await verifyRealmIdentityLinkProof({
+    ...input,
+    getKey,
+    pending: staging.link,
+    resource: staging.bootstrapResource,
+  });
+  const context = await handoff.context({
+    ownerSessionId: input.ownerSessionId,
+    nonceSha256: staging.link.nonceSha256,
+  });
+  if (context.target.sessionId !== input.ownerSessionId) {
+    throw new Error("realm_callback_scope");
+  }
+  await ports.assertCurrent(context);
+  const expiresAt = Math.min(
+    Date.now() + 240_000,
+    claims.exp * 1000,
+    Date.parse(staging.link.expiresAt),
+  );
+  const claimSecret = randomBytes(32).toString("hex");
+  const claimHash = createHash("sha256").update(claimSecret).digest("hex");
+  const encrypted = seal(
+    ports,
+    privateStageAad(ports.builderOrigin, input.ownerSessionId, claimHash),
+    JSON.stringify({ ...input, expiresAt, claimHash, version: 1 }),
+  );
+  await handoff.artifacts.put(
+    { authority: context.authority, target: context.target },
+    {
+      artifactRef: stageReference(context, claimHash),
+      chunkIndex: 0,
+      content: JSON.stringify(encrypted),
+    },
+  );
+  await ports.assertCurrent(context);
+  const ticket = seal(
+    ports,
+    ticketAad(ports.builderOrigin),
+    JSON.stringify({
+      ownerSessionId: input.ownerSessionId,
+      nonceSha256: staging.link.nonceSha256,
+      claimSecret,
+      expiresAt,
+      version: 1,
+    }),
+  );
+  const value = Buffer.from(JSON.stringify(ticket)).toString("base64url");
+  return Response.json(
+    {
+      version: 1,
+      continuationUrl: `${ports.builderOrigin}${PATH}?handoff=${encodeURIComponent(value)}`,
+    },
+    { headers: noStore },
+  );
+};
+
+const stageBrowserPost = async (ports: RealmIdentityCallbackPorts, request: Request) => {
+  const values = new URLSearchParams(await readBody(request));
+  const input = routing(values.get("nonce") ?? "", values.get("proof") ?? "");
+  const staging = await ports.staging({
+    nonceSha256: realmIdentityNonceSha256(input.nonce),
+    ownerSessionId: input.ownerSessionId,
+  });
+  if (request.headers.get("origin") !== staging.link.browserOrigin) {
+    throw new Error("realm_callback_origin");
+  }
+  const getKey = createRemoteJWKSet(new URL(staging.jwksUrl), { [customFetch]: ports.fetch });
+  const claims = await verifyRealmIdentityLinkProof({
+    ...input,
+    getKey,
+    pending: staging.link,
+    resource: staging.bootstrapResource,
+  });
+  const sessionId = input.ownerSessionId;
+  const seconds = Math.min(240, claims.exp - Math.floor(Date.now() / 1000));
+  const encrypted = encryptVercelToken({
+    associatedData: aad(ports.builderOrigin, sessionId),
+    key: ports.keyring.tokenKey,
+    token: JSON.stringify({ ...input, expiresAt: Date.now() + seconds * 1000, version: 1 }),
+  });
+  const value = Buffer.from(
+    JSON.stringify({ ...encrypted, keyVersion: ports.keyring.tokenKeyVersion }),
+  ).toString("base64url");
+  if (value.length > 3800) {
+    throw new Error("realm_stage_too_large");
+  }
+  return new Response(null, {
+    headers: {
+      ...noStore,
+      location: `${ports.builderOrigin}${PATH}?session=${encodeURIComponent(sessionId)}`,
+      "set-cookie": cookieHeader(value, seconds, sessionId),
+    },
+    status: 303,
+  });
+};
+const readRoutingTicket = (ports: RealmIdentityCallbackPorts, opaque: string) => {
+  const encoded = z
+    .string()
+    .min(1)
+    .max(3800)
+    .regex(/^[A-Za-z0-9_-]+$/u)
+    .parse(opaque);
+  const envelope = envelopeSchema.parse(
+    JSON.parse(Buffer.from(encoded, "base64url").toString("utf-8")),
+  );
+  const ticket = routingTicketSchema.parse(
+    JSON.parse(unseal(ports, ticketAad(ports.builderOrigin), envelope)),
+  );
+  if (ticket.expiresAt <= Date.now()) {
+    throw new Error("realm_stage_expired");
+  }
+  return ticket;
+};
+const readPrivateStage = async (
+  ports: RealmIdentityCallbackPorts,
+  context: HostedOperatorContext,
+  ticket: z.infer<typeof routingTicketSchema>,
+) => {
+  const handoff = ports.identityHandoff;
+  if (handoff === undefined) {
+    throw new Error("realm_handoff_unavailable");
+  }
+  const claimHash = createHash("sha256").update(ticket.claimSecret).digest("hex");
+  const content = await handoff.artifacts.read(
+    { authority: context.authority, target: context.target },
+    stageReference(context, claimHash),
+    0,
+  );
+  if (content === undefined) {
+    throw new Error("realm_stage_required");
+  }
+  const envelope = envelopeSchema.parse(JSON.parse(content));
+  const captured = privateStageSchema.parse(
+    JSON.parse(
+      unseal(
+        ports,
+        privateStageAad(ports.builderOrigin, ticket.ownerSessionId, claimHash),
+        envelope,
+      ),
+    ),
+  );
+  const matches = [
+    captured.ownerSessionId === ticket.ownerSessionId,
+    captured.claimHash === claimHash,
+    captured.expiresAt === ticket.expiresAt,
+    captured.expiresAt > Date.now(),
+    realmIdentityNonceSha256(captured.nonce) === ticket.nonceSha256,
+  ].every(Boolean);
+  if (!matches) {
+    throw new Error("realm_stage_expired");
+  }
+  return captured;
+};
+
+const completeBrowserGet = async (
+  ports: RealmIdentityCallbackPorts,
+  request: Request,
+  url: URL,
+) => {
+  let sessionId = url.searchParams.get("session") ?? "";
+  const opaque = url.searchParams.get("handoff");
+  const ticket = opaque === null ? undefined : readRoutingTicket(ports, opaque);
+  sessionId = ticket?.ownerSessionId ?? sessionId;
+  let stage = ticket === undefined ? fromCookie(request, ports, sessionId) : undefined;
+  const selector = {
+    nonceSha256: ticket?.nonceSha256 ?? realmIdentityNonceSha256(z.string().parse(stage?.nonce)),
+    ownerSessionId: sessionId,
+  };
+  // Validate the pending nonce before reading a staged artifact, including after a previous successful consumption.
+  await ports.staging(selector);
+  const context = await ports.authenticate(request, selector);
+  if (context === undefined) {
+    const returnPath =
+      opaque === null
+        ? `${PATH}?session=${encodeURIComponent(sessionId)}`
+        : `${PATH}?handoff=${encodeURIComponent(opaque)}`;
+    return new Response(null, {
+      headers: {
+        ...noStore,
+        location: `${ports.builderOrigin}/auth/sign-in?redirectTo=${encodeURIComponent(returnPath)}`,
+      },
+      status: 303,
+    });
+  }
+  if (context.target.sessionId !== sessionId) {
+    throw new Error("realm_callback_scope");
+  }
+  if (ticket !== undefined) {
+    stage = await readPrivateStage(ports, context, ticket);
+  }
+  if (stage === undefined) {
+    throw new Error("realm_stage_required");
+  }
+  const staging = await ports.staging(selector);
+  const getKey = createRemoteJWKSet(new URL(staging.jwksUrl), { [customFetch]: ports.fetch });
+  await readVerifiedRealmAccess({
+    ...stage,
+    assertCurrent: async () => {
+      await ports.assertCurrent(context);
+    },
+    getKey,
+    pending: staging.link,
+    readback: async (query) => await ports.fetch(query),
+    resource: staging.bootstrapResource,
+  });
+  const published = await ports.publish(context, stage.proof);
+  if (published.proofSha256 !== createHash("sha256").update(stage.proof).digest("hex")) {
+    throw new Error("realm_proof_publication_mismatch");
+  }
+  await ports.consume({ context, nonceSha256: selector.nonceSha256, ...published });
+  try {
+    await ports.afterLinked?.(context, { nonceSha256: selector.nonceSha256, ...published });
+  } catch {
+    // Identity is already linked. The supplied dispatcher owns durable retry;
+    // a dispatch failure must not be reported as failed authentication.
+  }
+  return new Response(null, {
+    headers: {
+      ...noStore,
+      location: `${ports.builderOrigin}/`,
+      "set-cookie": cookieHeader("", 0, sessionId),
+    },
+    status: 303,
+  });
+};
+
+/** Native private POST only stages proof. Completion always requires the normal original-owner browser session. */
 export const createRealmIdentityCallbackHandler =
   (ports: RealmIdentityCallbackPorts) =>
   async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
-    let sessionId = url.searchParams.get("session") ?? "";
+    const sessionId = url.searchParams.get("session") ?? "";
     try {
       const validOrigin = url.origin === ports.builderOrigin && url.pathname === PATH;
+      const queryKeys = [...url.searchParams.keys()];
       const validQuery =
         request.method === "POST"
           ? url.search === ""
-          : url.searchParams.getAll("session").length === 1 &&
-            [...url.searchParams.keys()].every((key) => key === "session");
+          : queryKeys.length === 1 && (queryKeys[0] === "session" || queryKeys[0] === "handoff");
       if (!validOrigin || !validQuery) {
         throw new Error("realm_callback_scope");
       }
       if (request.method === "POST") {
-        const values = new URLSearchParams(await readBody(request));
-        const input = routing(values.get("nonce") ?? "", values.get("proof") ?? "");
-        const staging = await ports.staging({
-          nonceSha256: realmIdentityNonceSha256(input.nonce),
-          ownerSessionId: input.ownerSessionId,
-        });
-        if (request.headers.get("origin") !== staging.link.browserOrigin) {
-          throw new Error("realm_callback_origin");
+        if (request.headers.get("content-type")?.split(";", 1)[0] === "application/json") {
+          return await privateStage(ports, request);
         }
-        const getKey = createRemoteJWKSet(new URL(staging.jwksUrl), { [customFetch]: ports.fetch });
-        const claims = await verifyRealmIdentityLinkProof({
-          ...input,
-          getKey,
-          pending: staging.link,
-          resource: staging.bootstrapResource,
-        });
-        sessionId = input.ownerSessionId;
-        const seconds = Math.min(240, claims.exp - Math.floor(Date.now() / 1000));
-        const encrypted = encryptVercelToken({
-          associatedData: aad(ports.builderOrigin, sessionId),
-          key: ports.keyring.tokenKey,
-          token: JSON.stringify({ ...input, expiresAt: Date.now() + seconds * 1000, version: 1 }),
-        });
-        const value = Buffer.from(
-          JSON.stringify({ ...encrypted, keyVersion: ports.keyring.tokenKeyVersion }),
-        ).toString("base64url");
-        if (value.length > 3800) {
-          throw new Error("realm_stage_too_large");
-        }
-        return new Response(null, {
-          headers: {
-            ...noStore,
-            location: `${ports.builderOrigin}${PATH}?session=${encodeURIComponent(sessionId)}`,
-            "set-cookie": cookieHeader(value, seconds, sessionId),
-          },
-          status: 303,
-        });
+        return await stageBrowserPost(ports, request);
       }
       if (request.method !== "GET") {
         throw new Error("realm_callback_method");
       }
-      const stage = fromCookie(request, ports, sessionId);
-      const selector = {
-        nonceSha256: realmIdentityNonceSha256(stage.nonce),
-        ownerSessionId: stage.ownerSessionId,
-      };
-      const context = await ports.authenticate(request, selector);
-      if (context === undefined) {
-        const returnPath = `${PATH}?session=${encodeURIComponent(sessionId)}`;
-        return new Response(null, {
-          headers: {
-            ...noStore,
-            location: `${ports.builderOrigin}/auth/sign-in?redirectTo=${encodeURIComponent(returnPath)}`,
-          },
-          status: 303,
-        });
-      }
-      const staging = await ports.staging(selector);
-      const getKey = createRemoteJWKSet(new URL(staging.jwksUrl), { [customFetch]: ports.fetch });
-      await readVerifiedRealmAccess({
-        ...stage,
-        assertCurrent: async () => {
-          await ports.assertCurrent(context);
-        },
-        getKey,
-        pending: staging.link,
-        readback: async (query) => await ports.fetch(query),
-        resource: staging.bootstrapResource,
-      });
-      const published = await ports.publish(context, stage.proof);
-      if (published.proofSha256 !== createHash("sha256").update(stage.proof).digest("hex")) {
-        throw new Error("realm_proof_publication_mismatch");
-      }
-      await ports.consume({ context, nonceSha256: selector.nonceSha256, ...published });
-      return new Response(
-        "Account linked. Return to your app build for its separately approved access plan.",
-        { headers: { ...noStore, "set-cookie": cookieHeader("", 0, sessionId) } },
-      );
+      return await completeBrowserGet(ports, request, url);
     } catch {
       return Response.json(
         { code: "auth_identity_required" },
@@ -261,6 +530,30 @@ export const createRealmIdentityCallbackDeploymentHandler =
         throw new Error("realm_callback_configuration");
       }
       let selectedEndpointOrigin: string | undefined;
+      let selectedNonceSha256: string | undefined;
+      const sender = configuration.gateway.workload;
+      if (
+        sender.environment !== "preview" ||
+        sender.projectId !== configuration.gateway.projectId ||
+        sender.ownerId !== configuration.teamId
+      ) {
+        throw new Error("realm_callback_configuration");
+      }
+      const stageArtifacts = createPostgresOperatorArtifactStore({
+        assertCurrentOwner: async (artifactContext) => {
+          const context = await controlPlane.resolveRealmIdentityCallbackContext({
+            authority: hostedTenantAuthoritySchema.parse(artifactContext.authority),
+            ownerSessionId: artifactContext.target.sessionId,
+            // The exact pending nonce is selected by the verified routing ticket or private POST below.
+            nonceSha256: selectedNonceSha256 ?? "",
+          });
+          if (context.target.appId !== artifactContext.target.appId) {
+            throw new Error("realm_callback_scope");
+          }
+          await controlPlane.assertPlanningAuthorized(context);
+        },
+        database: openHostedPostgresDatabase(runtime.databaseUrl),
+      });
       return await createRealmIdentityCallbackHandler({
         assertCurrent: controlPlane.assertPlanningAuthorized,
         authenticate: async (incoming, selector) => {
@@ -282,6 +575,9 @@ export const createRealmIdentityCallbackDeploymentHandler =
             : await controlPlane.resolveRealmIdentityCallbackContext({ authority, ...selector });
         },
         builderOrigin: configuration.builderCallbackOrigin,
+        afterLinked: async (context) => {
+          await controlPlane.reconcileOwnerRealmContinuation(context);
+        },
         consume: async (input) => {
           await controlPlane.consumeOwnerRealmIdentityCallback(input);
         },
@@ -295,6 +591,15 @@ export const createRealmIdentityCallbackDeploymentHandler =
             undefined,
             selectedEndpointOrigin,
           )(input, init);
+        },
+        identityHandoff: {
+          verifySender: createRealmIdentityHandoffSenderVerifier({
+            ...sender,
+            environment: "preview",
+          }),
+          context: async (selector) =>
+            await controlPlane.resolveRealmIdentityCallbackContext(selector),
+          artifacts: stageArtifacts,
         },
         keyring: readVercelTokenKeyringEnvironment({ ...environment }),
         publish: async (context, proof) => {
@@ -323,6 +628,7 @@ export const createRealmIdentityCallbackDeploymentHandler =
         },
         staging: async (input) => {
           const pending = await controlPlane.readPendingRealmIdentityLinkForStaging(input);
+          selectedNonceSha256 = input.nonceSha256;
           selectedEndpointOrigin = pending.link.endpointOrigin;
           return pending;
         },
