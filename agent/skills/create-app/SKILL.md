@@ -151,6 +151,26 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    gap; do not substitute filesystem or browser persistence for a hosted app.
    Browser storage, timers, and local state may
    support transient presentation, but never stand in for those outcomes.
+   At persistence boundaries, inspect the selected repository's datetime codec
+   and exact-replay contract. Keep server-issued timestamps consistent across
+   writes, database readback, retained retries and pagination; preserve the
+   contract's timezone and precision instead of assuming database wire text
+   equals browser text or reducing microseconds through a JavaScript Date.
+   Retain the original mutation intent and idempotency key for an exact retry;
+   do not regenerate timestamps. Match cursor comparison to the actual query's
+   ordering, null handling and unique tie-break. The generated runtime's
+   documented offset pages are deterministic for a stable dataset, not snapshots
+   across concurrent requests; do not invent a cursor or timestamp format.
+
+   Separate a committed mutation from subsequent refresh or revalidation.
+   A refresh failure after commit must report saved-but-not-refreshed state,
+   preserve recovery context and offer a read retry, rather than claim the write
+   was unsaved or submit a new mutation. An uncertain write requires the existing
+   replay/readback contract before claiming success or failure. For these concrete
+   defects, reuse focused behavior checks with actual database-returned timestamp
+   values, equal sort keys across pages, and commit-success/refresh-failure paths;
+   synthetic fixtures alone do not prove database interoperability.
+
    Prefer Server Component route shells and small interactive client leaves.
    Architecture source-pattern observations are advisory, not rejection gates.
    Verify durable writes, authentication, and tenant isolation through the
