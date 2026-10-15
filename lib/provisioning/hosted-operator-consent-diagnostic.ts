@@ -511,6 +511,9 @@ const gatewayBindingsDiagnostic = z.strictObject({
     "final_readback",
   ]),
   method: z.enum(["GET", "POST", "PATCH"]).optional(),
+  requestTarget: z.enum(["project_environment", "project_settings"]).optional(),
+  trustedSourcesVisibility: z.enum(["absent", "null", "present"]).optional(),
+  missingApprovedPairCount: z.number().int().nonnegative().optional(),
   statusCategory: z
     .enum([
       "success",

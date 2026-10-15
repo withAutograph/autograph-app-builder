@@ -28,6 +28,31 @@ const value: HostedOperatorConsentMetadata = {
 };
 
 describe("closed Neon consent diagnostics", () => {
+  it("projects only closed Gateway request targets and protection observations", () => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    const report = createHostedOperatorConsentDiagnostic(secret, sink);
+    const gatewayBindings = {
+      mode: "bind" as const,
+      stage: "write" as const,
+      result: "failed" as const,
+      requestTarget: "project_settings" as const,
+      trustedSourcesVisibility: "absent" as const,
+      missingApprovedPairCount: 2,
+    };
+    report({ ...value, gatewayBindings });
+    expect(sink.mock.calls[0]?.[0].gatewayBindings).toEqual(gatewayBindings);
+    for (const invalid of [
+      { requestTarget: secret },
+      { trustedSourcesVisibility: secret },
+      { missingApprovedPairCount: secret },
+      { missingApprovedPairCount: -1 },
+      { missingApprovedPairCount: 1.5 },
+    ]) {
+      report({ ...value, gatewayBindings: { ...gatewayBindings, ...invalid } });
+    }
+    expect(sink).toHaveBeenCalledOnce();
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
   it("accepts only closed projection flags and failure reasons without SDK fields", () => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     const report = createHostedOperatorConsentDiagnostic(secret, sink);
