@@ -937,6 +937,86 @@ it("checks the fresh execution context before making any provider mutation", asy
   expect(f.requests).toHaveLength(0);
 });
 
+const ownedLegacyRealmLinkFixture = async () => {
+  const f = fixture();
+  await f.writer.bind(f.input);
+  const link = f.rows.find((row) => row.key === "PLATFORM_REALM_OPERATOR_LINK_CONFIG")!;
+  const desired = z.string().parse(link.value);
+  const legacy = z.record(z.string(), z.json()).parse(JSON.parse(desired));
+  delete legacy.identityHandoff;
+  const value = JSON.stringify(legacy);
+  link.value = value;
+  f.input.gatewayEnvironmentRows = f.input.gatewayEnvironmentRows!.map((row) =>
+    row.id === link.id
+      ? { ...row, valueSha256: createHash("sha256").update(value).digest("hex") }
+      : row,
+  );
+  f.requests.length = 0;
+  f.checkpointGatewayEnvironment.mockClear();
+  return { ...f, desired, link };
+};
+
+it("converges an acknowledged owned legacy Realm Config through PATCH without replacing rows", async () => {
+  const f = await ownedLegacyRealmLinkFixture();
+  const identities = f.input.gatewayEnvironmentRows!.map(({ valueSha256: _hash, ...row }) => row);
+  expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "retryable" });
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+  expect(f.checkpointGatewayEnvironment).not.toHaveBeenCalled();
+  await f.writer.bind(f.input);
+  expect(f.requests.filter((request) => request.method !== "GET")).toEqual([
+    {
+      method: "PATCH",
+      path: `/v9/projects/${gateway.projectId}/env/${z.string().parse(f.link.id)}`,
+      body: { type: "encrypted", value: f.desired },
+    },
+  ]);
+  expect(f.link.value).toBe(f.desired);
+  expect(f.input.gatewayEnvironmentRows!.map(({ valueSha256: _hash, ...row }) => row)).toEqual(
+    identities,
+  );
+  f.requests.length = 0;
+  expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "applied" });
+  await f.writer.bind(f.input);
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+});
+
+it.each([
+  "hash",
+  "missing-hash",
+  "pending-operation",
+  "pending-value",
+  "missing-reference",
+  "missing-row",
+  "other-value",
+])(
+  "keeps a legacy Realm Config unknown when %s prevents an acknowledged complete readback",
+  async (condition) => {
+    const f = await ownedLegacyRealmLinkFixture();
+    const reference = f.input.gatewayEnvironmentRows!.find((row) => row.id === f.link.id)!;
+    if (condition === "hash") {
+      reference.valueSha256 = "f".repeat(64);
+    } else if (condition === "missing-hash") {
+      delete reference.valueSha256;
+    } else if (condition === "pending-operation") {
+      reference.pendingOperationRef = f.input.operationRef;
+    } else if (condition === "pending-value") {
+      reference.pendingValueSha256 = "f".repeat(64);
+    } else if (condition === "missing-reference") {
+      f.input.gatewayEnvironmentRows = f.input.gatewayEnvironmentRows!.filter(
+        (row) => row.id !== f.link.id,
+      );
+    } else if (condition === "missing-row") {
+      f.rows.splice(f.rows.indexOf(f.link), 1);
+    } else {
+      const other = f.rows.find((row) => row.key === "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS")!;
+      other.value = JSON.stringify(["unexpected-app"]);
+    }
+    expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
+    expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+    expect(f.checkpointGatewayEnvironment).not.toHaveBeenCalled();
+  },
+);
+
 const adoptionFixture = async (generic = false) => {
   const f = fixture(undefined, false, generic ? gateway.branch : undefined);
   if (generic) {
@@ -1878,4 +1958,25 @@ it("finishes an incomplete diagnostic body on the existing request abort without
   } finally {
     timeout.mockRestore();
   }
+});
+
+it("keeps adopted legacy Realm Config reconciliation read only and unknown", async () => {
+  const f = await adoptionFixture();
+  const link = f.rows.find((row) => row.key === "PLATFORM_REALM_OPERATOR_LINK_CONFIG")!;
+  const legacy = z.record(z.string(), z.json()).parse(JSON.parse(z.string().parse(link.value)));
+  delete legacy.identityHandoff;
+  link.value = JSON.stringify(legacy);
+  const canonical = f.canonical.map((row) =>
+    row.id === link.id
+      ? {
+          ...row,
+          valueSha256: createHash("sha256").update(z.string().parse(link.value)).digest("hex"),
+        }
+      : row,
+  );
+  f.setCanonicalRows(canonical);
+  f.input.plan.authAdoption!.gatewayEnvironment = canonical;
+  expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+  expect(f.checkpointGatewayEnvironment).not.toHaveBeenCalled();
 });

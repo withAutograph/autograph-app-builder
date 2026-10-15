@@ -96,6 +96,7 @@ const UNAPPROVED_PLAN = "operator:unapproved-plan";
 const AUTH_BOOTSTRAP_STAGE = "auth-bootstrap";
 const AUTH_PARTICIPANTS_STAGE = "auth-participants";
 const PARTICIPANTS_PREPARED = "participants-prepared";
+const GATEWAY_BINDINGS_EFFECT = "gateway-bindings";
 type Context = HostedOperatorContext;
 type PrivateState = NonNullable<HostedRuntimeJournalRecord["privateState"]>;
 type Effect = HostedOperatorPlan["effects"][number];
@@ -1167,6 +1168,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
               );
               if (
                 priorReceipt !== undefined &&
+                effect.kind !== GATEWAY_BINDINGS_EFFECT &&
                 ((effect.kind !== "access" && effect.kind !== "revoke") ||
                   priorReceipt.fenceGeneration === fenceGeneration)
               ) {
@@ -1546,7 +1548,13 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 await ownedUpdate((value) => {
                   const next = {
                     ...requireOperator(value),
-                    receipts: [...requireOperator(value).receipts, receipt],
+                    receipts: [
+                      ...requireOperator(value).receipts.filter(
+                        (saved) =>
+                          effect.kind !== GATEWAY_BINDINGS_EFFECT || saved.effectId !== effect.id,
+                      ),
+                      receipt,
+                    ],
                   };
                   delete next.pendingEffectId;
                   delete next.pendingEffectAttempt;

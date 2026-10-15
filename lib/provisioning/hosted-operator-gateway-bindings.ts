@@ -101,6 +101,43 @@ const managedKeys = [
   "PLATFORM_GATEWAY_PROJECT_BINDINGS",
 ] as const;
 const managedKeySchema = z.enum(managedKeys);
+
+/** Known owned values can converge without replacing their provider identities. */
+const hasOwnedRealmLinkConfigChange = (
+  input: GatewayManagedEnvironmentContext,
+  observation: {
+    expected: GatewayValues;
+    known: ManagedOperatorEnvironmentRow[];
+    rows: ProviderRow[];
+    values: ReadonlyMap<string, string>;
+  },
+) => {
+  const { expected, known, rows, values } = observation;
+  if (
+    input.plan.authAdoption !== undefined ||
+    rows.length !== managedKeys.length ||
+    known.length !== managedKeys.length
+  ) {
+    return false;
+  }
+  return rows.every((row) => {
+    const saved = known.find((item) => item.id === row.id && item.key === row.key);
+    const value = values.get(row.id);
+    if (
+      saved === undefined ||
+      value === undefined ||
+      saved.pendingOperationRef !== undefined ||
+      saved.pendingValueSha256 !== undefined ||
+      saved.valueSha256 !== valueDigest(value)
+    ) {
+      return false;
+    }
+    const desired = expected[managedKeySchema.parse(row.key)];
+    return row.key === "PLATFORM_REALM_OPERATOR_LINK_CONFIG"
+      ? value !== desired
+      : value === desired;
+  });
+};
 const requiredSecretKeys = [
   "PLATFORM_GATEWAY_IDENTITY_KEY_ID",
   "PLATFORM_GATEWAY_IDENTITY_PRIVATE_KEY",
@@ -1130,6 +1167,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
       input: GatewayManagedEnvironmentContext,
     ): Promise<
       | { status: "absent" | "unknown" }
+      | { status: "retryable"; resourceVersion: string }
       | { status: "applied"; rows: ManagedOperatorEnvironmentRow[] }
     > {
       const observation = diagnostic(input, "reconcile");
@@ -1137,6 +1175,18 @@ export const createHostedOperatorGatewayBindings = (deps: {
         const io = open(input, false, observation);
         observation.at("authority");
         await io.fullGuard();
+        const observed = await io.inspect(false);
+        await io.fullGuard();
+        if (hasOwnedRealmLinkConfigChange(input, observed)) {
+          // The diagnostic vocabulary reports unapplied setup as unknown.
+          observation.finish("unknown");
+          return {
+            status: "retryable",
+            resourceVersion: valueDigest(
+              JSON.stringify(io.referenceRows(observed.rows, observed.known, observed.values)),
+            ),
+          };
+        }
         const { expected, known, rows, values } = await io.inspect(true);
         await io.fullGuard();
         if (rows.length === 0) {
