@@ -8,6 +8,7 @@ import {
   reportOperatorPlanningMismatch,
   observeOperatorPlanStage,
   observeOperatorExecutionStage,
+  projectAuthStartupDiagnostic,
   reportRuntimePreparationFailure,
 } from "./hosted-operator-consent-diagnostic";
 import type {
@@ -836,4 +837,71 @@ it("keeps preparation failure reporting nonthrowing for hostile errors and throw
       preparationFailure: { stage: "client_resolution", errorClass: "unexpected" },
     }),
   );
+});
+
+it.each([
+  {
+    metadata: { stage: "schema_replan", domain_code: "migration_contention", private: secret },
+    expected: { stage: "schema_replan", domain_code: "migration_contention" },
+  },
+  {
+    metadata: { stage: "schema_replan", domain_code: secret },
+    expected: { stage: "schema_replan" },
+  },
+  { metadata: { stage: secret, domain_code: "migration_contention" }, expected: undefined },
+  {
+    metadata: Object.defineProperty({}, "stage", {
+      get() {
+        throw new Error(secret);
+      },
+    }),
+    expected: undefined,
+  },
+  {
+    metadata: new Proxy(
+      {},
+      {
+        getOwnPropertyDescriptor() {
+          throw new Error(secret);
+        },
+      },
+    ),
+    expected: undefined,
+  },
+])(
+  "projects advisory Auth startup data without changing execution failure: %j",
+  async ({ metadata: advisory, expected }) => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    const error = new HostedOperatorError("operator_unavailable");
+    const projected = projectAuthStartupDiagnostic(advisory);
+    expect(projected).toEqual(expected);
+    await expect(
+      observeOperatorExecutionStage(
+        secret,
+        "worker_protocol",
+        () => {
+          throw error;
+        },
+        sink,
+        {
+          stage: "worker_protocol",
+          workerFailure: "startup_rejected",
+          ...(projected === undefined ? {} : { authStartup: projected }),
+        },
+      ),
+    ).rejects.toBe(error);
+    expect(sink.mock.calls[0]?.[0].executionFailure?.workerFailure).toBe("startup_rejected");
+    expect(sink.mock.calls[0]?.[0].executionFailure?.authStartup).toEqual(expected);
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  },
+);
+it("does not invoke advisory field getters or inspect extra properties", () => {
+  const getter = vi.fn(() => {
+    throw new Error(secret);
+  });
+  const data = { stage: "schema_options" };
+  Object.defineProperty(data, "domain_code", { get: getter });
+  Object.defineProperty(data, "credentials", { get: getter });
+  expect(projectAuthStartupDiagnostic(data)).toEqual({ stage: "schema_options" });
+  expect(getter).not.toHaveBeenCalled();
 });
