@@ -36,12 +36,17 @@ const verifiedSourceText = async (input: {
     throw new Error("Requested review source is unavailable.");
   }
   const reader = stream.getReader();
-  const cancel = () => {
-    void reader.cancel().catch(() => {
+  const cancel = async () => {
+    try {
+      await reader.cancel();
+    } catch {
       /* Preserve the original Stop reason. */
-    });
+    }
   };
-  input.abortSignal?.addEventListener("abort", cancel, { once: true });
+  const onAbort = () => {
+    void cancel();
+  };
+  input.abortSignal?.addEventListener("abort", onAbort, { once: true });
   const hash = createHash("sha256");
   const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
   const parts: string[] = [];
@@ -63,7 +68,7 @@ const verifiedSourceText = async (input: {
     }
     return parts.join("");
   } finally {
-    input.abortSignal?.removeEventListener("abort", cancel);
+    input.abortSignal?.removeEventListener("abort", onAbort);
     await reader.cancel();
   }
 };
@@ -85,10 +90,7 @@ const sourceLineStarts = (text: string): number[] => {
   }
   return starts;
 };
-const sourcePosition = (
-  starts: readonly number[],
-  offset: number,
-): { line: number; column: number } => {
+const sourcePosition = (starts: readonly number[], offset: number) => {
   let low = 0;
   let high = starts.length - 1;
   while (low < high) {
@@ -107,13 +109,9 @@ const sourceCursorOffset = (
   cursor: SourceCursor,
 ): number => {
   const { line, column } = cursor;
-  if (
-    !Number.isInteger(line) ||
-    !Number.isInteger(column) ||
-    line < 1 ||
-    line > starts.length ||
-    column < 1
-  ) {
+  const invalidCoordinates = !Number.isInteger(line) || !Number.isInteger(column);
+  const outsideFile = line < 1 || line > starts.length || column < 1;
+  if (invalidCoordinates || outsideFile) {
     throw new ApplicationReviewSelectionError("Source cursor is outside its observed file.");
   }
   const offset = starts[line - 1] + column - 1;
@@ -137,7 +135,7 @@ const mergeReadWindow = (
   added: SourceReadWindow,
 ): SourceReadWindow[] => {
   const merged: SourceReadWindow[] = [];
-  for (const window of [...windows, added].sort(
+  for (const window of [...windows, added].toSorted(
     (left, right) => left.startOffset - right.startOffset,
   )) {
     const last = merged.at(-1);
@@ -181,11 +179,12 @@ export const applicationReviewVisibility = (input: {
   changedPaths: readonly string[];
   hasSelectedBaseline: boolean;
   unexposedReleasePrefixes?: readonly string[];
-}): { paths: string[]; omissions: string[] } => {
+}) => {
+  const unexposedReleasePrefixes = input.unexposedReleasePrefixes;
   if (!input.hasSelectedBaseline) {
     return { paths: [...input.observedPaths], omissions: [] };
   }
-  if (input.unexposedReleasePrefixes === undefined) {
+  if (unexposedReleasePrefixes === undefined) {
     const changed = new Set(input.changedPaths);
     return {
       paths: input.observedPaths.filter((path) => changed.has(path)),
@@ -197,12 +196,23 @@ export const applicationReviewVisibility = (input: {
   return {
     paths: input.observedPaths.filter(
       (path) =>
-        !input.unexposedReleasePrefixes?.some(
+        !unexposedReleasePrefixes.some(
           (prefix) => path === prefix.slice(0, -1) || path.startsWith(prefix),
         ),
     ),
     omissions: [],
   };
+};
+
+type RequirementKind = ApplicationReviewEvidence["requirements"][number]["kind"];
+const requirementKind = (id: string): RequirementKind => {
+  if (id === "original") {
+    return "original";
+  }
+  if (id === "app-spec") {
+    return "app-spec";
+  }
+  return "clarification";
 };
 
 /** Exact evidence stays process-local; model reads never receive credentials or arbitrary paths. */
@@ -276,7 +286,7 @@ export const createApplicationReviewEvidence = (input: {
     sourceFiles: files,
     requirements: [...documents.keys()].map((id, order) => ({
       id,
-      kind: id === "original" ? "original" : id === "app-spec" ? "app-spec" : "clarification",
+      kind: requirementKind(id),
       order,
     })),
     async readRedactionTexts() {
@@ -363,17 +373,19 @@ export const createApplicationReviewEvidence = (input: {
       return result;
     },
     async verifyRequirementQuote({ documentId, quote }) {
-      return quote.length > 0 && (await loadRequirement(documentId)).includes(quote);
+      if (quote.length === 0) {
+        return false;
+      }
+      const document = await loadRequirement(documentId);
+      return document.includes(quote);
     },
     async verifySourceCitation({ path, startLine, endLine, excerpt }) {
-      if (
-        !fileByPath.has(path) ||
+      const invalidLines =
         !Number.isInteger(startLine) ||
         !Number.isInteger(endLine) ||
         startLine < 1 ||
-        endLine < startLine ||
-        excerpt.length === 0
-      ) {
+        endLine < startLine;
+      if (!fileByPath.has(path) || invalidLines || excerpt.length === 0) {
         return false;
       }
       const text = await loadSource(path);

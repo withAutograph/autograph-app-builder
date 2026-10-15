@@ -147,7 +147,10 @@ describe("independent product source review", () => {
   });
 });
 
-type ApplicationToolCall = { toolName: string; input: object };
+interface ApplicationToolCall {
+  toolName: string;
+  input: object;
+}
 type ApplicationModelStep =
   | ApplicationToolCall[]
   | Error
@@ -210,8 +213,11 @@ const applicationEvidence = () => {
     changedPaths: ["apps/example/actions.ts"],
     readRedactionTexts: () => Promise.resolve([...documents.values()]),
     sourceFiles: [...source.keys()].map((path) => ({ path, digest: path, mode: "644" })),
-    readRequirements: vi.fn(({ id }) => Promise.resolve({ text: documents.get(id) ?? "" })),
-    readSource: vi.fn(({ path }) =>
+    readRequirements: vi.fn(
+      ({ id }: Parameters<ApplicationReviewEvidence["readRequirements"]>[0]) =>
+        Promise.resolve({ text: documents.get(id) ?? "" }),
+    ),
+    readSource: vi.fn(({ path }: Parameters<ApplicationReviewEvidence["readSource"]>[0]) =>
       Promise.resolve({
         path,
         digest: path,
@@ -223,11 +229,18 @@ const applicationEvidence = () => {
         totalLines: 1,
       }),
     ),
-    verifyRequirementQuote: vi.fn(({ documentId, quote }) =>
-      Promise.resolve(documents.get(documentId)?.includes(quote) ?? false),
+    verifyRequirementQuote: vi.fn(
+      ({ documentId, quote }: Parameters<ApplicationReviewEvidence["verifyRequirementQuote"]>[0]) =>
+        Promise.resolve(documents.get(documentId)?.includes(quote) ?? false),
     ),
-    verifySourceCitation: vi.fn(({ path, startLine, endLine, excerpt }) =>
-      Promise.resolve(startLine === 1 && endLine === 1 && source.get(path) === excerpt),
+    verifySourceCitation: vi.fn(
+      ({
+        path,
+        startLine,
+        endLine,
+        excerpt,
+      }: Parameters<ApplicationReviewEvidence["verifySourceCitation"]>[0]) =>
+        Promise.resolve(startLine === 1 && endLine === 1 && source.get(path) === excerpt),
     ),
   };
   return evidence;
@@ -280,23 +293,25 @@ describe("independent application source review", () => {
   it("follows column-aware long-line continuations and binds each actual read window", async () => {
     const evidence = applicationEvidence();
     const line = "x".repeat(40_000);
-    evidence.readSource = vi.fn(({ path, cursor, endLine }) => {
-      const offset = (cursor?.column ?? 1) - 1;
-      const end = Math.min(offset + 20_000, line.length);
-      return Promise.resolve({
-        path,
-        digest: "same-long-line",
-        content: line.slice(offset, end),
-        startLine: 1,
-        endLine: 1,
-        startColumn: offset + 1,
-        endColumn: end + 1,
-        totalLines: 1,
-        ...(end < line.length
-          ? { nextCursor: { line: 1, column: end + 1, endLine: cursor?.endLine ?? endLine } }
-          : {}),
-      });
-    });
+    evidence.readSource = vi.fn(
+      ({ path, cursor, endLine }: Parameters<ApplicationReviewEvidence["readSource"]>[0]) => {
+        const offset = (cursor?.column ?? 1) - 1;
+        const end = Math.min(offset + 20_000, line.length);
+        return Promise.resolve({
+          path,
+          digest: "same-long-line",
+          content: line.slice(offset, end),
+          startLine: 1,
+          endLine: 1,
+          startColumn: offset + 1,
+          endColumn: end + 1,
+          totalLines: 1,
+          ...(end < line.length
+            ? { nextCursor: { line: 1, column: end + 1, endLine: cursor?.endLine ?? endLine } }
+            : {}),
+        });
+      },
+    );
     const first = [
       { toolName: "readSource", input: { path: "apps/example/actions.ts", endLine: 1 } },
     ];
@@ -361,7 +376,7 @@ describe("independent application source review", () => {
         endLine: 1,
         ...(cursor === undefined ? {} : { cursor }),
       });
-      expect(Buffer.byteLength(JSON.stringify(page), "utf8")).toBeLessThanOrEqual(
+      expect(Buffer.byteLength(JSON.stringify(page), "utf-8")).toBeLessThanOrEqual(
         APPLICATION_REVIEW_SOURCE_PAGE_BYTES,
       );
       expect(page.startLine).toBe(1);
@@ -376,8 +391,8 @@ describe("independent application source review", () => {
     };
     await collect();
     expect(windows.length).toBeGreaterThan(1);
-    expect(Buffer.from(windows.map((page) => page.content).join(""), "utf8")).toEqual(
-      Buffer.from(longLine, "utf8"),
+    expect(Buffer.from(windows.map((page) => page.content).join(""), "utf-8")).toEqual(
+      Buffer.from(longLine, "utf-8"),
     );
     expect(windows[1].startColumn).toBe(windows[0].nextCursor?.column);
     expect(
@@ -393,7 +408,7 @@ describe("independent application source review", () => {
         path,
         startLine: 1,
         endLine: 1,
-        excerpt: windows[0].content.slice(-40) + windows[1].content.slice(0, 40),
+        excerpt: `${windows[0].content.slice(-40)}${windows[1].content.slice(0, 40)}`,
       }),
     ).toBe(true);
     expect(
@@ -401,7 +416,7 @@ describe("independent application source review", () => {
         path,
         startLine: 1,
         endLine: 1,
-        excerpt: windows[0].content + "invented",
+        excerpt: `${windows[0].content}invented`,
       }),
     ).toBe(false);
     expect(await evidence.readSource({ path: imported })).toMatchObject({

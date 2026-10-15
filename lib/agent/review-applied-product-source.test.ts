@@ -153,7 +153,7 @@ it("keeps original requirements, chronological product changes and complete dura
   const evidence = sourceEvidence(
     {},
     {
-      appSpecParts: async function* parts() {
+      appSpecParts: async function* appSpecParts() {
         opened += 1;
         yield fullSpec.slice(0, 100);
         yield fullSpec.slice(100);
@@ -309,7 +309,12 @@ it("does not publish completed application evidence after source changes or Stop
     reviewInput,
     normalizedChanges: [],
     evidence: sourceEvidence({}),
-    journal: { read: async () => undefined, put },
+    journal: {
+      read: async (): Promise<undefined> => {
+        /* No completed record exists in this fixture. */
+      },
+      put,
+    },
   };
   const assess = vi.fn(async () => completedApplication());
   const stale = await reviewApplicationWithJournal(
@@ -335,7 +340,7 @@ it("does not publish completed application evidence after source changes or Stop
 });
 it("releases a pending source byte read when Stop arrives", async () => {
   const controller = new AbortController();
-  const reading = Promise.withResolvers<void>();
+  const reading = Promise.withResolvers<boolean>();
   const cancel = vi.fn();
   const evidence = createApplicationReviewEvidence({
     reviewInput,
@@ -352,7 +357,7 @@ it("releases a pending source byte read when Stop arrives", async () => {
         new ReadableStream<Uint8Array>(
           {
             pull() {
-              reading.resolve();
+              reading.resolve(true);
             },
             cancel,
           },
@@ -398,9 +403,8 @@ it("distinguishes correctable evidence selection from actual observed source fai
   await expect(evidence.readRequirements({ id: "original", cursor: 1000 })).rejects.toBeInstanceOf(
     ApplicationReviewSelectionError,
   );
-  expect((await evidence.readSource({ path: "apps/example/page.ts" })).content).toBe(
-    "observed source",
-  );
+  const observedSource = await evidence.readSource({ path: "apps/example/page.ts" });
+  expect(observedSource.content).toBe("observed source");
   const changed = sourceEvidence(
     { "apps/example/page.ts": "new bytes" },
     { digestOverride: exactDigest("observed source") },
@@ -412,11 +416,10 @@ it("distinguishes correctable evidence selection from actual observed source fai
 
 it("binds mid-review authority checks to the same canonical journal key and blocks completion after revocation", async () => {
   let ownerAllowed = true;
-  const read = vi.fn(async (_key: string): Promise<SourceReviewJournalRecord | undefined> => {
+  const read = vi.fn(async (_key: string): Promise<undefined> => {
     if (!ownerAllowed) {
       throw new Error("owner revoked during review");
     }
-    return Promise.resolve<SourceReviewJournalRecord | undefined>(undefined);
   });
   const put = vi.fn(async (_key: string, record: SourceReviewJournalRecord) => record);
   const assess = async (
