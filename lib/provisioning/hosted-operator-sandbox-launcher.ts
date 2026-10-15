@@ -21,7 +21,10 @@ import type {
   RecordWorkerCheckpoint,
 } from "./hosted-operator-service";
 
-import { observeOperatorExecutionStage } from "./hosted-operator-consent-diagnostic";
+import {
+  observeOperatorExecutionStage,
+  projectAuthStartupDiagnostic,
+} from "./hosted-operator-consent-diagnostic";
 import type {
   HostedOperatorConsentDiagnosticSink,
   OperatorExecutionFailure,
@@ -29,7 +32,7 @@ import type {
 
 type LauncherExecution = Pick<
   OperatorExecutionFailure,
-  "stage" | "mode" | "commandExit" | "protocol" | "workerFailure" | "httpStatus"
+  "stage" | "mode" | "commandExit" | "protocol" | "workerFailure" | "httpStatus" | "authStartup"
 >;
 
 const MAX_PROTOCOL_FRAME_BYTES = 1024 * 1024;
@@ -314,6 +317,7 @@ const lifecycleNoticeSchema = z.strictObject({
   frame_id: z.number().int().positive(),
 });
 const lifecycleFactSchema = z.strictObject({
+  auth_startup: z.unknown().optional(),
   version: z.literal(1),
   run_id: workerRunIdSchema,
   kind: z.enum(["worker_started", "worker_succeeded", "worker_failed"]),
@@ -1198,6 +1202,12 @@ const runSandboxWorker = async (
           throw resourceMismatch();
         }
         execution.workerFailure = fact.failure_code;
+        if (fact.failure_code === "startup_rejected") {
+          const authStartup = projectAuthStartupDiagnostic(fact.auth_startup);
+          if (authStartup !== undefined) {
+            execution.authStartup = authStartup;
+          }
+        }
         terminal = true;
         if (unknownSeen || fact.failure_code === "readback_unknown") {
           throw reconciliationRequired();

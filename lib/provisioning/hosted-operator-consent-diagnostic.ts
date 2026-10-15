@@ -80,10 +80,69 @@ const operatorExecutionStage = z.enum([
   "sandbox_cleanup",
 ]);
 export type OperatorExecutionStage = z.infer<typeof operatorExecutionStage>;
+const authStartupStage = z.enum([
+  "spool_open",
+  "startup_plan_parse",
+  "context_binding",
+  "approved_plan_binding",
+  "schema_options",
+  "schema_replan",
+  "migrator_preflight",
+]);
+const authStartupDomainCode = z.enum([
+  "invalid_new_empty_auth_proposal",
+  "invalid_auth_worker_startup",
+  "auth_resource_mismatch",
+  "auth_worker_context_mismatch",
+  "auth_operator_plan_mismatch",
+  "invalid_auth_schema_plan",
+  "auth_schema_plan_mismatch",
+  "migration_contention",
+  "new_empty_public_namespace_occupied",
+  "verified_schema_drift",
+  "incomplete_schema_reconciliation_required",
+  "incomplete_effect_plan_changed",
+  "unowned_schema_history",
+  "invalid_schema_history_tables",
+  "exposed_schema_history",
+  "configured_schema_mismatch",
+  "schema_reconciliation_incomplete",
+  "auth_configuration_error",
+]);
+interface AuthStartupDiagnostic {
+  stage: z.infer<typeof authStartupStage>;
+  domain_code?: z.infer<typeof authStartupDomainCode>;
+}
+
+/** Project advisory worker metadata without invoking getters or retaining arbitrary values. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This projection is the untrusted advisory metadata parser and must discard malformed input.
+export const projectAuthStartupDiagnostic = (value: unknown): AuthStartupDiagnostic | undefined => {
+  try {
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Inspect only own data descriptors before validating closed fields; never invoke untrusted getters.
+    if (value === null || typeof value !== "object") {
+      return undefined;
+    }
+    const stage: unknown = Object.getOwnPropertyDescriptor(value, "stage")?.value;
+    const parsedStage = authStartupStage.safeParse(stage);
+    if (!parsedStage.success) {
+      return undefined;
+    }
+    const code: unknown = Object.getOwnPropertyDescriptor(value, "domain_code")?.value;
+    const parsedCode = authStartupDomainCode.safeParse(code);
+    return {
+      stage: parsedStage.data,
+      ...(parsedCode.success ? { domain_code: parsedCode.data } : {}),
+    };
+  } catch {
+    return undefined;
+  }
+};
+
 const operatorExecutionFailure = operatorPlanningFailure
   .omit({ stage: true, nativeStoreFailure: true })
   .extend({
     stage: operatorExecutionStage,
+    authStartup: z.unknown().optional(),
     mode: z.enum(["inspect", "execute"]).optional(),
     httpStatus: z.number().int().min(100).max(599).optional(),
     commandExit: z.enum(["zero", "nonzero"]).optional(),
@@ -99,6 +158,13 @@ const operatorExecutionFailure = operatorPlanningFailure
         "timeout",
       ])
       .optional(),
+  })
+  .transform(({ authStartup, ...failure }) => {
+    const projected =
+      failure.workerFailure === "startup_rejected"
+        ? projectAuthStartupDiagnostic(authStartup)
+        : undefined;
+    return { ...failure, ...(projected === undefined ? {} : { authStartup: projected }) };
   });
 export type OperatorExecutionFailure = z.infer<typeof operatorExecutionFailure>;
 
@@ -515,7 +581,7 @@ export const observeOperatorExecutionStage = async <T>(
   sink?: HostedOperatorConsentDiagnosticSink,
   execution?: Pick<
     OperatorExecutionFailure,
-    "stage" | "mode" | "commandExit" | "protocol" | "workerFailure" | "httpStatus"
+    "stage" | "mode" | "commandExit" | "protocol" | "workerFailure" | "httpStatus" | "authStartup"
   >,
 ): Promise<T> => {
   try {

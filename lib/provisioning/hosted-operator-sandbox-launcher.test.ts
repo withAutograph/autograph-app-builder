@@ -98,6 +98,13 @@ const fixtureFilesystemSource = (snapshotId?: string) =>
   snapshotId
     ? { source: { type: "snapshot" as const, snapshotId } }
     : { image: "protected-installer-control-image" };
+const fixtureStartupFact = (
+  failure: { code: string; metadata?: unknown } | undefined,
+  advisory: unknown,
+) =>
+  failure === undefined
+    ? { kind: "worker_started", auth_startup: advisory }
+    : { kind: "worker_failed", failure_code: failure.code, auth_startup: failure.metadata };
 // oxlint-disable-next-line sonarjs/cognitive-complexity -- One owned SDK fixture covers the closed installer and guard-only protocol variants.
 const makeFixture = (
   options: {
@@ -115,6 +122,8 @@ const makeFixture = (
     delayCreate?: Promise<void>;
     generated?: boolean;
     auth?: boolean;
+    startupFailure?: { code: string; metadata?: unknown };
+    startupAdvisory?: unknown;
     snapshotId?: string;
   } = {},
 ) => {
@@ -198,6 +207,7 @@ const makeFixture = (
         wait: ReturnType<typeof vi.fn>;
       }
     | undefined;
+  const startupFact = fixtureStartupFact(options.startupFailure, options.startupAdvisory);
   const sandbox = {
     delete: vi.fn(async () => undefined),
     extendTimeout: vi.fn(async () => undefined),
@@ -244,7 +254,11 @@ const makeFixture = (
         };
         files.set(
           `/vercel/sandbox/protected-installer/${transportRunId}/lifecycle/1.json`,
-          frame({ version: 1, run_id: transportRunId, kind: "worker_started" }),
+          frame({
+            version: 1,
+            run_id: transportRunId,
+            ...startupFact,
+          }),
         );
         files.set(
           `/vercel/sandbox/protected-installer/${transportRunId}/lifecycle/1.ready`,
@@ -1211,4 +1225,75 @@ it("does not invoke hostile HTTP-status getters or inspect inherited status", as
   expect(inherited.diagnostics.mock.calls[0]?.[0].executionFailure).not.toHaveProperty(
     "httpStatus",
   );
+});
+
+it("reports closed Auth startup facts without changing the original worker failure", async () => {
+  const f = makeFixture({
+    auth: true,
+    startupFailure: {
+      code: "startup_rejected",
+      metadata: {
+        stage: "schema_replan",
+        domain_code: "auth_schema_plan_mismatch",
+        extra: "private SQL credential",
+      },
+    },
+  });
+  await expect(f.launcher.execute(f.input)).rejects.toMatchObject({ code: "operator_unavailable" });
+  expect(f.diagnostics.mock.calls[0]?.[0].executionFailure).toMatchObject({
+    stage: "worker_protocol",
+    workerFailure: "startup_rejected",
+    authStartup: { stage: "schema_replan", domain_code: "auth_schema_plan_mismatch" },
+  });
+  expect(JSON.stringify(f.diagnostics.mock.calls)).not.toContain("private SQL credential");
+  expect(f.records).toHaveLength(0);
+});
+it.each([
+  undefined,
+  null,
+  "private SQL credential",
+  { stage: "private SQL credential" },
+  { stage: 12 },
+])(
+  "ignores invalid startup advisory metadata without replacing the failure: %j",
+  async (metadata) => {
+    const f = makeFixture({ auth: true, startupFailure: { code: "startup_rejected", metadata } });
+    await expect(f.launcher.execute(f.input)).rejects.toMatchObject({
+      code: "operator_unavailable",
+    });
+    expect(f.diagnostics.mock.calls[0]?.[0].executionFailure?.workerFailure).toBe(
+      "startup_rejected",
+    );
+    expect(f.diagnostics.mock.calls[0]?.[0].executionFailure).not.toHaveProperty("authStartup");
+  },
+);
+it("keeps a known startup stage when the advisory domain code is unknown", async () => {
+  const f = makeFixture({
+    auth: true,
+    startupFailure: {
+      code: "startup_rejected",
+      metadata: { stage: "migrator_preflight", domain_code: "private SQL credential" },
+    },
+  });
+  await expect(f.launcher.execute(f.input)).rejects.toMatchObject({ code: "operator_unavailable" });
+  expect(f.diagnostics.mock.calls[0]?.[0].executionFailure?.authStartup).toEqual({
+    stage: "migrator_preflight",
+  });
+  expect(JSON.stringify(f.diagnostics.mock.calls)).not.toContain("private SQL credential");
+});
+it("ignores Auth startup metadata on another lifecycle failure class", async () => {
+  const f = makeFixture({
+    startupFailure: { code: "effect_failed", metadata: { stage: "schema_replan" } },
+  });
+  await expect(f.launcher.execute(f.input)).rejects.toMatchObject({ code: "operator_unavailable" });
+  expect(f.diagnostics.mock.calls[0]?.[0].executionFailure?.workerFailure).toBe("effect_failed");
+  expect(f.diagnostics.mock.calls[0]?.[0].executionFailure).not.toHaveProperty("authStartup");
+});
+
+it("ignores startup advisory fields on a successful legacy lifecycle", async () => {
+  const f = makeFixture({
+    startupAdvisory: { stage: "schema_replan", domain_code: "migration_contention" },
+  });
+  await expect(f.launcher.execute(f.input)).resolves.toBeUndefined();
+  expect(f.diagnostics).not.toHaveBeenCalled();
 });
