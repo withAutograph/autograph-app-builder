@@ -244,6 +244,7 @@ const reportCheckpointDigestMismatch = (
 
 export const durableHostedSessionRecordSchema = z
   .object({
+    cancellationRevision: z.number().int().nonnegative().optional(),
     adapterGeneration: z.number().int().positive(),
     adapterSessionId: z.string().min(1).max(500),
     appId: z
@@ -806,6 +807,27 @@ export const isProvedSendDelivery = (
   );
 };
 
+/** Only the exact explicit SEND may replace its prior cancellation after native delivery proof. */
+export const mayReviveCancelledSession = (
+  operation: HostedOperationRecord | null,
+  current: HostedSessionRecord,
+  proof: NativeDeliveryState | undefined,
+): boolean => {
+  if (
+    current.status !== "cancelled" ||
+    operation === null ||
+    !["reserved", "submission_unknown"].includes(operation.state)
+  ) {
+    return false;
+  }
+  const revision = operation.sendDelivery?.resumeCancellationRevision;
+  return (
+    revision !== undefined &&
+    revision === (toDurableHostedSessionRecord(current).cancellationRevision ?? 0) &&
+    isProvedSendDelivery(operation, current, proof)
+  );
+};
+
 const maySettleHostedOperation = (
   operation: HostedOperationRecord,
   provedResolution = false,
@@ -903,6 +925,11 @@ export interface HostedEveStore {
     principal: z.infer<typeof hostedPrincipalSchema>,
     candidate: HostedOperationRecord,
   ) => Promise<ReserveOperationResult>;
+  recordCancellationIntent?: (input: {
+    principal: HostedPrincipal;
+    sessionId: string;
+    nowEpochMs: number;
+  }) => Promise<HostedSessionRecord>;
   recordSendDelivery?: (input: {
     principal: HostedPrincipal;
     operationId: string;
@@ -958,6 +985,7 @@ export interface HostedEveStore {
     cursor: number;
   }>;
   observeSession?: (input: {
+    explicitSendOperationId?: string;
     principal: z.infer<typeof hostedPrincipalSchema>;
     sessionId: string;
     checkpoint: HostedSessionCheckpoint;
@@ -967,6 +995,7 @@ export interface HostedEveStore {
     nowEpochMs: number;
   }) => Promise<HostedSessionRecord>;
   observeSessionPaged?: (input: {
+    explicitSendOperationId?: string;
     principal: z.infer<typeof hostedPrincipalSchema>;
     sessionId: string;
     expectedCheckpointDigest: string | undefined;
@@ -1126,6 +1155,23 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       InMemoryHostedEveStore.operationKey(input.principal, alias.operationId),
       structuredClone(settled),
     );
+  }
+
+  // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous canonical store contract.
+  async recordCancellationIntent(
+    input: Parameters<NonNullable<HostedEveStore["recordCancellationIntent"]>>[0],
+  ): Promise<HostedSessionRecord> {
+    const key = InMemoryHostedEveStore.sessionKey(input.principal, input.sessionId);
+    const current = this.sessions.get(key);
+    if (current === undefined) throw new Error(SESSION_NOT_FOUND);
+    const durable = toDurableHostedSessionRecord(current);
+    const updated = durableHostedSessionRecordSchema.parse({
+      ...durable,
+      cancellationRevision: (durable.cancellationRevision ?? 0) + 1,
+      updatedAtEpochMs: Math.max(durable.updatedAtEpochMs, input.nowEpochMs),
+    });
+    this.sessions.set(key, structuredClone(updated));
+    return structuredClone(updated);
   }
 
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
@@ -1401,6 +1447,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
 
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async observeSession(input: {
+    explicitSendOperationId?: string;
     principal: z.infer<typeof hostedPrincipalSchema>;
     sessionId: string;
     checkpoint: HostedSessionCheckpoint;
@@ -1415,8 +1462,21 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       throw new Error(SESSION_NOT_FOUND);
     }
     const durable = toDurableHostedSessionRecord(current);
-    // Cancellation is terminal for this session; explicit resume creates a new child.
-    if (durable.status === "cancelled") {
+    const explicitSend =
+      input.explicitSendOperationId === undefined
+        ? undefined
+        : this.operations.get(
+            InMemoryHostedEveStore.operationKey(input.principal, input.explicitSendOperationId),
+          );
+    // Passive observations never undo Stop; only its later explicit, proved SEND may advance.
+    if (
+      durable.status === "cancelled" &&
+      !mayReviveCancelledSession(
+        explicitSend ?? null,
+        durable,
+        input.checkpoint.nativeDeliveryState,
+      )
+    ) {
       return structuredClone(durable);
     }
     const observed = durableHostedSessionRecordSchema.parse({

@@ -24,6 +24,7 @@ export const nativeDeliveryStateSchema = z.strictObject({
 });
 export type NativeDeliveryState = z.infer<typeof nativeDeliveryStateSchema>;
 export const sendDeliverySchema = z.strictObject({
+  resumeCancellationRevision: z.number().int().nonnegative().optional(),
   adapterGeneration: z.number().int().positive(),
   adapterSessionId: z.string().min(1),
   deliveryId: z.string().min(1),
