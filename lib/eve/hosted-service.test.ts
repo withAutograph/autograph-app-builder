@@ -870,7 +870,7 @@ describe("hosted Eve service core", () => {
     });
     await service.cancel({ sessionId: result.sessionId, turnId: "turn_1" });
 
-    expect(adapter.get).toHaveBeenCalledTimes(2);
+    expect(adapter.get).toHaveBeenCalledWith({ adapterSessionId: "eve_1", principal });
     expect(adapter.send).toHaveBeenCalledTimes(1);
     expect(adapter.respond).toHaveBeenCalledTimes(1);
     expect(adapter.cancel).toHaveBeenCalledTimes(1);
@@ -2129,4 +2129,111 @@ it("keeps acknowledged cancellation terminal when an already-pending read comple
   expect(resumed.status).toBe("working");
   const retainedAfterResume = await store.getSession(principal, initialSession.sessionId);
   expect(retainedAfterResume?.status).toBe("cancelled");
+});
+
+describe("fallback mutation event pages", () => {
+  it("rejects an unavailable legacy baseline before dispatch and permits a new request after recovery", async () => {
+    const adapter = transport({
+      get: vi.fn(() => Promise.reject(new Error("native read unavailable"))),
+    });
+    const store = new InMemoryHostedEveStore();
+    const service = createHostedEveSessionService({ principal, store, transport: adapter });
+    const initialSession = await service.start({
+      clientRequestId: "legacy-read-start",
+      prompt: "Build",
+    });
+    const request = {
+      clientRequestId: "legacy-read-send",
+      sessionId: initialSession.sessionId,
+      message: "Continue",
+    };
+    const rejection = new HostedRejectedOperationError("send_preflight_unavailable");
+    await expect(service.send(request)).rejects.toEqual(rejection);
+    expect(adapter.send).not.toHaveBeenCalled();
+    adapter.get = vi.fn(() => Promise.resolve(snapshot));
+    await expect(service.send(request)).rejects.toEqual(rejection);
+    expect(adapter.send).not.toHaveBeenCalled();
+    await expect(
+      service.send({ ...request, clientRequestId: "legacy-read-recovered" }),
+    ).resolves.toMatchObject({ sessionId: initialSession.sessionId });
+    expect(adapter.send).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["send", 0],
+    ["send", 1],
+    ["send", 135],
+    ["respond", 0],
+    ["respond", 1],
+    ["respond", 135],
+  ] as const)("returns the fresh tail after %s with %i new events", async (kind, delta) => {
+    const baseline = 205;
+    const history = Array.from({ length: baseline }, (_, index) => ({
+      index,
+      text: `history ${index}`,
+      turnId: "turn_1",
+      type: "assistant.message",
+    }));
+    const before: HostedEngineSnapshot = {
+      events: kind === "respond" ? [...history, ...approvalSnapshot(["build"]).events] : history,
+      status: kind === "respond" ? "input_required" : "waiting",
+    };
+    const tail = baseline + (kind === "respond" ? 1 : 0);
+    const after: HostedEngineSnapshot = {
+      ...deliveredSnapshot(),
+      events: [
+        ...before.events,
+        ...Array.from({ length: delta }, (_, index) => ({
+          index: tail + index,
+          text: `new ${index}`,
+          turnId: "turn_1",
+          type: "assistant.message",
+        })),
+      ],
+      status: "waiting",
+    };
+    const send = vi.fn<HostedEveTransport["send"]>(async (input) => {
+      await input.onAccepted?.("fixture-delivery");
+      return after;
+    });
+    const respond = vi.fn(() => Promise.resolve(after));
+    const adapter = transport({ get: vi.fn(() => Promise.resolve(before)), send, respond });
+    const store = new InMemoryHostedEveStore();
+    const service = createHostedEveSessionService({ principal, store, transport: adapter });
+    // The native history advanced since the saved session checkpoint.
+    const initialSession = await service.start({
+      clientRequestId: "fallback-start",
+      prompt: "Build",
+    });
+    const submit = () =>
+      kind === "send"
+        ? service.send({
+            clientRequestId: "fallback-send",
+            sessionId: initialSession.sessionId,
+            message: "Continue",
+          })
+        : service.respond({
+            clientRequestId: "fallback-respond",
+            sessionId: initialSession.sessionId,
+            responses: [{ requestId: "build", response: { kind: "approve" } }],
+          });
+    const result = await submit();
+    expect(result.events.map((event) => event.index)).toEqual(
+      Array.from({ length: Math.min(delta, 100) }, (_, index) => tail + index),
+    );
+    expect(result.cursor).toBe(tail + Math.min(delta, 100));
+    expect(await submit()).toEqual(result);
+    expect(kind === "send" ? send : respond).toHaveBeenCalledOnce();
+    adapter.get = vi.fn(() => Promise.resolve(after));
+    const remainder = await service.get({
+      sessionId: initialSession.sessionId,
+      cursor: result.cursor,
+      limit: 100,
+    });
+    expect(remainder.events.map((event) => event.index)).toEqual(
+      Array.from({ length: Math.max(0, delta - 100) }, (_, index) => tail + 100 + index),
+    );
+    const stored = await store.getSession(principal, initialSession.sessionId);
+    expect(stored?.version === 2 && stored.checkpoint).toBeDefined();
+  });
 });

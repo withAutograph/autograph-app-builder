@@ -2,7 +2,7 @@ import { nativeDeliveryStateSchema } from "./native-delivery-state";
 import { privateInputStateSchema } from "./session-limit-input";
 import { createHash, randomUUID } from "node:crypto";
 
-import { and, asc, eq, gt, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
@@ -66,6 +66,11 @@ export const pagedCheckpointMetadataSchema = z.strictObject({
 
 // Limits one database write and read, not the total checkpoint.
 const CHUNK_BYTES = 64 * 1024;
+// Bound SQL statements and in-flight encoded bytes, never the complete history.
+// Each inserted row has ten parameters, well below Postgres's 65,534 limit.
+const BATCH_ROWS = 256;
+const BATCH_BYTES = CHUNK_BYTES * 16;
+const MISSING_CHUNKS = "Hosted checkpoint item has missing chunks.";
 
 const hashBytes = (bytes: Uint8Array) =>
   `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
@@ -169,6 +174,126 @@ function manifestWhere(key: ReturnType<typeof tenant>) {
     eq(agentSessionCheckpointManifests.sessionId, key.sessionId),
     eq(agentSessionCheckpointManifests.checkpointId, key.checkpointId),
   );
+}
+
+type CheckpointItem = typeof agentSessionCheckpointItems.$inferSelect;
+type CheckpointChunk = typeof agentSessionCheckpointChunks.$inferSelect;
+type CheckpointValue = z.infer<typeof pagedCheckpointMetadataSchema> | PublicEveEvent;
+
+// eslint-disable-next-line eslint/func-style -- Shared integrity validation for individual items and pages.
+function decodeItem(item: CheckpointItem, chunks: CheckpointChunk[]): CheckpointValue {
+  if (chunks.length !== item.partCount) {
+    throw new Error(MISSING_CHUNKS);
+  }
+  const hash = createHash("sha256");
+  const parts: Buffer[] = [];
+  for (const [partIndex, chunk] of chunks.entries()) {
+    if (chunk.partIndex !== partIndex) {
+      throw new Error("Hosted checkpoint chunk order is invalid.");
+    }
+    const bytes = Buffer.from(chunk.payload, "base64");
+    if (bytes.toString("base64") !== chunk.payload || hashBytes(bytes) !== chunk.chunkDigest) {
+      throw new Error("Hosted checkpoint chunk digest mismatch.");
+    }
+    hash.update(bytes);
+    parts.push(bytes);
+  }
+  const bytes = Buffer.concat(parts);
+  if (bytes.byteLength !== item.byteLength || `sha256:${hash.digest("hex")}` !== item.digest) {
+    throw new Error("Hosted checkpoint item digest mismatch.");
+  }
+  const parsed: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  return item.itemIndex === -1
+    ? pagedCheckpointMetadataSchema.parse(parsed)
+    : publicEveEventSchema.parse(parsed);
+}
+
+// eslint-disable-next-line eslint/func-style -- Share bounded, tenant-scoped SQL reads without re-reading the manifest per event.
+async function readItems(
+  reader: Database | Transaction,
+  key: ReturnType<typeof tenant>,
+  indexes: number[],
+): Promise<Map<number, CheckpointValue>> {
+  const items = await reader
+    .select()
+    .from(agentSessionCheckpointItems)
+    .where(
+      and(
+        eq(agentSessionCheckpointItems.issuer, key.issuer),
+        eq(agentSessionCheckpointItems.audience, key.audience),
+        eq(agentSessionCheckpointItems.workspaceId, key.workspaceId),
+        eq(agentSessionCheckpointItems.ownerUserId, key.ownerUserId),
+        eq(agentSessionCheckpointItems.sessionId, key.sessionId),
+        eq(agentSessionCheckpointItems.checkpointId, key.checkpointId),
+        inArray(agentSessionCheckpointItems.itemIndex, indexes),
+      ),
+    )
+    .orderBy(asc(agentSessionCheckpointItems.itemIndex));
+  if (items.length !== indexes.length) {
+    throw new Error("Hosted checkpoint item is missing.");
+  }
+  const values = new Map<number, CheckpointValue>();
+  let itemPosition = 0;
+  let parts: CheckpointChunk[] = [];
+  let afterItem = -2;
+  let afterPart = -1;
+  while (true) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Keyset chunk pages provide bounded backpressure.
+    const chunks = await reader
+      .select()
+      .from(agentSessionCheckpointChunks)
+      .where(
+        and(
+          eq(agentSessionCheckpointChunks.issuer, key.issuer),
+          eq(agentSessionCheckpointChunks.audience, key.audience),
+          eq(agentSessionCheckpointChunks.workspaceId, key.workspaceId),
+          eq(agentSessionCheckpointChunks.ownerUserId, key.ownerUserId),
+          eq(agentSessionCheckpointChunks.sessionId, key.sessionId),
+          eq(agentSessionCheckpointChunks.checkpointId, key.checkpointId),
+          inArray(agentSessionCheckpointChunks.itemIndex, indexes),
+          or(
+            gt(agentSessionCheckpointChunks.itemIndex, afterItem),
+            and(
+              eq(agentSessionCheckpointChunks.itemIndex, afterItem),
+              gt(agentSessionCheckpointChunks.partIndex, afterPart),
+            ),
+          ),
+        ),
+      )
+      .orderBy(
+        asc(agentSessionCheckpointChunks.itemIndex),
+        asc(agentSessionCheckpointChunks.partIndex),
+      )
+      .limit(BATCH_ROWS);
+    for (const chunk of chunks) {
+      const item = items[itemPosition];
+      if (item === undefined || chunk.itemIndex !== item.itemIndex) {
+        if (item === undefined) {
+          throw new Error("Hosted checkpoint chunk order is invalid.");
+        }
+        values.set(item.itemIndex, decodeItem(item, parts));
+        itemPosition += 1;
+        parts = [];
+      }
+      if (chunk.itemIndex !== items[itemPosition]?.itemIndex) {
+        throw new Error(MISSING_CHUNKS);
+      }
+      parts.push(chunk);
+      afterItem = chunk.itemIndex;
+      afterPart = chunk.partIndex;
+    }
+    if (chunks.length < BATCH_ROWS) {
+      break;
+    }
+  }
+  const lastItem = items[itemPosition];
+  if (lastItem !== undefined) {
+    values.set(lastItem.itemIndex, decodeItem(lastItem, parts));
+  }
+  if (values.size !== items.length) {
+    throw new Error(MISSING_CHUNKS);
+  }
+  return values;
 }
 
 /** Stages immutable byte chunks without holding a transaction across a history stream. */
@@ -323,65 +448,8 @@ export function createPostgresHostedCheckpointHistory(database: Database) {
       if (manifests[0]?.publishedAt === null || manifests[0] === undefined) {
         return null;
       }
-      const items = await reader
-        .select()
-        .from(agentSessionCheckpointItems)
-        .where(
-          and(
-            eq(agentSessionCheckpointItems.issuer, key.issuer),
-            eq(agentSessionCheckpointItems.audience, key.audience),
-            eq(agentSessionCheckpointItems.workspaceId, key.workspaceId),
-            eq(agentSessionCheckpointItems.ownerUserId, key.ownerUserId),
-            eq(agentSessionCheckpointItems.sessionId, key.sessionId),
-            eq(agentSessionCheckpointItems.checkpointId, key.checkpointId),
-            eq(agentSessionCheckpointItems.itemIndex, input.itemIndex),
-          ),
-        )
-        .limit(1);
-      const [item] = items;
-      if (item === undefined) {
-        throw new Error("Hosted checkpoint item is missing.");
-      }
-      const chunks = await reader
-        .select()
-        .from(agentSessionCheckpointChunks)
-        .where(
-          and(
-            eq(agentSessionCheckpointChunks.issuer, key.issuer),
-            eq(agentSessionCheckpointChunks.audience, key.audience),
-            eq(agentSessionCheckpointChunks.workspaceId, key.workspaceId),
-            eq(agentSessionCheckpointChunks.ownerUserId, key.ownerUserId),
-            eq(agentSessionCheckpointChunks.sessionId, key.sessionId),
-            eq(agentSessionCheckpointChunks.checkpointId, key.checkpointId),
-            eq(agentSessionCheckpointChunks.itemIndex, input.itemIndex),
-          ),
-        )
-        .orderBy(asc(agentSessionCheckpointChunks.partIndex));
-      if (chunks.length !== item.partCount) {
-        throw new Error("Hosted checkpoint item has missing chunks.");
-      }
-      const hash = createHash("sha256");
-      const parts: Buffer[] = [];
-      for (const [partIndex, chunk] of chunks.entries()) {
-        if (chunk.partIndex !== partIndex) {
-          throw new Error("Hosted checkpoint chunk order is invalid.");
-        }
-        const bytes = Buffer.from(chunk.payload, "base64");
-        if (bytes.toString("base64") !== chunk.payload || hashBytes(bytes) !== chunk.chunkDigest) {
-          throw new Error("Hosted checkpoint chunk digest mismatch.");
-        }
-        hash.update(bytes);
-        parts.push(bytes);
-      }
-      const bytes = Buffer.concat(parts);
-      if (bytes.byteLength !== item.byteLength || `sha256:${hash.digest("hex")}` !== item.digest) {
-        throw new Error("Hosted checkpoint item digest mismatch.");
-      }
-      const parsed: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-      if (input.itemIndex === -1) {
-        return pagedCheckpointMetadataSchema.parse(parsed);
-      }
-      return publicEveEventSchema.parse(parsed);
+      const values = await readItems(reader, key, [input.itemIndex]);
+      return values.get(input.itemIndex) ?? null;
     },
     async readPage(input: {
       principal: HostedPrincipal;
@@ -415,16 +483,20 @@ export function createPostgresHostedCheckpointHistory(database: Database) {
       ) {
         return null;
       }
-      const metadata = await this.readItem({ ...input, itemIndex: -1 });
-      if (metadata === null || "index" in metadata) {
+      const end = Math.min(manifest.eventCount, input.cursor + input.limit);
+      const indexes = [-1];
+      for (let index = input.cursor; index < end; index += 1) {
+        indexes.push(index);
+      }
+      const values = await readItems(reader, key, indexes);
+      const metadata = values.get(-1);
+      if (metadata === undefined || "index" in metadata) {
         throw new Error("Hosted checkpoint metadata is missing.");
       }
       const events = [];
-      const end = Math.min(manifest.eventCount, input.cursor + input.limit);
       for (let index = input.cursor; index < end; index += 1) {
-        // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Event pages are read and verified in order.
-        const event = await this.readItem({ ...input, itemIndex: index });
-        if (event === null || !("index" in event) || event.index !== index) {
+        const event = values.get(index);
+        if (event === undefined || !("index" in event) || event.index !== index) {
           throw new Error("Hosted checkpoint event page is incomplete.");
         }
         events.push(event);
@@ -473,26 +545,51 @@ export function createPostgresHostedCheckpointHistory(database: Database) {
       const checkpointHash = createHash("sha256");
       const progressHash = createHash("sha256");
       let eventCount = 0;
+      let pendingChunks: (typeof agentSessionCheckpointChunks.$inferInsert)[] = [];
+      let pendingItems: (typeof agentSessionCheckpointItems.$inferInsert)[] = [];
+      let pendingBytes = 0;
+      // eslint-disable-next-line eslint/func-style -- Flush bounded statements before accepting more history.
+      const flushBatch = async () => {
+        if (pendingChunks.length === 0 && pendingItems.length === 0) {
+          return;
+        }
+        if (pendingChunks.length > 0) {
+          await writer.insert(agentSessionCheckpointChunks).values(pendingChunks);
+        }
+        if (pendingItems.length > 0) {
+          await writer.insert(agentSessionCheckpointItems).values(pendingItems);
+        }
+        await writer
+          .update(agentSessionCheckpointManifests)
+          .set({ updatedAt: new Date() })
+          .where(and(manifestWhere(key), isNull(agentSessionCheckpointManifests.publishedAt)));
+        pendingChunks = [];
+        pendingItems = [];
+        pendingBytes = 0;
+      };
       // eslint-disable-next-line eslint/func-style -- Stage each item using its enclosing key.
       const writeItem = async (itemIndex: number, source: Bytes) => {
         const itemHash = createHash("sha256");
         let byteLength = 0;
         let partCount = 0;
         let buffer = Buffer.alloc(0);
-        // eslint-disable-next-line eslint/func-style -- Flush chunks one at a time.
+        // eslint-disable-next-line eslint/func-style -- Queue chunks with byte and row backpressure.
         const flush = async (bytes: Buffer) => {
-          await writer.insert(agentSessionCheckpointChunks).values({
+          if (pendingBytes + bytes.byteLength > BATCH_BYTES) {
+            await flushBatch();
+          }
+          pendingChunks.push({
             ...key,
             chunkDigest: hashBytes(bytes),
             itemIndex,
             partIndex: partCount,
             payload: bytes.toString("base64"),
           });
-          await writer
-            .update(agentSessionCheckpointManifests)
-            .set({ updatedAt: new Date() })
-            .where(and(manifestWhere(key), isNull(agentSessionCheckpointManifests.publishedAt)));
+          pendingBytes += bytes.byteLength;
           partCount += 1;
+          if (pendingChunks.length >= BATCH_ROWS || pendingBytes >= BATCH_BYTES) {
+            await flushBatch();
+          }
         };
         for await (const fragment of source) {
           if (!(fragment instanceof Uint8Array)) {
@@ -517,13 +614,16 @@ export function createPostgresHostedCheckpointHistory(database: Database) {
           await flush(buffer);
         }
         const itemDigest = `sha256:${itemHash.digest("hex")}`;
-        await writer.insert(agentSessionCheckpointItems).values({
+        pendingItems.push({
           ...key,
           byteLength,
           digest: itemDigest,
           itemIndex,
           partCount,
         });
+        if (pendingItems.length >= BATCH_ROWS) {
+          await flushBatch();
+        }
         checkpointHash.update(`${itemIndex}:${itemDigest}\n`);
         if (itemIndex >= 0) {
           progressHash.update(`${itemIndex}:${itemDigest}\n`);
@@ -548,6 +648,7 @@ export function createPostgresHostedCheckpointHistory(database: Database) {
           await writeItem(eventCount, encodeCheckpointJson(event));
           eventCount += 1;
         }
+        await flushBatch();
       } catch (error) {
         await writer.delete(agentSessionCheckpointManifests).where(manifestWhere(key));
         throw error;

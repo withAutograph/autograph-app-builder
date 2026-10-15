@@ -83,10 +83,19 @@ state or report that run as blocked; it does not start a replacement request.
 The local snapshot API proves retained history, not worker liveness. See the
 [local lifecycle](local-development-lifecycle.md#interrupted-public-sessions).
 
+Successful hosted `autograph_send` and `autograph_respond` results return a
+bounded event page starting at the absolute public-event position captured
+before dispatch. They preserve the full checkpoint and the original operation
+receipt; an exact idempotent retry returns that same settled result. Continue
+reading with `autograph_get` and the returned absolute cursor rather than
+replaying the response or restarting at event zero.
+
 New hosted checkpoints store the complete public history in tenant-scoped,
 digest-verified pages and publish a versioned manifest only after its chunks
-are durable. Page size bounds one operation, not total history. Older inline
-checkpoints and legacy HTML compatibility paths retain their historical
+are durable. Database reads and staging writes batch checkpoint items and
+chunks while retaining tenant ownership, ordered content verification, and
+atomic manifest publication. Page size bounds one operation, not total history.
+Older inline checkpoints and legacy HTML compatibility paths retain their historical
 ceilings; recovery reports their truncation marker and preserves exact
 outstanding requests. Events already discarded by an older writer cannot be
 reconstructed. See the [limit and recovery inventory](builder-build-limits-inventory.md)
