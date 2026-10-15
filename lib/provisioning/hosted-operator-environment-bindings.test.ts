@@ -131,6 +131,12 @@ const values = restrictedOperatorEnvironment(
   },
   authority,
 );
+const parseFixtureBody = (value: RequestInit["body"]) => {
+  const bodyText = z.string().optional().parse(value);
+  const body =
+    bodyText === undefined ? undefined : z.record(z.string(), z.json()).parse(JSON.parse(bodyText));
+  return body;
+};
 const fixture = (configurationId?: string | null) => {
   const rows: Record<string, z.infer<typeof z.json>>[] = [
     { id: "unrelated", key: "APP_TITLE", target: ["production"], type: "plain", value: "existing" },
@@ -164,14 +170,15 @@ const fixture = (configurationId?: string | null) => {
     target,
     workerCheckpoints: [],
   };
+  const project = {
+    id: target.projectId,
+    accountId: target.scopeId,
+    link: { productionBranch: "main" },
+  };
   const fetcher = vi.fn(async (url: URL | string | Request, init?: RequestInit) => {
     const parsed = new URL(url instanceof Request ? url.url : url.toString());
     const method = init?.method ?? "GET";
-    const bodyText = z.string().optional().parse(init?.body);
-    const body =
-      bodyText === undefined
-        ? undefined
-        : z.record(z.string(), z.json()).parse(JSON.parse(bodyText));
+    const body = parseFixtureBody(init?.body);
     interface FixtureRequest {
       method: string;
       path: string;
@@ -186,6 +193,9 @@ const fixture = (configurationId?: string | null) => {
     expect(parsed.searchParams.get("teamId")).toBe(target.scopeId);
     if (failedRead && method === "GET") {
       return new Response("private provider failure", { status: 500 });
+    }
+    if (parsed.pathname === `/v9/projects/${target.projectId}`) {
+      return Response.json(project);
     }
     if (method === "GET" && parsed.pathname.startsWith("/v1/")) {
       return Response.json({
@@ -249,6 +259,7 @@ const fixture = (configurationId?: string | null) => {
     input,
     readCredential,
     requests,
+    project,
     rows,
     setFailedDelete: (id: string) => {
       failedDeleteId = id;
@@ -592,4 +603,75 @@ it("accepts semantically identical approved row references with reordered fields
     branch: row.branch,
   }));
   expect(await f.writer.remove(f.input, values)).toEqual({ rows: [] });
+});
+
+it("binds generic Preview for the actual production branch without changing approved Git scope", async () => {
+  const f = fixture();
+  f.project.link.productionBranch = target.branch;
+  const result = await f.writer.bind(f.input, values);
+  expect(result.rows.every((row) => row.branch === target.branch && row.gitBranch === null)).toBe(
+    true,
+  );
+  for (const request of f.requests.filter((item) => item.method === "POST")) {
+    expect(request.body?.target).toEqual(["preview"]);
+    expect(request.body).not.toHaveProperty("gitBranch");
+  }
+  expect(f.input.target.branch).toBe(target.branch);
+  expect(await f.writer.reconcile(f.input, values)).toMatchObject({ status: "applied" });
+  const firstIds = result.rows.map((row) => row.id);
+  await f.writer.bind(f.input, values);
+  expect(f.input.managedEnvironment?.map((row) => row.id)).toEqual(firstIds);
+});
+it("retains legacy saved branch-specific references exactly after production-branch settings change", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input, values);
+  const legacy = f.input.managedEnvironment!.map(({ gitBranch, ...row }) => {
+    void gitBranch;
+    return row;
+  });
+  f.input.managedEnvironment = legacy;
+  f.input.operationRef = "later-owned-operation";
+  f.project.link.productionBranch = target.branch;
+  const result = await f.writer.bind(f.input, values);
+  expect(result.rows).toEqual(legacy);
+  expect(result.rows.every((row) => !Object.hasOwn(row, "gitBranch"))).toBe(true);
+});
+it.each(["owner", "installation", "value", "replacement", "duplicate"])(
+  "does not adopt generic Preview rows with foreign %s",
+  async (failure) => {
+    const f = fixture();
+    f.project.link.productionBranch = target.branch;
+    await f.writer.bind(f.input, values);
+    const row = f.rows.find((item) => item.key === "PLATFORM_ORIGIN")!;
+    if (failure === "owner") {
+      row.comment = "Other owner";
+    }
+    if (failure === "installation") {
+      row.configurationId = "foreign-installation";
+    }
+    if (failure === "value") {
+      row.value = "https://wrong.example.test";
+    }
+    if (failure === "replacement") {
+      row.id = "replacement-id";
+    }
+    if (failure === "duplicate") {
+      f.rows.push({ ...row, id: "duplicate-id" });
+    }
+    f.requests.length = 0;
+    expect(await f.writer.reconcile(f.input, values)).toEqual({ status: "unknown" });
+    expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+  },
+);
+it("removes an explicitly approved generic Preview row using its saved scope after settings change", async () => {
+  const f = historicalCleanupFixture();
+  const generic = { ...f.saved[0], gitBranch: null };
+  const saved = [generic, f.saved[1]];
+  f.input.plan = hostedOperatorPlanSchema.parse({ ...f.input.plan, appEnvironmentCleanup: saved });
+  f.input.managedEnvironment = structuredClone(saved);
+  const actual = f.rows.find((row) => row.id === generic.id)!;
+  actual.gitBranch = null;
+  f.project.link.productionBranch = "other-production-branch";
+  expect(await f.writer.remove(f.input, values)).toEqual({ rows: [] });
+  expect(f.rows.some((row) => row.id === generic.id)).toBe(false);
 });
