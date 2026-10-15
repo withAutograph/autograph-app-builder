@@ -59,8 +59,11 @@ const ACCESS_SCOPE = "generated-app-access-v1";
 const ACCESS_COMMAND = "protected-generated-app-access";
 const ACCESS_INSPECT_COMMAND = "protected-generated-app-access-readback";
 const AUTH_SCOPE = "auth-protected-schema-v1";
+const AUTH_MEMBERSHIP_EFFECT = "auth-membership";
+const AUTH_SIGNUP_POLICY_EFFECT = "auth-signup-policy";
 const MEMBERSHIP_SCOPE = "auth-protected-membership-v1";
 const MEMBERSHIP_COMMAND = "auth-protected-membership";
+const SIGNUP_POLICY_COMMAND = "auth-protected-signup-policy";
 const MEMBERSHIP_INSPECT_COMMAND = "auth-protected-membership-readback";
 const HC_SCOPE = "hc-protected-install-v1";
 const HC_COMMAND = "protected-install";
@@ -140,6 +143,7 @@ const workerSubcommandSchema = z.enum([
   GENERATED_COMMAND,
   AUTH_COMMAND,
   MEMBERSHIP_COMMAND,
+  SIGNUP_POLICY_COMMAND,
   MEMBERSHIP_INSPECT_COMMAND,
   RESOURCES_COMMAND,
   RESOURCES_INSPECT_COMMAND,
@@ -224,7 +228,7 @@ interface PrivateSandboxWorkerInput {
   generatedRelease?: { artifactRef: string; files: GeneratedAppReleaseFiles };
   /** Private reviewed Auth plan resolved from plan.authSchema.artifactRef. */
   authSchemaPlan?: { artifactRef: string; content: Buffer };
-  membershipProof?: { proof: string; oidcToken: string; organizationId?: string };
+  membershipProof?: { proof?: string; oidcToken: string; organizationId?: string };
   accessConnections?: {
     appMigrator: string;
     appRuntime: string;
@@ -738,11 +742,12 @@ const requestMatchesWorkerScope = (
   }
   if (worker.operationScope === MEMBERSHIP_SCOPE) {
     return (
-      worker.subcommand === MEMBERSHIP_COMMAND &&
+      [MEMBERSHIP_COMMAND, SIGNUP_POLICY_COMMAND].includes(worker.subcommand) &&
       context.app_id === "auth" &&
       context.tenant_targets.length === 0 &&
       tenantId === null &&
-      effectId === "auth:create-owned-organization"
+      ((worker.subcommand === MEMBERSHIP_COMMAND && effectId === AUTH_MEMBERSHIP_EFFECT) ||
+        (worker.subcommand === SIGNUP_POLICY_COMMAND && effectId === AUTH_SIGNUP_POLICY_EFFECT))
     );
   }
   if (worker.operationScope === AUTH_SCOPE) {
@@ -918,7 +923,8 @@ const runSandboxWorker = async (
     input.readbackOnly === true ? randomUUID() : workerRunIdSchema.parse(input.workerAttemptId);
   const resources = input.effect.kind === "resources" || input.effect.kind === "retire";
   const access = input.effect.kind === "access" || input.effect.kind === "revoke";
-  const membership = input.effect.kind === "auth-membership";
+  const membership =
+    input.effect.kind === AUTH_MEMBERSHIP_EFFECT || input.effect.kind === AUTH_SIGNUP_POLICY_EFFECT;
   const installReadback =
     input.readbackOnly === true &&
     input.effect.kind === "install" &&
@@ -962,6 +968,8 @@ const runSandboxWorker = async (
   }
   if (worker !== undefined && membership && input.readbackOnly === true) {
     worker = { ...worker, subcommand: MEMBERSHIP_INSPECT_COMMAND };
+  } else if (worker !== undefined && input.effect.kind === AUTH_SIGNUP_POLICY_EFFECT) {
+    worker = { ...worker, subcommand: SIGNUP_POLICY_COMMAND };
   }
   if (worker !== undefined && installReadback) {
     worker = { ...worker, subcommand: GENERATED_INSPECT_COMMAND };
@@ -1016,28 +1024,45 @@ const runSandboxWorker = async (
     ? buildResourceBootstrapContext(input)
     : buildProtectedInstallContext(contextInput);
   if (membership) {
+    const { authMembership } = input.plan;
+    const membershipProof = input.membershipProof?.proof;
+    const organizationSelection =
+      input.membershipProof?.organizationId === undefined
+        ? undefined
+        : { organizationId: input.membershipProof.organizationId };
+    const organization =
+      authMembership === undefined
+        ? undefined
+        : selectHostedOperatorOwnedOrganizationSpec(authMembership, organizationSelection);
+    const selectedOrganizationId =
+      organization === undefined
+        ? input.plan.authSignupPolicy?.organizationId
+        : organization.organizationId;
     if (
       worker.operationScope !== MEMBERSHIP_SCOPE ||
-      ![MEMBERSHIP_COMMAND, MEMBERSHIP_INSPECT_COMMAND].includes(worker.subcommand) ||
+      ![MEMBERSHIP_COMMAND, SIGNUP_POLICY_COMMAND, MEMBERSHIP_INSPECT_COMMAND].includes(
+        worker.subcommand,
+      ) ||
       worker.id !== "auth-owned-organization-v1" ||
-      input.plan.authMembership === undefined ||
-      input.membershipProof === undefined
+      selectedOrganizationId === undefined ||
+      (input.effect.kind === AUTH_MEMBERSHIP_EFFECT &&
+        (authMembership === undefined || membershipProof === undefined)) ||
+      (input.effect.kind === AUTH_SIGNUP_POLICY_EFFECT && input.plan.authSignupPolicy === undefined)
     ) {
       throw resourceMismatch();
     }
-    context.release = {
-      id: operatorPlanDigest(input.plan),
-      sha256: selectHostedOperatorOwnedOrganizationSpec(
-        input.plan.authMembership,
-        input.membershipProof.organizationId === undefined
-          ? undefined
-          : { organizationId: input.membershipProof.organizationId },
-      ).identityProof.sha256,
-    };
-    context.installer = { id: worker.id, sha256: worker.sha256 };
-    if (sha256(Buffer.from(input.membershipProof.proof, "utf-8")) !== context.release.sha256) {
-      throw resourceMismatch();
+    let releaseSha256 = operatorPlanDigest(input.plan);
+    if (input.effect.kind === AUTH_MEMBERSHIP_EFFECT) {
+      if (organization === undefined || membershipProof === undefined) {
+        throw resourceMismatch();
+      }
+      releaseSha256 = organization.identityProof.sha256;
+      if (sha256(Buffer.from(membershipProof, "utf-8")) !== releaseSha256) {
+        throw resourceMismatch();
+      }
     }
+    context.release = { id: operatorPlanDigest(input.plan), sha256: releaseSha256 };
+    context.installer = { id: worker.id, sha256: worker.sha256 };
   }
   let generatedMetadata: GeneratedAppReleaseMetadata | undefined;
   let generatedFiles: { member: string; content: Buffer }[] = [];
@@ -1499,6 +1524,13 @@ const runSandboxWorker = async (
           },
           {
             content: Buffer.from(
+              JSON.stringify({ version: 1, effectId: input.effect.id, kind: input.effect.kind }),
+            ),
+            mode: 0o600,
+            path: path.posix.join(startup, "membership-effect.json"),
+          },
+          {
+            content: Buffer.from(
               JSON.stringify({
                 version: 1,
                 environment: "preview",
@@ -1514,11 +1546,15 @@ const runSandboxWorker = async (
             mode: 0o600,
             path: path.posix.join(startup, "auth-database-resource.json"),
           },
-          {
-            content: Buffer.from(JSON.stringify({ proof: input.membershipProof.proof })),
-            mode: 0o600,
-            path: path.posix.join(startup, "realm-identity-proof.json"),
-          },
+          ...(input.membershipProof.proof === undefined
+            ? []
+            : [
+                {
+                  content: Buffer.from(JSON.stringify({ proof: input.membershipProof.proof })),
+                  mode: 0o600,
+                  path: path.posix.join(startup, "realm-identity-proof.json"),
+                },
+              ]),
           {
             content: Buffer.from(JSON.stringify({ token: input.membershipProof.oidcToken })),
             mode: 0o600,

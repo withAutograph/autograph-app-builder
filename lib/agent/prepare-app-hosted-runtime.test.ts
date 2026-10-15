@@ -2,7 +2,7 @@ import {
   reportRuntimePreparationFailure,
   reportRuntimePreparationStarted,
 } from "../provisioning/hosted-operator-consent-diagnostic";
-import type { ToolInputRequest, ToolInputResponse, WorkflowToolContext } from "eve/tools";
+import type { ToolInputResponse, WorkflowToolContext } from "eve/tools";
 import type {
   OperatorPublicResult,
   HostedOperatorError,
@@ -15,7 +15,6 @@ import {
   evaluateHostedRuntimePreparationApproval,
   hostedRuntimeApprovalInputSchema,
   participantIdentityInputQuestion,
-  realmIdentityInputQuestion,
 } from "../../agent/tools/prepare-app-hosted-runtime";
 import {
   HostedOperatorError as HostedOperatorErrorClass,
@@ -257,14 +256,7 @@ describe("hosted runtime Auth identity handoff", () => {
     if (value.identityInput === null) {
       throw new Error("Missing actual identity input");
     }
-    const ask = vi.fn(async (question: ToolInputRequest) => {
-      order.push("public-input");
-      expect(question.display).toBe("confirmation");
-      expect(question.prompt).toContain(value.identityInput?.browserUrl ?? "missing");
-      return await Promise.resolve({ optionId: "continue", status: "answered" as const });
-    });
-    await ask(realmIdentityInputQuestion(value.identityInput));
-    expect(order).toEqual(["lease-released", "selection", "identity", "public-input"]);
+    expect(order).toEqual(["lease-released", "selection", "identity"]);
     expect(operator.authIdentityInput).toHaveBeenCalledWith(
       { action: "auth-identity-input", operationRef, selection: plan.selection },
       ctx.abortSignal,
@@ -370,7 +362,7 @@ describe("hosted runtime Auth identity handoff", () => {
     expect(value.identityInput).toBeNull();
     expect(operator.authIdentityInput).not.toHaveBeenCalled();
   });
-  it("keeps the legacy bootstrap question without resuming it as participant preparation", async () => {
+  it("returns the protected Auth identity link without a manual confirmation step", async () => {
     stepMocks.step.mockResolvedValueOnce({
       result: {
         appId: input.appId,
@@ -382,8 +374,12 @@ describe("hosted runtime Auth identity handoff", () => {
     });
     const value = workflowContext({ status: "answered", optionId: "continue" });
     const result = await continueHostedRuntimePreparation(input, value.context, stepMocks.step);
-    expect(result).toMatchObject({ status: "auth-schema-prepared", identityResponse: "answered" });
-    expect(value.ask).toHaveBeenCalledWith(realmIdentityInputQuestion(identityLink));
+    expect(result).toMatchObject({
+      status: "auth-schema-prepared",
+      authIdentityLink: identityLink.browserUrl,
+      authIdentityLinkExpiresAt: identityLink.expiresAt,
+    });
+    expect(value.ask).not.toHaveBeenCalled();
     expect(stepMocks.step).toHaveBeenCalledTimes(1);
   });
   it("reports a real participant identity-link denial without requesting it again", async () => {
@@ -481,15 +477,6 @@ describe("hosted runtime Auth identity handoff", () => {
     });
     expect(stepMocks.step).toHaveBeenCalledTimes(2);
     expect(value.ask).toHaveBeenCalledTimes(2);
-  });
-  it("asks the user to complete the prepared Auth identity link", () => {
-    const question = realmIdentityInputQuestion({
-      browserUrl: "https://auth.example/link",
-      expiresAt: "2027-01-01T00:00:00Z",
-    });
-    expect(question.display).toBe("confirmation");
-    expect(question.prompt).toContain("https://auth.example/link");
-    expect(question.prompt).toContain("2027-01-01T00:00:00Z");
   });
 });
 

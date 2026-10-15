@@ -200,6 +200,46 @@ export const normalActorPreparationSchema = z.strictObject({
   accountApprovedByCallId: id,
 });
 export type NormalActorPreparation = z.infer<typeof normalActorPreparationSchema>;
+const hostedOperatorAuthSignupPolicyFieldsSchema = z.strictObject({
+  version: z.literal(1),
+  policyId: id,
+  authResourceId: id,
+  appId: operatorSelectionSchema.shape.appId,
+  origin: httpsPublicOrigin,
+  appPath: z.string().regex(/^\/(?!\/)[^?#\\]*$/u),
+  organizationId: id,
+  eligibility: z.enum(["public", "approved-email"]),
+  allowedEmails: z.array(z.email()).optional(),
+  membershipRole: z.literal("member"),
+  appRoles: z.array(sqlName).min(1),
+});
+export const hostedOperatorAuthSignupPolicySchema =
+  hostedOperatorAuthSignupPolicyFieldsSchema.superRefine((policy, ctx) => {
+    if (policy.eligibility === "approved-email" && (policy.allowedEmails?.length ?? 0) === 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Approved-email signup requires eligible accounts.",
+      });
+    }
+    if (
+      policy.allowedEmails &&
+      new Set(policy.allowedEmails.map((value) => value.toLowerCase())).size !==
+        policy.allowedEmails.length
+    ) {
+      ctx.addIssue({ code: "custom", message: "Signup eligibility entries must be unique." });
+    }
+  });
+export type HostedOperatorAuthSignupPolicy = z.infer<typeof hostedOperatorAuthSignupPolicySchema>;
+export const hostedOperatorAuthSignupPolicyInputSchema =
+  hostedOperatorAuthSignupPolicyFieldsSchema.omit({
+    policyId: true,
+    authResourceId: true,
+    appId: true,
+    origin: true,
+  });
+export type HostedOperatorAuthSignupPolicyInput = z.infer<
+  typeof hostedOperatorAuthSignupPolicyInputSchema
+>;
 export const managedOperatorEnvironmentRowSchema = z
   .strictObject({
     branch: id,
@@ -239,6 +279,7 @@ const hostedOperatorPlanDataSchema = z.strictObject({
       targetDigest: digest,
     })
     .optional(),
+  authSignupPolicy: hostedOperatorAuthSignupPolicySchema.optional(),
   bootstrap: z
     .strictObject({ endpointId: id, maintenanceDatabase: sqlName, role: sqlName })
     .optional(),
@@ -272,6 +313,7 @@ const hostedOperatorPlanDataSchema = z.strictObject({
           "gateway-delivery",
           "access",
           "auth-membership",
+          "auth-signup-policy",
           "normal-accounts",
           "bindings",
           "delivery",
@@ -516,6 +558,43 @@ const validateNormalActorPlan = (
     });
   }
 };
+const validateAuthSignupPolicy = (
+  plan: z.infer<typeof hostedOperatorPlanDataSchema>,
+  ctx: z.RefinementCtx,
+) => {
+  const policy = plan.authSignupPolicy;
+  if (!policy) {
+    return;
+  }
+  const membership = plan.authMembership;
+  let orgs: { organizationId: string }[] = [];
+  if (membership !== undefined) {
+    orgs = membership.kind === CREATE_OWNED_ORGANIZATION ? [membership] : membership.organizations;
+  }
+  const policyOrganizationApproved =
+    orgs.some((organization) => organization.organizationId === policy.organizationId) ||
+    plan.access.some((grant) => grant.organizationId === policy.organizationId);
+  const policyTargetApproved =
+    policy.authResourceId === plan.authDatabase.resourceId &&
+    policy.appId === plan.selection.appId &&
+    policy.origin === plan.deploymentBoundary?.verification.publicOrigin;
+  const policyEffectsApproved =
+    policyOrganizationApproved &&
+    policy.appRoles.every((role) => !["owner", "admin"].includes(role));
+  if (
+    plan.action !== "prepare" ||
+    plan.stage !== "app" ||
+    !policyTargetApproved ||
+    !policyEffectsApproved
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message:
+        "App signup policy must remain within the approved Auth resource, app, organization and roles.",
+      path: ["authSignupPolicy"],
+    });
+  }
+};
 const authorizationPhases = (plan: z.infer<typeof hostedOperatorPlanDataSchema>) => {
   if (plan.stage === AUTH_PARTICIPANTS_STAGE) {
     return ["normal-accounts"];
@@ -525,6 +604,9 @@ const authorizationPhases = (plan: z.infer<typeof hostedOperatorPlanDataSchema>)
     phases = ["resources", "install"];
     if (plan.authMembership !== undefined) {
       phases.push("auth-membership");
+    }
+    if (plan.authSignupPolicy !== undefined) {
+      phases.push("auth-signup-policy");
     }
     phases.push("access", "bindings");
     if (plan.delivery !== undefined) {
@@ -681,6 +763,7 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
   }
   validatePlanStage(plan, ctx);
   validateNormalActorPlan(plan, ctx);
+  validateAuthSignupPolicy(plan, ctx);
   // Each phase has an observed receipt, including a no-op verification for already-existing resources.
   // Authority is opened only after install/grant verification, and closed before retirement.
   const phases = authorizationPhases(plan);
@@ -1174,6 +1257,7 @@ export const operatorRequestSchema = z.discriminatedUnion("action", [
   }),
   z.strictObject({
     action: z.literal("plan"),
+    authSignupPolicy: hostedOperatorAuthSignupPolicyInputSchema.optional(),
     normalActorProgram: normalActorProgramSchema.optional(),
     operation: z.enum(["prepare", "cleanup"]),
     ownerContext: operatorOwnerContextSchema.optional(),
@@ -1229,6 +1313,7 @@ export const operatorPublicResultSchema = z.strictObject({
       "gateway_delivery_failed",
       "operator_unavailable",
       "legacy_runtime_requires_migration",
+      "signup_not_ready",
     ])
     .optional(),
   operationRef: z.uuid().optional(),
@@ -1242,7 +1327,11 @@ export const operatorPublicResultSchema = z.strictObject({
     "blocked",
     "auth-schema-prepared",
     "participants-prepared",
+    "waiting_for_signup",
+    "ready",
   ]),
+  appUrl: z.url().optional(),
+  signupUrl: z.url().optional(),
 });
 export type OperatorPublicResult = z.infer<typeof operatorPublicResultSchema>;
 export class HostedOperatorError extends Error {

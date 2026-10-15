@@ -375,16 +375,28 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
   repair report.
   Keep credentials out of inputs and output. Never mutate `amp.yaml`,
   deploy, promote, alias, activate, or claim admission or Production readiness.
+- For protected hosted signup, carry accepted signup eligibility, the exact
+  organization, and initial membership and app roles in the approved app-scoped
+  policy. The protected installer persists it for the selected Auth resource,
+  app and verified native public origin before signup is offered. Do not treat
+  ordinary signup as owner delegation or grant access to every app. Existing
+  eligible accounts must be enrolled idempotently through the same server-owned
+  policy. Continue the same approved operation only after server readback proves
+  the signed-in user, organization membership, app roles and usable app route.
+  Report only safe `waiting_for_signup`, `ready` or `blocked` status and the
+  public app URL; never ask users to confirm an Auth connection in Builder or
+  expose passwords, cookies or private proof.
 - When accepted requirements need several authenticated participants, derive
   `normalActorProgram` for `plan-app-hosted-runtime` from those accounts,
   organizations, memberships and app roles. Use the verified native public
-  origin. Preserve the program and original public session through resource
-  preparation, approved normal account preparation and the resolved access/app
-  plan. Ordinary sign-in replies resume the same approved preparation; never
-  ask the evaluator to insert fixture users, repair grants or drive private
-  stages. Keep passwords and session state out of tool inputs and conversation.
-  Read `docs/hosted-app-runtime.md` for the normal-account handoff. Do not invent
-  actor quotas, source-layout assertions or regular-app-change gates.
+  origin and preserve the program and original public session through approved
+  preparation and recovery. It describes required product participants and does
+  not restrict ordinary signup to a test roster when the approved policy allows
+  normal users. Never ask the evaluator to insert fixture users, repair grants
+  or drive private stages. Read `docs/hosted-app-runtime.md` for the app-scoped
+  enrollment contract. Do not invent actor quotas, source-layout assertions or
+  regular-app-change gates. Keep passwords and session state out of tool inputs
+  and conversation.
   For authenticated `test-e2e`, use the target repository's shared normal-actor
   fixture when exposed at `@autograph/playwright-config/normal-actors`. Select by
   `actorKey` and `organizationId`, preserve no-assignment actors, and exercise

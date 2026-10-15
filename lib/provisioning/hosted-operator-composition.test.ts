@@ -336,6 +336,76 @@ describe("app publication binding at plan renewal", () => {
     expect(f.unexpectedPort).not.toHaveBeenCalled();
   });
 
+  it("binds owner signup eligibility and roles to its approved Auth organization", async () => {
+    const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+    const base = hostedOperatorPlanSchema.parse({
+      ...bootstrapPlan(),
+      publicGateway: {
+        branch: "gateway",
+        origin: "https://apps.example",
+        projectId: "gateway",
+      },
+      deploymentBoundary: {
+        authority,
+        teamId: "team",
+        app: {
+          projectId: context.target.projectId,
+          deploymentId: "app-deployment",
+          branch: context.target.branch,
+          environment: "preview",
+        },
+        gateway: {
+          projectId: "gateway",
+          deploymentId: "gateway-deployment",
+          branch: "gateway",
+          environment: "preview",
+        },
+        operator: {
+          projectId: "operator",
+          deploymentId: "operator-deployment",
+          environment: "preview",
+        },
+        verification: {
+          gatewayOrigin: "https://gateway.example",
+          jwksUrl: "https://gateway.example/_platform/jwks.json",
+          publicOrigin: "https://apps.example",
+        },
+      },
+    });
+    const result = await resolveFullPlan(
+      base,
+      context,
+      f.configuration,
+      f.controlPlane,
+      {},
+      false,
+      false,
+      undefined,
+      {
+        version: 1,
+        appPath: "/dashboard",
+        appRoles: ["member"],
+        eligibility: "public",
+        membershipRole: "member",
+        organizationId: "actual-organization",
+      },
+    );
+    expect(result.authSignupPolicy).toMatchObject({
+      appId: "actual",
+      appPath: "/dashboard",
+      appRoles: ["member"],
+      authResourceId: "auth-resource",
+      eligibility: "public",
+      membershipRole: "member",
+      organizationId: "actual-organization",
+      origin: "https://apps.example",
+    });
+    const kinds = result.effects.map((effect) => effect.kind);
+    expect(kinds.indexOf("auth-membership")).toBeLessThan(kinds.indexOf("auth-signup-policy"));
+    expect(kinds.indexOf("auth-signup-policy")).toBeLessThan(kinds.indexOf("access"));
+    expect(kinds.indexOf("auth-signup-policy")).toBeLessThan(kinds.indexOf("delivery"));
+  });
+
   it.each(["branch", "projectId", "scopeId"] as const)(
     "retains the actual %s ownership check with a complete publication binding",
     async (field) => {
@@ -633,5 +703,41 @@ describe("participant plan resolution", () => {
     expect(result.normalActorPreparation?.accountApprovalId).toBe("first-account-approval");
     expect(f.readCapturedRealmIdentity).not.toHaveBeenCalled();
     expect(JSON.stringify(result)).not.toContain("private-account-state");
+  });
+
+  it("binds participant signup roles as a subset for one approved organization", async () => {
+    const f = participantResolutionFixture();
+    const result = await resolveFullPlan(
+      f.base,
+      context,
+      f.configuration,
+      f.ports,
+      {},
+      true,
+      true,
+      undefined,
+      {
+        version: 1,
+        appPath: "/dashboard",
+        appRoles: ["member"],
+        eligibility: "approved-email",
+        allowedEmails: ["owner@example.test"],
+        membershipRole: "member",
+        organizationId: "first-org",
+      },
+    );
+    expect(result.authSignupPolicy).toMatchObject({
+      appId: result.selection.appId,
+      appPath: "/dashboard",
+      appRoles: ["member"],
+      eligibility: "approved-email",
+      membershipRole: "member",
+      organizationId: "first-org",
+      origin: f.program.origin,
+    });
+    const kinds = result.effects.map((effect) => effect.kind);
+    expect(kinds.indexOf("auth-signup-policy")).toBeLessThan(kinds.indexOf("access"));
+    expect(kinds.indexOf("auth-signup-policy")).toBeLessThan(kinds.indexOf("delivery"));
+    expect(f.readCapturedRealmIdentity).not.toHaveBeenCalled();
   });
 });

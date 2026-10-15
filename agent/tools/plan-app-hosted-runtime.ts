@@ -3,12 +3,15 @@ import { authorizeHostedNeonForTool } from "@/lib/agent/hosted-neon-authorizatio
 import { z } from "zod";
 import { hostedOperatorClientForSession } from "@/lib/provisioning/hosted-operator-client";
 import type { OperatorSelection } from "@/lib/provisioning/hosted-operator-contract";
-import { HostedOperatorError } from "@/lib/provisioning/hosted-operator-contract";
+import {
+  HostedOperatorError,
+  hostedOperatorAuthSignupPolicyInputSchema,
+} from "@/lib/provisioning/hosted-operator-contract";
 import { normalActorProgramSchema } from "@/lib/provisioning/hosted-operator-normal-actor-program";
 
 export default defineTool({
   description:
-    "Read the protected operator's concrete Preview resource/access plan before asking for effect approval. Returns named targets, roles, effects, cost ownership, retention and an opaque operation reference. Supply appId; omit projectId and branch to resolve the configured owner-authorized Preview target. Explicit project or branch choices must match that target. For accepted product requirements needing several authenticated participants, derive normalActorProgram from the accepted account, organization, membership and app-role requirements and supply that program. Its origin must be the operator's verified native public origin. First approve normal account preparation; after participants-prepared, plan again using the same program and session to obtain the resolved organization, invitation, membership and app access approval before those writes. The Builder owns this preparation; ordinary public product replies supply its requirements. After gateway_delivery_failed, plan again for the same app/session and accepted participant program to select the current trusted Gateway source; submit the returned plan and operation reference to prepare-app-hosted-runtime through its existing approval flow. An identical operation retains its durable approval; changed plans need ordinary approval. Unknown alias or hostname assignment outcomes require reconciliation. This planning call does not allocate resources or create accounts.",
+    "Read the protected operator's concrete Preview resource/access plan. For signup, supply the product-approved organization, eligibility and initial app roles in authSignupPolicy; ordinary users are members, never owners. The policy is bound to the selected Auth resource, app and verified public origin and is persisted before signup is offered. Do not restrict ordinary signup to normalActorProgram test participants. For accepted product requirements needing named additional participants, derive normalActorProgram separately. After gateway_delivery_failed, plan again for the same app/session and accepted participant program to select the current trusted Gateway source; submit the returned plan and operation reference to prepare-app-hosted-runtime through its existing approval flow. An identical operation retains its durable approval; changed plans need ordinary approval. Unknown alias or hostname assignment outcomes require reconciliation. This planning call does not allocate resources or create accounts.",
   async execute(input, ctx) {
     const blocked = (code: HostedOperatorError["code"], selection?: OperatorSelection) => ({
       appId: input.appId,
@@ -49,6 +52,9 @@ export default defineTool({
       return await operator.request(
         {
           action: "plan",
+          ...(input.authSignupPolicy === undefined
+            ? {}
+            : { authSignupPolicy: input.authSignupPolicy }),
           ...(input.normalActorProgram === undefined
             ? {}
             : { normalActorProgram: input.normalActorProgram }),
@@ -63,6 +69,14 @@ export default defineTool({
   },
   inputSchema: z.strictObject({
     appId: z.string().min(1),
+    authSignupPolicy: hostedOperatorAuthSignupPolicyInputSchema
+      .extend({
+        appPath: z
+          .string()
+          .regex(/^\/(?!\/)[^?#\\]*$/u)
+          .default("/"),
+      })
+      .optional(),
     branch: z.string().min(1).optional(),
     environment: z.literal("preview"),
     operation: z.enum(["prepare", "cleanup"]),
