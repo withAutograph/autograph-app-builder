@@ -3,6 +3,7 @@ import { expect, it, vi } from "vitest";
 import {
   currentChangedSourcePaths,
   reviewObservedProductSource,
+  sourceReviewScopeBindingDigest,
 } from "./review-applied-product-source";
 import { unavailableSourceAssessment } from "./product-source-review";
 
@@ -19,22 +20,32 @@ const observe = async () => ({
   currentDigest: async () => "observed",
   source: { files: [], omissions: ["No behavior inferred"], sourceDigest: "observed" },
 });
-it("includes a validation repair absent from the original apply path list", () => {
-  const receipt = {
-    preTree: [{ digest: "old", mode: "644", path: "apps/example/page.tsx" }],
-    preTreeDigest: "before",
-  };
-  const observed = {
-    files: [
-      { digest: "new", mode: "644", path: "apps/example/page.tsx" },
-      { digest: "added", mode: "644", path: "apps/example/error.tsx" },
-    ],
-    treeDigest: "after",
-  };
-  expect(currentChangedSourcePaths(receipt, observed)).toEqual([
-    "apps/example/error.tsx",
+it("reviews every current normalized path, including repairs and supporting source", () => {
+  const changes = [
+    { kind: "modified" as const, path: "apps/example/page.tsx" },
+    { kind: "added" as const, path: "apps/example/error.tsx" },
+    { kind: "modified" as const, path: ".config/app-specs/example.cue" },
+    { kind: "added" as const, path: "apps/example/schema/release/v2/manifest.json" },
+    { kind: "modified" as const, path: "packages/shared/runtime.ts" },
+    { kind: "deleted" as const, path: "apps/example/demo.tsx" },
+  ];
+  expect(currentChangedSourcePaths(changes)).toEqual([
     "apps/example/page.tsx",
+    "apps/example/error.tsx",
+    ".config/app-specs/example.cue",
+    "apps/example/schema/release/v2/manifest.json",
+    "packages/shared/runtime.ts",
   ]);
+});
+it("keeps aggregate cache bindings distinct when review scope changes on the same source tree", () => {
+  const first = [{ kind: "added" as const, path: "apps/example/page.tsx" }];
+  const expanded = [...first, { kind: "added" as const, path: "apps/example/error.tsx" }];
+  expect(sourceReviewScopeBindingDigest(reviewInput, first)).toBe(
+    sourceReviewScopeBindingDigest(reviewInput, [...first]),
+  );
+  expect(sourceReviewScopeBindingDigest(reviewInput, first)).not.toBe(
+    sourceReviewScopeBindingDigest(reviewInput, expanded),
+  );
 });
 it("binds original requirements and actual source to the shared cached reviewer", async () => {
   const review = vi.fn(async () => unavailableSourceAssessment(reviewInput, "test"));

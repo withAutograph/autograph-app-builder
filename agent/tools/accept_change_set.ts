@@ -4,7 +4,7 @@ import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
-import { exactNormalizedChangeSet } from "./change_set_status";
+import { observeNormalizedChangeSet } from "./change_set_status";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
@@ -16,11 +16,11 @@ import { reviewedChangeSetSummary } from "@/lib/agent/review-result-summaries";
 import { checkedNativeToolResult } from "@/lib/eve/payload-envelope";
 
 export interface ChangeSetAcceptanceRuntime {
-  observeChangeSet: typeof exactNormalizedChangeSet;
+  observeChangeSet: typeof observeNormalizedChangeSet;
   reviewSource: typeof reviewAppliedProductSource;
 }
 const changeSetAcceptanceRuntime: ChangeSetAcceptanceRuntime = {
-  observeChangeSet: exactNormalizedChangeSet,
+  observeChangeSet: observeNormalizedChangeSet,
   reviewSource: reviewAppliedProductSource,
 };
 /** Internal ports preserve mandatory final source review without public injection. */
@@ -35,7 +35,7 @@ export const createChangeSetAcceptanceTool = (
       if (state.phase !== "validated" && state.phase !== "reviewed") {
         throw new Error("Run the repository validation before reviewing its changes.");
       }
-      const changeSet = await runtime.observeChangeSet({
+      const { changeSet, observed } = await runtime.observeChangeSet({
         sandbox: await ctx.getSandbox(),
         state,
       });
@@ -46,6 +46,8 @@ export const createChangeSetAcceptanceTool = (
         abortSignal: ctx.abortSignal,
         appSpec: state.appSpec,
         applyReceipt: state.applyReceipt,
+        normalizedChanges: changeSet.changes,
+        observed,
         artifacts: state.artifacts,
         callId: ctx.callId,
         getSandbox: async () => await ctx.getSandbox(),

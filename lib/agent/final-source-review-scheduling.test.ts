@@ -19,6 +19,11 @@ import {
   reviewCurrentProductSource,
 } from "./product-source-review-state";
 import { assessProductSource, unavailableSourceAssessment } from "./product-source-review";
+import {
+  currentScopedProductSourceAssessment,
+  retainScopedProductSourceAssessment,
+  sourceReviewScopeBindingDigest,
+} from "./review-applied-product-source";
 import { deriveNormalizedChangeSet } from "../repository/reviewed-change-set";
 import { createTargetValidationAttempt, validationBinding } from "../repository/target-validation";
 import type { TargetApplyReceipt } from "../repository/target-apply";
@@ -238,9 +243,14 @@ it("final acceptance runs an independent local model assessment and reuses only 
     let observations = 0;
     const tool = createChangeSetAcceptanceTool({
       async observeChangeSet() {
-        return await Promise.resolve(deriveNormalizedChangeSet(apply, validation, "contract"));
+        return await Promise.resolve({
+          changeSet: deriveNormalizedChangeSet(apply, validation, "contract"),
+          observed: { files: apply.postTree, treeDigest: apply.postTreeDigest },
+        });
       },
       async reviewSource(input) {
+        expect(input.normalizedChanges).toEqual(apply.changes);
+        expect(input.observed).toEqual({ files: apply.postTree, treeDigest: apply.postTreeDigest });
         observations += 1;
         const request = productRequestState.get();
         const reviewInput = {
@@ -359,4 +369,29 @@ it("a deferred assessment is never eligible as completed review evidence", async
   expect(assessments).toBe(1);
   expect(result.reviewCompleted).toBe(false);
   expect(result.reason).toBe("Model remains unassessed");
+});
+
+it("retains canonical acceptance evidence while requiring matching private review scope for reuse", () => {
+  contextStorage.run(new ContextContainer(), () => {
+    const input = {
+      appSpec: "Save records",
+      appSpecDigest: "spec",
+      clarifications: [],
+      files: [],
+      omissions: [],
+      originalRequest: "Save records",
+      sourceDigest: "same-current-tree",
+    };
+    const changes = [{ kind: "added" as const, path: "apps/example/page.tsx" }];
+    const expanded = [...changes, { kind: "added" as const, path: "apps/example/error.tsx" }];
+    const assessment = { ...unavailableSourceAssessment(input, "fixture"), reviewCompleted: true };
+    const scope = sourceReviewScopeBindingDigest(input, changes);
+    retainScopedProductSourceAssessment(assessment, scope);
+    expect(currentProductSourceAssessment(input)).toBe(assessment);
+    expect(currentScopedProductSourceAssessment(input, scope)).toBe(assessment);
+    expect(
+      currentScopedProductSourceAssessment(input, sourceReviewScopeBindingDigest(input, expanded)),
+    ).toBeUndefined();
+    expect(currentProductSourceAssessment(input)).toBe(assessment);
+  });
 });
