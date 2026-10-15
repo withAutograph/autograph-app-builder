@@ -114,6 +114,33 @@ describe("owner identity continuation", () => {
     expect(f.prepare.mock.calls[1]?.[1].session.auth).toBe(context.session.auth);
   });
 
+  it("invokes registration and acknowledgement steps without a serializable ports receiver", async () => {
+    const f = fixture();
+    const registerReceivers: boolean[] = [];
+    const acknowledgeReceivers: boolean[] = [];
+    let registrations = 0;
+    f.ports.register = function register(this: undefined) {
+      registerReceivers.push(this === undefined);
+      registrations += 1;
+      return Promise.resolve(
+        registrations === 1
+          ? { status: "waiting" as const }
+          : { status: "consumed" as const, eventId: "canonical-event" },
+      );
+    };
+    f.ports.acknowledge = function acknowledge(this: undefined) {
+      acknowledgeReceivers.push(this === undefined);
+      return Promise.resolve({ status: "consumed", eventId: "canonical-event" });
+    };
+    const generator = continueHostedRuntimeOwnerPreparation(input, context, f.prepare, f.ports);
+    expect(await generator.next()).toMatchObject({ done: false });
+    const terminal = generator.next();
+    f.expiry.resolve(null);
+    expect(await terminal).toMatchObject({ done: true, value: { status: "prepared" } });
+    expect(registerReceivers).toEqual([true, true]);
+    expect(acknowledgeReceivers).toEqual([true]);
+  });
+
   it.each(["consumed", "expired"] as const)(
     "re-reads a canonically %s request without showing a stale link",
     async (status) => {
