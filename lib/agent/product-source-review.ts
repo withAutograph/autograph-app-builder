@@ -579,6 +579,7 @@ const batchJudgmentSchema = z.strictObject({
 });
 
 const serializedPromptTooLarge = "The source review prompt exceeds its serialized byte bound.";
+const incompleteBatchCoverage = "Source review did not return every requested pair exactly once.";
 
 /** One provider response must cover every admitted pair exactly once. */
 // oxlint-disable-next-line eslint/complexity -- Response coverage, evidence validation and fresh usage accounting share one provider boundary.
@@ -650,7 +651,7 @@ const generateReviewBatch = async (
       new Set(parsed.data.judgments.map((entry) => entry.pairId)).size !== requested.size ||
       parsed.data.judgments.some((entry) => !requested.has(entry.pairId))
     ) {
-      return blocked("Source review did not return every requested pair exactly once.");
+      return blocked(incompleteBatchCoverage);
     }
     const judgments = new Map(parsed.data.judgments.map((entry) => [entry.pairId, entry.judgment]));
     return pairs.map((pair, index) => {
@@ -924,7 +925,8 @@ const assessReviewBatch = async (
         "The model provider rejected this source review prompt for context size.",
       ) ||
       assessments[0]?.reason === serializedPromptTooLarge ||
-      assessments[0]?.reason === providerOutputCapacityRejectedReason
+      assessments[0]?.reason === providerOutputCapacityRejectedReason ||
+      (unfinished.length > 1 && assessments[0]?.reason === incompleteBatchCoverage)
     ) {
       if (options.invocation !== undefined) {
         options.invocation.splits += 1;

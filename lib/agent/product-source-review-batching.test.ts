@@ -125,31 +125,80 @@ describe("exhaustive source review batching", () => {
   });
 
   it.each(["missing", "duplicate", "unknown"])(
-    "rejects %s pair results without checkpointing a partial response",
+    "recovers %s batch coverage through smaller exact reviews without checkpointing partial output",
     async (kind) => {
       const journal = new Journal();
-      const result = await assessProductSourcePages(input, stream(pages(3)), {
-        generateBatch(batch) {
-          const output = complete(batch);
-          if (kind === "missing") {
-            output.judgments.pop();
-          }
-          if (kind === "duplicate") {
-            const [first] = output.judgments;
-            output.judgments[1] = first;
-          }
-          if (kind === "unknown") {
-            output.judgments[1] = { judgment: empty, pairId: "invented" };
-          }
+      const requested = new Set<string>();
+      const completed = new Set<string>();
+      const generateBatch = vi.fn((batch: SourceReviewBatch) => {
+        const output = complete(batch);
+        for (const pair of batch.pairs) {
+          requested.add(pair.pairId);
+        }
+        if (batch.pairs.length === 1) {
+          completed.add(batch.pairs[0].pairId);
           return output;
-        },
+        }
+        if (kind === "missing") {
+          output.judgments.pop();
+        }
+        if (kind === "duplicate") {
+          const [first] = output.judgments;
+          output.judgments[1] = first;
+        }
+        if (kind === "unknown") {
+          output.judgments[1] = { judgment: empty, pairId: "invented" };
+        }
+        return output;
+      });
+      const result = await assessProductSourcePages(input, stream(pages(3)), {
+        generateBatch,
         journal,
       });
-      expect(result.reviewCompleted).toBe(false);
-      expect(journal.records.size).toBe(0);
-      expect(result.invocation).toMatchObject({ requestAttempts: 1, successfulRequests: 1 });
+      expect(result.reviewCompleted).toBe(true);
+      expect(completed).toEqual(requested);
+      expect(new Set(journal.records.keys())).toEqual(completed);
+      expect([...journal.records.values()].every((record) => record.kind === "completed")).toBe(
+        true,
+      );
+      expect(result.invocation?.splits).toBeGreaterThan(0);
+      generateBatch.mockClear();
+      const replay = await assessProductSourcePages(input, stream(pages(3)), {
+        generateBatch,
+        journal,
+      });
+      expect(evidence(replay)).toEqual(evidence(result));
+      expect(generateBatch).not.toHaveBeenCalled();
     },
   );
+
+  it("leaves invalid singleton coverage incomplete without recursively retrying it", async () => {
+    const journal = new Journal();
+    const generateBatch = vi.fn(() => ({ judgments: [] }));
+    const result = await assessProductSourcePages(input, stream(pages(1)), {
+      generateBatch,
+      journal,
+    });
+    expect(result.reviewCompleted).toBe(false);
+    expect(journal.records.size).toBe(0);
+    expect(generateBatch).toHaveBeenCalledTimes(1);
+    expect(result.invocation?.splits).toBe(0);
+  });
+
+  it("does not retry invalid singleton coverage left after completed journal siblings replay", async () => {
+    const journal = new Journal();
+    await assessProductSourcePages(input, stream(pages(2)), { generateBatch: complete, journal });
+    const completed = [...journal.records.keys()];
+    const generateBatch = vi.fn(() => ({ judgments: [] }));
+    const result = await assessProductSourcePages(input, stream(pages(3)), {
+      generateBatch,
+      journal,
+    });
+    expect(result.reviewCompleted).toBe(false);
+    expect([...journal.records.keys()]).toEqual(completed);
+    expect(generateBatch).toHaveBeenCalledTimes(1);
+    expect(result.invocation?.splits).toBe(0);
+  });
 
   it("checks citations against each exact page and checkpoints valid siblings before recovery", async () => {
     const journal = new Journal();
