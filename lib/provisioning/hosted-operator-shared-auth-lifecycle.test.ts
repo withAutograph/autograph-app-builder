@@ -384,6 +384,19 @@ const composed = (active = true) => {
   });
   const controlPlane: ControlPlane = {
     readApprovedPlan: unavailable,
+    registerOwnerRealmIdentityWait: unavailable,
+    acknowledgeOwnerRealmIdentityWait: unavailable,
+    readRealmIdentityWaitDelivery: unavailable,
+    resolveOwnerRealmContinuationContext: unavailable,
+    reconcileOwnerRealmContinuation: unavailable,
+    readRealmContinuationPendingBaseline: unavailable,
+    isObsoleteRealmAuthWait: unavailable,
+    readRealmContinuationDeliveryStartIndex: unavailable,
+    readRealmContinuationDeliveryTargetRequestId: unavailable,
+    acceptRealmContinuationDelivery: unavailable,
+    readRealmContinuationDeliveryReceipt: unavailable,
+    readRealmContinuationDeliveryClaim: unavailable,
+    claimRealmContinuationDelivery: unavailable,
     assertCanonicalOwner: unavailable,
     normalActorJournalPorts: {
       assertAuthorized: unavailable,

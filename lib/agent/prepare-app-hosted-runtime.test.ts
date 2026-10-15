@@ -24,6 +24,16 @@ import {
 } from "../provisioning/hosted-operator-contract";
 import type { PreparedRuntimeSelection } from "./prepared-runtime-selection";
 
+// These unit tests exercise injected preparation ports; Eve compiles the virtual runtime.
+vi.mock("workflow", () => ({
+  createHook: () => {
+    throw new Error("Workflow hooks require the compiled Eve runtime.");
+  },
+  sleep: () => {
+    throw new Error("Workflow waits require the compiled Eve runtime.");
+  },
+}));
+
 const stepMocks = { step: vi.fn<typeof prepareHostedRuntimeStep>() };
 
 const plan = hostedOperatorPlanSchema.parse({

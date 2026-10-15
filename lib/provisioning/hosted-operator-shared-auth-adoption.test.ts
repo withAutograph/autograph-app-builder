@@ -1008,6 +1008,19 @@ describe("native composition adoption boundary", () => {
     );
     const controlPlane: Awaited<ReturnType<typeof createHostedOperatorControlPlane>> = {
       readApprovedPlan: unavailable,
+      registerOwnerRealmIdentityWait: unavailable,
+      acknowledgeOwnerRealmIdentityWait: unavailable,
+      readRealmIdentityWaitDelivery: unavailable,
+      resolveOwnerRealmContinuationContext: unavailable,
+      reconcileOwnerRealmContinuation: unavailable,
+      readRealmContinuationPendingBaseline: unavailable,
+      isObsoleteRealmAuthWait: unavailable,
+      readRealmContinuationDeliveryStartIndex: unavailable,
+      readRealmContinuationDeliveryTargetRequestId: unavailable,
+      acceptRealmContinuationDelivery: unavailable,
+      readRealmContinuationDeliveryReceipt: unavailable,
+      readRealmContinuationDeliveryClaim: unavailable,
+      claimRealmContinuationDelivery: unavailable,
       assertCanonicalOwner: unavailable,
       normalActorJournalPorts: {
         assertAuthorized: unavailable,
