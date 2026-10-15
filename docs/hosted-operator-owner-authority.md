@@ -38,6 +38,20 @@ operations. Preserve the tenant, owner, adapter generation, operation, request,
 call, plan digest and cancellation checks. A recorded response or a tool
 invocation alone cannot substitute for the actual terminal approval receipt.
 
+## Native deployment completion
+
+A known native deployment that is `QUEUED`, `INITIALIZING` or `BUILDING` remains
+part of the existing approved operation. Builder waits between reads of that
+same deployment, renews its existing execution lease and preserves request
+cancellation. It does not ask for another approval, replan or create a replacement
+because a build is still running. A ready Gateway proceeds to the existing
+approved hostname assignment and independent readback.
+
+A build that fails or is cancelled keeps its observed outcome for recovery.
+Unknown provider reads and uncertain hostname assignments remain reconciliation
+cases; they do not authorize a blind write. Keep these waits inside the existing
+execution lifetime, without model polling loops or additional acceptance gates.
+
 ## Normal accounts and organization sessions
 
 For apps requiring several participants, Builder derives `normalActorProgram`

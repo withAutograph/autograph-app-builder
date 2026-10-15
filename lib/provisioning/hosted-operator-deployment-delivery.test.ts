@@ -119,9 +119,10 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
   if (delivery === undefined) {
     throw new Error("Missing fixture delivery");
   }
-  let ready = "BUILDING";
+  let ready = "READY";
   let count = 0;
   let deny = false;
+  let failCandidateReads = false;
   const calls: { method: string; path: string; body?: unknown }[] = [];
   const checkpoint = vi.fn<HostedOperatorDeploymentContext["checkpointDelivery"]>(async (rows) => {
     await Promise.resolve();
@@ -199,6 +200,10 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
     }
     return Response.json({ alias: aliasState.name });
   };
+  const candidateResponse = () =>
+    failCandidateReads
+      ? new Response(null, { status: 503 })
+      : Response.json({ ...deployment, readyState: ready });
   const fetcher: typeof fetch = async (url, init) => {
     await Promise.resolve();
     const requestUrl = new URL(url instanceof Request ? url.url : url);
@@ -249,15 +254,21 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
       return Response.json({ id: "dpl_new" });
     }
     if (path === "/v13/deployments/dpl_new") {
-      return Response.json({ ...deployment, readyState: ready });
+      return candidateResponse();
     }
     throw new Error("Unexpected native request");
   };
+  const wait = vi.fn(async (_milliseconds: number, signal?: AbortSignal) => {
+    await Promise.resolve();
+    signal?.throwIfAborted();
+    ready = "READY";
+  });
   const observeAlias = vi.fn(async () => {
     await Promise.resolve();
   });
   const writer = createHostedOperatorDeploymentDelivery({
     observeAlias,
+    wait,
     assertAuthorized: vi.fn(async () => {
       await Promise.resolve();
     }),
@@ -283,12 +294,19 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
   });
   return {
     calls,
+    wait,
     aliasState,
     observeAlias,
     project,
     deployment,
     checkpoint,
     input,
+    failCandidateReads: () => {
+      failCandidateReads = true;
+    },
+    seedCandidate: () => {
+      count = 1;
+    },
     revoke: () => {
       deny = true;
     },
@@ -301,11 +319,13 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
 it("requests standard Preview delivery from approved Git source and observes readiness", async () => {
   const f = fixture();
   const initial = await f.writer.reconcile(f.input);
+  f.setReady("BUILDING");
   const first = await f.writer.deliver(f.input);
   expect(initial.status).toBe("retryable");
-  expect(first.status).toBe("unknown");
+  expect(first.status).toBe("applied");
+  expect(f.wait).toHaveBeenCalled();
   const whileBuilding = await f.writer.deliver(f.input);
-  expect(whileBuilding.status).toBe("unknown");
+  expect(whileBuilding.status).toBe("applied");
   expect(f.calls.filter((call) => call.method === "POST")).toHaveLength(1);
   expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({
     gitSource: { ref: "feature", repoId: "repo", sha, type: "github" },
@@ -372,8 +392,9 @@ it.each(["services", "nextjs", null, "future-provider-framework", undefined])(
   async (framework) => {
     const f = fixture();
     f.project.framework = framework;
+    f.setReady("BUILDING");
     const building = await f.writer.deliver(f.input);
-    expect(building.status).toBe("unknown");
+    expect(building.status).toBe("applied");
     expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({
       project: plan.selection.projectId,
       gitSource: { repoId: plan.delivery?.repoId, ref: plan.delivery?.branch, sha },
@@ -501,8 +522,8 @@ it("reconciles historical staging delivery with Preview claims without changing 
 
 const readyGateway = async () => {
   const f = fixture(gatewayPlan, null, true);
-  await f.writer.deliver(f.input);
-  f.setReady("READY");
+  f.seedCandidate();
+  await f.writer.reconcile(f.input);
   return f;
 };
 it("assigns only the approved Gateway hostname to its exact READY deployment and independently reads it back", async () => {
@@ -519,7 +540,7 @@ it("assigns only the approved Gateway hostname to its exact READY deployment and
   ).toEqual([{ alias: "approved-gateway.example.test" }]);
   expect(
     f.calls.filter((call) => call.path === "/v13/deployments" && call.method === "POST"),
-  ).toHaveLength(1);
+  ).toHaveLength(0);
   expect(
     f.input.deliveryCandidates?.find((candidate) => candidate.deploymentId === "dpl_new")
       ?.gatewayAliasAttempted,
@@ -543,7 +564,7 @@ it.each([true, false])(
     ).toHaveLength(1);
     expect(
       f.calls.filter((call) => call.path === "/v13/deployments" && call.method === "POST"),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
     expect(
       f.input.deliveryCandidates?.some((candidate) => candidate.gatewayAliasAttempted === true),
     ).toBe(true);
@@ -570,6 +591,10 @@ it.each(["foreign-alias", "not-ready", "revoked", "foreign-source"])(
     }
     if (failure === "not-ready") {
       f.setReady("BUILDING");
+      f.wait.mockImplementation(async () => {
+        await Promise.resolve();
+        f.setReady("CANCELED");
+      });
     }
     if (failure === "revoked") {
       f.revoke();
@@ -655,7 +680,7 @@ it("durably records a definite alias rejection and permits a later corrected app
   ).toHaveLength(2);
   expect(
     f.calls.filter((call) => call.path === "/v13/deployments" && call.method === "POST"),
-  ).toHaveLength(1);
+  ).toHaveLength(0);
 });
 it("retains uncertain intent when recording a definite rejection fails", async () => {
   const f = await readyGateway();
@@ -741,4 +766,141 @@ it("accepts empty redirect metadata as a direct deployment binding", async () =>
   f.aliasState.redirect = "";
   const direct = await f.writer.deliver(f.input);
   expect(direct.status).toBe("applied");
+});
+
+it("waits through a long native Gateway build under the renewed lease and assigns its approved alias", async () => {
+  const f = fixture(gatewayPlan, null, true);
+  const controller = new AbortController();
+  f.input.signal = controller.signal;
+  let now = 0;
+  let leaseExpiresAt = 60_000;
+  f.input.assertCurrent = vi.fn(async () => {
+    await Promise.resolve();
+    if (now >= leaseExpiresAt) {
+      throw new Error("execution lease expired");
+    }
+    leaseExpiresAt = now + 60_000;
+  });
+  f.setReady("QUEUED");
+  f.wait.mockImplementation(async (milliseconds, signal) => {
+    await Promise.resolve();
+    signal?.throwIfAborted();
+    now += milliseconds;
+    let state = "INITIALIZING";
+    if (now >= 90_000) {
+      state = "READY";
+    } else if (now >= 15_000) {
+      state = "BUILDING";
+    }
+    f.setReady(state);
+  });
+  const observed = await f.writer.deliver(f.input);
+  expect(observed.status).toBe("applied");
+  expect(now).toBeGreaterThan(60_000);
+  expect(leaseExpiresAt).toBeGreaterThan(now);
+  expect(
+    f.calls.filter((call) => call.path === "/v13/deployments" && call.method === "POST"),
+  ).toHaveLength(1);
+  expect(
+    f.calls.filter((call) => call.path.endsWith("/aliases") && call.method === "POST"),
+  ).toHaveLength(1);
+  expect(f.calls.filter((call) => call.path === "/v7/deployments").length).toBeLessThan(
+    f.wait.mock.calls.length,
+  );
+  expect(f.calls.filter((call) => call.path.startsWith("/v9/projects/")).length).toBeLessThan(
+    f.wait.mock.calls.length,
+  );
+  expect(f.input.deliveryCandidates?.[0]?.readyState).toBe("READY");
+});
+
+it.each(["ERROR", "CANCELED"])(
+  "retains a waited %s build without creating another deployment",
+  async (state) => {
+    const f = fixture(gatewayPlan, null, true);
+    f.setReady("BUILDING");
+    f.wait.mockImplementation(async () => {
+      await Promise.resolve();
+      f.setReady(state);
+    });
+    const observed = await f.writer.deliver(f.input);
+    expect(observed.status).toBe("unknown");
+    expect(observed).toMatchObject({ candidates: [{ readyState: state }] });
+    expect(
+      f.calls.filter((call) => call.path === "/v13/deployments" && call.method === "POST"),
+    ).toHaveLength(1);
+    expect(f.calls.some((call) => call.path.endsWith("/aliases") && call.method === "POST")).toBe(
+      false,
+    );
+  },
+);
+
+it("stops a pending build on request cancellation without a replacement or alias write", async () => {
+  const f = fixture(gatewayPlan, null, true);
+  const controller = new AbortController();
+  f.input.signal = controller.signal;
+  f.setReady("BUILDING");
+  f.wait.mockImplementation(async (_milliseconds, signal) => {
+    await Promise.resolve();
+    expect(signal).toBe(controller.signal);
+    controller.abort();
+    signal?.throwIfAborted();
+  });
+  const observed = await f.writer.deliver(f.input);
+  expect(observed.status).toBe("unknown");
+  expect(
+    f.calls.filter((call) => call.path === "/v13/deployments" && call.method === "POST"),
+  ).toHaveLength(1);
+  expect(f.calls.some((call) => call.path.endsWith("/aliases") && call.method === "POST")).toBe(
+    false,
+  );
+  expect(f.input.deliveryCandidates?.[0]?.readyState).toBe("BUILDING");
+});
+
+it("stops a pending build when current authority is revoked", async () => {
+  const f = fixture(gatewayPlan, null, true);
+  f.setReady("BUILDING");
+  f.wait.mockImplementation(async () => {
+    await Promise.resolve();
+    f.revoke();
+  });
+  const observed = await f.writer.deliver(f.input);
+  expect(observed.status).toBe("unknown");
+  expect(
+    f.calls.filter((call) => call.path === "/v13/deployments" && call.method === "POST"),
+  ).toHaveLength(1);
+  expect(f.calls.some((call) => call.path.endsWith("/aliases") && call.method === "POST")).toBe(
+    false,
+  );
+});
+
+it("does not wait or repeat a write when an alias effect is genuinely uncertain", async () => {
+  const f = await readyGateway();
+  f.aliasState.applyWrite = false;
+  f.aliasState.throwOnWrite = true;
+  await f.writer.deliver(f.input);
+  f.setReady("BUILDING");
+  const observed = await f.writer.deliver(f.input);
+  expect(observed.status).toBe("unknown");
+  expect(f.wait).not.toHaveBeenCalled();
+  expect(
+    f.calls.filter((call) => call.path.endsWith("/aliases") && call.method === "POST"),
+  ).toHaveLength(1);
+});
+
+it("stops on an unknown provider read during a known build without repeating create", async () => {
+  const f = fixture(gatewayPlan, null, true);
+  f.setReady("BUILDING");
+  f.wait.mockImplementation(async () => {
+    await Promise.resolve();
+    f.failCandidateReads();
+  });
+  const observed = await f.writer.deliver(f.input);
+  expect(observed.status).toBe("unknown");
+  expect(f.wait).toHaveBeenCalledTimes(1);
+  expect(
+    f.calls.filter((call) => call.path === "/v13/deployments" && call.method === "POST"),
+  ).toHaveLength(1);
+  expect(f.calls.some((call) => call.path.endsWith("/aliases") && call.method === "POST")).toBe(
+    false,
+  );
 });

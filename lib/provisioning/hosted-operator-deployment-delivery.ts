@@ -1,6 +1,7 @@
 /* oxlint-disable eslint/no-await-in-loop -- Provider pages and observed deployment checkpoints are ordered under one real lease. */
 import { z } from "zod";
 import { createHash } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import type { createHostedOperatorControlPlane } from "./hosted-operator-deployment";
 import { HostedOperatorError, operatorPlanDigest } from "./hosted-operator-contract";
 import type { OperatorDeploymentCandidate } from "./hosted-operator-contract";
@@ -13,6 +14,8 @@ interface DeploymentListQuery {
   until?: string;
 }
 const id = z.string().min(1);
+const isPendingBuild = (candidate: OperatorDeploymentCandidate) =>
+  ["BUILDING", "QUEUED", "INITIALIZING"].includes(candidate.readyState);
 const nativePreviewMetadataSchema = z
   .object({
     customEnvironment: z.null().optional(),
@@ -93,6 +96,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
   readCredential: Awaited<ReturnType<typeof createHostedOperatorControlPlane>>["readCredential"];
   fetch?: typeof fetch;
   target?: "app" | "gateway";
+  wait?: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
   observeAlias?: (diagnostic: GatewayAliasDiagnostic) => void | Promise<void>;
 }) => {
   const observeAlias = (diagnostic: GatewayAliasDiagnostic) => {
@@ -170,6 +174,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       autograph_operator_plan: planDigest,
     };
     const assertCurrent = async () => {
+      input.signal?.throwIfAborted();
       await input.assertCurrent();
       await deps.assertAuthorized(input);
     };
@@ -216,7 +221,10 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
           },
           method: body === undefined ? "GET" : "POST",
           redirect: "error",
-          signal: AbortSignal.timeout(20_000),
+          signal: AbortSignal.any([
+            AbortSignal.timeout(20_000),
+            ...(input.signal === undefined ? [] : [input.signal]),
+          ]),
         });
       const { response, rejectedAssignment } = await sendObserved(
         send,
@@ -243,7 +251,10 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         }
       }
     };
-    const readCandidate = async (deploymentId: string): Promise<OperatorDeploymentCandidate> => {
+    const readCandidate = async (
+      deploymentId: string,
+      verifyProject = true,
+    ): Promise<OperatorDeploymentCandidate> => {
       const observed = deploymentSchema.parse(
         await request(`/v13/deployments/${encodeURIComponent(deploymentId)}`, {
           withGitRepoInfo: "true",
@@ -272,18 +283,21 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       if (!exactOrigin) {
         throw new HostedOperatorError("resource_mismatch");
       }
-      const project = projectSchema.parse(
-        await request(`/v9/projects/${encodeURIComponent(delivery.projectId)}`),
-      );
-      const team = z
-        .object({ id, slug: id })
-        .parse(await request(`/v2/teams/${encodeURIComponent(input.target.scopeId)}`));
-      if (
-        project.id !== delivery.projectId ||
-        project.accountId !== input.target.scopeId ||
-        team.id !== input.target.scopeId
-      ) {
-        throw new HostedOperatorError("resource_mismatch");
+      // Pending polls retain deployment identity checks; project/team are checked at entry and terminal readback.
+      if (verifyProject || !["BUILDING", "QUEUED", "INITIALIZING"].includes(observed.readyState)) {
+        const project = projectSchema.parse(
+          await request(`/v9/projects/${encodeURIComponent(delivery.projectId)}`),
+        );
+        const team = z
+          .object({ id, slug: id })
+          .parse(await request(`/v2/teams/${encodeURIComponent(input.target.scopeId)}`));
+        if (
+          project.id !== delivery.projectId ||
+          project.accountId !== input.target.scopeId ||
+          team.id !== input.target.scopeId
+        ) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
       }
       const saved = input.deliveryCandidates?.find(
         (candidate) =>
@@ -338,7 +352,9 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         seen.add(next);
         cursor = next;
       }
-      const candidates = await Promise.all([...ids].map(readCandidate));
+      const candidates = await Promise.all(
+        [...ids].map((deploymentId) => readCandidate(deploymentId)),
+      );
       if (candidates.length !== 0) {
         await input.checkpointDelivery(candidates);
       }
@@ -393,14 +409,38 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
   const reconcile = async (input: HostedOperatorDeploymentContext) => {
     try {
       const reader = io(input);
-      const candidates = await reader.readCandidates();
+      let candidates = await reader.readCandidates();
+      let waitedForBuild = false;
+      let waitMilliseconds = 5000;
+      while (
+        !candidates.some((candidate) => candidate.readyState === "READY") &&
+        !candidates.some((candidate) => candidate.gatewayAliasAttempted === true) &&
+        candidates.some(isPendingBuild)
+      ) {
+        // Renew the real execution lease around each bounded sleep. Only positively observed
+        // pending candidates are polled; uncertain effects never authorize another create.
+        await reader.assertCurrent();
+        await (deps.wait === undefined
+          ? delay(waitMilliseconds, undefined, { signal: input.signal })
+          : deps.wait(waitMilliseconds, input.signal));
+        await reader.assertCurrent();
+        candidates = await Promise.all(
+          candidates.map(async (candidate) =>
+            isPendingBuild(candidate)
+              ? await reader.readCandidate(candidate.deploymentId, false)
+              : candidate,
+          ),
+        );
+        await input.checkpointDelivery(candidates);
+        waitedForBuild = true;
+        waitMilliseconds = Math.min(waitMilliseconds + 5000, 15_000);
+      }
       let selected = candidates.find((value) => value.readyState === "READY");
       if (selected === undefined) {
         if (
+          waitedForBuild ||
           candidates.some(
-            (candidate) =>
-              ["BUILDING", "QUEUED", "INITIALIZING"].includes(candidate.readyState) ||
-              (deps.target === "gateway" && candidate.gatewayAliasAttempted === true),
+            (candidate) => deps.target === "gateway" && candidate.gatewayAliasAttempted === true,
           )
         ) {
           return { candidates, status: "unknown" as const };
@@ -571,7 +611,14 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         candidate,
       ];
       await input.checkpointDelivery(candidates);
-      return await reconcile({ ...input, deliveryCandidates: candidates });
+      const observed = await reconcile({ ...input, deliveryCandidates: candidates });
+      if (deps.target === "gateway" && observed.status === "retryable") {
+        const selected = observed.candidates.find((value) => value.readyState === "READY");
+        if (selected !== undefined) {
+          return await assignGatewayAlias(input, observed.candidates, selected);
+        }
+      }
+      return observed;
     },
     reconcile,
   };

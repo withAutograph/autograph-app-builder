@@ -124,6 +124,8 @@ export type HostedOperatorDeploymentContext = HostedOperatorEffectContext & {
   ) => Promise<void>;
 };
 export type HostedOperatorEffectContext = Context & {
+  /** Cancellation of the actual operator execution request. */
+  signal?: AbortSignal;
   effect: Effect;
   /** Actual execution lease, retained privately for read-only journal CAS authority checks. */
   leaseId?: string;
@@ -1061,6 +1063,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           { ...context, operationRef, plan },
           async (assertFence) => {
             const assertCurrent = async () => {
+              request.signal.throwIfAborted();
               await assertApproval();
               await assertFence();
               await ownedUpdate((record) => record);
@@ -1125,6 +1128,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
               }
               const effectInput: HostedOperatorEffectContext = {
                 ...context,
+                signal: request.signal,
                 leaseId,
                 assertCurrent,
                 accountPreparation: record.accountPreparation,
