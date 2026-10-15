@@ -180,7 +180,7 @@ export const applicationReviewVisibility = (input: {
   hasSelectedBaseline: boolean;
   unexposedReleasePrefixes?: readonly string[];
 }) => {
-  const unexposedReleasePrefixes = input.unexposedReleasePrefixes;
+  const { unexposedReleasePrefixes } = input;
   if (!input.hasSelectedBaseline) {
     return { paths: [...input.observedPaths], omissions: [] };
   }
