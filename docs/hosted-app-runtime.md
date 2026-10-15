@@ -168,6 +168,15 @@ public origin and verified Gateway transport/JWKS settings under the
 [app environment contract](hosted-operator-app-environment.md). They do not
 contain `BETTER_AUTH_URL`, an Auth SQL connection or a Better Auth signing secret.
 The trusted Gateway/Auth host receives its own approved authentication settings.
+Its Deployment Protection Trusted Sources policy belongs to approved shared-host
+setup: the exact Builder project Production → Gateway Preview and Operator project
+Preview → Gateway Preview rules have independent provider-policy readback. New
+app plans do not authorize those provider setting changes; they retain native
+OIDC verification, app/Auth bindings and Gateway delivery. Successful protected
+runtime access is not proof of those exact rules or automatic self-reproduction.
+See [shared Gateway host setup](operator-native-host.md#shared-gateway-host-setup-owns-trusted-sources).
+Already frozen plans retain their existing optional Trusted Sources scope and
+recovery semantics; this ownership change does not rewrite pending operations.
 Private Sandbox origins are never a Gateway origin. Persisted legacy plans remain
 readable without origin proof, and cleanup can retire their resources without
 reconstructing an origin. The concrete trusted planner still owns provider origin

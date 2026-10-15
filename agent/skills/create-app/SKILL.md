@@ -201,7 +201,7 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    Successful validation defers independent source assessment until final
    `accept_change_set`. A deferred or unassessed source assessment is expected;
    do not repeat validation merely to obtain review. Once the implementation and
-   required behavioral checks are ready, inspect `change_set_status` and call
+   available behavioral checks are ready, inspect `change_set_status` and call
    `accept_change_set` to assess current source against the original request and
    accepted plan. A matching completed assessment is reused; interrupted matching
    work resumes from the journal. Complete this independent review before
@@ -211,6 +211,11 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    Repair cited product contradictions through `validate_app_creation` with
    corrected implementation files, then accept the repaired change set again.
    A review interruption alone does not require another technical validation.
+   For requested hosted generated-app delivery, technical validation and source
+   review precede publication of the source needed to deploy the app. Keep hosted
+   behavior unassessed while completing that publication; exercise the pending
+   hosted checks after delivery instead of waiting for a Preview before reviewing
+   and publishing its source.
    An unavailable or clean source review never proves runtime
    success. Keep incomplete previews inspectable and report remaining checks;
    do not replace a requested backend outcome with a simulated transition.
@@ -405,8 +410,15 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
   support through the repository workflow; never ask the evaluator to copy
   cookies or repair the app. Keep assertions about product behavior and access,
   without exact internal call counts, opaque IDs or incidental DOM positions.
-- For protected hosted generated-app delivery, after publishing or updating the
-  reviewed draft PR, check `appSourceRecording`.
+- For requested protected hosted generated-app delivery, finish technical
+  validation and independent source review, then use the existing destination
+  diff review, `accept_change_set`, and `seal_github_draft_pr_proposal` workflow.
+  Obtain separate publication approval and use `publish_github_draft_pr`, or the
+  existing draft update/reconciliation path, before full app preparation and
+  delivery. Initial Auth/resource bootstrap may happen first. Hosted behavior
+  remains unassessed until the actual app is exercised; do not wait for that
+  behavior before publishing the source needed for its Preview.
+  After publishing or updating the reviewed draft PR, check `appSourceRecording`.
   `recorded` associates the actual published branch, commit and tree with this
   session's compiled release. Use that association for hosted Preview planning;
   never substitute the latest repository commit or manually supplied source IDs.

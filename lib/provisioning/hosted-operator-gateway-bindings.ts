@@ -743,13 +743,17 @@ export const createHostedOperatorGatewayBindings = (deps: {
       const missing = Object.values(approvedTrustedSources).filter(
         (rule) => !coversTrustedSource(sources, rule),
       );
-      let visibility: NonNullable<OperatorGatewayBindingsDiagnostic["trustedSourcesVisibility"]> = "present";
+      let visibility: NonNullable<OperatorGatewayBindingsDiagnostic["trustedSourcesVisibility"]> =
+        "present";
       if (project.trustedSources === undefined) {
         visibility = "absent";
       } else if (project.trustedSources === null) {
         visibility = "null";
       }
-      observation.protection({ trustedSourcesVisibility: visibility, missingApprovedPairCount: missing.length });
+      observation.protection({
+        trustedSourcesVisibility: visibility,
+        missingApprovedPairCount: missing.length,
+      });
       // A finite override cannot preserve the future same-environment semantics of an implicit foreign grant.
       const requiresReconciliation = missing.some(
         (rule) =>

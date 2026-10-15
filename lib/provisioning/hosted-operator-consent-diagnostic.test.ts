@@ -41,14 +41,11 @@ describe("closed Neon consent diagnostics", () => {
     };
     report({ ...value, gatewayBindings });
     expect(sink.mock.calls[0]?.[0].gatewayBindings).toEqual(gatewayBindings);
-    for (const invalid of [
-      { requestTarget: secret },
-      { trustedSourcesVisibility: secret },
-      { missingApprovedPairCount: secret },
-      { missingApprovedPairCount: -1 },
-      { missingApprovedPairCount: 1.5 },
-    ]) {
-      report({ ...value, gatewayBindings: { ...gatewayBindings, ...invalid } });
+    for (const field of ["requestTarget", "trustedSourcesVisibility", "missingApprovedPairCount"]) {
+      report({ ...value, gatewayBindings: { ...gatewayBindings, [field]: secret } });
+    }
+    for (const missingApprovedPairCount of [-1, 1.5]) {
+      report({ ...value, gatewayBindings: { ...gatewayBindings, missingApprovedPairCount } });
     }
     expect(sink).toHaveBeenCalledOnce();
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);

@@ -382,6 +382,62 @@ const retainCompletedAuth = (record: HostedRuntimeJournalRecord): HostedRuntimeJ
       : (record.retainedAuth ?? retainedOperatorAuthFromJournal(record)),
 });
 
+/** Removing host-owned protection administration cannot discard an uncertain app/environment effect. */
+const isSharedHostProtectionSuccessor = (
+  record: HostedRuntimeJournalRecord,
+  plan: HostedOperatorPlan,
+  now: number,
+) => {
+  const prior = record.operator;
+  const binding = prior?.plan.effects.find((effect) => effect.kind === GATEWAY_BINDINGS_EFFECT);
+  if (
+    prior === undefined ||
+    binding === undefined ||
+    prior.plan.gatewayBindings?.trustedSources === undefined ||
+    plan.gatewayBindings === undefined ||
+    plan.gatewayBindings.trustedSources !== undefined ||
+    prior.plan.gatewayDelivery === undefined ||
+    plan.gatewayDelivery === undefined
+  ) {
+    return false;
+  }
+  return [
+    record.status === "pending",
+    record.step === "reserved",
+    record.privateState !== undefined,
+    prior.plan.stage === AUTH_BOOTSTRAP_STAGE,
+    prior.approvalId !== undefined,
+    record.approvedByCallId !== UNAPPROVED_PLAN,
+    record.leaseId === undefined ||
+      (record.leaseExpiresAt !== undefined && Date.parse(record.leaseExpiresAt) <= now),
+    prior.pendingEffectId === binding.id,
+    prior.plan.effects.every(
+      (effect) =>
+        effect.id === binding.id ||
+        effect.kind === "gateway-delivery" ||
+        prior.receipts.some((receipt) => receipt.effectId === effect.id),
+    ),
+    prior.gatewayDeliveryCandidates?.some(
+      (candidate) => candidate.gatewayAliasAttempted === true,
+    ) !== true ||
+      prior.plan.effects.some(
+        (effect) =>
+          effect.kind === "gateway-delivery" &&
+          prior.receipts.some((receipt) => receipt.effectId === effect.id),
+      ),
+    sameOperatorPlanExceptExpiry(prior.plan, {
+      ...plan,
+      gatewayBindings: {
+        ...plan.gatewayBindings,
+        trustedSources: prior.plan.gatewayBindings.trustedSources,
+      },
+      effects: plan.effects.map((effect) =>
+        effect.id === binding.id ? { ...effect, description: binding.description } : effect,
+      ),
+    }),
+  ].every(Boolean);
+};
+
 const handlePlanOperation = async (
   deps: ProtectedHostedOperatorDependencies,
   context: Context,
@@ -423,7 +479,31 @@ const handlePlanOperation = async (
     await deps.assertAuthorized({ ...context, plan, purpose: "planning" });
   });
   assertUnexpired(plan, now());
-  const recovered = await recoverOriginalApprovedPlan(deps, context, input, appId, plan, now);
+  const successorPrior = await deps.store.read(context);
+  const sharedHostSuccessor =
+    successorPrior !== undefined &&
+    isSharedHostProtectionSuccessor(successorPrior.record, plan, now());
+  if (sharedHostSuccessor) {
+    const priorOperator = requireOperator(successorPrior.record);
+    const approval = await deps.readApproval({
+      ...context,
+      action: "prepare",
+      callId: successorPrior.record.approvedByCallId,
+      planDigest: priorOperator.planDigest,
+    });
+    if (
+      approval?.approved !== true ||
+      approval.approvalId !== priorOperator.approvalId ||
+      approval.callId !== successorPrior.record.approvedByCallId ||
+      approval.planDigest !== priorOperator.planDigest ||
+      approval.action !== "prepare"
+    ) {
+      throw new HostedOperatorError("authorization_required");
+    }
+  }
+  const recovered = sharedHostSuccessor
+    ? null
+    : await recoverOriginalApprovedPlan(deps, context, input, appId, plan, now);
   if (recovered !== null) {
     return response(recovered);
   }
@@ -495,8 +575,19 @@ const handlePlanOperation = async (
         record.operator.plan.stage === AUTH_PARTICIPANTS_STAGE &&
         record.accountPreparation !== undefined;
       const gatewaySourceSuccessor = isGatewaySourceSuccessor(record, plan, now());
+      const sharedHostProtectionSuccessor =
+        sharedHostSuccessor &&
+        record.operator.operationRef === successorPrior.record.operator?.operationRef &&
+        record.operator.planDigest === successorPrior.record.operator?.planDigest &&
+        record.operator.approvalId === successorPrior.record.operator?.approvalId &&
+        record.approvedByCallId === successorPrior.record.approvedByCallId &&
+        isSharedHostProtectionSuccessor(record, plan, now());
+      if (sharedHostSuccessor && !sharedHostProtectionSuccessor) {
+        throw new HostedOperatorError("operation_in_progress");
+      }
       if (
         !gatewaySourceSuccessor &&
+        !sharedHostProtectionSuccessor &&
         (record.leaseId !== undefined ||
           record.operator.pendingEffectId !== undefined ||
           record.operator.pendingEffectAttempt !== undefined ||
@@ -551,13 +642,19 @@ const handlePlanOperation = async (
       // Same-resource release changes keep credentials; old proof never attests the new plan.
       const nextOperator: ReturnType<typeof requireOperator> = { ...operator };
       nextOperator.retainedGatewayDeliveries = record.operator.retainedGatewayDeliveries;
-      if (gatewaySourceSuccessor) {
+      if (gatewaySourceSuccessor || sharedHostProtectionSuccessor) {
         const { retainedGatewayDeliveries, ...priorOperator } = record.operator;
         nextOperator.retainedGatewayDeliveries = [
           ...(retainedGatewayDeliveries ?? []),
           { approvedByCallId: record.approvedByCallId, operator: priorOperator },
         ];
         nextOperator.receipts = record.operator.receipts;
+      }
+      if (sharedHostProtectionSuccessor) {
+        nextOperator.operationRef = record.operator.operationRef;
+        nextOperator.pendingEffectId = record.operator.pendingEffectId;
+        nextOperator.pendingEffectAttempt = record.operator.pendingEffectAttempt;
+        nextOperator.workerCheckpoints = record.operator.workerCheckpoints;
       }
       if (sameAuthPreparation(record.operator.plan, plan)) {
         nextOperator.authPreparation = record.operator.authPreparation;
@@ -604,7 +701,7 @@ const handlePlanOperation = async (
         step: "reserved" as const,
       };
       delete next.proof;
-      if (gatewaySourceSuccessor) {
+      if (gatewaySourceSuccessor || sharedHostProtectionSuccessor) {
         delete next.leaseId;
         delete next.leaseExpiresAt;
       }

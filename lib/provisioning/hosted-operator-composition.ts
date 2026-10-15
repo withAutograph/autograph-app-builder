@@ -1186,7 +1186,6 @@ export const composeHostedOperatorDependencies = (
       }),
     );
     let readonlyAttesters: NonNullable<HostedOperatorPlan["gatewayBindings"]>["readonlyAttesters"];
-    let trustedSources: NonNullable<HostedOperatorPlan["gatewayBindings"]>["trustedSources"];
     if (
       configuration.workloadPolicy.environment === "production" &&
       configuration.nativeNeon.configuration.operator.environment === "preview"
@@ -1209,21 +1208,14 @@ export const composeHostedOperatorDependencies = (
           projectId: operator.projectId,
         },
       };
-      trustedSources = {
-        builderProduction: { projectId: builder.projectId, from: "production", to: "preview" },
-        operatorPreview: { projectId: operator.projectId, from: "preview", to: "preview" },
-      };
     }
     const gatewayPlan = hostedOperatorPlanSchema.parse({
       ...base,
       effects: [
         ...base.effects,
         {
-          description: `Bind shared Auth only in the isolated Gateway/Auth project; retain existing signing and Auth secrets.${
-            trustedSources === undefined
-              ? ""
-              : ` Allow Trusted Sources from Builder project ${trustedSources.builderProduction.projectId} Production to Gateway project ${configuration.gateway.projectId} Preview and from Operator project ${trustedSources.operatorPreview.projectId} Preview to the same Gateway Preview; preserve existing Trusted Sources rules.`
-          }`,
+          description:
+            "Bind shared Auth only in the isolated Gateway/Auth project; retain existing signing and Auth secrets.",
           id: GATEWAY_BINDINGS,
           kind: GATEWAY_BINDINGS,
         },
@@ -1240,7 +1232,6 @@ export const composeHostedOperatorDependencies = (
         catalogAppIds: configuration.gateway.protectedApplicationIds,
         operatorOrigin: configuration.operator.origin,
         readonlyAttesters,
-        trustedSources,
         sourceWorkload: configuration.gateway.workload,
       },
       gatewayDelivery: {
