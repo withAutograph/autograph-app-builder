@@ -3,7 +3,10 @@ import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { createHostedOperatorRealmLinkConfig } from "./hosted-operator-realm-link-config";
 import { z } from "zod";
-import { createHostedOperatorConsentDiagnostic } from "./hosted-operator-consent-diagnostic";
+import {
+  createHostedOperatorConsentDiagnostic,
+  projectOperatorGatewayProviderFailure,
+} from "./hosted-operator-consent-diagnostic";
 import type {
   HostedOperatorConsentDiagnosticSink,
   OperatorGatewayBindingsDiagnostic,
@@ -37,6 +40,53 @@ const valueDigest = (value: string) => createHash("sha256").update(value).digest
 const unavailable = () => new HostedOperatorError("operator_unavailable");
 const ignoreDiagnostic = () => {
   /* Unobserved read-only helpers keep their existing behavior. */
+};
+// Bound untrusted error-body buffering only; oversized or unreadable diagnostics stay unclassified.
+const readProviderFailure = async (response: Response, signal: AbortSignal) => {
+  try {
+    const reader = response.body?.getReader();
+    if (reader === undefined) {
+      return {};
+    }
+    const cancel = () => {
+      const discard = async () => {
+        try {
+          await reader.cancel();
+        } catch {
+          /* Advisory cleanup cannot replace the original provider failure. */
+        }
+      };
+      void discard();
+    };
+    signal.addEventListener("abort", cancel, { once: true });
+    try {
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      for (;;) {
+        if (signal.aborted) {
+          return {};
+        }
+        const next = await reader.read();
+        if (next.done) {
+          break;
+        }
+        size += next.value.byteLength;
+        if (size > 8192) {
+          return {};
+        }
+        chunks.push(next.value);
+      }
+      return projectOperatorGatewayProviderFailure(
+        JSON.parse(Buffer.concat(chunks).toString("utf-8")),
+      );
+    } finally {
+      signal.removeEventListener("abort", cancel);
+      cancel();
+      reader.releaseLock();
+    }
+  } catch {
+    return {};
+  }
 };
 const managedKeys = [
   "AUTH_DATABASE_RESOURCE",
@@ -224,6 +274,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
     let method: OperatorGatewayBindingsDiagnostic["method"];
     let statusCategory: OperatorGatewayBindingsDiagnostic["statusCategory"];
     let httpStatus: OperatorGatewayBindingsDiagnostic["httpStatus"];
+    let providerFailure: ReturnType<typeof projectOperatorGatewayProviderFailure> | undefined;
     return {
       at(next: OperatorGatewayBindingsDiagnostic["stage"], preserveRequest = false) {
         stage = next;
@@ -231,6 +282,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
           method = undefined;
           statusCategory = undefined;
           httpStatus = undefined;
+          providerFailure = undefined;
         }
       },
       get stage() {
@@ -265,6 +317,11 @@ export const createHostedOperatorGatewayBindings = (deps: {
       noResponse() {
         statusCategory = "no_response";
       },
+      providerFailure(
+        failure: ReturnType<typeof projectOperatorGatewayProviderFailure> | undefined,
+      ) {
+        providerFailure = failure;
+      },
       finish(result: OperatorGatewayBindingsDiagnostic["result"]) {
         report?.({
           boundary: "operator",
@@ -278,6 +335,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
             ...(method === undefined ? {} : { method }),
             ...(statusCategory === undefined ? {} : { statusCategory }),
             ...(httpStatus === undefined ? {} : { httpStatus }),
+            ...providerFailure,
           },
         });
       },
@@ -289,6 +347,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
     request: ignoreDiagnostic,
     response: ignoreDiagnostic,
     noResponse: ignoreDiagnostic,
+    providerFailure: ignoreDiagnostic,
     finish: ignoreDiagnostic,
   };
   const open = (
@@ -363,6 +422,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
       await requestGuard();
       const url = new URL(route, "https://api.vercel.com");
       url.searchParams.set("teamId", target.scopeId);
+      const signal = AbortSignal.timeout(20_000);
       const options: RequestInit = {
         cache: "no-store",
         headers: {
@@ -372,7 +432,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
         },
         method,
         redirect: "error",
-        signal: AbortSignal.timeout(20_000),
+        signal,
       };
       if (body !== undefined) {
         options.body = JSON.stringify(body);
@@ -393,6 +453,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
       try {
         await requestGuard();
         if (!response.ok) {
+          observation.providerFailure(await readProviderFailure(response, signal));
           throw unavailable();
         }
         if (response.status === 204) {
