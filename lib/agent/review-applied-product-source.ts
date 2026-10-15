@@ -6,12 +6,22 @@ import {
   reviewCurrentProductSource,
   retainCurrentProductSourceAssessment,
 } from "@/lib/agent/product-source-review-state";
-import { readProductReviewSourcePages } from "@/lib/agent/product-source-review-pages";
+import { assessApplicationSource, applicationSourceReviewKey } from "./application-source-review";
+import type {
+  ApplicationReviewEvidence,
+  ApplicationSourceReviewOptions,
+} from "./application-source-review";
+import {
+  applicationReviewVisibility,
+  createApplicationReviewEvidence,
+} from "./application-review-evidence";
+import type { SourceReviewJournal } from "./product-source-review-journal";
+import { appBaselineState } from "./app-baseline-state";
+import { readAppBaselineMarker } from "../repository/app-baseline";
 import { inspectApplyOverlay } from "@/lib/repository/target-apply";
 import type { OverlayChange, OverlaySnapshot } from "@/lib/repository/target-apply";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 import {
-  assessProductSourcePages,
   sourceReviewBindingDigest,
   unavailableSourceAssessment,
 } from "@/lib/agent/product-source-review";
@@ -113,6 +123,64 @@ export const reviewObservedProductSource = async (
   return assessment;
 };
 
+/** Canonical owner-authorized application reuse precedes every completed cache return. */
+export const reviewApplicationWithJournal = async (
+  input: {
+    reviewInput: ProductSourceReviewInput;
+    normalizedChanges: readonly OverlayChange[];
+    evidence: ApplicationReviewEvidence;
+    journal: SourceReviewJournal;
+    currentDigest: () => Promise<string>;
+    options?: ApplicationSourceReviewOptions;
+  },
+  assess = assessApplicationSource,
+): Promise<ProductSourceAssessment> => {
+  const signal = input.options?.abortSignal;
+  signal?.throwIfAborted();
+  const key = applicationSourceReviewKey(input.reviewInput, input.normalizedChanges);
+  const retained = await input.journal.read(key);
+  signal?.throwIfAborted();
+  const reusable =
+    retained?.kind === "application-completed" &&
+    retained.assessment.bindingDigest === sourceReviewBindingDigest(input.reviewInput);
+  const options: ApplicationSourceReviewOptions = {
+    ...input.options,
+    async assertCurrentOwner() {
+      signal?.throwIfAborted();
+      await input.journal.read(key);
+      signal?.throwIfAborted();
+    },
+  };
+  const assessment = reusable
+    ? { ...retained.assessment, invocation: { ...emptySourceReviewInvocation(), journalReuses: 1 } }
+    : await assess(input.reviewInput, input.evidence, options);
+  signal?.throwIfAborted();
+  if ((await input.currentDigest()) !== input.reviewInput.sourceDigest) {
+    return unavailableSourceAssessment(
+      input.reviewInput,
+      "Source changed during review; this assessment is stale. Review the current implementation when ready.",
+    );
+  }
+  signal?.throwIfAborted();
+  if (reusable) {
+    input.options?.onInvocation?.(assessment.invocation ?? emptySourceReviewInvocation());
+    return assessment;
+  }
+  if (!assessment.reviewCompleted) {
+    return assessment;
+  }
+  const { invocation, ...durableAssessment } = assessment;
+  const recorded = await input.journal.put(key, {
+    kind: "application-completed",
+    assessment: durableAssessment,
+  });
+  signal?.throwIfAborted();
+  if (recorded.kind !== "application-completed") {
+    throw new Error("Completed application review could not be retained.");
+  }
+  return { ...recorded.assessment, ...(invocation === undefined ? {} : { invocation }) };
+};
+
 /** Shared post-validation assessment; never substitutes for executed product behavior. */
 export const reviewAppliedProductSource = async (input: {
   appSpec: AcceptedAppSpec;
@@ -173,50 +241,56 @@ export const reviewAppliedProductSource = async (input: {
     const sandbox = await input.getSandbox();
     const { observed } = input;
     logPhase("current_source_observed", { fileCount: observed.files.length });
-    const currentInput = { ...reviewInput, sourceDigest: observed.treeDigest };
-    // Aggregate reuse follows both the actual source tree and its intended diff.
-    // Pair journals remain reusable for identical source pages and requirements.
-    const bindingDigest = sourceReviewScopeBindingDigest(currentInput, input.normalizedChanges);
-    const retained = currentScopedProductSourceAssessment(currentInput, bindingDigest);
-    if (retained !== undefined) {
-      const latest = await inspectApplyOverlay(sandbox, input.applyReceipt.applyRoot);
-      if (latest.treeDigest === observed.treeDigest) {
-        input.abortSignal?.throwIfAborted();
-        logPhase("retained_review_reused");
-        return { ...retained, invocation: emptySourceReviewInvocation() };
-      }
-      logPhase("source_changed_during_review");
-      return unavailableSourceAssessment(
-        currentInput,
-        "Source changed during review; this assessment is stale. Review the current implementation when ready.",
-      );
-    }
-    const changedPaths = currentChangedSourcePaths(input.normalizedChanges);
-    const groups = new Map<string, number>();
-    for (const path of changedPaths) {
-      const group = path.split("/")[0] ?? "";
-      groups.set(group, (groups.get(group) ?? 0) + 1);
-    }
-    const changedPathGroups = Object.fromEntries(
-      [...groups].toSorted(([a], [b]) => a.localeCompare(b)),
-    );
-    const source = readProductReviewSourcePages({
-      applyRoot: input.applyReceipt.applyRoot,
-      changedPaths,
-      observed,
-      sandbox,
+    const currentInput = {
+      ...reviewInput,
+      sourceDigest: observed.treeDigest,
+      omissions: [
+        "Source tools expose observed eligible code and configuration, including relevant unchanged imports. Uninspected dependencies cannot establish absence of functionality.",
+        "Only original request text and textual product clarifications are retained; attached assets are not reviewed.",
+      ],
+    };
+    const bindingDigest = applicationSourceReviewKey(currentInput, input.normalizedChanges);
+    const journal = await sourceReviewJournalForSession({
+      sessionAuth: input.sessionAuth,
+      sessionId: input.sessionId ?? "",
     });
-    logPhase("reviewing_changed_source", {
-      changedPathCount: changedPaths.length,
-      changedPathGroups,
+    input.abortSignal?.throwIfAborted();
+    const baseline = appBaselineState.get()?.selection;
+    const selectedBaseline = baseline?.appId === input.appSpec.appId ? baseline : undefined;
+    const marker =
+      selectedBaseline === undefined
+        ? undefined
+        : await readAppBaselineMarker(sandbox, selectedBaseline);
+    const visibility = applicationReviewVisibility({
+      observedPaths: observed.files.map((file) => file.path),
+      changedPaths: input.normalizedChanges.map((change) => change.path),
+      hasSelectedBaseline: selectedBaseline !== undefined,
+      unexposedReleasePrefixes: marker?.unexposedReleasePrefixes,
     });
-    const assessedInput = { ...currentInput, omissions: source.omissions };
-    const reviewOptions: NonNullable<Parameters<typeof assessProductSourcePages>[2]> = {
+    currentInput.omissions.push(...visibility.omissions);
+    const evidence = createApplicationReviewEvidence({
       abortSignal: input.abortSignal,
-      journal: await sourceReviewJournalForSession({
-        sessionAuth: input.sessionAuth,
-        sessionId: input.sessionId ?? "",
-      }),
+      applyRoot: input.applyReceipt.applyRoot,
+      changedPaths: input.normalizedChanges.map((change) => change.path),
+      observed,
+      reviewInput: currentInput,
+      sandbox,
+      visiblePaths: visibility.paths,
+      ...(input.appSpec.version !== 2
+        ? {}
+        : {
+            appSpecParts: () =>
+              acceptedAppSpecTextParts({
+                accepted: input.appSpec,
+                artifacts: input.artifacts ?? [],
+                sessionAuth: input.sessionAuth,
+                sessionId: input.sessionId ?? "",
+              }),
+          }),
+    });
+    const options: ApplicationSourceReviewOptions = {
+      abortSignal: input.abortSignal,
+      sessionId: input.sessionId,
       onInvocation(invocation) {
         console.info(
           JSON.stringify({
@@ -224,15 +298,6 @@ export const reviewAppliedProductSource = async (input: {
             event: "app_builder.source_review_invocation",
             sessionId: input.sessionId,
             ...invocation,
-          }),
-        );
-      },
-      onProgress(progress) {
-        console.info(
-          JSON.stringify({
-            callId: input.callId,
-            event: "app_builder.source_review_progress",
-            ...progress,
           }),
         );
       },
@@ -246,29 +311,21 @@ export const reviewAppliedProductSource = async (input: {
           }),
         );
       },
-      sessionId: input.sessionId,
     };
-    if (input.appSpec.version === 2) {
-      reviewOptions.reviewAppSpecParts = () =>
-        acceptedAppSpecTextParts({
-          accepted: input.appSpec,
-          artifacts: input.artifacts ?? [],
-          sessionAuth: input.sessionAuth,
-          sessionId: input.sessionId ?? "",
-        });
-    }
-    const assessment = await assessProductSourcePages(assessedInput, source.pages, reviewOptions);
-    logPhase("changed_source_review_finished", { status: assessment.status });
+    const assessment = await reviewApplicationWithJournal({
+      reviewInput: currentInput,
+      normalizedChanges: input.normalizedChanges,
+      evidence,
+      journal,
+      options,
+      currentDigest: async () => {
+        const { treeDigest } = await inspectApplyOverlay(sandbox, input.applyReceipt.applyRoot);
+        return treeDigest;
+      },
+    });
     input.abortSignal?.throwIfAborted();
-    const latest = await inspectApplyOverlay(sandbox, input.applyReceipt.applyRoot);
-    if (latest.treeDigest !== observed.treeDigest) {
-      logPhase("source_changed_during_review");
-      return unavailableSourceAssessment(
-        assessedInput,
-        "Source changed during review; this assessment is stale. Review the current implementation when ready.",
-      );
-    }
     retainScopedProductSourceAssessment(assessment, bindingDigest);
+    logPhase("application_source_review_finished", { status: assessment.status });
     return assessment;
   } catch (error) {
     input.abortSignal?.throwIfAborted();

@@ -27,16 +27,33 @@ export interface ReviewDetailCursor {
   offsetBytes: number;
 }
 
+export type ReviewDetailSection = "all" | "source-assessment";
+
+/** eve 0.68 capToolResults measures JSON.stringify(tool-result output) in UTF-16 units. */
+export const EVE_REVIEW_DETAIL_HISTORY_CHARACTERS = 2000;
+
+const modelOutputCharacters = (output: object): number =>
+  JSON.stringify({ type: "json", value: output }).length;
+
 /** Full receipt and acceptance data remain in their original owner/session state. */
 export const readOwnedReviewDetailPage = (input: {
   details: OwnedReviewDetails;
   sessionId: string;
   metadata: NativeActionResultMetadata;
   cursor?: ReviewDetailCursor;
+  section?: ReviewDetailSection;
   maxBytes?: number;
 }) => {
-  const content = JSON.stringify(input.details);
-  const digest = createHash("sha256").update(content, "utf-8").digest("hex");
+  const section = input.section ?? "all";
+  const sourceAssessment = input.details.productAcceptance.sourceAssessment;
+  if (section === "source-assessment" && sourceAssessment === undefined) {
+    throw new Error("The source assessment is unavailable in this owner/session context.");
+  }
+  const content = JSON.stringify(section === "all" ? input.details : sourceAssessment);
+  const digest = createHash("sha256")
+    .update(JSON.stringify([input.sessionId, input.details.reviewReceipt.digest, section]))
+    .update(content, "utf-8")
+    .digest("hex");
   if (input.cursor !== undefined && input.cursor.digest !== digest) {
     throw new Error(
       "The detail cursor no longer matches the current owner/session review. Start its details from the first page.",
@@ -47,23 +64,42 @@ export const readOwnedReviewDetailPage = (input: {
   const maxBytes = input.maxBytes ?? EVE_NATIVE_RESULT_PAGE_BYTES;
   const chunk = largestUtf8PayloadChunk({
     content,
-    makePayload: (piece, nextOffsetBytes) => ({
-      complete: nextOffsetBytes === totalBytes,
-      content: piece,
-      detailCursor:
-        nextOffsetBytes < totalBytes ? { digest, offsetBytes: nextOffsetBytes } : undefined,
-      digest,
-      mediaType: "application/json" as const,
-      offsetBytes,
-      reviewReference: {
-        digest: input.details.reviewReceipt.digest,
-        kind: "current-session-reviewed-change-set" as const,
-        sessionId: input.sessionId,
-      },
-      totalBytes,
-    }),
+    makePayload: (piece, nextOffsetBytes) => {
+      const detailCursor =
+        nextOffsetBytes < totalBytes ? { digest, offsetBytes: nextOffsetBytes } : undefined;
+      return {
+        complete: nextOffsetBytes === totalBytes,
+        nextCall:
+          detailCursor === undefined
+            ? undefined
+            : {
+                view: "acceptance" as const,
+                detailSection: section,
+                expectedReviewDigest: input.details.reviewReceipt.digest,
+                ...(sourceAssessment === undefined
+                  ? {}
+                  : { sourceAssessmentBindingDigest: sourceAssessment.bindingDigest }),
+                detailCursor,
+              },
+        detailCursor,
+        reviewReference: {
+          digest: input.details.reviewReceipt.digest,
+          kind: "current-session-reviewed-change-set" as const,
+          sessionId: input.sessionId,
+        },
+        digest,
+        mediaType: "application/json" as const,
+        section,
+        offsetBytes,
+        totalBytes,
+        content: piece,
+      };
+    },
     maxBytes,
-    measurePayloadBytes: (output) => serializedNativeActionResultBytes(output, input.metadata),
+    measurePayloadBytes: (output) =>
+      modelOutputCharacters(output) <= EVE_REVIEW_DETAIL_HISTORY_CHARACTERS
+        ? serializedNativeActionResultBytes(output, input.metadata)
+        : maxBytes + 1,
     offsetBytes,
   });
   return fitOutputNativeFrame(chunk.payload, input.metadata, maxBytes);
@@ -77,6 +113,7 @@ export const readCurrentOwnedReviewDetails = (input: {
   cursor?: ReviewDetailCursor;
   expectedReviewDigest?: string;
   sourceAssessmentBindingDigest?: string;
+  section?: ReviewDetailSection;
 }) => {
   if (
     input.expectedReviewDigest !== undefined &&
@@ -110,6 +147,7 @@ export const readCurrentOwnedReviewDetails = (input: {
       reviewReceipt: input.state.reviewReceipt,
     },
     metadata: input.metadata,
+    section: input.section,
     sessionId: input.sessionId,
   });
 };

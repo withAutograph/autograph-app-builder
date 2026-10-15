@@ -3,9 +3,22 @@ import { expect, it, vi } from "vitest";
 import {
   currentChangedSourcePaths,
   reviewObservedProductSource,
+  reviewApplicationWithJournal,
   sourceReviewScopeBindingDigest,
 } from "./review-applied-product-source";
 import { unavailableSourceAssessment } from "./product-source-review";
+import {
+  applicationReviewVisibility,
+  createApplicationReviewEvidence,
+} from "./application-review-evidence";
+import { createHash } from "node:crypto";
+import type { SourceReviewJournalRecord } from "./product-source-review-journal";
+import { ApplicationReviewSelectionError } from "./application-source-review";
+import type {
+  ApplicationReviewEvidence,
+  ApplicationSourceReviewOptions,
+} from "./application-source-review";
+import type { ProductSourceReviewInput } from "./product-source-review";
 
 const reviewInput = {
   appSpec: "Accepted plan",
@@ -101,4 +114,333 @@ it("propagates cancellation rather than returning an unavailable assessment", as
       reviewInput,
     }),
   ).rejects.toThrow("cancelled");
+});
+
+const exactDigest = (text: string) => createHash("sha256").update(text).digest("hex");
+const sourceEvidence = (
+  files: Record<string, string>,
+  options?: {
+    appSpecParts?: () => AsyncIterable<string>;
+    abortSignal?: AbortSignal;
+    digestOverride?: string;
+  },
+) =>
+  createApplicationReviewEvidence({
+    reviewInput,
+    applyRoot: "/workspace/repository",
+    observed: {
+      files: Object.entries(files).map(([path, content]) => ({
+        path,
+        digest: options?.digestOverride ?? exactDigest(content),
+        mode: "644",
+      })),
+      treeDigest: reviewInput.sourceDigest,
+    },
+    changedPaths: ["apps/example/page.ts"],
+    visiblePaths: Object.keys(files),
+    sandbox: {
+      readFile: async ({ path }: { path: string }) => {
+        const content = files[path.replace(/^repository\//u, "")];
+        return content === undefined ? null : new Blob([content]).stream();
+      },
+    },
+    appSpecParts: options?.appSpecParts,
+    abortSignal: options?.abortSignal,
+  });
+it("keeps original requirements, chronological product changes and complete durable AppSpec readable once", async () => {
+  let opened = 0;
+  const fullSpec = "Complete accepted AppSpec. ".repeat(900);
+  const evidence = sourceEvidence(
+    {},
+    {
+      appSpecParts: async function* parts() {
+        opened += 1;
+        yield fullSpec.slice(0, 100);
+        yield fullSpec.slice(100);
+      },
+    },
+  );
+  expect(evidence.requirements.map(({ kind }) => kind)).toEqual([
+    "original",
+    "clarification",
+    "app-spec",
+  ]);
+  expect(await evidence.readRequirements({ id: "original" })).toEqual({
+    text: "Original full request",
+  });
+  expect(await evidence.readRequirements({ id: "clarification-0" })).toEqual({
+    text: "Use durable drafts",
+  });
+  const first = await evidence.readRequirements({ id: "app-spec" });
+  const second = await evidence.readRequirements({ id: "app-spec", cursor: first.nextCursor });
+  expect(first.text + second.text).toBe(fullSpec);
+  expect(
+    await evidence.verifyRequirementQuote({ documentId: "app-spec", quote: fullSpec.slice(-100) }),
+  ).toBe(true);
+  expect(await evidence.readRedactionTexts()).toEqual([
+    "Original full request",
+    "Use durable drafts",
+    fullSpec,
+  ]);
+  expect(opened).toBe(1);
+});
+it("reads exact ranged evidence from relevant unchanged imports and rejects invented evidence", async () => {
+  const evidence = sourceEvidence({
+    "apps/example/page.ts": 'import { save } from "../../shared/save";',
+    "packages/shared/save.ts":
+      "export async function save() {\n  return database.insert(record);\n}",
+    "secrets.json": '{"credential":"must-not-read"}',
+  });
+  const source = await evidence.readSource({
+    path: "packages/shared/save.ts",
+    startLine: 2,
+    endLine: 2,
+  });
+  expect(source.content).toBe("  return database.insert(record);");
+  expect(source.startLine).toBe(2);
+  expect(
+    await evidence.verifySourceCitation({
+      path: source.path,
+      startLine: 2,
+      endLine: 2,
+      excerpt: source.content,
+    }),
+  ).toBe(true);
+  expect(
+    await evidence.verifySourceCitation({
+      path: source.path,
+      startLine: 2,
+      endLine: 2,
+      excerpt: "invented",
+    }),
+  ).toBe(false);
+  expect(await evidence.verifyRequirementQuote({ documentId: "original", quote: "invented" })).toBe(
+    false,
+  );
+  expect(evidence.sourceFiles.map(({ path }) => path)).not.toContain("secrets.json");
+  await expect(evidence.readSource({ path: "secrets.json" })).rejects.toThrow(
+    "not available review source",
+  );
+  await expect(evidence.readSource({ path: "../outside.ts" })).rejects.toThrow(
+    "not available review source",
+  );
+});
+it("verifies complete file bytes before returning a requested range", async () => {
+  const evidence = sourceEvidence(
+    { "apps/example/page.ts": "changed bytes" },
+    { digestOverride: exactDigest("observed bytes") },
+  );
+  await expect(
+    evidence.readSource({ path: "apps/example/page.ts", startLine: 1, endLine: 1 }),
+  ).rejects.toThrow("changed since");
+});
+const completedApplication = () => ({
+  ...unavailableSourceAssessment(
+    reviewInput,
+    "Independent source review cannot prove runtime behavior",
+  ),
+  reviewCompleted: true,
+  status: "unassessed" as const,
+});
+it("authorizes application journal reuse before returning completed evidence without another generation", async () => {
+  const assessment = completedApplication();
+  const read = vi.fn(async () => ({ kind: "application-completed" as const, assessment }));
+  const put = vi.fn(async (_key: string, record: SourceReviewJournalRecord) => record);
+  const assess = vi.fn(async () => assessment);
+  const input = {
+    reviewInput,
+    normalizedChanges: [],
+    evidence: sourceEvidence({}),
+    journal: { read, put },
+    currentDigest: async () => reviewInput.sourceDigest,
+  };
+  const result = await reviewApplicationWithJournal(input, assess);
+  expect(read).toHaveBeenCalledOnce();
+  expect(assess).not.toHaveBeenCalled();
+  expect(put).not.toHaveBeenCalled();
+  expect(result).toMatchObject({
+    reviewCompleted: true,
+    status: "unassessed",
+    invocation: { requestAttempts: 0, journalReuses: 1 },
+  });
+  read.mockRejectedValueOnce(new Error("owner revoked"));
+  await expect(reviewApplicationWithJournal(input, assess)).rejects.toThrow("owner revoked");
+  expect(assess).not.toHaveBeenCalled();
+});
+it("does not treat legacy fragment records as completed app review and strips fresh invocation from durable completion", async () => {
+  const assessment = {
+    ...completedApplication(),
+    invocation: {
+      requestAttempts: 1,
+      successfulRequests: 1,
+      journalReuses: 0,
+      splits: 0,
+      requestsWithIncompleteUsage: 0,
+      freshUsage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 },
+    },
+  };
+  const read = vi.fn(async () => ({
+    kind: "completed" as const,
+    assessment: completedApplication(),
+  }));
+  const put = vi.fn(async (_key: string, record: SourceReviewJournalRecord) => record);
+  const assess = vi.fn(async () => assessment);
+  const result = await reviewApplicationWithJournal(
+    {
+      reviewInput,
+      normalizedChanges: [],
+      evidence: sourceEvidence({}),
+      journal: { read, put },
+      currentDigest: async () => reviewInput.sourceDigest,
+    },
+    assess,
+  );
+  expect(assess).toHaveBeenCalledOnce();
+  expect(put).toHaveBeenCalledWith(expect.any(String), {
+    kind: "application-completed",
+    assessment: completedApplication(),
+  });
+  expect(result.invocation?.freshUsage.totalTokens).toBe(12);
+});
+it("does not publish completed application evidence after source changes or Stop", async () => {
+  const controller = new AbortController();
+  const put = vi.fn(async (_key: string, record: SourceReviewJournalRecord) => record);
+  const common = {
+    reviewInput,
+    normalizedChanges: [],
+    evidence: sourceEvidence({}),
+    journal: { read: async () => undefined, put },
+  };
+  const assess = vi.fn(async () => completedApplication());
+  const stale = await reviewApplicationWithJournal(
+    { ...common, currentDigest: async () => "new source" },
+    assess,
+  );
+  expect(stale.reviewCompleted).toBe(false);
+  expect(put).not.toHaveBeenCalled();
+  await expect(
+    reviewApplicationWithJournal(
+      {
+        ...common,
+        currentDigest: async () => reviewInput.sourceDigest,
+        options: { abortSignal: controller.signal },
+      },
+      async () => {
+        controller.abort(new Error("Stop"));
+        return completedApplication();
+      },
+    ),
+  ).rejects.toThrow("Stop");
+  expect(put).not.toHaveBeenCalled();
+});
+it("releases a pending source byte read when Stop arrives", async () => {
+  const controller = new AbortController();
+  const reading = Promise.withResolvers<void>();
+  const cancel = vi.fn();
+  const evidence = createApplicationReviewEvidence({
+    reviewInput,
+    applyRoot: "/workspace/repository",
+    changedPaths: ["apps/example/page.ts"],
+    visiblePaths: ["apps/example/page.ts"],
+    observed: {
+      files: [{ path: "apps/example/page.ts", digest: exactDigest("pending"), mode: "644" }],
+      treeDigest: reviewInput.sourceDigest,
+    },
+    abortSignal: controller.signal,
+    sandbox: {
+      readFile: async () =>
+        new ReadableStream<Uint8Array>(
+          {
+            pull() {
+              reading.resolve();
+            },
+            cancel,
+          },
+          { highWaterMark: 0 },
+        ),
+    },
+  });
+  const result = evidence.readSource({ path: "apps/example/page.ts" });
+  await reading.promise;
+  controller.abort(new Error("Stop source read"));
+  await expect(result).rejects.toThrow("Stop source read");
+  expect(cancel).toHaveBeenCalledOnce();
+});
+
+it("preserves validated baseline visibility and narrows missing optional metadata without a setup gate", () => {
+  const input = {
+    observedPaths: ["app/page.ts", "shared/save.ts", "retained/later/manifest.json"],
+    changedPaths: ["app/page.ts"],
+    hasSelectedBaseline: true,
+  };
+  const fallback = applicationReviewVisibility(input);
+  expect(fallback.paths).toEqual(["app/page.ts"]);
+  expect(fallback.omissions).toHaveLength(1);
+  expect(
+    applicationReviewVisibility({ ...input, unexposedReleasePrefixes: ["retained/later/"] }),
+  ).toEqual({ paths: ["app/page.ts", "shared/save.ts"], omissions: [] });
+  expect(applicationReviewVisibility({ ...input, hasSelectedBaseline: false }).paths).toEqual(
+    input.observedPaths,
+  );
+});
+
+it("distinguishes correctable evidence selection from actual observed source failures", async () => {
+  const evidence = sourceEvidence({ "apps/example/page.ts": "observed source" });
+  await expect(evidence.readSource({ path: "packages/guessed-import.ts" })).rejects.toBeInstanceOf(
+    ApplicationReviewSelectionError,
+  );
+  await expect(
+    evidence.readSource({ path: "apps/example/page.ts", startLine: 5 }),
+  ).rejects.toBeInstanceOf(ApplicationReviewSelectionError);
+  await expect(evidence.readRequirements({ id: "unknown-document" })).rejects.toBeInstanceOf(
+    ApplicationReviewSelectionError,
+  );
+  await expect(evidence.readRequirements({ id: "original", cursor: 1000 })).rejects.toBeInstanceOf(
+    ApplicationReviewSelectionError,
+  );
+  expect((await evidence.readSource({ path: "apps/example/page.ts" })).content).toBe(
+    "observed source",
+  );
+  const changed = sourceEvidence(
+    { "apps/example/page.ts": "new bytes" },
+    { digestOverride: exactDigest("observed source") },
+  );
+  const actualFailure = changed.readSource({ path: "apps/example/page.ts" });
+  await expect(actualFailure).rejects.toThrow("changed since");
+  await expect(actualFailure).rejects.not.toBeInstanceOf(ApplicationReviewSelectionError);
+});
+
+it("binds mid-review authority checks to the same canonical journal key and blocks completion after revocation", async () => {
+  let ownerAllowed = true;
+  const read = vi.fn(async (_key: string): Promise<SourceReviewJournalRecord | undefined> => {
+    if (!ownerAllowed) {
+      throw new Error("owner revoked during review");
+    }
+    return Promise.resolve<SourceReviewJournalRecord | undefined>(undefined);
+  });
+  const put = vi.fn(async (_key: string, record: SourceReviewJournalRecord) => record);
+  const assess = async (
+    _input: ProductSourceReviewInput,
+    _evidence: ApplicationReviewEvidence,
+    options?: ApplicationSourceReviewOptions,
+  ) => {
+    await options?.assertCurrentOwner?.();
+    ownerAllowed = false;
+    await options?.assertCurrentOwner?.();
+    return completedApplication();
+  };
+  await expect(
+    reviewApplicationWithJournal(
+      {
+        reviewInput,
+        normalizedChanges: [],
+        evidence: sourceEvidence({}),
+        journal: { read, put },
+        currentDigest: async () => reviewInput.sourceDigest,
+      },
+      assess,
+    ),
+  ).rejects.toThrow("owner revoked during review");
+  expect(read.mock.calls.every(([key]) => key === read.mock.calls[0]?.[0])).toBe(true);
+  expect(put).not.toHaveBeenCalled();
 });

@@ -1,5 +1,9 @@
 # Request amplification audit
 
+This dated audit records the implementation at its original observation. See
+[current product source review](product-source-review.md) for the application-level
+replacement and [cost accounting](builder-model-cost.md) for measurement.
+
 Date: 2026-10-14. Source baseline: `d05afe5832244a9b168cc5078260391594bc6884`
 (merged PR #742). The older shared checkout at
 `3a87f4c14287eea1b10e1cc5a2782c327f112ff2` was used only for initial discovery;

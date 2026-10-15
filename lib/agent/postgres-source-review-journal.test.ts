@@ -3,6 +3,24 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { createPostgresSourceReviewJournal } from "./postgres-source-review-journal";
+import type { SourceReviewJournalRecord } from "./product-source-review-journal";
+
+const applicationRecord: SourceReviewJournalRecord = {
+  assessment: {
+    basis: "source-review",
+    bindingDigest: "a".repeat(64),
+    evidenceDigest: "b".repeat(64),
+    evidenceNote: "Validated source evidence; runtime behavior remains unassessed.",
+    findings: [],
+    modelId: "review-model",
+    omissions: [],
+    reason: "No cited source contradiction was identified.",
+    remainingRuntimeChecks: [],
+    reviewCompleted: true,
+    status: "unassessed",
+  },
+  kind: "application-completed",
+};
 
 const auth = (owner = "owner") => {
   const context = {
@@ -78,6 +96,25 @@ const fixture = () => {
   };
 };
 describe("authenticated PostgreSQL source review journal", () => {
+  it("isolates completed application evidence and preserves the legacy winner without relabelling it", async () => {
+    const { journal, create } = fixture();
+    const key = "e".repeat(64);
+    const fragmentKey = "f".repeat(64);
+    await journal.put(key, applicationRecord);
+    await journal.put(fragmentKey, { kind: "split-source" });
+    expect(await create().read(key)).toEqual(applicationRecord);
+    expect(await create("other").read(key)).toBeUndefined();
+    expect(await create("owner", "other-session").read(key)).toBeUndefined();
+    expect(await journal.put(fragmentKey, applicationRecord)).toEqual({ kind: "split-source" });
+  });
+  it("denies completed application evidence after live authority is revoked", async () => {
+    const { journal, revoke } = fixture();
+    const key = "e".repeat(64);
+    await journal.put(key, applicationRecord);
+    revoke();
+    await expect(journal.read(key)).rejects.toThrow("ownership revoked");
+    await expect(journal.put(key, applicationRecord)).rejects.toThrow("ownership revoked");
+  });
   it("writes immutable owner/session rows and verifies retries", async () => {
     const { journal, values, where } = fixture();
     const key = "a".repeat(64);

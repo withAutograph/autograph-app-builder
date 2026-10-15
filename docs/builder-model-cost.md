@@ -1,7 +1,7 @@
 # Builder model use and cost accounting
 
 Builder uses model calls for app authoring and independent review. This guide
-explains request batching, build phases and how to account for fresh usage.
+explains application-level review, build phases and fresh-usage accounting.
 
 ## Four business phases
 
@@ -28,45 +28,57 @@ attempt merely to obtain an assessment.
 When implementation and required product QA are ready, `accept_change_set`
 observes current source and performs the independent assessment. This final
 review is required for private preview completion as well as publication.
-Matching completed assessments are reused; interrupted matching reviews resume
-journaled work. Concrete review findings are repaired through the supported
+Matching completed application assessments are reused. An interrupted incomplete
+application review may rerun its model work; it has no durable per-tool checkpoint. Concrete review findings are repaired through the supported
 implementation/validation path before another final acceptance. Technical checks
 are not cached or skipped by this scheduling change.
 
 ## Source review optimization
 
-Previously, each selected source page and each chronological requirements excerpt
-formed its own model request. With `P` source pages and `C` requirements excerpts,
-one complete review started `P × C` requests before provider context splits.
-Four concurrent calls reduced elapsed time but did not reduce that request count.
-Coverage still includes every pair, but pending
-pairs now share a serialized JSON prompt bounded to 128 KiB; rubric instructions
-and output schema are outside that JSON budget. The review model, rubric,
-mechanical citation checks and per-pair durable journal remain authoritative.
-Provider context rejection triggers smaller batches or singleton page/context
-splits. There is no arbitrary app quota, model downgrade or skipped review.
+The final reviewer assesses the application against the exact original request,
+chronological product changes and complete accepted AppSpec. Read-only evidence
+tools expose requirements and relevant source paths, including unchanged imports.
+The reviewer can inspect related files together and must support findings with
+mechanically checked requirement quotes and source citations.
 
-Unchanged later assessments reuse exact evidence. Interrupted retries reuse
-completed matching pair records. The full source and requirements binding still
-invalidates every pair key after source or clarification changes, so batching
-does not provide selective reuse across repairs.
+This replaces the previous Cartesian method: every selected source page was
+paired with every requirements excerpt, then pairs shared bounded requests.
+Batching reduced request fanout but still multiplied judgments, repeated context
+and journal operations. The application reviewer has no mandatory page × excerpt
+matrix. It retains the selected review model and separate runtime acceptance;
+there is no model downgrade, arbitrary app/request/spend quota, or skipped
+original requirements.
+
+Only a completed application assessment is stored in the existing immutable
+owner/session journal. Matching complete evidence reuses without fresh
+generation after current authorization. Interrupted incomplete application work
+may rerun. Legacy fragment records retain their provenance and cannot establish
+application-level completion. Normal source or requirements changes create
+ordinary cache misses under the exact source/diff/input binding.
+
+Actual provider context/output rejection uses compact immutable evidence
+references or smaller evidence submissions while preserving access to complete
+originals and validated findings. Transport paging is not a workload ceiling.
+No savings multiplier is assumed before an equivalent run is measured.
 
 Implementation pointers:
 
-- `lib/agent/product-source-review.ts`: pair coverage, bounded requests, citation
-  checking, provider fallback and per-pair journal.
-- `lib/agent/review-applied-product-source.ts`: observed overlay binding and exact
-  assessment reuse.
+- `lib/agent/application-source-review.ts`: independent app reviewer, read-only
+  tools, checked evidence, provider recovery and request accounting.
+- `lib/agent/product-source-review.ts`: shared assessment validation/sanitization
+  and legacy fragment-review provenance.
+- `lib/agent/product-source-review-journal.ts`: closed completed-app record.
+- `lib/agent/review-applied-product-source.ts`: observed source, current authority,
+  exact completed-assessment reuse and final source observation.
 - `lib/agent/product-source-review-state.ts`: original request and clarification
   retention.
-- `agent/tools/validate_app_creation.ts`: repository checks, persistent backend
-  browser task and deferred source evidence.
-- `agent/tools/accept_change_set.ts`: final independent assessment, matching
-  evidence reuse and change receipt.
+- `agent/tools/validate_app_creation.ts`: technical validation and deferred source
+  evidence.
+- `agent/tools/accept_change_set.ts`: final independent assessment and receipt.
 
 ## Accounting and evidence
 
-Historical assessment `usage` is the token total attached to review judgments.
+Historical assessment `usage` is the token total attached to review evidence.
 It includes retained or journaled evidence and must not be counted as newly billed
 usage every time an assessment is returned. Invocation metrics distinguish newly
 attempted provider calls and fresh provider-reported tokens from reuse. Rejected
@@ -80,8 +92,8 @@ The assessment's `invocation` fields describe one invocation:
 | `requestAttempts`             | Newly started model requests, including provider context rejections.                                                                               |
 | `successfulRequests`          | Accepted provider responses, including responses whose citations fail validation.                                                                  |
 | `requestsWithIncompleteUsage` | Started requests without complete reported input/output/total token usage; their cost remains incompletely accounted.                              |
-| `journalReuses`               | Completed pair judgments replayed from the journal.                                                                                                |
-| `splits`                      | Provider context fallback batch or singleton splits taken in this invocation.                                                                      |
+| `journalReuses`               | Completed review records replayed from the journal.                                                                                                |
+| `splits`                      | Provider-capacity recovery steps in this invocation; legacy reviews report batch or singleton splits.                                              |
 | `freshUsage`                  | Newly provider-reported `inputTokens`, `outputTokens` and `totalTokens`, including responses whose structured output or citations fail validation. |
 
 A retained exact assessment needs no new generation; report its fresh invocation
@@ -94,9 +106,8 @@ Each completed provider request logs only allowlisted generation/response IDs,
 when supplied,
 and input, output, cache and reasoning token counts. These correlate a provider
 cost lookup with one review invocation without logging source, messages or
-credentials. Requirements precede changing source in batch prompts so repeated
-requirements can form a stable provider-cache prefix. This is provider prompt
-caching, not reuse of a stale review judgment.
+credentials. Stable requirements and reviewer instructions can form a provider-cache prefix.
+Provider prompt caching is distinct from reuse of a completed assessment.
 Use actual invocation counters and provider billing records to reconcile spend;
 public polling counts and workflow phase counts cannot substitute for that
 attribution. Provider usage and local source evidence still need exact deployed
@@ -126,7 +137,7 @@ For an authorized next build, collect these measurements privately:
    generation costs and cache details. Reconcile these with the same session and
    window; account totals or a model name alone cannot identify one app's spend.
 5. Report request count, token usage, measured generation cost and final product
-   QA separately. A batching estimate or local test does not establish live
+   QA separately. A source-derived estimate or local test does not establish live
    savings or review quality.
 
 No paid custom reporting tags are required. Keep account costs, session IDs,
@@ -142,8 +153,8 @@ The following changes are prospective and require shared workflow implementation
   missing scenarios rather than repeating already covered browser journeys.
 - Drain deterministic diff paging, command sequencing and receipt handling in
   supported workflow code, preserving complete reads and approval boundaries.
-- Separate authorization decisions from product requirement clarifications and
-  design safe selective judgment reuse before changing global review bindings.
+- Preserve the distinction between authorization decisions and product requirement
+  clarifications; pure effect approvals must not create new product requirements.
 - Complete approved deployment/submission through supported delivery capabilities;
   report operator or provider blockers through the original public session.
 

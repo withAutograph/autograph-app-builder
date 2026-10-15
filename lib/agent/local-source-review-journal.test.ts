@@ -4,15 +4,39 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createLocalSourceReviewJournal } from "./local-source-review-journal";
 import { serializeSourceReviewRecord } from "./product-source-review-journal";
+import type { ProductSourceAssessment } from "./product-source-review";
+
+const completedAssessment: ProductSourceAssessment = {
+  basis: "source-review",
+  bindingDigest: "a".repeat(64),
+  evidenceDigest: "b".repeat(64),
+  evidenceNote: "Validated source evidence; runtime behavior remains unassessed.",
+  findings: [],
+  modelId: "review-model",
+  omissions: [],
+  reason: "No cited source contradiction was identified.",
+  remainingRuntimeChecks: ["Execute the accepted product walkthrough."],
+  reviewCompleted: true,
+  status: "unassessed",
+};
 
 const roots: string[] = [];
 const fixture = async (ownerScope = "owner", sessionId = "session") => {
   const stateRoot = await realpath(await mkdtemp(path.join(tmpdir(), "source-review-journal-")));
   roots.push(stateRoot);
+  let authorized = true;
   return {
+    revoke: () => {
+      authorized = false;
+    },
     stateRoot,
     store: await createLocalSourceReviewJournal({
-      async assertCurrentOwner() {},
+      // oxlint-disable-next-line eslint/require-await -- Ownership has the same asynchronous contract as the runtime callback.
+      async assertCurrentOwner() {
+        if (!authorized) {
+          throw new Error("ownership revoked");
+        }
+      },
       ownerScope,
       sessionId,
       stateRoot,
@@ -27,6 +51,27 @@ afterEach(async () => {
   );
 });
 describe("private durable source review journal", () => {
+  it("retains a completed application assessment separately from immutable fragment provenance", async () => {
+    const { store } = await fixture();
+    const fragment = { assessment: completedAssessment, kind: "completed" as const };
+    const application = { assessment: completedAssessment, kind: "application-completed" as const };
+    const fragmentKey = "f".repeat(64);
+    const applicationKey = "a".repeat(64);
+    await store.put(fragmentKey, fragment);
+    await store.put(applicationKey, application);
+    expect(await store.read(applicationKey)).toEqual(application);
+    expect(await store.read(fragmentKey)).toEqual(fragment);
+    expect(await store.put(fragmentKey, application)).toEqual(fragment);
+  });
+  it("rechecks live ownership before reading or writing completed application evidence", async () => {
+    const { store, revoke } = await fixture();
+    const key = "a".repeat(64);
+    const application = { assessment: completedAssessment, kind: "application-completed" as const };
+    await store.put(key, application);
+    revoke();
+    await expect(store.read(key)).rejects.toThrow("ownership revoked");
+    await expect(store.put(key, application)).rejects.toThrow("ownership revoked");
+  });
   it("replays immutable decisions and rejects a conflicting retry", async () => {
     const { store } = await fixture();
     const key = "a".repeat(64);
@@ -83,5 +128,24 @@ describe("private durable source review journal", () => {
       }),
     ).toThrow();
     expect(() => serializeSourceReviewRecord({ kind: "split-source", source: "secret" })).toThrow();
+    expect(() =>
+      serializeSourceReviewRecord({
+        assessment: { ...completedAssessment, reviewCompleted: false },
+        kind: "application-completed",
+      }),
+    ).toThrow();
+    expect(() =>
+      serializeSourceReviewRecord({
+        assessment: completedAssessment,
+        kind: "application-completed",
+        transcript: "private source and request text",
+      }),
+    ).toThrow();
+    expect(() =>
+      serializeSourceReviewRecord({
+        assessment: { ...completedAssessment, source: "private source" },
+        kind: "application-completed",
+      }),
+    ).toThrow();
   });
 });

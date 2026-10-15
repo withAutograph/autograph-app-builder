@@ -203,13 +203,20 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    do not repeat validation merely to obtain review. Once the implementation and
    available behavioral checks are ready, inspect `change_set_status` and call
    `accept_change_set` to assess current source against the original request and
-   accepted plan. A matching completed assessment is reused; interrupted matching
-   work resumes from the journal. Complete this independent review before
-   declaring the private preview finished, as well as before publication. You
-   may start the private preview to complete missing behavioral checks before
-   final acceptance; keep that incomplete preview explicitly inspectable.
+   accepted plan. A matching completed application assessment is reused.
+   Interrupted incomplete application-review model work may rerun; do not claim
+   per-step durable recovery. Record the independent assessment truthfully,
+   including findings or unavailable evidence. Source opinions are advisory;
+   do not turn them into an additional publication gate. You may start the private
+   preview to complete missing behavioral checks before final acceptance; keep
+   that incomplete preview explicitly inspectable.
    Repair cited product contradictions through `validate_app_creation` with
    corrected implementation files, then accept the repaired change set again.
+   Read cited findings through `change_set_status` with `view: "acceptance"`,
+   `detailSection: "source-assessment"`, and both existing review/source bindings.
+   Follow each returned `nextCall` and join its content until complete. A long
+   walkthrough or truncated tool history is not a reason to discard the finding
+   or start another paid review; the saved assessment remains readable.
    A review interruption alone does not require another technical validation.
    For requested hosted generated-app delivery, technical validation and source
    review precede publication of the source needed to deploy the app. Keep hosted

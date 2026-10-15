@@ -615,7 +615,7 @@ const exportAppliedTextFiles = async (input: {
 
 export default defineTool({
   description:
-    "Read one bounded page of the complete change metadata and optional source content after validation. Prefer view=next-page with contentSide for destination content: it reads actual content from the current session saved cursor without caller contentCursor, and returns alreadyComplete without resetting completed sides. In next-page mode repeat the same minimal call until no cursor remains. In legacy changes mode continue with the entire returned contentCursor verbatim using the same contentSide and includeContent until no cursor remains. Read destination before and after sides from their first page with includeContent=true before acceptance; metadata-only pages do not complete either side. If a cursor is lost or rejected, use view=read-progress to read current saved side coverage and exact nextCall arguments; this status read grants no completion. To restart an unreadable side, omit its contentCursor and read that side completely again. Use view=acceptance after acceptance to read the full saved receipt and product/source evidence as UTF-8-safe JSON chunks using detailCursor and the returned session references. Failed validation remains explicitly unreviewed and cannot be accepted. This never publishes or changes an external repository.",
+    "Read one bounded page of the complete change metadata and optional source content after validation. Prefer view=next-page with contentSide for destination content: it reads actual content from the current session saved cursor without caller contentCursor, and returns alreadyComplete without resetting completed sides. In next-page mode repeat the same minimal call until no cursor remains. In legacy changes mode continue with the entire returned contentCursor verbatim using the same contentSide and includeContent until no cursor remains. Read destination before and after sides from their first page with includeContent=true before acceptance; metadata-only pages do not complete either side. If a cursor is lost or rejected, use view=read-progress to read current saved side coverage and exact nextCall arguments; this status read grants no completion. To restart an unreadable side, omit its contentCursor and read that side completely again. Use view=acceptance with detailSection=source-assessment and its sourceAssessmentBindingDigest reference to read saved findings without the full receipt or walkthrough. Copy each returned nextCall until complete, joining content chunks as JSON. Omit detailSection for the full saved receipt and acceptance evidence. These pages preserve the existing assessment and never rerun review. Failed validation remains explicitly unreviewed and cannot be accepted. This never publishes or changes an external repository.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (
@@ -640,6 +640,7 @@ export default defineTool({
           expectedReviewDigest: input.expectedReviewDigest,
           metadata,
           sessionId: ctx.session.id,
+          section: input.detailSection,
           sourceAssessmentBindingDigest: input.sourceAssessmentBindingDigest,
           state,
         }),
@@ -774,6 +775,7 @@ export default defineTool({
         offsetBytes: z.number().int().nonnegative(),
       })
       .optional(),
+    detailSection: z.enum(["all", "source-assessment"]).default("all"),
     expectedReviewDigest: z
       .string()
       .regex(/^[0-9a-f]{64}$/u)
