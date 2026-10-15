@@ -451,22 +451,26 @@ describe("participant bootstrap planning evidence", () => {
 });
 
 describe("Realm link configuration codec", () => {
-  it("preserves the exact legacy JSON bytes and adds the capture sender only for participant programs", () => {
+  it("preserves link destinations and binds the sender for owner and participant handoffs", () => {
     const desired = desiredPlan();
-    const legacy = { ...desired, normalActorProgram: undefined };
-    expect(JSON.stringify(createHostedOperatorRealmLinkConfig(legacy))).toBe(
-      JSON.stringify({
+    const ownerPlan = { ...desired, normalActorProgram: undefined };
+    const owner = createHostedOperatorRealmLinkConfig(ownerPlan);
+    const participant = createHostedOperatorRealmLinkConfig(desired);
+    for (const configuration of [owner, participant]) {
+      expect(configuration).toMatchObject({
         browserOrigin: "https://apps.example",
         builderCallbackOrigin: "https://builder.example",
         builderCallbackPath: "/api/hosted-operator/realm-identity",
         operatorOrigin: "https://operator.example",
-      }),
-    );
-    expect(createHostedOperatorRealmLinkConfig(desired).browserSessionCapture).toEqual({
+      });
+      expect(configuration.identityHandoff.sender).toEqual(sourceWorkload);
+    }
+    expect(owner.browserSessionCapture).toBeUndefined();
+    expect(participant.browserSessionCapture).toMatchObject({
       path: "/api/hosted-operator/realm-browser-session",
-      sender: sourceWorkload,
     });
-    expect(hostedOperatorRealmLinkConfigSha256(legacy)).not.toBe(
+    expect(participant.browserSessionCapture?.sender).toEqual(sourceWorkload);
+    expect(hostedOperatorRealmLinkConfigSha256(ownerPlan)).not.toBe(
       hostedOperatorRealmLinkConfigSha256(desired),
     );
   });

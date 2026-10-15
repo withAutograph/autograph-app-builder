@@ -687,11 +687,13 @@ export const createHostedOperatorControlPlane = async (input: {
           }
           const existing = record.operator.identityLink;
           if (
-            record.operator.plan.normalActorProgram === undefined &&
-            existing?.browserSession === undefined &&
-            link.browserSession === undefined &&
-            existing?.bootstrapPlanDigest === link.bootstrapPlanDigest &&
-            existing.consumedAt !== undefined
+            [
+              record.operator.plan.normalActorProgram === undefined,
+              existing?.browserSession === undefined,
+              link.browserSession === undefined,
+              existing?.bootstrapPlanDigest === link.bootstrapPlanDigest,
+              existing?.consumedAt !== undefined,
+            ].every(Boolean)
           ) {
             // Capture may finish while provider inventory is read. Never replace the same owner's proof.
             throw new HostedOperatorError("operation_in_progress");
