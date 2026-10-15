@@ -8,6 +8,7 @@ import type { VercelInstallationBinding } from "../integrations/vercel-installat
 import type { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import type { RepositoryAccessToolInput } from "./repository-access-tool";
 import { readJsonStringChecks } from "./streaming-json-pointer";
+import { readPreparedHandoffContext } from "./handoff-context";
 
 // Cache infrastructure only. Handoff, membership, bindings, and decrypted
 // credentials are re-read for the authenticated tenant on each invocation.
@@ -430,8 +431,7 @@ export function createPreparedAppContextReader(input: {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function readPreparedAppContext(sessionAuth: unknown) {
-  const { readPreparedHandoffContext } = await import("./handoff-context");
-  return createPreparedAppContextReader({
+  return await createPreparedAppContextReader({
     async github(auth, value) {
       const { repositoryAccessRuntimeForSession } =
         await import("./deployment-repository-access-runtime");

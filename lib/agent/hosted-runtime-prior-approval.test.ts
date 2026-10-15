@@ -28,6 +28,17 @@ import {
   createHostedRuntimePriorApprovalReader,
 } from "./hosted-runtime-prior-approval";
 
+// The compiler supplies this virtual module; approval behavior uses injected ports.
+// oxlint-disable-next-line anti-slop/no-module-mocking -- No Node module exists for this compiler-owned SDK; its real bundle is checked separately.
+vi.mock("workflow", () => ({
+  createHook: () => {
+    throw new Error("Workflow hooks require the compiled Eve runtime.");
+  },
+  sleep: () => {
+    throw new Error("Workflow waits require the compiled Eve runtime.");
+  },
+}));
+
 const principal: HostedPrincipal = {
   audience: "https://builder.example/mcp",
   issuer: "https://builder.example/api/auth",

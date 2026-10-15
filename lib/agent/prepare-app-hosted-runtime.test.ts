@@ -24,6 +24,17 @@ import {
 } from "../provisioning/hosted-operator-contract";
 import type { PreparedRuntimeSelection } from "./prepared-runtime-selection";
 
+// The compiler supplies this virtual module; preparation behavior uses injected ports.
+// oxlint-disable-next-line anti-slop/no-module-mocking -- No Node module exists for this compiler-owned SDK; its real bundle is checked separately.
+vi.mock("workflow", () => ({
+  createHook: () => {
+    throw new Error("Workflow hooks require the compiled Eve runtime.");
+  },
+  sleep: () => {
+    throw new Error("Workflow waits require the compiled Eve runtime.");
+  },
+}));
+
 const stepMocks = { step: vi.fn<typeof prepareHostedRuntimeStep>() };
 
 const plan = hostedOperatorPlanSchema.parse({
