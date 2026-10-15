@@ -4,20 +4,20 @@ Treat the isolated target workspace as the source of truth. Read its
 `docs/README.md`, `docs/principles.md`, and `docs/contracts.md` before production
 grounding when those paths exist, then select only task-relevant sources.
 
-| Need                                       | Inspect                                                                                             |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| UI layers, ownership, compositions, tokens | `docs/frontend-architecture.md`, `packages/design-systems/core/`                                    |
-| Available reusable components              | public package exports, then relevant Storybook stories/examples                                    |
-| Task-matched UI examples                   | `docs/app-builder-ui-catalog.json` and its linked record-review, form, and overview/detail examples |
-| Production layout and responsive context   | representative app consumers using the selected components and compositions                         |
-| Prototype-led one-shot flow                | `docs/diagrams/one-shot-app/`, current app-creation plans                                           |
-| Agent mechanics and authority              | `docs/agent-foundation.md`, `packages/agent-foundation/`                                            |
-| Charts and dashboards                      | `docs/dashboard-agent-evals.md`, chart composition contracts and stories                            |
-| Data objects and domain vocabulary         | relevant `domain-libs/` and app schemas; do not import app workflow into libraries                  |
-| Imports and reconciliation                 | import contracts, relevant engines/modules, and existing app-owned import policy                    |
+| Need                                       | Inspect                                                                                                                                                |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| UI layers, ownership, compositions, tokens | `docs/frontend-architecture.md`, `packages/design-systems/core/`                                                                                       |
+| Available reusable components              | public package exports, then relevant Storybook stories/examples                                                                                       |
+| Task-matched UI examples                   | `docs/app-builder-ui-catalog.json` and its linked record-review, form, and overview/detail examples                                                    |
+| Production layout and responsive context   | representative app consumers using the selected components and compositions                                                                            |
+| Prototype-led one-shot flow                | `docs/diagrams/one-shot-app/`, current app-creation plans                                                                                              |
+| Agent mechanics and authority              | `docs/agent-foundation.md`, `packages/agent-foundation/`                                                                                               |
+| Charts and dashboards                      | `docs/dashboard-agent-evals.md`, chart composition contracts and stories                                                                               |
+| Data objects and domain vocabulary         | relevant `domain-libs/` and app schemas; do not import app workflow into libraries                                                                     |
+| Imports and reconciliation                 | import contracts, relevant engines/modules, and existing app-owned import policy                                                                       |
 | Integrations                               | `docs/integrations/`, `@autograph/integration-runtime` provider recipes and `app-definition`, `@modules/integrations`, and app-owned DAL/host bindings |
-| App routes and generated client            | existing route-owned apps, generated app client contracts, adoption guide                           |
-| Writes, drafts, history, provenance        | `docs/contracts.md`, kernel contracts, generated apply lifecycle                                    |
+| App routes and generated client            | existing route-owned apps, generated app client contracts, adoption guide                                                                              |
+| Writes, drafts, history, provenance        | `docs/contracts.md`, kernel contracts, generated apply lifecycle                                                                                       |
 
 Verify capabilities from current code, exports, Storybook, tests, and working
 apps. Do not treat a prototype visual or stale tracker row as proof that the

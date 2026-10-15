@@ -76,7 +76,6 @@ not a connected or activated provider. AppSpec integration prose carries product
 intent; executable app definitions carry recipe selection and target bindings.
 Existing navigation composes the generated navigation entry explicitly.
 
-
 Inspect the selected app's actual CUE and checked release before changing it.
 `existingAppChanges` and `implementationFiles` accept legacy `{path, content}`
 upserts, explicit `{path, operation: "upsert", content}`, and
