@@ -1929,6 +1929,21 @@ export const composeHostedOperatorDependencies = (
     if (!knownPrepared) {
       throw new HostedOperatorError(OPERATION_IN_PROGRESS);
     }
+    const link = operator.identityLink;
+    const capturedOwner = [
+      operator.plan.normalActorProgram === undefined,
+      link?.browserSession === undefined,
+      link?.bootstrapPlanDigest === operator.planDigest,
+      link?.ownerSessionId === input.target.sessionId,
+      link?.authResourceId === operator.plan.authDatabase.resourceId,
+      link?.consumedAt !== undefined,
+      link?.proofRef !== undefined,
+      link?.proofSha256 !== undefined,
+    ].every(Boolean);
+    if (capturedOwner) {
+      // Consumption raced the preceding execute read. Preserve its canonical nonce and re-read preparation.
+      throw new HostedOperatorError(OPERATION_IN_PROGRESS);
+    }
     const candidate = operator.gatewayDeliveryCandidates?.find(
       (value) =>
         value.deploymentId === operator.deliveredGatewayDeploymentId &&
