@@ -67,6 +67,39 @@ export const hostedRuntimeJournalRecordSchema = z.strictObject({
   leaseId: z.uuid().optional(),
   operator: hostedOperatorRecordSchema.optional(),
   privateState: encryptedStateSchema.optional(),
+  /** Authored Workflow hook capability; kept encrypted and outside public operator results. */
+  realmIdentityWait: z
+    .strictObject({
+      adapterSessionId: z.string().min(1).max(200),
+      approvedPlanDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+      callId: z.string().min(1),
+      hook: encryptedStateSchema,
+      nonceSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+      operationRef: z.uuid(),
+      registeredAt: z.iso.datetime({ offset: true }),
+      observedAt: z.iso.datetime({ offset: true }).optional(),
+      eventId: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/u)
+        .optional(),
+    })
+    .optional(),
+  /** Private native continuation claim; never projected into public operator metadata. */
+  realmContinuation: z
+    .strictObject({
+      dispatchId: z.string().regex(/^[a-f0-9]{64}$/u),
+      operationRef: z.uuid(),
+      approvedPlanDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+      nonceSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+      status: z.enum(["claimed", "unknown", "accepted"]),
+      claimedAt: z.iso.datetime({ offset: true }),
+      acceptedAt: z.iso.datetime({ offset: true }).optional(),
+      receiverClaimedAt: z.iso.datetime({ offset: true }).optional(),
+      receiverStreamStartIndex: z.number().int().nonnegative().optional(),
+      receiverRequestId: z.string().min(1).max(200).optional(),
+      adapterSessionId: z.string().min(1).max(200),
+    })
+    .optional(),
   proof: hostedRuntimeProofSchema.optional(),
   request: hostedRuntimeTargetSchema,
   retainedAuth: retainedOperatorAuthSchema.optional(),

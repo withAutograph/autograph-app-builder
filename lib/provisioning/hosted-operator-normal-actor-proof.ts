@@ -1,5 +1,5 @@
-/* oxlint-disable eslint/no-await-in-loop -- Bounded private callback HTML cancels immediately at the input limit. */
 import { createHash } from "node:crypto";
+/* oxlint-disable eslint/no-await-in-loop -- Bounded response reading cancels immediately at the byte limit. */
 import { Cookie, CookieJar } from "tough-cookie";
 import type { JWTVerifyGetKey } from "jose";
 import { z } from "zod";
@@ -86,7 +86,7 @@ const cookieHeader = (storage: NormalBrowserStorageState, origin: string, path: 
   }
   return jar.getCookieStringSync(new URL(path, origin).href, { sameSiteContext: "strict" });
 };
-const boundedHtml = async (response: Response) => {
+const boundedProofResponse = async (response: Response) => {
   if (response.body === null) {
     throw unavailable();
   }
@@ -105,57 +105,14 @@ const boundedHtml = async (response: Response) => {
     }
     chunks.push(next.value);
   }
-  return Buffer.concat(chunks).toString("utf-8");
-};
-const decodeAttribute = (value: string) =>
-  value
-    .replaceAll("&quot;", '"')
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&amp;", "&");
-const attributes = (value: string) => {
-  const entries = [
-    ...value.matchAll(
-      /(?<name>[A-Za-z][A-Za-z0-9-]*)\s*=\s*(?:"(?<double>[^"]*)"|'(?<single>[^']*)')/gu,
-    ),
-  ].map(
-    (match) =>
-      [
-        match.groups?.name.toLowerCase() ?? "",
-        decodeAttribute(match.groups?.double ?? match.groups?.single ?? ""),
-      ] as const,
-  );
-  if (new Set(entries.map(([key]) => key)).size !== entries.length) {
+  try {
+    const result = z
+      .strictObject({ version: z.literal(1), proof: proofSchema })
+      .parse(JSON.parse(Buffer.concat(chunks).toString("utf-8")));
+    return result.proof;
+  } catch {
     throw unavailable();
   }
-  return new Map(entries);
-};
-const callbackProof = (html: string, callbackOrigin: string, nonce: string) => {
-  const forms = [...html.matchAll(/<form\b(?<attributes>[^>]*)>(?<body>[\s\S]*?)<\/form\s*>/giu)];
-  const [form] = forms;
-  if (forms.length !== 1 || form?.groups === undefined) {
-    throw unavailable();
-  }
-  const props = attributes(form.groups.attributes ?? "");
-  if (
-    props.get("method")?.toLowerCase() !== "post" ||
-    props.get("action") !== `${callbackOrigin}/api/hosted-operator/realm-identity`
-  ) {
-    throw unavailable();
-  }
-  const fields = new Map<string, string>();
-  for (const input of (form.groups.body ?? "").matchAll(/<input\b(?<attributes>[^>]*)>/giu)) {
-    const field = attributes(input.groups?.attributes ?? "");
-    const name = field.get("name");
-    if (name === undefined || fields.has(name) || field.get("type")?.toLowerCase() !== "hidden") {
-      throw unavailable();
-    }
-    fields.set(name, field.get("value") ?? "");
-  }
-  if (fields.size !== 2 || fields.get("nonce") !== nonce) {
-    throw unavailable();
-  }
-  return proofSchema.parse(fields.get("proof"));
 };
 
 type OwnedArtifacts = Awaited<ReturnType<NormalActorProofDependencies["ownedArtifacts"]>>;
@@ -167,7 +124,6 @@ const readProof = async ({
   fetch,
   storageState,
   origin,
-  callbackOrigin,
   assertCurrent,
 }: {
   record: NormalActorOrganizationProof;
@@ -177,7 +133,6 @@ const readProof = async ({
   fetch: typeof globalThis.fetch;
   storageState: NormalBrowserStorageState;
   origin: string;
-  callbackOrigin: string;
   assertCurrent: () => Promise<void>;
 }): Promise<string> => {
   let proof: string;
@@ -205,6 +160,7 @@ const readProof = async ({
       headers: {
         origin,
         "content-type": "application/x-www-form-urlencoded",
+        accept: "application/vnd.realm-operator-proof+json",
         cookie,
       },
       redirect: "error",
@@ -216,12 +172,14 @@ const readProof = async ({
         response.status === 200,
         !response.redirected,
         response.url === "" || new URL(response.url).origin === origin,
-        response.headers.get("content-type")?.startsWith("text/html") === true,
+        response.headers
+          .get("content-type")
+          ?.startsWith("application/vnd.realm-operator-proof+json") === true,
       ].every(Boolean)
     ) {
       throw unavailable();
     }
-    proof = callbackProof(await boundedHtml(response), callbackOrigin, nonce);
+    proof = await boundedProofResponse(response);
   } else {
     const { proofRef, proofSha256 } = record.link;
     if (proofRef === undefined || proofSha256 === undefined) {
@@ -404,7 +362,6 @@ export const createHostedOperatorNormalActorProofCollector = (
         fetch,
         storageState: normal.exportStorageState(),
         origin: preparation.program.origin,
-        callbackOrigin: binding.builderCallbackOrigin,
         assertCurrent,
       });
       const verified = await readVerifiedRealmAccess({

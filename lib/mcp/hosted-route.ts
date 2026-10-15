@@ -11,6 +11,8 @@ import { composeHostedMcpRuntime } from "./hosted-runtime";
 import { readHostedMcpAuthConfig, unavailableResponse } from "./request-auth";
 import { createMcpRequestHandler } from "./request-handler";
 import type { HostedBuilderHandoffRuntime } from "./request-handler";
+import { createRealmContinuationRead } from "./realm-continuation-read";
+import type { ResumeRealmContinuation } from "./realm-continuation-read";
 
 export { openHostedPostgresDatabase } from "../db/hosted-postgres";
 
@@ -79,6 +81,7 @@ export function createDeploymentMcpRequestHandler(input: {
   openDatabase?: (databaseUrl: string) => Database;
   fetchImplementation?: typeof fetch;
   resumeRepositoryAccess?: ResumeRepositoryAccess;
+  resumeRealmContinuation?: ResumeRealmContinuation;
   recheckRepositoryAccess?: RecheckRepositoryAccess;
   now?: () => number;
 }) {
@@ -87,6 +90,10 @@ export function createDeploymentMcpRequestHandler(input: {
   });
   let hostedHandler: ((request: Request) => Promise<Response>) | undefined;
   let hostedResourceUrl: string | undefined;
+  const resumeRealmContinuation = createRealmContinuationRead({
+    environment: input.environment,
+    resume: input.resumeRealmContinuation,
+  });
 
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   return async (request: Request): Promise<Response> => {
@@ -116,7 +123,7 @@ export function createDeploymentMcpRequestHandler(input: {
           environment: input.environment,
           hostedRuntime: {
             ...runtime,
-            async beforeRead({ principal, adapterSessionId, sourceHandoffId }) {
+            async beforeRead({ principal, sessionId, adapterSessionId, sourceHandoffId }) {
               try {
                 const repositoryRuntime =
                   await import("../agent/deployment-repository-access-runtime");
@@ -135,6 +142,12 @@ export function createDeploymentMcpRequestHandler(input: {
                 // access remains parked and the ordinary session read still
                 // returns its exact outstanding authorization request.
               }
+              await resumeRealmContinuation({
+                principal,
+                sessionId,
+                adapterSessionId,
+                ...(sourceHandoffId === undefined ? {} : { sourceHandoffId }),
+              });
             },
             handoffs: {
               ...handoffService,

@@ -1214,6 +1214,7 @@ export const retainedOperatorAuthSchema = z
 export type RetainedOperatorAuth = z.infer<typeof retainedOperatorAuthSchema>;
 /** Private server-derived claims; the operator re-reads their durable authority. */
 const ownerContextBaseSchema = z.strictObject({
+  realmContinuation: z.strictObject({ sealedAuthority: z.string().min(1) }).optional(),
   adapterGeneration: z.number().int().positive(),
   adapterSessionId: z.string().min(1).max(200),
   authority: hostedTenantAuthoritySchema,

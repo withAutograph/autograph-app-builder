@@ -1,5 +1,25 @@
 import { requireFinalResourceBindingPhase } from "./hosted-operator-resource-binding-phase";
+import { nativeObservationStateSchema } from "../eve/native-observation-state";
+import { realmContinuationPendingBaseline } from "./hosted-operator-realm-pending";
+import { createHostedOperatorRealmIdentityWait } from "./hosted-operator-realm-identity-wait";
 import { createHash, randomBytes } from "node:crypto";
+import {
+  createHostedOperatorRealmContinuation,
+  observeRealmContinuationRecord,
+  realmContinuationDispatchId,
+  realmContinuationReceiptSchema,
+  realmContinuationPath,
+  isRealmContinuationTechnicalWait,
+} from "./hosted-operator-realm-continuation";
+import type {
+  RealmContinuationRequest,
+  RealmContinuationObservation,
+} from "./hosted-operator-realm-continuation";
+import {
+  mintRealmContinuationAuthority,
+  realmContinuationServiceIdentityForWorkload,
+} from "../hosted/realm-continuation-authority";
+import type { RealmContinuationAuthority } from "../hosted/realm-continuation-authority";
 import { isDeepStrictEqual } from "node:util";
 /* oxlint-disable sonarjs/no-nested-functions -- Owner authorization and journal CAS closures share the actual opened private database. */
 import postgres from "postgres";
@@ -125,6 +145,7 @@ import {
 } from "./hosted-operator-shared-gateway";
 import type {
   HostedRuntimeJournalRecord,
+  HostedRuntimeJournalRow,
   HostedRuntimeJournalStore,
 } from "./hosted-runtime-journal";
 import { createPostgresOperatorArtifactStore } from "./hosted-operator-artifact-store";
@@ -289,6 +310,54 @@ type ResourceBindingContext = HostedOperatorContext & {
   privateState?: HostedRuntimeJournalRecord["privateState"];
 };
 
+/** Select only the original retained prepare evidence for a read-only binding request.
+ * Approval, owner, completion, sealed checkpoint and second-read checks remain with the caller.
+ */
+export const selectAuthPlanningResourceBindingRow = (
+  row: HostedRuntimeJournalRow | undefined,
+  plan: ResourceBindingContext["plan"],
+): HostedRuntimeJournalRow | undefined => {
+  if (row === undefined || row.record.operator?.planDigest === operatorPlanDigest(plan)) {
+    return row;
+  }
+  const parsed = retainedOperatorAuthSchema.safeParse(row.record.retainedAuth);
+  if (!parsed.success) {
+    return row;
+  }
+  const retained = parsed.data;
+  if (retained.planDigest !== operatorPlanDigest(plan)) {
+    return row;
+  }
+  if (
+    row.record.leaseId !== undefined ||
+    row.record.leaseExpiresAt !== undefined ||
+    row.record.operator?.pendingEffectId !== undefined ||
+    row.record.operator?.pendingEffectAttempt !== undefined
+  ) {
+    throw new HostedOperatorError("operation_in_progress");
+  }
+  return {
+    ...row,
+    record: {
+      ...row.record,
+      approvedByCallId: retained.approvedByCallId,
+      operator: {
+        approvalId: retained.approvalId,
+        authPreparation: retained.authPreparation,
+        fenceGeneration: retained.fenceGeneration,
+        gatewayEnvironment: retained.gatewayEnvironment,
+        mode: "protected-operator-v1",
+        operationRef: retained.operationRef,
+        plan: retained.plan,
+        planDigest: retained.planDigest,
+        receipts: retained.receipts,
+      },
+      status: "prepared",
+      step: "bound",
+    },
+  };
+};
+
 /**
  * Composes the production control-plane readers and fences already owned by
  * Builder. This is intentionally not a complete operator adapter: planning,
@@ -369,6 +438,11 @@ export const createHostedOperatorControlPlane = async (input: {
       });
     const owner = createHostedOperatorOwnerAuthority({
       eve,
+      journal: store,
+      realmContinuation: {
+        config: tokenKeyring,
+        service: realmContinuationServiceIdentityForWorkload(input.workloadPolicy),
+      },
       fetch: input.fetch,
       handoffs,
       listVercelInstallations: async (authority) => await installations.list(authority),
@@ -816,8 +890,387 @@ export const createHostedOperatorControlPlane = async (input: {
       store,
     });
 
+    const observeOwnerRealmContinuation = async (
+      context: HostedOperatorContext,
+    ): Promise<RealmContinuationObservation | undefined> => {
+      // A wake observes saved state only. The protected prepare/effect
+      // boundary rechecks actual provider deployment authority afterward.
+      await owner.assertArtifactAuthorized(context);
+      const { ownerContext } = context;
+      if (ownerContext === undefined) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      const savedSession = await eve.getSession(ownerContext.principal, ownerContext.sessionId);
+      if (savedSession === null) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      const ownedSession = toDurableHostedSessionRecord(savedSession);
+      if (["cancelled", "completed"].includes(ownedSession.status)) {
+        return undefined;
+      }
+      const current = await store.read(context);
+      if (current?.record.operator === undefined) {
+        return undefined;
+      }
+      const { operator } = current.record;
+      const approval = await readApproval({
+        ...context,
+        action: operator.plan.action,
+        callId: current.record.approvedByCallId,
+        planDigest: operator.planDigest,
+      });
+      if (
+        !approval?.approved ||
+        approval.approvalId !== operator.approvalId ||
+        approval.callId !== current.record.approvedByCallId ||
+        approval.planDigest !== operator.planDigest
+      ) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      const { initiator } = forwardedSessionAuth(
+        ownedSession.principal,
+        context.ownerContext?.kind === "handoff" ? context.ownerContext.sourceHandoffId : undefined,
+      );
+      const forwardedBy = input.workloadPolicy.subject;
+      Object.assign(initiator.attributes, { "eve:forwarded-by": forwardedBy });
+      const observed = observeRealmContinuationRecord({
+        context,
+        record: current.record,
+        initiator,
+        now: Date.now(),
+      });
+      if (observed?.reason.kind === "consumed-proof") {
+        const artifacts = ownedArtifacts(context);
+        const content = await artifacts.store.read(artifacts.context, observed.reason.proofRef, 0);
+        if (
+          content === undefined ||
+          createHash("sha256").update(Buffer.from(content, "base64")).digest("hex") !==
+            observed.reason.proofSha256
+        ) {
+          throw new HostedOperatorError("auth_identity_required");
+        }
+      }
+      await owner.assertArtifactAuthorized(context);
+      return observed;
+    };
+    const deliverRealmContinuation = async (
+      request: RealmContinuationRequest,
+      reconcile: boolean,
+    ) => {
+      const token = await operatorIdentity.token();
+      const response = await (input.fetch ?? fetch)(
+        new URL(
+          `${realmContinuationPath}${reconcile ? "/reconcile" : ""}`,
+          new URL(config.resource).origin,
+        ),
+        {
+          method: "POST",
+          redirect: "error",
+          cache: "no-store",
+          signal: AbortSignal.timeout(10_000),
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${token}`,
+            "x-vercel-trusted-oidc-idp-token": token,
+            accept: "application/json",
+          },
+          body: JSON.stringify(request),
+        },
+      );
+      if (!response.ok) {
+        throw new Error("Realm continuation delivery is unavailable.");
+      }
+      return realmContinuationReceiptSchema.parse(await response.json());
+    };
+    const reconcileOwnerRealmContinuation = createHostedOperatorRealmContinuation({
+      store,
+      observe: observeOwnerRealmContinuation,
+      seal: (observed) =>
+        mintRealmContinuationAuthority({
+          config: tokenKeyring,
+          observed,
+          service: realmContinuationServiceIdentityForWorkload(input.workloadPolicy),
+        }),
+      dispatch: async (request) => await deliverRealmContinuation(request, false),
+      reconcile: async (request) => await deliverRealmContinuation(request, true),
+    });
+    const continuationContext = async (claim: RealmContinuationAuthority) => {
+      const rows = await database
+        .select({ record: builderProvisioningJournals.record })
+        .from(builderProvisioningJournals)
+        .where(
+          and(
+            eq(builderProvisioningJournals.issuer, claim.authority.issuer),
+            eq(builderProvisioningJournals.audience, claim.authority.audience),
+            eq(builderProvisioningJournals.workspaceId, claim.authority.workspaceId),
+            eq(builderProvisioningJournals.ownerUserId, claim.authority.ownerUserId),
+            sql`${builderProvisioningJournals.record}->>'kind' = 'app-runtime'`,
+            sql`${builderProvisioningJournals.record}->'request'->>'sessionId' = ${claim.ownerSessionId}`,
+            sql`${builderProvisioningJournals.record}->'request'->>'appId' = ${claim.appId}`,
+          ),
+        )
+        .limit(2);
+      if (rows.length !== 1) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      const record = hostedRuntimeJournalRecordSchema.parse(rows[0]?.record);
+      const principal = { ...claim.authority, scopes: claim.initiator.attributes["mcp:scopes"] };
+      const ownerContext = await ownerContextResolver({
+        adapterSessionId: claim.adapterSessionId,
+        authority: claim.authority,
+        principal,
+        sessionAuth: { current: claim.initiator, initiator: claim.initiator },
+      });
+      const context = { authority: claim.authority, ownerContext, target: record.request };
+      const current = await observeOwnerRealmContinuation(context);
+      if (
+        current === undefined ||
+        realmContinuationDispatchId(current) !== realmContinuationDispatchId(claim)
+      ) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      return context;
+    };
+    const realmIdentityWait = createHostedOperatorRealmIdentityWait({
+      config: tokenKeyring,
+      store,
+      assertAuthorized: owner.assertArtifactAuthorized,
+      observe: observeOwnerRealmContinuation,
+    });
+
     const controlPlane = {
       readApprovedPlan,
+      registerOwnerRealmIdentityWait: (...args: Parameters<typeof realmIdentityWait.register>) =>
+        realmIdentityWait.register(...args),
+      acknowledgeOwnerRealmIdentityWait: (
+        ...args: Parameters<typeof realmIdentityWait.acknowledge>
+      ) => realmIdentityWait.acknowledge(...args),
+      async readRealmIdentityWaitDelivery(claim: RealmContinuationAuthority) {
+        return await realmIdentityWait.delivery(await continuationContext(claim));
+      },
+      async resolveOwnerRealmContinuationContext(request: {
+        principal: HostedPrincipal;
+        sessionId: string;
+        adapterSessionId: string;
+        sourceHandoffId?: string;
+      }): Promise<HostedOperatorContext | undefined> {
+        const raw = await eve.getSession(request.principal, request.sessionId);
+        const parsed = hostedSessionRecordSchema.safeParse(raw);
+        if (!parsed.success || parsed.data.version !== 2) {
+          return undefined;
+        }
+        const durable = toDurableHostedSessionRecord(parsed.data);
+        if (
+          durable.adapterSessionId !== request.adapterSessionId ||
+          parsed.data.sourceHandoffId !== request.sourceHandoffId ||
+          !isDeepStrictEqual(
+            hostedTenantAuthoritySchema.parse({
+              issuer: durable.principal.issuer,
+              audience: durable.principal.audience,
+              workspaceId: durable.principal.workspaceId,
+              ownerUserId: durable.principal.ownerUserId,
+            }),
+            hostedTenantAuthoritySchema.parse({
+              issuer: request.principal.issuer,
+              audience: request.principal.audience,
+              workspaceId: request.principal.workspaceId,
+              ownerUserId: request.principal.ownerUserId,
+            }),
+          )
+        ) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        const authority = hostedTenantAuthoritySchema.parse({
+          issuer: durable.principal.issuer,
+          audience: durable.principal.audience,
+          workspaceId: durable.principal.workspaceId,
+          ownerUserId: durable.principal.ownerUserId,
+        });
+        const rows = await database
+          .select({ record: builderProvisioningJournals.record })
+          .from(builderProvisioningJournals)
+          .where(
+            and(
+              eq(builderProvisioningJournals.issuer, authority.issuer),
+              eq(builderProvisioningJournals.audience, authority.audience),
+              eq(builderProvisioningJournals.workspaceId, authority.workspaceId),
+              eq(builderProvisioningJournals.ownerUserId, authority.ownerUserId),
+              sql`${builderProvisioningJournals.record}->>'kind' = 'app-runtime'`,
+              sql`${builderProvisioningJournals.record}->'request'->>'sessionId' = ${request.sessionId}`,
+            ),
+          )
+          .limit(2);
+        if (rows.length === 0) {
+          return undefined;
+        }
+        if (rows.length !== 1) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        const record = hostedRuntimeJournalRecordSchema.parse(rows[0]?.record);
+        const ownerContext = await ownerContextResolver({
+          adapterSessionId: durable.adapterSessionId,
+          authority,
+          principal: durable.principal,
+          sessionAuth: forwardedSessionAuth(durable.principal, parsed.data.sourceHandoffId),
+        });
+        return { authority, ownerContext, target: record.request };
+      },
+      reconcileOwnerRealmContinuation,
+      async readRealmContinuationPendingBaseline(claim: RealmContinuationAuthority) {
+        const context = await continuationContext(claim);
+        const principal = context.ownerContext?.principal;
+        if (principal === undefined || eve.readCheckpointPage === undefined) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        const ownedSession = await eve.getSession(principal, claim.ownerSessionId);
+        if (ownedSession === null) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        const durable = toDurableHostedSessionRecord(ownedSession);
+        if (
+          durable.adapterSessionId !== claim.adapterSessionId ||
+          durable.checkpointRef === undefined
+        ) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        const page = await eve.readCheckpointPage({
+          principal,
+          sessionId: claim.ownerSessionId,
+          checkpointRef: durable.checkpointRef,
+          cursor: 0,
+          limit: 1,
+        });
+        const state = nativeObservationStateSchema.parse(page.metadata.nativeObservationState);
+        if (
+          state.adapterSessionId !== claim.adapterSessionId ||
+          page.checkpointDigest !== durable.checkpointRef.digest ||
+          page.totalEvents !== durable.checkpointRef.eventCount
+        ) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        return realmContinuationPendingBaseline(state);
+      },
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Raw native pending request is parsed by the exact structural guard.
+      async isObsoleteRealmAuthWait(claim: RealmContinuationAuthority, request: unknown) {
+        const context = await continuationContext(claim);
+        const current = await store.read(context);
+        return current !== undefined && isRealmContinuationTechnicalWait(current.record, request);
+      },
+      async readRealmContinuationDeliveryStartIndex(
+        claim: RealmContinuationAuthority,
+        dispatchId: string,
+      ) {
+        const context = await continuationContext(claim);
+        if (realmContinuationDispatchId(claim) !== dispatchId) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        const current = await store.read(context);
+        const state = current?.record.realmContinuation;
+        return state?.dispatchId === dispatchId ? state.receiverStreamStartIndex : undefined;
+      },
+      async readRealmContinuationDeliveryTargetRequestId(
+        claim: RealmContinuationAuthority,
+        dispatchId: string,
+      ) {
+        const context = await continuationContext(claim);
+        if (realmContinuationDispatchId(claim) !== dispatchId) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        const current = await store.read(context);
+        const state = current?.record.realmContinuation;
+        return state?.dispatchId === dispatchId ? state.receiverRequestId : undefined;
+      },
+      async acceptRealmContinuationDelivery(claim: RealmContinuationAuthority, dispatchId: string) {
+        const context = await continuationContext(claim);
+        if (realmContinuationDispatchId(claim) !== dispatchId) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        await updateHostedRuntimeJournal({
+          ...context,
+          now: Date.now,
+          store,
+          update: (record) => {
+            const state = record.realmContinuation;
+            if (state?.dispatchId !== dispatchId || state.receiverClaimedAt === undefined) {
+              throw new HostedOperatorError("authorization_required");
+            }
+            return {
+              ...record,
+              realmContinuation: {
+                ...state,
+                status: "accepted",
+                acceptedAt: state.acceptedAt ?? new Date().toISOString(),
+              },
+            };
+          },
+        });
+      },
+      async readRealmContinuationDeliveryReceipt(
+        claim: RealmContinuationAuthority,
+        dispatchId: string,
+      ): Promise<"accepted" | "unknown" | "not-submitted"> {
+        const context = await continuationContext(claim);
+        if (realmContinuationDispatchId(claim) !== dispatchId) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        const current = await store.read(context);
+        const state = current?.record.realmContinuation;
+        if (state?.dispatchId === dispatchId && state.status === "accepted") {
+          return "accepted";
+        }
+        return state?.dispatchId === dispatchId && state.receiverClaimedAt !== undefined
+          ? "unknown"
+          : "not-submitted";
+      },
+      async readRealmContinuationDeliveryClaim(
+        claim: RealmContinuationAuthority,
+        dispatchId: string,
+      ) {
+        const context = await continuationContext(claim);
+        if (realmContinuationDispatchId(claim) !== dispatchId) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        const current = await store.read(context);
+        const state = current?.record.realmContinuation;
+        return state?.dispatchId === dispatchId && state.receiverClaimedAt !== undefined;
+      },
+      async claimRealmContinuationDelivery(
+        claim: RealmContinuationAuthority,
+        dispatchId: string,
+        streamStartIndex: number,
+        targetRequestId: string,
+      ) {
+        const receiverStreamStartIndex = z.number().int().nonnegative().parse(streamStartIndex);
+        const receiverRequestId = z.string().min(1).max(200).parse(targetRequestId);
+        const context = await continuationContext(claim);
+        if (realmContinuationDispatchId(claim) !== dispatchId) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        const current = await store.read(context);
+        const state = current?.record.realmContinuation;
+        if (
+          current === undefined ||
+          state?.dispatchId !== dispatchId ||
+          state.receiverClaimedAt !== undefined
+        ) {
+          return false;
+        }
+        const saved = await store.compareAndSet({
+          ...context,
+          expectedRevision: current.revision,
+          now: new Date(),
+          record: {
+            ...current.record,
+            realmContinuation: {
+              ...state,
+              receiverClaimedAt: new Date().toISOString(),
+              receiverStreamStartIndex,
+              receiverRequestId,
+            },
+          },
+        });
+        return saved !== undefined;
+      },
       normalActorJournalPorts,
       assertAuthorized: owner.assertAuthorized,
       async assertMembershipCapture(inputContext: HostedOperatorEffectContext) {
@@ -1307,7 +1760,7 @@ export const createHostedOperatorControlPlane = async (input: {
         }
         await owner.assertAuthorized(effectInput);
         const current = requireFinalResourceBindingPhase(
-          await store.read(effectInput),
+          selectAuthPlanningResourceBindingRow(await store.read(effectInput), effectInput.plan),
           effectInput,
         );
         const { operator } = current.record;
@@ -1336,7 +1789,10 @@ export const createHostedOperatorControlPlane = async (input: {
           record: current.record,
         });
         await owner.assertAuthorized(effectInput);
-        const latest = requireFinalResourceBindingPhase(await store.read(effectInput), effectInput);
+        const latest = requireFinalResourceBindingPhase(
+          selectAuthPlanningResourceBindingRow(await store.read(effectInput), effectInput.plan),
+          effectInput,
+        );
         if (
           latest.revision !== current.revision ||
           JSON.stringify(latest.record.operator) !== JSON.stringify(operator)

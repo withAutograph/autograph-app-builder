@@ -1327,7 +1327,7 @@ it.each([
   },
 );
 
-it("keeps absent-program Realm link config byte-for-byte unchanged", async () => {
+it("enables the exact native identity handoff without requiring a participant program", async () => {
   const f = fixture();
   await f.writer.bind(f.input);
   const link = f.rows.find((row) => row.key === "PLATFORM_REALM_OPERATOR_LINK_CONFIG");
@@ -1337,6 +1337,7 @@ it("keeps absent-program Realm link config byte-for-byte unchanged", async () =>
       builderCallbackOrigin: gateway.builderCallbackOrigin,
       builderCallbackPath: "/api/hosted-operator/realm-identity",
       operatorOrigin: gateway.operatorOrigin,
+      identityHandoff: { sender: gateway.sourceWorkload },
     }),
   );
 });

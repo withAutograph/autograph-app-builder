@@ -189,7 +189,9 @@ export interface ProtectedHostedOperatorDependencies {
     },
   ) => Promise<HostedOperatorPlan>;
   /** Re-read membership, owner connection and provider grants. No ambient Neon authority. */
-  assertAuthorized: (context: Context & { plan: HostedOperatorPlan }) => Promise<void>;
+  assertAuthorized: (
+    context: Context & { plan: HostedOperatorPlan; purpose?: "planning" },
+  ) => Promise<void>;
   /** Canonical session/member/app/adapter authority; provider grants remain full at observation boundaries and mutations. */
   assertCanonicalOwner?: (context: Context) => Promise<void>;
   /** Canonical current-owner original approval selection; never accepts model-supplied proof. */
@@ -417,7 +419,7 @@ const handlePlanOperation = async (
     throw new HostedOperatorError("resource_mismatch");
   }
   await observeOperatorPlanStage(context.target.sessionId, "plan_authorization", async () => {
-    await deps.assertAuthorized({ ...context, plan });
+    await deps.assertAuthorized({ ...context, plan, purpose: "planning" });
   });
   assertUnexpired(plan, now());
   const recovered = await recoverOriginalApprovedPlan(deps, context, input, appId, plan, now);

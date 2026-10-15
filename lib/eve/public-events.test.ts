@@ -1491,3 +1491,96 @@ it("keeps a typed framework session limit out of public confirmations", () => {
     false,
   );
 });
+
+describe("suspended hosted identity invitation", () => {
+  const link = "https://auth.example.com/api/auth/platform/operator-link?nonce=ordinary-link-nonce";
+  const partial = (output: unknown, toolName = "prepare-app-hosted-runtime") =>
+    installedEvent({
+      type: "action.partial",
+      data: {
+        turnId: "owner-turn",
+        sequence: 8,
+        stepIndex: 2,
+        result: { kind: "tool-result", toolName, callId: "prepare-call", output },
+      },
+    });
+  it("exposes the ordinary link before completion without creating a response request", () => {
+    const event = partial({
+      authIdentityLink: link,
+      authIdentityLinkExpiresAt: "2026-10-15T15:00:00Z",
+      nextStep: "private instruction must not be copied",
+      token: "private-hook-token",
+      proof: "private-proof",
+      sealedAuthority: "private-seal",
+    });
+    const projected = projectInstalledEveEvents([event]);
+    expect(projected).toHaveLength(2);
+    expect(projected[0]).toMatchObject({ type: "assistant_message" });
+    expect(projected[1]).toMatchObject({
+      type: "auth_identity_invitation",
+      callId: "prepare-call",
+      url: link,
+    });
+    expect(JSON.stringify(projected)).toContain(link);
+    expect(JSON.stringify(projected)).not.toMatch(/private-/u);
+    expect(outstandingInstalledEveRequests([event])).toEqual([]);
+    expect(projectInstalledEveEvents([event])).toEqual(projected);
+    const [native] = projectInstalledEveEvent(event, 5);
+    expect(toPublicEvent(native)).toMatchObject({
+      index: 5,
+      turnId: projected[0].type === "assistant_message" ? projected[0].turnId : "",
+    });
+  });
+  it("keeps the invitation separate from the eventual assistant reply", () => {
+    const projected = projectInstalledEveEvents([
+      partial({ authIdentityLink: link }),
+      installedEvent({
+        type: "message.completed",
+        data: { turnId: "owner-turn", message: "Ready" },
+      }),
+    ]);
+    expect(projected).toHaveLength(2);
+    expect(
+      projected.map((event) => (event.type === "assistant_message" ? event.turnId : "")),
+    ).toEqual(["owner-turn:identity-invitation:prepare-call:8", "owner-turn"]);
+  });
+  it("does not publish other tools or private partial output", () => {
+    expect(projectInstalledEveEvents([partial({ authIdentityLink: link }, "other-tool")])).toEqual(
+      [],
+    );
+    expect(projectInstalledEveEvents([partial({ token: "private-hook-token" })])).toEqual([]);
+  });
+  it.each([
+    // oxlint-disable-next-line eslint/no-script-url -- Verify untrusted invitations cannot publish executable URLs.
+    "javascript:alert(1)",
+    "http://auth.example.com",
+    "https://user:password@auth.example.com",
+  ])("does not expose an unsafe invitation %s", (authIdentityLink) => {
+    expect(projectInstalledEveEvents([partial({ authIdentityLink })])).toEqual([]);
+  });
+});
+
+it("closes only the finished hosted identity tool invitation", () => {
+  const events = projectInstalledEveEvents([
+    installedEvent({
+      type: "action.result",
+      data: {
+        turnId: "owner-turn",
+        sequence: 9,
+        stepIndex: 2,
+        status: "completed",
+        result: {
+          kind: "tool-result",
+          toolName: "prepare-app-hosted-runtime",
+          callId: "prepare-call",
+          output: { status: "prepared" },
+        },
+      },
+    }),
+  ]);
+  expect(events).toContainEqual({
+    type: "auth_identity_invitation_resolved",
+    callId: "prepare-call",
+    index: 1,
+  });
+});

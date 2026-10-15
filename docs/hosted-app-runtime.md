@@ -31,6 +31,33 @@ The operator still has to compare the receipt with the independently resolved
 owner, membership, plan digest and selected target; receipt persistence alone
 is not evidence of hosted provider authority.
 
+The normal owner link returns through a private Gateway-to-Builder staging POST
+followed by a normal browser GET. The POST verifies the configured native Gateway
+workload and the signed Realm proof before placing an encrypted, short-lived
+stage in existing immutable owner/session artifact storage. Its encrypted opaque
+return ticket contains no signed proof or cookie. The GET requires the original
+Builder owner's normal session, independently rechecks current Realm access,
+and publishes the proof with the existing single-use nonce CAS. Success returns
+to Builder automatically. Knowing the original pending nonce cannot retrieve a
+stage, and this link grants no organization membership or app role. The legacy
+browser POST and sealed-cookie return remain readable for compatibility.
+
+Identity preparation publishes a passive sign-in invitation and waits on an
+authored Workflow hook. Signup or sign-in automatically completes the approved
+account link and resumes the same preparation; there is no confirmation screen,
+return button, or request to report that sign-in succeeded. The private hook
+token is encrypted and bound to the current owner, session, operation, plan and
+nonce. Its wake carries only an event ID; canonical proof or expiry readback
+establishes the result before preparation proceeds. A durable timer recovers
+missed wakes using saved database state. Provider grants remain checked at the
+protected preparation and effect boundaries.
+
+Existing native technical questions are recovered using an exact request-ID
+response attributed to the server workload. This response never chooses an
+approval option or dismisses another pending question. Submission receipts stay
+unknown until the exact native resolution is observed, and unknown writes are
+reconciled without posting another answer.
+
 `mise run operator:serve -- <absolute-reviewed-adapter-module> <sha256> [port]`
 is a separate service entrypoint bound to loopback for an authenticated HTTPS
 front end. It refuses startup without every required adapter. It must run in a

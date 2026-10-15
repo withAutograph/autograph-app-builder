@@ -2,6 +2,7 @@ import { isFrameworkSessionLimitInput } from "./session-limit-input";
 import { createHash } from "node:crypto";
 
 import {
+  publicIdentityInvitationSchema,
   publicPrototypeSchema,
   publicPrototypeReferenceSchema,
   publicUiPreviewSchema,
@@ -38,6 +39,8 @@ export interface InternalEveEvent {
   status?: EveSessionStatus;
   requestIds?: string[];
   resolutionKind?: "authorization";
+  identityInvitation?: { callId: string; url: string; expiresAt: string };
+  callId?: string;
 }
 
 const authorizationCoordinatesSchema = z.object({
@@ -1189,6 +1192,21 @@ const inputRequest = (request: {
   };
 };
 
+/** Only the ordinary invitation is public; the rest of a suspended tool result stays private. */
+const hostedIdentityInvitation = (value: unknown): string | undefined => {
+  const invitation = z
+    .object({ authIdentityLink: z.url().startsWith("https://") })
+    .safeParse(value);
+  if (!invitation.success) {
+    return undefined;
+  }
+  const url = new URL(invitation.data.authIdentityLink);
+  if (url.username !== "" || url.password !== "" || /[\r\n<>]/u.test(url.href)) {
+    return undefined;
+  }
+  return `Sign in to connect your account: <${url.href}>. The approved preparation resumes automatically.`;
+};
+
 /** Converts only the installed Eve 0.68 events that belong in the public MCP projection. */
 export const projectInstalledEveEvent = (
   event: MessageStreamEvent,
@@ -1244,6 +1262,37 @@ export const projectInstalledEveEvent = (
         return label === undefined ? [] : [{ index, label, state: "started", type: "progress" }];
       });
     }
+    case "action.partial": {
+      const { result, turnId, sequence } = event.data;
+      if (
+        result.kind !== "tool-result" ||
+        result.toolName !== "prepare-app-hosted-runtime" ||
+        result.isError === true
+      ) {
+        return [];
+      }
+      const text = hostedIdentityInvitation(result.output);
+      if (text === undefined) {
+        return [];
+      }
+      const invitation = publicIdentityInvitationSchema.safeParse({
+        callId: result.callId,
+        url: recordStringField(result.output, "authIdentityLink"),
+        expiresAt: recordStringField(result.output, "authIdentityLinkExpiresAt"),
+      });
+      return [
+        {
+          index,
+          text,
+          // Keep a yielded invitation distinct from the later model reply, stable on replay.
+          turnId: `${turnId}:identity-invitation:${result.callId}:${sequence}`,
+          type: "assistant.message",
+        },
+        ...(invitation.success
+          ? [{ index, type: "auth_identity_invitation", identityInvitation: invitation.data }]
+          : []),
+      ];
+    }
     case "action.result": {
       if (event.data.result?.kind !== "tool-result") {
         return [];
@@ -1257,21 +1306,28 @@ export const projectInstalledEveEvent = (
       const commandFailed =
         event.data.result.toolName === "validate_github_draft_pr_reconciliation" &&
         (returnedStatus === "needs_repair" || returnedStatus === "needs_resolution");
-      return label === undefined
-        ? []
-        : [
-            {
-              index,
-              label,
-              state:
-                event.data.status === "completed" &&
-                event.data.result.isError !== true &&
-                !commandFailed
-                  ? "completed"
-                  : "failed",
-              type: "progress",
-            },
-          ];
+      const progress: InternalEveEvent[] =
+        label === undefined
+          ? []
+          : [
+              {
+                index,
+                label,
+                state:
+                  event.data.status === "completed" &&
+                  event.data.result.isError !== true &&
+                  !commandFailed
+                    ? "completed"
+                    : "failed",
+                type: "progress",
+              },
+            ];
+      return event.data.result.toolName === "prepare-app-hosted-runtime"
+        ? [
+            ...progress,
+            { index, type: "auth_identity_invitation_resolved", callId: event.data.result.callId },
+          ]
+        : progress;
     }
     case "input.requested": {
       const projectedRequests = event.data.requests.map(inputRequest);
@@ -1543,6 +1599,17 @@ export const deriveInstalledEveStatus = (
 /** Project one durable Eve stream into a dense, cursor-addressable public stream. */
 export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null => {
   switch (event.type) {
+    case "auth_identity_invitation": {
+      const invitation = publicIdentityInvitationSchema.safeParse(event.identityInvitation);
+      return invitation.success
+        ? { ...invitation.data, index: event.index, type: "auth_identity_invitation" }
+        : null;
+    }
+    case "auth_identity_invitation_resolved": {
+      return event.callId
+        ? { callId: event.callId, index: event.index, type: "auth_identity_invitation_resolved" }
+        : null;
+    }
     case "assistant.message": {
       return event.turnId && event.text !== undefined
         ? {

@@ -19,6 +19,8 @@ import {
 } from "./browser-preview";
 import type { StreamedPrototypePreviewResolver } from "./browser-preview";
 import { openHostedPostgresDatabase } from "./hosted-route";
+import { createRealmContinuationRead } from "./realm-continuation-read";
+import type { ResumeRealmContinuation } from "./realm-continuation-read";
 
 type Environment = NodeJS.ProcessEnv | Record<string, string | undefined>;
 
@@ -108,7 +110,12 @@ export function createDeploymentPrototypePreviewRequestHandler(input: {
   workloadIdentity: HostedWorkloadIdentity;
   fetchImplementation?: typeof fetch;
   serviceForRequest?: (request: Request) => Promise<EveSessionService | undefined>;
+  resumeRealmContinuation?: ResumeRealmContinuation;
 }) {
+  const beforeRead = createRealmContinuationRead({
+    environment: input.environment,
+    resume: input.resumeRealmContinuation,
+  });
   let hosted:
     | {
         origin: string;
@@ -177,6 +184,7 @@ export function createDeploymentPrototypePreviewRequestHandler(input: {
       workspaceId,
     });
     const service = createHostedEveSessionService({
+      beforeRead,
       principal,
       store: hosted.store,
       transport: hosted.transport,

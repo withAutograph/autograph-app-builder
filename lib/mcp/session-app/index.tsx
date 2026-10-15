@@ -7,6 +7,8 @@ import { eveSessionResultSchema } from "../contracts";
 import type { EveSessionResult } from "../contracts";
 import { createBoundedAuthorizationRefresh } from "./automatic-refresh";
 import { SessionAppView } from "./view";
+import { reduceIdentityInvitations } from "./identity-invitation";
+import type { IdentityInvitationState } from "./identity-invitation";
 import type { SessionResponse } from "./view";
 
 const app = new App(
@@ -15,10 +17,14 @@ const app = new App(
   { autoResize: true, strict: true },
 );
 let latestResult: EveSessionResult | undefined;
+let identityInvitationState: IdentityInvitationState | undefined;
 const resultListeners = new Set<() => void>();
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function publishResult(result?: EveSessionResult) {
+  identityInvitationState = result
+    ? reduceIdentityInvitations(identityInvitationState, result)
+    : undefined;
   latestResult = result;
   for (const listener of resultListeners) {
     listener();
@@ -127,6 +133,7 @@ function SessionAppContainer() {
   return (
     <SessionAppView
       result={result}
+      identityInvitations={identityInvitationState?.invitations ?? []}
       canCallTools={Boolean(capabilities?.serverTools)}
       canOpenLinks={Boolean(capabilities?.openLinks)}
       onOpenLink={async (url) => {

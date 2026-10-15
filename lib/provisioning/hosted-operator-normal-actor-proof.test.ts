@@ -162,7 +162,7 @@ const fixture = async () => {
     }),
   };
   let approved = true;
-  let wrongCallback = false;
+  let malformedPrivateResponse = false;
   let wrongActor = false;
   const requests: Request[] = [];
   const cookies = new Map<string, string>();
@@ -219,6 +219,7 @@ const fixture = async () => {
     }
     expect(request.method).toBe("POST");
     expect(request.headers.get("origin")).toBe(program.origin);
+    expect(request.headers.get("accept")).toBe("application/vnd.realm-operator-proof+json");
     const values = new URLSearchParams(await request.text());
     expect(values.has("operationRef")).toBe(false);
     expect(values.has("participantProgramDigest")).toBe(false);
@@ -250,12 +251,9 @@ const fixture = async () => {
       .setIssuedAt()
       .setExpirationTime("4m")
       .sign(privateKey);
-    const action = wrongCallback
-      ? "https://unapproved.example.com/api/hosted-operator/realm-identity"
-      : "https://builder.example.com/api/hosted-operator/realm-identity";
-    return new Response(
-      `<!doctype html><title>Account confirmed</title><form method="post" action="${action}"><input type="hidden" name="nonce" value="${values.get("nonce")}"><input type="hidden" name="proof" value="${proof}"><button type="submit">Return to App Builder</button></form>`,
-      { headers: { "content-type": "text/html; charset=utf-8" } },
+    return Response.json(
+      malformedPrivateResponse ? { version: 1, unexpected: proof } : { version: 1, proof },
+      { headers: { "content-type": "application/vnd.realm-operator-proof+json" } },
     );
   };
   const journal = createNormalActorJournal(journalPorts);
@@ -392,8 +390,8 @@ const fixture = async () => {
     revoke() {
       approved = false;
     },
-    badCallback() {
-      wrongCallback = true;
+    malformedPrivateResponse() {
+      malformedPrivateResponse = true;
     },
     badActor() {
       wrongActor = true;
@@ -424,9 +422,9 @@ describe("normal organization owner proof collector", () => {
     );
     expect(f.artifacts.size).toBe(2);
   });
-  it("rejects an unapproved callback destination without retaining a proof", async () => {
+  it("rejects malformed private proof responses without retaining a proof", async () => {
     const f = await fixture();
-    f.badCallback();
+    f.malformedPrivateResponse();
     await expect(f.collect(await f.input("org-one"))).rejects.toMatchObject({
       code: "auth_identity_required",
     });

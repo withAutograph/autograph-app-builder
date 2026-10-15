@@ -10,6 +10,7 @@ import type { HostedEveStore, HostedPagedCheckpointMetadata } from "../eve/hoste
 import { HostedAdapterSessionUnavailableError } from "../eve/hosted-service";
 import type { HostedEveTransport } from "../eve/hosted-service";
 import type { getPrototypeChunk, PrototypeChunkKey } from "../agent/postgres-prototype-chunks";
+import type { ResumeRealmContinuation } from "./realm-continuation-read";
 
 const providers = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -62,6 +63,7 @@ const ownedFixture = (
     artifactSessionId?: string;
     missingManifest?: boolean;
     lostAdapter?: boolean;
+    resumeRealmContinuation?: ResumeRealmContinuation;
   } = {},
 ) => {
   const publicId = "ses_public";
@@ -176,6 +178,7 @@ const ownedFixture = (
   );
   const handler = createDeploymentPrototypePreviewRequestHandler({
     environment: { EVE_HOSTED_ADAPTER: "1" },
+    resumeRealmContinuation: options.resumeRealmContinuation,
     workloadIdentity: {
       async token() {
         await Promise.resolve();
@@ -194,6 +197,35 @@ describe("deployment Browser preview route", () => {
     for (const mock of Object.values(providers)) {
       mock.mockReset();
     }
+  });
+  it("recovers the exact authenticated saved build before reading its artifact", async () => {
+    const resume = vi.fn<ResumeRealmContinuation>().mockImplementation(() => Promise.resolve());
+    const fixture = ownedFixture({ resumeRealmContinuation: resume });
+    const response = await fixture.handler(fixture.request, {
+      digest,
+      sessionId: fixture.publicId,
+    });
+    expect(response.status).toBe(200);
+    await expect(response.text()).resolves.toBe(content);
+    expect(resume).toHaveBeenCalledTimes(1);
+    expect(resume).toHaveBeenCalledWith({
+      principal: owner,
+      sessionId: fixture.publicId,
+      adapterSessionId: fixture.record.adapterSessionId,
+      environment: { EVE_HOSTED_ADAPTER: "1" },
+    });
+  });
+
+  it("does not recover another account's saved build", async () => {
+    const resume = vi.fn<ResumeRealmContinuation>().mockImplementation(() => Promise.resolve());
+    const fixture = ownedFixture({ resumeRealmContinuation: resume });
+    providers.auth.mockResolvedValue({ user: { id: "other-owner" } });
+    const response = await fixture.handler(fixture.request, {
+      digest,
+      sessionId: fixture.publicId,
+    });
+    expect(response.status).toBe(404);
+    expect(resume).not.toHaveBeenCalled();
   });
   it("serves the exact artifact selected by the request-scoped service", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double

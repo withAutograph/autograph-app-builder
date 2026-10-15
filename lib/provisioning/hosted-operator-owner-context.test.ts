@@ -1,5 +1,12 @@
 import type { HostedOperatorConsentDiagnosticSink } from "./hosted-operator-consent-diagnostic";
 import { describe, expect, it, vi } from "vitest";
+import {
+  createRealmContinuationServiceAuth,
+  mintRealmContinuationAuthority,
+  readRealmContinuationServiceIdentity,
+  realmContinuationInitiatorSchema,
+} from "../hosted/realm-continuation-authority";
+import type { RealmContinuationAuthority } from "../hosted/realm-continuation-authority";
 import { activeBuilderModelId } from "../integrations/active-model";
 import { hostedEveOperationScopes } from "../eve/hosted-auth";
 import {
@@ -121,6 +128,9 @@ const fixture = (
     handoff?: BuilderHandoffRecord | null;
     session?: HostedSessionRecord;
     isActiveMember?: boolean;
+    realmContinuation?: Parameters<
+      typeof createHostedOperatorOwnerContextResolver
+    >[0]["realmContinuation"];
   } = {},
 ) => {
   const handoffs = {
@@ -144,6 +154,7 @@ const fixture = (
   const diagnosticSink = vi.fn<HostedOperatorConsentDiagnosticSink>();
   const resolver = createHostedOperatorOwnerContextResolver({
     audience: authority.audience,
+    realmContinuation: overrides.realmContinuation,
     diagnosticSink,
     handoffs,
     isActiveMember: async () => {
@@ -593,5 +604,114 @@ describe("hosted operator owner context", () => {
       ownerContext: resolved,
     });
     expect(JSON.stringify(captured?.headers)).not.toContain(sessionAuth.current.subject);
+  });
+});
+
+describe("Realm service continuation live owner checks", () => {
+  const service = readRealmContinuationServiceIdentity({
+    EVE_HOSTED_ADAPTER: "1",
+    EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
+    VERCEL_ENV: "preview",
+    EVE_HOSTED_VERCEL_PROJECT_NAME: "autograph-app-builder",
+    EVE_HOSTED_VERCEL_TEAM_SLUG: "withautograph",
+  });
+  const config = { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" };
+  const realmContinuation = { config, service };
+  const serviceAuth = (
+    overrides: {
+      adapterSessionId?: string;
+      ownerSessionId?: string;
+      direct?: boolean;
+      expired?: boolean;
+    } = {},
+  ) => {
+    const original = realmContinuationInitiatorSchema.parse(
+      (overrides.direct === true ? directSessionAuth : sessionAuth).initiator,
+    );
+    const reason: RealmContinuationAuthority["reason"] =
+      overrides.expired === true
+        ? { kind: "expired-technical-wait", expiresAt: "2026-10-01T00:00:00.000Z" }
+        : { kind: "consumed-proof", proofRef: "private-proof-ref", proofSha256: "c".repeat(64) };
+    return createRealmContinuationServiceAuth({
+      ...realmContinuation,
+      initiator: original,
+      claim: mintRealmContinuationAuthority({
+        ...realmContinuation,
+        observed: {
+          adapterSessionId: overrides.adapterSessionId ?? "adapter-current",
+          appId: "sample-app",
+          approvedPlanDigest: "a".repeat(64),
+          authority,
+          initiator: original,
+          nonceSha256: "b".repeat(64),
+          operationRef: "123e4567-e89b-42d3-a456-426614174003",
+          ownerSessionId: overrides.ownerSessionId ?? "public-session-1",
+          reason,
+        },
+      }),
+    });
+  };
+  const input = (auth: ReturnType<typeof serviceAuth>) => ({
+    adapterSessionId: "adapter-current",
+    authority,
+    principal,
+    sessionAuth: auth,
+  });
+
+  it.each([false, true])(
+    "resolves a sealed continuation with expired=%s through the actual handoff and membership resolver",
+    async (expired) => {
+      const f = fixture({ realmContinuation });
+      const result = await f.resolver(input(serviceAuth({ expired })));
+      expect(result).toMatchObject({
+        authority,
+        principal,
+        sessionId: "public-session-1",
+        adapterSessionId: "adapter-current",
+      });
+      expect(JSON.stringify(result)).not.toContain("private-proof-ref");
+      expect(result.realmContinuation?.sealedAuthority).toBeDefined();
+    },
+  );
+
+  it("retains direct owner session binding", async () => {
+    const f = fixture({ realmContinuation, session: directSessionRecord() });
+    await expect(f.resolver(input(serviceAuth({ direct: true })))).resolves.toMatchObject({
+      kind: "direct",
+      sessionId: "public-session-1",
+    });
+    await expect(
+      f.resolver(input(serviceAuth({ direct: true, ownerSessionId: "foreign-public-session" }))),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+  });
+
+  it("rejects wrong native/public bindings, revoked membership, changed adapter, and changed stored principal scopes", async () => {
+    const valid = serviceAuth();
+    const denials = [
+      [fixture({ realmContinuation }), serviceAuth({ adapterSessionId: "foreign-adapter" })],
+      [fixture({ realmContinuation }), serviceAuth({ ownerSessionId: "foreign-public-session" })],
+      [fixture({ realmContinuation, isActiveMember: false }), valid],
+      [
+        fixture({
+          realmContinuation,
+          session: { ...session, adapterSessionId: "changed-adapter" },
+        }),
+        valid,
+      ],
+      [
+        fixture({
+          realmContinuation,
+          session: { ...session, principal: { ...principal, scopes: ["autograph:get"] } },
+        }),
+        valid,
+      ],
+    ] as const;
+    await Promise.all(
+      denials.map(async ([f, auth]) => {
+        await expect(f.resolver(input(auth))).rejects.toMatchObject({
+          code: "authorization_required",
+        });
+      }),
+    );
   });
 });

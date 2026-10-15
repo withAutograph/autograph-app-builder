@@ -1,3 +1,11 @@
+import {
+  readSealedRealmContinuationAuthority,
+  realmContinuationPrincipal,
+} from "../hosted/realm-continuation-authority";
+import type {
+  RealmContinuationAuthority,
+  RealmContinuationVerificationOptions,
+} from "../hosted/realm-continuation-authority";
 import type { HostedEveStore } from "../eve/hosted-store";
 import { hostedSessionRecordSchema, toDurableHostedSessionRecord } from "../eve/hosted-store";
 import { hostedPrincipalSchema } from "../eve/hosted-auth";
@@ -23,6 +31,7 @@ import type {
   OperatorOwnerContext,
   OperatorSelection,
   HostedOperatorPlan,
+  HostedOperatorRecord,
 } from "./hosted-operator-contract";
 import { createOperatorWorkloadVerifier } from "./hosted-operator-workload";
 import type { OperatorWorkloadPolicy } from "./hosted-operator-workload";
@@ -50,6 +59,8 @@ type AccessReader = Parameters<typeof readPreparedVercelAccess>[0]["readCredenti
 type VerifierKeyResolver = Parameters<typeof createOperatorWorkloadVerifier>[1];
 
 export interface HostedOperatorOwnerDependencies {
+  journal?: Pick<HostedRuntimeJournalStore, "read">;
+  realmContinuation?: RealmContinuationVerificationOptions;
   workloadPolicy: OperatorWorkloadPolicy;
   keyResolver?: VerifierKeyResolver;
   eve: Pick<HostedEveStore, "getSession">;
@@ -321,12 +332,113 @@ const readHandoffOwnerTarget = async (
   return { handoff: handoff.data, session, target };
 };
 
+const readRealmOwnerRestriction = (
+  deps: Pick<HostedOperatorOwnerDependencies, "realmContinuation">,
+  owner: OperatorOwnerContext,
+  appId: string,
+): RealmContinuationAuthority | undefined => {
+  if (owner.realmContinuation === undefined) {
+    return undefined;
+  }
+  try {
+    const claim = readSealedRealmContinuationAuthority(
+      owner.realmContinuation.sealedAuthority,
+      deps.realmContinuation,
+    );
+    const matches = [
+      claim.appId === appId,
+      claim.ownerSessionId === owner.sessionId,
+      claim.adapterSessionId === owner.adapterSessionId,
+      sameAuthority(claim.authority, owner.authority),
+      samePrincipal(realmContinuationPrincipal(claim), owner.principal),
+      claim.initiator.attributes["autograph:source-handoff-id"] ===
+        (owner.kind === "handoff" ? owner.sourceHandoffId : undefined),
+    ].every(Boolean);
+    if (!matches) {
+      throw unavailable();
+    }
+    return claim;
+  } catch {
+    throw unavailable();
+  }
+};
+
+const assertExpiredRealmReentry = (
+  operator: HostedOperatorRecord,
+  plan: HostedOperatorPlan,
+  expiresAt: string,
+) => {
+  const preparation = operator.authPreparation;
+  const link = operator.identityLink;
+  const completed = [
+    plan.action === "prepare",
+    operator.pendingEffectId === undefined,
+    operator.pendingEffectAttempt === undefined,
+    operator.receipts.length === plan.effects.length,
+    plan.effects.every(
+      (effect) =>
+        operator.receipts.filter((receipt) => receipt.effectId === effect.id).length === 1,
+    ),
+    preparation !== undefined,
+    preparation?.database === plan.authDatabase.database,
+    preparation?.runtimeRole === plan.authDatabase.runtimeRole,
+    preparation?.targetDigest === plan.authSchema?.targetDigest,
+    link?.expiresAt === expiresAt,
+    Date.parse(expiresAt) <= Date.now(),
+    link?.consumedAt === undefined,
+    link?.proofRef === undefined,
+    link?.proofSha256 === undefined,
+  ].every(Boolean);
+  if (!completed) {
+    throw unavailable();
+  }
+};
+
+const assertRealmEffectRestriction = async (
+  deps: HostedOperatorOwnerDependencies,
+  input: HostedOperatorContext & { plan: HostedOperatorPlan },
+) => {
+  const owner = operatorOwnerContextSchema.parse(input.ownerContext);
+  const claim = readRealmOwnerRestriction(deps, owner, input.target.appId);
+  if (claim === undefined) {
+    return;
+  }
+  if (deps.journal === undefined) {
+    throw unavailable();
+  }
+  const row = await deps.journal.read(input);
+  const operator = row?.record.operator;
+  const link = operator?.identityLink;
+  const matches = [
+    operator?.operationRef === claim.operationRef,
+    operator?.planDigest === claim.approvedPlanDigest,
+    operatorPlanDigest(input.plan) === claim.approvedPlanDigest,
+    link?.ownerSessionId === claim.ownerSessionId,
+    link?.nonceSha256 === claim.nonceSha256,
+  ].every(Boolean);
+  if (!matches || operator === undefined || link === undefined) {
+    throw unavailable();
+  }
+  if (claim.reason.kind === "consumed-proof") {
+    if (
+      link.consumedAt === undefined ||
+      link.proofRef !== claim.reason.proofRef ||
+      link.proofSha256 !== claim.reason.proofSha256
+    ) {
+      throw unavailable();
+    }
+    return;
+  }
+  assertExpiredRealmReentry(operator, input.plan, claim.reason.expiresAt);
+};
+
 const readOwnedState = async (
   deps: HostedOperatorOwnerDependencies,
   owner: OperatorOwnerContext,
   principal: HostedPrincipal,
   selection: OperatorSelection,
 ) => {
+  readRealmOwnerRestriction(deps, owner, selection.appId);
   if (selection.sessionId !== owner.sessionId || selection.environment !== "preview") {
     throw unavailable();
   }
@@ -384,6 +496,7 @@ export const createHostedOperatorOwnerAuthority = (deps: HostedOperatorOwnerDepe
   /** Recheck canonical artifact ownership without borrowing deployment authority. */
   const assertArtifactAuthorized = async (input: HostedOperatorContext): Promise<void> => {
     const { owner, principal } = ownerContextFromHint(input.ownerContext);
+    readRealmOwnerRestriction(deps, owner, input.target.appId);
     if (
       !sameAuthority(input.authority, owner.authority) ||
       input.target.sessionId !== owner.sessionId
@@ -405,7 +518,9 @@ export const createHostedOperatorOwnerAuthority = (deps: HostedOperatorOwnerDepe
   const assertPlanningAuthorized = async (input: HostedOperatorContext): Promise<void> => {
     await readCurrentPlanningOwner(input);
   };
-  const assertAuthorized = async (input: HostedOperatorContext & { plan: HostedOperatorPlan }) => {
+  const assertAuthorized = async (
+    input: HostedOperatorContext & { plan: HostedOperatorPlan; purpose?: "planning" },
+  ) => {
     if (
       !sameOperatorSelection(input.plan.selection, {
         appId: input.target.appId,
@@ -418,6 +533,9 @@ export const createHostedOperatorOwnerAuthority = (deps: HostedOperatorOwnerDepe
       throw unavailable();
     }
     await assertPlanningAuthorized(input);
+    if (input.purpose !== "planning") {
+      await assertRealmEffectRestriction(deps, input);
+    }
   };
   return {
     assertArtifactAuthorized,

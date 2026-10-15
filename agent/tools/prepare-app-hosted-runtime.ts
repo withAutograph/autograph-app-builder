@@ -6,10 +6,17 @@ import type { ToolInputRequest, WorkflowToolContext } from "eve/tools";
 import { defineWorkflowTool } from "eve/tools";
 import type { ApprovalContext, ApprovalStatus } from "eve/tools/approval";
 import { z } from "zod";
+import { createHook, sleep } from "workflow";
 
 import { prepareHostedRuntimeStep } from "../../lib/agent/prepare-app-hosted-runtime-step";
 import type { readHostedRuntimePriorApproval } from "../../lib/agent/hosted-runtime-prior-approval";
 import type { HostedRuntimeApprovalEnvelope } from "../../lib/agent/prepare-app-hosted-runtime-step";
+import {
+  acknowledgeHostedRuntimeIdentityWaitStep,
+  continueHostedRuntimeOwnerPreparation,
+  registerHostedRuntimeIdentityWaitStep,
+} from "../../lib/agent/hosted-runtime-identity-wait";
+import type { HostedRuntimeIdentityWake } from "../../lib/agent/hosted-runtime-identity-wait";
 
 export const hostedRuntimeApprovalInputSchema = z.strictObject({
   appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
@@ -139,9 +146,16 @@ export default defineWorkflowTool({
   approval: hostedRuntimePreparationApproval,
   description:
     "After approval of the concrete protected operator plan, prepare exactly its named Preview resources/access. Pass the plan and operation reference returned by plan-app-hosted-runtime. Technical retries of the identical operation reuse its server-owned durable human approval. Changed plans require fresh approval. A gateway_delivery_failed result means an actual native Gateway build failed: follow its nextAction to request a new plan in this session, then obtain ordinary approval for the returned changed plan. Repeating an old plan does not adopt repaired Gateway source. Unknown alias or hostname assignment outcomes still require reconciliation. The protected service independently verifies the original approval and current owner authority, resumes the same journal and reports actual effects. No installer credential or repository script is sent to an app Sandbox. This does not deploy or activate Production.",
-  async execute(input: HostedRuntimeApprovalEnvelope, ctx) {
+  async *execute(input: HostedRuntimeApprovalEnvelope, ctx) {
     "use workflow";
-    return await continueHostedRuntimePreparation(input, ctx, prepareHostedRuntimeStep);
+    return yield* continueHostedRuntimeOwnerPreparation(input, ctx, prepareHostedRuntimeStep, {
+      createHook: () => createHook<HostedRuntimeIdentityWake>(),
+      register: registerHostedRuntimeIdentityWaitStep,
+      acknowledge: acknowledgeHostedRuntimeIdentityWaitStep,
+      sleepUntil: async (expiresAt) => {
+        await sleep(expiresAt);
+      },
+    });
   },
   inputSchema: hostedRuntimeApprovalInputSchema,
 });

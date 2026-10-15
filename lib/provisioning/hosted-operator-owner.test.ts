@@ -1,3 +1,8 @@
+import {
+  mintRealmContinuationAuthority,
+  readRealmContinuationServiceIdentity,
+} from "../hosted/realm-continuation-authority";
+import type { RealmContinuationAuthority } from "../hosted/realm-continuation-authority";
 import { generateKeyPair, SignJWT } from "jose";
 import type { MessageStreamEvent } from "eve/client";
 import { beforeAll, describe, expect, it, vi } from "vitest";
@@ -28,6 +33,8 @@ import {
   hostedRuntimeTargetSchema,
   // oxlint-disable-next-line import/consistent-type-specifier-style -- Keep this module in one import declaration.
   type HostedRuntimeJournalStore,
+  // oxlint-disable-next-line import/consistent-type-specifier-style -- Keep this module in one import declaration.
+  type HostedRuntimeJournalRecord,
 } from "./hosted-runtime-journal";
 import type { OperatorWorkloadPolicy } from "./hosted-operator-workload";
 import { normalActorProgramDigest } from "./hosted-operator-normal-actor-program";
@@ -181,6 +188,10 @@ const makeFixture = (
   missingHandoff = false,
   activeMember = true,
   diagnosticSink?: HostedOperatorConsentDiagnosticSink,
+  continuation?: Pick<
+    Parameters<typeof createHostedOperatorOwnerAuthority>[0],
+    "realmContinuation" | "journal"
+  >,
 ) => {
   const currentSession = durableHostedSessionRecordSchema.parse({
     adapterGeneration: 1,
@@ -297,6 +308,7 @@ const makeFixture = (
     return [{ active: true, installationId: "icfg_1" }];
   });
   const authority = createHostedOperatorOwnerAuthority({
+    ...continuation,
     apiOrigin: "https://vercel.example",
     diagnosticSink,
     eve,
@@ -1386,4 +1398,210 @@ describe("canonical original approved plan reader", () => {
       { code: "operation_in_progress" },
     );
   });
+});
+
+describe("Realm delegation at operator effect boundaries", () => {
+  const config = { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" };
+  const service = readRealmContinuationServiceIdentity({
+    EVE_HOSTED_ADAPTER: "1",
+    EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
+    VERCEL_ENV: "preview",
+    EVE_HOSTED_VERCEL_PROJECT_NAME: "autograph-app-builder",
+    EVE_HOSTED_VERCEL_TEAM_SLUG: "withautograph",
+  });
+  const operationRef = "a5c2b20f-0c08-49a8-a34f-cce64c72cc8c";
+  const setup = (expired = false) => {
+    const selectedPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      authSchema: {
+        artifactRef: "auth-schema",
+        installer: plan.installer,
+        planDigest: "d".repeat(64),
+        targetDigest: "e".repeat(64),
+      },
+    });
+    const planDigest = operatorPlanDigest(selectedPlan);
+    const expiresAt = "2026-10-01T00:00:00.000Z";
+    const reason: RealmContinuationAuthority["reason"] = expired
+      ? { kind: "expired-technical-wait", expiresAt }
+      : { kind: "consumed-proof", proofRef: "private-proof", proofSha256: "f".repeat(64) };
+    const sealedAuthority = mintRealmContinuationAuthority({
+      config,
+      service,
+      observed: {
+        adapterSessionId: ownerContext.adapterSessionId,
+        appId: selection.appId,
+        approvedPlanDigest: planDigest,
+        authority: ownerContext.authority,
+        initiator: {
+          attributes: {
+            "autograph:source-handoff-id": handoffId,
+            "mcp:audience": principal.audience,
+            "mcp:scopes": principal.scopes,
+            "mcp:workspace-id": principal.workspaceId,
+          },
+          authenticator: "mcp-oauth-jwks",
+          issuer: principal.issuer,
+          principalId: principal.ownerUserId,
+          principalType: "user",
+          subject: principal.ownerUserId,
+        },
+        nonceSha256: "a".repeat(64),
+        operationRef,
+        ownerSessionId: ownerContext.sessionId,
+        reason,
+      },
+    });
+    const record: HostedRuntimeJournalRecord = {
+      approvedByCallId: "approved-call",
+      kind: "app-runtime",
+      status: "pending",
+      step: "planned",
+      version: 1,
+      request: hostedRuntimeTargetSchema.parse({
+        ...selection,
+        installationId: "icfg_1",
+        scopeId: "team_1",
+        scopeType: "team",
+      }),
+      operator: {
+        mode: "protected-operator-v1",
+        operationRef,
+        plan: selectedPlan,
+        planDigest,
+        receipts: selectedPlan.effects.map((effect) => ({
+          effectId: effect.id,
+          observedAt: "2026-10-01T00:00:00.000Z",
+          resourceVersion: "verified-resource",
+        })),
+        authPreparation: {
+          assetSha256: "b".repeat(64),
+          catalogFingerprint: "c".repeat(64),
+          database: selectedPlan.authDatabase.database,
+          runtimeRole: selectedPlan.authDatabase.runtimeRole,
+          targetDigest: "e".repeat(64),
+          observedAt: "2026-10-01T00:00:00.000Z",
+        },
+        identityLink: {
+          audience: "https://builder.example",
+          authResourceId: selectedPlan.authDatabase.resourceId,
+          bootstrapPlanDigest: planDigest,
+          browserOrigin: "https://auth.example",
+          endpointOrigin: "https://gateway.example",
+          expiresAt,
+          issuer: "https://builder.example",
+          nonceSha256: "a".repeat(64),
+          organizationId: null,
+          ownerSessionId: ownerContext.sessionId,
+          ...(expired
+            ? {}
+            : { consumedAt: expiresAt, proofRef: "private-proof", proofSha256: "f".repeat(64) }),
+        },
+      },
+    };
+    const journal: Pick<HostedRuntimeJournalStore, "read"> = {
+      read: async () => await Promise.resolve({ record, revision: 1 }),
+    };
+    const f = makeFixture(undefined, false, true, undefined, {
+      journal,
+      realmContinuation: { config, service },
+    });
+    const delegatedOwner = { ...ownerContext, realmContinuation: { sealedAuthority } };
+    const context = {
+      authority: ownerContext.authority,
+      ownerContext: delegatedOwner,
+      target: record.request,
+      plan: selectedPlan,
+    };
+    return { ...f, context, record };
+  };
+
+  it("checks the sealed owner restriction and exact current consumed proof on every effect authorization", async () => {
+    const f = setup();
+    await expect(f.authority.assertAuthorized(f.context)).resolves.toBeUndefined();
+    const { operator } = f.record;
+    if (operator === undefined) {
+      throw new Error("fixture operator missing");
+    }
+    operator.operationRef = "851d5dd6-0983-4f91-ae80-797fd61cfd4f";
+    await expect(f.authority.assertAuthorized(f.context)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+  });
+
+  it.each(["app", "nonce", "proof", "plan"])(
+    "rejects substituted %s at the actual effect authorizer",
+    async (field) => {
+      const f = setup();
+      const { operator } = f.record;
+      if (operator?.identityLink === undefined) {
+        throw new Error("fixture link missing");
+      }
+      if (field === "app") {
+        f.context.target.appId = "foreign-app";
+      }
+      if (field === "nonce") {
+        operator.identityLink.nonceSha256 = "b".repeat(64);
+      }
+      if (field === "proof") {
+        operator.identityLink.proofSha256 = "b".repeat(64);
+      }
+      if (field === "plan") {
+        operator.planDigest = "b".repeat(64);
+      }
+      await expect(f.authority.assertAuthorized(f.context)).rejects.toMatchObject({
+        code: "authorization_required",
+      });
+    },
+  );
+
+  it("permits a same-app fresh proposal check without granting its changed plan effect authority", async () => {
+    const f = setup();
+    const changed = { ...f.context, plan: { ...f.context.plan, contextId: "new-proposal" } };
+    await expect(
+      f.authority.assertAuthorized({ ...changed, purpose: "planning" }),
+    ).resolves.toBeUndefined();
+    await expect(f.authority.assertAuthorized(changed)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+  });
+
+  it("permits only complete unchanged expired-wait reentry", async () => {
+    const f = setup(true);
+    await expect(f.authority.assertAuthorized(f.context)).resolves.toBeUndefined();
+    const { operator } = f.record;
+    if (operator === undefined) {
+      throw new Error("fixture operator missing");
+    }
+    operator.receipts.pop();
+    await expect(f.authority.assertAuthorized(f.context)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+  });
+
+  it.each(["pending-effect", "pending-attempt", "unprepared", "changed-expiry"])(
+    "denies expired wait reentry with %s",
+    async (field) => {
+      const f = setup(true);
+      const { operator } = f.record;
+      if (operator?.identityLink === undefined) {
+        throw new Error("fixture link missing");
+      }
+      if (field === "pending-effect") {
+        operator.pendingEffectId = "resources";
+      }
+      if (field === "pending-attempt") {
+        operator.pendingEffectAttempt = { id: operationRef };
+      }
+      if (field === "unprepared") {
+        delete operator.authPreparation;
+      }
+      if (field === "changed-expiry") {
+        operator.identityLink.expiresAt = "2026-10-02T00:00:00.000Z";
+      }
+      await expect(f.authority.assertAuthorized(f.context)).rejects.toMatchObject({
+        code: "authorization_required",
+      });
+    },
+  );
 });
