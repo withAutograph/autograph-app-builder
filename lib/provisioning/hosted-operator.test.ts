@@ -2700,3 +2700,87 @@ describe("closed prepare pre-effect diagnostics", () => {
     expect(JSON.stringify(sink.mock.calls)).not.toContain(privateError.message);
   });
 });
+
+describe("completed owned Gateway binding convergence", () => {
+  it("reconciles the completed binding under its original approval and replaces only its receipt", async () => {
+    const f = fixture();
+    const gatewayPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      gatewayBindings: adoptedGatewayPlan().gatewayBindings,
+      effects: [
+        ...plan.effects,
+        { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
+      ],
+    });
+    f.deps.plan = async () => gatewayPlan;
+    const request = await prepared(f);
+    f.approve();
+    expect((await f.client.request(request)).status).toBe("prepared");
+    const before = hostedRuntimeJournalRecordSchema.parse(f.row?.record);
+    const beforeOperator = hostedOperatorRecordSchema.parse(before.operator);
+    const calls = vi.mocked(f.deps.executeEffect).mock.calls.length;
+    const { reconcile, executeEffect } = f.deps;
+    let stale = true;
+    f.deps.reconcile = async (input) => {
+      if (input.effect.kind === "gateway-bindings" && stale) {
+        return { status: "retryable", resourceVersion: "observed-old-owned-config" };
+      }
+      return await reconcile(input);
+    };
+    f.deps.executeEffect = async (input) => {
+      expect(input.effect.kind).toBe("gateway-bindings");
+      expect(input.workerAttemptId).toBeTruthy();
+      expect(f.row?.record.operator?.pendingEffectId).toBe(input.effect.id);
+      await input.assertCurrent();
+      const receipt = {
+        ...(await executeEffect(input)),
+        resourceVersion: "observed-current-owned-config",
+      };
+      f.applied.set(input.effect.id, { ...receipt, fenceGeneration: input.fenceGeneration });
+      stale = false;
+      return receipt;
+    };
+    expect((await f.client.request(request)).status).toBe("prepared");
+    expect(vi.mocked(executeEffect).mock.calls).toHaveLength(calls + 1);
+    const after = hostedRuntimeJournalRecordSchema.parse(f.row?.record);
+    const afterOperator = hostedOperatorRecordSchema.parse(after.operator);
+    expect(
+      afterOperator.receipts.filter((receipt) => receipt.effectId !== "gateway-bindings"),
+    ).toEqual(beforeOperator.receipts.filter((receipt) => receipt.effectId !== "gateway-bindings"));
+    expect(
+      afterOperator.receipts.filter((receipt) => receipt.effectId === "gateway-bindings"),
+    ).toMatchObject([{ resourceVersion: "observed-current-owned-config" }]);
+    expect(after.privateState).toEqual(before.privateState);
+    expect(afterOperator.operationRef).toBe(beforeOperator.operationRef);
+    expect(afterOperator.approvalId).toBe(beforeOperator.approvalId);
+    expect(after.approvedByCallId).toBe(before.approvedByCallId);
+    expect((await f.client.request(request)).status).toBe("prepared");
+    expect(vi.mocked(executeEffect).mock.calls).toHaveLength(calls + 1);
+    expect(f.row?.record.operator?.receipts).toHaveLength(beforeOperator.receipts.length);
+    expect(
+      f.row?.record.operator?.receipts.filter((receipt) => receipt.effectId === "gateway-bindings"),
+    ).toHaveLength(1);
+  });
+
+  it("retains a completed Gateway receipt when fresh reconciliation is unknown", async () => {
+    const f = fixture();
+    f.deps.plan = async () =>
+      hostedOperatorPlanSchema.parse({
+        ...plan,
+        gatewayBindings: adoptedGatewayPlan().gatewayBindings,
+        effects: [
+          ...plan.effects,
+          { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
+        ],
+      });
+    const request = await prepared(f);
+    f.approve();
+    expect((await f.client.request(request)).status).toBe("prepared");
+    const receipts = structuredClone(f.row?.record.operator?.receipts);
+    const calls = vi.mocked(f.deps.executeEffect).mock.calls.length;
+    f.unknown();
+    expect((await f.client.request(request)).code).toBe("reconciliation_required");
+    expect(f.row?.record.operator?.receipts).toEqual(receipts);
+    expect(f.deps.executeEffect).toHaveBeenCalledTimes(calls);
+  });
+});
