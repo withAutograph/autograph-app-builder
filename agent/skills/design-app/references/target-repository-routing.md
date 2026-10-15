@@ -15,7 +15,7 @@ grounding when those paths exist, then select only task-relevant sources.
 | Charts and dashboards                      | `docs/dashboard-agent-evals.md`, chart composition contracts and stories                            |
 | Data objects and domain vocabulary         | relevant `domain-libs/` and app schemas; do not import app workflow into libraries                  |
 | Imports and reconciliation                 | import contracts, relevant engines/modules, and existing app-owned import policy                    |
-| Integrations                               | `docs/integrations/` and relevant app-owned adapters/recipes                                        |
+| Integrations                               | `docs/integrations/`, `@autograph/integration-runtime` provider recipes and `app-definition`, `@modules/integrations`, and app-owned DAL/host bindings |
 | App routes and generated client            | existing route-owned apps, generated app client contracts, adoption guide                           |
 | Writes, drafts, history, provenance        | `docs/contracts.md`, kernel contracts, generated apply lifecycle                                    |
 
