@@ -1039,6 +1039,76 @@ describe("existing populated Auth workflow planning", () => {
   it("preserves a consumed owner nonce when proof capture races the identity-link read", async () => {
     const f = setup("current");
     const operator = f.original.operator!;
+    operator.plan = {
+      ...operator.plan,
+      publicGateway: {
+        branch: "gateway-actual",
+        origin: "https://apps.example",
+        projectId: "gateway",
+      },
+      effects: [
+        ...operator.plan.effects,
+        { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
+      ],
+      deploymentBoundary: {
+        app: {
+          branch: context.target.branch,
+          deploymentId: "app-deployment",
+          environment: "preview",
+          projectId: context.target.projectId,
+        },
+        gateway: {
+          branch: "gateway-actual",
+          deploymentId: "gateway-deployment",
+          environment: "preview",
+          projectId: "gateway",
+        },
+        operator: {
+          deploymentId: "operator-deployment",
+          environment: "preview",
+          projectId: "operator",
+        },
+        authority: context.authority,
+        teamId: "team",
+        verification: {
+          gatewayOrigin: "https://gateway.example",
+          publicOrigin: "https://apps.example",
+          jwksUrl: "https://gateway.example/_platform/jwks.json",
+        },
+      },
+      gatewayBindings: {
+        authBrowserOrigin: "https://auth.example",
+        builderCallbackOrigin: "https://builder.example",
+        catalogAppIds: ["actual"],
+        operatorOrigin: "https://operator.example",
+        sourceWorkload: {
+          audience: "https://vercel.com/team",
+          environment: "preview",
+          issuer: "https://oidc.vercel.com/team",
+          ownerId: "team",
+          projectId: "gateway",
+          subject: "gateway-workload",
+        },
+      },
+    };
+    operator.planDigest = operatorPlanDigest(operator.plan);
+    operator.receipts.push({
+      effectId: "gateway-bindings",
+      observedAt: "2026-10-15T12:00:00Z",
+      resourceVersion: "owned-observation",
+    });
+    operator.gatewayDeliveryCandidates = [
+      {
+        branch: "gateway-actual",
+        deploymentId: "gateway-deployment",
+        operationRef: operator.operationRef,
+        origin: "https://gateway.example",
+        projectId: "gateway",
+        readyState: "READY",
+        repoId: "gateway-repository",
+      },
+    ];
+    operator.deliveredGatewayDeploymentId = "gateway-deployment";
     operator.identityLink = {
       audience: "https://operator.example",
       authResourceId: operator.plan.authDatabase.resourceId,
