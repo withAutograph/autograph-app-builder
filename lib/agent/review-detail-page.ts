@@ -9,6 +9,7 @@ import {
 import type { NativeActionResultMetadata } from "../eve/payload-envelope";
 import type { ReviewedChangeSetReceipt } from "../repository/reviewed-change-set";
 import type { productAcceptanceObligations } from "./product-acceptance";
+
 export interface OwnedReviewDetails {
   reviewReceipt: ReviewedChangeSetReceipt;
   productAcceptance: ReturnType<typeof productAcceptanceObligations>;

@@ -339,17 +339,15 @@ const assessmentFor = (
   invocation,
 });
 
-const reviewCapacityFailure = (error: unknown) => {
-  if (!(error instanceof Error)) {
-    return { contextRejected: false, outputRejected: false };
-  }
-  return {
-    contextRejected: providerContextRejected(error),
-    outputRejected: providerReviewFailureReason(error).startsWith(
-      "The model provider exhausted source review output capacity.",
-    ),
-  };
-};
+const hasCompletedReview = (state: ReviewState): boolean =>
+  !state.outputRejected && state.completionRequested && !state.invalidEvidence;
+
+const reviewCapacityFailure = (error: Error) => ({
+  contextRejected: providerContextRejected(error),
+  outputRejected: providerReviewFailureReason(error).startsWith(
+    "The model provider exhausted source review output capacity.",
+  ),
+});
 
 /** One independent read-only application review; interrupted incomplete work may rerun. */
 export const assessApplicationSource = async (
@@ -457,9 +455,12 @@ export const assessApplicationSource = async (
         await agent.generate({ messages, abortSignal: options.abortSignal });
       } catch (error) {
         options.abortSignal?.throwIfAborted();
-        const capacityFailure = reviewCapacityFailure(error);
-        contextRejected = capacityFailure.contextRejected;
-        state.outputRejected ||= capacityFailure.outputRejected;
+        const { contextRejected: rejectedContext, outputRejected } =
+          error instanceof Error
+            ? reviewCapacityFailure(error)
+            : { contextRejected: false, outputRejected: false };
+        contextRejected = rejectedContext;
+        state.outputRejected ||= outputRejected;
         if (!contextRejected && !state.outputRejected) {
           return blocked(
             "Independent application source review was unavailable. No provider details or runtime verdict were inferred.",
@@ -470,7 +471,7 @@ export const assessApplicationSource = async (
       if (state.evidenceFailed) {
         return blocked("Application source evidence became unavailable during review.");
       }
-      if (!state.outputRejected && state.completionRequested && !state.invalidEvidence) {
+      if (hasCompletedReview(state)) {
         const texts = await readRedactions();
         return texts === undefined
           ? blocked("Primary review document redaction is unavailable.")
