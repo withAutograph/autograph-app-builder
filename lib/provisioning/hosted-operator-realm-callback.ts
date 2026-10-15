@@ -3,6 +3,7 @@ import { verifyVercelOidcToken } from "@vercel/oidc";
 import { createHash, randomBytes } from "node:crypto";
 import { createRemoteJWKSet, customFetch } from "jose";
 import { z } from "zod";
+import { HostedOperatorError, operatorPublicResultSchema } from "./hosted-operator-contract";
 import {
   encryptVercelToken,
   decryptVersionedVercelToken,
@@ -222,76 +223,157 @@ export const createRealmIdentityHandoffSenderVerifier =
     }
   };
 
+const privateStageName = z.enum([
+  "sender",
+  "body",
+  "canonical_pending",
+  "origin",
+  "proof_verification",
+  "context",
+  "current_authority",
+  "artifact",
+  "seal",
+  "response",
+]);
+const privateStageJoseCode = z.enum([
+  "ERR_JOSE_ALG_NOT_ALLOWED",
+  "ERR_JOSE_NOT_SUPPORTED",
+  "ERR_JOSE_GENERIC",
+  "ERR_JOSE_INVALID",
+  "ERR_JWT_EXPIRED",
+  "ERR_JWT_CLAIM_VALIDATION_FAILED",
+  "ERR_JWT_INVALID",
+  "ERR_JWS_INVALID",
+  "ERR_JWS_SIGNATURE_VERIFICATION_FAILED",
+  "ERR_JWKS_INVALID",
+  "ERR_JWKS_NO_MATCHING_KEY",
+  "ERR_JWKS_MULTIPLE_MATCHING_KEYS",
+  "ERR_JWKS_TIMEOUT",
+]);
+interface PrivateStageFailure {
+  stage: z.infer<typeof privateStageName>;
+  errorClass: "operator_error" | "jose_error" | "unknown";
+  code?: string;
+}
+const reportPrivateStageFailure = (
+  stage: z.infer<typeof privateStageName>,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Caught exceptions are reduced to exact allowlisted codes; never messages, causes, or request values.
+  error: unknown,
+) => {
+  const failure: PrivateStageFailure = { stage, errorClass: "unknown" };
+  try {
+    // Read only an own data descriptor; a hostile code getter is never invoked.
+    const code: unknown = Object.getOwnPropertyDescriptor(error, "code")?.value;
+    if (error instanceof HostedOperatorError) {
+      const parsed = operatorPublicResultSchema.shape.code.unwrap().safeParse(code);
+      if (parsed.success) {
+        failure.errorClass = "operator_error";
+        failure.code = parsed.data;
+      }
+    } else {
+      const parsed = privateStageJoseCode.safeParse(code);
+      if (parsed.success) {
+        failure.errorClass = "jose_error";
+        failure.code = parsed.data;
+      }
+    }
+  } catch {
+    /* Exception introspection cannot replace the original callback failure. */
+  }
+  try {
+    console.error("realm_identity_callback_failure", failure);
+  } catch {
+    /* Diagnostics cannot change the original callback response. */
+  }
+};
+
 const privateStage = async (ports: RealmIdentityCallbackPorts, request: Request) => {
-  const handoff = ports.identityHandoff;
-  if (handoff === undefined) {
-    throw new Error("realm_handoff_unavailable");
-  }
-  await handoff.verifySender(request);
-  const candidate = privateStageRequestSchema.parse(JSON.parse(await readBody(request, 32_768)));
-  const input = routing(candidate.nonce, candidate.proof);
-  const staging = await ports.staging({
-    nonceSha256: realmIdentityNonceSha256(input.nonce),
-    ownerSessionId: input.ownerSessionId,
-  });
-  if (candidate.origin !== staging.link.browserOrigin) {
-    throw new Error("realm_callback_origin");
-  }
-  const getKey = createRemoteJWKSet(new URL(staging.jwksUrl), { [customFetch]: ports.fetch });
-  const claims = await verifyRealmIdentityLinkProof({
-    ...input,
-    getKey,
-    pending: staging.link,
-    resource: staging.bootstrapResource,
-  });
-  const context = await handoff.context({
-    ownerSessionId: input.ownerSessionId,
-    nonceSha256: staging.link.nonceSha256,
-  });
-  if (context.target.sessionId !== input.ownerSessionId) {
-    throw new Error("realm_callback_scope");
-  }
-  await ports.assertCurrent(context);
-  const expiresAt = Math.min(
-    Date.now() + 240_000,
-    claims.exp * 1000,
-    Date.parse(staging.link.expiresAt),
-  );
-  const claimSecret = randomBytes(32).toString("hex");
-  const claimHash = createHash("sha256").update(claimSecret).digest("hex");
-  const encrypted = seal(
-    ports,
-    privateStageAad(ports.builderOrigin, input.ownerSessionId, claimHash),
-    JSON.stringify({ ...input, expiresAt, claimHash, version: 1 }),
-  );
-  await handoff.artifacts.put(
-    { authority: context.authority, target: context.target },
-    {
-      artifactRef: stageReference(context, claimHash),
-      chunkIndex: 0,
-      content: JSON.stringify(encrypted),
-    },
-  );
-  await ports.assertCurrent(context);
-  const ticket = seal(
-    ports,
-    ticketAad(ports.builderOrigin),
-    JSON.stringify({
+  let stage: z.infer<typeof privateStageName> = "sender";
+  try {
+    const handoff = ports.identityHandoff;
+    if (handoff === undefined) {
+      throw new Error("realm_handoff_unavailable");
+    }
+    await handoff.verifySender(request);
+    stage = "body";
+    const candidate = privateStageRequestSchema.parse(JSON.parse(await readBody(request, 32_768)));
+    const input = routing(candidate.nonce, candidate.proof);
+    stage = "canonical_pending";
+    const staging = await ports.staging({
+      nonceSha256: realmIdentityNonceSha256(input.nonce),
+      ownerSessionId: input.ownerSessionId,
+    });
+    stage = "origin";
+    if (candidate.origin !== staging.link.browserOrigin) {
+      throw new Error("realm_callback_origin");
+    }
+    stage = "proof_verification";
+    const getKey = createRemoteJWKSet(new URL(staging.jwksUrl), { [customFetch]: ports.fetch });
+    const claims = await verifyRealmIdentityLinkProof({
+      ...input,
+      getKey,
+      pending: staging.link,
+      resource: staging.bootstrapResource,
+    });
+    stage = "context";
+    const context = await handoff.context({
       ownerSessionId: input.ownerSessionId,
       nonceSha256: staging.link.nonceSha256,
-      claimSecret,
-      expiresAt,
-      version: 1,
-    }),
-  );
-  const value = Buffer.from(JSON.stringify(ticket)).toString("base64url");
-  return Response.json(
-    {
-      version: 1,
-      continuationUrl: `${ports.builderOrigin}${PATH}?handoff=${encodeURIComponent(value)}`,
-    },
-    { headers: noStore },
-  );
+    });
+    if (context.target.sessionId !== input.ownerSessionId) {
+      throw new Error("realm_callback_scope");
+    }
+    stage = "current_authority";
+    await ports.assertCurrent(context);
+    const expiresAt = Math.min(
+      Date.now() + 240_000,
+      claims.exp * 1000,
+      Date.parse(staging.link.expiresAt),
+    );
+    const claimSecret = randomBytes(32).toString("hex");
+    const claimHash = createHash("sha256").update(claimSecret).digest("hex");
+    stage = "seal";
+    const encrypted = seal(
+      ports,
+      privateStageAad(ports.builderOrigin, input.ownerSessionId, claimHash),
+      JSON.stringify({ ...input, expiresAt, claimHash, version: 1 }),
+    );
+    stage = "artifact";
+    await handoff.artifacts.put(
+      { authority: context.authority, target: context.target },
+      {
+        artifactRef: stageReference(context, claimHash),
+        chunkIndex: 0,
+        content: JSON.stringify(encrypted),
+      },
+    );
+    stage = "current_authority";
+    await ports.assertCurrent(context);
+    stage = "seal";
+    const ticket = seal(
+      ports,
+      ticketAad(ports.builderOrigin),
+      JSON.stringify({
+        ownerSessionId: input.ownerSessionId,
+        nonceSha256: staging.link.nonceSha256,
+        claimSecret,
+        expiresAt,
+        version: 1,
+      }),
+    );
+    const value = Buffer.from(JSON.stringify(ticket)).toString("base64url");
+    stage = "response";
+    return Response.json(
+      {
+        version: 1,
+        continuationUrl: `${ports.builderOrigin}${PATH}?handoff=${encodeURIComponent(value)}`,
+      },
+      { headers: noStore },
+    );
+  } catch (error) {
+    reportPrivateStageFailure(stage, error);
+    throw error;
+  }
 };
 
 const stageBrowserPost = async (ports: RealmIdentityCallbackPorts, request: Request) => {
