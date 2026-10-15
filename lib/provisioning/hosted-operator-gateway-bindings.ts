@@ -40,9 +40,163 @@ const providerRow = z.object({
   type: z.string(),
 });
 type ProviderRow = z.infer<typeof providerRow>;
+// Public Vercel project Trusted Sources schema; retain unrelated provider-owned fields on round-trip.
+const trustedEnvironmentSet = z.looseObject({
+  slugs: z.array(z.string()).optional(),
+  preset: z.literal("all-custom").optional(),
+});
+const trustedProjectSource = z.looseObject({
+  label: z.string().optional(),
+  customAllow: z
+    .array(z.looseObject({ from: trustedEnvironmentSet, to: trustedEnvironmentSet }))
+    .optional(),
+});
+const trustedSourcesSchema = z.looseObject({
+  projects: z.record(z.string(), trustedProjectSource).optional(),
+  oidcProviders: z
+    .record(
+      z.string(),
+      z.array(
+        z.looseObject({
+          label: z.string().optional(),
+          claims: z.record(z.string(), z.array(z.string())),
+          to: trustedEnvironmentSet,
+        }),
+      ),
+    )
+    .optional(),
+  enableVercelCiSameRepository: z.boolean().optional(),
+});
+const trustedProjectSnapshot = z.object({
+  id: z.string(),
+  accountId: z.string(),
+  trustedSources: trustedSourcesSchema.nullish(),
+});
+type TrustedSourceRule =
+  | NonNullable<
+      NonNullable<GatewayManagedEnvironmentContext["plan"]["gatewayBindings"]>["trustedSources"]
+    >["builderProduction"]
+  | NonNullable<
+      NonNullable<GatewayManagedEnvironmentContext["plan"]["gatewayBindings"]>["trustedSources"]
+    >["operatorPreview"];
+const coversTrustedSource = (
+  sources: z.infer<typeof trustedSourcesSchema>,
+  rule: TrustedSourceRule,
+) => {
+  const source = sources.projects?.[rule.projectId];
+  if (source === undefined) {
+    return false;
+  }
+  // An existing foreign project without overrides retains its same-environment defaults.
+  if (source.customAllow === undefined) {
+    return rule.from === rule.to;
+  }
+  return source.customAllow.some(
+    (allow) =>
+      allow.from.slugs?.includes(rule.from) === true && allow.to.slugs?.includes(rule.to) === true,
+  );
+};
+
+const hasOnlyApprovedSourcePairs = (
+  sources: z.infer<typeof trustedSourcesSchema>,
+  projectId: string,
+  approved: TrustedSourceRule[],
+) => {
+  const rules = sources.projects?.[projectId]?.customAllow;
+  if (rules === undefined) {
+    return false;
+  }
+  const pairs = new Set(
+    approved.flatMap((rule) => (rule.projectId === projectId ? [`${rule.from}:${rule.to}`] : [])),
+  );
+  return rules.every((rule) => {
+    const from = rule.from.slugs;
+    const to = rule.to.slugs;
+    return (
+      rule.from.preset === undefined &&
+      rule.to.preset === undefined &&
+      from !== undefined &&
+      to !== undefined &&
+      from.length > 0 &&
+      to.length > 0 &&
+      from.every((source) => to.every((target) => pairs.has(`${source}:${target}`)))
+    );
+  });
+};
+
+const systemEnvironmentSlugs = new Set(["production", "preview", "development"]);
+const includesEnvironmentSet = (
+  actual: z.infer<typeof trustedEnvironmentSet>,
+  expected: z.infer<typeof trustedEnvironmentSet>,
+) => {
+  const slugs = new Set(actual.slugs);
+  return (
+    (expected.preset === undefined || actual.preset === expected.preset) &&
+    (expected.slugs ?? []).every(
+      (slug) =>
+        slugs.has(slug) || (actual.preset === "all-custom" && !systemEnvironmentSlugs.has(slug)),
+    )
+  );
+};
+const preservesTrustedSources = (
+  actual: z.infer<typeof trustedSourcesSchema>,
+  expected: z.infer<typeof trustedSourcesSchema>,
+) => {
+  const projectsPreserved = Object.entries(expected.projects ?? {}).every(([id, source]) => {
+    const observed = actual.projects?.[id];
+    if (observed === undefined) {
+      return false;
+    }
+    if (source.customAllow === undefined) {
+      return observed.customAllow === undefined;
+    }
+    return source.customAllow.every((rule) => {
+      if (observed.customAllow === undefined) {
+        return (
+          rule.from.preset === undefined &&
+          rule.to.preset === undefined &&
+          (rule.from.slugs ?? []).every((from) => (rule.to.slugs ?? []).every((to) => from === to))
+        );
+      }
+      return observed.customAllow.some(
+        (candidate) =>
+          includesEnvironmentSet(candidate.from, rule.from) &&
+          includesEnvironmentSet(candidate.to, rule.to),
+      );
+    });
+  });
+  const externalPreserved = Object.entries(expected.oidcProviders ?? {}).every(
+    ([issuer, sources]) =>
+      sources.every(
+        (source) =>
+          actual.oidcProviders?.[issuer]?.some(
+            (candidate) =>
+              includesEnvironmentSet(candidate.to, source.to) &&
+              Object.entries(candidate.claims).every(
+                ([name, values]) =>
+                  source.claims[name] !== undefined &&
+                  source.claims[name].every((value) => values.includes(value)),
+              ),
+          ) === true,
+      ),
+  );
+  return (
+    projectsPreserved &&
+    externalPreserved &&
+    (actual.enableVercelCiSameRepository ?? true) ===
+      (expected.enableVercelCiSameRepository ?? true)
+  );
+};
 const providerValue = z.object({ value: z.string() });
 const valueDigest = (value: string) => createHash("sha256").update(value).digest("hex");
 const unavailable = () => new HostedOperatorError("operator_unavailable");
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve only the closed reconciliation code; every other caught provider failure keeps its existing public mapping.
+const rethrowBindingFailure = (error: unknown): never => {
+  if (error instanceof HostedOperatorError && error.code === "reconciliation_required") {
+    throw error;
+  }
+  throw unavailable();
+};
 const ignoreDiagnostic = () => {
   /* Unobserved read-only helpers keep their existing behavior. */
 };
@@ -447,14 +601,16 @@ export const createHostedOperatorGatewayBindings = (deps: {
     const request = async (
       route: string,
       method: "GET" | "POST" | "PATCH" = "GET",
-      body?: {
-        comment?: string;
-        gitBranch?: string;
-        key?: string;
-        target?: string[];
-        type: "encrypted";
-        value: string;
-      },
+      body?:
+        | { trustedSources: z.infer<typeof trustedSourcesSchema> }
+        | {
+            comment?: string;
+            gitBranch?: string;
+            key?: string;
+            target?: string[];
+            type: "encrypted";
+            value: string;
+          },
     ) => {
       const requestStage = observation.stage;
       const requestGuard = method === "GET" ? guard : fullGuard;
@@ -536,6 +692,79 @@ export const createHostedOperatorGatewayBindings = (deps: {
         return resolveNativePreviewEnvironmentGitBranch(branch, raw);
       })();
       return previewGitBranch;
+    };
+    const approvedTrustedSources = input.plan.gatewayBindings?.trustedSources;
+    const observeTrustedSources = async () => {
+      if (approvedTrustedSources === undefined) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- Absent approved settings preserve the legacy path without a provider security observation.
+        return undefined;
+      }
+      const project = trustedProjectSnapshot.parse(
+        await request(`/v9/projects/${encodeURIComponent(projectId)}`),
+      );
+      if (project.id !== projectId || project.accountId !== target.scopeId) {
+        throw unavailable();
+      }
+      const sources = project.trustedSources ?? {};
+      const missing = Object.values(approvedTrustedSources).filter(
+        (rule) => !coversTrustedSource(sources, rule),
+      );
+      // A finite override cannot preserve the future same-environment semantics of an implicit foreign grant.
+      const requiresReconciliation = missing.some(
+        (rule) =>
+          sources.projects?.[rule.projectId] !== undefined &&
+          sources.projects[rule.projectId].customAllow === undefined,
+      );
+      return { sources, missing, requiresReconciliation };
+    };
+    const bindTrustedSources = async () => {
+      const observed = await observeTrustedSources();
+      if (observed === undefined || observed.missing.length === 0) {
+        return;
+      }
+      if (observed.requiresReconciliation) {
+        throw new HostedOperatorError("reconciliation_required");
+      }
+      // Exact pair scope is known for entries first created by this write, independently of unrelated concurrent additions.
+      const createdProjectIds = [
+        ...new Set(
+          observed.missing
+            .filter((rule) => observed.sources.projects?.[rule.projectId] === undefined)
+            .map((rule) => rule.projectId),
+        ),
+      ];
+      const sources = structuredClone(observed.sources);
+      sources.projects ??= {};
+      for (const rule of observed.missing) {
+        const prior = sources.projects[rule.projectId];
+        sources.projects[rule.projectId] = {
+          ...prior,
+          customAllow: [
+            ...(prior?.customAllow ?? []),
+            { from: { slugs: [rule.from] }, to: { slugs: [rule.to] } },
+          ],
+        };
+      }
+      observation.at("write");
+      await request(`/v9/projects/${encodeURIComponent(projectId)}`, "PATCH", {
+        trustedSources: sources,
+      });
+      observation.at("write_readback");
+      const actual = await observeTrustedSources();
+      if (
+        actual === undefined ||
+        actual.missing.length !== 0 ||
+        !preservesTrustedSources(actual.sources, sources) ||
+        !createdProjectIds.every((id) =>
+          hasOnlyApprovedSourcePairs(
+            actual.sources,
+            id,
+            Object.values(approvedTrustedSources ?? {}),
+          ),
+        )
+      ) {
+        throw unavailable();
+      }
     };
     const isBranchPreview = (row: ProviderRow) =>
       row.target.includes("preview") &&
@@ -1077,6 +1306,8 @@ export const createHostedOperatorGatewayBindings = (deps: {
       inspect,
       inspectIteration,
       inspectOwnership,
+      observeTrustedSources,
+      bindTrustedSources,
       prepareWrite,
       projectId,
       readSelectedValue,
@@ -1154,13 +1385,14 @@ export const createHostedOperatorGatewayBindings = (deps: {
           await io.checkpoint(rows, known, values, expected);
         }
         ({ known, rows, values } = await io.inspect(true));
+        await io.bindTrustedSources();
         await io.fullGuard();
         const result = { rows: io.referenceRows(rows, known, values) };
         observation.finish("bound");
         return result;
-      } catch {
+      } catch (error) {
         observation.finish("failed");
-        throw unavailable();
+        return rethrowBindingFailure(error);
       }
     },
     async reconcile(
@@ -1188,13 +1420,25 @@ export const createHostedOperatorGatewayBindings = (deps: {
           };
         }
         const { expected, known, rows, values } = await io.inspect(true);
+        const protection = await io.observeTrustedSources();
         await io.fullGuard();
+        if (protection?.requiresReconciliation === true) {
+          observation.finish("unknown");
+          return { status: "unknown" };
+        }
         if (rows.length === 0) {
           observation.finish("absent");
           return { status: "absent" };
         }
         await io.checkpoint(rows, known, values, expected);
         if (rows.length === Object.keys(expected).length) {
+          if (protection !== undefined && protection.missing.length !== 0) {
+            observation.finish("unknown");
+            return {
+              status: "retryable",
+              resourceVersion: valueDigest(JSON.stringify(protection.sources)),
+            };
+          }
           const result = {
             rows: io.referenceRows(rows, known, values),
             status: "applied" as const,
@@ -1235,6 +1479,10 @@ export const createHostedOperatorGatewayBindings = (deps: {
       await io.fullGuard();
       const { rows, known, expected, values } = await io.inspect(true);
       if (rows.length !== Object.keys(expected).length) {
+        throw unavailable();
+      }
+      const protection = await io.observeTrustedSources();
+      if (protection !== undefined && protection.missing.length !== 0) {
         throw unavailable();
       }
       await io.fullGuard();

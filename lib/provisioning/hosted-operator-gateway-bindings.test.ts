@@ -142,6 +142,13 @@ interface RecordedRequest {
   body?: Record<string, z.infer<typeof z.json>>;
 }
 
+interface FixtureProject {
+  id: string;
+  accountId: string;
+  link: { productionBranch?: string };
+  trustedSources?: z.infer<typeof z.json>;
+}
+
 const fixture = (
   configurationId?: string | null,
   observationGuards = false,
@@ -217,6 +224,11 @@ const fixture = (
   let losePostResponse = false;
   let losePatchResponse = false;
   let emptyMutationResponse = false;
+  let loseProtectionPatchResponse = false;
+  let ignoreProtectionPatch = false;
+  let protectionReadbackTransform:
+    | ((value: z.infer<typeof z.json>) => z.infer<typeof z.json>)
+    | undefined;
   const assertCurrent = vi.fn(async () => {});
   const assertCurrentObservation = vi.fn(async () => {});
   const assertCanonicalOwner = vi.fn(async () => {});
@@ -262,7 +274,12 @@ const fixture = (
     target: structuredClone(target),
     workerCheckpoints: [],
   };
-  const project = { id: gateway.projectId, accountId: target.scopeId, link: { productionBranch } };
+  const project: FixtureProject = {
+    id: gateway.projectId,
+    accountId: target.scopeId,
+    link: { productionBranch },
+  };
+  // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- One synthetic provider transport preserves the existing env API and narrow project protection responses.
   const fetcher = vi.fn(async (url: URL | string | Request, init?: RequestInit) => {
     const parsed = new URL(url instanceof Request ? url.url : url.toString());
     const method = init?.method ?? "GET";
@@ -283,6 +300,18 @@ const fixture = (
       return Response.json({ value: row?.value });
     }
     if (method === "GET" && parsed.pathname === `/v9/projects/${gateway.projectId}`) {
+      return Response.json(project);
+    }
+    if (method === "PATCH" && parsed.pathname === `/v9/projects/${gateway.projectId}`) {
+      if (!ignoreProtectionPatch) {
+        project.trustedSources = body?.trustedSources;
+        if (project.trustedSources !== undefined && protectionReadbackTransform !== undefined) {
+          project.trustedSources = protectionReadbackTransform(project.trustedSources);
+        }
+      }
+      if (loseProtectionPatchResponse) {
+        throw new Error("fixture lost protection PATCH response");
+      }
       return Response.json(project);
     }
     if (method === "GET") {
@@ -346,6 +375,13 @@ const fixture = (
   });
   return {
     project,
+    setLoseProtectionPatchResponse: (value: boolean) => (loseProtectionPatchResponse = value),
+    setIgnoreProtectionPatch: (value: boolean) => (ignoreProtectionPatch = value),
+    setProtectionReadbackTransform: (
+      transform: (value: z.infer<typeof z.json>) => z.infer<typeof z.json>,
+    ) => {
+      protectionReadbackTransform = transform;
+    },
     diagnostics,
     assertAuthorized,
     assertCanonicalOwner,
@@ -368,6 +404,267 @@ const fixture = (
     writer,
   };
 };
+
+const approvedSources = {
+  builderProduction: {
+    projectId: "prj_builder",
+    from: "production" as const,
+    to: "preview" as const,
+  },
+  operatorPreview: { projectId: "prj_operator", from: "preview" as const, to: "preview" as const },
+};
+const approveSources = (f: ReturnType<typeof fixture>) => {
+  if (f.input.plan.gatewayBindings === undefined) {
+    throw new Error("Missing fixture gateway binding plan");
+  }
+  f.input.plan.gatewayBindings.trustedSources = structuredClone(approvedSources);
+};
+const projectPatches = (f: ReturnType<typeof fixture>) =>
+  f.requests.filter(
+    (request) => request.method === "PATCH" && request.path === `/v9/projects/${gateway.projectId}`,
+  );
+
+it("keeps legacy plans free of Trusted Sources writes", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input);
+  expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "applied" });
+  expect(projectPatches(f)).toEqual([]);
+  expect(f.project.trustedSources).toBeUndefined();
+});
+
+it("adds only approved source pairs while preserving self, unrelated projects, external sources, and CI policy", async () => {
+  const f = fixture();
+  approveSources(f);
+  const existing = {
+    projects: {
+      prj_gateway: { customAllow: [], label: "Keep self customization" },
+      prj_unrelated: {
+        customAllow: [{ from: { slugs: ["staging"] }, to: { slugs: ["preview"] } }],
+        label: "Keep sibling",
+      },
+    },
+    oidcProviders: {
+      "https://issuer.example": [
+        { claims: { aud: ["existing"] }, to: { slugs: ["preview"] }, label: "Keep external" },
+      ],
+    },
+    enableVercelCiSameRepository: false,
+  };
+  f.project.trustedSources = structuredClone(existing);
+  await f.writer.bind(f.input);
+  expect(projectPatches(f)).toHaveLength(1);
+  expect(projectPatches(f)[0]?.body).toEqual({
+    trustedSources: {
+      ...existing,
+      projects: {
+        ...existing.projects,
+        prj_builder: {
+          customAllow: [{ from: { slugs: ["production"] }, to: { slugs: ["preview"] } }],
+        },
+        prj_operator: {
+          customAllow: [{ from: { slugs: ["preview"] }, to: { slugs: ["preview"] } }],
+        },
+      },
+    },
+  });
+  expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "applied" });
+  await f.writer.bind(f.input);
+  expect(projectPatches(f)).toHaveLength(1);
+});
+
+it("treats missing approved protection as retryable and refuses delivery despite complete environment rows", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input);
+  approveSources(f);
+  expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "retryable" });
+  expect(projectPatches(f)).toEqual([]);
+  f.input.effect = {
+    id: "gateway-delivery",
+    kind: "gateway-delivery",
+    description: "Verify delivery",
+  };
+  await expect(f.writer.verifyForDelivery(f.input)).rejects.toThrow("operator_unavailable");
+  f.input.effect = plan.effects.find((effect) => effect.kind === "gateway-bindings")!;
+  await f.writer.bind(f.input);
+  f.input.effect = {
+    id: "gateway-delivery",
+    kind: "gateway-delivery",
+    description: "Verify delivery",
+  };
+  const verified = await f.writer.verifyForDelivery(f.input);
+  expect(verified.rows).toHaveLength(5);
+});
+
+it("reconciles a committed protection PATCH after its response is lost without repeating the write", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input);
+  approveSources(f);
+  f.setLoseProtectionPatchResponse(true);
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  f.setLoseProtectionPatchResponse(false);
+  expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "applied" });
+  await f.writer.bind(f.input);
+  expect(projectPatches(f)).toHaveLength(1);
+});
+
+it("preserves an existing Operator implicit same-environment default without replacing it", async () => {
+  const f = fixture();
+  approveSources(f);
+  const operator = { label: "Implicit same-environment access" };
+  f.project.trustedSources = { projects: { prj_operator: operator } };
+  await f.writer.bind(f.input);
+  expect(projectPatches(f)[0]?.body).toEqual({
+    trustedSources: {
+      projects: {
+        prj_operator: operator,
+        prj_builder: {
+          customAllow: [{ from: { slugs: ["production"] }, to: { slugs: ["preview"] } }],
+        },
+      },
+    },
+  });
+  expect(f.requests.some((request) => request.path === "/v9/projects/prj_operator")).toBe(false);
+});
+
+it("keeps an implicit foreign cross-environment grant unknown without replacing its defaults", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input);
+  approveSources(f);
+  f.project.trustedSources = {
+    projects: { prj_builder: { label: "Keep implicit defaults" }, prj_operator: {} },
+  };
+  expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
+  await expect(f.writer.bind(f.input)).rejects.toThrow("reconciliation_required");
+  expect(projectPatches(f)).toEqual([]);
+  expect(f.requests.some((request) => request.path === "/v9/projects/prj_builder")).toBe(false);
+});
+
+it("accepts additive readback and reordered existing grants while preserving their access", async () => {
+  const f = fixture();
+  approveSources(f);
+  const rules = [
+    { from: { slugs: ["staging", "qa"] }, to: { slugs: ["preview", "staging"] } },
+    { from: { slugs: ["production"] }, to: { slugs: ["production"] } },
+  ];
+  const external = [
+    { claims: { aud: ["original", "other"] }, to: { slugs: ["preview", "production"] } },
+    { claims: { aud: ["second"] }, to: { slugs: ["preview"] } },
+  ];
+  f.project.trustedSources = {
+    projects: { prj_unrelated: { customAllow: rules } },
+    oidcProviders: { "https://issuer.example": external },
+  };
+  f.setProtectionReadbackTransform((value) => {
+    const sources = z.record(z.string(), z.json()).parse(value);
+    const projects = z.record(z.string(), z.json()).parse(sources.projects);
+    return {
+      ...sources,
+      projects: {
+        ...projects,
+        prj_unrelated: {
+          customAllow: [
+            rules[1],
+            { from: { slugs: ["qa", "staging"] }, to: { slugs: ["staging", "preview"] } },
+          ],
+        },
+        prj_concurrent: {
+          customAllow: [{ from: { slugs: ["preview"] }, to: { slugs: ["preview"] } }],
+        },
+      },
+      oidcProviders: {
+        "https://issuer.example": [
+          external[1],
+          {
+            claims: { aud: ["other", "original", "additional"] },
+            to: { slugs: ["production", "preview"] },
+          },
+        ],
+      },
+    };
+  });
+  await expect(f.writer.bind(f.input)).resolves.toHaveProperty("rows");
+  expect(projectPatches(f)).toHaveLength(1);
+});
+
+it("rejects broadened environment access on a newly created managed source during write readback", async () => {
+  const f = fixture();
+  approveSources(f);
+  f.setProtectionReadbackTransform((value) => {
+    const sources = z.record(z.string(), z.json()).parse(value);
+    const projects = z.record(z.string(), z.json()).parse(sources.projects);
+    return {
+      ...sources,
+      projects: {
+        ...projects,
+        prj_builder: {
+          customAllow: [
+            { from: { slugs: ["production"] }, to: { slugs: ["preview", "production"] } },
+          ],
+        },
+      },
+    };
+  });
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(projectPatches(f)).toHaveLength(1);
+});
+
+it("keeps explicit caller rules intact and adds only a missing approved pair", async () => {
+  const f = fixture();
+  approveSources(f);
+  const priorAllow = [
+    { from: { preset: "all-custom", slugs: ["production"] }, to: { slugs: ["production"] } },
+  ];
+  f.project.trustedSources = {
+    projects: {
+      prj_builder: { label: "Keep explicit", customAllow: priorAllow },
+      prj_operator: {
+        customAllow: [{ from: { slugs: ["preview", "production"] }, to: { slugs: ["preview"] } }],
+      },
+    },
+  };
+  await f.writer.bind(f.input);
+  expect(projectPatches(f)[0]?.body).toEqual({
+    trustedSources: {
+      projects: {
+        prj_builder: {
+          label: "Keep explicit",
+          customAllow: [
+            ...priorAllow,
+            { from: { slugs: ["production"] }, to: { slugs: ["preview"] } },
+          ],
+        },
+        prj_operator: {
+          customAllow: [{ from: { slugs: ["preview", "production"] }, to: { slugs: ["preview"] } }],
+        },
+      },
+    },
+  });
+  expect(f.requests.some((request) => request.path === "/v9/projects/prj_builder")).toBe(false);
+});
+
+it("does not accept a protection write that is absent from fresh readback", async () => {
+  const f = fixture();
+  approveSources(f);
+  f.setIgnoreProtectionPatch(true);
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "retryable" });
+  expect(projectPatches(f)).toHaveLength(1);
+});
+
+it("keeps provider metadata failures unknown during protection reconciliation", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input);
+  approveSources(f);
+  const original = f.fetcher.getMockImplementation()!;
+  f.fetcher.mockImplementation(async (url, init) => {
+    const parsed = new URL(url instanceof Request ? url.url : url.toString());
+    return parsed.pathname === `/v9/projects/${gateway.projectId}`
+      ? new Response(null, { status: 403 })
+      : await original(url, init);
+  });
+  expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
+  expect(projectPatches(f)).toEqual([]);
+});
 
 it("writes generic Gateway Preview scope for the production branch while keeping logical branch identity", async () => {
   const f = fixture(undefined, false, gateway.branch);

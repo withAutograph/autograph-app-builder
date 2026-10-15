@@ -116,6 +116,52 @@ const record = () => ({
 });
 
 describe("owner-bound private Realm identity link contract", () => {
+  it("keeps legacy Gateway plans without provider Trusted Sources scope", () => {
+    expect(hostedOperatorPlanSchema.parse(plan).gatewayBindings?.trustedSources).toBeUndefined();
+  });
+  it("freezes both scoped Trusted Sources rules in the existing plan digest", () => {
+    const trustedSources = {
+      builderProduction: { projectId: "prj_builder", from: "production", to: "preview" },
+      operatorPreview: { projectId: "prj_operator", from: "preview", to: "preview" },
+    };
+    const scoped = hostedOperatorPlanSchema.parse({
+      ...plan,
+      gatewayBindings: { ...plan.gatewayBindings, trustedSources },
+    });
+    expect(scoped.gatewayBindings?.trustedSources).toEqual(trustedSources);
+    expect(operatorPlanDigest(scoped)).not.toBe(operatorPlanDigest(plan));
+    const changed = hostedOperatorPlanSchema.parse({
+      ...scoped,
+      gatewayBindings: {
+        ...scoped.gatewayBindings,
+        trustedSources: {
+          ...trustedSources,
+          builderProduction: { ...trustedSources.builderProduction, projectId: "other-builder" },
+        },
+      },
+    });
+    expect(operatorPlanDigest(changed)).not.toBe(operatorPlanDigest(scoped));
+  });
+  it.each([
+    { source: "builderProduction", from: "preview", to: "preview" },
+    { source: "builderProduction", from: "production", to: "production" },
+    { source: "operatorPreview", from: "production", to: "preview" },
+    { source: "operatorPreview", from: "preview", to: "production" },
+  ])("rejects broadened $source environment scope $from to $to", ({ source, from, to }) => {
+    expect(
+      hostedOperatorPlanSchema.safeParse({
+        ...plan,
+        gatewayBindings: {
+          ...plan.gatewayBindings,
+          trustedSources: {
+            builderProduction: { projectId: "prj_builder", from: "production", to: "preview" },
+            operatorPreview: { projectId: "prj_operator", from: "preview", to: "preview" },
+            [source]: { projectId: "prj_source", from, to },
+          },
+        },
+      }).success,
+    ).toBe(false);
+  });
   it("projects a refined valid pending link without invoking Zod omit or exposing encrypted nonce", () => {
     const pending = operatorRealmIdentityLinkSchema.parse({
       ...link,
