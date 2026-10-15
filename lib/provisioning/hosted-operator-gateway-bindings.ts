@@ -4,6 +4,11 @@ import { isDeepStrictEqual } from "node:util";
 import { createHostedOperatorRealmLinkConfig } from "./hosted-operator-realm-link-config";
 import { z } from "zod";
 import {
+  resolveNativePreviewEnvironmentGitBranch,
+  savedPreviewEnvironmentGitBranch,
+  matchesPreviewEnvironmentGitBranch,
+} from "./native-preview-environment-scope";
+import {
   createHostedOperatorConsentDiagnostic,
   projectOperatorGatewayProviderFailure,
 } from "./hosted-operator-consent-diagnostic";
@@ -241,15 +246,24 @@ const referenceRow = (
   input: GatewayManagedEnvironmentContext,
   knownById: ReadonlyMap<string, ManagedOperatorEnvironmentRow>,
   value: string,
-) => ({
-  branch: input.gateway.branch,
-  comment: z.string().min(1).parse(row.comment),
-  id: row.id,
-  key: row.key,
-  operationRef: knownById.get(row.id)?.operationRef ?? input.operationRef,
-  projectId: input.gateway.projectId,
-  valueSha256: valueDigest(value),
-});
+) => {
+  const prior = knownById.get(row.id);
+  const reference: ManagedOperatorEnvironmentRow = {
+    branch: input.gateway.branch,
+    comment: z.string().min(1).parse(row.comment),
+    id: row.id,
+    key: row.key,
+    operationRef: prior?.operationRef ?? input.operationRef,
+    projectId: input.gateway.projectId,
+    valueSha256: valueDigest(value),
+  };
+  if (prior?.gitBranch !== undefined) {
+    reference.gitBranch = prior.gitBranch;
+  } else if (prior === undefined && matchesPreviewEnvironmentGitBranch(row.gitBranch, null)) {
+    reference.gitBranch = null;
+  }
+  return reference;
+};
 
 export const createHostedOperatorGatewayBindings = (deps: {
   assertAuthorized: ProtectedHostedOperatorDependencies["assertAuthorized"];
@@ -474,6 +488,18 @@ export const createHostedOperatorGatewayBindings = (deps: {
         .object({ envs: z.array(providerRow) })
         .parse(await request(`/v10/projects/${encodeURIComponent(projectId)}/env`)).envs;
     };
+    let previewGitBranch: Promise<string | null> | undefined;
+    const newRowGitBranch = () => {
+      previewGitBranch ??= (async () => {
+        const raw = await request(`/v9/projects/${encodeURIComponent(projectId)}`);
+        const project = z.object({ id: z.string(), accountId: z.string() }).parse(raw);
+        if (project.id !== projectId || project.accountId !== target.scopeId) {
+          throw unavailable();
+        }
+        return resolveNativePreviewEnvironmentGitBranch(branch, raw);
+      })();
+      return previewGitBranch;
+    };
     const isBranchPreview = (row: ProviderRow) =>
       row.target.includes("preview") &&
       (row.gitBranch === null || row.gitBranch === undefined || row.gitBranch === branch);
@@ -686,6 +712,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
           return (
             prior !== undefined &&
             (row.key !== prior.key ||
+              savedPreviewEnvironmentGitBranch(row) !== savedPreviewEnvironmentGitBranch(prior) ||
               row.operationRef !== prior.operationRef ||
               row.comment !== prior.comment ||
               row.valueSha256 === undefined)
@@ -715,20 +742,31 @@ export const createHostedOperatorGatewayBindings = (deps: {
       }
       return known;
     };
-    const owned = (row: ProviderRow, known: ManagedOperatorEnvironmentRow[]) =>
-      row.target.length === 1 &&
-      row.target[0] === "preview" &&
-      row.gitBranch === branch &&
-      (row.configurationId === null ||
-        row.configurationId === undefined ||
-        row.configurationId === "" ||
-        row.configurationId === input.target.installationId) &&
-      row.type === "encrypted" &&
-      (known.some(
-        (item) => item.id === row.id && item.key === row.key && item.comment === row.comment,
-      ) ||
-        (row.comment === comment &&
-          !known.some((item) => item.id === row.id || item.key === row.key)));
+    const owned = (
+      row: ProviderRow,
+      known: ManagedOperatorEnvironmentRow[],
+      newScope: string | null,
+    ) => {
+      const saved = known.find((item) => item.id === row.id);
+      return (
+        row.target.length === 1 &&
+        row.target[0] === "preview" &&
+        matchesPreviewEnvironmentGitBranch(
+          row.gitBranch,
+          saved === undefined ? newScope : savedPreviewEnvironmentGitBranch(saved),
+        ) &&
+        (row.configurationId === null ||
+          row.configurationId === undefined ||
+          row.configurationId === "" ||
+          row.configurationId === input.target.installationId) &&
+        row.type === "encrypted" &&
+        (known.some(
+          (item) => item.id === row.id && item.key === row.key && item.comment === row.comment,
+        ) ||
+          (row.comment === comment &&
+            !known.some((item) => item.id === row.id || item.key === row.key)))
+      );
+    };
     const referenceRows = (
       rows: ProviderRow[],
       known: ManagedOperatorEnvironmentRow[],
@@ -818,15 +856,17 @@ export const createHostedOperatorGatewayBindings = (deps: {
       return reference;
     };
     const inspectOwnership = async (canonicalOnly = false, selectedKey?: keyof GatewayValues) => {
+      // oxlint-disable-next-line react-doctor/async-parallel -- Establish source ownership before guarded provider metadata; reuse one resolved physical selector afterward.
       const known = await knownRows();
       // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Source ownership must be established before provider readback.
       const listed = await list();
+      const newScope = await newRowGitBranch();
       observation.at("ownership_readback");
       const rows = listed.filter(
         (row) => managedKeySchema.safeParse(row.key).success && isBranchPreview(row),
       );
       if (
-        rows.some((row) => !owned(row, known)) ||
+        rows.some((row) => !owned(row, known, newScope)) ||
         new Set(rows.map((row) => row.key)).size !== rows.length ||
         known.some((row) => rows.some((actual) => actual.key === row.key && actual.id !== row.id))
       ) {
@@ -926,8 +966,9 @@ export const createHostedOperatorGatewayBindings = (deps: {
         ),
       ).value;
     };
-    const writeRow = async (key: keyof GatewayValues, value: string, existing?: ProviderRow) =>
-      await (existing
+    const writeRow = async (key: keyof GatewayValues, value: string, existing?: ProviderRow) => {
+      const gitBranch = existing === undefined ? await newRowGitBranch() : undefined;
+      return await (existing
         ? request(
             `/v9/projects/${encodeURIComponent(projectId)}/env/${encodeURIComponent(existing.id)}`,
             "PATCH",
@@ -935,12 +976,13 @@ export const createHostedOperatorGatewayBindings = (deps: {
           )
         : request(`/v10/projects/${encodeURIComponent(projectId)}/env`, "POST", {
             comment,
-            gitBranch: branch,
+            ...(gitBranch === null ? {} : { gitBranch }),
             key,
             target: ["preview"],
             type: "encrypted",
             value,
           }));
+    };
     const prepareWrite = async (
       existing: ProviderRow | undefined,
       rows: ProviderRow[],
