@@ -74,7 +74,7 @@ interface DeliveryProjectFixture {
   name: string;
 }
 
-const fixture = (deliveryPlan = plan) => {
+const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null) => {
   let ready = "BUILDING";
   let count = 0;
   let deny = false;
@@ -121,7 +121,7 @@ const fixture = (deliveryPlan = plan) => {
     oidcTokenClaims: { environment: "preview" },
     ownerId: "team",
     projectId: "prj_app",
-    target: "staging",
+    target: deploymentTarget,
     url: "new-native.vercel.app",
   };
   const fetcher: typeof fetch = async (url, init) => {
@@ -146,7 +146,7 @@ const fixture = (deliveryPlan = plan) => {
       return Response.json({ id: "team", slug: "team-slug" });
     }
     if (path === "/v13/deployments" && method === "POST") {
-      expect(body).toMatchObject({ target: "staging" });
+      expect(body).not.toHaveProperty("target");
       count += 1;
       return Response.json({ id: "dpl_new" });
     }
@@ -193,7 +193,7 @@ const fixture = (deliveryPlan = plan) => {
     writer,
   };
 };
-it("does not infer absence from an empty deployment listing and records normal Git delivery", async () => {
+it("requests standard Preview delivery from approved Git source and observes readiness", async () => {
   const f = fixture();
   const initial = await f.writer.reconcile(f.input);
   const first = await f.writer.deliver(f.input);
@@ -203,8 +203,13 @@ it("does not infer absence from an empty deployment listing and records normal G
   expect(whileBuilding.status).toBe("unknown");
   expect(f.calls.filter((call) => call.method === "POST")).toHaveLength(1);
   expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({
-    gitSource: { ref: "feature", sha, type: "github" },
+    gitSource: { ref: "feature", repoId: "repo", sha, type: "github" },
     project: "prj_app",
+    meta: {
+      autograph_operator_effect: "deliver",
+      autograph_operator_operation: f.input.operationRef,
+      autograph_operator_plan: operatorPlanDigest(plan),
+    },
   });
   expect(f.checkpoint).toHaveBeenCalled();
   f.setReady("READY");
@@ -326,3 +331,20 @@ it.each(["owner", "repository", "branch", "commit"])(
     expect(f.checkpoint).not.toHaveBeenCalled();
   },
 );
+
+it("reconciles historical staging delivery with Preview claims without changing the approved source", async () => {
+  const f = fixture();
+  await f.writer.deliver(f.input);
+  f.deployment.target = "staging";
+  f.setReady("READY");
+  const observed = await f.writer.reconcile(f.input);
+  expect(observed.status).toBe("applied");
+  if (observed.status === "applied") {
+    expect(observed.selected).toMatchObject({
+      projectId: plan.selection.projectId,
+      repoId: plan.delivery?.repoId,
+      branch: plan.delivery?.branch,
+      operationRef: f.input.operationRef,
+    });
+  }
+});
