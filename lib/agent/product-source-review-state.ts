@@ -17,11 +17,23 @@ export interface RetainedProductRequest {
 interface RetainedProductInput {
   requestId: string;
   kind: "question" | "tool-approval";
+  authorizationOnly?: true;
   prompt: string;
   options: { id: string; label: string; description?: string }[];
 }
 
-/** Keep presentation context only, never the tool action or its potentially sensitive inputs. */
+// These tools authorize a sealed outward effect, rather than choose product requirements.
+// Unknown tools and historical pending requests remain product context conservatively.
+const authorizationOnlyTools = new Set([
+  "prepare-app-hosted-runtime",
+  "cleanup-app-hosted-runtime",
+  "publish_github_draft_pr",
+  "publish-github-draft-pr",
+  "update_github_draft_pr",
+  "reconcile_github_draft_pr",
+]);
+
+/** Retain presentation and purpose only, never a tool action or its sensitive inputs. */
 export const retainProductInputs = (
   current: RetainedProductRequest,
   requests: HookEvent<"input.requested">["data"]["requests"],
@@ -42,7 +54,12 @@ export const retainProductInputs = (
       }
       return option;
     });
+    const authorizationOnly =
+      request.kind === "tool-approval" &&
+      request.action?.kind === "tool-call" &&
+      authorizationOnlyTools.has(request.action.toolName);
     pending.push({
+      ...(authorizationOnly ? { authorizationOnly: true as const } : {}),
       kind: request.kind,
       options,
       prompt: request.prompt,
@@ -57,6 +74,7 @@ interface ProductClarification {
   question: string;
   outcome: string;
   selectedOption?: RetainedProductInput["options"][number];
+  selectedOptionId?: string;
   userText?: string;
 }
 type ProductResolution = HookEvent<"input.resolved">["data"]["resolutions"][number];
@@ -72,7 +90,7 @@ const resolutionClarification = (
     return undefined;
   }
   const option = request.options.find((candidate) => candidate.id === response?.optionId);
-  if (response?.optionId !== undefined && !option) {
+  if (response?.optionId !== undefined && !option && !request.authorizationOnly) {
     return undefined;
   }
   const missingAnswer = option === undefined && (response?.text ?? "").length === 0;
@@ -80,6 +98,15 @@ const resolutionClarification = (
     return undefined;
   }
   if (request.kind === "tool-approval" && !["approved", "denied"].includes(resolution.outcome)) {
+    return undefined;
+  }
+  // Authorization remains in native events and approval receipts. Only a new, proven
+  // effect-only decision without product choices or user text is absent from requirements.
+  if (
+    request.authorizationOnly &&
+    response?.optionId === undefined &&
+    (response?.text ?? "").length === 0
+  ) {
     return undefined;
   }
   const clarification: ProductClarification = {
@@ -92,6 +119,9 @@ const resolutionClarification = (
   };
   if (option) {
     clarification.selectedOption = option;
+  }
+  if (!option && response?.optionId !== undefined) {
+    clarification.selectedOptionId = response.optionId;
   }
   if (response?.text !== undefined) {
     clarification.userText = response.text;
