@@ -6,7 +6,9 @@ import { hostedSessionRecordSchema, toDurableHostedSessionRecord } from "../eve/
 import {
   createPrivateHostedApprovalRecorder,
   readPrivateHostedApproval,
+  privateHostedApprovalCaptureStateSchema,
 } from "../eve/private-hosted-approval";
+import { nativeObservationStateSchema } from "../eve/native-observation-state";
 import type { PrivateHostedApprovalReceipt } from "../eve/private-hosted-approval";
 import {
   HostedOperatorError,
@@ -193,7 +195,10 @@ export const createHostedRuntimePriorApprovalReader =
     return { approvalId: receipt.requestId, callId: receipt.callId };
   };
 
-type ApprovalStore = Pick<HostedEveStore, "getSession" | "recordPrivateApprovalReceipts">;
+type ApprovalStore = Pick<
+  HostedEveStore,
+  "getSession" | "recordPrivateApprovalReceipts" | "readCheckpointPage"
+>;
 let deploymentStore: Promise<ApprovalStore> | undefined;
 const openDeploymentStore = async (): Promise<ApprovalStore> => {
   const configuration = readHostedOperatorOwnerReaderConfiguration(process.env);
@@ -231,6 +236,70 @@ export const readHostedRuntimePriorApproval = async (
   );
 };
 
+/** Reuse only a paired reducer checkpoint from this current owner and adapter generation. */
+const readApprovalCaptureSeed = async (store: ApprovalStore, owner: OperatorOwnerContext) => {
+  if (store.readCheckpointPage === undefined) {
+    return null;
+  }
+  try {
+    const parsed = hostedSessionRecordSchema.safeParse(
+      await store.getSession(owner.principal, owner.sessionId),
+    );
+    if (!parsed.success) {
+      return null;
+    }
+    const session = toDurableHostedSessionRecord(parsed.data);
+    const ref = session.checkpointRef;
+    if (ref === undefined) {
+      return null;
+    }
+    if (
+      [
+        session.sessionId !== owner.sessionId,
+        session.adapterSessionId !== owner.adapterSessionId,
+        session.adapterGeneration !== owner.adapterGeneration,
+        tenantKeyFor(session.principal) !== tenantKeyFor(owner.principal),
+      ].some(Boolean)
+    ) {
+      return null;
+    }
+    const page = await store.readCheckpointPage({
+      checkpointRef: ref,
+      cursor: 0,
+      limit: 1,
+      principal: owner.principal,
+      sessionId: owner.sessionId,
+    });
+    if (
+      page.checkpointDigest !== ref.digest ||
+      page.totalEvents !== ref.eventCount ||
+      page.metadata.coldReadProgress !== undefined
+    ) {
+      return null;
+    }
+    const native = nativeObservationStateSchema.safeParse(page.metadata.nativeObservationState);
+    const capture = privateHostedApprovalCaptureStateSchema.safeParse(
+      page.metadata.privateApprovalCaptureState,
+    );
+    if (!native.success || !capture.success) {
+      return null;
+    }
+    if (
+      [
+        native.data.adapterSessionId !== owner.adapterSessionId,
+        native.data.publicEventCount !== ref.eventCount,
+        capture.data.sessionId !== owner.sessionId,
+      ].some(Boolean)
+    ) {
+      return null;
+    }
+    return { native: native.data, capture: capture.data };
+  } catch {
+    // Checkpoint reuse is optional; the existing authenticated cold read remains available.
+    return null;
+  }
+};
+
 /** Capture real native request/settlement events with Builder's own workload identity. */
 export const captureHostedRuntimeApproval = async (input: {
   ownerContext: OperatorOwnerContext;
@@ -242,10 +311,13 @@ export const captureHostedRuntimeApproval = async (input: {
 }) => {
   input.signal.throwIfAborted();
   const owner = operatorOwnerContextSchema.parse(input.ownerContext);
+  const seed = await readApprovalCaptureSeed(input.store, owner);
+  input.signal.throwIfAborted();
   const recorder = createPrivateHostedApprovalRecorder({
     principal: owner.principal,
     sessionId: owner.sessionId,
     store: input.store,
+    ...(seed === null ? {} : { state: seed.capture }),
   });
   const transport = createSameOriginEveTransport({
     config: { baseUrl: input.baseUrl },
@@ -281,6 +353,7 @@ export const captureHostedRuntimeApproval = async (input: {
     throw new HostedOperatorError("operator_unavailable");
   }
   await transport.observe({
+    ...(seed === null ? {} : { nativeObservationState: seed.native }),
     adapterSessionId: owner.adapterSessionId,
     principal: owner.principal,
     sessionId: owner.sessionId,

@@ -4,6 +4,7 @@ import type { MessageStreamEvent } from "eve/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { evaluateHostedRuntimePreparationApproval } from "../../agent/tools/prepare-app-hosted-runtime";
+import { nativeObservationStateSchema } from "../eve/native-observation-state";
 import { createPrivateHostedApprovalRecorder } from "../eve/private-hosted-approval";
 import { InMemoryHostedEveStore } from "../eve/hosted-store";
 import { createHostedEveSessionService } from "../eve/hosted-service";
@@ -474,24 +475,31 @@ describe("owned hosted runtime prior approval", () => {
 const nativeApprovalCapture = (
   f: Awaited<ReturnType<typeof fixture>>,
   events: MessageStreamEvent[],
+  startIndex = 0,
 ) => {
   const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
     await Promise.resolve();
     const requested = new URL(url instanceof Request ? url.url : url);
     expect(requested.origin).toBe("https://builder.example");
     expect(requested.pathname).toBe(`/eve/v1/session/${f.saved.adapterSessionId}/stream`);
-    expect(requested.searchParams.get("startIndex")).toBe("0");
+    expect(requested.searchParams.get("startIndex")).toBe(String(startIndex));
     expect(requested.searchParams.get("includeTailIndex")).toBe("1");
     expect(new Headers(init?.headers).get("authorization")).toBe("Bearer builder-workload-fixture");
-    return new Response(`${events.map((event) => JSON.stringify(event)).join("\n")}\n`, {
-      headers: {
-        "content-type": "application/x-ndjson",
-        "x-eve-session-id": f.saved.adapterSessionId,
-        "x-eve-stream-format": "ndjson",
-        "x-eve-stream-version": "25",
-        "x-eve-stream-tail-index": String(events.length - 1),
+    return new Response(
+      `${events
+        .slice(startIndex)
+        .map((event) => JSON.stringify(event))
+        .join("\n")}\n`,
+      {
+        headers: {
+          "content-type": "application/x-ndjson",
+          "x-eve-session-id": f.saved.adapterSessionId,
+          "x-eve-stream-format": "ndjson",
+          "x-eve-stream-version": "25",
+          "x-eve-stream-tail-index": String(events.length - 1),
+        },
       },
-    });
+    );
   });
   const capture = vi.fn(async (ctx: Parameters<typeof f.reader>[1]) => {
     await captureHostedRuntimeApproval({
@@ -506,6 +514,68 @@ const nativeApprovalCapture = (
   const read = createHostedRuntimeExecutionApprovalReader({ readPrior: f.reader, capture });
   return { read, capture, fetchImplementation };
 };
+const retainedApprovalCapture = async (
+  f: Awaited<ReturnType<typeof fixture>>,
+  events: MessageStreamEvent[],
+) => {
+  const recorder = createPrivateHostedApprovalRecorder({
+    principal,
+    sessionId: f.saved.sessionId,
+    store: f.store,
+  });
+  await recorder.observe(events[0]);
+  const native = nativeObservationStateSchema.parse({
+    adapterSessionId: f.saved.adapterSessionId,
+    artifactReadback: {
+      incompleteArtifacts: [],
+      incompleteUiPreviews: [],
+      legacy: false,
+      markdownCalls: [],
+      pending: [],
+      references: { requested: [], requestedUiPreview: [] },
+    },
+    boundary: "input_required",
+    invalidInput: false,
+    nextNativeIndex: 1,
+    pendingRequests: [],
+    prototypeProjector: { artifactReadRequests: [], readChunks: [], requested: [], transfers: [] },
+    prototypeReference: { requested: [], requestedUiPreview: [] },
+    publicEventCount: 1,
+    version: 1,
+  });
+  const ref = { id: randomUUID(), digest: `sha256:${"a".repeat(64)}`, eventCount: 1 };
+  const metadata = {
+    capturedAtEpochMs: 10,
+    status: "input_required" as const,
+    version: 1 as const,
+    nativeObservationState: native,
+    privateApprovalCaptureState: recorder.snapshot(),
+  };
+  const getSession = f.store.getSession.bind(f.store);
+  const read = vi
+    .spyOn(f.store, "getSession")
+    .mockImplementation(async (candidatePrincipal, sessionId) => {
+      const stored = await getSession(candidatePrincipal, sessionId);
+      if (stored === null) {
+        return null;
+      }
+      const { checkpoint, ...paged } = stored;
+      void checkpoint;
+      return { ...paged, checkpointRef: ref, checkpointDigest: ref.digest };
+    });
+  const checkpointDigest = ref.digest;
+  f.store.readCheckpointPage = vi.fn(() =>
+    Promise.resolve({
+      checkpointDigest,
+      cursor: 1,
+      totalEvents: 1,
+      events: [{ index: 0, text: "Waiting for approval", type: "assistant_message" as const }],
+      metadata,
+    }),
+  );
+  return { native, metadata, ref, read, getSession };
+};
+
 describe("Builder-local approval capture before execution", () => {
   it("persists actual native approval before the exact protected status/execute path", async () => {
     const f = await fixture();
@@ -519,6 +589,107 @@ describe("Builder-local approval capture before execution", () => {
     expect(local.fetchImplementation).toHaveBeenCalledOnce();
     expect(f.requests.map((request) => request.action)).toEqual(["status"]);
   });
+  it("captures a settlement-only delta using the paired saved request without advancing the public checkpoint", async () => {
+    const f = await fixture();
+    const events = await f.approve({ persist: false });
+    const seed = await retainedApprovalCapture(f, events);
+    const local = nativeApprovalCapture(f, events, 1);
+    expect(await local.read(f.input, f.context, f.operator)).toEqual({
+      approvalId: "original-request",
+      callId: "original-call",
+    });
+    const stored = await f.store.getSession(principal, f.saved.sessionId);
+    expect(stored?.version === 2 && stored.privateApprovalReceipts?.[0]).toMatchObject({
+      requestId: "original-request",
+      outcome: "approved",
+    });
+    expect(stored?.version === 2 && stored.checkpointRef).toEqual(seed.ref);
+    expect(seed.metadata.nativeObservationState.nextNativeIndex).toBe(1);
+    expect(seed.metadata.privateApprovalCaptureState.pendingRequests).toHaveLength(1);
+  });
+
+  it("reuses the immutable pair when ordinary reads advance the current checkpoint in the same generation", async () => {
+    const f = await fixture();
+    const events = await f.approve({ persist: false });
+    const seed = await retainedApprovalCapture(f, events);
+    let reads = 0;
+    const advancedCheckpointId = randomUUID();
+    seed.read.mockImplementation(async (candidatePrincipal, sessionId) => {
+      const stored = await seed.getSession(candidatePrincipal, sessionId);
+      if (stored === null) {
+        return null;
+      }
+      const { checkpoint, ...paged } = stored;
+      void checkpoint;
+      reads += 1;
+      return {
+        ...paged,
+        checkpointRef: reads > 1 ? { ...seed.ref, id: advancedCheckpointId } : seed.ref,
+        checkpointDigest: seed.ref.digest,
+      };
+    });
+    const local = nativeApprovalCapture(f, events, 1);
+    await local.capture(f.context);
+    expect(await f.reader(f.input, f.context, f.operator)).toEqual({
+      approvalId: "original-request",
+      callId: "original-call",
+    });
+  });
+
+  it.each([
+    "missing-capture",
+    "foreign-session",
+    "foreign-adapter",
+    "event-count",
+    "checkpoint-digest",
+    "replaced-generation",
+  ])("cold-reads complete approval history instead of reusing %s state", async (failure) => {
+    const f = await fixture();
+    const events = await f.approve({ persist: false });
+    const seed = await retainedApprovalCapture(f, events);
+    if (failure === "missing-capture") {
+      Reflect.deleteProperty(seed.metadata, "privateApprovalCaptureState");
+    }
+    if (failure === "foreign-session") {
+      seed.metadata.privateApprovalCaptureState.sessionId = "another-session";
+    }
+    if (failure === "foreign-adapter") {
+      seed.native.adapterSessionId = "another-adapter";
+    }
+    if (failure === "event-count") {
+      seed.native.publicEventCount = 2;
+    }
+    if (failure === "checkpoint-digest") {
+      seed.ref.digest = `sha256:${"b".repeat(64)}`;
+    }
+    if (failure === "replaced-generation") {
+      let reads = 0;
+      seed.read.mockImplementation(async (candidatePrincipal, sessionId) => {
+        const stored = await seed.getSession(candidatePrincipal, sessionId);
+        if (stored === null) {
+          return null;
+        }
+        reads += 1;
+        const { checkpoint, ...paged } = stored;
+        void checkpoint;
+        return {
+          ...paged,
+          checkpointRef: seed.ref,
+          checkpointDigest: seed.ref.digest,
+          ...(reads === 1 && failure === "replaced-generation"
+            ? { adapterGeneration: f.saved.adapterGeneration + 1 }
+            : {}),
+        };
+      });
+    }
+    const local = nativeApprovalCapture(f, events);
+    await local.capture(f.context);
+    expect(await f.reader(f.input, f.context, f.operator)).toEqual({
+      approvalId: "original-request",
+      callId: "original-call",
+    });
+  });
+
   it("skips native capture when exact durable approval already exists", async () => {
     const f = await fixture();
     const events = await f.approve();
