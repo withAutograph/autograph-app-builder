@@ -110,12 +110,15 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     const request = async (
       pathname: string,
       query: Record<string, string> = {},
-      body?: {
-        gitSource: { ref: string; repoId: string; sha: string; type: "github" };
-        meta: Record<string, string>;
-        name: string;
-        project: string;
-      },
+      body?:
+        | {
+            gitSource: { ref: string; repoId: string; sha: string; type: "github" };
+            meta: Record<string, string>;
+            name: string;
+            project: string;
+          }
+        | { alias: string },
+      allowNotFound = false,
     ) => {
       await assertCurrent();
       const credential = await deps.readCredential(input.authority, input.target.installationId);
@@ -148,6 +151,9 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         signal: AbortSignal.timeout(20_000),
       });
       try {
+        if (allowNotFound && response.status === 404) {
+          return null;
+        }
         if (!response.ok) {
           throw new HostedOperatorError("operator_unavailable");
         }
@@ -202,7 +208,14 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       ) {
         throw new HostedOperatorError("resource_mismatch");
       }
+      const attempted = input.deliveryCandidates?.some(
+        (candidate) =>
+          candidate.deploymentId === observed.id &&
+          candidate.operationRef === input.operationRef &&
+          candidate.gatewayAliasAttempted === true,
+      );
       return {
+        ...(attempted === true ? { gatewayAliasAttempted: true as const } : {}),
         branch: delivery.branch,
         deploymentId: observed.id,
         operationRef: input.operationRef,
@@ -254,17 +267,43 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       }
       return candidates;
     };
-    return { assertCurrent, delivery, expectedMeta, readCandidate, readCandidates, request };
+    const readGatewayAlias = async () => {
+      const gateway = input.plan.publicGateway;
+      if (deps.target !== "gateway" || gateway === undefined) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+      const alias = new URL(gateway.origin).hostname;
+      const raw = await request(`/v4/aliases/${encodeURIComponent(alias)}`, {}, undefined, true);
+      if (raw === null) {
+        return { alias, deploymentId: null };
+      }
+      const observed = z.object({ alias: id, deploymentId: id, projectId: id }).parse(raw);
+      if (observed.alias.toLowerCase() !== alias || observed.projectId !== gateway.projectId) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+      return { alias, deploymentId: observed.deploymentId };
+    };
+    return {
+      assertCurrent,
+      delivery,
+      expectedMeta,
+      readCandidate,
+      readCandidates,
+      readGatewayAlias,
+      request,
+    };
   };
   const reconcile = async (input: HostedOperatorDeploymentContext) => {
     try {
       const reader = io(input);
       const candidates = await reader.readCandidates();
-      const selected = candidates.find((value) => value.readyState === "READY");
+      let selected = candidates.find((value) => value.readyState === "READY");
       if (selected === undefined) {
         if (
-          candidates.some((candidate) =>
-            ["BUILDING", "QUEUED", "INITIALIZING"].includes(candidate.readyState),
+          candidates.some(
+            (candidate) =>
+              ["BUILDING", "QUEUED", "INITIALIZING"].includes(candidate.readyState) ||
+              (deps.target === "gateway" && candidate.gatewayAliasAttempted === true),
           )
         ) {
           return { candidates, status: "unknown" as const };
@@ -279,6 +318,26 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       }
       await deps.assertEnvironment(input);
       await reader.assertCurrent();
+      if (deps.target === "gateway") {
+        const alias = await reader.readGatewayAlias();
+        const assigned = candidates.find(
+          (candidate) =>
+            candidate.deploymentId === alias.deploymentId && candidate.readyState === "READY",
+        );
+        if (assigned === undefined) {
+          if (candidates.some((candidate) => candidate.gatewayAliasAttempted === true)) {
+            return { candidates, status: "unknown" as const };
+          }
+          return {
+            candidates,
+            resourceVersion: createHash("sha256")
+              .update(JSON.stringify({ alias, candidates, scope: reader.delivery }))
+              .digest("hex"),
+            status: "retryable" as const,
+          };
+        }
+        selected = assigned;
+      }
       await input.checkpointDelivery(candidates, selected.deploymentId);
       return { candidates, selected, status: "applied" as const };
     } catch {
@@ -292,6 +351,40 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       const prior = await reconcile(input);
       if (prior.status === "applied" || prior.status === "unknown") {
         return prior;
+      }
+      if (deps.target === "gateway") {
+        const selected = prior.candidates?.find((candidate) => candidate.readyState === "READY");
+        if (selected !== undefined) {
+          await deps.assertEnvironment(input);
+          await reader.assertCurrent();
+          const marked = prior.candidates.map((candidate) =>
+            candidate.deploymentId === selected.deploymentId
+              ? { ...candidate, gatewayAliasAttempted: true as const }
+              : candidate,
+          );
+          // Persist intent before the outward write. A lost response or process stop never authorizes a blind re-POST.
+          await input.checkpointDelivery(marked);
+          const markedInput = { ...input, deliveryCandidates: marked };
+          const fresh = io(markedInput);
+          try {
+            const candidate = await fresh.readCandidate(selected.deploymentId);
+            if (candidate.readyState !== "READY") {
+              return { candidates: marked, status: "unknown" as const };
+            }
+            const alias = await fresh.readGatewayAlias();
+            if (alias.deploymentId !== selected.deploymentId) {
+              await fresh.assertCurrent();
+              await fresh.request(
+                `/v2/deployments/${encodeURIComponent(selected.deploymentId)}/aliases`,
+                {},
+                { alias: alias.alias },
+              );
+            }
+            return await reconcile(markedInput);
+          } catch {
+            return { candidates: marked, status: "unknown" as const };
+          }
+        }
       }
       // A complete no-match listing is still uncertain; this approved retry is at-least-once and may create another scoped Preview.
       await deps.assertEnvironment(input);

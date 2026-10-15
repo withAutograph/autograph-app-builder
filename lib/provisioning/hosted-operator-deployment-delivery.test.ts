@@ -1,6 +1,10 @@
 import { expect, it, vi } from "vitest";
 import { z } from "zod";
-import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
+import {
+  hostedOperatorPlanSchema,
+  operatorPlanDigest,
+  operatorDeploymentCandidatesSchema,
+} from "./hosted-operator-contract";
 import { createHostedOperatorDeploymentDelivery } from "./hosted-operator-deployment-delivery";
 import type { HostedOperatorDeploymentContext } from "./hosted-operator-service";
 
@@ -66,6 +70,41 @@ const plan = hostedOperatorPlanSchema.parse({
   selection,
   version: 1,
 });
+const gatewayPlan = hostedOperatorPlanSchema.parse({
+  ...plan,
+  publicGateway: {
+    projectId: "prj_gateway",
+    branch: "gateway-main",
+    origin: "https://approved-gateway.example.test",
+  },
+  gatewayDelivery: {
+    projectId: "prj_gateway",
+    branch: "gateway-main",
+    repoId: "gateway-repo",
+    gitSha: sha,
+  },
+  deploymentBoundary: {
+    authority,
+    teamId: "team",
+    app: { projectId: "prj_app", branch: selection.branch, environment: "preview" },
+    gateway: { projectId: "prj_gateway", branch: "gateway-main", environment: "preview" },
+    operator: { projectId: "prj_operator", deploymentId: "dpl_operator", environment: "preview" },
+    verification: {
+      gatewayOrigin: "https://approved-gateway.example.test",
+      publicOrigin: "https://approved-gateway.example.test",
+      jwksUrl: "https://approved-gateway.example.test/_platform/jwks.json",
+    },
+  },
+  effects: [
+    ...plan.effects,
+    {
+      id: "gateway-delivery",
+      kind: "gateway-delivery",
+      description: "Deliver and pin the exact approved Gateway Preview",
+    },
+  ],
+});
+
 interface DeliveryProjectFixture {
   accountId: string;
   framework?: string | null;
@@ -74,13 +113,19 @@ interface DeliveryProjectFixture {
   name: string;
 }
 
-const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null) => {
+const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, gateway = false) => {
+  const delivery = gateway ? deliveryPlan.gatewayDelivery : deliveryPlan.delivery;
+  if (delivery === undefined) {
+    throw new Error("Missing fixture delivery");
+  }
   let ready = "BUILDING";
   let count = 0;
   let deny = false;
   const calls: { method: string; path: string; body?: unknown }[] = [];
-  const checkpoint = vi.fn(async () => {
+  const checkpoint = vi.fn<HostedOperatorDeploymentContext["checkpointDelivery"]>(async (rows) => {
     await Promise.resolve();
+    // oxlint-disable-next-line eslint/no-use-before-define -- This callback runs only after the fixture context is initialized.
+    input.deliveryCandidates = operatorDeploymentCandidatesSchema.parse(rows);
   });
   const input: HostedOperatorDeploymentContext = {
     assertCurrent: vi.fn(async () => {
@@ -94,7 +139,7 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null) =>
       await Promise.resolve();
     }),
     checkpointDelivery: checkpoint,
-    effect: plan.effects[4],
+    effect: gateway ? gatewayPlan.effects[5] : plan.effects[4],
     fenceGeneration: 1,
     operationRef: "00000000-0000-4000-8000-000000000001",
     plan: deliveryPlan,
@@ -102,44 +147,81 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null) =>
     workerCheckpoints: [],
   };
   const meta = {
-    autograph_operator_effect: "deliver",
+    autograph_operator_effect: input.effect.id,
     autograph_operator_operation: input.operationRef,
     autograph_operator_plan: operatorPlanDigest(deliveryPlan),
   };
   const project: DeliveryProjectFixture = {
     accountId: "team",
     framework: "nextjs",
-    id: "prj_app",
-    link: { repoId: "repo", type: "github" },
+    id: delivery.projectId,
+    link: { repoId: delivery.repoId, type: "github" },
     name: "app",
   };
   const deployment = {
     customEnvironment: null,
-    gitSource: { ref: deliveryPlan.delivery?.branch, repoId: "repo", sha, type: "github" },
+    gitSource: { ref: delivery.branch, repoId: delivery.repoId, sha, type: "github" },
     id: "dpl_new",
     meta,
     oidcTokenClaims: { environment: "preview" },
     ownerId: "team",
-    projectId: "prj_app",
+    projectId: delivery.projectId,
     target: deploymentTarget,
     url: "new-native.vercel.app",
   };
+  const aliasState = {
+    name: "approved-gateway.example.test",
+    projectId: "prj_gateway",
+    deploymentId: "dpl_previous",
+    applyWrite: true,
+    throwOnWrite: false,
+    failReads: false,
+    missing: false,
+  };
+  const aliasWriteResponse = () => {
+    if (aliasState.applyWrite) {
+      aliasState.deploymentId = "dpl_new";
+      aliasState.missing = false;
+    }
+    if (aliasState.throwOnWrite) {
+      throw new Error("Private lost provider response");
+    }
+    return Response.json({ alias: aliasState.name });
+  };
   const fetcher: typeof fetch = async (url, init) => {
     await Promise.resolve();
-    const path = new URL(url instanceof Request ? url.url : url).pathname;
+    const requestUrl = new URL(url instanceof Request ? url.url : url);
+    expect(requestUrl.searchParams.get("teamId")).toBe(target.scopeId);
+    const path = requestUrl.pathname;
     const method = init?.method ?? "GET";
     let body;
     if (init?.body !== undefined) {
       body = z.json().parse(JSON.parse(z.string().parse(init.body)));
     }
     calls.push({ body, method, path });
+    if (path.startsWith("/v4/aliases/")) {
+      if (aliasState.failReads) {
+        return new Response(null, { status: 500 });
+      }
+      if (aliasState.missing) {
+        return new Response(null, { status: 404 });
+      }
+      return Response.json({
+        alias: aliasState.name,
+        deploymentId: aliasState.deploymentId,
+        projectId: aliasState.projectId,
+      });
+    }
+    if (path === "/v2/deployments/dpl_new/aliases" && method === "POST") {
+      return aliasWriteResponse();
+    }
     if (path === "/v7/deployments") {
       return Response.json({
         deployments: count === 0 ? [] : [{ meta, uid: "dpl_new" }],
         pagination: { next: null },
       });
     }
-    if (path === "/v9/projects/prj_app") {
+    if (path === `/v9/projects/${project.id}`) {
       return Response.json(project);
     }
     if (path === "/v2/teams/team") {
@@ -163,6 +245,7 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null) =>
       await Promise.resolve();
     }),
     fetch: fetcher,
+    ...(gateway ? { target: "gateway" as const } : {}),
     readCredential: async () =>
       await Promise.resolve({
         binding: {
@@ -180,6 +263,7 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null) =>
   });
   return {
     calls,
+    aliasState,
     project,
     deployment,
     checkpoint,
@@ -347,4 +431,134 @@ it("reconciles historical staging delivery with Preview claims without changing 
       operationRef: f.input.operationRef,
     });
   }
+});
+
+const readyGateway = async () => {
+  const f = fixture(gatewayPlan, null, true);
+  await f.writer.deliver(f.input);
+  f.setReady("READY");
+  return f;
+};
+it("assigns only the approved Gateway hostname to its exact READY deployment and independently reads it back", async () => {
+  const f = await readyGateway();
+  f.deployment.url = "candidate-field-is-not-alias-authority.vercel.app";
+  const before = await f.writer.reconcile(f.input);
+  expect(before.status).toBe("retryable");
+  const result = await f.writer.deliver(f.input);
+  expect(result.status).toBe("applied");
+  expect(
+    f.calls
+      .filter((call) => call.path.endsWith("/aliases") && call.method === "POST")
+      .map((call) => call.body),
+  ).toEqual([{ alias: "approved-gateway.example.test" }]);
+  expect(
+    f.calls.filter((call) => call.path === "/v13/deployments" && call.method === "POST"),
+  ).toHaveLength(1);
+  expect(
+    f.input.deliveryCandidates?.find((candidate) => candidate.deploymentId === "dpl_new")
+      ?.gatewayAliasAttempted,
+  ).toBe(true);
+  expect(f.aliasState.deploymentId).toBe("dpl_new");
+});
+it.each([true, false])(
+  "does not blindly repeat an alias assignment after a lost response (provider applied: %s)",
+  async (applied) => {
+    const f = await readyGateway();
+    f.aliasState.applyWrite = applied;
+    f.aliasState.throwOnWrite = true;
+    const first = await f.writer.deliver(f.input);
+    expect(first.status).toBe("unknown");
+    const savedJournal = JSON.stringify(f.input.deliveryCandidates);
+    f.input.deliveryCandidates = operatorDeploymentCandidatesSchema.parse(JSON.parse(savedJournal));
+    const replay = await f.writer.deliver(f.input);
+    expect(replay.status).toBe(applied ? "applied" : "unknown");
+    expect(
+      f.calls.filter((call) => call.path.endsWith("/aliases") && call.method === "POST"),
+    ).toHaveLength(1);
+    expect(
+      f.calls.filter((call) => call.path === "/v13/deployments" && call.method === "POST"),
+    ).toHaveLength(1);
+    expect(f.input.deliveryCandidates?.some((candidate) => candidate.gatewayAliasAttempted)).toBe(
+      true,
+    );
+  },
+);
+it("keeps a saved attempted alias unknown through provider read failures without another write", async () => {
+  const f = await readyGateway();
+  f.aliasState.applyWrite = false;
+  f.aliasState.throwOnWrite = true;
+  await f.writer.deliver(f.input);
+  f.aliasState.failReads = true;
+  const replay = await f.writer.deliver(f.input);
+  expect(replay.status).toBe("unknown");
+  expect(
+    f.calls.filter((call) => call.path.endsWith("/aliases") && call.method === "POST"),
+  ).toHaveLength(1);
+});
+it.each(["foreign-alias", "not-ready", "revoked", "foreign-source"])(
+  "does not assign the approved Gateway alias for %s",
+  async (failure) => {
+    const f = await readyGateway();
+    if (failure === "foreign-alias") {
+      f.aliasState.projectId = "another-project";
+    }
+    if (failure === "not-ready") {
+      f.setReady("BUILDING");
+    }
+    if (failure === "revoked") {
+      f.revoke();
+    }
+    if (failure === "foreign-source") {
+      f.deployment.gitSource.repoId = "another-repository";
+    }
+    try {
+      await f.writer.deliver(f.input);
+    } catch {
+      /* Current authorization may reject before reconciliation. */
+    }
+    expect(f.calls.some((call) => call.path.endsWith("/aliases") && call.method === "POST")).toBe(
+      false,
+    );
+  },
+);
+it("does not attempt Gateway alias writes from app delivery", async () => {
+  const f = fixture();
+  await f.writer.deliver(f.input);
+  f.setReady("READY");
+  const observed = await f.writer.reconcile(f.input);
+  expect(observed.status).toBe("applied");
+  expect(f.calls.some((call) => call.path.includes("/aliases"))).toBe(false);
+});
+
+it("does not allocate another assignment when the approved alias already names the READY candidate", async () => {
+  const f = await readyGateway();
+  f.aliasState.deploymentId = "dpl_new";
+  const observed = await f.writer.deliver(f.input);
+  expect(observed.status).toBe("applied");
+  expect(f.calls.some((call) => call.path.endsWith("/aliases") && call.method === "POST")).toBe(
+    false,
+  );
+});
+it("creates the exact approved missing alias without deriving a new hostname", async () => {
+  const f = await readyGateway();
+  f.aliasState.missing = true;
+  const observed = await f.writer.deliver(f.input);
+  expect(observed.status).toBe("applied");
+  expect(
+    f.calls.find((call) => call.path.endsWith("/aliases") && call.method === "POST")?.body,
+  ).toEqual({ alias: new URL(gatewayPlan.publicGateway?.origin ?? "").hostname });
+});
+it("does not assign when durable intent checkpointing fails", async () => {
+  const f = await readyGateway();
+  f.checkpoint.mockImplementation(async (rows) => {
+    await Promise.resolve();
+    if (rows.some((row) => row.gatewayAliasAttempted === true)) {
+      throw new Error("Private checkpoint failure");
+    }
+    f.input.deliveryCandidates = structuredClone([...rows]);
+  });
+  await expect(f.writer.deliver(f.input)).rejects.toThrow("Private checkpoint failure");
+  expect(f.calls.some((call) => call.path.endsWith("/aliases") && call.method === "POST")).toBe(
+    false,
+  );
 });

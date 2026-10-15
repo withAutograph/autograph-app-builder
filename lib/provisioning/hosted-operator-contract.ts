@@ -784,6 +784,8 @@ export const projectPendingRealmIdentityLink = (input: OperatorRealmIdentityLink
   return publicLink;
 };
 export const operatorDeploymentCandidateSchema = z.strictObject({
+  /** Durable intent before the exact approved Gateway alias assignment; never alias authority. */
+  gatewayAliasAttempted: z.literal(true).optional(),
   branch: id,
   deploymentId: id,
   operationRef: z.uuid(),
