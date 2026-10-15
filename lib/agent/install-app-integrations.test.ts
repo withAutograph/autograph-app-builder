@@ -1,5 +1,6 @@
 /* oxlint-disable anti-slop/no-module-mocking -- Isolate Eve workflow authority at the real tool execute boundary. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ToolContext } from "eve/tools";
 import installTool, {
   appIntegrationsInstallCommand,
   installAppIntegrations,
@@ -23,7 +24,25 @@ vi.mock("./workflow-state", () => ({
 vi.mock("./product-behavior-state", () => ({
   invalidateProductBehaviorEvidence: hooks.invalidate,
 }));
-vi.mock("./source-bound-sandbox", () => ({ getSourceBoundSandbox: async () => hooks.sandbox }));
+vi.mock("./source-bound-sandbox", () => ({
+  getSourceBoundSandbox: () => Promise.resolve(hooks.sandbox),
+}));
+
+const context: ToolContext = {
+  abortSignal: new AbortController().signal,
+  callId: "install-integrations",
+  getSandbox: () => Promise.reject(new Error("The source-bound sandbox fixture owns execution.")),
+  getToken: () => Promise.reject(new Error("Installation must not request a provider token.")),
+  requireAuth: () => {
+    throw new Error("Installation must use the existing private build approval.");
+  },
+  session: {
+    auth: { current: null, initiator: null },
+    id: "integration-install-session",
+    turn: { id: "integration-install-turn", sequence: 0 },
+  },
+  toolName: "install-app-integrations",
+};
 
 describe("private app integrations installation", () => {
   beforeEach(() => {
@@ -42,10 +61,7 @@ describe("private app integrations installation", () => {
   });
 
   it("runs the fixed operation in the accepted private checkout and invalidates validation", async () => {
-    // SAFETY: Identity defineTool fixture supplies all context consumed by this operation.
-    const result = await installTool.execute({}, {
-      abortSignal: new AbortController().signal,
-    } as never);
+    const result = await installTool.execute({}, context);
     expect(hooks.sandbox.run).toHaveBeenCalledWith(
       expect.objectContaining({
         command: "mise run integrations:install spend-review",
@@ -61,15 +77,16 @@ describe("private app integrations installation", () => {
     expect(hooks.invalidate).toHaveBeenCalledWith("source-repair");
   });
 
-  it("cannot run before private build approval or after final review", async () => {
-    for (const phase of ["empty", "planned", "app_spec_accepted", "change_set_accepted"]) {
+  it.each(["empty", "planned", "app_spec_accepted", "change_set_accepted"])(
+    "cannot install in the %s phase before approval or after review",
+    async (phase) => {
       hooks.state.phase = phase;
-      await expect(installTool.execute({}, {} as never)).rejects.toThrow(
+      await expect(installTool.execute({}, context)).rejects.toThrow(
         "Apply the accepted private app build",
       );
-    }
-    expect(hooks.sandbox.run).not.toHaveBeenCalled();
-  });
+      expect(hooks.sandbox.run).not.toHaveBeenCalled();
+    },
+  );
 
   it("rejects command injection in app identity before executing", () => {
     expect(() => appIntegrationsInstallCommand("spend-review; publish")).toThrow();
