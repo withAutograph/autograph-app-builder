@@ -130,7 +130,14 @@ const fixture = () => {
     }
     expect(options?.method).toBe("GET");
     expect(parsed.searchParams.get("teamId")).toBe("team_owner");
-    return Response.json(payloads.get(parsed.pathname) ?? { error: "missing" });
+    const deploymentPath =
+      parsed.pathname === "/v13/deployments/gateway.example.test"
+        ? "/v13/deployments/dpl_gateway"
+        : parsed.pathname;
+    const payload = payloads.get(deploymentPath);
+    return payload === undefined
+      ? Response.json({ error: "missing" }, { status: 404 })
+      : Response.json(payload);
   });
   const assertCurrentOwner = vi.fn(async () => {
     await Promise.resolve();
@@ -306,6 +313,7 @@ describe("private read-only operator provider inventory", () => {
     const { deploymentId: gatewayDeployment, ...gateway } = configuration.gateway;
     void appDeployment;
     void gatewayDeployment;
+    f.payloads.delete("/v13/deployments/dpl_gateway");
     const observed = await readHostedOperatorProviderInventory({
       ...f.input,
       configuration: { ...configuration, app, gateway },
@@ -355,6 +363,93 @@ describe("private read-only operator provider inventory", () => {
         phase: "bootstrap-planning",
       }),
     ).rejects.toThrow("operator_unavailable");
+  });
+  it("treats a missing planning alias as undelivered even when an older configured deployment exists", async () => {
+    const f = fixture();
+    f.payloads.delete("/v13/deployments/dpl_gateway");
+    const observed = await readHostedOperatorProviderInventory({
+      ...f.input,
+      phase: "bootstrap-planning",
+      resolveGatewayByPublicOrigin: true,
+    });
+    expect(observed.gateway.deploymentId).toBeUndefined();
+    expect(observed.verification.publicKeyIds).toBeNull();
+    await expect(
+      readHostedOperatorProviderInventory({ ...f.input, phase: "bootstrap-planning" }),
+    ).rejects.toThrow("operator_unavailable");
+  });
+  it.each([null, {}])(
+    "rejects a successful malformed deployment response instead of treating it as missing: %j",
+    async (payload) => {
+      const f = fixture();
+      const originalFetch = f.input.fetch;
+      const fetcher: typeof fetch = async (url, options) => {
+        const parsed = url instanceof Request ? new URL(url.url) : new URL(url);
+        return parsed.pathname.startsWith("/v13/deployments/") &&
+          parsed.pathname !== "/v13/deployments/dpl_operator" &&
+          parsed.pathname !== "/v13/deployments/dpl_app"
+          ? Response.json(payload)
+          : await originalFetch(url, options);
+      };
+      await expect(
+        readHostedOperatorProviderInventory({
+          ...f.input,
+          fetch: fetcher,
+          phase: "bootstrap-planning",
+          resolveGatewayByPublicOrigin: true,
+        }),
+      ).rejects.toThrow("operator_unavailable");
+      await expect(
+        readHostedOperatorProviderInventory({
+          ...f.input,
+          fetch: fetcher,
+          phase: "bootstrap-planning",
+        }),
+      ).rejects.toThrow("operator_unavailable");
+    },
+  );
+  it("resolves the current trusted public alias during new planning while execution retains its fixed deployment", async () => {
+    const f = fixture();
+    const { gateway } = configuration;
+    const successor = {
+      ...f.payloads.get("/v13/deployments/dpl_gateway"),
+      id: "dpl_successor",
+      url: "gateway-successor.example.test",
+    };
+    f.payloads.set("/v13/deployments/dpl_gateway", successor);
+    f.payloads.set("/v2/deployments/dpl_successor/aliases", {
+      aliases: [{ alias: "gateway.example.test" }],
+    });
+    const observed = await readHostedOperatorProviderInventory({
+      ...f.input,
+      phase: "bootstrap-planning",
+      resolveGatewayByPublicOrigin: true,
+    });
+    expect(observed.gateway.deploymentId).toBe("dpl_successor");
+    expect(observed.verification.publicOrigin).toBe(configuration.verification.publicOrigin);
+    expect(configuration.gateway).toBe(gateway);
+    await expect(
+      readHostedOperatorProviderInventory({ ...f.input, phase: "bootstrap-planning" }),
+    ).rejects.toThrow("resource_mismatch");
+  });
+  it.each([
+    { ownerId: "foreign-owner" },
+    { projectId: "foreign-project" },
+    { gitSource: { ref: "foreign-branch" } },
+    { target: "production" },
+  ])("rejects an alias that resolves outside the approved Gateway boundary: %j", async (patch) => {
+    const f = fixture();
+    f.payloads.set("/v13/deployments/dpl_gateway", {
+      ...f.payloads.get("/v13/deployments/dpl_gateway"),
+      ...patch,
+    });
+    await expect(
+      readHostedOperatorProviderInventory({
+        ...f.input,
+        phase: "bootstrap-planning",
+        resolveGatewayByPublicOrigin: true,
+      }),
+    ).rejects.toThrow("resource_mismatch");
   });
   it("still rejects foreign and non-READY supplied candidates during bootstrap planning", async () => {
     await Promise.all(

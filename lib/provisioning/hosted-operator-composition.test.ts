@@ -1011,6 +1011,65 @@ describe("existing populated Auth workflow planning", () => {
       expect(JSON.stringify(plan)).not.toContain("private-fixture");
     },
   );
+  it.each([
+    {
+      configuredDeploymentId: "configured-gateway",
+      recordedState: "READY",
+      expectedDeploymentId: "configured-gateway",
+      expectedOrigin: "https://gateway.example",
+    },
+    {
+      configuredDeploymentId: undefined,
+      recordedState: "READY",
+      expectedDeploymentId: undefined,
+      expectedOrigin: "https://gateway.example",
+    },
+    {
+      configuredDeploymentId: undefined,
+      recordedState: "BUILDING",
+      expectedDeploymentId: undefined,
+      expectedOrigin: "https://gateway.example",
+    },
+  ] as const)(
+    "plans against stable configured Gateway origins without overriding them from history: $configuredDeploymentId / $recordedState",
+    async ({ configuredDeploymentId, recordedState, expectedDeploymentId, expectedOrigin }) => {
+      const f = setup("current");
+      f.configuration.gateway.deploymentId = configuredDeploymentId;
+      const operator = f.original.operator!;
+      operator.deliveredGatewayDeploymentId = "retained-gateway";
+      operator.gatewayDeliveryCandidates = [
+        {
+          branch: f.configuration.gateway.branch,
+          deploymentId: "retained-gateway",
+          operationRef: operator.operationRef,
+          origin: "https://retained-gateway.example",
+          projectId: f.configuration.gateway.projectId,
+          readyState: recordedState,
+          repoId: f.configuration.gateway.repoId,
+        },
+      ];
+      const { approvalId, planDigest } = operator;
+      await f.dependencies.plan({ ...context, action: "prepare" });
+      const observedTargets = vi
+        .mocked(providerInventory.readHostedOperatorProviderInventory)
+        .mock.calls.map(([{ configuration }]) => ({
+          deploymentId: configuration.gateway.deploymentId,
+          gatewayOrigin: configuration.verification.gatewayOrigin,
+          publicOrigin: configuration.verification.publicOrigin,
+        }));
+      expect(observedTargets).toContainEqual({
+        deploymentId: expectedDeploymentId,
+        gatewayOrigin: expectedOrigin,
+        publicOrigin: f.configuration.gateway.publicOrigin,
+      });
+      expect(operator.deliveredGatewayDeploymentId).toBe("retained-gateway");
+      expect(operator.gatewayDeliveryCandidates[0]?.origin).toBe(
+        "https://retained-gateway.example",
+      );
+      expect(operator.approvalId).toBe(approvalId);
+      expect(operator.planDigest).toBe(planDigest);
+    },
+  );
   it("preserves the approved source artifact and read-only adoption authority", async () => {
     const f = setup("adopted");
     const plan = await f.dependencies.plan({ ...context, action: "prepare" });
@@ -1036,108 +1095,127 @@ describe("existing populated Auth workflow planning", () => {
     expect(f.readResourceBindings).not.toHaveBeenCalled();
     expect(f.propose.mock.calls[0]?.[0]).not.toHaveProperty("directMigrationUrl");
   });
-  it("preserves a consumed owner nonce when proof capture races the identity-link read", async () => {
-    const f = setup("current");
-    const operator = f.original.operator!;
-    operator.plan = {
-      ...operator.plan,
-      publicGateway: {
-        branch: "gateway-actual",
-        origin: "https://apps.example",
-        projectId: "gateway",
-      },
-      effects: [
-        ...operator.plan.effects,
-        { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
-      ],
-      deploymentBoundary: {
-        app: {
-          branch: context.target.branch,
-          deploymentId: "app-deployment",
-          environment: "preview",
-          projectId: context.target.projectId,
+  it.each(["consumed", "pending"] as const)(
+    "preserves frozen identity authority when the owner nonce is %s",
+    async (nonceState) => {
+      const f = setup("current");
+      const operator = f.original.operator!;
+      operator.plan = {
+        ...operator.plan,
+        publicGateway: {
+          branch: "gateway-actual",
+          origin: "https://apps.example",
+          projectId: "gateway",
         },
-        gateway: {
+        effects: [
+          ...operator.plan.effects,
+          { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
+        ],
+        deploymentBoundary: {
+          app: {
+            branch: context.target.branch,
+            deploymentId: "app-deployment",
+            environment: "preview",
+            projectId: context.target.projectId,
+          },
+          gateway: {
+            branch: "gateway-actual",
+            deploymentId: "gateway-deployment",
+            environment: "preview",
+            projectId: "gateway",
+          },
+          operator: {
+            deploymentId: "operator-deployment",
+            environment: "preview",
+            projectId: "operator",
+          },
+          authority: context.authority,
+          teamId: "team",
+          verification: {
+            gatewayOrigin: "https://gateway.example",
+            publicOrigin: "https://apps.example",
+            jwksUrl: "https://gateway.example/_platform/jwks.json",
+          },
+        },
+        gatewayBindings: {
+          authBrowserOrigin: "https://auth.example",
+          builderCallbackOrigin: "https://builder.example",
+          catalogAppIds: ["actual"],
+          operatorOrigin: "https://operator.example",
+          sourceWorkload: {
+            audience: "https://vercel.com/team",
+            environment: "preview",
+            issuer: "https://oidc.vercel.com/team",
+            ownerId: "team",
+            projectId: "gateway",
+            subject: "gateway-workload",
+          },
+        },
+      };
+      operator.planDigest = operatorPlanDigest(operator.plan);
+      operator.receipts.push({
+        effectId: "gateway-bindings",
+        observedAt: "2026-10-15T12:00:00Z",
+        resourceVersion: "owned-observation",
+      });
+      operator.gatewayDeliveryCandidates = [
+        {
           branch: "gateway-actual",
           deploymentId: "gateway-deployment",
-          environment: "preview",
+          operationRef: operator.operationRef,
+          origin: "https://gateway.example",
           projectId: "gateway",
+          readyState: "READY",
+          repoId: "gateway-repository",
         },
-        operator: {
-          deploymentId: "operator-deployment",
-          environment: "preview",
-          projectId: "operator",
-        },
-        authority: context.authority,
-        teamId: "team",
-        verification: {
-          gatewayOrigin: "https://gateway.example",
-          publicOrigin: "https://apps.example",
-          jwksUrl: "https://gateway.example/_platform/jwks.json",
-        },
-      },
-      gatewayBindings: {
-        authBrowserOrigin: "https://auth.example",
-        builderCallbackOrigin: "https://builder.example",
-        catalogAppIds: ["actual"],
-        operatorOrigin: "https://operator.example",
-        sourceWorkload: {
-          audience: "https://vercel.com/team",
-          environment: "preview",
-          issuer: "https://oidc.vercel.com/team",
-          ownerId: "team",
-          projectId: "gateway",
-          subject: "gateway-workload",
-        },
-      },
-    };
-    operator.planDigest = operatorPlanDigest(operator.plan);
-    operator.receipts.push({
-      effectId: "gateway-bindings",
-      observedAt: "2026-10-15T12:00:00Z",
-      resourceVersion: "owned-observation",
-    });
-    operator.gatewayDeliveryCandidates = [
-      {
-        branch: "gateway-actual",
-        deploymentId: "gateway-deployment",
-        operationRef: operator.operationRef,
-        origin: "https://gateway.example",
-        projectId: "gateway",
-        readyState: "READY",
-        repoId: "gateway-repository",
-      },
-    ];
-    operator.deliveredGatewayDeploymentId = "gateway-deployment";
-    operator.identityLink = {
-      audience: "https://operator.example",
-      authResourceId: operator.plan.authDatabase.resourceId,
-      bootstrapPlanDigest: operator.planDigest,
-      browserOrigin: "https://auth.example",
-      endpointOrigin: "https://gateway.example",
-      issuer: "https://apps.example",
-      ownerSessionId: context.target.sessionId,
-      organizationId: null,
-      nonceSha256: "a".repeat(64),
-      expiresAt: "2026-10-01T00:00:00Z",
-      consumedAt: "2026-09-30T23:59:00Z",
-      proofRef: "captured-owner-proof",
-      proofSha256: "b".repeat(64),
-    };
-    const prepareRealmIdentityLink = vi.fn();
-    Object.assign(f.controlPlane, { prepareRealmIdentityLink });
-    const before = structuredClone(operator.identityLink);
-    await expect(
-      f.dependencies.authIdentityInput!({
+      ];
+      operator.deliveredGatewayDeploymentId = "gateway-deployment";
+      operator.identityLink = {
+        audience: "https://operator.example",
+        authResourceId: operator.plan.authDatabase.resourceId,
+        bootstrapPlanDigest: operator.planDigest,
+        browserOrigin: "https://auth.example",
+        endpointOrigin: "https://gateway.example",
+        issuer: "https://apps.example",
+        ownerSessionId: context.target.sessionId,
+        organizationId: null,
+        nonceSha256: "a".repeat(64),
+        expiresAt: "2026-10-01T00:00:00Z",
+        consumedAt: "2026-09-30T23:59:00Z",
+        proofRef: "captured-owner-proof",
+        proofSha256: "b".repeat(64),
+      };
+      const prepareRealmIdentityLink = vi.fn(() => {
+        throw new Error("fixture invitation boundary");
+      });
+      Object.assign(f.controlPlane, { prepareRealmIdentityLink });
+      if (nonceState === "pending") {
+        operator.identityLink.consumedAt = undefined;
+      }
+      const before = structuredClone(operator.identityLink);
+      const invitation = f.dependencies.authIdentityInput!({
         ...context,
         operationRef: operator.operationRef,
         plan: operator.plan,
-      }),
-    ).rejects.toMatchObject({ code: "operation_in_progress" });
-    expect(prepareRealmIdentityLink).not.toHaveBeenCalled();
-    expect(providerInventory.readHostedOperatorProviderInventory).not.toHaveBeenCalled();
-    expect(operator.identityLink).toEqual(before);
-  });
+      });
+      if (nonceState === "consumed") {
+        await expect(invitation).rejects.toMatchObject({ code: "operation_in_progress" });
+        expect(prepareRealmIdentityLink).not.toHaveBeenCalled();
+        expect(providerInventory.readHostedOperatorProviderInventory).not.toHaveBeenCalled();
+      } else {
+        await expect(invitation).rejects.toThrow("fixture invitation boundary");
+        const [observed] = vi.mocked(providerInventory.readHostedOperatorProviderInventory).mock
+          .calls;
+        expect(observed?.[0].phase).toBe("bootstrap-planning");
+        expect(observed?.[0].resolveGatewayByPublicOrigin).toBeUndefined();
+        expect(observed?.[0].configuration.gateway.deploymentId).toBe("gateway-deployment");
+        expect(observed?.[0].configuration.verification.gatewayOrigin).toBe(
+          "https://gateway.example",
+        );
+      }
+      expect(operator.identityLink).toEqual(before);
+    },
+  );
   it("continues participant capture through its existing next-actor path", async () => {
     const f = setup("current");
     const participant = participantResolutionFixture();

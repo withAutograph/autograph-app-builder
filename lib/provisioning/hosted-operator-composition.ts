@@ -929,19 +929,6 @@ export const composeHostedOperatorDependencies = (
       });
       await neon.inspectPlanningTarget(context, configuration.nativeNeon.scope);
     });
-    const recordedGateway = current?.record.operator?.gatewayDeliveryCandidates?.find(
-      (candidate) =>
-        candidate.deploymentId === current.record.operator?.deliveredGatewayDeploymentId &&
-        candidate.readyState === "READY",
-    );
-    const gatewayReference =
-      recordedGateway === undefined
-        ? configuration.gateway
-        : {
-            ...configuration.gateway,
-            deploymentId: recordedGateway.deploymentId,
-            gatewayOrigin: recordedGateway.origin,
-          };
     const inventory = await observe(
       "provider_inventory",
       async () =>
@@ -951,15 +938,16 @@ export const composeHostedOperatorDependencies = (
           },
           configuration: {
             app: { ...application, environment: "preview" },
-            gateway: gatewayReference,
+            gateway: configuration.gateway,
             operator: configuration.operator,
             verification: {
-              gatewayOrigin: gatewayReference.gatewayOrigin,
+              gatewayOrigin: configuration.gateway.gatewayOrigin,
               publicOrigin: configuration.gateway.publicOrigin,
             },
           },
           context,
           phase: "bootstrap-planning",
+          resolveGatewayByPublicOrigin: true,
           readVercelCredential: async ({ authority, installationId }) =>
             await controlPlane.readCredential(authority, installationId),
         }),

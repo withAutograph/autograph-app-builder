@@ -1099,12 +1099,12 @@ export const createHostedOperatorGatewayBindings = (deps: {
         let { expected, known, rows, values } = await io.inspect(false);
         const creatingRows = rows.length === 0;
         await io.checkpoint(rows, known, values, expected);
-        // A replay with current values needs only the fresh final observation.
-        // Changed values still use the complete per-write ownership and checkpoint path.
-        const currentValues = Object.entries(expected).every(([key, value]) =>
-          rows.some((row) => row.key === key && values.get(row.id) === value),
+        // Select work from the fresh initial observation. Each changed key keeps
+        // its full prewrite checks, and final readback still verifies every row.
+        const changedKeys = Object.entries(expected).flatMap(([key, value]) =>
+          rows.some((row) => row.key === key && values.get(row.id) === value) ? [] : [key],
         );
-        for (const keyText of currentValues ? [] : Object.keys(expected)) {
+        for (const keyText of changedKeys) {
           const key = managedKeySchema.parse(keyText);
           ({ expected, known, rows, values } = await io.inspectIteration(
             key,

@@ -9,6 +9,10 @@ import { readVercelManagedNeonResource } from "./hosted-runtime-marketplace-reso
 import type { MarketplaceJsonValue } from "./hosted-runtime-marketplace-resource";
 
 type CredentialReader = Parameters<typeof readPreparedVercelAccess>[0]["readCredential"];
+class MissingPlanningAliasError extends Error {
+  override name = "MissingPlanningAliasError";
+}
+
 const id = z.string().min(1);
 const projectSchema = z.object({ accountId: id, id });
 const deploymentSchema = z.object({
@@ -77,6 +81,28 @@ const origin = (value: string): string => {
   }
   return parsed.origin;
 };
+const invalidDeploymentObservation = (input: {
+  deployment: z.infer<typeof deploymentSchema>;
+  reference: OperatorDeploymentReference;
+  projectId: string;
+  scopeId: string;
+  branch?: string;
+  resolveAlias: boolean;
+}) => {
+  const { deployment, reference, projectId, scopeId, branch, resolveAlias } = input;
+  return {
+    deployment_project: deployment.projectId !== projectId,
+    deployment_identity: !resolveAlias && deployment.id !== reference.deploymentId,
+    deployment_owner: deployment.ownerId !== undefined && deployment.ownerId !== scopeId,
+    deployment_ready: deployment.readyState !== "READY",
+    deployment_environment:
+      reference.environment === "production"
+        ? deployment.target !== "production"
+        : !isNativePreviewDeployment(deployment),
+    deployment_branch: branch !== undefined && deployment.gitSource?.ref !== branch,
+  };
+};
+
 const forbiddenAppKey = (key: string, appKey: string) => {
   const forbidden = [
     key.includes("DATABASE_URL"),
@@ -156,6 +182,8 @@ export const readHostedOperatorProviderInventory = async (input: {
   configuration: OperatorInventoryConfiguration;
   /** Trusted composition only: project inventory before first approved delivery. */
   phase?: "bootstrap-planning";
+  /** New plan creation only; approved operations retain their exact deployment reference. */
+  resolveGatewayByPublicOrigin?: true;
   /** The app ref from the already approved delivery plan; resource identity stays unchanged. */
   approvedAppBranch?: string;
   context: HostedOperatorContext;
@@ -167,6 +195,7 @@ export const readHostedOperatorProviderInventory = async (input: {
     const authority = hostedTenantAuthoritySchema.parse(input.context.authority);
     const { target } = input.context;
     const config = input.configuration;
+    const bootstrapPlanning = input.phase === "bootstrap-planning";
     const invalidConfiguration = {
       project_separation:
         new Set([config.app.projectId, config.gateway.projectId, config.operator.projectId])
@@ -205,6 +234,7 @@ export const readHostedOperatorProviderInventory = async (input: {
     const request = async (
       path: string,
       query: Record<string, string> = {},
+      allowMissing = false,
     ): Promise<MarketplaceJsonValue> => {
       await input.assertCurrentOwner();
       const url = new URL(path, "https://api.vercel.com");
@@ -226,6 +256,9 @@ export const readHostedOperatorProviderInventory = async (input: {
       const response = await fetcher(url, options);
       if (!response.ok) {
         await response.body?.cancel();
+        if (allowMissing && response.status === 404) {
+          throw new MissingPlanningAliasError();
+        }
         throw new HostedOperatorError(
           response.status === 401 || response.status === 403
             ? "authorization_required"
@@ -238,6 +271,7 @@ export const readHostedOperatorProviderInventory = async (input: {
       reference: OperatorDeploymentReference,
       branch?: string,
       allowUndelivered = false,
+      planningAlias?: string,
     ) => {
       const project = projectSchema.parse(
         await request(`/v9/projects/${encodeURIComponent(reference.projectId)}`),
@@ -251,24 +285,31 @@ export const readHostedOperatorProviderInventory = async (input: {
         throw new HostedOperatorError("resource_mismatch");
       }
       let deployment: z.infer<typeof deploymentSchema> | undefined;
-      if (reference.deploymentId !== undefined) {
-        deployment = deploymentSchema.parse(
-          await request(`/v13/deployments/${encodeURIComponent(reference.deploymentId)}`, {
-            withGitRepoInfo: "true",
-          }),
-        );
-        const invalidDeployment = {
-          deployment_project: deployment.projectId !== project.id,
-          deployment_identity: deployment.id !== reference.deploymentId,
-          deployment_owner:
-            deployment.ownerId !== undefined && deployment.ownerId !== target.scopeId,
-          deployment_ready: deployment.readyState !== "READY",
-          deployment_environment:
-            reference.environment === "production"
-              ? deployment.target !== "production"
-              : !isNativePreviewDeployment(deployment),
-          deployment_branch: branch !== undefined && deployment.gitSource?.ref !== branch,
-        };
+      const deploymentReference = planningAlias ?? reference.deploymentId;
+      if (deploymentReference !== undefined) {
+        try {
+          deployment = deploymentSchema.parse(
+            await request(
+              `/v13/deployments/${encodeURIComponent(deploymentReference)}`,
+              { withGitRepoInfo: "true" },
+              planningAlias !== undefined && allowUndelivered && bootstrapPlanning,
+            ),
+          );
+        } catch (error) {
+          if (!(error instanceof MissingPlanningAliasError)) {
+            throw error;
+          }
+        }
+      }
+      if (deployment !== undefined) {
+        const invalidDeployment = invalidDeploymentObservation({
+          deployment,
+          reference,
+          projectId: project.id,
+          scopeId: target.scopeId,
+          branch,
+          resolveAlias: planningAlias !== undefined,
+        });
         if (Object.values(invalidDeployment).some(Boolean)) {
           reportOperatorPlanningMismatch(
             target.sessionId,
@@ -277,7 +318,7 @@ export const readHostedOperatorProviderInventory = async (input: {
           );
           throw new HostedOperatorError("resource_mismatch");
         }
-      } else if (!allowUndelivered || input.phase !== "bootstrap-planning") {
+      } else if (!allowUndelivered || !bootstrapPlanning) {
         reportOperatorPlanningMismatch(target.sessionId, "inventory_deployment", {
           deployment_missing: true,
         });
@@ -314,7 +355,14 @@ export const readHostedOperatorProviderInventory = async (input: {
     };
     const [app, gateway, operator] = await Promise.all([
       observe(config.app, config.app.branch, true),
-      observe(config.gateway, config.gateway.branch, true),
+      observe(
+        config.gateway,
+        config.gateway.branch,
+        true,
+        bootstrapPlanning && input.resolveGatewayByPublicOrigin === true
+          ? new URL(origin(config.verification.publicOrigin)).hostname
+          : undefined,
+      ),
       observe(config.operator),
     ]);
     const publicOrigin = origin(config.verification.publicOrigin);
