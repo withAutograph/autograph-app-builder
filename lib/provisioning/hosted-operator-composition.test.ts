@@ -986,6 +986,35 @@ describe("existing populated Auth workflow planning", () => {
       readResourceBindings,
     };
   };
+  it("plans exact cross-project Gateway Trusted Sources with explicit approval scope", async () => {
+    const f = setup("current");
+    f.configuration.workloadPolicy.environment = "production";
+    const plan = await f.dependencies.plan({ ...context, action: "prepare" });
+    expect(plan.gatewayBindings?.trustedSources).toEqual({
+      builderProduction: { projectId: "builder", from: "production", to: "preview" },
+      operatorPreview: { projectId: "operator", from: "preview", to: "preview" },
+    });
+    expect(plan.gatewayDelivery?.projectId).toBe("gateway");
+    expect(plan.gatewayBindings?.readonlyAttesters).toMatchObject({
+      builderProduction: { projectId: "builder", environment: "production" },
+      operatorPreview: { projectId: "operator", environment: "preview" },
+    });
+    const effect = plan.effects.find((candidate) => candidate.kind === "gateway-bindings");
+    expect(effect?.description).toContain("Trusted Sources");
+    expect(effect?.description).toContain(f.configuration.workloadPolicy.projectId);
+    expect(effect?.description).toContain(
+      f.configuration.nativeNeon.configuration.operator.projectId,
+    );
+    expect(effect?.description).toContain(f.configuration.gateway.projectId);
+    expect(effect?.description).toContain("Production");
+    expect(effect?.description).toContain("Preview");
+  });
+  it("does not invent Production source authority for a Preview Builder workload", async () => {
+    const f = setup("current");
+    const plan = await f.dependencies.plan({ ...context, action: "prepare" });
+    expect(plan.gatewayBindings?.trustedSources).toBeUndefined();
+    expect(plan.gatewayBindings?.readonlyAttesters).toBeUndefined();
+  });
   it("reproposes the approved migration with the existing private binding and current fence", async () => {
     const reconcileMigration = vi.fn<
       ReturnType<typeof authReadiness.createHostedOperatorAuthReadiness>["reconcileMigration"]

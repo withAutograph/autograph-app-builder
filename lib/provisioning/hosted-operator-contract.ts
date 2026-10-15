@@ -349,6 +349,20 @@ const hostedOperatorPlanDataSchema = z.strictObject({
           }),
         })
         .optional(),
+      trustedSources: z
+        .strictObject({
+          builderProduction: z.strictObject({
+            projectId: id,
+            from: z.literal("production"),
+            to: z.literal("preview"),
+          }),
+          operatorPreview: z.strictObject({
+            projectId: id,
+            from: z.literal("preview"),
+            to: z.literal("preview"),
+          }),
+        })
+        .optional(),
       sourceWorkload: z.strictObject({
         audience: z.url(),
         environment: z.literal("preview"),
