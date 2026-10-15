@@ -920,13 +920,15 @@ const assessReviewBatch = async (
     options.abortSignal?.throwIfAborted();
     const assessments = await generateReviewBatch(unfinished, options);
     options.abortSignal?.throwIfAborted();
+    const incompleteMultiPairCoverage =
+      unfinished.length > 1 && assessments[0]?.reason === incompleteBatchCoverage;
     if (
       assessments[0]?.reason.startsWith(
         "The model provider rejected this source review prompt for context size.",
       ) ||
       assessments[0]?.reason === serializedPromptTooLarge ||
       assessments[0]?.reason === providerOutputCapacityRejectedReason ||
-      (unfinished.length > 1 && assessments[0]?.reason === incompleteBatchCoverage)
+      incompleteMultiPairCoverage
     ) {
       if (options.invocation !== undefined) {
         options.invocation.splits += 1;
