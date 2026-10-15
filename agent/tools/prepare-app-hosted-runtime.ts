@@ -153,7 +153,7 @@ export default defineWorkflowTool({
       register: registerHostedRuntimeIdentityWaitStep,
       acknowledge: acknowledgeHostedRuntimeIdentityWaitStep,
       sleepUntil: async (expiresAt) => {
-        await sleep(expiresAt);
+        await sleep(new Date(expiresAt));
       },
     });
   },
