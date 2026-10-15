@@ -477,6 +477,13 @@ export const createHostedOperatorGatewayBindings = (deps: {
     }
     let stage: OperatorGatewayBindingsDiagnostic["stage"] = "context";
     let method: OperatorGatewayBindingsDiagnostic["method"];
+    let requestTarget: OperatorGatewayBindingsDiagnostic["requestTarget"];
+    let protection:
+      | Pick<
+          OperatorGatewayBindingsDiagnostic,
+          "trustedSourcesVisibility" | "missingApprovedPairCount"
+        >
+      | undefined;
     let statusCategory: OperatorGatewayBindingsDiagnostic["statusCategory"];
     let httpStatus: OperatorGatewayBindingsDiagnostic["httpStatus"];
     let providerFailure: ReturnType<typeof projectOperatorGatewayProviderFailure> | undefined;
@@ -485,6 +492,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
         stage = next;
         if (!preserveRequest) {
           method = undefined;
+          requestTarget = undefined;
           statusCategory = undefined;
           httpStatus = undefined;
           providerFailure = undefined;
@@ -493,8 +501,15 @@ export const createHostedOperatorGatewayBindings = (deps: {
       get stage() {
         return stage;
       },
-      request(next: NonNullable<OperatorGatewayBindingsDiagnostic["method"]>) {
+      request(
+        next: NonNullable<OperatorGatewayBindingsDiagnostic["method"]>,
+        target: NonNullable<OperatorGatewayBindingsDiagnostic["requestTarget"]>,
+      ) {
         method = next;
+        requestTarget = target;
+      },
+      protection(value?: typeof protection) {
+        protection = value;
       },
       response(status: number) {
         if (!Number.isFinite(status)) {
@@ -538,6 +553,10 @@ export const createHostedOperatorGatewayBindings = (deps: {
             stage,
             result,
             ...(method === undefined ? {} : { method }),
+            ...((result === "failed" || result === "unknown") && requestTarget !== undefined
+              ? { requestTarget }
+              : {}),
+            ...(result === "failed" || result === "unknown" ? protection : {}),
             ...(statusCategory === undefined ? {} : { statusCategory }),
             ...(httpStatus === undefined ? {} : { httpStatus }),
             ...providerFailure,
@@ -550,6 +569,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
     at: ignoreDiagnostic,
     stage: "context",
     request: ignoreDiagnostic,
+    protection: ignoreDiagnostic,
     response: ignoreDiagnostic,
     noResponse: ignoreDiagnostic,
     providerFailure: ignoreDiagnostic,
@@ -611,6 +631,9 @@ export const createHostedOperatorGatewayBindings = (deps: {
             type: "encrypted";
             value: string;
           },
+      requestTarget: NonNullable<
+        OperatorGatewayBindingsDiagnostic["requestTarget"]
+      > = "project_environment",
     ) => {
       const requestStage = observation.stage;
       const requestGuard = method === "GET" ? guard : fullGuard;
@@ -644,7 +667,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
       if (body !== undefined) {
         options.body = JSON.stringify(body);
       }
-      observation.request(method);
+      observation.request(method, requestTarget);
       let response: Response;
       try {
         response = await (deps.fetch ?? fetch)(url, options);
@@ -684,7 +707,12 @@ export const createHostedOperatorGatewayBindings = (deps: {
     let previewGitBranch: Promise<string | null> | undefined;
     const newRowGitBranch = () => {
       previewGitBranch ??= (async () => {
-        const raw = await request(`/v9/projects/${encodeURIComponent(projectId)}`);
+        const raw = await request(
+          `/v9/projects/${encodeURIComponent(projectId)}`,
+          "GET",
+          undefined,
+          "project_settings",
+        );
         const project = z.object({ id: z.string(), accountId: z.string() }).parse(raw);
         if (project.id !== projectId || project.accountId !== target.scopeId) {
           throw unavailable();
@@ -699,8 +727,14 @@ export const createHostedOperatorGatewayBindings = (deps: {
         // oxlint-disable-next-line unicorn/no-useless-undefined -- Absent approved settings preserve the legacy path without a provider security observation.
         return undefined;
       }
+      observation.protection();
       const project = trustedProjectSnapshot.parse(
-        await request(`/v9/projects/${encodeURIComponent(projectId)}`),
+        await request(
+          `/v9/projects/${encodeURIComponent(projectId)}`,
+          "GET",
+          undefined,
+          "project_settings",
+        ),
       );
       if (project.id !== projectId || project.accountId !== target.scopeId) {
         throw unavailable();
@@ -709,6 +743,13 @@ export const createHostedOperatorGatewayBindings = (deps: {
       const missing = Object.values(approvedTrustedSources).filter(
         (rule) => !coversTrustedSource(sources, rule),
       );
+      let visibility: NonNullable<OperatorGatewayBindingsDiagnostic["trustedSourcesVisibility"]> = "present";
+      if (project.trustedSources === undefined) {
+        visibility = "absent";
+      } else if (project.trustedSources === null) {
+        visibility = "null";
+      }
+      observation.protection({ trustedSourcesVisibility: visibility, missingApprovedPairCount: missing.length });
       // A finite override cannot preserve the future same-environment semantics of an implicit foreign grant.
       const requiresReconciliation = missing.some(
         (rule) =>
@@ -746,9 +787,14 @@ export const createHostedOperatorGatewayBindings = (deps: {
         };
       }
       observation.at("write");
-      await request(`/v9/projects/${encodeURIComponent(projectId)}`, "PATCH", {
-        trustedSources: sources,
-      });
+      await request(
+        `/v9/projects/${encodeURIComponent(projectId)}`,
+        "PATCH",
+        {
+          trustedSources: sources,
+        },
+        "project_settings",
+      );
       observation.at("write_readback");
       const actual = await observeTrustedSources();
       if (

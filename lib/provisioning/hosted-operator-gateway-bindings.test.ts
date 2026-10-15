@@ -430,6 +430,69 @@ it("keeps legacy plans free of Trusted Sources writes", async () => {
   expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "applied" });
   expect(projectPatches(f)).toEqual([]);
   expect(f.project.trustedSources).toBeUndefined();
+  for (const [diagnostic] of f.diagnostics.mock.calls) {
+    expect(diagnostic.gatewayBindings).not.toHaveProperty("trustedSourcesVisibility");
+    expect(diagnostic.gatewayBindings).not.toHaveProperty("missingApprovedPairCount");
+    expect(diagnostic.gatewayBindings).not.toHaveProperty("requestTarget");
+  }
+});
+
+it.each(["absent", "null", "present"] as const)(
+  "classifies a rejected settings PATCH from its existing %s Trusted Sources observation",
+  async (visibility) => {
+    const f = fixture();
+    await f.writer.bind(f.input);
+    approveSources(f);
+    if (visibility === "null") {
+      f.project.trustedSources = null;
+    } else if (visibility === "present") {
+      f.project.trustedSources = { projects: { prj_operator: {} } };
+    }
+    f.diagnostics.mockClear();
+    const original = f.fetcher.getMockImplementation()!;
+    f.fetcher.mockImplementation(async (url, init) =>
+      init?.method === "PATCH"
+        ? Response.json(
+            { error: { code: "id_not_found", message: privateAuthUrl } },
+            { status: 404 },
+          )
+        : await original(url, init),
+    );
+    await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+    expect(f.diagnostics.mock.calls[0]?.[0].gatewayBindings).toMatchObject({
+      mode: "bind",
+      stage: "write",
+      result: "failed",
+      method: "PATCH",
+      httpStatus: 404,
+      requestTarget: "project_settings",
+      trustedSourcesVisibility: visibility,
+      missingApprovedPairCount: visibility === "present" ? 1 : 2,
+    });
+    expect(JSON.stringify(f.diagnostics.mock.calls)).not.toContain(privateAuthUrl);
+  },
+);
+
+it("classifies an environment PATCH without adding a protection observation", async () => {
+  const f = await ownedLegacyRealmLinkFixture();
+  f.diagnostics.mockClear();
+  const original = f.fetcher.getMockImplementation()!;
+  f.fetcher.mockImplementation(async (url, init) =>
+    init?.method === "PATCH"
+      ? Response.json({ error: { code: "id_not_found" } }, { status: 404 })
+      : await original(url, init),
+  );
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  const diagnostic = f.diagnostics.mock.calls[0]?.[0].gatewayBindings;
+  expect(diagnostic).toMatchObject({
+    stage: "write",
+    result: "failed",
+    method: "PATCH",
+    httpStatus: 404,
+    requestTarget: "project_environment",
+  });
+  expect(diagnostic).not.toHaveProperty("trustedSourcesVisibility");
+  expect(diagnostic).not.toHaveProperty("missingApprovedPairCount");
 });
 
 it("adds only approved source pairs while preserving self, unrelated projects, external sources, and CI policy", async () => {
@@ -1839,6 +1902,7 @@ it("reports a missing prerequisite without changing bind or reconciliation outco
   expect(f.diagnostics.mock.calls[0]?.[0]).toMatchObject({
     gatewayBindings: { mode: "bind", stage: "public_environment", result: "failed" },
   });
+  expect(f.diagnostics.mock.calls[0]?.[0].gatewayBindings).not.toHaveProperty("requestTarget");
   expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
   expect(f.diagnostics).toHaveBeenCalledTimes(2);
   expect(f.diagnostics.mock.calls[1]?.[0]).toMatchObject({
@@ -1947,6 +2011,9 @@ it("drops nonclosed Gateway metadata through the existing private diagnostic pro
     "mode",
     "stage",
     "method",
+    "requestTarget",
+    "trustedSourcesVisibility",
+    "missingApprovedPairCount",
     "statusCategory",
     "httpStatus",
     "providerCode",
