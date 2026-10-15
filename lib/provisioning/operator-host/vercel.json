@@ -7,7 +7,8 @@
       "entrypoint": "entrypoint.ts",
       "functions": {
         "entrypoint.ts": {
-          "includeFiles": "node_modules/.pnpm/eve*/node_modules/eve/**"
+          "includeFiles": "node_modules/.pnpm/eve*/node_modules/eve/**",
+          "maxDuration": 1800
         }
       }
     }
