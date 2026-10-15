@@ -58,6 +58,7 @@ approval of exact frozen plans before any effect.
 
    Outside-root source access lets the operator import the shared Builder
    composition without changing its service root.
+
 2. Configure deployment protection and Trusted Sources for the exact approved
    Builder caller team/project/environment. The client sends its verified workload
    bearer for operator authorization and the provider Trusted Sources header for
@@ -88,6 +89,7 @@ approval of exact frozen plans before any effect.
    are defined in the [official Vercel SDK deployment request schema](https://github.com/vercel/sdk/blob/main/docs/models/createdeploymentrequestbody.md).
 
    Observe the exact immutable operator deployment URL and source/target identity.
+
 4. Exercise unauthorized/mismatched callers and actual owner-approved Preview
    operations, independent provider/database readback, recovery and isolation.
 
