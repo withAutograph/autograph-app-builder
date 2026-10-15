@@ -1326,6 +1326,7 @@ describe("protected hosted operator boundary", () => {
     "id",
     "key",
     "branch",
+    "gitBranch",
     "projectId",
     "operationRef",
     "comment",
@@ -1353,14 +1354,13 @@ describe("protected hosted operator boundary", () => {
           if (original === undefined) {
             throw new Error("Missing fixture row");
           }
-          const arbitraryValue = field === "key" ? "UNRELATED_KEY" : "foreign";
-          const changed = {
-            ...original,
-            [field]:
-              field === "operationRef" || field === "pendingOperationRef"
-                ? "be91e77e-f23e-49d8-b6a8-a8a5acb36dfe"
-                : arbitraryValue,
-          };
+          let changedValue: string | null = field === "key" ? "UNRELATED_KEY" : "foreign";
+          if (field === "gitBranch") {
+            changedValue = null;
+          } else if (field === "operationRef" || field === "pendingOperationRef") {
+            changedValue = "be91e77e-f23e-49d8-b6a8-a8a5acb36dfe";
+          }
+          const changed = { ...original, [field]: changedValue };
           if (field === "operationRef") {
             changed.comment = `App Builder protected operator ${changed.operationRef}`;
           }

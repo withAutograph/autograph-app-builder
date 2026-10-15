@@ -73,6 +73,9 @@ export const createPostgresHostedRuntimeJournalStore = (
           createdAt: input.now,
           record: hostedRuntimeJournalRecordSchema.parse({
             approvedByCallId: input.approvedByCallId,
+            ...(input.environmentGitBranch === undefined
+              ? {}
+              : { environmentGitBranch: input.environmentGitBranch }),
             kind: "app-runtime",
             operator: input.operator,
             request: input.target,

@@ -142,7 +142,11 @@ interface RecordedRequest {
   body?: Record<string, z.infer<typeof z.json>>;
 }
 
-const fixture = (configurationId?: string | null, observationGuards = false) => {
+const fixture = (
+  configurationId?: string | null,
+  observationGuards = false,
+  productionBranch?: string,
+) => {
   const rows: Record<string, z.infer<typeof z.json>>[] = [
     {
       id: "auth-secret",
@@ -258,6 +262,7 @@ const fixture = (configurationId?: string | null, observationGuards = false) => 
     target: structuredClone(target),
     workerCheckpoints: [],
   };
+  const project = { id: gateway.projectId, accountId: target.scopeId, link: { productionBranch } };
   const fetcher = vi.fn(async (url: URL | string | Request, init?: RequestInit) => {
     const parsed = new URL(url instanceof Request ? url.url : url.toString());
     const method = init?.method ?? "GET";
@@ -276,6 +281,9 @@ const fixture = (configurationId?: string | null, observationGuards = false) => 
     if (method === "GET" && parsed.pathname.startsWith("/v1/")) {
       const row = rows.find((item) => item.id === parsed.pathname.split("/").at(-1));
       return Response.json({ value: row?.value });
+    }
+    if (method === "GET" && parsed.pathname === `/v9/projects/${gateway.projectId}`) {
+      return Response.json(project);
     }
     if (method === "GET") {
       return Response.json({ envs: rows.map(({ value: _value, ...row }) => row) });
@@ -337,6 +345,7 @@ const fixture = (configurationId?: string | null, observationGuards = false) => 
     readCredential,
   });
   return {
+    project,
     diagnostics,
     assertAuthorized,
     assertCanonicalOwner,
@@ -359,6 +368,134 @@ const fixture = (configurationId?: string | null, observationGuards = false) => 
     writer,
   };
 };
+
+it("writes generic Gateway Preview scope for the production branch while keeping logical branch identity", async () => {
+  const f = fixture(undefined, false, gateway.branch);
+  for (const row of f.rows) {
+    row.gitBranch = null;
+  }
+  const result = await f.writer.bind(f.input);
+  const posts = f.requests.filter((request) => request.method === "POST");
+  expect(posts).toHaveLength(5);
+  expect(posts.every((request) => !Object.hasOwn(request.body ?? {}, "gitBranch"))).toBe(true);
+  expect(result.rows.every((row) => row.branch === gateway.branch && row.gitBranch === null)).toBe(
+    true,
+  );
+  expect(
+    f.requests.filter((request) => request.path === `/v9/projects/${gateway.projectId}`),
+  ).toHaveLength(1);
+  for (const row of f.rows) {
+    delete row.gitBranch;
+  }
+  f.requests.length = 0;
+  expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "applied" });
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+  expect(
+    f.requests.filter((request) => request.path === `/v9/projects/${gateway.projectId}`),
+  ).toHaveLength(1);
+});
+
+it("preserves inherited branch-specific Gateway selectors and optional absence after production branch changes", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input);
+  const saved = structuredClone(f.input.gatewayEnvironmentRows);
+  f.project.link.productionBranch = gateway.branch;
+  f.requests.length = 0;
+  expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "applied" });
+  expect(f.input.gatewayEnvironmentRows).toEqual(saved);
+  expect(f.input.gatewayEnvironmentRows?.every((row) => !Object.hasOwn(row, "gitBranch"))).toBe(
+    true,
+  );
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+});
+
+it("recovers an omitted-branch Gateway POST only in its exact generic scope and desired value", async () => {
+  const f = fixture(undefined, false, gateway.branch);
+  for (const row of f.rows) {
+    row.gitBranch = null;
+  }
+  f.setLosePostResponse(true);
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  f.setLosePostResponse(false);
+  await f.writer.bind(f.input);
+  expect(f.requests.filter((request) => request.method === "POST")).toHaveLength(5);
+  expect(f.input.gatewayEnvironmentRows?.every((row) => row.gitBranch === null)).toBe(true);
+});
+
+it("rejects a generic Gateway row substituted for a saved branch-specific row", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input);
+  const saved = structuredClone(f.input.gatewayEnvironmentRows);
+  const managed = f.rows.find((row) => row.key === "AUTH_DATABASE_RESOURCE");
+  if (managed === undefined) {
+    throw new Error("Missing managed row");
+  }
+  managed.gitBranch = null;
+  f.project.link.productionBranch = gateway.branch;
+  f.requests.length = 0;
+  expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
+  expect(f.input.gatewayEnvironmentRows).toEqual(saved);
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+});
+
+it("recovers an uncheckpointed logical-branch Gateway POST after production branch metadata changes", async () => {
+  const f = fixture();
+  f.setLosePostResponse(true);
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.input.gatewayEnvironmentRows).toEqual([]);
+  f.setLosePostResponse(false);
+  f.project.link.productionBranch = gateway.branch;
+  const result = await f.writer.bind(f.input);
+  const recovered = result.rows.find((row) => row.key === "AUTH_DATABASE_RESOURCE");
+  expect(recovered).toMatchObject({ branch: gateway.branch, operationRef: f.input.operationRef });
+  expect(recovered).not.toHaveProperty("gitBranch");
+  const posts = f.requests.filter((request) => request.method === "POST");
+  expect(posts.filter((request) => request.body?.key === "AUTH_DATABASE_RESOURCE")).toHaveLength(1);
+  expect(
+    posts
+      .filter((request) => request.body?.key !== "AUTH_DATABASE_RESOURCE")
+      .every((request) => !Object.hasOwn(request.body ?? {}, "gitBranch")),
+  ).toBe(true);
+});
+
+it("does not recover an uncheckpointed generic Gateway row when the mapped scope is branch-specific", async () => {
+  const f = fixture(undefined, false, gateway.branch);
+  for (const row of f.rows) {
+    row.gitBranch = null;
+  }
+  f.setLosePostResponse(true);
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  f.setLosePostResponse(false);
+  f.project.link.productionBranch = "another-branch";
+  f.requests.length = 0;
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+});
+
+it("rejects foreign project metadata before a Gateway environment write", async () => {
+  const f = fixture(undefined, false, gateway.branch);
+  f.project.accountId = "another-owner";
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+});
+
+it("does not recover a generic Gateway POST when its value changed before checkpointing", async () => {
+  const f = fixture(undefined, false, gateway.branch);
+  for (const row of f.rows) {
+    row.gitBranch = null;
+  }
+  f.setLosePostResponse(true);
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  f.setLosePostResponse(false);
+  const created = f.rows.find((row) => row.key === "AUTH_DATABASE_RESOURCE");
+  if (created === undefined) {
+    throw new Error("Missing interrupted row");
+  }
+  created.value = "unapproved-value";
+  f.requests.length = 0;
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+});
 
 it.each([
   ["bind", "credential"],
@@ -431,7 +568,11 @@ it.each([
       ),
     ).toBe(true);
     expect(
-      f.requests.every((request) => request.path.includes(`/projects/${approved.projectId}/`)),
+      f.requests.every(
+        (request) =>
+          request.path === `/v9/projects/${approved.projectId}` ||
+          request.path.includes(`/projects/${approved.projectId}/`),
+      ),
     ).toBe(true);
     const posts = f.requests.filter((request) => request.method === "POST");
     expect(posts).toHaveLength(method === "bind" ? 5 : 0);
@@ -505,12 +646,12 @@ it.each([undefined, null, "", target.installationId])(
 it("uses canonical observation guards for GETs and full guards around every write and the bind", async () => {
   const f = fixture(undefined, true);
   await f.writer.bind(f.input);
-  expect(f.requests).toHaveLength(47);
+  expect(f.requests).toHaveLength(48);
   expect(f.assertAuthorized).toHaveBeenCalledTimes(22);
   expect(f.assertCurrent).toHaveBeenCalledTimes(22);
-  expect(f.assertCurrentObservation).toHaveBeenCalledTimes(194);
-  expect(f.assertCanonicalOwner).toHaveBeenCalledTimes(194);
-  expect(f.readCredential).toHaveBeenCalledTimes(47);
+  expect(f.assertCurrentObservation).toHaveBeenCalledTimes(198);
+  expect(f.assertCanonicalOwner).toHaveBeenCalledTimes(198);
+  expect(f.readCredential).toHaveBeenCalledTimes(48);
 });
 
 it("fully brackets a read-only replay while checking current observation authority on every read", async () => {
@@ -521,10 +662,10 @@ it("fully brackets a read-only replay while checking current observation authori
   f.assertCurrent.mockClear();
   f.assertCurrentObservation.mockClear();
   await f.writer.bind(f.input);
-  expect(f.requests).toHaveLength(29);
+  expect(f.requests).toHaveLength(30);
   expect(f.assertAuthorized).toHaveBeenCalledTimes(2);
   expect(f.assertCurrent).toHaveBeenCalledTimes(2);
-  expect(f.assertCurrentObservation).toHaveBeenCalledTimes(122);
+  expect(f.assertCurrentObservation).toHaveBeenCalledTimes(126);
 });
 
 it("falls back to full guards when the observation callback is absent", async () => {
@@ -533,7 +674,7 @@ it("falls back to full guards when the observation callback is absent", async ()
   await f.writer.bind(f.input);
   expect(f.assertCurrentObservation).not.toHaveBeenCalled();
   expect(f.assertCanonicalOwner).not.toHaveBeenCalled();
-  expect(f.assertAuthorized).toHaveBeenCalledTimes(216);
+  expect(f.assertAuthorized).toHaveBeenCalledTimes(220);
 });
 
 it("falls back to full guards when the canonical callback is absent", async () => {
@@ -541,7 +682,7 @@ it("falls back to full guards when the canonical callback is absent", async () =
   f.input.assertCurrentObservation = f.assertCurrentObservation;
   await f.writer.bind(f.input);
   expect(f.assertCurrentObservation).not.toHaveBeenCalled();
-  expect(f.assertAuthorized).toHaveBeenCalledTimes(216);
+  expect(f.assertAuthorized).toHaveBeenCalledTimes(220);
 });
 
 it.each(["observation", "canonical"] as const)(
@@ -582,7 +723,7 @@ it("rejects a provider grant lost at the final full replay boundary", async () =
   f.requests.length = 0;
   f.assertAuthorized.mockResolvedValueOnce().mockRejectedValue(new Error("provider grant revoked"));
   await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
-  expect(f.requests).toHaveLength(29);
+  expect(f.requests).toHaveLength(30);
   expect(f.requests.every((request) => request.method === "GET")).toBe(true);
 });
 
@@ -602,7 +743,7 @@ it("creates Gateway rows with fresh metadata and only selected row reads before 
   const f = fixture();
   const result = await f.writer.bind(f.input);
   expect(result.rows).toHaveLength(5);
-  expect(f.requests).toHaveLength(47);
+  expect(f.requests).toHaveLength(48);
   expect(f.requests.filter((request) => request.method === "POST")).toHaveLength(5);
   expect(
     f.requests.filter((request) => request.path.startsWith("/v10/") && request.method === "GET"),
@@ -635,7 +776,7 @@ it("replays current Gateway values with two fresh inventories and no per-key ins
   const result = await f.writer.bind(f.input);
   expect(result.rows).toHaveLength(5);
   expect(f.requests.every((request) => request.method === "GET")).toBe(true);
-  expect(f.requests).toHaveLength(29);
+  expect(f.requests).toHaveLength(30);
   expect(f.requests.filter((request) => request.path.startsWith("/v10/"))).toHaveLength(2);
   expect(f.readAuthRuntimeUrl).toHaveBeenCalledTimes(2);
 });
@@ -771,8 +912,13 @@ it("checks the fresh execution context before making any provider mutation", asy
   expect(f.requests).toHaveLength(0);
 });
 
-const adoptionFixture = async () => {
-  const f = fixture();
+const adoptionFixture = async (generic = false) => {
+  const f = fixture(undefined, false, generic ? gateway.branch : undefined);
+  if (generic) {
+    for (const row of f.rows) {
+      row.gitBranch = null;
+    }
+  }
   const priorOperation = "11111111-1111-4111-8111-111111111111";
   f.input.operationRef = priorOperation;
   f.input.deliveryCandidates![0].operationRef = priorOperation;
@@ -823,6 +969,23 @@ const adoptionFixture = async () => {
   f.checkpointGatewayEnvironment.mockClear();
   return { ...f, canonical };
 };
+
+it("preserves generic canonical Gateway scope through adoption and rejects local selector tampering", async () => {
+  const f = await adoptionFixture(true);
+  const result = await f.writer.bind(f.input);
+  expect(
+    result.rows.every(
+      (row) => row.gitBranch === null && row.operationRef === f.canonical[0]?.operationRef,
+    ),
+  ).toBe(true);
+  f.input.gatewayEnvironmentRows = f.input.gatewayEnvironmentRows?.map((row) => ({
+    ...row,
+    gitBranch: gateway.branch,
+  }));
+  f.requests.length = 0;
+  expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
+  expect(f.requests).toHaveLength(0);
+});
 
 it("proves canonical ownership during the actual Auth resource effect with GET-only access", async () => {
   const f = await adoptionFixture();

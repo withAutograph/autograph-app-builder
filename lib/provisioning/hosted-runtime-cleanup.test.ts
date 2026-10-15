@@ -95,7 +95,7 @@ const fixture = () => {
       z.object({
         comment: z.string(),
         configurationId: z.string(),
-        gitBranch: z.string(),
+        gitBranch: z.string().nullable(),
         id: z.string(),
         key: z.string(),
         target: z.array(z.string()),
@@ -183,6 +183,7 @@ const fixture = () => {
         framework: "services",
         id: target.projectId,
         rootDirectory: ".",
+        link: { productionBranch: target.branch },
       },
     );
   });
@@ -322,4 +323,18 @@ describe("approved hosted runtime cleanup", () => {
     ).toHaveLength(3);
     expect(f.environment.some((entry) => entry.key === "SPEND_REVIEW_DATABASE_URL")).toBe(false);
   });
+});
+
+it("cleans saved generic managed rows while retaining the logical branch and native installer scope", async () => {
+  const f = fixture();
+  f.read().record.environmentGitBranch = null;
+  for (const row of f.environment) {
+    if (row.comment.startsWith("App Builder runtime")) {
+      row.gitBranch = null;
+    }
+  }
+  expect(await cleanupHostedRuntime(f.input)).toMatchObject({ status: "cleaned" });
+  expect(f.read().record.request.branch).toBe(target.branch);
+  expect(f.environment.map((row) => row.id)).toEqual(["native", "guard"]);
+  expect(f.environment.every((row) => row.gitBranch === target.branch)).toBe(true);
 });

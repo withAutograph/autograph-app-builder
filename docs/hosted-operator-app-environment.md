@@ -42,6 +42,31 @@ verification configuration. A caller-supplied flag or plausible project ID
 cannot replace that read. Vercel Services share project environment variables;
 filtering one returned dictionary does not establish physical isolation.
 
+## Native Preview environment scope
+
+Keep the approved project and logical Git branch unchanged when binding a
+Preview deployment. Vercel's [branch-specific Preview variables](https://vercel.com/docs/environment-variables#preview-environment-variables)
+apply to non-Production branches. When the selected branch equals the actual
+project's `link.productionBranch`, create managed Preview variables without a
+`gitBranch` selector. Provider readback represents that generic Preview scope
+as `null` or an omitted field. Other branches retain their branch-specific
+selector; missing production-branch metadata retains the historical selector.
+
+Private managed row references keep `branch` as the approved logical identity
+and record physical scope in optional `gitBranch` metadata. An absent field on
+a historical reference means its saved logical branch; explicit `null` means
+generic Preview. Preserve historical omission when carrying approved rows.
+Readback, recovery and cleanup use the saved physical selector together with
+the existing row ID, owner comment, installation and value proofs. Generic
+scope alone supplies no ownership. The legacy runtime saves its chosen physical
+selector atomically with a new private reservation.
+
+Apply this mapping directly in the shared provider adapters. Focused tests cover
+successful binding, interrupted-write recovery, ownership isolation and cleanup;
+they should allow ordinary app and branch changes. Native Neon installer
+credential reads retain the exact selected branch and integration authority
+described in the [legacy runtime contract](hosted-app-runtime.md#provider-prerequisites).
+
 ## App projection
 
 Exactly these environment keys are permitted:

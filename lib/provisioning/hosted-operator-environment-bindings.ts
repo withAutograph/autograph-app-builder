@@ -12,6 +12,12 @@ import type {
   ProtectedHostedOperatorDependencies,
 } from "./hosted-operator-service";
 
+import {
+  matchesPreviewEnvironmentGitBranch,
+  resolveNativePreviewEnvironmentGitBranch,
+  savedPreviewEnvironmentGitBranch,
+} from "./native-preview-environment-scope";
+
 const providerRow = z.object({
   comment: z.string().optional(),
   configurationId: z.string().nullable().optional(),
@@ -105,6 +111,18 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
       await guard();
       return result;
     };
+    let writeGitBranch: Promise<string | null> | undefined;
+    const previewGitBranch = () => {
+      writeGitBranch ??= (async () => {
+        const project = await request(`/v9/projects/${encodeURIComponent(target.projectId)}`);
+        const observed = z.object({ id: z.string(), accountId: z.string() }).parse(project);
+        if (observed.id !== target.projectId || observed.accountId !== target.scopeId) {
+          throw unavailable();
+        }
+        return resolveNativePreviewEnvironmentGitBranch(deploymentTarget.branch, project);
+      })();
+      return writeGitBranch;
+    };
     const list = async () =>
       z
         .object({ envs: z.array(providerRow) })
@@ -115,29 +133,42 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
         row.gitBranch === undefined ||
         row.gitBranch === deploymentTarget.branch) &&
       Object.hasOwn(expected, row.key);
-    const owned = (row: ProviderRow) =>
-      row.target.length === 1 &&
-      row.target[0] === "preview" &&
-      row.gitBranch === deploymentTarget.branch &&
-      (row.configurationId === undefined ||
-        row.configurationId === null ||
-        row.configurationId === "" ||
-        row.configurationId === target.installationId) &&
-      row.type === "encrypted" &&
-      (row.comment === comment ||
-        (input.managedEnvironment ?? []).some(
-          (known) => known.id === row.id && known.key === row.key && known.comment === row.comment,
-        ));
-    const reference = (row: ProviderRow): ManagedOperatorEnvironmentRow => ({
-      branch: deploymentTarget.branch,
-      comment: z.string().min(1).parse(row.comment),
-      id: row.id,
-      key: row.key,
-      operationRef:
-        (input.managedEnvironment ?? []).find((known) => known.id === row.id)?.operationRef ??
-        input.operationRef,
-      projectId: target.projectId,
-    });
+    const owned = (row: ProviderRow, gitBranch: string | null) => {
+      const known = (input.managedEnvironment ?? []).find((saved) => saved.id === row.id);
+      return (
+        row.target.length === 1 &&
+        row.target[0] === "preview" &&
+        (known === undefined
+          ? matchesPreviewEnvironmentGitBranch(row.gitBranch, gitBranch) ||
+            row.gitBranch === deploymentTarget.branch
+          : matchesPreviewEnvironmentGitBranch(
+              row.gitBranch,
+              savedPreviewEnvironmentGitBranch(known),
+            )) &&
+        (row.configurationId === undefined ||
+          row.configurationId === null ||
+          row.configurationId === "" ||
+          row.configurationId === target.installationId) &&
+        row.type === "encrypted" &&
+        (row.comment === comment ||
+          (input.managedEnvironment ?? []).some(
+            (saved) =>
+              saved.id === row.id && saved.key === row.key && saved.comment === row.comment,
+          ))
+      );
+    };
+    const reference = (row: ProviderRow): ManagedOperatorEnvironmentRow => {
+      const known = (input.managedEnvironment ?? []).find((saved) => saved.id === row.id);
+      return {
+        ...(known ?? { gitBranch: row.gitBranch ?? null }),
+        branch: deploymentTarget.branch,
+        comment: z.string().min(1).parse(row.comment),
+        id: row.id,
+        key: row.key,
+        operationRef: known?.operationRef ?? input.operationRef,
+        projectId: target.projectId,
+      };
+    };
     const validateKnown = () => {
       const known = input.managedEnvironment ?? [];
       if (
@@ -157,10 +188,10 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
     };
     const inspect = async (verifyValues = true) => {
       const known = validateKnown();
-      const listed = await list();
+      const [gitBranch, listed] = await Promise.all([previewGitBranch(), list()]);
       const rows = listed.filter(relevant);
       if (
-        rows.some((row) => !owned(row)) ||
+        rows.some((row) => !owned(row, gitBranch)) ||
         new Set(rows.map((row) => row.key)).size !== rows.length ||
         known.some((row) => rows.some((actual) => actual.key === row.key && actual.id !== row.id))
       ) {
@@ -207,7 +238,10 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
         if (
           row.projectId !== target.projectId ||
           actual.key !== row.key ||
-          actual.gitBranch !== row.branch ||
+          !matchesPreviewEnvironmentGitBranch(
+            actual.gitBranch,
+            savedPreviewEnvironmentGitBranch(row),
+          ) ||
           actual.comment !== row.comment ||
           actual.type !== "encrypted" ||
           actual.target.length !== 1 ||
@@ -236,6 +270,7 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
       guard,
       inspect,
       reference,
+      previewGitBranch,
       request,
       target: deploymentTarget,
     };
@@ -268,12 +303,13 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
               { type: "encrypted", value },
             );
           } else {
+            const gitBranch = await io.previewGitBranch();
             await io.request(
               `/v10/projects/${encodeURIComponent(io.target.projectId)}/env`,
               "POST",
               {
                 comment: io.comment,
-                gitBranch: io.target.branch,
+                ...(gitBranch === null ? {} : { gitBranch }),
                 key,
                 target: ["preview"],
                 type: "encrypted",

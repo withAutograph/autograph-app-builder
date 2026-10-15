@@ -1,4 +1,5 @@
 import { recoverOriginalApprovedPlan } from "./hosted-operator-approved-plan";
+import { savedPreviewEnvironmentGitBranch } from "./native-preview-environment-scope";
 import { isDeepStrictEqual } from "node:util";
 import {
   retainAppDeliveryHistory,
@@ -1165,7 +1166,9 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                                 "operationRef",
                                 "projectId",
                               ] as const
-                            ).every((key) => saved[key] === row[key]);
+                            ).every((key) => saved[key] === row[key]) &&
+                            savedPreviewEnvironmentGitBranch(saved) ===
+                              savedPreviewEnvironmentGitBranch(row);
                           const foreignPending =
                             row.pendingOperationRef !== undefined &&
                             row.pendingOperationRef !== operationRef;

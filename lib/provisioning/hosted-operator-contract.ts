@@ -52,6 +52,7 @@ const databaseResource = z
 /** Non-secret provider snapshot approved for read-only cross-journal ownership lookup. */
 export const canonicalGatewayEnvironmentRowSchema = z.strictObject({
   branch: id,
+  gitBranch: id.nullable().optional(),
   comment: id,
   id,
   key: z.enum([
@@ -202,6 +203,7 @@ export type NormalActorPreparation = z.infer<typeof normalActorPreparationSchema
 export const managedOperatorEnvironmentRowSchema = z
   .strictObject({
     branch: id,
+    gitBranch: id.nullable().optional(),
     comment: id,
     id,
     key: z.string().regex(/^[A-Z][A-Z0-9_]{0,199}$/u),

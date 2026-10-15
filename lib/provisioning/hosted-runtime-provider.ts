@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  matchesPreviewEnvironmentGitBranch,
+  resolveNativePreviewEnvironmentGitBranch,
+} from "./native-preview-environment-scope";
 
 import type { VercelInstallationBinding } from "../integrations/vercel-installation";
 import type { HostedRuntimeTarget } from "./hosted-runtime-journal";
@@ -30,7 +34,7 @@ const environmentSchema = z.looseObject({
 const providerJsonSchema = z.json();
 interface RuntimeVariableInput {
   comment: string;
-  gitBranch: string;
+  gitBranch?: string;
   key: string;
   target: ["preview"];
   type: "encrypted";
@@ -41,8 +45,11 @@ const environmentsSchema = z.union([
   z.object({ envs: z.array(environmentSchema) }).transform(({ envs }) => envs),
 ]);
 
-const exactPreviewVariable = (environment: z.infer<typeof environmentSchema>, branch: string) =>
-  environment.gitBranch === branch &&
+const exactPreviewVariable = (
+  environment: z.infer<typeof environmentSchema>,
+  branch: string | null,
+) =>
+  matchesPreviewEnvironmentGitBranch(environment.gitBranch, branch) &&
   (Array.isArray(environment.target)
     ? environment.target.length === 1 && environment.target[0] === "preview"
     : environment.target === "preview");
@@ -81,6 +88,7 @@ export const createHostedRuntimeVercelProvider = (input: {
   credential: { binding: VercelInstallationBinding; token: string };
   fetch?: typeof fetch;
   signal?: AbortSignal;
+  environmentGitBranch?: string | null;
 }) => {
   const { binding } = input.credential;
   if (
@@ -92,6 +100,9 @@ export const createHostedRuntimeVercelProvider = (input: {
     throw new HostedRuntimeProviderError("authorization_required");
   }
   const projectPath = encodeURIComponent(input.target.projectId);
+  let environmentGitBranch =
+    input.environmentGitBranch === undefined ? input.target.branch : input.environmentGitBranch;
+  let observedProject: unknown;
   const request = async (
     path: string,
     query: Record<string, string> = {},
@@ -150,10 +161,13 @@ export const createHostedRuntimeVercelProvider = (input: {
       throw new HostedRuntimeProviderError("provider_unavailable");
     }
   };
-  const environments = async () => {
+  const environments = async (physicalBranch = environmentGitBranch) => {
     try {
       return environmentsSchema.parse(
-        await request(`/v10/projects/${projectPath}/env`, { gitBranch: input.target.branch }),
+        await request(
+          `/v10/projects/${projectPath}/env`,
+          physicalBranch === null ? {} : { gitBranch: physicalBranch },
+        ),
       );
     } catch (error) {
       if (error instanceof HostedRuntimeProviderError) {
@@ -162,7 +176,11 @@ export const createHostedRuntimeVercelProvider = (input: {
       throw new HostedRuntimeProviderError("provider_unavailable");
     }
   };
-  const decrypted = async (id: string, allowGlobalGuard = false) => {
+  const decrypted = async (
+    id: string,
+    allowGlobalGuard = false,
+    physicalBranch = environmentGitBranch,
+  ) => {
     const result = environmentSchema.safeParse(
       await request(`/v1/projects/${projectPath}/env/${encodeURIComponent(id)}`),
     );
@@ -175,7 +193,7 @@ export const createHostedRuntimeVercelProvider = (input: {
       (result.data.gitBranch === undefined || result.data.gitBranch === null);
     if (
       result.data.id !== id ||
-      (!exactPreviewVariable(result.data, input.target.branch) && !guardScope)
+      (!exactPreviewVariable(result.data, physicalBranch) && !guardScope)
     ) {
       throw new HostedRuntimeProviderError("resource_mismatch");
     }
@@ -194,12 +212,13 @@ export const createHostedRuntimeVercelProvider = (input: {
     preserveForeign = false,
   ) => {
     const comment = runtimeId === undefined ? undefined : runtimeComment(runtimeId);
+    const physicalBranch = environmentGitBranch;
     const selected = new Map<string, z.infer<typeof environmentSchema>>();
     for (const key of keys) {
       const matches = observed.filter(
         (environment) =>
           environment.key === key &&
-          environment.gitBranch === input.target.branch &&
+          matchesPreviewEnvironmentGitBranch(environment.gitBranch, physicalBranch) &&
           hasPreviewTarget(environment),
       );
       const [match] = matches;
@@ -211,7 +230,7 @@ export const createHostedRuntimeVercelProvider = (input: {
       }
       const integrationOwned = match.configurationId !== undefined && match.configurationId !== "";
       const wrongOwner = comment !== undefined && match.comment !== comment;
-      if (!exactPreviewVariable(match, input.target.branch) || integrationOwned) {
+      if (!exactPreviewVariable(match, physicalBranch) || integrationOwned) {
         throw new HostedRuntimeProviderError("resource_mismatch");
       }
       if (wrongOwner && !preserveForeign) {
@@ -238,7 +257,7 @@ export const createHostedRuntimeVercelProvider = (input: {
       Object.keys(values).map(async (key) => {
         const matches = observed.filter(
           (environment) =>
-            environment.key === key && exactPreviewVariable(environment, input.target.branch),
+            environment.key === key && exactPreviewVariable(environment, environmentGitBranch),
         );
         const [match] = matches;
         if (matches.length !== 1 || match === undefined) {
@@ -258,26 +277,39 @@ export const createHostedRuntimeVercelProvider = (input: {
       }),
     );
   };
+  const assertProject = async () => {
+    const project = z
+      .object({
+        accountId: z.string(),
+        framework: z.literal("services"),
+        id: z.string(),
+        rootDirectory: z.string().nullable(),
+        link: z.unknown().optional(),
+      })
+      .safeParse(await request(`/v9/projects/${projectPath}`));
+    if (
+      !project.success ||
+      project.data.id !== input.target.projectId ||
+      project.data.accountId !== binding.scopeId ||
+      ![null, "", "."].includes(project.data.rootDirectory)
+    ) {
+      throw new HostedRuntimeProviderError("resource_mismatch");
+    }
+    observedProject = project.data;
+  };
   return {
     assertEnvironmentAvailability,
     assertEnvironmentBindings,
-    async assertProject() {
-      const project = z
-        .object({
-          accountId: z.string(),
-          framework: z.literal("services"),
-          id: z.string(),
-          rootDirectory: z.string().nullable(),
-        })
-        .safeParse(await request(`/v9/projects/${projectPath}`));
-      if (
-        !project.success ||
-        project.data.id !== input.target.projectId ||
-        project.data.accountId !== binding.scopeId ||
-        ![null, "", "."].includes(project.data.rootDirectory)
-      ) {
-        throw new HostedRuntimeProviderError("resource_mismatch");
+    assertProject,
+    async resolveEnvironmentGitBranch() {
+      if (observedProject === undefined) {
+        await assertProject();
       }
+      environmentGitBranch = resolveNativePreviewEnvironmentGitBranch(
+        input.target.branch,
+        observedProject,
+      );
+      return environmentGitBranch;
     },
     async bindEnvironment(
       values: Readonly<Record<string, string>>,
@@ -300,7 +332,7 @@ export const createHostedRuntimeVercelProvider = (input: {
               options === undefined
                 ? `App Builder isolated runtime for ${input.target.appId}`
                 : runtimeComment(options.runtimeId),
-            gitBranch: input.target.branch,
+            ...(environmentGitBranch === null ? {} : { gitBranch: environmentGitBranch }),
             key,
             target: ["preview"],
             type: "encrypted",
@@ -325,7 +357,7 @@ export const createHostedRuntimeVercelProvider = (input: {
       return keys;
     },
     async readClusterCredential() {
-      const observed = await environments();
+      const observed = await environments(input.target.branch);
       const candidates = observed.filter(
         (environment) =>
           environment.key === "DATABASE_URL_UNPOOLED" &&
@@ -341,7 +373,7 @@ export const createHostedRuntimeVercelProvider = (input: {
         throw new HostedRuntimeProviderError("connection_required");
       }
       const configurationId = z.string().min(1).parse(reference.configurationId);
-      const secret = await decrypted(reference.id);
+      const secret = await decrypted(reference.id, false, input.target.branch);
       if (secret.configurationId !== reference.configurationId || secret.key !== reference.key) {
         throw new HostedRuntimeProviderError("resource_mismatch");
       }
@@ -369,7 +401,7 @@ export const createHostedRuntimeVercelProvider = (input: {
       if (guard === undefined || guardCount !== 1) {
         throw new HostedRuntimeProviderError("connection_required");
       }
-      const productionGuard = await decrypted(guard.id, true);
+      const productionGuard = await decrypted(guard.id, true, input.target.branch);
       if (
         productionGuard.key !== "AUTH_PRODUCTION_DATABASE_IDENTITY" ||
         !/^[a-z0-9.-]+\.neon\.tech\/[a-zA-Z0-9_.-]+$/u.test(productionGuard.value ?? "")

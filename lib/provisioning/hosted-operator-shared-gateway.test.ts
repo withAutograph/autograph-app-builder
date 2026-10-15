@@ -4,6 +4,11 @@ import {
   describeHostedOperatorSharedGateway,
 } from "./hosted-operator-shared-gateway";
 import type { SharedAuthAdoption } from "./hosted-operator-contract";
+import {
+  resolveNativePreviewEnvironmentGitBranch,
+  savedPreviewEnvironmentGitBranch,
+  matchesPreviewEnvironmentGitBranch,
+} from "./native-preview-environment-scope";
 
 const operationRef = "7a111111-1111-4111-8111-111111111111";
 const source = {
@@ -56,6 +61,46 @@ const adoption = (): SharedAuthAdoption => ({
 });
 
 describe("canonical shared Gateway journal snapshot", () => {
+  it("maps only the actual native production branch to generic Preview without inventing missing metadata", () => {
+    expect(
+      resolveNativePreviewEnvironmentGitBranch("main", { link: { productionBranch: "main" } }),
+    ).toBeNull();
+    for (const project of [
+      {},
+      { link: null },
+      { link: {} },
+      { link: { productionBranch: "trunk" } },
+      { productionBranch: "main" },
+    ]) {
+      expect(resolveNativePreviewEnvironmentGitBranch("main", project)).toBe("main");
+    }
+    expect(
+      resolveNativePreviewEnvironmentGitBranch("trunk", { link: { productionBranch: "trunk" } }),
+    ).toBeNull();
+  });
+  it("preserves legacy physical branch selection and normalizes only generic provider null or omission", () => {
+    expect(savedPreviewEnvironmentGitBranch({ branch: "main" })).toBe("main");
+    expect(savedPreviewEnvironmentGitBranch({ branch: "main", gitBranch: null })).toBeNull();
+    expect(savedPreviewEnvironmentGitBranch({ branch: "main", gitBranch: "historic" })).toBe(
+      "historic",
+    );
+    expect(matchesPreviewEnvironmentGitBranch(undefined, null)).toBe(true);
+    expect(matchesPreviewEnvironmentGitBranch(null, null)).toBe(true);
+    expect(matchesPreviewEnvironmentGitBranch("main", null)).toBe(false);
+    expect(matchesPreviewEnvironmentGitBranch(undefined, "main")).toBe(false);
+  });
+  it("carries explicit generic physical scope through canonical approval while preserving legacy absence", () => {
+    const legacy = describeHostedOperatorSharedGateway(source, rows());
+    expect(legacy.every((row) => !Object.hasOwn(row, "gitBranch"))).toBe(true);
+    const generic = rows().map((row) => ({ ...row, gitBranch: null }));
+    const approved = describeHostedOperatorSharedGateway(source, generic);
+    expect(approved.every((row) => row.gitBranch === null)).toBe(true);
+    const target = { ...source, authAdoption: { ...adoption(), gatewayEnvironment: approved } };
+    expect(assertHostedOperatorSharedGateway(target, source, generic)).toEqual(approved);
+    expect(() => assertHostedOperatorSharedGateway(target, source, rows())).toThrow(
+      "resource_mismatch",
+    );
+  });
   it("retains prior operations and compares the complete snapshot independent of row order", () => {
     const target = { ...source, authAdoption: adoption() };
     expect(assertHostedOperatorSharedGateway(target, source, rows().toReversed())).toEqual(

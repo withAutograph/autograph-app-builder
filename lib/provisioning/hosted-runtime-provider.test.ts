@@ -527,3 +527,135 @@ describe("owner-bound native Neon runtime adapter", () => {
     );
   });
 });
+
+const managedScopeFixture = (productionBranch: string = target.branch) => {
+  const rows: {
+    comment?: string;
+    configurationId?: string;
+    gitBranch?: string | null;
+    id: string;
+    key: string;
+    target: string[];
+    value: string;
+  }[] = [];
+  const project = {
+    accountId: target.scopeId,
+    framework: "services",
+    id: target.projectId,
+    rootDirectory: ".",
+    link: { productionBranch },
+  };
+  // oxlint-disable-next-line eslint/require-await -- Promise-returning provider fixture.
+  const request = vi.fn<typeof fetch>(async (resource, init) => {
+    const url = new URL(resource instanceof Request ? resource.url : resource.toString());
+    if (init?.method === "POST") {
+      const values = z
+        .array(
+          z.object({
+            comment: z.string(),
+            gitBranch: z.string().optional(),
+            key: z.string(),
+            target: z.array(z.string()),
+            value: z.string(),
+          }),
+        )
+        .parse(JSON.parse(z.string().parse(init.body)));
+      for (const value of values) {
+        const prior = rows.find((row) => row.key === value.key);
+        if (prior) {
+          Object.assign(prior, value);
+        } else {
+          rows.push({ ...value, id: `managed-${rows.length}` });
+        }
+      }
+      return Response.json({ created: [], failed: [] });
+    }
+    if (init?.method === "DELETE") {
+      const index = rows.findIndex((row) => url.pathname.endsWith(`/env/${row.id}`));
+      if (index !== -1) {
+        rows.splice(index, 1);
+      }
+      return new Response(null, { status: 204 });
+    }
+    if (url.pathname.endsWith("/env")) {
+      return Response.json({ envs: rows });
+    }
+    return Response.json(rows.find((row) => url.pathname.endsWith(`/env/${row.id}`)) ?? project);
+  });
+  return { project, request, rows };
+};
+
+it("uses generic Preview managed rows for the observed production branch without changing logical identity", async () => {
+  const f = managedScopeFixture();
+  const provider = createHostedRuntimeVercelProvider({ credential, fetch: f.request, target });
+  await provider.assertProject();
+  expect(await provider.resolveEnvironmentGitBranch()).toBeNull();
+  const values = { SPEND_REVIEW_DATABASE_URL: "restricted" };
+  expect(await provider.bindEnvironment(values, { runtimeId })).toEqual(Object.keys(values));
+  const projectReads = f.request.mock.calls.filter(
+    ([resource]) =>
+      new URL(resource instanceof Request ? resource.url : resource.toString()).pathname ===
+      `/v9/projects/${target.projectId}`,
+  );
+  expect(projectReads).toHaveLength(1);
+  for (const [resource, init] of f.request.mock.calls) {
+    const url = new URL(resource instanceof Request ? resource.url : resource.toString());
+    if (url.pathname.endsWith("/env")) {
+      expect(url.searchParams.has("gitBranch")).toBe(false);
+    }
+    if (init?.method === "POST") {
+      expect(JSON.parse(z.string().parse(init.body))).toMatchObject([
+        { target: ["preview"], comment: ownerComment },
+      ]);
+      expect(
+        z.array(z.record(z.string(), z.json())).parse(JSON.parse(z.string().parse(init.body)))[0],
+      ).not.toHaveProperty("gitBranch");
+    }
+  }
+  f.project.link.productionBranch = "other";
+  await provider.assertEnvironmentBindings(values, { runtimeId });
+  expect(await provider.removeEnvironmentBindings(values, { runtimeId })).toEqual(
+    Object.keys(values),
+  );
+  expect(target.branch).toBe("builder/spend-review");
+});
+
+it("retains historical branch-specific managed scope even if that branch is now production", async () => {
+  const f = managedScopeFixture();
+  f.rows.push(ownedApp);
+  const provider = createHostedRuntimeVercelProvider({
+    credential,
+    fetch: f.request,
+    target,
+  });
+  await provider.assertProject();
+  await provider.assertEnvironmentBindings({ [ownedApp.key]: ownedApp.value }, { runtimeId });
+  await provider.removeEnvironmentBindings({ [ownedApp.key]: ownedApp.value }, { runtimeId });
+  expect(f.rows).toHaveLength(0);
+});
+
+it("rejects foreign generic managed rows and never borrows a generic installer credential", async () => {
+  const f = managedScopeFixture();
+  f.rows.push({ ...ownedApp, gitBranch: null, comment: "App Builder runtime foreign" });
+  const provider = createHostedRuntimeVercelProvider({
+    credential,
+    fetch: f.request,
+    target,
+    environmentGitBranch: null,
+  });
+  await expect(
+    provider.bindEnvironment({ [ownedApp.key]: ownedApp.value }, { runtimeId }),
+  ).rejects.toMatchObject({ code: "resource_mismatch" });
+  expect(f.request.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+  f.rows.push({ ...native, gitBranch: null, value: clusterUrl });
+  await expect(provider.readClusterCredential()).rejects.toMatchObject({
+    code: "connection_required",
+  });
+  expect(
+    f.request.mock.calls.some(([resource]) =>
+      new URL(resource instanceof Request ? resource.url : resource.toString()).pathname.endsWith(
+        `/env/${native.id}`,
+      ),
+    ),
+  ).toBe(false);
+});
