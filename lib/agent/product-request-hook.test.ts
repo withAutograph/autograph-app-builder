@@ -181,16 +181,20 @@ it("does not carry pending question context into another session and retains exp
   expect(state.clarifications[1]).toContain("Do not publish");
 });
 
-it.each([
-  "prepare-app-hosted-runtime",
-  "cleanup-app-hosted-runtime",
-  "publish_github_draft_pr",
-  "publish-github-draft-pr",
-  "update_github_draft_pr",
-  "reconcile_github_draft_pr",
-])(
-  "keeps pure %s authorization out of requirements without changing review binding",
-  async (toolName) => {
+it.each(
+  [
+    "prepare-app-hosted-runtime",
+    "cleanup-app-hosted-runtime",
+    "publish_github_draft_pr",
+    "publish-github-draft-pr",
+    "update_github_draft_pr",
+    "reconcile_github_draft_pr",
+  ].flatMap((toolName) =>
+    (["approved", "denied"] as const).map((outcome) => ({ outcome, toolName })),
+  ),
+)(
+  "keeps pure $toolName $outcome authorization out of requirements without changing review binding",
+  async ({ outcome, toolName }) => {
     let state: RetainedProductRequest = {
       clarifications: ["Keep all original product requirements"],
       original: "Build an authenticated app",
@@ -207,24 +211,20 @@ it.each([
         sourceDigest: "unchanged-source",
       });
     const before = binding();
-    for (const outcome of ["approved", "denied"] as const) {
-      const requestId = `${toolName}-${outcome}`;
-      await requestInput("tool-approval", requestId, toolName);
-      expect(state.pendingInputs?.[0]?.authorizationOnly).toBe(true);
-      expect(JSON.stringify(state)).not.toContain("do-not-retain-action-input");
-      const resolution = {
-        kind: "tool-approval" as const,
-        outcome,
-        requestId,
-        response: { requestId },
-      };
-      await resolveInput(resolution);
-      await resolveInput(resolution);
-      expect(state.pendingInputs).toEqual([]);
-      expect(state.sequences.filter((sequence) => sequence === `input:${requestId}`)).toHaveLength(
-        1,
-      );
-    }
+    const requestId = `${toolName}-${outcome}`;
+    await requestInput("tool-approval", requestId, toolName);
+    expect(state.pendingInputs?.[0]?.authorizationOnly).toBe(true);
+    expect(JSON.stringify(state)).not.toContain("do-not-retain-action-input");
+    const resolution = {
+      kind: "tool-approval" as const,
+      outcome,
+      requestId,
+      response: { requestId },
+    };
+    await resolveInput(resolution);
+    await resolveInput(resolution);
+    expect(state.pendingInputs).toEqual([]);
+    expect(state.sequences.filter((sequence) => sequence === `input:${requestId}`)).toHaveLength(1);
     expect(state.clarifications).toEqual(["Keep all original product requirements"]);
     expect(binding()).toBe(before);
     await receive(2, "Approved, but add reviewer comments");
