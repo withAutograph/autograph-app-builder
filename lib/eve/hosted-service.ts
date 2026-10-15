@@ -2240,9 +2240,7 @@ export function createHostedEveSessionService(input: {
             throw new HostedSessionRecoveryUnavailableError();
           }
           const stored = await input.store.observeSessionPaged({
-            ...(explicitSendOperationId === undefined
-              ? {}
-              : { explicitSendOperationId: explicitSendOperationId }),
+            ...(explicitSendOperationId === undefined ? {} : { explicitSendOperationId }),
             events: readCheckpointEvents(session),
             expectedCheckpointDigest: session.checkpointDigest,
             metadata: {
@@ -2332,9 +2330,7 @@ export function createHostedEveSessionService(input: {
               : { workingPreview: metadata.workingPreview }),
           });
           const stored = await input.store.observeSessionPaged({
-            ...(explicitSendOperationId === undefined
-              ? {}
-              : { explicitSendOperationId: explicitSendOperationId }),
+            ...(explicitSendOperationId === undefined ? {} : { explicitSendOperationId }),
             ...(summary.uiPreview?.appId === undefined ? {} : { appId: summary.uiPreview.appId }),
             events: orderedEvents,
             expectedCheckpointDigest: session.checkpointDigest,

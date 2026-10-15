@@ -130,33 +130,31 @@ const cancelledSendFixture = () => {
     });
   };
   const updates = vi.fn();
+  const selectTable = (table: PgTable) => {
+    const limit = () => selected(table);
+    const where = () => ({ limit });
+    return { where };
+  };
+  const updateValues = (values: typeof row) => {
+    const returning = () => {
+      updates(values);
+      row = { ...row, ...values };
+      return Promise.resolve([row]);
+    };
+    const where = () => ({ returning });
+    return { where };
+  };
   const transaction = {
-    select: () => ({
-      from: (table: PgTable) => ({ where: () => ({ limit: () => selected(table) }) }),
-    }),
-    update: () => ({
-      set: (values: typeof row) => ({
-        where: () => ({
-          // oxlint-disable-next-line eslint/require-await -- The terminal UPDATE double preserves the database contract.
-          returning: async () => {
-            updates(values);
-            row = { ...row, ...values };
-            return [row];
-          },
-        }),
-      }),
-    }),
+    select: () => ({ from: selectTable }),
+    update: () => ({ set: updateValues }),
   };
   const database = {
-    // oxlint-disable-next-line eslint/require-await -- The transaction double executes the real store's locked mutation.
-    transaction: async <T>(execute: (input: typeof transaction) => Promise<T>) =>
-      execute(transaction),
+    transaction: <T>(execute: (input: typeof transaction) => Promise<T>) => execute(transaction),
   };
   // SAFETY: The terminal double implements only the tenant-scoped locked reads and UPDATEs exercised below.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- Provider-free database fixture.
-  const store = createPostgresHostedEveStore(
-    database as unknown as Parameters<typeof createPostgresHostedEveStore>[0],
-  );
+  const db = database as unknown as Parameters<typeof createPostgresHostedEveStore>[0];
+  const store = createPostgresHostedEveStore(db);
   const proof = nativeDeliveryForEvents([
     {
       data: { sequence: 1, turnId: "resumed-turn" },

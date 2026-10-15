@@ -811,7 +811,7 @@ export const isProvedSendDelivery = (
 export const mayReviveCancelledSession = (
   operation: HostedOperationRecord | null,
   current: HostedSessionRecord,
-  proof: NativeDeliveryState | undefined,
+  proof?: NativeDeliveryState,
 ): boolean => {
   if (
     current.status !== "cancelled" ||
