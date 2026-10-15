@@ -62,7 +62,8 @@ approval of exact frozen plans before any effect.
 2. Configure deployment protection and Trusted Sources for the exact approved
    Builder caller team/project/environment. The client sends its verified workload
    bearer for operator authorization and the provider Trusted Sources header for
-   ingress; neither substitutes for the other.
+   ingress; neither substitutes for the other. This operator ingress rule is
+   separate from the Gateway rules below.
 3. Deploy the selected immutable Git commit through normal Git delivery using
    `lib/provisioning/operator-host/vercel.json`. Deployment requests must retain
    the operator project root and select this nested configuration. Its service
@@ -93,8 +94,44 @@ approval of exact frozen plans before any effect.
 4. Exercise unauthorized/mismatched callers and actual owner-approved Preview
    operations, independent provider/database readback, recovery and isolation.
 
-These are reviewed external effects and qualification requirements. This source
-slice creates no projects, deployments, secrets, provider resources or credentials.
+These are reviewed external effects and qualification requirements. Importing the
+native entrypoint creates no projects, deployments, secrets or provider resources.
+
+## Approved Gateway Trusted Sources
+
+When the configured Builder workload is Production and the operator is Preview,
+planning freezes these two provider access rules in optional
+`gatewayBindings.trustedSources`, targeting the Gateway project already named in
+`gatewayDelivery.projectId`:
+
+- Builder project **Production → Gateway Preview**, for protected JWKS and identity readback.
+- Operator project **Preview → Gateway Preview**, for protected identity readback.
+
+The public `gateway-bindings` effect names both source projects, environment pairs
+and target Gateway Preview. Adding this scope changes the plan and requires its
+ordinary explicit approval. A legacy plan without the field performs no Trusted
+Sources reads or writes; deploying newer code does not backfill that approval.
+
+The approved effect reads current project protection, adds missing scoped pairs,
+and reads the provider state again. It preserves unrelated project and external
+rules, self access, existing environment pairs and CI settings. It does not replace
+implicit grants with a finite override; unresolved outcomes require reconciliation
+through the existing effect.
+
+`readonlyAttesters` configures application verification of native callers. Trusted
+Sources separately admits those callers through Vercel Deployment Protection.
+Observe protected `/_platform/jwks.json` and
+`/api/auth/platform/operator-identity/readback` with the intended native OIDC
+callers during the normal account connection, and retain provider readback as
+evidence. The fixed native readback POST sets its Origin from the exact owned
+journal endpoint after native workload verification and cookie rejection. It never
+copies an incoming Origin or synthesizes browser Fetch Metadata; JWKS GET headers
+are unchanged. A saved connection can therefore retain its original immutable
+Gateway endpoint through a source refresh.
+
+This adds no separate AI turn or qualification probe. Source checks or
+a repair to the current native session do not establish automatic hosted recovery or
+[out-of-the-box self-reproduction](evals/self-reproduction.md).
 
 ## Preparation before normal Auth identity
 

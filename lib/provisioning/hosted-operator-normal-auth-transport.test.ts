@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
+import type { verifyVercelOidcToken } from "@vercel/oidc";
 import { createHostedOperatorNormalAuthTransport } from "./hosted-operator-normal-auth-transport";
 import type { NormalAuthTransportConfiguration } from "./hosted-operator-normal-auth-transport";
 import type { HostedOperatorContext } from "./hosted-operator-service";
+import { createHostedOperatorRealmHttpTransport } from "./hosted-operator-realm-http-transport";
+import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
 
 const origin = "https://public.example.com";
 const configuration: NormalAuthTransportConfiguration = {
@@ -97,6 +100,147 @@ const requestHeaders = {
   cookie: "normal-session=private-cookie",
 };
 const getSession = `${origin}/api/auth/get-session?disableRefresh=true&disableCookieCache=true`;
+
+describe("private Realm readback native transport", () => {
+  const endpointOrigin = "https://immutable-gateway.example.com";
+  const readback = `${endpointOrigin}/api/auth/platform/operator-identity/readback`;
+  const builderWorkload = {
+    audience: "https://vercel.com/team",
+    issuer: "https://oidc.vercel.com/team",
+    ownerId: "team",
+    projectId: "builder-project",
+    environment: "production" as const,
+    subject: "owner:team:project:builder:environment:production",
+  };
+  // SAFETY: The private transport reads only gatewayOrigin and the two native workload policies supplied here.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Unused source configuration fields are outside this focused transport fixture.
+  const realmConfiguration = {
+    ...configuration,
+    gateway: { ...configuration.gateway, gatewayOrigin: "https://configured-gateway.example.com" },
+    workloadPolicy: builderWorkload,
+  } as HostedOperatorSourceConfiguration;
+
+  const realmIo = () => {
+    const verifyOidc = vi.fn<typeof verifyVercelOidcToken>();
+    return {
+      ...io(),
+      // SAFETY: The transport awaits verification but never consumes its generic JWT payload; this spy models that boundary.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Preserve the SDK generic signature while retaining the focused mock controls.
+      verifyOidc: verifyOidc as typeof verifyVercelOidcToken & typeof verifyOidc,
+    };
+  };
+
+  it.each([undefined, "https://untrusted-caller.example.com"])(
+    "derives POST Origin from the journal-pinned endpoint rather than caller metadata (%s)",
+    async (callerOrigin) => {
+      const native = realmIo();
+      const transport = createHostedOperatorRealmHttpTransport(
+        realmConfiguration,
+        "builder",
+        native,
+        endpointOrigin,
+      );
+      const headers = new Headers({ "content-type": "application/x-www-form-urlencoded" });
+      if (callerOrigin !== undefined) {
+        headers.set("origin", callerOrigin);
+      }
+      await transport(
+        new Request(readback, {
+          method: "POST",
+          headers,
+          body: new URLSearchParams({ proof: "private-proof" }),
+        }),
+      );
+      const [sent] = native.fetch.mock.calls;
+      const sentHeaders = new Headers(sent?.[1]?.headers);
+      expect(sent?.[0]).toBeInstanceOf(URL);
+      expect(sent?.[0] instanceof URL && sent[0].href).toBe(readback);
+      expect(sentHeaders.get("origin")).toBe(endpointOrigin);
+      expect(sentHeaders.get("x-vercel-trusted-oidc-idp-token")).toBe("private-native-token");
+      expect(sentHeaders.has("sec-fetch-site")).toBe(false);
+      expect(sent?.[1]?.redirect).toBe("error");
+      expect(sent?.[1]?.method).toBe("POST");
+      expect(native.verifyOidc).toHaveBeenCalledWith("private-native-token", {
+        audience: builderWorkload.audience,
+        environment: builderWorkload.environment,
+        issuer: builderWorkload.issuer,
+        ownerId: builderWorkload.ownerId,
+        projectId: builderWorkload.projectId,
+      });
+      const sentBody = sent?.[1]?.body;
+      expect(sentBody).toBeInstanceOf(ArrayBuffer);
+      if (!(sentBody instanceof ArrayBuffer)) {
+        throw new Error("fixture_body_missing");
+      }
+      expect(Buffer.from(sentBody).toString()).toBe("proof=private-proof");
+    },
+  );
+
+  it.each([undefined, "https://caller.example.com"])(
+    "leaves JWKS GET Origin unchanged (%s)",
+    async (callerOrigin) => {
+      const native = realmIo();
+      const headers = new Headers();
+      if (callerOrigin !== undefined) {
+        headers.set("origin", callerOrigin);
+      }
+      await createHostedOperatorRealmHttpTransport(
+        realmConfiguration,
+        "builder",
+        native,
+        endpointOrigin,
+      )(`${endpointOrigin}/_platform/jwks.json`, { headers });
+      expect(new Headers(native.fetch.mock.calls[0]?.[1]?.headers).get("origin")).toBe(
+        callerOrigin ?? null,
+      );
+      expect(native.fetch.mock.calls[0]?.[1]?.method).toBe("GET");
+    },
+  );
+
+  it("rejects a cookie and native verification failure without sending readback", async () => {
+    const native = realmIo();
+    const transport = createHostedOperatorRealmHttpTransport(
+      realmConfiguration,
+      "builder",
+      native,
+      endpointOrigin,
+    );
+    await expect(
+      transport(readback, {
+        method: "POST",
+        headers: { cookie: "normal-session=private-cookie" },
+      }),
+    ).rejects.toThrow();
+    expect(native.fetch).not.toHaveBeenCalled();
+    native.verifyOidc.mockRejectedValueOnce(new Error("native verification failed"));
+    await expect(transport(readback, { method: "POST" })).rejects.toThrow();
+    expect(native.fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["https://other-gateway.example.com/api/auth/platform/operator-identity/readback", "POST"],
+    ["https://configured-gateway.example.com/api/auth/platform/operator-identity/readback", "POST"],
+    [`${readback}?unapproved=value`, "POST"],
+    [`${endpointOrigin}/api/auth/platform/operator-link`, "POST"],
+    [readback, "GET"],
+    [`${endpointOrigin}/_platform/jwks.json`, "POST"],
+  ])(
+    "rejects requests outside the exact endpoint and fixed read routes (%s, %s)",
+    async (url, method) => {
+      const native = realmIo();
+      await expect(
+        createHostedOperatorRealmHttpTransport(
+          realmConfiguration,
+          "builder",
+          native,
+          endpointOrigin,
+        )(url, { method }),
+      ).rejects.toThrow();
+      expect(native.getOidc).not.toHaveBeenCalled();
+      expect(native.fetch).not.toHaveBeenCalled();
+    },
+  );
+});
 
 describe("normal Auth native transport", () => {
   it("uses the actual configured Builder workload for private owner capture readback", async () => {
