@@ -97,6 +97,7 @@ const AUTH_BOOTSTRAP_STAGE = "auth-bootstrap";
 const AUTH_PARTICIPANTS_STAGE = "auth-participants";
 const PARTICIPANTS_PREPARED = "participants-prepared";
 const GATEWAY_BINDINGS_EFFECT = "gateway-bindings";
+const GATEWAY_DELIVERY_EFFECT = "gateway-delivery";
 type Context = HostedOperatorContext;
 type PrivateState = NonNullable<HostedRuntimeJournalRecord["privateState"]>;
 type Effect = HostedOperatorPlan["effects"][number];
@@ -336,7 +337,7 @@ const isGatewaySourceSuccessor = (
   now: number,
 ) => {
   const prior = record.operator;
-  const delivery = prior?.plan.effects.find((effect) => effect.kind === "gateway-delivery");
+  const delivery = prior?.plan.effects.find((effect) => effect.kind === GATEWAY_DELIVERY_EFFECT);
   if (
     prior === undefined ||
     delivery === undefined ||
@@ -414,7 +415,7 @@ const isSharedHostProtectionSuccessor = (
     prior.plan.effects.every(
       (effect) =>
         effect.id === binding.id ||
-        effect.kind === "gateway-delivery" ||
+        effect.kind === GATEWAY_DELIVERY_EFFECT ||
         prior.receipts.some((receipt) => receipt.effectId === effect.id),
     ),
     prior.gatewayDeliveryCandidates?.some(
@@ -422,7 +423,7 @@ const isSharedHostProtectionSuccessor = (
     ) !== true ||
       prior.plan.effects.some(
         (effect) =>
-          effect.kind === "gateway-delivery" &&
+          effect.kind === GATEWAY_DELIVERY_EFFECT &&
           prior.receipts.some((receipt) => receipt.effectId === effect.id),
       ),
     sameOperatorPlanExceptExpiry(prior.plan, {

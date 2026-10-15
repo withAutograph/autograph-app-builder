@@ -710,17 +710,21 @@ describe("shared host protection plan successor", () => {
     f.deps.plan = async () => originalPlan;
     const original = await prepared(f);
     const execute = f.deps.executeEffect;
-    f.deps.executeEffect = vi.fn(async (input) => {
-      if (input.effect.kind === "gateway-bindings") {
-        throw new HostedOperatorError("operator_unavailable");
-      }
-      return await execute(input);
-    });
+    f.deps.executeEffect = vi.fn<ProtectedHostedOperatorDependencies["executeEffect"]>(
+      async (input) => {
+        if (input.effect.kind === "gateway-bindings") {
+          throw new HostedOperatorError("operator_unavailable");
+        }
+        return await execute(input);
+      },
+    );
     f.approve();
     expect(await f.client.request(original)).toMatchObject({ status: "blocked" });
     expect(f.row?.record.operator?.pendingEffectId).toBe("gateway-bindings");
     const previous = f.row;
-    if (previous?.record.operator === undefined) throw new Error("Missing pending protection");
+    if (previous?.record.operator === undefined) {
+      throw new Error("Missing pending protection");
+    }
     const successorPlan = hostedOperatorPlanSchema.parse({
       ...originalPlan,
       gatewayBindings: { ...originalPlan.gatewayBindings, trustedSources: undefined },
@@ -736,7 +740,7 @@ describe("shared host protection plan successor", () => {
 
   it("requires a new approval and preserves pending work until normal fenced reconciliation applies", async () => {
     const { f, original, previous, successorPlan, execute } = await pendingProtection();
-    const readApproval = f.deps.readApproval;
+    const { readApproval } = f.deps;
     f.deps.readApproval = async (input) =>
       input.planDigest === original.planDigest ? await readApproval(input) : null;
     const successor = { ...(await prepared(f)), callId: "successor-approval" };
@@ -760,6 +764,7 @@ describe("shared host protection plan successor", () => {
       code: "authorization_required",
     });
     f.deps.readApproval = readApproval;
+    const { reconcile: originalReconcile } = f.deps;
     const reconcile = vi.spyOn(f.deps, "reconcile");
     f.unknown();
     expect(await f.client.request(successor)).toMatchObject({ code: "reconciliation_required" });
@@ -771,7 +776,6 @@ describe("shared host protection plan successor", () => {
       expect.objectContaining({ plan: successorPlan, operationRef: original.operationRef }),
     );
     f.known();
-    const originalReconcile = reconcile.getMockImplementation()!;
     reconcile.mockImplementation(async (input) =>
       input.effect.kind === "gateway-bindings"
         ? {
@@ -808,21 +812,29 @@ describe("shared host protection plan successor", () => {
     async (change) => {
       const { f, original, successorPlan } = await pendingProtection();
       const before = f.row;
-      if (before?.record.operator === undefined) throw new Error("Missing pending protection");
-      if (change === "resource")
+      if (before?.record.operator === undefined) {
+        throw new Error("Missing pending protection");
+      }
+      if (change === "resource") {
         f.deps.plan = async () => ({ ...successorPlan, contextId: "other-resource" });
-      if (change === "release")
+      }
+      if (change === "release") {
         f.deps.plan = async () => ({
           ...successorPlan,
           release: { ...successorPlan.release, sha256: "c".repeat(64) },
         });
-      if (change === "other-effect") before.record.operator.pendingEffectId = "auth-schema";
+      }
+      if (change === "other-effect") {
+        before.record.operator.pendingEffectId = "auth-schema";
+      }
       if (change === "live-lease") {
         before.record.leaseId = "active-lease";
         before.record.leaseExpiresAt = "2099-01-01T00:00:00Z";
       }
-      if (change === "approval") f.deps.readApproval = async () => null;
-      if (change === "alias-write")
+      if (change === "approval") {
+        f.deps.readApproval = async () => null;
+      }
+      if (change === "alias-write") {
         before.record.operator.gatewayDeliveryCandidates = [
           {
             branch: selection.branch,
@@ -835,6 +847,7 @@ describe("shared host protection plan successor", () => {
             gatewayAliasAttempted: true,
           },
         ];
+      }
       f.row = before;
       expect(
         await f.client.request({ action: "plan", operation: "prepare", selection }),
