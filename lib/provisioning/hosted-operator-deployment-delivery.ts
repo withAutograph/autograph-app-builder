@@ -128,6 +128,9 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       }
       throw error;
     }
+    if (stage === undefined) {
+      return { response, rejectedAssignment: false };
+    }
     const rejectedAssignment =
       stage === "assignment" && [400, 401, 403, 404, 409, 429].includes(response.status);
     let category: GatewayAliasDiagnostic["category"] = "unknown";
@@ -138,9 +141,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     } else if (rejectedAssignment) {
       category = "rejected";
     }
-    if (stage !== undefined) {
-      observeAlias({ stage, method, httpStatus: response.status, category });
-    }
+    observeAlias({ stage, method, httpStatus: response.status, category });
     return { response, rejectedAssignment };
   };
   const io = (input: HostedOperatorDeploymentContext) => {
