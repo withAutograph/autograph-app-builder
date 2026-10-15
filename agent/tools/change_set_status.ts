@@ -427,7 +427,10 @@ export const observeNormalizedChangeSet = async (input: {
 
 export const exactNormalizedChangeSet = async (
   input: Parameters<typeof observeNormalizedChangeSet>[0],
-) => (await observeNormalizedChangeSet(input)).changeSet;
+) => {
+  const { changeSet } = await observeNormalizedChangeSet(input);
+  return changeSet;
+};
 
 const currentDestinationProgress = (
   progress: GitHubDestinationReviewReadProgress | undefined,

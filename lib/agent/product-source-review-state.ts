@@ -78,6 +78,31 @@ interface ProductClarification {
   userText?: string;
 }
 type ProductResolution = HookEvent<"input.resolved">["data"]["resolutions"][number];
+const validProductResolution = (
+  request: RetainedProductInput,
+  resolution: ProductResolution,
+  option: RetainedProductInput["options"][number] | undefined,
+): boolean => {
+  const { response } = resolution;
+  if (response && response.requestId !== resolution.requestId) {
+    return false;
+  }
+  if (response?.optionId !== undefined && !option && !request.authorizationOnly) {
+    return false;
+  }
+  if (request.kind === "question") {
+    const missingAnswer = option === undefined && (response?.text ?? "").length === 0;
+    return resolution.outcome === "answered" && !missingAnswer;
+  }
+  return ["approved", "denied"].includes(resolution.outcome);
+};
+const pureAuthorizationResolution = (
+  request: RetainedProductInput,
+  response: ProductResolution["response"],
+): boolean =>
+  request.authorizationOnly === true &&
+  response?.optionId === undefined &&
+  (response?.text ?? "").length === 0;
 const resolutionClarification = (
   request: RetainedProductInput | undefined,
   resolution: ProductResolution,
@@ -86,27 +111,13 @@ const resolutionClarification = (
     return undefined;
   }
   const { response } = resolution;
-  if (response && response.requestId !== resolution.requestId) {
-    return undefined;
-  }
   const option = request.options.find((candidate) => candidate.id === response?.optionId);
-  if (response?.optionId !== undefined && !option && !request.authorizationOnly) {
-    return undefined;
-  }
-  const missingAnswer = option === undefined && (response?.text ?? "").length === 0;
-  if (request.kind === "question" && (resolution.outcome !== "answered" || missingAnswer)) {
-    return undefined;
-  }
-  if (request.kind === "tool-approval" && !["approved", "denied"].includes(resolution.outcome)) {
+  if (!validProductResolution(request, resolution, option)) {
     return undefined;
   }
   // Authorization remains in native events and approval receipts. Only a new, proven
   // effect-only decision without product choices or user text is absent from requirements.
-  if (
-    request.authorizationOnly &&
-    response?.optionId === undefined &&
-    (response?.text ?? "").length === 0
-  ) {
+  if (pureAuthorizationResolution(request, response)) {
     return undefined;
   }
   const clarification: ProductClarification = {
