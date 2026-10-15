@@ -54,9 +54,11 @@ export async function* continueHostedRuntimeOwnerPreparation(
   prepare: typeof prepareHostedRuntimeStep,
   ports: HostedRuntimeIdentityWaitPorts,
 ) {
+  // Workflow step proxies serialize their receiver; keep function-bearing ports out of step arguments.
+  const { createHook, register, acknowledge, sleepUntil } = ports;
   let prepared = await prepare(input, ctx);
   while (prepared.identityInput !== null) {
-    const hook = ports.createHook();
+    const hook = createHook();
     try {
       // Registration must commit before a callback can discover the private token.
       // oxlint-disable-next-line eslint/no-await-in-loop -- Each identity handoff has its own durable hook registration.
@@ -70,7 +72,7 @@ export async function* continueHostedRuntimeOwnerPreparation(
         identityInput,
       };
       // oxlint-disable-next-line eslint/no-await-in-loop -- Register only after this hook commits.
-      const registration = await ports.register(input, ctx, request);
+      const registration = await register(input, ctx, request);
       let { eventId } = registration;
       if (registration.status === "waiting") {
         yield {
@@ -88,13 +90,13 @@ export async function* continueHostedRuntimeOwnerPreparation(
           const wake = await Promise.race([
             Promise.resolve(hook),
             (async () => {
-              await ports.sleepUntil(observationDeadline);
+              await sleepUntil(observationDeadline);
               return null;
             })(),
           ]);
           if (wake === null) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- Canonical readback recovers a lost hook delivery and only server time can establish expiry.
-            const observed = await ports.register(input, ctx, request);
+            const observed = await register(input, ctx, request);
             eventId = observed.status === "waiting" ? undefined : observed.eventId;
             observationAt = Math.max(
               Date.parse(observed.checkAfter ?? identityInput.expiresAt),
@@ -111,7 +113,7 @@ export async function* continueHostedRuntimeOwnerPreparation(
       }
       // Local time never creates an expiry event: this step verifies the server receipt.
       // oxlint-disable-next-line eslint/no-await-in-loop -- Acknowledge the canonical receipt before continuing its approved preparation.
-      await ports.acknowledge(input, ctx, { eventId });
+      await acknowledge(input, ctx, { eventId });
     } finally {
       hook.dispose();
     }
