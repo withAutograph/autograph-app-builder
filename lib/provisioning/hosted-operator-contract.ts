@@ -831,7 +831,7 @@ export const retainedAppDeliverySchema = z.object({
 });
 export type RetainedAppDelivery = z.infer<typeof retainedAppDeliverySchema>;
 
-const hostedOperatorRecordDataSchema = z.strictObject({
+const hostedOperatorRecordBaseSchema = z.strictObject({
   approvalId: id.optional(),
   authPreparation: operatorAuthSchemaPreparationSchema.optional(),
   deliveredDeploymentId: id.optional(),
@@ -854,6 +854,17 @@ const hostedOperatorRecordDataSchema = z.strictObject({
   receipts: z.array(operatorReceiptSchema),
   retainedAppDeliveries: z.array(retainedAppDeliverySchema).optional(),
   workerCheckpoints: z.array(workerEffectCheckpointSchema).optional(),
+});
+const hostedOperatorRecordDataSchema = hostedOperatorRecordBaseSchema.extend({
+  /** Private provenance for source repair; prior approval never approves the successor. */
+  retainedGatewayDeliveries: z
+    .array(
+      z.strictObject({
+        approvedByCallId: id,
+        operator: hostedOperatorRecordBaseSchema,
+      }),
+    )
+    .optional(),
 });
 const gatewayDeliveryOrigin = (operator: z.infer<typeof hostedOperatorRecordDataSchema>) =>
   operator.gatewayDeliveryCandidates?.find(
@@ -1215,6 +1226,7 @@ export const operatorPublicResultSchema = z.strictObject({
       "resource_mismatch",
       "operation_in_progress",
       "reconciliation_required",
+      "gateway_delivery_failed",
       "operator_unavailable",
       "legacy_runtime_requires_migration",
     ])

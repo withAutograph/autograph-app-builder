@@ -1,3 +1,4 @@
+import { hasFailedGatewayDelivery } from "./hosted-operator-gateway-delivery-failure";
 import { inspectParticipantBootstrapPreparation } from "./hosted-operator-participant-bootstrap";
 import { createHostedOperatorConsentOwner } from "./hosted-operator-consent-owner";
 import {
@@ -1381,6 +1382,9 @@ export const composeHostedOperatorDependencies = (
     const observed = await (
       input.effect.kind === "delivery" ? appDelivery : gatewayDelivery
     ).reconcile(deliveryContext(input));
+    if (hasFailedGatewayDelivery(input, observed, configuration.gateway.gitSha)) {
+      throw new HostedOperatorError("gateway_delivery_failed");
+    }
     if (observed.status === "applied") {
       return { receipt: receipt(input, hash(observed.selected)), status: "applied" };
     }
@@ -1565,6 +1569,9 @@ export const composeHostedOperatorDependencies = (
     const observed = await (
       input.effect.kind === "delivery" ? appDelivery : gatewayDelivery
     ).deliver(deliveryContext(input));
+    if (hasFailedGatewayDelivery(input, observed, configuration.gateway.gitSha)) {
+      throw new HostedOperatorError("gateway_delivery_failed");
+    }
     if (observed.status !== "applied") {
       throw new HostedOperatorError(RECONCILIATION_REQUIRED);
     }

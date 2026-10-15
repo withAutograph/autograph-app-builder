@@ -8,6 +8,7 @@ import type {
   HostedOperatorError as HostedOperatorErrorType,
   HostedOperatorPlan,
   OperatorSelection,
+  OperatorPublicResult,
 } from "../../lib/provisioning/hosted-operator-contract";
 import type { PreparedRuntimeSelection } from "../../lib/agent/prepared-runtime-selection";
 import type { hostedOperatorClientForSession } from "../../lib/provisioning/hosted-operator-client";
@@ -61,6 +62,31 @@ const reportCaughtPreparationFailure = (
   } catch {
     /* Diagnostics cannot change the original blocked result. */
   }
+};
+
+const preparationResult = (result: OperatorPublicResult, input: HostedRuntimeInput) => {
+  if (result.code !== "gateway_delivery_failed") {
+    return result;
+  }
+  return {
+    ...result,
+    nextAction: {
+      tool: "plan-app-hosted-runtime" as const,
+      input: {
+        appId: input.appId,
+        branch: input.branch,
+        environment: input.environment,
+        operation: "prepare" as const,
+        projectId: input.projectId,
+        ...(input.plan.normalActorProgram === undefined
+          ? {}
+          : { normalActorProgram: input.plan.normalActorProgram }),
+      },
+      approval: "normal-plan-approval" as const,
+      reason:
+        "The native Gateway build failed. Plan again in this session using the current trusted source. Prepare the returned plan through the existing approval flow: an identical operation retains its durable approval, while a changed plan requires ordinary approval. Keep the existing resources.",
+    },
+  };
 };
 
 // oxlint-disable-next-line eslint/complexity -- Legacy readiness and participant preflight retain their separate approval-bound identity handoffs.
@@ -137,10 +163,10 @@ export const prepareHostedRuntimeWithOperator = async (
       participantPlan && result.status === "blocked" && result.code === "auth_identity_required";
     const needsIdentity = legacyIdentityMissing || participantIdentityMissing;
     const identityInput = needsIdentity ? await requestIdentity() : null;
-    return { identityInput, result };
+    return { identityInput, result: preparationResult(result, input) };
   } catch (error) {
     reportCaughtPreparationFailure(contract, stage, error);
-    const result = {
+    const result: OperatorPublicResult = {
       appId: input.appId,
       authenticatedBehavior: "unassessed" as const,
       code: isOperatorError(error) ? error.code : "operator_unavailable",
@@ -159,7 +185,7 @@ export const prepareHostedRuntimeWithOperator = async (
         };
       }
     }
-    return { identityInput: null, result };
+    return { identityInput: null, result: preparationResult(result, input) };
   }
 };
 
