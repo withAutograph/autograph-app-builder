@@ -52,6 +52,11 @@ Unknown provider reads and uncertain hostname assignments remain reconciliation
 cases; they do not authorize a blind write. Keep these waits inside the existing
 execution lifetime, without model polling loops or additional acceptance gates.
 
+Auth browser trust covers the approved public and Auth browser origins. The
+independently verified native Gateway/JWKS probe may use a different deployment
+URL; it is not another browser origin. Replacing that server endpoint does not
+require expanding browser trust or changing the approved operation.
+
 ## Normal accounts and organization sessions
 
 For apps requiring several participants, Builder derives `normalActorProgram`

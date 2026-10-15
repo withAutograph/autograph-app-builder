@@ -891,17 +891,42 @@ it("does not treat a credential shared with Production as a Gateway Preview cred
   expect(f.requests.every((request) => request.method === "GET")).toBe(true);
 });
 
-it("requires both approved Gateway and public-app origins while preserving unrelated authorized origins", async () => {
+it("requires approved browser origins while preserving unrelated authorized origins", async () => {
   const f = fixture();
   const trustedOrigins = f.rows.find((row) => row.id === "trusted-origins");
   if (!trustedOrigins) {
     throw new Error("Missing fixture trusted origins");
   }
-  trustedOrigins.value = `${gateway.gatewayOrigin},https://separately-approved.example.test`;
-  expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
-  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
-  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+  trustedOrigins.value = [
+    "https://separately-approved.example.test",
+    gateway.publicOrigin,
+    gateway.authBrowserOrigin,
+  ].join(",");
+  await f.writer.bind(f.input);
+  f.requests.length = 0;
+  expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "applied" });
+  expect(
+    f.requests.some(
+      (request) => request.method !== "GET" && request.path.includes("trusted-origins"),
+    ),
+  ).toBe(false);
 });
+
+it.each(["publicOrigin", "authBrowserOrigin"] as const)(
+  "requires the approved %s browser origin",
+  async (missingOrigin) => {
+    const f = fixture();
+    const trustedOrigins = f.rows.find((row) => row.id === "trusted-origins");
+    if (!trustedOrigins) {
+      throw new Error("Missing fixture trusted origins");
+    }
+    trustedOrigins.value =
+      missingOrigin === "publicOrigin" ? gateway.authBrowserOrigin : gateway.publicOrigin;
+    expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
+    await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+    expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+  },
+);
 
 it("checks the fresh execution context before making any provider mutation", async () => {
   const f = fixture();

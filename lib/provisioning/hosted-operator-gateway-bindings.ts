@@ -568,8 +568,8 @@ export const createHostedOperatorGatewayBindings = (deps: {
           .map((origin) => origin.trim())
           .filter((origin) => origin.length > 0),
       );
+      // gatewayOrigin is the server-side transport/JWKS probe origin, not a browser origin.
       if (
-        !trustedOriginValues.has(gateway.gatewayOrigin) ||
         !trustedOriginValues.has(gateway.publicOrigin) ||
         !trustedOriginValues.has(gateway.authBrowserOrigin)
       ) {
