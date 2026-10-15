@@ -68,6 +68,22 @@ const projectSchema = z.object({
   name: id,
 });
 
+const aliasCategorySchema = z.enum(["ok", "not_found", "rejected", "unknown", "redirected"]);
+
+export interface GatewayAliasDiagnostic {
+  stage: "assignment" | "readback";
+  method: "GET" | "POST";
+  httpStatus?: number;
+  category: z.infer<typeof aliasCategorySchema>;
+}
+
+class RejectedAliasAssignmentError extends HostedOperatorError {
+  constructor() {
+    super("operator_unavailable");
+    this.name = "RejectedAliasAssignmentError";
+  }
+}
+
 /** Explicit approved Preview delivery via normal Git. Candidate IDs are observed effects, never Git/alias authority. */
 export const createHostedOperatorDeploymentDelivery = (deps: {
   assertAuthorized: Awaited<
@@ -77,7 +93,56 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
   readCredential: Awaited<ReturnType<typeof createHostedOperatorControlPlane>>["readCredential"];
   fetch?: typeof fetch;
   target?: "app" | "gateway";
+  observeAlias?: (diagnostic: GatewayAliasDiagnostic) => void | Promise<void>;
 }) => {
+  const observeAlias = (diagnostic: GatewayAliasDiagnostic) => {
+    try {
+      if (deps.observeAlias === undefined) {
+        console.info("hosted_operator_gateway_alias", diagnostic);
+      } else {
+        const sink = deps.observeAlias;
+        void (async () => {
+          try {
+            await sink(diagnostic);
+          } catch {
+            // A rejected advisory sink cannot alter delivery.
+          }
+        })();
+      }
+    } catch {
+      // Advisory observations never change the delivery outcome.
+    }
+  };
+  const sendObserved = async (
+    send: () => Promise<Response>,
+    stage: GatewayAliasDiagnostic["stage"] | undefined,
+    method: GatewayAliasDiagnostic["method"],
+    allowNotFound: boolean,
+  ) => {
+    let response: Response;
+    try {
+      response = await send();
+    } catch (error) {
+      if (stage !== undefined) {
+        observeAlias({ stage, method, category: "unknown" });
+      }
+      throw error;
+    }
+    const rejectedAssignment =
+      stage === "assignment" && [400, 401, 403, 404, 409, 429].includes(response.status);
+    let category: GatewayAliasDiagnostic["category"] = "unknown";
+    if (response.ok) {
+      category = "ok";
+    } else if (allowNotFound && response.status === 404) {
+      category = "not_found";
+    } else if (rejectedAssignment) {
+      category = "rejected";
+    }
+    if (stage !== undefined) {
+      observeAlias({ stage, method, httpStatus: response.status, category });
+    }
+    return { response, rejectedAssignment };
+  };
   const io = (input: HostedOperatorDeploymentContext) => {
     const delivery = deps.target === "gateway" ? input.plan.gatewayDelivery : input.plan.delivery;
     if (delivery === undefined) {
@@ -119,6 +184,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
           }
         | { alias: string },
       allowNotFound = false,
+      aliasStage?: GatewayAliasDiagnostic["stage"],
     ) => {
       await assertCurrent();
       const credential = await deps.readCredential(input.authority, input.target.installationId);
@@ -138,19 +204,29 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       for (const [key, value] of Object.entries(query)) {
         url.searchParams.set(key, value);
       }
-      const response = await (deps.fetch ?? fetch)(url, {
-        body: body === undefined ? undefined : JSON.stringify(body),
-        cache: "no-store",
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${credential.token}`,
-          "Content-Type": "application/json",
-        },
-        method: body === undefined ? "GET" : "POST",
-        redirect: "error",
-        signal: AbortSignal.timeout(20_000),
-      });
+      const send = async () =>
+        await (deps.fetch ?? fetch)(url, {
+          body: body === undefined ? undefined : JSON.stringify(body),
+          cache: "no-store",
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${credential.token}`,
+            "Content-Type": "application/json",
+          },
+          method: body === undefined ? "GET" : "POST",
+          redirect: "error",
+          signal: AbortSignal.timeout(20_000),
+        });
+      const { response, rejectedAssignment } = await sendObserved(
+        send,
+        aliasStage,
+        body === undefined ? "GET" : "POST",
+        allowNotFound,
+      );
       try {
+        if (rejectedAssignment) {
+          throw new RejectedAliasAssignmentError();
+        }
         if (allowNotFound && response.status === 404) {
           return null;
         }
@@ -208,14 +284,14 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       ) {
         throw new HostedOperatorError("resource_mismatch");
       }
-      const attempted = input.deliveryCandidates?.some(
+      const saved = input.deliveryCandidates?.find(
         (candidate) =>
-          candidate.deploymentId === observed.id &&
-          candidate.operationRef === input.operationRef &&
-          candidate.gatewayAliasAttempted === true,
+          candidate.deploymentId === observed.id && candidate.operationRef === input.operationRef,
       );
       return {
-        ...(attempted === true ? { gatewayAliasAttempted: true as const } : {}),
+        ...(saved?.gatewayAliasAttempted === undefined
+          ? {}
+          : { gatewayAliasAttempted: saved.gatewayAliasAttempted }),
         branch: delivery.branch,
         deploymentId: observed.id,
         operationRef: input.operationRef,
@@ -273,15 +349,35 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         throw new HostedOperatorError("resource_mismatch");
       }
       const alias = new URL(gateway.origin).hostname;
-      const raw = await request(`/v4/aliases/${encodeURIComponent(alias)}`, {}, undefined, true);
+      const raw = await request(
+        `/v4/aliases/${encodeURIComponent(alias)}`,
+        {},
+        undefined,
+        true,
+        "readback",
+      );
       if (raw === null) {
-        return { alias, deploymentId: null };
+        return { alias, deploymentId: null, redirected: false };
       }
-      const observed = z.object({ alias: id, deploymentId: id, projectId: id }).parse(raw);
+      const observed = z
+        .object({
+          alias: id,
+          deploymentId: id,
+          projectId: id,
+          redirect: z.string().nullable().optional(),
+        })
+        .parse(raw);
       if (observed.alias.toLowerCase() !== alias || observed.projectId !== gateway.projectId) {
         throw new HostedOperatorError("resource_mismatch");
       }
-      return { alias, deploymentId: observed.deploymentId };
+      const redirected =
+        observed.redirect !== undefined &&
+        observed.redirect !== null &&
+        observed.redirect.length > 0;
+      if (redirected) {
+        observeAlias({ stage: "readback", method: "GET", category: "redirected" });
+      }
+      return { alias, deploymentId: observed.deploymentId, redirected };
     };
     return {
       assertCurrent,
@@ -320,6 +416,9 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       await reader.assertCurrent();
       if (deps.target === "gateway") {
         const alias = await reader.readGatewayAlias();
+        if (alias.redirected) {
+          return { candidates, status: "unknown" as const };
+        }
         const assigned = candidates.find(
           (candidate) =>
             candidate.deploymentId === alias.deploymentId && candidate.readyState === "READY",
@@ -344,6 +443,74 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       return { status: "unknown" as const };
     }
   };
+  const assignGatewayAlias = async (
+    input: HostedOperatorDeploymentContext,
+    candidates: OperatorDeploymentCandidate[],
+    selected: OperatorDeploymentCandidate,
+  ) => {
+    const fresh = io({ ...input, deliveryCandidates: candidates });
+    await deps.assertEnvironment(input);
+    await fresh.assertCurrent();
+
+    let alias: Awaited<ReturnType<typeof fresh.readGatewayAlias>>;
+    try {
+      const candidate = await fresh.readCandidate(selected.deploymentId);
+      if (candidate.readyState !== "READY") {
+        return { candidates, status: "unknown" as const };
+      }
+      alias = await fresh.readGatewayAlias();
+      if (alias.redirected) {
+        return { candidates, status: "unknown" as const };
+      }
+      if (alias.deploymentId === selected.deploymentId) {
+        return await reconcile({ ...input, deliveryCandidates: candidates });
+      }
+      await fresh.assertCurrent();
+    } catch {
+      // No assignment was dispatched; a later corrected read may safely try again.
+      return { candidates, status: "unknown" as const };
+    }
+    const marked = candidates.map((candidate) =>
+      candidate.deploymentId === selected.deploymentId
+        ? { ...candidate, gatewayAliasAttempted: true as const }
+        : candidate,
+    );
+    // Persist intent immediately before the outward write. A lost response never authorizes a blind re-POST.
+    await input.checkpointDelivery(marked);
+    const markedInput = { ...input, deliveryCandidates: marked };
+    try {
+      await fresh.request(
+        `/v2/deployments/${encodeURIComponent(selected.deploymentId)}/aliases`,
+        {},
+        { alias: alias.alias },
+        false,
+        "assignment",
+      );
+      return await reconcile(markedInput);
+    } catch (error) {
+      if (error instanceof RejectedAliasAssignmentError) {
+        const rejected = marked.map((candidate) =>
+          candidate.deploymentId === selected.deploymentId
+            ? { ...candidate, gatewayAliasAttempted: false }
+            : candidate,
+        );
+        try {
+          // Only a durably recorded definite rejection permits a later approved retry.
+          await input.checkpointDelivery(rejected);
+        } catch {
+          return { candidates: marked, status: "unknown" as const };
+        }
+        return {
+          candidates: rejected,
+          resourceVersion: createHash("sha256")
+            .update(JSON.stringify({ candidates: rejected, scope: fresh.delivery }))
+            .digest("hex"),
+          status: "retryable" as const,
+        };
+      }
+      return { candidates: marked, status: "unknown" as const };
+    }
+  };
   return {
     async deliver(input: HostedOperatorDeploymentContext) {
       const reader = io(input);
@@ -355,35 +522,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       if (deps.target === "gateway") {
         const selected = prior.candidates?.find((candidate) => candidate.readyState === "READY");
         if (selected !== undefined) {
-          await deps.assertEnvironment(input);
-          await reader.assertCurrent();
-          const marked = prior.candidates.map((candidate) =>
-            candidate.deploymentId === selected.deploymentId
-              ? { ...candidate, gatewayAliasAttempted: true as const }
-              : candidate,
-          );
-          // Persist intent before the outward write. A lost response or process stop never authorizes a blind re-POST.
-          await input.checkpointDelivery(marked);
-          const markedInput = { ...input, deliveryCandidates: marked };
-          const fresh = io(markedInput);
-          try {
-            const candidate = await fresh.readCandidate(selected.deploymentId);
-            if (candidate.readyState !== "READY") {
-              return { candidates: marked, status: "unknown" as const };
-            }
-            const alias = await fresh.readGatewayAlias();
-            if (alias.deploymentId !== selected.deploymentId) {
-              await fresh.assertCurrent();
-              await fresh.request(
-                `/v2/deployments/${encodeURIComponent(selected.deploymentId)}/aliases`,
-                {},
-                { alias: alias.alias },
-              );
-            }
-            return await reconcile(markedInput);
-          } catch {
-            return { candidates: marked, status: "unknown" as const };
-          }
+          return await assignGatewayAlias(input, prior.candidates, selected);
         }
       }
       // A complete no-match listing is still uncertain; this approved retry is at-least-once and may create another scoped Preview.

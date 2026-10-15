@@ -177,8 +177,18 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
     throwOnWrite: false,
     failReads: false,
     missing: false,
+    rejectStatus: 0,
+    // SAFETY: Provider fixtures exercise both absent and nonempty redirect metadata.
+    redirect: null as string | null,
+    failNextRead: false,
   };
   const aliasWriteResponse = () => {
+    if (aliasState.rejectStatus !== 0) {
+      return Response.json(
+        { private: "credential/body must never reach diagnostics" },
+        { status: aliasState.rejectStatus },
+      );
+    }
     if (aliasState.applyWrite) {
       aliasState.deploymentId = "dpl_new";
       aliasState.missing = false;
@@ -200,6 +210,10 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
     }
     calls.push({ body, method, path });
     if (path.startsWith("/v4/aliases/")) {
+      if (aliasState.failNextRead) {
+        aliasState.failNextRead = false;
+        return new Response(null, { status: 500 });
+      }
       if (aliasState.failReads) {
         return new Response(null, { status: 500 });
       }
@@ -210,6 +224,7 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
         alias: aliasState.name,
         deploymentId: aliasState.deploymentId,
         projectId: aliasState.projectId,
+        redirect: aliasState.redirect,
       });
     }
     if (path === "/v2/deployments/dpl_new/aliases" && method === "POST") {
@@ -237,7 +252,11 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
     }
     throw new Error("Unexpected native request");
   };
+  const observeAlias = vi.fn(async () => {
+    await Promise.resolve();
+  });
   const writer = createHostedOperatorDeploymentDelivery({
+    observeAlias,
     assertAuthorized: vi.fn(async () => {
       await Promise.resolve();
     }),
@@ -264,6 +283,7 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
   return {
     calls,
     aliasState,
+    observeAlias,
     project,
     deployment,
     checkpoint,
@@ -478,9 +498,9 @@ it.each([true, false])(
     expect(
       f.calls.filter((call) => call.path === "/v13/deployments" && call.method === "POST"),
     ).toHaveLength(1);
-    expect(f.input.deliveryCandidates?.some((candidate) => candidate.gatewayAliasAttempted)).toBe(
-      true,
-    );
+    expect(
+      f.input.deliveryCandidates?.some((candidate) => candidate.gatewayAliasAttempted === true),
+    ).toBe(true);
   },
 );
 it("keeps a saved attempted alias unknown through provider read failures without another write", async () => {
@@ -561,4 +581,118 @@ it("does not assign when durable intent checkpointing fails", async () => {
   expect(f.calls.some((call) => call.path.endsWith("/aliases") && call.method === "POST")).toBe(
     false,
   );
+});
+
+it("durably records a definite alias rejection and permits a later corrected approved attempt", async () => {
+  const f = await readyGateway();
+  f.aliasState.rejectStatus = 400;
+  const rejected = await f.writer.deliver(f.input);
+  expect(rejected.status).toBe("retryable");
+  expect(rejected).toHaveProperty("resourceVersion");
+  const savedRejectedJournal = JSON.stringify(f.input.deliveryCandidates);
+  f.input.deliveryCandidates = operatorDeploymentCandidatesSchema.parse(
+    JSON.parse(savedRejectedJournal),
+  );
+  expect(f.input.deliveryCandidates?.[0]?.gatewayAliasAttempted).toBe(false);
+  expect(f.observeAlias).toHaveBeenCalledWith({
+    stage: "assignment",
+    method: "POST",
+    httpStatus: 400,
+    category: "rejected",
+  });
+  expect(JSON.stringify(f.observeAlias.mock.calls)).not.toContain("credential/body");
+  f.aliasState.rejectStatus = 0;
+  const corrected = await f.writer.deliver(f.input);
+  expect(corrected.status).toBe("applied");
+  expect(
+    f.calls.filter((call) => call.path.endsWith("/aliases") && call.method === "POST"),
+  ).toHaveLength(2);
+  expect(
+    f.calls.filter((call) => call.path === "/v13/deployments" && call.method === "POST"),
+  ).toHaveLength(1);
+});
+it("retains uncertain intent when recording a definite rejection fails", async () => {
+  const f = await readyGateway();
+  f.aliasState.rejectStatus = 400;
+  const persist = f.checkpoint.getMockImplementation();
+  f.checkpoint.mockImplementation(async (rows, selected) => {
+    if (rows.some((row) => row.gatewayAliasAttempted === false)) {
+      throw new Error("private checkpoint failure");
+    }
+    await persist?.(rows, selected);
+  });
+  const rejected = await f.writer.deliver(f.input);
+  expect(rejected.status).toBe("unknown");
+  f.aliasState.rejectStatus = 0;
+  const replay = await f.writer.deliver(f.input);
+  expect(replay.status).toBe("unknown");
+  expect(f.input.deliveryCandidates?.[0]?.gatewayAliasAttempted).toBe(true);
+  expect(
+    f.calls.filter((call) => call.path.endsWith("/aliases") && call.method === "POST"),
+  ).toHaveLength(1);
+});
+it.each([408, 499, 500])(
+  "keeps ambiguous HTTP %s assignment outcomes read-only",
+  async (status) => {
+    const f = await readyGateway();
+    f.aliasState.rejectStatus = status;
+    const uncertain = await f.writer.deliver(f.input);
+    expect(uncertain.status).toBe("unknown");
+    f.aliasState.rejectStatus = 0;
+    const replay = await f.writer.deliver(f.input);
+    expect(replay.status).toBe("unknown");
+    expect(
+      f.calls.filter((call) => call.path.endsWith("/aliases") && call.method === "POST"),
+    ).toHaveLength(1);
+  },
+);
+it("does not report direct alias binding applied when a redirect overrides that deployment", async () => {
+  const f = await readyGateway();
+  f.aliasState.deploymentId = "dpl_new";
+  f.aliasState.redirect = "https://private-route.example.test";
+  const redirected = await f.writer.deliver(f.input);
+  expect(redirected.status).toBe("unknown");
+  expect(f.calls.some((call) => call.path.endsWith("/aliases") && call.method === "POST")).toBe(
+    false,
+  );
+  expect(f.input.deliveryCandidates?.[0]?.gatewayAliasAttempted).toBeUndefined();
+  expect(JSON.stringify(f.observeAlias.mock.calls)).not.toContain("private-route");
+});
+it("recovers a read failure before assignment without persisting attempted intent", async () => {
+  const f = await readyGateway();
+  let aliasReads = 0;
+  f.observeAlias.mockImplementation(async () => {
+    aliasReads += 1;
+    if (aliasReads === 1) {
+      f.aliasState.failNextRead = true;
+    }
+    await Promise.resolve();
+  });
+  const failedRead = await f.writer.deliver(f.input);
+  expect(failedRead.status).toBe("unknown");
+  expect(f.input.deliveryCandidates?.[0]?.gatewayAliasAttempted).toBeUndefined();
+  expect(f.calls.some((call) => call.path.endsWith("/aliases") && call.method === "POST")).toBe(
+    false,
+  );
+  f.observeAlias.mockImplementation(async () => {
+    await Promise.resolve();
+    throw new Error("private advisory failure");
+  });
+  const corrected = await f.writer.deliver(f.input);
+  expect(corrected.status).toBe("applied");
+});
+
+it("does not await an unresolved advisory alias observer", async () => {
+  const f = await readyGateway();
+  const pendingDiagnostic = Promise.withResolvers<undefined>();
+  f.observeAlias.mockImplementation(() => pendingDiagnostic.promise);
+  const delivered = await f.writer.deliver(f.input);
+  expect(delivered.status).toBe("applied");
+});
+it("accepts empty redirect metadata as a direct deployment binding", async () => {
+  const f = await readyGateway();
+  f.aliasState.deploymentId = "dpl_new";
+  f.aliasState.redirect = "";
+  const direct = await f.writer.deliver(f.input);
+  expect(direct.status).toBe("applied");
 });
