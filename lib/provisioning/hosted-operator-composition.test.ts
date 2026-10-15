@@ -1064,6 +1064,51 @@ describe("existing populated Auth workflow planning", () => {
       expect(JSON.stringify(plan)).not.toContain("private-fixture");
     },
   );
+  it("replans using retained approved Auth when the current unapproved plan carries preparation", async () => {
+    const f = setup("current");
+    const retained = retainedOperatorAuthFromJournal(f.original);
+    if (retained === undefined) {
+      throw new Error("Fixture completed Auth authority is missing.");
+    }
+    f.original.retainedAuth = retained;
+    f.original.approvedByCallId = "operator:unapproved-plan";
+    const operator = f.original.operator!;
+    operator.approvalId = undefined;
+    operator.operationRef = "00000000-0000-4000-8000-000000000002";
+    operator.plan = {
+      ...operator.plan,
+      retention: { ...operator.plan.retention, expiresAt: "2027-01-02T00:00:00Z" },
+    };
+    operator.planDigest = operatorPlanDigest(operator.plan);
+    operator.receipts = operator.receipts.filter((receipt) =>
+      operator.plan.effects.some(
+        (effect) =>
+          effect.id === receipt.effectId && ["resources", "install"].includes(effect.kind),
+      ),
+    );
+    const before = structuredClone(f.row);
+    f.readResourceBindings.mockImplementation(async (binding) => {
+      const selected = selectAuthPlanningResourceBindingRow(f.row, binding.plan);
+      const authorized = requireFinalResourceBindingPhase(selected, binding);
+      expect(authorized.record.operator?.approvalId).toBe(retained.approvalId);
+      expect(authorized.record.approvedByCallId).toBe(retained.approvedByCallId);
+      return {
+        authDatabase: { migrationUrl: f.migrationUrl, runtimeUrl: "private-runtime" },
+        appDatabase: { migrationUrl: "private-app", runtimeUrl: "private-app-runtime" },
+      };
+    });
+    const next = await f.dependencies.plan({ ...context, action: "prepare" });
+    expect(f.original.operator?.authPreparation).toBeDefined();
+    expect(f.original.operator?.approvalId).toBeUndefined();
+    expect(f.original.operator?.planDigest).not.toBe(retained.planDigest);
+    expect(f.readResourceBindings.mock.calls.length).toBeGreaterThan(0);
+    expect(
+      f.readResourceBindings.mock.calls.every(([binding]) => binding.plan === retained.plan),
+    ).toBe(true);
+    expect(next.authSchema?.artifactRef).toBe("new-observed-artifact");
+    expect(f.propose.mock.calls[0]?.[0].directMigrationUrl).toBe(f.migrationUrl);
+    expect(f.row).toEqual(before);
+  });
   it.each([
     {
       configuredDeploymentId: "configured-gateway",

@@ -1,3 +1,4 @@
+import { retainedOperatorAuthFromJournal } from "./hosted-runtime-journal";
 import { hasFailedGatewayDelivery } from "./hosted-operator-gateway-delivery-failure";
 import { inspectParticipantBootstrapPreparation } from "./hosted-operator-participant-bootstrap";
 import { createHostedOperatorConsentOwner } from "./hosted-operator-consent-owner";
@@ -982,11 +983,11 @@ export const composeHostedOperatorDependencies = (
       current?.record.retainedAuth?.plan.authSchema;
     // Read under the original completed approval before the next plan replaces it.
     // Shared adoption keeps its source artifact and read-only execution contract.
-    const originalPlan =
-      current?.record.operator?.authPreparation !== undefined &&
-      current.record.operator.plan.action === "prepare"
-        ? current.record.operator.plan
-        : current?.record.retainedAuth?.plan;
+    const completedAuth =
+      current === undefined
+        ? undefined
+        : (retainedOperatorAuthFromJournal(current.record) ?? current.record.retainedAuth);
+    const originalPlan = completedAuth?.plan;
     const bindingPlan =
       adopted === undefined && activeAuth === undefined && originalPlan?.authAdoption === undefined
         ? originalPlan
