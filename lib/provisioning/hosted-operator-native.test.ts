@@ -53,6 +53,9 @@ describe("separate native operator host", () => {
         functions: {
           "entrypoint.ts": {
             includeFiles: "node_modules/.pnpm/eve*/node_modules/eve/**",
+            // Existing Pro/Node24 host supports extended per-function duration.
+            // https://vercel.com/docs/functions/configuring-functions/duration
+            maxDuration: 1800,
           },
         },
         root: ".",
