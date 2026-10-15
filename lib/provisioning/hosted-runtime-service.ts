@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { z } from "zod";
+import { savedPreviewEnvironmentGitBranch } from "./native-preview-environment-scope";
 
 import {
   decryptVersionedVercelToken,
@@ -170,6 +171,28 @@ export const hostedRuntimeExecutionEnvironment = (files: PrivateRuntimeFiles, ap
   return runtime;
 };
 
+const savedRuntimeEnvironmentScope = (
+  target: HostedRuntimeTarget,
+  row: Awaited<ReturnType<HostedRuntimeJournalStore["read"]>>,
+) =>
+  savedPreviewEnvironmentGitBranch({
+    branch: target.branch,
+    gitBranch: row?.record.environmentGitBranch,
+  });
+
+/** Only a new reservation derives managed scope from current project metadata. */
+const resolveRuntimeEnvironmentScope = async (
+  provider: Pick<
+    ReturnType<typeof createHostedRuntimeVercelProvider>,
+    "resolveEnvironmentGitBranch"
+  >,
+  target: HostedRuntimeTarget,
+  row: Awaited<ReturnType<HostedRuntimeJournalStore["read"]>>,
+) =>
+  row === undefined
+    ? await provider.resolveEnvironmentGitBranch()
+    : savedRuntimeEnvironmentScope(target, row);
+
 /** The caller must already have an effect-specific approval and freshly verified tenant membership. */
 export const prepareHostedRuntime = async (input: {
   authority: BuilderProvisionAuthority;
@@ -201,6 +224,7 @@ export const prepareHostedRuntime = async (input: {
       target,
       update: change,
     });
+  let environmentGitBranch: string | null = target.branch;
   let claimed = false;
   let leaseLost = false;
   let leasePending: Promise<void> | null = null;
@@ -258,13 +282,17 @@ export const prepareHostedRuntime = async (input: {
     if (!credential) {
       throw new HostedRuntimeProviderError("authorization_required");
     }
+    const previous = await input.store.read({ authority: input.authority, target });
+    environmentGitBranch = savedRuntimeEnvironmentScope(target, previous);
     const provider = createHostedRuntimeVercelProvider({
+      environmentGitBranch,
       credential,
       fetch: input.fetch,
       signal: input.signal,
       target,
     });
     await provider.assertProject();
+    environmentGitBranch = await resolveRuntimeEnvironmentScope(provider, target, previous);
     await provider.assertEnvironmentAvailability(
       [
         `${target.appId.toUpperCase().replaceAll("-", "_")}_DATABASE_URL`,
@@ -274,12 +302,14 @@ export const prepareHostedRuntime = async (input: {
       ],
       identity.runtimeId,
     );
-    await input.store.reserve({
+    const reserved = await input.store.reserve({
+      environmentGitBranch,
       approvedByCallId: input.approvedByCallId,
       authority: input.authority,
       now: new Date(now()),
       target,
     });
+    environmentGitBranch = savedRuntimeEnvironmentScope(target, reserved);
     const row = await update((record) => {
       if (
         record.leaseId !== undefined &&
@@ -352,6 +382,7 @@ export const prepareHostedRuntime = async (input: {
       throw new HostedRuntimeProviderError("authorization_required");
     }
     const prepareProvider = createHostedRuntimeVercelProvider({
+      environmentGitBranch,
       credential: prepareCredential,
       fetch: input.fetch,
       signal: executionSignal,
@@ -394,6 +425,7 @@ export const prepareHostedRuntime = async (input: {
       throw new HostedRuntimeProviderError("authorization_required");
     }
     const bindingProvider = createHostedRuntimeVercelProvider({
+      environmentGitBranch,
       credential: bindingCredential,
       fetch: input.fetch,
       signal: executionSignal,

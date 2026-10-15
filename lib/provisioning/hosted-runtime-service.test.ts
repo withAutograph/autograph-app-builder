@@ -137,6 +137,9 @@ const memoryStore = () => {
       const row = rows.get(key) ?? {
         record: {
           approvedByCallId: input.approvedByCallId,
+          ...(input.environmentGitBranch === undefined
+            ? {}
+            : { environmentGitBranch: input.environmentGitBranch }),
           kind: "app-runtime",
           request: input.target,
           status: "pending",
@@ -152,8 +155,18 @@ const memoryStore = () => {
   };
   return { rows, store };
 };
-const providerFixture = () => {
-  const environments = [
+const providerFixture = (productionBranch?: string) => {
+  const project = { productionBranch };
+  let losePostResponse = false;
+  const environments: {
+    comment: string;
+    configurationId: string;
+    gitBranch?: string | null;
+    id: string;
+    key: string;
+    target: string[];
+    value: string;
+  }[] = [
     native,
     {
       ...native,
@@ -183,7 +196,7 @@ const providerFixture = () => {
         .array(
           z.object({
             comment: z.string(),
-            gitBranch: z.string(),
+            gitBranch: z.string().optional(),
             key: z.string(),
             target: z.array(z.string()),
             value: z.string(),
@@ -199,6 +212,9 @@ const providerFixture = () => {
           environments[index] = entry;
         }
       }
+      if (losePostResponse) {
+        throw new Error("lost response");
+      }
       return Response.json({ created: [], failed: [] });
     }
     if (url.pathname.endsWith("/env")) {
@@ -213,10 +229,18 @@ const providerFixture = () => {
         framework: "services",
         id: target.projectId,
         rootDirectory: ".",
+        link: { productionBranch: project.productionBranch },
       },
     );
   });
-  return { environments, request };
+  return {
+    environments,
+    request,
+    project,
+    setLosePostResponse: (value: boolean) => {
+      losePostResponse = value;
+    },
+  };
 };
 
 describe("durable hosted runtime preparation", () => {
@@ -631,4 +655,132 @@ describe("durable hosted runtime preparation", () => {
     files["environment.json"] = JSON.stringify(environment);
     expect(() => hostedRuntimeBindings(files, target.appId)).toThrow(/installer or unrelated/u);
   });
+});
+
+it("persists generic managed scope before an unknown POST and recovers it after project metadata changes", async () => {
+  const { store } = memoryStore();
+  const f = providerFixture(target.branch);
+  const executor: HostedRuntimeExecutor = {
+    capture: async () => runtimeFiles(),
+    restore: vi.fn(async () => {}),
+    run: vi.fn(async () => proof),
+  };
+  const originalFetch = f.request.getMockImplementation();
+  const posts: { selector: string | null | undefined; query: string | null }[] = [];
+  const fetcher: typeof fetch = async (resource, init) => {
+    if (init?.method === "POST") {
+      const saved = await store.read({ authority, target });
+      posts.push({
+        selector: saved?.record.environmentGitBranch,
+        query: new URL(
+          resource instanceof Request ? resource.url : resource.toString(),
+        ).searchParams.get("gitBranch"),
+      });
+      expect(saved?.record.environmentGitBranch).toBeNull();
+    }
+    if (originalFetch === undefined) {
+      throw new Error("missing fixture transport");
+    }
+    return await originalFetch(resource, init);
+  };
+  const input = {
+    approvedByCallId: "approval_generic",
+    authority,
+    config,
+    executor,
+    fetch: fetcher,
+    readCredential: async () => credential,
+    store,
+    target,
+  };
+  f.setLosePostResponse(true);
+  expect(await prepareHostedRuntime(input)).toMatchObject({
+    status: "blocked",
+    code: "provider_unavailable",
+  });
+  expect(posts.length).toBeGreaterThan(0);
+  const pending = await store.read({ authority, target });
+  expect(pending?.record.environmentGitBranch).toBeNull();
+  f.project.productionBranch = "another-production-branch";
+  f.setLosePostResponse(false);
+  expect(await prepareHostedRuntime(input)).toMatchObject({
+    status: "prepared",
+    branch: target.branch,
+  });
+  const saved = await store.read({ authority, target });
+  expect(saved?.record.environmentGitBranch).toBeNull();
+  expect(saved?.record.request.branch).toBe(target.branch);
+  expect(
+    f.environments
+      .filter((entry) => entry.comment.startsWith("App Builder runtime"))
+      .every((entry) => entry.gitBranch === undefined),
+  ).toBe(true);
+});
+
+it("rejects a foreign generic managed row in preflight before reservation or database work", async () => {
+  const { store } = memoryStore();
+  const f = providerFixture(target.branch);
+  f.environments.push({
+    comment: "App Builder runtime another-owner",
+    configurationId: "",
+    gitBranch: null,
+    id: "foreign-generic",
+    key: "SPEND_REVIEW_DATABASE_URL",
+    target: ["preview"],
+    value: "private-foreign",
+  });
+  const executor: HostedRuntimeExecutor = {
+    capture: vi.fn(async () => runtimeFiles()),
+    restore: vi.fn(async () => {}),
+    run: vi.fn(async () => proof),
+  };
+  expect(
+    await prepareHostedRuntime({
+      approvedByCallId: "approval",
+      authority,
+      config,
+      executor,
+      fetch: f.request,
+      readCredential: async () => credential,
+      store,
+      target,
+    }),
+  ).toMatchObject({ status: "blocked", code: "resource_mismatch" });
+  expect(executor.run).not.toHaveBeenCalled();
+  expect(await store.read({ authority, target })).toBeUndefined();
+  expect(f.request.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+});
+
+it("honors the actual existing reservation when a legacy row wins concurrent creation", async () => {
+  const memory = memoryStore();
+  const f = providerFixture(target.branch);
+  const store: HostedRuntimeJournalStore = {
+    ...memory.store,
+    reserve: async (input) =>
+      await memory.store.reserve({ ...input, environmentGitBranch: undefined }),
+  };
+  const executor: HostedRuntimeExecutor = {
+    capture: async () => runtimeFiles(),
+    restore: vi.fn(async () => {}),
+    run: vi.fn(async () => proof),
+  };
+  expect(
+    await prepareHostedRuntime({
+      approvedByCallId: "approval",
+      authority,
+      config,
+      executor,
+      fetch: f.request,
+      readCredential: async () => credential,
+      store,
+      target,
+    }),
+  ).toMatchObject({ status: "prepared" });
+  const saved = await store.read({ authority, target });
+  expect(saved?.record.environmentGitBranch).toBeUndefined();
+  expect(
+    f.environments
+      .filter((row) => row.comment.startsWith("App Builder runtime"))
+      .every((row) => row.gitBranch === target.branch),
+  ).toBe(true);
 });

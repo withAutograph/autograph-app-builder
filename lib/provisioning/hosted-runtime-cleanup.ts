@@ -39,6 +39,7 @@ export const cleanupHostedRuntime = async (input: Parameters<typeof prepareHoste
   const leaseId = randomUUID();
   const abort = new AbortController();
   const signal = input.signal ? AbortSignal.any([input.signal, abort.signal]) : abort.signal;
+  let environmentGitBranch: string | null = target.branch;
   let claimed = false;
   let leaseLost = false;
   let timer: ReturnType<typeof setInterval> | undefined;
@@ -66,6 +67,7 @@ export const cleanupHostedRuntime = async (input: Parameters<typeof prepareHoste
       throw new HostedRuntimeProviderError("authorization_required");
     }
     const client = createHostedRuntimeVercelProvider({
+      environmentGitBranch,
       credential,
       fetch: input.fetch,
       signal,
@@ -79,6 +81,10 @@ export const cleanupHostedRuntime = async (input: Parameters<typeof prepareHoste
     if (!current || current.record.status === "cleaned") {
       return { appId: target.appId, status: "cleaned" as const };
     }
+    environmentGitBranch =
+      current.record.environmentGitBranch === undefined
+        ? target.branch
+        : current.record.environmentGitBranch;
     const files = decryptHostedRuntimeFiles({ ...input, record: current.record });
     if (!files && current.record.step !== "reserved") {
       throw new HostedRuntimeProviderError("resource_mismatch");

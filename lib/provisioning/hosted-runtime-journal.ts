@@ -61,6 +61,7 @@ export const hostedRuntimeJournalRecordSchema = z.strictObject({
     })
     .optional(),
   environmentBound: z.boolean().optional(),
+  environmentGitBranch: z.string().nullable().optional(),
   kind: z.literal("app-runtime"),
   leaseExpiresAt: z.iso.datetime({ offset: true }).optional(),
   leaseId: z.uuid().optional(),
@@ -133,6 +134,7 @@ export interface HostedRuntimeJournalStore {
     target: HostedRuntimeTarget;
     approvedByCallId: string;
     operator?: z.infer<typeof hostedOperatorRecordSchema>;
+    environmentGitBranch?: string | null;
     now: Date;
   }) => Promise<HostedRuntimeJournalRow>;
   read: (input: {
