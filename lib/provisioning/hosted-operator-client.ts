@@ -1,3 +1,4 @@
+import { Agent } from "undici";
 import {
   operatorHeaderProbeRequired,
   reportHostedOperatorHeaderProbes,
@@ -25,6 +26,15 @@ import {
   restrictedOperatorEnvironment,
   sameOperatorSelection,
 } from "./hosted-operator-contract";
+
+/** Match the protected operator's function duration without changing unrelated fetches. */
+export const createHostedOperatorDispatcher = (factory?: Agent.Options["factory"]) =>
+  new Agent({
+    bodyTimeout: 1_800_000,
+    headersTimeout: 1_800_000,
+    ...(factory === undefined ? {} : { factory }),
+  });
+const operatorDispatcher = createHostedOperatorDispatcher();
 
 const bindingSchema = z.strictObject({
   environment: z.record(z.string(), z.string()),
@@ -84,8 +94,9 @@ export const createHostedOperatorClient = (input: {
       operatorAction: body.action,
     });
     const token = await input.token();
-    const response = await (input.fetch ?? fetch)(new URL("/v1/runtime", url), {
+    const options: RequestInit & { dispatcher: Agent } = {
       body: JSON.stringify(body),
+      dispatcher: operatorDispatcher,
       headers: {
         authorization: `Bearer ${token}`,
         "content-type": "application/json",
@@ -94,7 +105,8 @@ export const createHostedOperatorClient = (input: {
       method: "POST",
       redirect: "error",
       signal,
-    });
+    };
+    const response = await (input.fetch ?? fetch)(new URL("/v1/runtime", url), options);
     const emit = (accessClass: NonNullable<HostedOperatorConsentMetadata["accessClass"]>) => {
       const vercelError = response.headers.get("x-vercel-error");
       let outcome: HostedOperatorConsentMetadata["outcome"] = "operator_access_denied";
