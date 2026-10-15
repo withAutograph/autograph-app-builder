@@ -662,3 +662,187 @@ describe("Gateway source repair", () => {
     },
   );
 });
+
+describe("shared host protection plan successor", () => {
+  const pendingProtection = async () => {
+    const f = fixture();
+    const { authAdoption, ...base } = adoptedGatewayPlan();
+    void authAdoption;
+    const originalPlan = hostedOperatorPlanSchema.parse({
+      ...base,
+      access: [],
+      stage: "auth-bootstrap",
+      effects: [
+        {
+          id: "auth-resources",
+          kind: "resources",
+          description: "Prepare Auth",
+          resourceId: plan.authDatabase.resourceId,
+        },
+        {
+          id: "app-resources",
+          kind: "resources",
+          description: "Prepare app",
+          resourceId: plan.appDatabase.resourceId,
+        },
+        { id: "auth-schema", kind: "install", description: "Install Auth" },
+        {
+          id: "gateway-bindings",
+          kind: "gateway-bindings",
+          description: "Bind Gateway and approved protection",
+        },
+        { id: "gateway-delivery", kind: "gateway-delivery", description: "Deliver Gateway" },
+      ],
+      gatewayBindings: {
+        ...base.gatewayBindings,
+        trustedSources: {
+          builderProduction: { projectId: "builder", from: "production", to: "preview" },
+          operatorPreview: { projectId: "operator", from: "preview", to: "preview" },
+        },
+      },
+      gatewayDelivery: {
+        branch: selection.branch,
+        projectId: "prj_gateway",
+        repoId: "gateway-repo",
+        gitSha: "1".repeat(40),
+      },
+    });
+    f.deps.plan = async () => originalPlan;
+    const original = await prepared(f);
+    const execute = f.deps.executeEffect;
+    f.deps.executeEffect = vi.fn(async (input) => {
+      if (input.effect.kind === "gateway-bindings") {
+        throw new HostedOperatorError("operator_unavailable");
+      }
+      return await execute(input);
+    });
+    f.approve();
+    expect(await f.client.request(original)).toMatchObject({ status: "blocked" });
+    expect(f.row?.record.operator?.pendingEffectId).toBe("gateway-bindings");
+    const previous = f.row;
+    if (previous?.record.operator === undefined) throw new Error("Missing pending protection");
+    const successorPlan = hostedOperatorPlanSchema.parse({
+      ...originalPlan,
+      gatewayBindings: { ...originalPlan.gatewayBindings, trustedSources: undefined },
+      effects: originalPlan.effects.map((effect) =>
+        effect.kind === "gateway-bindings"
+          ? { ...effect, description: "Bind shared Gateway environment" }
+          : effect,
+      ),
+    });
+    f.deps.plan = async () => successorPlan;
+    return { f, original, originalPlan, previous, successorPlan, execute };
+  };
+
+  it("requires a new approval and preserves pending work until normal fenced reconciliation applies", async () => {
+    const { f, original, previous, successorPlan, execute } = await pendingProtection();
+    const readApproval = f.deps.readApproval;
+    f.deps.readApproval = async (input) =>
+      input.planDigest === original.planDigest ? await readApproval(input) : null;
+    const successor = { ...(await prepared(f)), callId: "successor-approval" };
+    expect(successor.operationRef).toBe(original.operationRef);
+    expect(successor.planDigest).toBe(operatorPlanDigest(successorPlan));
+    expect(successor.planDigest).not.toBe(original.planDigest);
+    expect(f.row?.record).toMatchObject({
+      approvedByCallId: "operator:unapproved-plan",
+      privateState: previous.record.privateState,
+      operator: {
+        receipts: previous.record.operator?.receipts,
+        pendingEffectId: "gateway-bindings",
+        pendingEffectAttempt: previous.record.operator?.pendingEffectAttempt,
+        retainedGatewayDeliveries: [
+          { approvedByCallId: original.callId, operator: previous.record.operator },
+        ],
+      },
+    });
+    expect(f.row?.record.operator?.approvalId).toBeUndefined();
+    await expect(f.client.request(successor)).resolves.toMatchObject({
+      code: "authorization_required",
+    });
+    f.deps.readApproval = readApproval;
+    const reconcile = vi.spyOn(f.deps, "reconcile");
+    f.unknown();
+    expect(await f.client.request(successor)).toMatchObject({ code: "reconciliation_required" });
+    expect(f.row?.record.operator?.pendingEffectAttempt).toEqual(
+      previous.record.operator?.pendingEffectAttempt,
+    );
+    expect(f.row?.record.operator?.pendingEffectId).toBe("gateway-bindings");
+    expect(reconcile).toHaveBeenCalledWith(
+      expect.objectContaining({ plan: successorPlan, operationRef: original.operationRef }),
+    );
+    f.known();
+    const originalReconcile = reconcile.getMockImplementation()!;
+    reconcile.mockImplementation(async (input) =>
+      input.effect.kind === "gateway-bindings"
+        ? {
+            status: "applied",
+            receipt: {
+              effectId: input.effect.id,
+              observedAt: new Date().toISOString(),
+              resourceVersion: "fresh-owned-environment",
+            },
+          }
+        : await originalReconcile(input),
+    );
+    const executed: string[] = [];
+    f.deps.executeEffect = async (input) => {
+      executed.push(input.effect.kind);
+      return await execute(input);
+    };
+    f.deps.verifyAuthReadiness = async () => ({
+      assetSha256: "1".repeat(64),
+      catalogFingerprint: "2".repeat(64),
+      database: plan.authDatabase.database,
+      runtimeRole: plan.authDatabase.runtimeRole,
+      targetDigest: z.string().parse(successorPlan.authSchema?.targetDigest),
+      observedAt: new Date().toISOString(),
+    });
+    expect(await f.client.request(successor)).toMatchObject({ status: "auth-schema-prepared" });
+    expect(executed).toEqual(["gateway-delivery"]);
+    expect(f.row?.record.operator?.pendingEffectId).toBeUndefined();
+    expect(f.row?.record.operator?.pendingEffectAttempt).toBeUndefined();
+  });
+
+  it.each(["resource", "release", "other-effect", "live-lease", "approval", "alias-write"])(
+    "does not broaden partial replacement for %s",
+    async (change) => {
+      const { f, original, successorPlan } = await pendingProtection();
+      const before = f.row;
+      if (before?.record.operator === undefined) throw new Error("Missing pending protection");
+      if (change === "resource")
+        f.deps.plan = async () => ({ ...successorPlan, contextId: "other-resource" });
+      if (change === "release")
+        f.deps.plan = async () => ({
+          ...successorPlan,
+          release: { ...successorPlan.release, sha256: "c".repeat(64) },
+        });
+      if (change === "other-effect") before.record.operator.pendingEffectId = "auth-schema";
+      if (change === "live-lease") {
+        before.record.leaseId = "active-lease";
+        before.record.leaseExpiresAt = "2099-01-01T00:00:00Z";
+      }
+      if (change === "approval") f.deps.readApproval = async () => null;
+      if (change === "alias-write")
+        before.record.operator.gatewayDeliveryCandidates = [
+          {
+            branch: selection.branch,
+            deploymentId: "uncertain",
+            operationRef: original.operationRef,
+            origin: "https://uncertain-gateway.example",
+            projectId: "prj_gateway",
+            repoId: "gateway-repo",
+            readyState: "READY",
+            gatewayAliasAttempted: true,
+          },
+        ];
+      f.row = before;
+      expect(
+        await f.client.request({ action: "plan", operation: "prepare", selection }),
+      ).toMatchObject({
+        status: "blocked",
+        code: change === "approval" ? "authorization_required" : "operation_in_progress",
+      });
+      expect(f.row?.record.operator?.planDigest).toBe(original.planDigest);
+    },
+  );
+});

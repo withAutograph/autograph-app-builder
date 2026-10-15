@@ -149,9 +149,19 @@ not write the checkout. Submit the complete `implementationFiles` and product
 summary together so its approval card covers the actual build; do not send an
 empty apply merely to obtain approval and then request another apply for the
 implementation. The tool writes the private checkout only after approval.
-For hosted Preview persistence, first use `plan-app-hosted-runtime` after the
-private implementation is ready and the user requests connected Preview
-resources. Present the returned concrete targets, app/Auth roles, access grants,
+For requested hosted generated-app delivery, technically validate and independently
+review the private implementation, then complete the normal destination diff
+review, seal its proposal, and obtain separate publication approval. Use
+`publish_github_draft_pr`, or the existing draft update/reconciliation path, to
+publish the reviewed source. Verify `appSourceRecording` is `recorded`; if it is
+`unavailable`, resume that approved publication to record its actual source.
+Do this before full app preparation and delivery. Initial Auth/resource bootstrap
+may happen first. Keep hosted behavior unassessed until the actual app runs;
+do not wait for authenticated Preview acceptance before publishing the source
+needed to deploy that Preview. Never substitute another app or repository head.
+For hosted Preview persistence, use `plan-app-hosted-runtime` after the private
+implementation is ready and the user requests connected Preview resources.
+Present the returned concrete targets, app/Auth roles, access grants,
 effects, cost owner and retention. Pass that unchanged plan, digest and operation
 reference to `prepare-app-hosted-runtime` for separate effect approval. Read
 pending status with `get-app-hosted-runtime`; never report completion before

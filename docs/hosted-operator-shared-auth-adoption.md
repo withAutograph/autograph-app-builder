@@ -83,6 +83,17 @@ does not recursively depend on the originating app's active operation.
 
 ## Shared Gateway continuation
 
+Shared Gateway Deployment Protection is owned by approved host setup, separately
+from app adoption. Its two fixed rules are Builder project Production → Gateway
+Preview and Operator project Preview → Gateway Preview, with the exact project
+IDs named in the host setup and independently read back from the provider policy.
+New app/adoption plans do not include provider Trusted Sources setting writes.
+Native OIDC/owner-proof verification, app/Auth environment binding and Gateway
+delivery still apply. Runtime access alone does not prove the exact provider
+policy or out-of-the-box self-reproduction. Existing frozen plans keep their
+optional Trusted Sources scope and normal recovery; no pending journal or unknown
+write is rewritten by this change. See [host setup ownership](operator-native-host.md#shared-gateway-host-setup-owns-trusted-sources).
+
 Initial activation always verifies every approved value hash. Afterwards,
 local active ownership supplies the canonical row identities. Fixed Auth and
 realm-link values still require exact verification. Protected-app lists and

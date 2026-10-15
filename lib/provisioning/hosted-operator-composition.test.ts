@@ -986,28 +986,24 @@ describe("existing populated Auth workflow planning", () => {
       readResourceBindings,
     };
   };
-  it("plans exact cross-project Gateway Trusted Sources with explicit approval scope", async () => {
+  it("uses host-owned Gateway ingress while retaining native caller verification and app delivery", async () => {
     const f = setup("current");
     f.configuration.workloadPolicy.environment = "production";
     const plan = await f.dependencies.plan({ ...context, action: "prepare" });
-    expect(plan.gatewayBindings?.trustedSources).toEqual({
-      builderProduction: { projectId: "builder", from: "production", to: "preview" },
-      operatorPreview: { projectId: "operator", from: "preview", to: "preview" },
-    });
+    expect(plan.gatewayBindings?.trustedSources).toBeUndefined();
     expect(plan.gatewayDelivery?.projectId).toBe("gateway");
     expect(plan.gatewayBindings?.readonlyAttesters).toMatchObject({
       builderProduction: { projectId: "builder", environment: "production" },
       operatorPreview: { projectId: "operator", environment: "preview" },
     });
-    const effect = plan.effects.find((candidate) => candidate.kind === "gateway-bindings");
-    expect(effect?.description).toContain("Trusted Sources");
-    expect(effect?.description).toContain(f.configuration.workloadPolicy.projectId);
-    expect(effect?.description).toContain(
-      f.configuration.nativeNeon.configuration.operator.projectId,
+    expect(plan.gatewayBindings).toMatchObject({
+      authBrowserOrigin: f.configuration.gateway.authBrowserOrigin,
+      operatorOrigin: f.configuration.operator.origin,
+      sourceWorkload: f.configuration.gateway.workload,
+    });
+    expect(plan.effects.map(({ kind }) => kind)).toEqual(
+      expect.arrayContaining(["gateway-bindings", "gateway-delivery"]),
     );
-    expect(effect?.description).toContain(f.configuration.gateway.projectId);
-    expect(effect?.description).toContain("Production");
-    expect(effect?.description).toContain("Preview");
   });
   it("does not invent Production source authority for a Preview Builder workload", async () => {
     const f = setup("current");

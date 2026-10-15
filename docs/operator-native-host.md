@@ -97,26 +97,30 @@ approval of exact frozen plans before any effect.
 These are reviewed external effects and qualification requirements. Importing the
 native entrypoint creates no projects, deployments, secrets or provider resources.
 
-## Approved Gateway Trusted Sources
+## Shared Gateway host setup owns Trusted Sources
 
-When the configured Builder workload is Production and the operator is Preview,
-planning freezes these two provider access rules in optional
-`gatewayBindings.trustedSources`, targeting the Gateway project already named in
-`gatewayDelivery.projectId`:
+Deployment Protection for the shared Gateway is configured during approved host
+setup. New generated-app plans consume that host and do not include
+`gatewayBindings.trustedSources` or authorize provider protection-setting writes.
+The host setup names the exact source and target project IDs and installs these
+two fixed rules on the shared Gateway project:
 
 - Builder project **Production → Gateway Preview**, for protected JWKS and identity readback.
 - Operator project **Preview → Gateway Preview**, for protected identity readback.
 
-The public `gateway-bindings` effect names both source projects, environment pairs
-and target Gateway Preview. Adding this scope changes the plan and requires its
-ordinary explicit approval. A legacy plan without the field performs no Trusted
-Sources reads or writes; deploying newer code does not backfill that approval.
+The coordinator independently reads the provider's actual Gateway protection
+policy after the approved setup and retains the exact project/environment pairs.
+Preserve unrelated project and external rules, self access, environment pairs and
+CI settings. Successful runtime access proves reachability for that caller; it
+is not proof that these exact policy rules are installed. A deployment marked
+READY is not that policy readback either.
 
-The approved effect reads current project protection, adds missing scoped pairs,
-and reads the provider state again. It preserves unrelated project and external
-rules, self access, existing environment pairs and CI settings. It does not replace
-implicit grants with a finite override; unresolved outcomes require reconciliation
-through the existing effect.
+App plans still carry native caller verification, app/Auth environment bindings
+and Gateway delivery effects. The optional `trustedSources` contract and binder
+remain for already frozen plans: their existing approvals and reconciliation
+semantics are unchanged. Removing the field from new plans does not rewrite a
+pending old operation, authorize a retry of an unknown provider write, or resolve
+its recovery boundary. Use the existing approved recovery path for that operation.
 
 `readonlyAttesters` configures application verification of native callers. Trusted
 Sources separately admits those callers through Vercel Deployment Protection.
@@ -133,7 +137,8 @@ still belongs to the approved owner/project, native Preview environment and
 branch and is READY. That read does not replace the saved immutable transport or
 require the previous deployment to retain the browser alias.
 
-This adds no separate AI turn or qualification probe. Source checks or
+Host setup is shared infrastructure work, not a new per-app approval or
+qualification step. Source checks, provider policy readback, runtime access or
 a repair to the current native session do not establish automatic hosted recovery or
 [out-of-the-box self-reproduction](evals/self-reproduction.md).
 
