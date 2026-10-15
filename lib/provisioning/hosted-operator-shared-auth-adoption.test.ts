@@ -1088,6 +1088,8 @@ describe("native composition adoption boundary", () => {
     const schemaRead = vi.fn(async () => structuredClone(requirePreparation(f.source.record)));
     vi.spyOn(authReadinessModule, "createHostedOperatorAuthReadiness").mockImplementation(() => ({
       verify: schemaRead,
+      verifyPublication: unavailable,
+      reconcileMigration: unavailable,
     }));
     const native = composeHostedOperatorDependencies(configuration, controlPlane);
     checkpointSharedAuthAdoption.mockImplementationOnce(async (input) => {
