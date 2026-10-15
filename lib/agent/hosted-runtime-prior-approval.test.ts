@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ApprovalContext } from "eve/tools/approval";
 import type { MessageStreamEvent } from "eve/client";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { evaluateHostedRuntimePreparationApproval } from "../../agent/tools/prepare-app-hosted-runtime";
 import { createPrivateHostedApprovalRecorder } from "../eve/private-hosted-approval";
@@ -20,7 +20,11 @@ import {
 } from "../provisioning/hosted-operator-contract";
 import type { HostedRuntimeApprovalEnvelope } from "./prepare-app-hosted-runtime-step";
 import { prepareHostedRuntimeWithOperator } from "./prepare-app-hosted-runtime-step";
-import { createHostedRuntimePriorApprovalReader } from "./hosted-runtime-prior-approval";
+import {
+  captureHostedRuntimeApproval,
+  createHostedRuntimeExecutionApprovalReader,
+  createHostedRuntimePriorApprovalReader,
+} from "./hosted-runtime-prior-approval";
 
 const principal: HostedPrincipal = {
   audience: "https://builder.example/mcp",
@@ -203,6 +207,7 @@ const fixture = async () => {
   const approve = async (
     options: {
       outcome?: "approved" | "cancelled";
+      persist?: boolean;
       callId?: string;
       requestId?: string;
       sequence?: number;
@@ -245,8 +250,11 @@ const fixture = async () => {
         turnId: "original-turn",
       },
     };
-    await recorder.observe(requested);
-    await recorder.observe(settled);
+    if (options.persist !== false) {
+      await recorder.observe(requested);
+      await recorder.observe(settled);
+    }
+    return [requested, settled];
   };
   return {
     store,
@@ -459,6 +467,130 @@ describe("owned hosted runtime prior approval", () => {
     await expect(
       f.read(f.input, { ...f.context, abortSignal: controller.signal }),
     ).rejects.toThrow();
+    expect(f.requests).toEqual([]);
+  });
+});
+
+const nativeApprovalCapture = (
+  f: Awaited<ReturnType<typeof fixture>>,
+  events: MessageStreamEvent[],
+) => {
+  const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
+    await Promise.resolve();
+    const requested = new URL(url instanceof Request ? url.url : url);
+    expect(requested.origin).toBe("https://builder.example");
+    expect(requested.pathname).toBe(`/eve/v1/session/${f.saved.adapterSessionId}/stream`);
+    expect(requested.searchParams.get("startIndex")).toBe("0");
+    expect(requested.searchParams.get("includeTailIndex")).toBe("1");
+    expect(new Headers(init?.headers).get("authorization")).toBe("Bearer builder-workload-fixture");
+    return new Response(`${events.map((event) => JSON.stringify(event)).join("\n")}\n`, {
+      headers: {
+        "content-type": "application/x-ndjson",
+        "x-eve-session-id": f.saved.adapterSessionId,
+        "x-eve-stream-format": "ndjson",
+        "x-eve-stream-version": "25",
+        "x-eve-stream-tail-index": String(events.length - 1),
+      },
+    });
+  });
+  const capture = vi.fn(async (ctx: Parameters<typeof f.reader>[1]) => {
+    await captureHostedRuntimeApproval({
+      ownerContext: operatorOwnerContextSchema.parse(f.operator.ownerContext),
+      store: f.store,
+      baseUrl: "https://builder.example",
+      signal: ctx.abortSignal,
+      workloadIdentity: { token: async () => await Promise.resolve("builder-workload-fixture") },
+      fetchImplementation,
+    });
+  });
+  const read = createHostedRuntimeExecutionApprovalReader({ readPrior: f.reader, capture });
+  return { read, capture, fetchImplementation };
+};
+describe("Builder-local approval capture before execution", () => {
+  it("persists actual native approval before the exact protected status/execute path", async () => {
+    const f = await fixture();
+    const events = await f.approve({ persist: false });
+    const local = nativeApprovalCapture(f, events);
+    const approval = await local.read(f.input, f.context, f.operator);
+    expect(approval).toEqual({ approvalId: "original-request", callId: "original-call" });
+    const stored = await f.store.getSession(principal, f.saved.sessionId);
+    expect(stored?.version === 2 && stored.privateApprovalReceipts?.[0]?.outcome).toBe("approved");
+    expect(local.capture).toHaveBeenCalledOnce();
+    expect(local.fetchImplementation).toHaveBeenCalledOnce();
+    expect(f.requests.map((request) => request.action)).toEqual(["status"]);
+  });
+  it("skips native capture when exact durable approval already exists", async () => {
+    const f = await fixture();
+    const events = await f.approve();
+    const local = nativeApprovalCapture(f, events);
+    expect(await local.read(f.input, f.context, f.operator)).toEqual({
+      approvalId: "original-request",
+      callId: "original-call",
+    });
+    expect(local.capture).not.toHaveBeenCalled();
+  });
+  it.each(["orphan", "cancelled", "foreign-responder"])(
+    "does not promote %s native input into approved authority",
+    async (failure) => {
+      const f = await fixture();
+      const events = await f.approve({
+        persist: false,
+        ...(failure === "cancelled" ? { outcome: "cancelled" as const } : {}),
+        ...(failure === "foreign-responder" ? { responderPrincipalId: "foreign-owner" } : {}),
+      });
+      const local = nativeApprovalCapture(f, failure === "orphan" ? events.slice(1) : events);
+      if (failure === "orphan") {
+        expect(await local.read(f.input, f.context, f.operator)).toBeNull();
+      } else {
+        await expect(local.read(f.input, f.context, f.operator)).rejects.toMatchObject({
+          code: "authorization_required",
+        });
+      }
+      expect(f.requests).toEqual([]);
+    },
+  );
+  it("rechecks a real concurrently persisted receipt even when redundant capture fails", async () => {
+    const f = await fixture();
+    const capture = vi.fn(async () => {
+      await f.approve();
+      throw new Error("private capture response lost");
+    });
+    const read = createHostedRuntimeExecutionApprovalReader({ readPrior: f.reader, capture });
+    expect(await read(f.input, f.context, f.operator)).toEqual({
+      approvalId: "original-request",
+      callId: "original-call",
+    });
+    expect(capture).toHaveBeenCalledOnce();
+  });
+  it("does not capture or suppress a real saved cancellation", async () => {
+    const f = await fixture();
+    const events = await f.approve({ outcome: "cancelled" });
+    const local = nativeApprovalCapture(f, events);
+    await expect(local.read(f.input, f.context, f.operator)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(local.capture).not.toHaveBeenCalled();
+  });
+  it("does not fetch a native stream after adapter generation changed", async () => {
+    const f = await fixture();
+    const local = nativeApprovalCapture(f, await f.approve({ persist: false }));
+    vi.spyOn(f.store, "getSession").mockResolvedValue({
+      ...f.saved,
+      adapterGeneration: f.saved.adapterGeneration + 1,
+    });
+    await expect(local.capture(f.context)).rejects.toThrow();
+    expect(local.fetchImplementation).not.toHaveBeenCalled();
+  });
+  it("preserves cancellation after capture instead of executing", async () => {
+    const f = await fixture();
+    const controller = new AbortController();
+    const context = { ...f.context, abortSignal: controller.signal };
+    const capture = vi.fn(async () => {
+      await f.approve();
+      controller.abort();
+    });
+    const read = createHostedRuntimeExecutionApprovalReader({ readPrior: f.reader, capture });
+    await expect(read(f.input, context, f.operator)).rejects.toThrow();
     expect(f.requests).toEqual([]);
   });
 });

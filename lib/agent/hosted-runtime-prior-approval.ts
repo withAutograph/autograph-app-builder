@@ -3,7 +3,10 @@ import { z } from "zod";
 
 import type { HostedEveStore } from "../eve/hosted-store";
 import { hostedSessionRecordSchema, toDurableHostedSessionRecord } from "../eve/hosted-store";
-import { readPrivateHostedApproval } from "../eve/private-hosted-approval";
+import {
+  createPrivateHostedApprovalRecorder,
+  readPrivateHostedApproval,
+} from "../eve/private-hosted-approval";
 import type { PrivateHostedApprovalReceipt } from "../eve/private-hosted-approval";
 import {
   HostedOperatorError,
@@ -12,9 +15,16 @@ import {
   operatorPlanDigest,
   sameOperatorSelection,
 } from "../provisioning/hosted-operator-contract";
-import type { OperatorPublicResult } from "../provisioning/hosted-operator-contract";
+import type {
+  OperatorOwnerContext,
+  OperatorPublicResult,
+} from "../provisioning/hosted-operator-contract";
 import type { hostedOperatorClientForSession } from "../provisioning/hosted-operator-client";
 import { readHostedOperatorOwnerReaderConfiguration } from "../provisioning/hosted-operator-owner-context";
+import { createSameOriginEveTransport } from "../eve/same-origin-http";
+import type { HostedWorkloadIdentity } from "../eve/same-origin-http";
+import { tenantKeyFor } from "../eve/hosted-auth";
+import { createVercelWorkloadIdentity } from "../eve/vercel-workload-identity";
 import type { HostedRuntimeApprovalEnvelope } from "./prepare-app-hosted-runtime-step";
 
 export const hostedRuntimePreparationInputSchema = z.strictObject({
@@ -183,8 +193,9 @@ export const createHostedRuntimePriorApprovalReader =
     return { approvalId: receipt.requestId, callId: receipt.callId };
   };
 
-let deploymentStore: Promise<Pick<HostedEveStore, "getSession">> | undefined;
-const openDeploymentStore = async (): Promise<Pick<HostedEveStore, "getSession">> => {
+type ApprovalStore = Pick<HostedEveStore, "getSession" | "recordPrivateApprovalReceipts">;
+let deploymentStore: Promise<ApprovalStore> | undefined;
+const openDeploymentStore = async (): Promise<ApprovalStore> => {
   const configuration = readHostedOperatorOwnerReaderConfiguration(process.env);
   const [{ openHostedPostgresDatabase }, { createPostgresHostedEveStore }] = await Promise.all([
     import("../db/hosted-postgres"),
@@ -204,7 +215,7 @@ export const readHostedRuntimePriorApproval = async (
   const operator = existingOperator ?? (await resolveOperator(ctx.session.auth, ctx.session.id));
   deploymentStore ??= openDeploymentStore();
   const pendingStore = deploymentStore;
-  let store: Pick<HostedEveStore, "getSession">;
+  let store: ApprovalStore;
   try {
     store = await pendingStore;
   } catch (error) {
@@ -219,3 +230,106 @@ export const readHostedRuntimePriorApproval = async (
     operator,
   );
 };
+
+/** Capture real native request/settlement events with Builder's own workload identity. */
+export const captureHostedRuntimeApproval = async (input: {
+  ownerContext: OperatorOwnerContext;
+  store: ApprovalStore;
+  baseUrl: string;
+  workloadIdentity: HostedWorkloadIdentity;
+  signal: AbortSignal;
+  fetchImplementation?: typeof fetch;
+}) => {
+  input.signal.throwIfAborted();
+  const owner = operatorOwnerContextSchema.parse(input.ownerContext);
+  const recorder = createPrivateHostedApprovalRecorder({
+    principal: owner.principal,
+    sessionId: owner.sessionId,
+    store: input.store,
+  });
+  const transport = createSameOriginEveTransport({
+    config: { baseUrl: input.baseUrl },
+    workloadIdentity: input.workloadIdentity,
+    fetchImplementation: async (url, init) =>
+      await (input.fetchImplementation ?? fetch)(url, {
+        ...init,
+        signal:
+          init?.signal === undefined || init.signal === null
+            ? input.signal
+            : AbortSignal.any([input.signal, init.signal]),
+      }),
+    verifyReadAuthority: async ({ principal, sessionId, adapterSessionId }) => {
+      input.signal.throwIfAborted();
+      const raw = await input.store.getSession(owner.principal, owner.sessionId);
+      const parsed = hostedSessionRecordSchema.safeParse(raw);
+      if (!parsed.success) {
+        return false;
+      }
+      const session = toDurableHostedSessionRecord(parsed.data);
+      return [
+        sessionId === owner.sessionId,
+        adapterSessionId === owner.adapterSessionId,
+        tenantKeyFor(principal) === tenantKeyFor(owner.principal),
+        session.sessionId === owner.sessionId,
+        session.adapterSessionId === owner.adapterSessionId,
+        session.adapterGeneration === owner.adapterGeneration,
+        tenantKeyFor(session.principal) === tenantKeyFor(owner.principal),
+      ].every(Boolean);
+    },
+  });
+  if (transport.observe === undefined) {
+    throw new HostedOperatorError("operator_unavailable");
+  }
+  await transport.observe({
+    adapterSessionId: owner.adapterSessionId,
+    principal: owner.principal,
+    sessionId: owner.sessionId,
+    onEvent: () => {
+      /* Only private approval events are captured here. */
+    },
+    onPrivateEvent: recorder.observe,
+    readDeadline: true,
+  });
+  input.signal.throwIfAborted();
+};
+
+/** Execution-only catch-up; a failed redundant read cannot override a real concurrent receipt. */
+export const createHostedRuntimeExecutionApprovalReader =
+  (dependencies: {
+    readPrior: (
+      input: HostedRuntimeApprovalEnvelope,
+      ctx: Context,
+      operator: Operator,
+    ) => Promise<HostedRuntimePriorApproval | null>;
+    capture: (ctx: Context, operator: Operator) => Promise<void>;
+  }) =>
+  async (input: HostedRuntimeApprovalEnvelope, ctx: Context, operator: Operator) => {
+    const prior = await dependencies.readPrior(input, ctx, operator);
+    if (prior !== null) {
+      return prior;
+    }
+    ctx.abortSignal.throwIfAborted();
+    try {
+      await dependencies.capture(ctx, operator);
+    } catch {
+      // Only the exact fresh receipt read below decides authority, even after a lost capture response.
+    }
+    ctx.abortSignal.throwIfAborted();
+    return await dependencies.readPrior(input, ctx, operator);
+  };
+
+export const readHostedRuntimeExecutionApproval = createHostedRuntimeExecutionApprovalReader({
+  readPrior: readHostedRuntimePriorApproval,
+  capture: async (ctx, operator) => {
+    const configuration = readHostedOperatorOwnerReaderConfiguration(process.env);
+    deploymentStore ??= openDeploymentStore();
+    const store = await deploymentStore;
+    await captureHostedRuntimeApproval({
+      ownerContext: operatorOwnerContextSchema.parse(operator.ownerContext),
+      store,
+      baseUrl: new URL(configuration.resource).origin,
+      workloadIdentity: createVercelWorkloadIdentity(),
+      signal: ctx.abortSignal,
+    });
+  },
+});

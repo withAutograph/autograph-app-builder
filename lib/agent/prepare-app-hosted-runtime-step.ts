@@ -232,7 +232,7 @@ export async function prepareHostedRuntimeStep(
       ctx.session.id,
     );
     stage = "prior_approval";
-    const retainedApproval = await priorApprovalModule.readHostedRuntimePriorApproval(
+    const retainedApproval = await priorApprovalModule.readHostedRuntimeExecutionApproval(
       approvalInput,
       ctx,
       operator,
