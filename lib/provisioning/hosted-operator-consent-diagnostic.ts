@@ -368,6 +368,121 @@ const neonMcpFailureSchema = z.strictObject({
 });
 export type OperatorNeonMcpFailure = z.infer<typeof neonMcpFailureSchema>;
 
+// Official CLI env error codes; BAD_REQUEST remains generic, never a guessed branch cause.
+// https://github.com/vercel/vercel/blob/main/packages/cli/src/util/env/known-error.ts
+const gatewayProviderCode = z.enum([
+  "BAD_REQUEST",
+  "ENV_ALREADY_EXISTS",
+  "ENV_CONFLICT",
+  "EXISTING_KEY_AND_TARGET",
+  "FORBIDDEN",
+  "ID_NOT_FOUND",
+  "INVALID_KEY",
+  "INVALID_VALUE",
+  "KEY_INVALID_CHARACTERS",
+  "KEY_INVALID_LENGTH",
+  "KEY_RESERVED",
+  "RESERVED_ENV_VARIABLE",
+  "MAX_ENVS_EXCEEDED",
+  "MISSING_ID",
+  "MISSING_KEY",
+  "MISSING_TARGET",
+  "MISSING_VALUE",
+  "NOT_AUTHORIZED",
+  "NOT_DECRYPTABLE",
+  "SYSTEM_ENV_WITH_VALUE",
+  "TEAM_NOT_FOUND",
+  "TOO_MANY_IDS",
+  "TOO_MANY_KEYS",
+  "UNKNOWN_ERROR",
+  "VALUE_INVALID_LENGTH",
+  "VALUE_INVALID_TYPE",
+]);
+
+// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- Read untrusted own data descriptors before the closed advisory projection; never invoke getters.
+const ownProviderDetail = (value: unknown, key: string): unknown =>
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Object descriptors require an object; this does not authorize any provider data.
+  typeof value === "object" && value !== null
+    ? Object.getOwnPropertyDescriptor(value, key)?.value
+    : undefined;
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Parse ephemeral provider text here; only literal closed labels leave the caller.
+const providerMessages = (value: unknown): string[] => {
+  const message = z.string().safeParse(value);
+  return message.success ? [message.data] : [];
+};
+
+const gatewayProviderTerm = z.enum([
+  "branch",
+  "production",
+  "preview",
+  "target",
+  "integration",
+  "token",
+  "configuration",
+  "permission",
+  "duplicate",
+  "size",
+  "update",
+  "length",
+]);
+const gatewayValidationField = z.enum(["gitBranch", "target", "type", "key", "value", "comment"]);
+
+/** Literal observations only: labels are neither provider causes nor permission to retry. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the parser for untrusted advisory provider metadata; only closed fields are returned.
+export const projectOperatorGatewayProviderFailure = (payload: unknown) => {
+  const result: Pick<
+    OperatorGatewayBindingsDiagnostic,
+    "providerCode" | "providerTerms" | "validationFields"
+  > = {};
+  try {
+    const error = ownProviderDetail(payload, "error");
+    const rawCode = z.string().safeParse(ownProviderDetail(error, "code"));
+    const code = gatewayProviderCode.safeParse(
+      rawCode.success ? rawCode.data.toUpperCase() : undefined,
+    );
+    if (code.success) {
+      result.providerCode = code.data;
+    }
+    const messages = providerMessages(ownProviderDetail(error, "message"));
+    const details = ownProviderDetail(error, "details");
+    const entries: unknown[] = [];
+    if (Array.isArray(details)) {
+      for (let index = 0; index < details.length; index += 1) {
+        entries.push(ownProviderDetail(details, String(index)));
+      }
+    } else {
+      entries.push(details);
+    }
+    const fields = new Set<z.infer<typeof gatewayValidationField>>();
+    for (const detail of entries) {
+      messages.push(
+        ...providerMessages(detail),
+        ...providerMessages(ownProviderDetail(detail, "message")),
+      );
+      const path = ownProviderDetail(detail, "path");
+      const stringPath = z.string().safeParse(path);
+      const field = gatewayValidationField.safeParse(
+        stringPath.success ? stringPath.data.replace(/^\//u, "") : ownProviderDetail(path, "0"),
+      );
+      if (field.success) {
+        fields.add(field.data);
+      }
+    }
+    const terms = gatewayProviderTerm.options.filter((term) =>
+      messages.some((text) => new RegExp(`\\b${term}\\b`, "iu").test(text)),
+    );
+    if (terms.length !== 0) {
+      result.providerTerms = terms;
+    }
+    if (fields.size !== 0) {
+      result.validationFields = gatewayValidationField.options.filter((field) => fields.has(field));
+    }
+  } catch {
+    /* Hostile advisory properties cannot change the original provider failure. */
+  }
+  return result;
+};
+
 const gatewayBindingsDiagnostic = z.strictObject({
   mode: z.enum(["bind", "reconcile"]),
   stage: z.enum([
@@ -406,6 +521,9 @@ const gatewayBindingsDiagnostic = z.strictObject({
     ])
     .optional(),
   httpStatus: z.number().int().min(100).max(599).optional(),
+  providerCode: gatewayProviderCode.optional(),
+  providerTerms: z.array(gatewayProviderTerm).optional(),
+  validationFields: z.array(gatewayValidationField).optional(),
   result: z.enum(["bound", "applied", "absent", "unknown", "failed"]),
 });
 export type OperatorGatewayBindingsDiagnostic = z.infer<typeof gatewayBindingsDiagnostic>;

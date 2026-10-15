@@ -13,7 +13,10 @@ import type {
 } from "./hosted-operator-contract";
 import type { GatewayManagedEnvironmentContext } from "./hosted-operator-service";
 import type { HostedOperatorConsentDiagnosticSink } from "./hosted-operator-consent-diagnostic";
-import { createHostedOperatorConsentDiagnostic } from "./hosted-operator-consent-diagnostic";
+import {
+  createHostedOperatorConsentDiagnostic,
+  projectOperatorGatewayProviderFailure,
+} from "./hosted-operator-consent-diagnostic";
 import { createHostedOperatorGatewayBindings } from "./hosted-operator-gateway-bindings";
 
 const authority = {
@@ -1317,6 +1320,9 @@ it("drops nonclosed Gateway metadata through the existing private diagnostic pro
     "method",
     "statusCategory",
     "httpStatus",
+    "providerCode",
+    "providerTerms",
+    "validationFields",
     "result",
     "url",
     "message",
@@ -1399,4 +1405,233 @@ it("does not coerce an advisory status value", async () => {
   expect(coercion).not.toHaveBeenCalled();
   expect(f.diagnostics).toHaveBeenCalledOnce();
   expect(f.diagnostics.mock.calls[0]?.[0].gatewayBindings).not.toHaveProperty("httpStatus");
+});
+
+it.each([
+  "BAD_REQUEST",
+  "ENV_ALREADY_EXISTS",
+  "ENV_CONFLICT",
+  "EXISTING_KEY_AND_TARGET",
+  "FORBIDDEN",
+  "ID_NOT_FOUND",
+  "INVALID_KEY",
+  "INVALID_VALUE",
+  "KEY_INVALID_CHARACTERS",
+  "KEY_INVALID_LENGTH",
+  "KEY_RESERVED",
+  "RESERVED_ENV_VARIABLE",
+  "MAX_ENVS_EXCEEDED",
+  "MISSING_ID",
+  "MISSING_KEY",
+  "MISSING_TARGET",
+  "MISSING_VALUE",
+  "NOT_AUTHORIZED",
+  "NOT_DECRYPTABLE",
+  "SYSTEM_ENV_WITH_VALUE",
+  "TEAM_NOT_FOUND",
+  "TOO_MANY_IDS",
+  "TOO_MANY_KEYS",
+  "UNKNOWN_ERROR",
+  "VALUE_INVALID_LENGTH",
+  "VALUE_INVALID_TYPE",
+])("projects only the official provider code %s without retry", async (code) => {
+  const f = fixture();
+  f.fetcher.mockResolvedValueOnce(
+    Response.json(
+      { error: { code: code.toLowerCase(), message: privateAuthUrl } },
+      { status: 400 },
+    ),
+  );
+  expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
+  expect(f.fetcher).toHaveBeenCalledOnce();
+  expect(f.diagnostics.mock.calls[0]?.[0].gatewayBindings).toMatchObject({
+    providerCode: code,
+    httpStatus: 400,
+    result: "unknown",
+  });
+  expect(JSON.stringify(f.diagnostics.mock.calls)).not.toContain(privateAuthUrl);
+});
+
+it("observes literal error terms and validation fields on a rejected POST without interpreting or echoing them", async () => {
+  const control = fixture();
+  const f = fixture();
+  for (const [subject, body] of [
+    [control, { error: { code: "bad_request" } }],
+    [
+      f,
+      {
+        error: {
+          code: "bad_request",
+          message: `Branch production preview target integration token configuration permission duplicate size update length ${privateAuthUrl}`,
+          details: [
+            { path: ["gitBranch"], message: "target", value: privateAuthUrl },
+            { path: "/type", message: "length" },
+            { path: "key", value: "fixture-owner-oauth" },
+            { path: ["value"], value: privateAuthUrl },
+            { path: "comment", value: "fixture-owner-oauth" },
+            { path: ["target", 0] },
+            { path: privateAuthUrl },
+          ],
+        },
+        request: { key: privateAuthUrl, value: "fixture-owner-oauth" },
+      },
+    ],
+  ] as const) {
+    const original = subject.fetcher.getMockImplementation()!;
+    subject.fetcher.mockImplementation(async (url, init) =>
+      init?.method === "POST" ? Response.json(body, { status: 400 }) : await original(url, init),
+    );
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Compare two isolated fixture runs in order.
+    await expect(subject.writer.bind(subject.input)).rejects.toThrow("operator_unavailable");
+  }
+  expect(
+    f.fetcher.mock.calls.map(([url, init]) => ({
+      url: url instanceof Request ? url.url : url.toString(),
+      method: init?.method,
+      body: init?.body,
+    })),
+  ).toEqual(
+    control.fetcher.mock.calls.map(([url, init]) => ({
+      url: url instanceof Request ? url.url : url.toString(),
+      method: init?.method,
+      body: init?.body,
+    })),
+  );
+  expect(f.assertCurrent.mock.calls.length).toBe(control.assertCurrent.mock.calls.length);
+  expect(f.assertAuthorized.mock.calls.length).toBe(control.assertAuthorized.mock.calls.length);
+  expect(f.diagnostics.mock.calls[0]?.[0].gatewayBindings).toMatchObject({
+    stage: "write",
+    method: "POST",
+    httpStatus: 400,
+    result: "failed",
+    providerCode: "BAD_REQUEST",
+    providerTerms: [
+      "branch",
+      "production",
+      "preview",
+      "target",
+      "integration",
+      "token",
+      "configuration",
+      "permission",
+      "duplicate",
+      "size",
+      "update",
+      "length",
+    ],
+    validationFields: ["gitBranch", "target", "type", "key", "value", "comment"],
+  });
+  const serialized = JSON.stringify(f.diagnostics.mock.calls);
+  for (const secret of [
+    privateAuthUrl,
+    "fixture-owner-oauth",
+    selection.sessionId,
+    "fixture-better-auth-secret",
+  ]) {
+    expect(serialized).not.toContain(secret);
+  }
+});
+
+it("does not classify unknown codes, arbitrary fields, request echoes, or substrings as provider reasons", () => {
+  expect(
+    projectOperatorGatewayProviderFailure({
+      code: "BAD_REQUEST",
+      message: "branch production",
+      error: {
+        code: privateAuthUrl,
+        message: "branching retargeted previewing",
+        value: "permission",
+        details: { path: privateAuthUrl, value: "integration" },
+      },
+      request: { message: "branch", target: "preview" },
+    }),
+  ).toEqual({});
+});
+
+it("ignores hostile advisory getters and proxies without evaluating messages or values", () => {
+  const getter = vi.fn(() => {
+    throw new Error(privateAuthUrl);
+  });
+  const error = Object.defineProperties(
+    {},
+    { code: { get: getter }, message: { get: getter }, details: { get: getter } },
+  );
+  expect(projectOperatorGatewayProviderFailure({ error })).toEqual({});
+  expect(
+    projectOperatorGatewayProviderFailure(Object.defineProperty({}, "error", { get: getter })),
+  ).toEqual({});
+  expect(
+    projectOperatorGatewayProviderFailure(
+      new Proxy(
+        {},
+        {
+          getOwnPropertyDescriptor() {
+            throw new Error(privateAuthUrl);
+          },
+        },
+      ),
+    ),
+  ).toEqual({});
+  expect(getter).not.toHaveBeenCalled();
+});
+
+it.each(["malformed", "oversized", "stream_error", "body_getter"] as const)(
+  "retains the original failure and guard for an unreadable %s error diagnostic",
+  async (kind) => {
+    const f = fixture();
+    let response = new Response("private non-JSON error", { status: 400 });
+    if (kind === "oversized") {
+      response = Response.json(
+        { error: { code: "bad_request", message: privateAuthUrl.repeat(1000) } },
+        { status: 400 },
+      );
+    } else if (kind === "stream_error") {
+      response = new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.error(new Error(privateAuthUrl));
+          },
+        }),
+        { status: 400 },
+      );
+    } else if (kind === "body_getter") {
+      Object.defineProperty(response, "body", {
+        get() {
+          throw new Error(privateAuthUrl);
+        },
+      });
+    }
+    const postResponseGuard = vi.fn(async () => {});
+    f.fetcher.mockImplementationOnce(async () => {
+      f.assertCurrent.mockImplementation(postResponseGuard);
+      return response;
+    });
+    expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
+    expect(postResponseGuard).toHaveBeenCalledOnce();
+    expect(f.fetcher).toHaveBeenCalledOnce();
+    expect(f.diagnostics.mock.calls[0]?.[0].gatewayBindings).not.toHaveProperty("providerCode");
+    expect(JSON.stringify(f.diagnostics.mock.calls)).not.toContain(privateAuthUrl);
+  },
+);
+
+it("finishes an incomplete diagnostic body on the existing request abort without another call", async () => {
+  const f = fixture();
+  const controller = new AbortController();
+  const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
+  const cancel = vi.fn();
+  const response = new Response(new ReadableStream({ cancel }), { status: 400 });
+  f.fetcher.mockResolvedValueOnce(response);
+  try {
+    const result = f.writer.reconcile(f.input);
+    await vi.waitFor(() => {
+      expect(response.body?.locked).toBe(true);
+    });
+    controller.abort();
+    expect(await result).toEqual({ status: "unknown" });
+    expect(cancel).toHaveBeenCalled();
+    expect(f.fetcher).toHaveBeenCalledOnce();
+    expect(f.diagnostics.mock.calls[0]?.[0].gatewayBindings).not.toHaveProperty("providerCode");
+  } finally {
+    timeout.mockRestore();
+  }
 });
