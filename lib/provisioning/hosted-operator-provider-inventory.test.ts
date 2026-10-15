@@ -123,7 +123,9 @@ const fixture = () => {
   const fetcher = vi.fn<typeof fetch>(async (url, options) => {
     await Promise.resolve();
     const parsed = url instanceof Request ? new URL(url.url) : new URL(url);
-    if (parsed.origin === "https://gateway.example.test") {
+    if (
+      ["https://gateway.example.test", "https://gateway-old.example.test"].includes(parsed.origin)
+    ) {
       return Response.json({
         keys: [publicJwk],
       });
@@ -134,7 +136,7 @@ const fixture = () => {
       parsed.pathname === "/v13/deployments/gateway.example.test"
         ? "/v13/deployments/dpl_gateway"
         : parsed.pathname;
-    const payload = payloads.get(deploymentPath);
+    const payload = payloads.get(parsed.pathname) ?? payloads.get(deploymentPath);
     return payload === undefined
       ? Response.json({ error: "missing" }, { status: 404 })
       : Response.json(payload);
@@ -408,6 +410,91 @@ describe("private read-only operator provider inventory", () => {
       ).rejects.toThrow("operator_unavailable");
     },
   );
+  const movedPublicAlias = () => {
+    const f = fixture();
+    const frozen = f.payloads.get("/v13/deployments/dpl_gateway");
+    f.payloads.set("/v13/deployments/dpl_gateway", { ...frozen, url: "gateway-old.example.test" });
+    f.payloads.set("/v2/deployments/dpl_gateway/aliases", { aliases: [] });
+    f.payloads.set("/v13/deployments/gateway.example.test", {
+      ...frozen,
+      id: "dpl_current",
+      url: "gateway-current.example.test",
+    });
+    return {
+      ...f,
+      input: {
+        ...f.input,
+        configuration: {
+          ...configuration,
+          verification: {
+            ...configuration.verification,
+            gatewayOrigin: "https://gateway-old.example.test",
+          },
+        },
+      },
+    };
+  };
+  it("keeps the exact approved transport when its public alias advances within the same native boundary", async () => {
+    const f = movedPublicAlias();
+    const observed = await readHostedOperatorProviderInventory({
+      ...f.input,
+      phase: "bootstrap-planning",
+    });
+    expect(observed.gateway.deploymentId).toBe("dpl_gateway");
+    expect(observed.verification.gatewayOrigin).toBe("https://gateway-old.example.test");
+    expect(observed.verification.publicOrigin).toBe("https://gateway.example.test");
+    expect(observed.verification.publicKeyIds).toEqual(["public-key"]);
+  });
+  it.each([
+    { projectId: "foreign" },
+    { ownerId: "foreign" },
+    { target: "production" },
+    { gitSource: { ref: "another-branch" } },
+    { readyState: "BUILDING" },
+  ])("rejects a moved public alias outside the approved native boundary: %j", async (patch) => {
+    const f = movedPublicAlias();
+    f.payloads.set("/v13/deployments/gateway.example.test", {
+      ...f.payloads.get("/v13/deployments/gateway.example.test"),
+      ...patch,
+    });
+    await expect(
+      readHostedOperatorProviderInventory({ ...f.input, phase: "bootstrap-planning" }),
+    ).rejects.toThrow("resource_mismatch");
+  });
+  it.each([null, {}])("rejects malformed current public alias evidence: %j", async (payload) => {
+    const f = movedPublicAlias();
+    const originalFetch = f.input.fetch;
+    const fetcher: typeof fetch = async (url, options) => {
+      const parsed = url instanceof Request ? new URL(url.url) : new URL(url);
+      return parsed.pathname === "/v13/deployments/gateway.example.test"
+        ? Response.json(payload)
+        : await originalFetch(url, options);
+    };
+    await expect(
+      readHostedOperatorProviderInventory({
+        ...f.input,
+        fetch: fetcher,
+        phase: "bootstrap-planning",
+      }),
+    ).rejects.toThrow("operator_unavailable");
+  });
+  it("rejects a missing current public alias without substituting another deployment", async () => {
+    const f = movedPublicAlias();
+    const originalFetch = f.input.fetch;
+    const fetcher: typeof fetch = async (url, options) => {
+      const parsed = url instanceof Request ? new URL(url.url) : new URL(url);
+      return parsed.pathname === "/v13/deployments/gateway.example.test"
+        ? Response.json({ error: "missing" }, { status: 404 })
+        : await originalFetch(url, options);
+    };
+    await expect(
+      readHostedOperatorProviderInventory({
+        ...f.input,
+        fetch: fetcher,
+        phase: "bootstrap-planning",
+      }),
+    ).rejects.toThrow("operator_unavailable");
+  });
   it("resolves the current trusted public alias during new planning while execution retains its fixed deployment", async () => {
     const f = fixture();
     const { gateway } = configuration;

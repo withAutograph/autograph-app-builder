@@ -5,6 +5,7 @@ import {
   createHostedOperatorClient,
   createHostedOperatorDispatcher,
 } from "./hosted-operator-client";
+import { HostedOperatorError } from "./hosted-operator-contract";
 
 const selection = {
   appId: "test-app",
@@ -14,6 +15,68 @@ const selection = {
   sessionId: "private-session",
 };
 const operationRef = "83cf8be5-3e1f-4e73-8e2f-e270fd2e6833";
+
+const clientFor = (response: Record<string, string | undefined>) =>
+  createHostedOperatorClient({
+    endpoint: "https://operator.example",
+    fetch: async () => await Promise.resolve(Response.json(response)),
+    token: async () => await Promise.resolve("private-bearer"),
+  });
+
+describe("operator Auth identity input results", () => {
+  const request = { action: "auth-identity-input" as const, selection, operationRef };
+  const success = {
+    browserUrl: "https://auth.example/api/auth/platform/operator-link?nonce=private-nonce",
+    expiresAt: "2026-10-15T20:00:00.000Z",
+    operationRef,
+    sessionId: selection.sessionId,
+  };
+
+  it.each([
+    "auth_identity_required",
+    "operation_in_progress",
+    "authorization_required",
+    undefined,
+  ] as const)("preserves a blocked operator result code (%s)", async (code) => {
+    const result = clientFor({
+      appId: selection.appId,
+      authenticatedBehavior: "unassessed",
+      status: "blocked",
+      operationRef,
+      ...(code === undefined ? {} : { code }),
+    }).authIdentityInput(request);
+    await expect(result).rejects.toBeInstanceOf(HostedOperatorError);
+    await expect(result).rejects.toMatchObject({ code: code ?? "operator_unavailable" });
+  });
+
+  it("returns the validated identity invitation", async () => {
+    await expect(clientFor(success).authIdentityInput(request)).resolves.toEqual(success);
+  });
+
+  it.each([
+    { operationRef: "0f598245-fd56-48ca-a11e-dfa2e50c0884" },
+    { sessionId: "another-private-session" },
+  ])("rejects a successful result bound to another request (%j)", async (mismatch) => {
+    await expect(
+      clientFor({ ...success, ...mismatch }).authIdentityInput(request),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
+  });
+
+  it.each([
+    { ...success, expiresAt: "invalid-time" },
+    { ...success, browserUrl: "http://insecure.example" },
+    {
+      appId: selection.appId,
+      authenticatedBehavior: "unassessed",
+      status: "blocked",
+      code: "unrecognized-code",
+    },
+  ])("preserves schema validation for malformed responses (%j)", async (malformed) => {
+    await expect(clientFor(malformed).authIdentityInput(request)).rejects.toBeInstanceOf(
+      z.ZodError,
+    );
+  });
+});
 
 describe("closed outbound operator action diagnostics", () => {
   it.each(["status", "execute"] as const)(
