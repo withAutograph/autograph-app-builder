@@ -675,3 +675,26 @@ it("removes an explicitly approved generic Preview row using its saved scope aft
   expect(await f.writer.remove(f.input, values)).toEqual({ rows: [] });
   expect(f.rows.some((row) => row.id === generic.id)).toBe(false);
 });
+
+it("recovers current-operation branch-specific rows without a journal after production-branch settings change", async () => {
+  const f = fixture();
+  const written = await f.writer.bind(f.input, values);
+  f.input.managedEnvironment = [];
+  f.project.link.productionBranch = target.branch;
+  f.requests.length = 0;
+  const recovered = await f.writer.bind(f.input, values);
+  expect(recovered.rows.map((row) => row.id)).toEqual(written.rows.map((row) => row.id));
+  expect(recovered.rows.every((row) => row.gitBranch === target.branch)).toBe(true);
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+});
+it("does not adopt unjournaled generic rows when the current mapping is branch-specific", async () => {
+  const f = fixture();
+  f.project.link.productionBranch = target.branch;
+  await f.writer.bind(f.input, values);
+  f.input.managedEnvironment = [];
+  f.project.link.productionBranch = "main";
+  f.requests.length = 0;
+  expect(await f.writer.reconcile(f.input, values)).toEqual({ status: "unknown" });
+  await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+});

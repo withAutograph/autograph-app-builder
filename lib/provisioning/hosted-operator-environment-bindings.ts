@@ -138,10 +138,13 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
       return (
         row.target.length === 1 &&
         row.target[0] === "preview" &&
-        matchesPreviewEnvironmentGitBranch(
-          row.gitBranch,
-          known === undefined ? gitBranch : savedPreviewEnvironmentGitBranch(known),
-        ) &&
+        (known === undefined
+          ? matchesPreviewEnvironmentGitBranch(row.gitBranch, gitBranch) ||
+            row.gitBranch === deploymentTarget.branch
+          : matchesPreviewEnvironmentGitBranch(
+              row.gitBranch,
+              savedPreviewEnvironmentGitBranch(known),
+            )) &&
         (row.configurationId === undefined ||
           row.configurationId === null ||
           row.configurationId === "" ||
