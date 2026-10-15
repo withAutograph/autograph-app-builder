@@ -690,7 +690,9 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       const principal = hostedPrincipalSchema.parse(input.principal);
       return database.transaction(async (transaction) => {
         const row = await sessionById(transaction, principal, input.sessionId, true);
-        if (row === null) throw new Error(SESSION_NOT_FOUND);
+        if (row === null) {
+          throw new Error(SESSION_NOT_FOUND);
+        }
         const current = toDurableHostedSessionRecord(row);
         const updated = durableHostedSessionRecordSchema.parse({
           ...current,
@@ -704,7 +706,9 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
             and(sessionTenantPredicate(principal), eq(agentSessions.sessionId, input.sessionId)),
           )
           .returning();
-        if (rows.length !== 1) throw new Error("Cancellation intent was not durable.");
+        if (rows.length !== 1) {
+          throw new Error("Cancellation intent was not durable.");
+        }
         return parseHostedSessionRow(rows[0]);
       });
     },

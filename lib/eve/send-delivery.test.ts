@@ -176,14 +176,16 @@ describe("canonical SEND delivery acknowledgement", () => {
         }
         return snapshot([turnEvent("turn.started", "resumed", ["ack"])]);
       });
-      await f
-        .create()
-        .send(f.request)
-        .catch(() => undefined);
-      await f
-        .create()
-        .send(f.request)
-        .catch(() => undefined);
+      try {
+        await f.create().send(f.request);
+      } catch (error) {
+        expect(error).toBeInstanceOf(HostedSubmissionUnknownError);
+      }
+      try {
+        await f.create().send(f.request);
+      } catch (error) {
+        expect(error).toBeInstanceOf(HostedSubmissionUnknownError);
+      }
       expect(await f.store.getSession(principal, f.request.sessionId)).toMatchObject({
         cancellationRevision: 2,
         sessionId: f.request.sessionId,
@@ -204,7 +206,7 @@ describe("canonical SEND delivery acknowledgement", () => {
     const proof = nativeDeliveryForEvents([turnEvent("turn.started", "resumed", ["ack"])]);
     expect(mayReviveCancelledSession(operation, current, proof)).toBe(true);
     expect(mayReviveCancelledSession(null, current, proof)).toBe(false);
-    expect(mayReviveCancelledSession(operation, current, undefined)).toBe(false);
+    expect(mayReviveCancelledSession(operation, current)).toBe(false);
     expect(
       mayReviveCancelledSession(operation, { ...current, cancellationRevision: 2 }, proof),
     ).toBe(false);
