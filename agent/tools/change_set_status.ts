@@ -339,7 +339,7 @@ export const changedAppTextExport = async (
   return { exportFiles, exportOmissions };
 };
 
-export const exactNormalizedChangeSet = async (input: {
+export const observeNormalizedChangeSet = async (input: {
   state: Extract<
     ReturnType<typeof appBuilderWorkflowState.get>,
     { phase: "validated" | "reviewed" }
@@ -398,7 +398,7 @@ export const exactNormalizedChangeSet = async (input: {
           input.state.appSpec.appId,
           includeBaselinePlanningSpecs,
         );
-  return deriveNormalizedChangeSet(
+  const changeSet = deriveNormalizedChangeSet(
     {
       ...input.state.applyReceipt,
       ...(selectedBaseline === undefined && destination === undefined
@@ -422,7 +422,12 @@ export const exactNormalizedChangeSet = async (input: {
     input.state.proposal.contractDigest,
     input.state.sourceReceipt.contractDigest,
   );
+  return { changeSet, observed };
 };
+
+export const exactNormalizedChangeSet = async (
+  input: Parameters<typeof observeNormalizedChangeSet>[0],
+) => (await observeNormalizedChangeSet(input)).changeSet;
 
 const currentDestinationProgress = (
   progress: GitHubDestinationReviewReadProgress | undefined,

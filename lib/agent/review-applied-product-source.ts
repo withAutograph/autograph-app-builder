@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { defineState } from "eve/context";
 import {
   currentProductSourceAssessment,
   productRequestState,
@@ -5,11 +7,12 @@ import {
   retainCurrentProductSourceAssessment,
 } from "@/lib/agent/product-source-review-state";
 import { readProductReviewSourcePages } from "@/lib/agent/product-source-review-pages";
-import { inspectApplyOverlay, overlayChanges } from "@/lib/repository/target-apply";
-import type { OverlaySnapshot } from "@/lib/repository/target-apply";
+import { inspectApplyOverlay } from "@/lib/repository/target-apply";
+import type { OverlayChange, OverlaySnapshot } from "@/lib/repository/target-apply";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 import {
   assessProductSourcePages,
+  sourceReviewBindingDigest,
   unavailableSourceAssessment,
 } from "@/lib/agent/product-source-review";
 import type {
@@ -28,14 +31,43 @@ export interface AppliedSourceObservation {
   currentDigest: () => Promise<string>;
 }
 
-/** Validation repairs may change files beyond the original apply proposal. */
+/** Review the current normalized publication diff, including validation repairs. */
 export const currentChangedSourcePaths = (
-  receipt: Pick<TargetApplyReceipt, "preTree" | "preTreeDigest">,
-  observed: OverlaySnapshot,
-): string[] =>
-  overlayChanges({ files: receipt.preTree, treeDigest: receipt.preTreeDigest }, observed).flatMap(
-    (change) => (change.kind === "deleted" ? [] : [change.path]),
-  );
+  changes: readonly Pick<OverlayChange, "path" | "kind">[],
+): string[] => changes.flatMap((change) => (change.kind === "deleted" ? [] : [change.path]));
+
+/** Aggregate cache identity includes the complete intended diff on the actual source tree. */
+export const sourceReviewScopeBindingDigest = (
+  input: Parameters<typeof sourceReviewBindingDigest>[0],
+  changes: readonly OverlayChange[],
+): string =>
+  createHash("sha256")
+    .update(JSON.stringify([sourceReviewBindingDigest(input), changes]))
+    .digest("hex");
+
+const aggregateReviewScope = defineState<string | null>(
+  "autograph-app-builder.source-review-scope.v1",
+  () => null,
+);
+
+/** Scope metadata is private; consumers retain the canonical source/product binding. */
+export const currentScopedProductSourceAssessment = (
+  input: Parameters<typeof currentProductSourceAssessment>[0],
+  scopeBindingDigest: string,
+): ProductSourceAssessment | undefined =>
+  aggregateReviewScope.get() === scopeBindingDigest
+    ? currentProductSourceAssessment(input)
+    : undefined;
+
+export const retainScopedProductSourceAssessment = (
+  assessment: ProductSourceAssessment,
+  scopeBindingDigest: string,
+): void => {
+  if (assessment.reviewCompleted) {
+    retainCurrentProductSourceAssessment(assessment);
+    aggregateReviewScope.update(() => scopeBindingDigest);
+  }
+};
 
 /** Observe and assess through the same boundary for validation and review. */
 export const reviewObservedProductSource = async (
@@ -85,6 +117,8 @@ export const reviewObservedProductSource = async (
 export const reviewAppliedProductSource = async (input: {
   appSpec: AcceptedAppSpec;
   applyReceipt: TargetApplyReceipt;
+  normalizedChanges: readonly OverlayChange[];
+  observed: OverlaySnapshot;
   getSandbox: () => Promise<SandboxSession>;
   abortSignal?: AbortSignal;
   callId?: string;
@@ -137,10 +171,13 @@ export const reviewAppliedProductSource = async (input: {
     input.abortSignal?.throwIfAborted();
     logPhase("observing_current_source");
     const sandbox = await input.getSandbox();
-    const observed = await inspectApplyOverlay(sandbox, input.applyReceipt.applyRoot);
+    const { observed } = input;
     logPhase("current_source_observed", { fileCount: observed.files.length });
     const currentInput = { ...reviewInput, sourceDigest: observed.treeDigest };
-    const retained = currentProductSourceAssessment(currentInput);
+    // Aggregate reuse follows both the actual source tree and its intended diff.
+    // Pair journals remain reusable for identical source pages and requirements.
+    const bindingDigest = sourceReviewScopeBindingDigest(currentInput, input.normalizedChanges);
+    const retained = currentScopedProductSourceAssessment(currentInput, bindingDigest);
     if (retained !== undefined) {
       const latest = await inspectApplyOverlay(sandbox, input.applyReceipt.applyRoot);
       if (latest.treeDigest === observed.treeDigest) {
@@ -154,7 +191,7 @@ export const reviewAppliedProductSource = async (input: {
         "Source changed during review; this assessment is stale. Review the current implementation when ready.",
       );
     }
-    const changedPaths = currentChangedSourcePaths(input.applyReceipt, observed);
+    const changedPaths = currentChangedSourcePaths(input.normalizedChanges);
     const groups = new Map<string, number>();
     for (const path of changedPaths) {
       const group = path.split("/")[0] ?? "";
@@ -231,7 +268,7 @@ export const reviewAppliedProductSource = async (input: {
         "Source changed during review; this assessment is stale. Review the current implementation when ready.",
       );
     }
-    retainCurrentProductSourceAssessment(assessment);
+    retainScopedProductSourceAssessment(assessment, bindingDigest);
     return assessment;
   } catch (error) {
     input.abortSignal?.throwIfAborted();
