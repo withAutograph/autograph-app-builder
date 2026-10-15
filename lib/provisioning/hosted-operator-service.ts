@@ -57,6 +57,7 @@ import {
   operatorSelectionSchema,
   restrictedOperatorEnvironment,
   sameOperatorSelection,
+  sameOperatorPlanExceptExpiry,
   hostedOperatorRecordSchema,
   operatorOwnerContextSchema,
   workerContextBindingSchema,
@@ -319,6 +320,53 @@ const sameAuthPreparation = (prior: HostedOperatorPlan, next: HostedOperatorPlan
   (next.authSchema === undefined ||
     prior.authSchema?.targetDigest === next.authSchema.targetDigest);
 
+/** A source repair continues the already observed bootstrap effects under a new normal approval.
+ * Native deployment creation is at-least-once; an uncertain alias write still requires reconciliation.
+ */
+const isGatewaySourceSuccessor = (
+  record: HostedRuntimeJournalRecord,
+  plan: HostedOperatorPlan,
+  now: number,
+) => {
+  const prior = record.operator;
+  const delivery = prior?.plan.effects.find((effect) => effect.kind === "gateway-delivery");
+  if (
+    prior === undefined ||
+    delivery === undefined ||
+    prior.plan.gatewayDelivery === undefined ||
+    plan.gatewayDelivery === undefined
+  ) {
+    return false;
+  }
+  return [
+    record.status === "pending",
+    record.step === "reserved",
+    record.privateState !== undefined,
+    prior.approvalId !== undefined,
+    record.approvedByCallId !== UNAPPROVED_PLAN,
+    prior.plan.stage === AUTH_BOOTSTRAP_STAGE,
+    prior.plan.gatewayDelivery.gitSha !== plan.gatewayDelivery.gitSha,
+    sameOperatorPlanExceptExpiry(prior.plan, {
+      ...plan,
+      gatewayDelivery: { ...plan.gatewayDelivery, gitSha: prior.plan.gatewayDelivery.gitSha },
+    }),
+    record.leaseId === undefined ||
+      (record.leaseExpiresAt !== undefined && Date.parse(record.leaseExpiresAt) <= now),
+    prior.pendingEffectId === undefined || prior.pendingEffectId === delivery.id,
+    prior.gatewayDeliveryCandidates?.some(
+      (candidate) =>
+        candidate.operationRef === prior.operationRef && candidate.gatewayAliasAttempted === true,
+    ) !== true,
+    !prior.receipts.some((receipt) => receipt.effectId === delivery.id),
+    prior.plan.effects.every(
+      (effect) =>
+        effect.id === delivery.id ||
+        (["resources", "install", "gateway-bindings"].includes(effect.kind) &&
+          prior.receipts.some((receipt) => receipt.effectId === effect.id)),
+    ),
+  ].every(Boolean);
+};
+
 const retainCompletedAuth = (record: HostedRuntimeJournalRecord): HostedRuntimeJournalRecord => ({
   ...record,
   retainedAuth:
@@ -436,14 +484,16 @@ const handlePlanOperation = async (
         record.status === PARTICIPANTS_PREPARED &&
         record.operator.plan.stage === AUTH_PARTICIPANTS_STAGE &&
         record.accountPreparation !== undefined;
+      const gatewaySourceSuccessor = isGatewaySourceSuccessor(record, plan, now());
       if (
-        record.leaseId !== undefined ||
-        record.operator.pendingEffectId !== undefined ||
-        record.operator.pendingEffectAttempt !== undefined ||
-        (record.operator.receipts.length > 0 &&
-          !["prepared", "cleaned"].includes(record.status) &&
-          !authStageCompleted &&
-          !participantsCompleted)
+        !gatewaySourceSuccessor &&
+        (record.leaseId !== undefined ||
+          record.operator.pendingEffectId !== undefined ||
+          record.operator.pendingEffectAttempt !== undefined ||
+          (record.operator.receipts.length > 0 &&
+            !["prepared", "cleaned"].includes(record.status) &&
+            !authStageCompleted &&
+            !participantsCompleted))
       ) {
         throw new HostedOperatorError("operation_in_progress");
       }
@@ -490,12 +540,23 @@ const handlePlanOperation = async (
       }
       // Same-resource release changes keep credentials; old proof never attests the new plan.
       const nextOperator: ReturnType<typeof requireOperator> = { ...operator };
+      nextOperator.retainedGatewayDeliveries = record.operator.retainedGatewayDeliveries;
+      if (gatewaySourceSuccessor) {
+        const { retainedGatewayDeliveries, ...priorOperator } = record.operator;
+        nextOperator.retainedGatewayDeliveries = [
+          ...(retainedGatewayDeliveries ?? []),
+          { approvedByCallId: record.approvedByCallId, operator: priorOperator },
+        ];
+        nextOperator.receipts = record.operator.receipts;
+      }
       if (sameAuthPreparation(record.operator.plan, plan)) {
         nextOperator.authPreparation = record.operator.authPreparation;
       }
       Object.assign(nextOperator, retainAppDeliveryHistory(record.operator, nextOperator));
       nextOperator.gatewayDeliveryCandidates = record.operator.gatewayDeliveryCandidates;
-      nextOperator.deliveredGatewayDeploymentId = record.operator.deliveredGatewayDeploymentId;
+      if (!gatewaySourceSuccessor) {
+        nextOperator.deliveredGatewayDeploymentId = record.operator.deliveredGatewayDeploymentId;
+      }
       if (record.operator.gatewayEnvironment !== undefined) {
         nextOperator.gatewayEnvironment = record.operator.gatewayEnvironment;
       }
@@ -533,6 +594,10 @@ const handlePlanOperation = async (
         step: "reserved" as const,
       };
       delete next.proof;
+      if (gatewaySourceSuccessor) {
+        delete next.leaseId;
+        delete next.leaseExpiresAt;
+      }
       return next;
     },
   });

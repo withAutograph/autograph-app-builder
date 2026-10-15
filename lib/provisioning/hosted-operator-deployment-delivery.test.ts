@@ -1,3 +1,4 @@
+import { hasFailedGatewayDelivery } from "./hosted-operator-gateway-delivery-failure";
 import { expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
@@ -398,6 +399,51 @@ it("retains an actual provider build failure as retryable delivery", async () =>
   const reconciled = await f.writer.reconcile(f.input);
   expect(delivered.status).toBe("retryable");
   expect(reconciled.status).toBe("retryable");
+});
+it("guides source recovery only after actual failed readback when repaired trusted source is available", async () => {
+  const f = fixture(gatewayPlan, null, true);
+  const repairedSha = "e".repeat(40);
+  f.setReady("ERROR");
+  const delivered = await f.writer.deliver(f.input);
+  const observed = await f.writer.reconcile(f.input);
+  expect(hasFailedGatewayDelivery(f.input, delivered, repairedSha)).toBe(true);
+  expect(hasFailedGatewayDelivery(f.input, observed, repairedSha)).toBe(true);
+  // The native result remains retryable: same-source explicit retries are not fenced by this guidance.
+  expect(observed.status).toBe("retryable");
+  expect(hasFailedGatewayDelivery(f.input, observed, sha)).toBe(false);
+  expect(hasFailedGatewayDelivery(f.input, { ...observed, status: "unknown" }, repairedSha)).toBe(
+    false,
+  );
+  expect(
+    hasFailedGatewayDelivery(
+      f.input,
+      {
+        ...observed,
+        candidates: observed.candidates?.map((candidate) => ({
+          ...candidate,
+          gatewayAliasAttempted: true,
+        })),
+      },
+      repairedSha,
+    ),
+  ).toBe(false);
+  expect(
+    hasFailedGatewayDelivery(
+      f.input,
+      {
+        ...observed,
+        candidates: observed.candidates?.map((candidate) => ({
+          ...candidate,
+          operationRef: "00000000-0000-4000-8000-000000000002",
+        })),
+      },
+      repairedSha,
+    ),
+  ).toBe(false);
+  f.setReady("BUILDING");
+  expect(hasFailedGatewayDelivery(f.input, await f.writer.reconcile(f.input), repairedSha)).toBe(
+    false,
+  );
 });
 it.each(["owner", "repository"])(
   "rejects an actual wrong project %s before deployment",
