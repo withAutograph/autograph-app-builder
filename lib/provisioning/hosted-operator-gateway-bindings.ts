@@ -240,6 +240,9 @@ export const createHostedOperatorGatewayBindings = (deps: {
         method = next;
       },
       response(status: number) {
+        if (!Number.isFinite(status)) {
+          return;
+        }
         if (Number.isInteger(status) && status >= 100 && status <= 599) {
           httpStatus = status;
         }
@@ -382,7 +385,11 @@ export const createHostedOperatorGatewayBindings = (deps: {
         observation.noResponse();
         throw error;
       }
-      observation.response(response.status);
+      try {
+        observation.response(response.status);
+      } catch {
+        /* Advisory status access must not skip the existing post-response guard. */
+      }
       try {
         await requestGuard();
         if (!response.ok) {

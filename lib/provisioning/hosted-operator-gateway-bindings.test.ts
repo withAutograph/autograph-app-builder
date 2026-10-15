@@ -1365,3 +1365,38 @@ it("reports a post-response authorization failure as authority, retaining succes
     },
   });
 });
+
+it("keeps the original post-response guard when an advisory status getter throws", async () => {
+  const f = fixture();
+  const postResponseGuard = vi.fn(async () => {});
+  const response = Response.json({ envs: [] });
+  Object.defineProperty(response, "status", {
+    get() {
+      throw new Error(privateAuthUrl);
+    },
+  });
+  f.fetcher.mockImplementationOnce(async () => {
+    f.assertCurrent.mockImplementation(postResponseGuard);
+    return response;
+  });
+  // The original status access still rejects after its existing guard; the diagnostic access cannot move it earlier.
+  expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
+  expect(postResponseGuard).toHaveBeenCalledOnce();
+  expect(f.diagnostics).toHaveBeenCalledOnce();
+  expect(f.diagnostics.mock.calls[0]?.[0].gatewayBindings).not.toHaveProperty("httpStatus");
+  expect(JSON.stringify(f.diagnostics.mock.calls)).not.toContain(privateAuthUrl);
+});
+
+it("does not coerce an advisory status value", async () => {
+  const f = fixture();
+  const coercion = vi.fn(() => {
+    throw new Error(privateAuthUrl);
+  });
+  const response = Response.json({ envs: f.rows.map(({ value: _value, ...row }) => row) });
+  Object.defineProperty(response, "status", { value: { valueOf: coercion } });
+  f.fetcher.mockResolvedValueOnce(response);
+  expect(await f.writer.reconcile(f.input)).toEqual({ status: "absent" });
+  expect(coercion).not.toHaveBeenCalled();
+  expect(f.diagnostics).toHaveBeenCalledOnce();
+  expect(f.diagnostics.mock.calls[0]?.[0].gatewayBindings).not.toHaveProperty("httpStatus");
+});
