@@ -3,7 +3,7 @@ import { createHash, generateKeyPairSync } from "node:crypto";
 import { SignJWT } from "jose";
 import { z } from "zod";
 import type { RealmIdentityCallbackPorts } from "./hosted-operator-realm-callback";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createRealmIdentityCallbackHandler,
   createRealmIdentityHandoffSenderVerifier,
@@ -18,7 +18,12 @@ import type {
   OperatorArtifactContext,
   OperatorArtifactStore,
 } from "./hosted-operator-artifact-store";
+import { HostedOperatorError } from "./hosted-operator-contract";
 import { encryptVercelToken } from "../integrations/vercel-installation";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const resource = {
   database: "auth_owned",
@@ -322,6 +327,92 @@ describe("normal-owner sealed Realm browser callback", () => {
 });
 
 describe("native private Realm identity handoff", () => {
+  it("emits no private staging failure diagnostic on success", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const f = await fixture();
+    expect((await f.nativePost()).status).toBe(200);
+    expect(log).not.toHaveBeenCalled();
+  });
+  it.each([
+    ["canonical_pending", "auth_schema_not_ready"],
+    ["context", "authorization_required"],
+    ["current_authority", "operation_in_progress"],
+    ["artifact", "operator_unavailable"],
+  ] as const)("reports only the closed %s failure and public code", async (stage, code) => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const f = await fixture();
+    const failure = new HostedOperatorError(code);
+    if (stage === "canonical_pending") {
+      f.ports.staging.mockRejectedValue(failure);
+    }
+    if (stage === "context") {
+      f.ports.identityHandoff.context.mockRejectedValue(failure);
+    }
+    if (stage === "current_authority") {
+      f.ports.assertCurrent.mockRejectedValue(failure);
+    }
+    if (stage === "artifact") {
+      vi.mocked(f.ports.identityHandoff.artifacts.put).mockRejectedValue(failure);
+    }
+    const response = await f.nativePost();
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ code: "auth_identity_required" });
+    expect(log).toHaveBeenCalledExactlyOnceWith("realm_identity_callback_failure", {
+      stage,
+      errorClass: "operator_error",
+      code,
+    });
+  });
+  it("allowlists JOSE codes while discarding private error details", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const f = await fixture();
+    f.ports.fetch.mockRejectedValue(
+      Object.assign(new Error(`private ${f.proof}`), {
+        code: "ERR_JWKS_TIMEOUT",
+        cause: { cookie: "private-cookie", nonce: f.nonce },
+      }),
+    );
+    expect((await f.nativePost()).status).toBe(401);
+    expect(log).toHaveBeenCalledExactlyOnceWith("realm_identity_callback_failure", {
+      stage: "proof_verification",
+      errorClass: "jose_error",
+      code: "ERR_JWKS_TIMEOUT",
+    });
+    expect(JSON.stringify(log.mock.calls)).not.toContain(f.proof);
+    expect(JSON.stringify(log.mock.calls)).not.toContain(f.nonce);
+    expect(JSON.stringify(log.mock.calls)).not.toContain(f.ownerSessionId);
+    expect(JSON.stringify(log.mock.calls)).not.toContain("private-cookie");
+  });
+  it("omits malicious messages and nonallowlisted codes without invoking getters", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const f = await fixture();
+    const error = Object.assign(new Error("private-message"), { code: "private-code" });
+    f.ports.staging.mockRejectedValueOnce(error);
+    expect((await f.nativePost()).status).toBe(401);
+    const readCode = vi.fn(() => {
+      throw new Error("private-getter");
+    });
+    f.ports.staging.mockRejectedValueOnce(
+      Object.defineProperty(new Error("private-message"), "code", { get: readCode }),
+    );
+    expect((await f.nativePost()).status).toBe(401);
+    expect(readCode).not.toHaveBeenCalled();
+    expect(log.mock.calls).toEqual([
+      ["realm_identity_callback_failure", { stage: "canonical_pending", errorClass: "unknown" }],
+      ["realm_identity_callback_failure", { stage: "canonical_pending", errorClass: "unknown" }],
+    ]);
+  });
+  it("preserves the denial when the diagnostic sink throws", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {
+      throw new Error("sink unavailable");
+    });
+    const f = await fixture();
+    f.ports.staging.mockRejectedValue(new HostedOperatorError("authorization_required"));
+    const response = await f.nativePost();
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ code: "auth_identity_required" });
+  });
+
   it("stages a verified proof privately and completes through an opaque normal-owner GET once", async () => {
     const f = await fixture();
     const response = await f.nativePost();
