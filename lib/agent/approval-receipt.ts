@@ -210,12 +210,17 @@ const operatorApprovalDescription = (record: Record<string, unknown>, toolName: 
   const grants = plan.access
     .map((entry) => `${entry.actorId} in ${entry.organizationId}: ${entry.roles.join(", ")}`)
     .join("; ");
+  const signupPolicy = plan.authSignupPolicy;
+  const signupApproval =
+    signupPolicy === undefined
+      ? ""
+      : ` Public signup: eligibility ${signupPolicy.eligibility}; organization ${signupPolicy.organizationId}; member role ${signupPolicy.membershipRole}; app roles ${signupPolicy.appRoles.join(", ") || "none"}.`;
   return (
     `${plan.action === "cleanup" ? "Clean up" : "Prepare"} ${plan.selection.appId} on Preview branch ${plan.selection.branch} in Vercel project ${plan.selection.projectId}. ` +
     `Context ${plan.contextId}; Neon project ${plan.neon.projectId}, branch ${plan.neon.branchId} (${plan.neon.source}). ` +
     `Auth database ${plan.authDatabase.database} with runtime role ${plan.authDatabase.runtimeRole} and migrator role ${plan.authDatabase.migratorRole}; app database ${plan.appDatabase.database} with runtime role ${plan.appDatabase.runtimeRole} and migrator role ${plan.appDatabase.migratorRole}. ` +
     `Release ${plan.release.id} (${plan.release.sha256}); trusted installer ${plan.installer.reference} (${plan.installer.sha256}). Effects: ${plan.effects.map((effect) => effect.description).join("; ")}. ` +
-    `Access: ${grants || "no new actor grants"}. Cost owner: ${plan.cost.owner}; ${plan.cost.class}: ${plan.cost.description}. ` +
+    `Access: ${grants || "no new actor grants"}.${signupApproval} Cost owner: ${plan.cost.owner}; ${plan.cost.class}: ${plan.cost.description}. ` +
     `Retention: ${plan.retention.policy}; expires ${plan.retention.expiresAt}. This does not deploy or activate Production.`
   );
 };

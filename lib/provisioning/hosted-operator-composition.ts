@@ -25,6 +25,8 @@ import {
 } from "./hosted-operator-contract";
 import type {
   HostedOperatorPlan,
+  HostedOperatorAuthSignupPolicy,
+  HostedOperatorAuthSignupPolicyInput,
   ManagedOperatorEnvironmentRow,
   OperatorDeploymentCandidate,
   HostedOperatorOwnedOrganizationSpec,
@@ -75,8 +77,37 @@ const AUTH_SCHEMA_EFFECT = "auth-schema";
 const RESOURCE_MISMATCH = "resource_mismatch";
 const AUTH_MEMBERSHIP_REQUIRED = "auth_membership_required";
 const AUTH_MEMBERSHIP = "auth-membership";
+const AUTH_SIGNUP_POLICY = "auth-signup-policy";
 const OPERATION_IN_PROGRESS = "operation_in_progress";
 const RECONCILIATION_REQUIRED = "reconciliation_required";
+const bindSignupPolicy = (
+  policy: HostedOperatorAuthSignupPolicyInput,
+  plan: HostedOperatorPlan,
+  organizationId: string | undefined,
+  allowedAppRoles: readonly string[],
+): HostedOperatorAuthSignupPolicy => {
+  const publicOrigin = plan.deploymentBoundary?.verification.publicOrigin;
+  const allowedAppRoleSet = new Set(allowedAppRoles);
+  if (
+    organizationId === undefined ||
+    organizationId !== policy.organizationId ||
+    publicOrigin === undefined ||
+    policy.appRoles.some(
+      (role) =>
+        !allowedAppRoleSet.has(role) ||
+        /(?:^|[_-])(?:owner|admin|administrator)(?:[_-]|$)/u.test(role),
+    )
+  ) {
+    throw new HostedOperatorError("resource_mismatch");
+  }
+  return {
+    ...policy,
+    policyId: `${plan.selection.appId}:${organizationId}:signup`,
+    authResourceId: plan.authDatabase.resourceId,
+    appId: plan.selection.appId,
+    origin: publicOrigin,
+  };
+};
 type ControlPlane = Awaited<ReturnType<typeof createHostedOperatorControlPlane>> &
   HostedOperatorNormalActorPorts & {
     readNormalActorRuntimeBindings: NonNullable<
@@ -183,6 +214,36 @@ const assertParticipantOrganization = (
       (membership) =>
         membership.organizationId === organization.organizationId &&
         membership.status !== "complete",
+    )
+  ) {
+    throw new HostedOperatorError(RECONCILIATION_REQUIRED);
+  }
+  return state;
+};
+const assertParticipantSignupPolicyState = (
+  input: HostedOperatorEffectContext,
+  stateInput: NormalActorState,
+) => {
+  const program = input.plan.normalActorProgram;
+  const preparation = input.plan.normalActorPreparation;
+  const organizationId = input.plan.authSignupPolicy?.organizationId;
+  if (
+    program === undefined ||
+    preparation === undefined ||
+    organizationId === undefined ||
+    program.organizations.filter((candidate) => candidate.organizationId === organizationId)
+      .length !== 1
+  ) {
+    throw new HostedOperatorError(RESOURCE_MISMATCH);
+  }
+  const state = assertNormalActorState(program, stateInput, preparation.accountOperationRef);
+  if (
+    !state.organizations.some(
+      (candidate) => candidate.organizationId === organizationId && candidate.status === "complete",
+    ) ||
+    state.memberships.some(
+      (membership) =>
+        membership.organizationId === organizationId && membership.status !== "complete",
     )
   ) {
     throw new HostedOperatorError(RECONCILIATION_REQUIRED);
@@ -354,6 +415,7 @@ const assertParticipantOrganizationProposal = (
 const resolveParticipantPlan = async (
   base: HostedOperatorPlan,
   program: NormalActorProgram,
+  signupPolicy: HostedOperatorAuthSignupPolicyInput | undefined,
   context: HostedOperatorContext,
   configuration: HostedOperatorSourceConfiguration,
   controlPlane: Pick<ControlPlane, "assertPlanningAuthorized"> &
@@ -425,6 +487,16 @@ const resolveParticipantPlan = async (
       description:
         "Prepare this approved organization, ordinary invitations and actual memberships for its normally authenticated participants.",
     })),
+    ...(signupPolicy === undefined
+      ? []
+      : [
+          {
+            id: AUTH_SIGNUP_POLICY,
+            kind: "auth-signup-policy" as const,
+            description:
+              "Persist the approved public signup eligibility and app-scoped member roles before the Preview is offered.",
+          },
+        ]),
     {
       id: "access",
       kind: "access",
@@ -447,6 +519,16 @@ const resolveParticipantPlan = async (
   await controlPlane.assertPlanningAuthorized(context);
   return hostedOperatorPlanSchema.parse({
     ...base,
+    ...(signupPolicy === undefined
+      ? {}
+      : {
+          authSignupPolicy: bindSignupPolicy(
+            signupPolicy,
+            base,
+            signupPolicy.organizationId,
+            application.accessRoles,
+          ),
+        }),
     stage: "app",
     access: proposeResolvedNormalActorAccess(program, state),
     authMembership:
@@ -485,11 +567,13 @@ export const resolveFullPlan = async (
   participantsBootstrapPrepared = false,
   participantsCompleted = false,
   selectedRelease?: CompiledOperatorReleaseSelection,
+  signupPolicy?: HostedOperatorAuthSignupPolicyInput,
 ): Promise<HostedOperatorPlan> => {
   if (base.normalActorProgram !== undefined) {
     return await resolveParticipantPlan(
       base,
       base.normalActorProgram,
+      signupPolicy,
       context,
       configuration,
       controlPlane,
@@ -586,6 +670,14 @@ export const resolveFullPlan = async (
       kind: AUTH_MEMBERSHIP,
     });
   }
+  if (signupPolicy !== undefined) {
+    effects.push({
+      id: AUTH_SIGNUP_POLICY,
+      kind: AUTH_SIGNUP_POLICY,
+      description:
+        "Persist the approved public signup eligibility and app-scoped member roles before the Preview is offered.",
+    });
+  }
   effects.push(
     {
       description: "Grant the exact approved current actor and app roles.",
@@ -606,6 +698,16 @@ export const resolveFullPlan = async (
   );
   return hostedOperatorPlanSchema.parse({
     ...base,
+    ...(signupPolicy === undefined
+      ? {}
+      : {
+          authSignupPolicy: bindSignupPolicy(
+            signupPolicy,
+            base,
+            organizationId,
+            application.accessRoles,
+          ),
+        }),
     access: [
       { actorId: verified.identity.actorId, organizationId, roles: application.accessRoles },
     ],
@@ -744,6 +846,7 @@ export const composeHostedOperatorDependencies = (
     context: HostedOperatorContext & {
       action: "prepare" | "cleanup";
       normalActorProgram?: NormalActorProgram;
+      authSignupPolicy?: HostedOperatorAuthSignupPolicyInput;
     },
   ): Promise<HostedOperatorPlan> => {
     const observe = async <T>(stage: OperatorPlanStage, run: () => T | Promise<T>) =>
@@ -1137,6 +1240,7 @@ export const composeHostedOperatorDependencies = (
           current?.record.status === "participants-prepared" ||
             current?.record.operator?.plan.stage === "app",
           selection,
+          context.authSignupPolicy,
         ),
     );
   };
@@ -1285,6 +1389,39 @@ export const composeHostedOperatorDependencies = (
       database: "authDatabase" as const,
       directDatabaseUrl: urls.authDatabase.migrationUrl,
       membershipProof: { oidcToken, proof: proof.proof },
+    };
+  };
+  const signupPolicyWorkerInput = async (input: HostedOperatorEffectContext) => {
+    if (input.plan.normalActorProgram === undefined && input.plan.authMembership !== undefined) {
+      return await membershipInput(input);
+    }
+    if (
+      input.plan.authSignupPolicy === undefined ||
+      input.plan.normalActorProgram === undefined ||
+      controlPlane.readNormalActorPreparation === undefined ||
+      configuration.sandbox.membershipWorker === undefined
+    ) {
+      throw new HostedOperatorError(AUTH_MEMBERSHIP_REQUIRED);
+    }
+    const prepared = await controlPlane.readNormalActorPreparation(input);
+    if (prepared === undefined) {
+      throw new HostedOperatorError(RECONCILIATION_REQUIRED);
+    }
+    assertParticipantSignupPolicyState(input, prepared.state);
+    const urls = await privateBindings(input);
+    await input.assertCurrent();
+    const oidcToken = await getVercelOidcToken({
+      project: configuration.operator.projectId,
+      team: configuration.teamId,
+    });
+    await input.assertCurrent();
+    return {
+      database: "authDatabase" as const,
+      directDatabaseUrl: urls.authDatabase.migrationUrl,
+      membershipProof: {
+        oidcToken,
+        organizationId: input.plan.authSignupPolicy.organizationId,
+      },
     };
   };
   const reconcileResources = async (
@@ -1447,6 +1584,39 @@ export const composeHostedOperatorDependencies = (
     }
     return { status: "unknown" };
   };
+  const reconcileAuthSignupPolicy = async (
+    input: HostedOperatorEffectContext,
+  ): ReturnType<ProtectedHostedOperatorDependencies["reconcile"]> => {
+    if (
+      input.plan.authSignupPolicy === undefined ||
+      (input.plan.authMembership === undefined && input.plan.normalActorProgram === undefined)
+    ) {
+      return { status: "absent" };
+    }
+    const observed = await launcher.inspect({
+      ...input,
+      assertCurrent: async () => {
+        if (input.plan.normalActorProgram === undefined) {
+          await controlPlane.assertMembershipCapture(input);
+          return;
+        }
+        const prepared = await controlPlane.readNormalActorPreparation(input);
+        if (prepared === undefined) {
+          throw new HostedOperatorError(RECONCILIATION_REQUIRED);
+        }
+        assertParticipantSignupPolicyState(input, prepared.state);
+      },
+      ...(await signupPolicyWorkerInput(input)),
+      readbackOnly: true,
+    });
+    if (observed?.status === "applied" && observed.readback_sha256 !== undefined) {
+      return { receipt: receipt(input, observed.readback_sha256), status: "applied" };
+    }
+    if (observed?.status === "absent") {
+      return { status: "absent" };
+    }
+    return { status: "unknown" };
+  };
   const reconcileHandlers: Partial<
     Record<
       HostedOperatorPlan["effects"][number]["kind"],
@@ -1477,6 +1647,7 @@ export const composeHostedOperatorDependencies = (
     },
     access: reconcileAppWorker,
     "auth-membership": reconcileAuthMembership,
+    [AUTH_SIGNUP_POLICY]: reconcileAuthSignupPolicy,
     bindings: reconcileBindings,
     delivery: reconcileDelivery,
     [GATEWAY_BINDINGS]: reconcileGatewayBindings,
@@ -1615,6 +1786,30 @@ export const composeHostedOperatorDependencies = (
     }
     return observed.receipt;
   };
+  const executeEffectAuthSignupPolicy = async (
+    input: HostedOperatorWorkerEffectContext,
+  ): ReturnType<ProtectedHostedOperatorDependencies["executeEffect"]> => {
+    await launcher.execute({
+      ...input,
+      assertCurrent: async () => {
+        if (input.plan.normalActorProgram === undefined) {
+          await controlPlane.assertMembershipCapture(input);
+          return;
+        }
+        const prepared = await controlPlane.readNormalActorPreparation(input);
+        if (prepared === undefined) {
+          throw new HostedOperatorError(RECONCILIATION_REQUIRED);
+        }
+        assertParticipantSignupPolicyState(input, prepared.state);
+      },
+      ...(await signupPolicyWorkerInput(input)),
+    });
+    const observed = await reconcileAuthSignupPolicy(input);
+    if (observed.status !== "applied") {
+      throw new HostedOperatorError(RECONCILIATION_REQUIRED);
+    }
+    return observed.receipt;
+  };
   const executeEffectHandlers: Partial<
     Record<
       HostedOperatorPlan["effects"][number]["kind"],
@@ -1643,6 +1838,7 @@ export const composeHostedOperatorDependencies = (
     },
     access: executeEffectAppWorker,
     "auth-membership": executeEffectAuthMembership,
+    [AUTH_SIGNUP_POLICY]: executeEffectAuthSignupPolicy,
     bindings: executeEffectBindings,
     delivery: executeEffectDelivery,
     [GATEWAY_BINDINGS]: executeEffectGatewayBindings,

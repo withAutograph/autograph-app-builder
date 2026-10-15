@@ -22,17 +22,6 @@ export const hostedRuntimeApprovalInputSchema = z.strictObject({
   projectId: z.string().min(1),
 });
 
-export const realmIdentityInputQuestion = (identityInput: {
-  browserUrl: string;
-  expiresAt: string;
-}): ToolInputRequest => ({
-  allowFreeform: true,
-  dismissible: true,
-  display: "confirmation",
-  options: [{ id: "continue", label: "I connected my Auth account" }],
-  prompt: `The Auth schema is prepared. Sign in or create your account using [Connect your Auth account](${identityInput.browserUrl}), then continue here. This link expires at ${identityInput.expiresAt}. App access and the working Preview still require a fresh approved plan.`,
-});
-
 export const participantIdentityInputQuestion = (identityInput: {
   browserUrl: string;
   expiresAt: string;
@@ -53,14 +42,21 @@ export const continueHostedRuntimePreparation = async (
   let prepared = await prepare(input, ctx);
   const participantPlan =
     input.plan.stage === "auth-participants" && input.plan.normalActorProgram !== undefined;
+  if (prepared.identityInput !== null && !participantPlan) {
+    return {
+      ...prepared.result,
+      authIdentityLink: prepared.identityInput.browserUrl,
+      authIdentityLinkExpiresAt: prepared.identityInput.expiresAt,
+      nextStep:
+        "Complete the protected Auth identity link, then retry this same approved preparation to read back the server-side result.",
+    };
+  }
   while (prepared.identityInput !== null) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- Each ordinary human reply determines whether the same operation may resume.
     const identityResponse = await ctx.ask(
-      participantPlan
-        ? participantIdentityInputQuestion(prepared.identityInput)
-        : realmIdentityInputQuestion(prepared.identityInput),
+      participantIdentityInputQuestion(prepared.identityInput),
     );
-    if (!participantPlan || identityResponse.status !== "answered") {
+    if (identityResponse.status !== "answered") {
       return { ...prepared.result, identityResponse: identityResponse.status };
     }
     // Re-read real capture under the same approved invocation; answering alone establishes no identity.

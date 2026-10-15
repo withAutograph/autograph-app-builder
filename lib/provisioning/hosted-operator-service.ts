@@ -84,6 +84,7 @@ import type {
   ManagedOperatorEnvironmentRow,
   OperatorAuthSchemaPreparation,
   OperatorDeploymentCandidate,
+  HostedOperatorAuthSignupPolicyInput,
 } from "./hosted-operator-contract";
 
 export interface HostedOperatorContext {
@@ -184,6 +185,7 @@ export interface ProtectedHostedOperatorDependencies {
     context: Context & {
       action: "prepare" | "cleanup";
       normalActorProgram?: NormalActorProgram;
+      authSignupPolicy?: HostedOperatorAuthSignupPolicyInput;
     },
   ) => Promise<HostedOperatorPlan>;
   /** Re-read membership, owner connection and provider grants. No ambient Neon authority. */
@@ -394,6 +396,9 @@ const handlePlanOperation = async (
         ...(input.normalActorProgram === undefined
           ? {}
           : { normalActorProgram: input.normalActorProgram }),
+        ...(input.authSignupPolicy === undefined
+          ? {}
+          : { authSignupPolicy: input.authSignupPolicy }),
       }),
   );
   const cleanupPrior = input.operation === "cleanup" ? await deps.store.read(context) : undefined;
@@ -881,7 +886,33 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
         ) {
           status = "auth-schema-prepared";
         }
-        return { appId, authenticatedBehavior: "unassessed", operationRef, planDigest, status };
+        const signupPolicy = operator.plan.authSignupPolicy;
+        const policyInstalled =
+          signupPolicy !== undefined &&
+          requireOperator(record).receipts.some(
+            (receipt) => receipt.effectId === "auth-signup-policy",
+          );
+        const signupReady = record.status === "prepared" && policyInstalled;
+        const appUrl =
+          signupReady && signupPolicy !== undefined
+            ? new URL(signupPolicy.appPath, signupPolicy.origin).toString()
+            : undefined;
+        const signupUrl =
+          appUrl === undefined || signupPolicy === undefined
+            ? undefined
+            : `${signupPolicy.origin}/auth/sign-up?redirectTo=${encodeURIComponent(appUrl)}`;
+        if (status === "prepared" && policyInstalled) {
+          status = "waiting_for_signup";
+        }
+        return {
+          appId,
+          authenticatedBehavior: "unassessed",
+          operationRef,
+          planDigest,
+          status,
+          ...(appUrl === undefined ? {} : { appUrl }),
+          ...(signupUrl === undefined ? {} : { signupUrl }),
+        };
       };
       if (input.action === "auth-identity-input") {
         if (plan.normalActorProgram !== undefined && plan.stage !== AUTH_PARTICIPANTS_STAGE) {

@@ -81,6 +81,21 @@ const preparationResult = (result: OperatorPublicResult, input: HostedRuntimeInp
         ...(input.plan.normalActorProgram === undefined
           ? {}
           : { normalActorProgram: input.plan.normalActorProgram }),
+        ...(input.plan.authSignupPolicy === undefined
+          ? {}
+          : {
+              authSignupPolicy: {
+                version: input.plan.authSignupPolicy.version,
+                organizationId: input.plan.authSignupPolicy.organizationId,
+                eligibility: input.plan.authSignupPolicy.eligibility,
+                ...(input.plan.authSignupPolicy.allowedEmails === undefined
+                  ? {}
+                  : { allowedEmails: input.plan.authSignupPolicy.allowedEmails }),
+                membershipRole: input.plan.authSignupPolicy.membershipRole,
+                appRoles: input.plan.authSignupPolicy.appRoles,
+                appPath: input.plan.authSignupPolicy.appPath,
+              },
+            }),
       },
       approval: "normal-plan-approval" as const,
       reason:

@@ -4,7 +4,11 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { HostedOperatorError, hostedOperatorPlanSchema } from "./hosted-operator-contract";
+import {
+  HostedOperatorError,
+  hostedOperatorPlanSchema,
+  operatorPlanDigest,
+} from "./hosted-operator-contract";
 import type {
   HostedOperatorWorkerEffectContext,
   RecordWorkerCheckpoint,
@@ -105,7 +109,7 @@ const fixtureStartupFact = (
   failure === undefined
     ? { kind: "worker_started", auth_startup: advisory }
     : { kind: "worker_failed", failure_code: failure.code, auth_startup: failure.metadata };
-// oxlint-disable-next-line sonarjs/cognitive-complexity -- One owned SDK fixture covers the closed installer and guard-only protocol variants.
+/* oxlint-disable eslint/complexity, sonarjs/cognitive-complexity -- One owned SDK fixture covers the closed installer and guard-only protocol variants. */
 const makeFixture = (
   options: {
     access?: boolean;
@@ -122,6 +126,7 @@ const makeFixture = (
     delayCreate?: Promise<void>;
     generated?: boolean;
     auth?: boolean;
+    signupPolicy?: boolean;
     startupFailure?: { code: string; metadata?: unknown };
     startupAdvisory?: unknown;
     snapshotId?: string;
@@ -164,15 +169,116 @@ const makeFixture = (
         installer: { reference: "auth-protected-schema-v1", sha256: "f".repeat(64) },
       },
     });
+  } else if (options.signupPolicy) {
+    selectedPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      action: "prepare",
+      stage: "app",
+      authSchema: {
+        artifactRef: "auth-plan-artifact",
+        planDigest: "d".repeat(64),
+        targetDigest: "e".repeat(64),
+        installer: { reference: "auth-protected-schema-v1", sha256: "f".repeat(64) },
+      },
+      publicGateway: {
+        branch: "gateway",
+        origin: "https://apps.example",
+        projectId: "gateway",
+      },
+      installer: { reference: "auth-owned-organization-v1", sha256: workerDigest },
+      authMembership: {
+        actorId: "owner",
+        bootstrapPlanDigest: "1".repeat(64),
+        identityCapture: {
+          capturedAt: "2026-10-15T12:00:00Z",
+          realmSessionId: "realm-session",
+        },
+        identityNonceSha256: "2".repeat(64),
+        identityProof: { reference: "proof-reference", sha256: "3".repeat(64) },
+        identityVerification: {
+          audience: "https://operator.example",
+          issuer: "https://apps.example",
+          jwksUrl: "https://gateway.example/_platform/jwks.json",
+          transportSource: {
+            audience: "https://vercel.com/team",
+            environment: "preview",
+            issuer: "https://oidc.vercel.com/team",
+            ownerId: "team",
+            projectId: "operator",
+          },
+        },
+        kind: "create-owned-organization",
+        name: "Reviewers",
+        organizationId: "org-fixture",
+        slug: "reviewers",
+      },
+      authSignupPolicy: {
+        version: 1,
+        policyId: "hc:org-fixture:signup",
+        authResourceId: "auth-resource",
+        appId: "hc",
+        origin: "https://apps.example",
+        appPath: "/dashboard",
+        organizationId: "org-fixture",
+        eligibility: "public",
+        membershipRole: "member",
+        appRoles: ["reviewer"],
+      },
+      deploymentBoundary: {
+        authority: {
+          audience: "https://builder.example/mcp",
+          issuer: "https://builder.example/api/auth",
+          ownerUserId: "owner",
+          workspaceId: "workspace",
+        },
+        teamId: "team",
+        app: {
+          projectId: "prj_fixture",
+          deploymentId: "app-deployment",
+          branch: "preview",
+          environment: "preview",
+        },
+        gateway: {
+          projectId: "gateway",
+          deploymentId: "gateway-deployment",
+          branch: "gateway",
+          environment: "preview",
+        },
+        operator: {
+          projectId: "operator",
+          deploymentId: "operator-deployment",
+          environment: "preview",
+        },
+        verification: {
+          gatewayOrigin: "https://gateway.example",
+          jwksUrl: "https://gateway.example/_platform/jwks.json",
+          publicOrigin: "https://apps.example",
+        },
+      },
+      effects: [
+        ...plan.effects.slice(0, 2),
+        { description: "Create approved member", id: "auth-membership", kind: "auth-membership" },
+        { description: "Install policy", id: "auth-signup-policy", kind: "auth-signup-policy" },
+        ...plan.effects.slice(2),
+      ],
+    });
   }
-  const customWorker = options.generated === true || options.auth === true;
-  const selectedContext = buildProtectedInstallContext({
+  const customWorker =
+    options.generated === true || options.auth === true || options.signupPolicy === true;
+  const baseSelectedContext = buildProtectedInstallContext({
     plan: selectedPlan,
-    database: options.auth ? "authDatabase" : "appDatabase",
-    ...(options.auth ? { subject: "auth" as const } : {}),
+    database: options.auth || options.signupPolicy ? "authDatabase" : "appDatabase",
+    ...(options.auth || options.signupPolicy ? { subject: "auth" as const } : {}),
     fenceGeneration: 3,
     operationRef: runId,
   });
+  const selectedContext = options.signupPolicy
+    ? {
+        ...baseSelectedContext,
+        release: { id: operatorPlanDigest(selectedPlan), sha256: operatorPlanDigest(selectedPlan) },
+        installer: { id: "auth-owned-organization-v1", sha256: workerDigest },
+      }
+    : baseSelectedContext;
   const selectedDigest = createHash("sha256").update(JSON.stringify(selectedContext)).digest("hex");
   const reportedDigest =
     options.pinMatches === false ? "d".repeat(64) : selectedContext.installer.sha256;
@@ -182,6 +288,9 @@ const makeFixture = (
   }
   if (options.auth) {
     selectedEffectId = "auth:apply-schema-plan";
+  }
+  if (options.signupPolicy) {
+    selectedEffectId = "auth-signup-policy";
   }
   const scopedAuthorization = customWorker
     ? {
@@ -194,7 +303,7 @@ const makeFixture = (
         effect_id: selectedEffectId,
         release_id: selectedContext.release.id,
         resource_id: selectedContext.resource.resource_id,
-        tenant_id: options.auth ? null : rustAuthorization.tenant_id,
+        tenant_id: options.auth || options.signupPolicy ? null : rustAuthorization.tenant_id,
       }
     : rustAuthorization;
   const files = new Map<string, Buffer>();
@@ -386,12 +495,16 @@ const makeFixture = (
       records.push(checkpoint);
     };
   });
+  let selectedEffect = plan.effects[1]!;
+  if (options.access) {
+    selectedEffect = selectedPlan.effects.find((effect) => effect.kind === "access")!;
+  } else if (options.signupPolicy) {
+    selectedEffect = selectedPlan.effects.find((effect) => effect.kind === "auth-signup-policy")!;
+  }
   const input = {
     authority: {} as HostedOperatorWorkerEffectContext["authority"],
     target: {} as HostedOperatorWorkerEffectContext["target"],
-    effect: options.access
-      ? selectedPlan.effects.find((effect) => effect.kind === "access")!
-      : plan.effects[1]!,
+    effect: selectedEffect,
     fenceGeneration: 3,
     operationRef: runId,
     plan: selectedPlan,
@@ -431,6 +544,14 @@ const makeFixture = (
           },
         }
       : {}),
+    ...(options.signupPolicy
+      ? {
+          membershipProof: {
+            oidcToken: "fixture-oidc-token",
+            organizationId: "org-fixture",
+          },
+        }
+      : {}),
     ...(options.generated
       ? {
           generatedRelease: {
@@ -445,7 +566,7 @@ const makeFixture = (
     assertCurrent,
     bindWorkerContext,
     signal: new AbortController().signal,
-    database: options.auth ? "authDatabase" : "appDatabase",
+    database: options.auth || options.signupPolicy ? "authDatabase" : "appDatabase",
     ...(options.access
       ? {
           accessConnections: {
@@ -457,12 +578,14 @@ const makeFixture = (
           },
         }
       : {}),
-    directDatabaseUrl:
-      "postgresql://migrator:secret@ep-fixture.us-east-1.aws.neon.tech/app_db?sslmode=require",
+    directDatabaseUrl: options.signupPolicy
+      ? "postgresql://migrator:secret@ep-fixture.us-east-1.aws.neon.tech/auth_db?sslmode=require"
+      : "postgresql://migrator:secret@ep-fixture.us-east-1.aws.neon.tech/app_db?sslmode=require",
   } as HostedOperatorWorkerEffectContext & {
     signal: AbortSignal;
     database: "appDatabase" | "authDatabase";
     directDatabaseUrl: string;
+    membershipProof?: { oidcToken: string; organizationId: string };
   };
   const diagnostics = vi.fn<HostedOperatorConsentDiagnosticSink>();
   const launcher = createHostedOperatorSandboxLauncher(
@@ -499,6 +622,17 @@ const makeFixture = (
             },
           }
         : {}),
+      ...(options.signupPolicy
+        ? {
+            membershipWorker: {
+              executablePath: "/opt/auth-worker",
+              id: "auth-owned-organization-v1",
+              operationScope: "auth-protected-membership-v1" as const,
+              sha256: workerDigest,
+              subcommand: "auth-protected-membership" as const,
+            },
+          }
+        : {}),
     },
     { createSandbox, diagnosticSink: diagnostics },
   );
@@ -517,6 +651,7 @@ const makeFixture = (
     written,
   };
 };
+/* oxlint-enable eslint/complexity, sonarjs/cognitive-complexity */
 
 describe("hosted protected installer Sandbox launcher", () => {
   it("runs the pinned worker from the configured snapshot without an image or source clone", async () => {
@@ -533,6 +668,43 @@ describe("hosted protected installer Sandbox launcher", () => {
     });
     expect(options).not.toHaveProperty("image");
     expect(fixture.records).toHaveLength(1);
+  });
+
+  it("runs the separate approved signup-policy effect with its exact startup selector", async () => {
+    const fixture = makeFixture({ signupPolicy: true });
+    await fixture.launcher.execute(fixture.input);
+    const command = fixture.sandbox.runCommand.mock.calls.at(-1)?.[0];
+    expect(command?.args?.[0]).toBe("auth-protected-signup-policy");
+    const effectEntry = [...fixture.files.entries()].find(([path]) =>
+      path.endsWith("/startup/membership-effect.json"),
+    );
+    expect(effectEntry?.[1]).toEqual(
+      frame({ version: 1, effectId: "auth-signup-policy", kind: "auth-signup-policy" }),
+    );
+    const planEntry = [...fixture.files.entries()].find(([path]) =>
+      path.endsWith("/startup/operator-plan.json"),
+    );
+    expect(JSON.parse(planEntry![1].toString("utf-8"))).toMatchObject({
+      authSignupPolicy: { appId: "hc", organizationId: "org-fixture" },
+    });
+    expect(
+      [...fixture.files.keys()].some((path) => path.endsWith("/startup/realm-identity-proof.json")),
+    ).toBe(false);
+    expect(fixture.records).toHaveLength(1);
+
+    const inspector = makeFixture({
+      signupPolicy: true,
+      fenceOnly: true,
+      readbackStatus: "applied",
+    });
+    const observed = await inspector.launcher.inspect({
+      ...inspector.input,
+      readbackOnly: true,
+    });
+    expect(observed).toMatchObject({ status: "applied", readback_sha256: "9".repeat(64) });
+    expect(inspector.sandbox.runCommand.mock.calls.at(-1)?.[0].args?.[0]).toBe(
+      "auth-protected-membership-readback",
+    );
   });
 
   it("independently inspects access under the real leased context without a new worker attempt or receipt", async () => {

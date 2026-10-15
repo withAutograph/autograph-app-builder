@@ -43,26 +43,37 @@ input. The [native operator host](operator-native-host.md) separately wires the
 trusted [Preview composition](hosted-operator-native-composition.md). Source
 wiring does not establish deployed configuration or successful provider effects.
 
-## Approved normal participants
+## App-scoped signup and normal participants
 
-Builder supplies `normalActorProgram` when the accepted app requires multiple
-accounts or organization contexts. Use the verified native public origin and
-the accepted account, membership and app-role requirements. The read-only plan
-first prepares the named resource/Auth/Gateway effects. Once that bootstrap is
-observed, the next plan names normal account preparation. Its approval remains
-bound to the original operation while ordinary sign-in requests are answered.
-At `participants-prepared`, plan again with the same program and original public
-session to resolve actual organization owners, invitations, memberships, app
-access and app delivery before approving those effects.
+The approved hosted runtime plan carries the app's signup eligibility, exact
+organization, and initial membership and app roles. The protected installer
+persists this as a server-owned policy bound to the selected Auth resource, app,
+verified public origin, operation, approved plan and owner authority. Signup is
+available only after the Auth resources, policy and usable Preview are ready.
+The policy grants only the named app access within the named organization;
+ordinary signup never grants administrative ownership or access to other apps.
+An accepted `normalActorProgram` can describe additional named accounts,
+organizations, memberships and app roles, but is not a roster restriction on
+ordinary users when the approved product allows open signup.
 
-Normal sign-up/sign-in and the protected organization worker own these effects.
-Private capture stages actual cookie bytes under the configured native sender
+The app's normal signup or sign-in establishes the user's Auth session. A
+protected server-side enrollment path idempotently applies only the approved
+organization membership and app roles, including when an eligible account
+already exists. The server verifies the live session, matching membership and
+app-specific roles before continuing the same approved operation. There is no
+return-to-Builder checkbox or user-supplied claim that Auth was connected.
+Until a real eligible user completes signup, the private status is
+`waiting_for_signup`; after verified enrollment and route readiness it is
+`ready`. Authority or provider failures remain `blocked`. Public results expose
+only safe status and app URL, never cookies or private proof. See
+[owner and normal-account authority](hosted-operator-owner-authority.md).
+
+Private capture keeps actual cookie bytes under the configured native sender
 and pending owner scope; the ordinary original-owner callback confirms them.
 Each organization uses its own real selected Realm session. The prepared runtime
 freshly checks these sessions and memberships before delivering private browser
 storage through authenticated bindings. It never exposes passwords or cookies
-as tool text or environment variables. See
-[owner and normal-account authority](hosted-operator-owner-authority.md).
+as tool text or environment variables.
 
 The evaluator submits product replies and approvals through the existing public
 workflow. It does not insert users, patch organization grants or steer private
@@ -70,7 +81,8 @@ stages. Preserve pending operations and their approvals across replies and
 recovery. Keep actual credential, approval, tenant and lease/fence protections;
 normal source edits or a different number of legitimate participants do not
 justify new gates or quotas. Source/CI evidence does not establish hosted Auth
-behavior; report the actual sign-in and app acceptance results separately.
+behavior; report the actual signup/sign-in, server-verified app access and app
+acceptance results separately.
 
 ## Durable effect journal
 

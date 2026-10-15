@@ -6,7 +6,8 @@ import { describe, expect, it, vi } from "vitest";
 import { evaluateHostedRuntimePreparationApproval } from "../../agent/tools/prepare-app-hosted-runtime";
 import { nativeObservationStateSchema } from "../eve/native-observation-state";
 import { createPrivateHostedApprovalRecorder } from "../eve/private-hosted-approval";
-import { InMemoryHostedEveStore } from "../eve/hosted-store";
+import type { HostedEveStore } from "../eve/hosted-store";
+import { InMemoryHostedEveStore, toDurableHostedSessionRecord } from "../eve/hosted-store";
 import { createHostedEveSessionService } from "../eve/hosted-service";
 import type { HostedEveTransport } from "../eve/hosted-service";
 import type { HostedPrincipal } from "../eve/hosted-auth";
@@ -559,17 +560,24 @@ const retainedApprovalCapture = async (
       if (stored === null) {
         return null;
       }
-      const { checkpoint, ...paged } = stored;
+      const { checkpoint, ...paged } = toDurableHostedSessionRecord(stored);
       void checkpoint;
       return { ...paged, checkpointRef: ref, checkpointDigest: ref.digest };
     });
   const checkpointDigest = ref.digest;
-  f.store.readCheckpointPage = vi.fn(() =>
+  f.store.readCheckpointPage = vi.fn<NonNullable<HostedEveStore["readCheckpointPage"]>>(() =>
     Promise.resolve({
       checkpointDigest,
       cursor: 1,
       totalEvents: 1,
-      events: [{ index: 0, text: "Waiting for approval", type: "assistant_message" as const }],
+      events: [
+        {
+          index: 0,
+          text: "Waiting for approval",
+          turnId: "original-turn",
+          type: "assistant_message" as const,
+        },
+      ],
       metadata,
     }),
   );
@@ -619,7 +627,7 @@ describe("Builder-local approval capture before execution", () => {
       if (stored === null) {
         return null;
       }
-      const { checkpoint, ...paged } = stored;
+      const { checkpoint, ...paged } = toDurableHostedSessionRecord(stored);
       void checkpoint;
       reads += 1;
       return {
@@ -670,7 +678,7 @@ describe("Builder-local approval capture before execution", () => {
           return null;
         }
         reads += 1;
-        const { checkpoint, ...paged } = stored;
+        const { checkpoint, ...paged } = toDurableHostedSessionRecord(stored);
         void checkpoint;
         return {
           ...paged,
