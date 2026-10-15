@@ -46,13 +46,50 @@ approval of exact frozen plans before any effect.
 
 1. Observe and approve the distinct operator, Gateway/Auth and app project IDs,
    owners, roots and environments. Configure only operator authority in this
-   private operator project; app/Gateway projects must not receive it.
+   private operator project; app/Gateway projects must not receive it. Save these
+   project settings:
+
+   ```json
+   {
+     "rootDirectory": "lib/provisioning/operator-host",
+     "sourceFilesOutsideRootDirectory": true
+   }
+   ```
+
+   Outside-root source access lets the operator import the shared Builder
+   composition without changing its service root.
+
 2. Configure deployment protection and Trusted Sources for the exact approved
    Builder caller team/project/environment. The client sends its verified workload
    bearer for operator authorization and the provider Trusted Sources header for
    ingress; neither substitutes for the other.
-3. Deploy the reviewed composition through normal Git delivery. Observe
-   the exact immutable operator deployment URL and source/target identity.
+3. Deploy the selected immutable Git commit through normal Git delivery using
+   `lib/provisioning/operator-host/vercel.json`. Deployment requests must retain
+   the operator project root and select this nested configuration. Its service
+   root `.` is relative to `lib/provisioning/operator-host`; the service uses
+   the `hono` preset and `entrypoint.ts`.
+
+   The repository-root `vercel.json` builds the Builder, including Eve and
+   Next.js. A saved `rootDirectory: null`, or a deployment request that selects
+   the repository root instead of the operator configuration, can run that
+   Builder build in the operator project. Keep the saved operator settings and
+   deployment configuration aligned when refreshing this project.
+
+   For a standard Preview deployment, omit `target` from the deployment request;
+   do not send the literal `preview`. The API's `staging` target is distinct and
+   assigns a staging alias. Do not assume it is equivalent to an omitted target
+   for Trusted Sources, even when OIDC reports the Preview environment.
+
+   A redeploy using `deploymentId` inherits the original deployment's project
+   settings and environment variables unless explicitly overridden. Keep the
+   intended operator configuration and current rotated automatic binding through
+   the provider's supported deployment settings. `withLatestCommit: true` only
+   removes the previous Git SHA selection so the latest commit is used; it does
+   not refresh inherited settings or environment variables. These request semantics
+   are defined in the [official Vercel SDK deployment request schema](https://github.com/vercel/sdk/blob/main/docs/models/createdeploymentrequestbody.md).
+
+   Observe the exact immutable operator deployment URL and source/target identity.
+
 4. Exercise unauthorized/mismatched callers and actual owner-approved Preview
    operations, independent provider/database readback, recovery and isolation.
 

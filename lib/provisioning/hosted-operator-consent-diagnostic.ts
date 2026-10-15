@@ -368,6 +368,48 @@ const neonMcpFailureSchema = z.strictObject({
 });
 export type OperatorNeonMcpFailure = z.infer<typeof neonMcpFailureSchema>;
 
+const gatewayBindingsDiagnostic = z.strictObject({
+  mode: z.enum(["bind", "reconcile"]),
+  stage: z.enum([
+    "context",
+    "authority",
+    "credential",
+    "known_rows",
+    "environment_inventory",
+    "managed_values",
+    "required_environment",
+    "public_environment",
+    "trusted_origins",
+    "runtime_binding",
+    "prior_policy",
+    "prior_projection",
+    "app_candidate",
+    "desired_values",
+    "ownership_readback",
+    "checkpoint",
+    "prewrite",
+    "write",
+    "write_readback",
+    "final_readback",
+  ]),
+  method: z.enum(["GET", "POST", "PATCH"]).optional(),
+  statusCategory: z
+    .enum([
+      "success",
+      "auth_denied",
+      "rate_limited",
+      "client_error",
+      "server_error",
+      "redirect",
+      "other",
+      "no_response",
+    ])
+    .optional(),
+  httpStatus: z.number().int().min(100).max(599).optional(),
+  result: z.enum(["bound", "applied", "absent", "unknown", "failed"]),
+});
+export type OperatorGatewayBindingsDiagnostic = z.infer<typeof gatewayBindingsDiagnostic>;
+
 const metadata = z.strictObject({
   accessClass: z
     .enum(["upstream_auth_denied", "application_auth_denied", "other_failed", "ok"])
@@ -427,6 +469,7 @@ const metadata = z.strictObject({
   phase,
   planningFailure: operatorPlanningFailure.optional(),
   executionFailure: operatorExecutionFailure.optional(),
+  gatewayBindings: gatewayBindingsDiagnostic.optional(),
   planningMismatch: z
     .strictObject({
       boundary: operatorPlanningMismatchBoundary,
