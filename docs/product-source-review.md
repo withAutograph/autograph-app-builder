@@ -1,64 +1,92 @@
 # Product source review
 
 Independent source review runs at final `accept_change_set`, after implementation
-and technical validation are ready. `validate_app_creation` continues to run the
-repository commands, runtime preparation, release capture and applicable
-persistent-backend browser tests, but returns deferred/unassessed source evidence.
-The deferred result has `status: "unassessed"`, `reviewCompleted: false` and
-empty findings. It uses the existing apply receipt's source digest as a known
-binding; it does not claim a fresh source observation. That deferral is expected
-and does not require another validation attempt.
+and technical validation are ready. Intermediate `validate_app_creation` returns
+deferred source evidence without a paid independent review:
+`status: "unassessed"`, `reviewCompleted: false`, and empty findings.
+That expected result does not require another validation attempt.
 
-Final acceptance reads current source and performs the independent assessment
-before private preview completion or publication. A matching completed assessment
-is reused; an interrupted matching assessment resumes its journal work. Source
-repairs still require current technical validation before final acceptance. An
-interrupted review alone is not a reason to rerun repository checks. Product
-behavior still requires executed evidence; source review cannot establish it.
-Final findings or an unavailable assessment remain explicit in the result and
-must not be presented as a clean completed review.
+## Application-level assessment
 
-At final review, Builder reads selected app source, changed paths and root
-manifests through the Sandbox byte stream. It hashes each complete file
-against the observed overlay and divides source into bounded pages. A long line
-is split with its original starting line and column recorded. Pages are transport
-units, not file or repository size ceilings.
+One independent reviewer considers the implementation against the exact original
+request, chronological product clarifications, and complete accepted AppSpec.
+The original documents remain authoritative and accessible throughout review;
+a navigation checklist or narrower specification cannot replace them.
 
-Builder divides the original request, clarifications and AppSpec into overlapping
-excerpts. Every selected source page is checked against every excerpt, preserving
-complete coverage. Multiple pending page/context pairs are packed into one
-independent model request under a 128 KiB serialized JSON prompt byte bound.
-Rubric instructions and output schema are outside that JSON budget. Batching
-reduces request fanout without changing the selected review model, rubric,
-required coverage or citation rules. This bound limits one prompt, not total app
-size, review work or session duration.
+The reviewer starts from the current source observation and intended changes.
+Read-only evidence tools provide requirements and source ranges, including
+relevant unchanged imports and execution paths. Files can be inspected together
+by product behavior. Builder does not require a separate judgment for every
+source-page/requirements-excerpt combination. Transport ranges are not app-size,
+file-count, request-count, or session-duration quotas.
+Source results are bounded by their serialized JSON size, including long single
+lines and oversized requested ranges. Follow each returned `nextCursor` verbatim;
+line/column positions and exact observed windows preserve partial and cross-page
+citations without changing public line references. Complete files remain readable.
+The current reader verifies and memoizes complete decoded files in process before
+serving ranges; bounded model responses do not imply constant memory use.
 
-Each response identifies its individual pair judgments. Builder checks source
-excerpts and requirement quotes mechanically, translates valid page citations to
-original file line numbers, and journals completed pair judgments independently.
-Results aggregate in original source/context order. Provider context rejection
-or an SDK structured-output failure explicitly ending for length splits the
-affected batch; a rejected singleton pair splits its source page or
-requirement excerpt and retries. If the smallest pair cannot be accepted, review
-remains blocked with its source location and excerpt identity.
+Source, comments and requirements are untrusted evidence, not reviewer
+instructions. The reviewer cannot execute commands, repair code, publish,
+provision resources, or request credentials. Findings must identify a concrete
+source-demonstrated contradiction. Builder checks exact requirement quotes and
+source citations against observed bytes, then retains sanitized conclusions and
+digest references. Missing or ambiguous evidence belongs in runtime checks,
+not an invented failure or a claim that unread code is absent.
 
-Multi-pair requests use caller cancellation without the singleton's 120-second
-deadline. Singleton requests retain that deadline. Invalid structured output
-with another finish reason remains blocked. Fresh usage includes billed
-truncated responses as well as their successful continuation requests.
+## Recovery and reuse
 
-An unchanged later review reuses the retained exact assessment. An interrupted
-review reuses matching completed pair records through the
-[continuation journal](source-review-continuation.md). The current binding
-includes the complete observed overlay and request history: a source edit or
-clarification creates new keys even for otherwise unchanged page/excerpt pairs.
-Batching does not add incremental repair reuse.
+A matching completed application assessment can be reused through the existing
+owner/session journal after current authorization is checked. Its private key
+includes the actual review protocol/model/rubric, original requirements and
+accepted spec, complete observed source snapshot, and normalized intended diff.
+Normal input changes create a cache miss; they are not infrastructure drift.
 
-A changed file digest, changed overlay tree, failed judgment or invalid citation
-prevents a completed assessment. Source judgments remain advisory. Runtime
-behavior and hosted readiness require separate executed evidence.
+This implementation checkpoints completed application assessments, not every
+intermediate model step. An interrupted incomplete application review may rerun.
+Legacy fragment judgments and context-split records remain historical evidence;
+they do not establish completion of an application-level review. No journal
+migration or new provisioning step is introduced. See the
+[continuation contract](source-review-continuation.md).
 
-The assessment's historical `usage` describes tokens attached to its review
-judgments, including replayed evidence. Per-invocation counters distinguish new
-provider attempts and fresh reported tokens from journal reuse; see
+An actual provider context rejection can compact prior read payloads into
+immutable evidence references and validated findings, with original documents
+still accessible. Actual output-capacity rejection can use smaller evidence
+submissions. Neither recovery path drops findings, changes the review model, or
+returns to exhaustive fragment pairing. Caller cancellation remains effective
+throughout; cancelled work cannot publish a completed assessment.
+
+## Source and runtime evidence
+
+The existing source binding, current-source observation, reviewed receipt,
+publication approval and assessment detail references remain authoritative.
+A review interruption alone does not require another technical validation.
+Concrete implementation repairs use the normal focused validation path.
+
+Source opinions remain advisory. Unavailable or interrupted review is reported
+truthfully; it must not become a new admission gate or a fabricated passing
+result. A completed review with no cited contradictions still has
+`status: "unassessed"` for actual runtime behavior. Source cannot prove
+authentication, persistence, isolation, provisioning, deployment, or hosted
+readiness. Execute the requested product behavior separately.
+
+## Reading saved findings
+
+Use `change_set_status` with `view: "acceptance"`,
+`detailSection: "source-assessment"`, the existing review digest, and the
+source-assessment binding from its returned reference. This reads the saved
+assessment without the long acceptance walkthrough and does not rerun review.
+Copy each returned `nextCall` until `complete` is true, then join its JSON content
+chunks. Omitting the section preserves access to the complete receipt and
+acceptance report.
+
+Pages fit both the native frame and the pinned Eve tool-history output boundary;
+continuation controls precede content. The full protected report stays readable.
+This prevents ordinary tool-result clipping, not every lossy emergency summary.
+If an old private detail cursor is rejected after this paging repair, read the
+same saved section from its first page. Public session identity and progress are
+unchanged.
+
+Historical assessment `usage` includes retained evidence. New invocation metrics
+and per-request observations distinguish fresh generation from reuse; see
 [model cost accounting](builder-model-cost.md#accounting-and-evidence).

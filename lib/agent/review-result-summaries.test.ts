@@ -1,10 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ReviewedChangeSetReceipt } from "../repository/reviewed-change-set";
 import { reviewedChangeSetSummary } from "./review-result-summaries";
 import type { ReviewedChangeSetSummaryInput } from "./review-result-summaries";
-import { readOwnedReviewDetailPage } from "./review-detail-pages";
+import {
+  EVE_REVIEW_DETAIL_HISTORY_CHARACTERS,
+  readOwnedReviewDetailPage,
+} from "./review-detail-pages";
 import type { ReviewDetailCursor } from "./review-detail-pages";
 import { serializedNativeActionResultBytes } from "../eve/payload-envelope";
+
+// These pure paging/summary tests do not run an Eve session or resolve live review state.
+vi.mock("./product-source-review-state", () => ({
+  currentProductSourceAssessment: vi.fn(),
+  productRequestState: { get: vi.fn() },
+  retainedProductSourceAssessmentForReference: vi.fn(),
+}));
+vi.mock("./product-behavior-state", () => ({ currentProductBehaviorEvidence: vi.fn() }));
 
 const receipt: ReviewedChangeSetReceipt = {
   appSpecDigest: "spec",
@@ -71,6 +82,124 @@ const input: ReviewedChangeSetSummaryInput = {
 };
 
 describe("review result summaries", () => {
+  it("reads the complete saved blocking assessment through model-visible continuation calls without the long walkthrough", () => {
+    const blockingAssessment = {
+      ...sourceAssessment,
+      findings: [
+        {
+          citations: [
+            {
+              endLine: 12,
+              excerptDigest: "source-excerpt",
+              path: "apps/example/actions.ts",
+              startLine: 10,
+            },
+          ],
+          explanation: 'The save action returns a local "saved" state 💙.\n'.repeat(80),
+          repair: "Persist the submitted record and read it independently after reload.",
+          requirement: "Saved records survive reload.",
+          requirementQuoteDigest: "requirement-quote",
+        },
+      ],
+      status: "failed" as const,
+    };
+    const details = {
+      productAcceptance: {
+        ...input.productAcceptance,
+        sourceAssessment: blockingAssessment,
+        walkthrough: "LONG_WALKTHROUGH".repeat(10_000),
+      },
+      reviewReceipt: receipt,
+    };
+    const metadata = {
+      callId: "owned-call",
+      toolName: "change_set_status",
+      turnId: "owned-turn",
+    };
+    let page = readOwnedReviewDetailPage({
+      details,
+      metadata,
+      section: "source-assessment",
+      sessionId: "owner-session",
+    });
+    const parts: string[] = [];
+    for (;;) {
+      // eve capToolResults measures the complete model output wrapper, not just content.
+      const serialized = JSON.stringify({ type: "json", value: page });
+      expect(serialized.length).toBeLessThanOrEqual(EVE_REVIEW_DETAIL_HISTORY_CHARACTERS);
+      expect(serialized).not.toContain("LONG_WALKTHROUGH");
+      expect(page.content).not.toContain("�");
+      parts.push(page.content);
+      if (page.complete) {
+        expect(page.nextCall).toBeUndefined();
+        expect(page.detailCursor).toBeUndefined();
+        break;
+      }
+      const { nextCall } = page;
+      if (nextCall === undefined) {
+        throw new Error("An unfinished assessment page must provide its continuation call");
+      }
+      expect(nextCall).toMatchObject({
+        detailSection: "source-assessment",
+        expectedReviewDigest: receipt.digest,
+        sourceAssessmentBindingDigest: blockingAssessment.bindingDigest,
+        view: "acceptance",
+      });
+      expect(nextCall.detailCursor).toEqual(page.detailCursor);
+      page = readOwnedReviewDetailPage({
+        cursor: nextCall.detailCursor,
+        details,
+        metadata,
+        section: nextCall.detailSection,
+        sessionId: "owner-session",
+      });
+    }
+    expect(parts.length).toBeGreaterThan(1);
+    expect(JSON.parse(parts.join(""))).toEqual(blockingAssessment);
+  });
+  it("binds assessment continuation to its report, section and current session", () => {
+    const details = {
+      productAcceptance: {
+        ...input.productAcceptance,
+        sourceAssessment: { ...sourceAssessment, reason: "SOURCE_DETAIL".repeat(1000) },
+      },
+      reviewReceipt: receipt,
+    };
+    const common = {
+      details,
+      metadata: { callId: "owned-call", toolName: "change_set_status", turnId: "owned-turn" },
+      section: "source-assessment" as const,
+      sessionId: "owner-session",
+    };
+    const first = readOwnedReviewDetailPage(common);
+    expect(first.detailCursor).toBeDefined();
+    expect(() =>
+      readOwnedReviewDetailPage({ ...common, cursor: first.detailCursor, sessionId: "other" }),
+    ).toThrow("current owner/session review");
+    expect(() =>
+      readOwnedReviewDetailPage({ ...common, cursor: first.detailCursor, section: "all" }),
+    ).toThrow("current owner/session review");
+    expect(() =>
+      readOwnedReviewDetailPage({
+        ...common,
+        cursor: first.detailCursor,
+        details: { ...details, reviewReceipt: { ...receipt, digest: "new-review" } },
+      }),
+    ).toThrow("current owner/session review");
+  });
+  it("reports unavailable source assessment instead of returning an empty findings section", () => {
+    expect(() =>
+      readOwnedReviewDetailPage({
+        details: {
+          productAcceptance: { ...input.productAcceptance, sourceAssessment: undefined },
+          reviewReceipt: receipt,
+        },
+        metadata: { callId: "owned-call", toolName: "change_set_status", turnId: "owned-turn" },
+        section: "source-assessment",
+        sessionId: "owner-session",
+      }),
+    ).toThrow("source assessment is unavailable");
+  });
   it("replays full authoritative receipt and acceptance bytes through owner/session detail pages", () => {
     const details = {
       productAcceptance: {
@@ -96,6 +225,9 @@ describe("review result summaries", () => {
         sessionId: "owner-session",
       });
       expect(serializedNativeActionResultBytes(page, metadata)).toBeLessThanOrEqual(1800);
+      expect(JSON.stringify({ type: "json", value: page }).length).toBeLessThanOrEqual(
+        EVE_REVIEW_DETAIL_HISTORY_CHARACTERS,
+      );
       expect(page.reviewReference).toEqual({
         digest: receipt.digest,
         kind: "current-session-reviewed-change-set",

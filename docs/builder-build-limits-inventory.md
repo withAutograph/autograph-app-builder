@@ -11,7 +11,7 @@ a ceiling on the total number of files, events, or retry attempts.
 | GitHub recursive trees             | Provider 100,000-entry or 7 MB recursive response boundary | On `truncated`, walk nonrecursive subtrees. A truncated individual directory fails with repository, revision, and path; it is never accepted as complete.                                                                    |
 | GitHub files                       | Provider 100 MiB per-file ceiling                          | Report the rejected operation and path, including the 413 status and byte count when supplied. Suggest reducing the file or reviewing Git LFS or another storage provider; do not silently redesign storage.                 |
 | Eve event messages                 | Transport envelope                                         | Size each artifact chunk against the serialized envelope, including escaping and metadata. Continue with another chunk; do not impose a total artifact ceiling.                                                              |
-| Model review context               | Provider context capacity                                  | Review source in scoped, digest-verified pages. Report the path and line when the smallest page is rejected.                                                                                                                 |
+| Model review context               | Provider context capacity                                  | Use read-only application evidence and recover from actual capacity rejection with compact evidence references; preserve original documents and citations.                                                                   |
 | Postgres checkpoint stage          | Database transaction and memory pressure                   | Write immutable 64 KiB byte chunks and publish the manifest atomically with the session pointer. The chunk size limits one read or write, not history length.                                                                |
 | Hosted session compute lease       | Cleanup and stale-writer fencing                           | Compute can be released after idle or lifetime expiry. The public session and its durable progress remain available for continuation.                                                                                        |
 | Hosted Eve read deadline           | Stalled provider response recovery                         | A single read times out after 30 seconds and returns a recoverable error. A later read can continue the same durable session; this is not a total session or history limit.                                                  |
@@ -56,8 +56,9 @@ of the full AppSpec in workflow state. V2 requires canonical LF and the exact
 status-only handoff bytes; noncanonical drafts must be rewritten before
 acceptance. Existing v1 receipts and accepted snapshots retain their original
 normalisation and readback behavior. Planning writes verified chunks through
-the sandbox's streamed file API. Independent source review reopens verified
-chunks for bounded requirement excerpts against each source page. The public
+the sandbox's streamed file API. Independent application review exposes complete verified requirements through
+read-only evidence tools, without pairing every requirement excerpt with every
+source page. The public
 AppSpec tool readback remains paged by exact digest and revision. See
 [the streamed AppSpec contract](app-spec-stream-contract.md).
 

@@ -41,11 +41,16 @@ export const completedSourceAssessmentSchema = z.strictObject({
     .optional(),
 });
 export const sourceReviewJournalRecordSchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    assessment: completedSourceAssessmentSchema,
+    kind: z.literal("application-completed"),
+  }),
   z.strictObject({ assessment: completedSourceAssessmentSchema, kind: z.literal("completed") }),
   z.strictObject({ kind: z.literal("split-source") }),
   z.strictObject({ kind: z.literal("split-context") }),
 ]);
 export type SourceReviewJournalRecord =
+  | { kind: "application-completed"; assessment: ProductSourceAssessment }
   | { kind: "completed"; assessment: ProductSourceAssessment }
   | { kind: "split-source" | "split-context" };
 export interface SourceReviewJournal {
