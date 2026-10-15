@@ -127,7 +127,11 @@ evidence. The fixed native readback POST sets its Origin from the exact owned
 journal endpoint after native workload verification and cookie rejection. It never
 copies an incoming Origin or synthesizes browser Fetch Metadata; JWKS GET headers
 are unchanged. A saved connection can therefore retain its original immutable
-Gateway endpoint through a source refresh.
+Gateway endpoint through a source refresh. The browser entrypoint is a separate
+provider-owned address: when it moves, renewal verifies its current deployment
+still belongs to the approved owner/project, native Preview environment and
+branch and is READY. That read does not replace the saved immutable transport or
+require the previous deployment to retain the browser alias.
 
 This adds no separate AI turn or qualification probe. Source checks or
 a repair to the current native session do not establish automatic hosted recovery or

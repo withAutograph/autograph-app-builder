@@ -375,9 +375,29 @@ export const readHostedOperatorProviderInventory = async (input: {
         origin(`https://${gateway.deployment.url}`),
         ...aliases.aliases.map((alias) => origin(`https://${alias.alias}`)),
       ]);
+      const ownsGatewayOrigin = ownedOrigins.has(gatewayOrigin);
+      let ownsPublicOrigin = ownedOrigins.has(publicOrigin);
+      if (ownsGatewayOrigin && !ownsPublicOrigin) {
+        // A browser alias can advance while the approved immutable transport remains valid.
+        // Resolve only the trusted configured hostname through the owner-scoped provider API.
+        const publicDeployment = deploymentSchema.parse(
+          await request(`/v13/deployments/${encodeURIComponent(new URL(publicOrigin).hostname)}`, {
+            withGitRepoInfo: "true",
+          }),
+        );
+        const invalidPublicDeployment = invalidDeploymentObservation({
+          deployment: publicDeployment,
+          reference: config.gateway,
+          projectId: gateway.summary.projectId,
+          scopeId: target.scopeId,
+          branch: config.gateway.branch,
+          resolveAlias: true,
+        });
+        ownsPublicOrigin = !Object.values(invalidPublicDeployment).some(Boolean);
+      }
       const invalidOrigins = {
-        public_origin: !ownedOrigins.has(publicOrigin),
-        gateway_origin: !ownedOrigins.has(gatewayOrigin),
+        public_origin: !ownsPublicOrigin,
+        gateway_origin: !ownsGatewayOrigin,
       };
       if (Object.values(invalidOrigins).some(Boolean)) {
         reportOperatorPlanningMismatch(target.sessionId, "gateway_origin", invalidOrigins);

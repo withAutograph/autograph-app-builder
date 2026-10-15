@@ -181,7 +181,12 @@ export const createHostedOperatorClient = (input: {
       request: Extract<OperatorRequest, { action: "auth-identity-input" }>,
       signal?: AbortSignal,
     ) {
-      const value = operatorAuthIdentityInputSchema.parse(await send(request, signal));
+      const raw = await send(request, signal);
+      const blocked = operatorPublicResultSchema.safeParse(raw);
+      if (blocked.success) {
+        throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable");
+      }
+      const value = operatorAuthIdentityInputSchema.parse(raw);
       if (
         value.operationRef !== request.operationRef ||
         value.sessionId !== request.selection.sessionId
