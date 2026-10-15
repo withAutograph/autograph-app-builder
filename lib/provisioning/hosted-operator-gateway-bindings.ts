@@ -3,6 +3,11 @@ import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { createHostedOperatorRealmLinkConfig } from "./hosted-operator-realm-link-config";
 import { z } from "zod";
+import { createHostedOperatorConsentDiagnostic } from "./hosted-operator-consent-diagnostic";
+import type {
+  HostedOperatorConsentDiagnosticSink,
+  OperatorGatewayBindingsDiagnostic,
+} from "./hosted-operator-consent-diagnostic";
 import type { readActiveVercelInstallationToken } from "../integrations/postgres-vercel-installation";
 import {
   canonicalGatewayEnvironmentRowsSchema,
@@ -30,6 +35,9 @@ type ProviderRow = z.infer<typeof providerRow>;
 const providerValue = z.object({ value: z.string() });
 const valueDigest = (value: string) => createHash("sha256").update(value).digest("hex");
 const unavailable = () => new HostedOperatorError("operator_unavailable");
+const ignoreDiagnostic = () => {
+  /* Unobserved read-only helpers keep their existing behavior. */
+};
 const managedKeys = [
   "AUTH_DATABASE_RESOURCE",
   "PLATFORM_AUTH_DATABASE_URL",
@@ -203,8 +211,88 @@ export const createHostedOperatorGatewayBindings = (deps: {
     input: GatewayManagedEnvironmentContext,
   ) => Promise<{ active: boolean; rows: CanonicalGatewayEnvironmentRow[] }>;
   fetch?: typeof fetch;
+  diagnosticSink?: HostedOperatorConsentDiagnosticSink;
 }) => {
-  const open = (liveInput: GatewayManagedEnvironmentContext, readonlyCanonical = false) => {
+  const diagnostic = (input: GatewayManagedEnvironmentContext, mode: "bind" | "reconcile") => {
+    let report: ReturnType<typeof createHostedOperatorConsentDiagnostic> | undefined;
+    try {
+      report = createHostedOperatorConsentDiagnostic(input.target.sessionId, deps.diagnosticSink);
+    } catch {
+      /* Diagnostics never change the existing binding or reconciliation outcome. */
+    }
+    let stage: OperatorGatewayBindingsDiagnostic["stage"] = "context";
+    let method: OperatorGatewayBindingsDiagnostic["method"];
+    let statusCategory: OperatorGatewayBindingsDiagnostic["statusCategory"];
+    let httpStatus: OperatorGatewayBindingsDiagnostic["httpStatus"];
+    return {
+      at(next: OperatorGatewayBindingsDiagnostic["stage"], preserveRequest = false) {
+        stage = next;
+        if (!preserveRequest) {
+          method = undefined;
+          statusCategory = undefined;
+          httpStatus = undefined;
+        }
+      },
+      get stage() {
+        return stage;
+      },
+      request(next: NonNullable<OperatorGatewayBindingsDiagnostic["method"]>) {
+        method = next;
+      },
+      response(status: number) {
+        if (Number.isInteger(status) && status >= 100 && status <= 599) {
+          httpStatus = status;
+        }
+        if (status >= 200 && status < 300) {
+          statusCategory = "success";
+        } else if (status === 401 || status === 403) {
+          statusCategory = "auth_denied";
+        } else if (status === 429) {
+          statusCategory = "rate_limited";
+        } else if (status >= 400 && status < 500) {
+          statusCategory = "client_error";
+        } else if (status >= 500 && status < 600) {
+          statusCategory = "server_error";
+        } else if (status >= 300 && status < 400) {
+          statusCategory = "redirect";
+        } else {
+          statusCategory = "other";
+        }
+      },
+      noResponse() {
+        statusCategory = "no_response";
+      },
+      finish(result: OperatorGatewayBindingsDiagnostic["result"]) {
+        report?.({
+          boundary: "operator",
+          phase: "inline",
+          stage: "operator_request",
+          outcome: result === "failed" || result === "unknown" ? "setup_unavailable" : "verified",
+          gatewayBindings: {
+            mode,
+            stage,
+            result,
+            ...(method === undefined ? {} : { method }),
+            ...(statusCategory === undefined ? {} : { statusCategory }),
+            ...(httpStatus === undefined ? {} : { httpStatus }),
+          },
+        });
+      },
+    };
+  };
+  const silentObservation: ReturnType<typeof diagnostic> = {
+    at: ignoreDiagnostic,
+    stage: "context",
+    request: ignoreDiagnostic,
+    response: ignoreDiagnostic,
+    noResponse: ignoreDiagnostic,
+    finish: ignoreDiagnostic,
+  };
+  const open = (
+    liveInput: GatewayManagedEnvironmentContext,
+    readonlyCanonical = false,
+    observation = silentObservation,
+  ) => {
     const input = {
       ...liveInput,
       authority: structuredClone(liveInput.authority),
@@ -226,20 +314,26 @@ export const createHostedOperatorGatewayBindings = (deps: {
     // Written values are accepted only for writes acknowledged by this invocation, until checkpointed.
     const acknowledgedValues = new Map<string, string>();
     const fullGuard = async () => {
+      const priorStage = observation.stage;
+      observation.at("authority", true);
       await input.assertCurrent();
       await deps.assertAuthorized(input);
+      observation.at(priorStage, true);
     };
     const guard = async () => {
       if (input.assertCurrentObservation === undefined || deps.assertCanonicalOwner === undefined) {
         await fullGuard();
         return;
       }
+      const priorStage = observation.stage;
+      observation.at("authority", true);
       await input.assertCurrentObservation();
       await deps.assertCanonicalOwner(input);
+      observation.at(priorStage, true);
     };
     const request = async (
       route: string,
-      method = "GET",
+      method: "GET" | "POST" | "PATCH" = "GET",
       body?: {
         comment?: string;
         gitBranch?: string;
@@ -249,8 +343,10 @@ export const createHostedOperatorGatewayBindings = (deps: {
         value: string;
       },
     ) => {
+      const requestStage = observation.stage;
       const requestGuard = method === "GET" ? guard : fullGuard;
       await requestGuard();
+      observation.at("credential");
       const credential = await deps.readCredential(input.authority, target.installationId);
       if (
         credential?.binding.active !== true ||
@@ -260,6 +356,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
       ) {
         throw new HostedOperatorError("authorization_required");
       }
+      observation.at(requestStage);
       await requestGuard();
       const url = new URL(route, "https://api.vercel.com");
       url.searchParams.set("teamId", target.scopeId);
@@ -277,7 +374,15 @@ export const createHostedOperatorGatewayBindings = (deps: {
       if (body !== undefined) {
         options.body = JSON.stringify(body);
       }
-      const response = await (deps.fetch ?? fetch)(url, options);
+      observation.request(method);
+      let response: Response;
+      try {
+        response = await (deps.fetch ?? fetch)(url, options);
+      } catch (error) {
+        observation.noResponse();
+        throw error;
+      }
+      observation.response(response.status);
       try {
         await requestGuard();
         if (!response.ok) {
@@ -295,14 +400,17 @@ export const createHostedOperatorGatewayBindings = (deps: {
         }
       }
     };
-    const list = async () =>
-      z
+    const list = async () => {
+      observation.at("environment_inventory");
+      return z
         .object({ envs: z.array(providerRow) })
         .parse(await request(`/v10/projects/${encodeURIComponent(projectId)}/env`)).envs;
+    };
     const isBranchPreview = (row: ProviderRow) =>
       row.target.includes("preview") &&
       (row.gitBranch === null || row.gitBranch === undefined || row.gitBranch === branch);
     const requiredEnvironment = async (rows: ProviderRow[]) => {
+      observation.at("required_environment");
       const byKey = (key: string) =>
         rows.filter(
           (row) =>
@@ -323,6 +431,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
       ) {
         throw unavailable();
       }
+      observation.at("public_environment");
       for (const [key, expected] of [
         ["BETTER_AUTH_URL", gateway.publicOrigin],
         ["BETTER_AUTH_APP_NAME", "apps"],
@@ -345,6 +454,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
           throw unavailable();
         }
       }
+      observation.at("trusted_origins");
       const trustedOriginRows = byKey("PLATFORM_AUTH_TRUSTED_ORIGINS");
       if (trustedOriginRows.length !== 1) {
         throw unavailable();
@@ -374,6 +484,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
     };
     const expectedValues = async (rows: ProviderRow[]): Promise<GatewayValues> => {
       await guard();
+      observation.at("runtime_binding");
       const runtimeUrl = await deps.readAuthRuntimeUrl(input);
       await guard();
       assertRuntimeUrl(runtimeUrl, input);
@@ -382,6 +493,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
         a.localeCompare(b),
       );
       if (oldPolicy) {
+        observation.at("prior_policy");
         const oldValue = providerValue.parse(
           await request(
             `/v1/projects/${encodeURIComponent(projectId)}/env/${encodeURIComponent(oldPolicy.id)}`,
@@ -401,6 +513,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
       const oldProjection = rows.find((row) => row.key === "PLATFORM_GATEWAY_PROJECT_BINDINGS");
       let priorBindings: z.infer<typeof appBinding>[] = [];
       if (oldProjection !== undefined) {
+        observation.at("prior_projection");
         const stored = providerValue.parse(
           await request(
             `/v1/projects/${encodeURIComponent(projectId)}/env/${encodeURIComponent(oldProjection.id)}`,
@@ -416,6 +529,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
         }
         priorBindings = prior.bindings;
       }
+      observation.at("app_candidate");
       const selectedId =
         input.plan.stage === "auth-bootstrap"
           ? undefined
@@ -457,6 +571,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
           bound,
         ];
       }
+      observation.at("desired_values");
       const projection = projectionSchema.parse({
         bindings: priorBindings,
         provenance: "trusted-operator-published-provider-projection",
@@ -475,6 +590,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
     };
     let activeSharedAuth = false;
     const knownRows = async () => {
+      observation.at("known_rows");
       let canonical: CanonicalGatewayEnvironmentRow[] = [];
       if (input.plan.authAdoption !== undefined) {
         if (approvedCanonical === undefined || deps.readCanonicalGatewayRows === undefined) {
@@ -592,6 +708,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
         }
         return reference;
       });
+      observation.at("checkpoint");
       await input.checkpointGatewayEnvironment(saved);
       input.gatewayEnvironmentRows = saved;
       await guard();
@@ -636,6 +753,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
       const known = await knownRows();
       // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Source ownership must be established before provider readback.
       const listed = await list();
+      observation.at("ownership_readback");
       const rows = listed.filter(
         (row) => managedKeySchema.safeParse(row.key).success && isBranchPreview(row),
       );
@@ -646,6 +764,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
       ) {
         throw unavailable();
       }
+      observation.at("managed_values");
       const values = new Map<string, string>();
       for (const row of rows.filter(
         (candidate) => selectedKey === undefined || candidate.key === selectedKey,
@@ -693,6 +812,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
         throw unavailable();
       }
       if (verifyValues) {
+        observation.at("final_readback");
         for (const row of rows) {
           const actual = providerValue.parse(
             await request(
@@ -763,6 +883,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
       selectedKey?: keyof GatewayValues,
     ) => {
       const fresh = await inspectOwnership(false, selectedKey);
+      observation.at("prewrite");
       const selectedValues =
         selectedKey === undefined
           ? values
@@ -813,11 +934,13 @@ export const createHostedOperatorGatewayBindings = (deps: {
 
   return {
     async bind(input: GatewayManagedEnvironmentContext) {
+      const observation = diagnostic(input, "bind");
       try {
         if (input.effect.kind !== "gateway-bindings") {
           throw unavailable();
         }
-        const io = open(input);
+        const io = open(input, false, observation);
+        observation.at("authority");
         await io.fullGuard();
         let { expected, known, rows, values } = await io.inspect(false);
         const creatingRows = rows.length === 0;
@@ -855,6 +978,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
             value,
             creatingRows ? key : undefined,
           );
+          observation.at("write");
           await io.writeRow(key, value, existing);
           if (existing !== undefined) {
             io.acknowledgedValues.set(existing.id, valueDigest(value));
@@ -868,6 +992,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
           if (!observed) {
             throw unavailable();
           }
+          observation.at("write_readback");
           const actual = await io.readSelectedValue(observed, values, creatingRows);
           if (actual !== expected[key]) {
             throw unavailable();
@@ -876,10 +1001,11 @@ export const createHostedOperatorGatewayBindings = (deps: {
         }
         ({ known, rows, values } = await io.inspect(true));
         await io.fullGuard();
-        return {
-          rows: io.referenceRows(rows, known, values),
-        };
+        const result = { rows: io.referenceRows(rows, known, values) };
+        observation.finish("bound");
+        return result;
       } catch {
+        observation.finish("failed");
         throw unavailable();
       }
     },
@@ -889,22 +1015,30 @@ export const createHostedOperatorGatewayBindings = (deps: {
       | { status: "absent" | "unknown" }
       | { status: "applied"; rows: ManagedOperatorEnvironmentRow[] }
     > {
+      const observation = diagnostic(input, "reconcile");
       try {
-        const io = open(input);
+        const io = open(input, false, observation);
+        observation.at("authority");
         await io.fullGuard();
         const { expected, known, rows, values } = await io.inspect(true);
         await io.fullGuard();
         if (rows.length === 0) {
+          observation.finish("absent");
           return { status: "absent" };
         }
         await io.checkpoint(rows, known, values, expected);
-        return rows.length === Object.keys(expected).length
-          ? {
-              rows: io.referenceRows(rows, known, values),
-              status: "applied",
-            }
-          : { status: "unknown" };
+        if (rows.length === Object.keys(expected).length) {
+          const result = {
+            rows: io.referenceRows(rows, known, values),
+            status: "applied" as const,
+          };
+          observation.finish("applied");
+          return result;
+        }
+        observation.finish("unknown");
+        return { status: "unknown" };
       } catch {
+        observation.finish("unknown");
         return { status: "unknown" };
       }
     },

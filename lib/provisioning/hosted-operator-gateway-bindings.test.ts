@@ -12,6 +12,8 @@ import type {
   ManagedOperatorEnvironmentRow,
 } from "./hosted-operator-contract";
 import type { GatewayManagedEnvironmentContext } from "./hosted-operator-service";
+import type { HostedOperatorConsentDiagnosticSink } from "./hosted-operator-consent-diagnostic";
+import { createHostedOperatorConsentDiagnostic } from "./hosted-operator-consent-diagnostic";
 import { createHostedOperatorGatewayBindings } from "./hosted-operator-gateway-bindings";
 
 const authority = {
@@ -321,7 +323,9 @@ const fixture = (configurationId?: string | null, observationGuards = false) => 
     active: false,
     rows: structuredClone(canonicalRows),
   }));
+  const diagnostics = vi.fn<HostedOperatorConsentDiagnosticSink>();
   const writer = createHostedOperatorGatewayBindings({
+    diagnosticSink: diagnostics,
     assertAuthorized,
     ...(observationGuards ? { assertCanonicalOwner } : {}),
     readCanonicalGatewayRows,
@@ -330,6 +334,7 @@ const fixture = (configurationId?: string | null, observationGuards = false) => 
     readCredential,
   });
   return {
+    diagnostics,
     assertAuthorized,
     assertCanonicalOwner,
     assertCurrent,
@@ -1189,4 +1194,174 @@ it("activates normal browser capture with the exact frozen native sender workloa
   expect(link?.type).toBe("encrypted");
   expect(link?.gitBranch).toBe(gateway.branch);
   expect(JSON.stringify(config)).not.toContain("fixture-private-password");
+});
+
+it("reports a missing prerequisite without changing bind or reconciliation outcomes", async () => {
+  const f = fixture();
+  f.rows.splice(
+    f.rows.findIndex((row) => row.key === "BETTER_AUTH_URL"),
+    1,
+  );
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.diagnostics).toHaveBeenCalledOnce();
+  expect(f.diagnostics.mock.calls[0]?.[0]).toMatchObject({
+    gatewayBindings: { mode: "bind", stage: "public_environment", result: "failed" },
+  });
+  expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
+  expect(f.diagnostics).toHaveBeenCalledTimes(2);
+  expect(f.diagnostics.mock.calls[1]?.[0]).toMatchObject({
+    gatewayBindings: { mode: "reconcile", stage: "public_environment", result: "unknown" },
+  });
+  const serialized = JSON.stringify(f.diagnostics.mock.calls);
+  for (const privateValue of [
+    privateAuthUrl,
+    "fixture-owner-oauth",
+    "fixture-better-auth-secret",
+    gateway.publicOrigin,
+    selection.sessionId,
+  ]) {
+    expect(serialized).not.toContain(privateValue);
+  }
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+});
+
+it.each([
+  [401, "auth_denied"],
+  [403, "auth_denied"],
+  [429, "rate_limited"],
+  [400, "client_error"],
+  [500, "server_error"],
+  [302, "redirect"],
+] as const)(
+  "reports only the category for provider status %s without retry",
+  async (status, statusCategory) => {
+    const f = fixture();
+    f.fetcher.mockResolvedValueOnce(new Response("private-provider-response", { status }));
+    expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
+    expect(f.fetcher).toHaveBeenCalledOnce();
+    expect(f.diagnostics).toHaveBeenCalledOnce();
+    expect(f.diagnostics.mock.calls[0]?.[0]).toMatchObject({
+      gatewayBindings: {
+        mode: "reconcile",
+        stage: "environment_inventory",
+        method: "GET",
+        statusCategory,
+        result: "unknown",
+      },
+    });
+    expect(JSON.stringify(f.diagnostics.mock.calls)).not.toContain("private-provider-response");
+  },
+);
+
+it("retains transport failure behavior without exposing the thrown error", async () => {
+  const f = fixture();
+  f.fetcher.mockRejectedValueOnce(new Error(privateAuthUrl));
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.fetcher).toHaveBeenCalledOnce();
+  expect(f.diagnostics.mock.calls[0]?.[0]).toMatchObject({
+    gatewayBindings: {
+      mode: "bind",
+      stage: "environment_inventory",
+      method: "GET",
+      statusCategory: "no_response",
+      result: "failed",
+    },
+  });
+  expect(JSON.stringify(f.diagnostics.mock.calls)).not.toContain(privateAuthUrl);
+});
+
+it("distinguishes authority and private runtime binding failures without added requests", async () => {
+  const denied = fixture();
+  denied.assertCurrent.mockRejectedValueOnce(new Error(privateAuthUrl));
+  expect(await denied.writer.reconcile(denied.input)).toEqual({ status: "unknown" });
+  expect(denied.fetcher).not.toHaveBeenCalled();
+  expect(denied.diagnostics.mock.calls[0]?.[0]).toMatchObject({
+    gatewayBindings: { stage: "authority", result: "unknown" },
+  });
+  const runtime = fixture();
+  runtime.readAuthRuntimeUrl.mockRejectedValueOnce(new Error(privateAuthUrl));
+  expect(await runtime.writer.reconcile(runtime.input)).toEqual({ status: "unknown" });
+  expect(runtime.diagnostics.mock.calls[0]?.[0]).toMatchObject({
+    gatewayBindings: { stage: "runtime_binding", result: "unknown" },
+  });
+  expect(runtime.requests.every((request) => request.method === "GET")).toBe(true);
+});
+
+it.each(["sync", "async"] as const)(
+  "preserves exact binding requests and results when the %s diagnostic sink fails",
+  async (kind) => {
+    const control = fixture();
+    const expected = await control.writer.bind(control.input);
+    const f = fixture();
+    f.diagnostics.mockImplementation(() => {
+      if (kind === "sync") {
+        throw new Error(privateAuthUrl);
+      }
+      return Promise.reject(new Error(privateAuthUrl));
+    });
+    expect(await f.writer.bind(f.input)).toEqual(expected);
+    expect(f.requests).toEqual(control.requests);
+    expect(f.assertCurrent.mock.calls.length).toBe(control.assertCurrent.mock.calls.length);
+    expect(f.assertAuthorized.mock.calls.length).toBe(control.assertAuthorized.mock.calls.length);
+    expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "applied" });
+    expect(f.diagnostics).toHaveBeenCalledTimes(2);
+  },
+);
+
+it("drops nonclosed Gateway metadata through the existing private diagnostic projection", () => {
+  const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+  const report = createHostedOperatorConsentDiagnostic(selection.sessionId, sink);
+  for (const field of [
+    "mode",
+    "stage",
+    "method",
+    "statusCategory",
+    "httpStatus",
+    "result",
+    "url",
+    "message",
+    "value",
+  ]) {
+    report({
+      boundary: "operator",
+      phase: "inline",
+      stage: "operator_request",
+      outcome: "setup_unavailable",
+      gatewayBindings: {
+        mode: "bind",
+        stage: "context",
+        result: "failed",
+        [field]: privateAuthUrl,
+      },
+    });
+  }
+  expect(sink).not.toHaveBeenCalled();
+});
+
+it("retains a no-status provider failure diagnostic for an opaque status zero", async () => {
+  const f = fixture();
+  f.fetcher.mockResolvedValueOnce(Response.error());
+  expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
+  const diagnostic = f.diagnostics.mock.calls[0]?.[0].gatewayBindings;
+  expect(diagnostic).toMatchObject({ statusCategory: "other", method: "GET", result: "unknown" });
+  expect(diagnostic).not.toHaveProperty("httpStatus");
+});
+
+it("reports a post-response authorization failure as authority, retaining successful HTTP evidence", async () => {
+  const f = fixture();
+  f.fetcher.mockImplementationOnce(async () => {
+    f.assertCurrent.mockRejectedValueOnce(new Error(privateAuthUrl));
+    return Response.json({ envs: [] });
+  });
+  expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
+  expect(f.fetcher).toHaveBeenCalledOnce();
+  expect(f.diagnostics.mock.calls[0]?.[0]).toMatchObject({
+    gatewayBindings: {
+      stage: "authority",
+      method: "GET",
+      statusCategory: "success",
+      httpStatus: 200,
+      result: "unknown",
+    },
+  });
 });
