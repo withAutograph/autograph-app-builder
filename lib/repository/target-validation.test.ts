@@ -453,6 +453,71 @@ describe("target validation", () => {
     expect(excerpt.stderr).not.toContain("session=private");
     expect(excerpt.truncated).toBe(true);
   });
+
+  it.each(["Format issues found in 2 files", "Formatting issues found in 2 files"])(
+    "retains generic formatter filenames and timings after %s",
+    (summary) => {
+      const excerpt = validationOutputExcerpt(
+        "",
+        [
+          "ordinary build progress",
+          summary,
+          "  verbose build progress",
+          "app/forms/task list.tsx (0ms)",
+          "src/café view.ts (1ms)",
+          "README.md (0ms)",
+          "HK src/資料 page (2ms)",
+          "apps/example/app/page.tsx (3ms)",
+          "task-check: packages/shared/entry file (4ms)",
+        ].join("\n"),
+      );
+
+      expect(excerpt.stderr).toContain(summary);
+      expect(excerpt.stderr).toContain("app/forms/task list.tsx (0ms)");
+      expect(excerpt.stderr).toContain("src/café view.ts (1ms)");
+      expect(excerpt.stderr).toContain("README.md (0ms)");
+      expect(excerpt.stderr).toContain("HK src/資料 page (2ms)");
+      expect(excerpt.stderr).toContain("apps/example/app/page.tsx (3ms)");
+      expect(excerpt.stderr).toContain("task-check: packages/shared/entry file (4ms)");
+      expect(excerpt.stderr).not.toContain("ordinary build progress");
+      expect(excerpt.stderr).not.toContain("verbose build progress");
+      expect(excerpt.truncated).toBe(true);
+    },
+  );
+
+  it("does not retain formatter timing lines without a failure summary", () => {
+    const excerpt = validationOutputExcerpt("src/fast path.ts (1ms)\nordinary build progress", "");
+
+    expect(excerpt.stdout).toBe("");
+    expect(excerpt.truncated).toBe(true);
+  });
+
+  it.each(["stdout", "stderr"] as const)(
+    "retains formatter filenames in %s when the other stream reports the failure",
+    (stream) => {
+      const filename = "src/fixture file.ts (1ms)";
+      const summary = "Formatting issues found";
+      const excerpt = validationOutputExcerpt(
+        stream === "stdout" ? filename : summary,
+        stream === "stderr" ? filename : summary,
+      );
+
+      expect(excerpt[stream]).toBe(filename);
+      expect(excerpt.truncated).toBe(false);
+    },
+  );
+
+  it("sanitizes formatter failure and adjacent timing lines before selecting them", () => {
+    const excerpt = validationOutputExcerpt(
+      "",
+      "\u001B[31mFormatting issues found\u001B[0m\napps/example/API_KEY=private page.tsx (0ms)\u0000",
+    );
+
+    expect(excerpt.stderr).toContain("Formatting issues found");
+    expect(excerpt.stderr).toContain("apps/example/API_KEY=[REDACTED] page.tsx (0ms)");
+    expect(excerpt.stderr).not.toContain("private");
+    expect(excerpt.stderr).not.toContain("\u0000");
+  });
   it("redacts complete diagnostic text, including lines omitted from the repair excerpt", () => {
     const raw =
       "starting build\nhttps://user:password@example.test/path\nBearer abc123\nAPI_KEY=super-secret\napps/example/app/page.tsx(4,2): error TS2304: MissingThing";
