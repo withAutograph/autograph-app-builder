@@ -116,6 +116,14 @@ verified successful publication records its successor before optional app-source
 recording. An unproved head leaves the original baseline and existing conflict
 protection in place; independent edits are still preserved and refused on conflict.
 
+Older successful reconciliations may predate retained proposal state. Builder can
+recover their baseline from an existing protected published-source completion
+marker under the same tenant, original session and app, after verifying the
+original owned draft receipt. The marker must match the provider-observed
+repository, branch, commit and tree exactly. This reads retained publication
+history; it neither selects a latest release nor accepts a supplied historical
+commit. An absent or mismatched marker leaves the original baseline unchanged.
+
 `hosted_github_installation` binds that same tenant tuple to one exact GitHub
 App installation and expected account identity. Binding is available only
 through the owner-only, confirmation-digest-bound

@@ -27,6 +27,16 @@ export const publishedAppSourceSchema = z.object({
   reviewDigest: digest,
 });
 export type PublishedAppSource = z.infer<typeof publishedAppSourceSchema>;
+export type PublishedAppSourceLookup = Pick<
+  PublishedAppSource,
+  "repositoryId" | "branch" | "gitSha" | "gitTree"
+>;
+export const publishedAppSourceLookupSchema = publishedAppSourceSchema.pick({
+  repositoryId: true,
+  branch: true,
+  gitSha: true,
+  gitTree: true,
+});
 export const compiledOperatorReleaseSelectionSchema = z.object({
   appId,
   appSpecDigest: digest,
@@ -105,6 +115,29 @@ export const selectExactCompiledOperatorRelease = (
   }
   return matched;
 };
+/** An exact recorded publication is usable across accepted specifications of the same owned app. */
+export const selectExactPublishedAppSource = (
+  selections: readonly CompiledOperatorReleaseSelection[],
+  lookupInput: PublishedAppSourceLookup,
+): PublishedAppSource | undefined => {
+  const lookup = publishedAppSourceLookupSchema.parse(lookupInput);
+  const parsed = selections.map((selection) =>
+    compiledOperatorReleaseSelectionSchema.parse(selection),
+  );
+  return parsed
+    .map((selection) => selection.publishedSource)
+    .find(
+      (source) =>
+        source !== undefined &&
+        [
+          source.repositoryId === lookup.repositoryId,
+          source.branch === lookup.branch,
+          source.gitSha === lookup.gitSha,
+          source.gitTree === lookup.gitTree,
+        ].every(Boolean),
+    );
+};
+
 export interface OperatorArtifactSelections {
   read: (
     context: OperatorArtifactContext,
@@ -115,6 +148,10 @@ export interface OperatorArtifactSelections {
     context: OperatorArtifactContext,
     lookup: ExactCompiledOperatorReleaseLookup,
   ) => Promise<CompiledOperatorReleaseSelection | undefined>;
+  readPublishedSource?: (
+    context: OperatorArtifactContext,
+    lookup: PublishedAppSourceLookup,
+  ) => Promise<PublishedAppSource | undefined>;
   record: (
     context: OperatorArtifactContext,
     callId: string,
@@ -230,6 +267,53 @@ export const createPostgresOperatorArtifactSelections = (input: {
       return selection;
     });
     return selectExactCompiledOperatorRelease(selections, lookup);
+  },
+  async readPublishedSource(context, lookupInput) {
+    const lookup = publishedAppSourceLookupSchema.parse(lookupInput);
+    const authority = hostedTenantAuthoritySchema.parse(context.authority);
+    const selectedApp = appId.parse(context.target.appId);
+    const sessionId = z.string().min(1).parse(context.target.sessionId);
+    const pathPrefix = `_protected-operator/selections/generated-release/${selectedApp}/`;
+    // SQL may reorder AND terms; unrelated prototype rows can contain HTML.
+    const publishedSource = sql`case when left(${prototypeArtifactChunks.path}, ${pathPrefix.length}) = ${pathPrefix} then ${prototypeArtifactChunks.content}::jsonb -> 'publishedSource' end`;
+    await input.assertCurrentOwner(context);
+    const rows = await input.database
+      .select({
+        chunkDigest: prototypeArtifactChunks.chunkDigest,
+        content: prototypeArtifactChunks.content,
+        path: prototypeArtifactChunks.path,
+      })
+      .from(prototypeArtifactChunks)
+      .where(
+        and(
+          eq(prototypeArtifactChunks.issuer, authority.issuer),
+          eq(prototypeArtifactChunks.audience, authority.audience),
+          eq(prototypeArtifactChunks.workspaceId, authority.workspaceId),
+          eq(prototypeArtifactChunks.ownerUserId, authority.ownerUserId),
+          eq(prototypeArtifactChunks.sessionId, sessionId),
+          eq(prototypeArtifactChunks.chunkIndex, 0),
+          sql`left(${prototypeArtifactChunks.path}, ${pathPrefix.length}) = ${pathPrefix}`,
+          sql`(${publishedSource}) ->> 'repositoryId' = ${lookup.repositoryId}`,
+          sql`(${publishedSource}) ->> 'branch' = ${lookup.branch}`,
+          sql`(${publishedSource}) ->> 'gitSha' = ${lookup.gitSha}`,
+          sql`(${publishedSource}) ->> 'gitTree' = ${lookup.gitTree}`,
+        ),
+      );
+    await input.assertCurrentOwner(context);
+    const selections = rows.map((row) => {
+      if (row.chunkDigest !== hash(row.content)) {
+        throw operatorArtifactUnavailable();
+      }
+      const selection = compiledOperatorReleaseSelectionSchema.parse(JSON.parse(row.content));
+      if (
+        selection.appId !== selectedApp ||
+        row.path !== `${pathPrefix}${selection.appSpecDigest}`
+      ) {
+        throw operatorArtifactUnavailable();
+      }
+      return selection;
+    });
+    return selectExactPublishedAppSource(selections, lookup);
   },
   async record(
     context: OperatorArtifactContext,

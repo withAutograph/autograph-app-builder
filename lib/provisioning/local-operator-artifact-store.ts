@@ -17,6 +17,8 @@ import {
   compiledOperatorReleaseSelectionSchema,
   exactCompiledOperatorReleaseLookupSchema,
   selectExactCompiledOperatorRelease,
+  selectExactPublishedAppSource,
+  publishedAppSourceLookupSchema,
 } from "./hosted-operator-artifact-selection";
 import type {
   CompiledOperatorReleaseSelection,
@@ -242,6 +244,35 @@ export const createLocalOperatorArtifactStorage = async (input: {
     await ensureDirectory(selectionRoot);
     return selectionRoot;
   };
+  const readRetainedSelections = async (
+    context: OperatorArtifactContext,
+    appSpecDigest?: string,
+  ): Promise<CompiledOperatorReleaseSelection[]> => {
+    const owned = await directory(context);
+    const candidates: CompiledOperatorReleaseSelection[] = [];
+    const entries = await opendir(owned);
+    for await (const entry of entries) {
+      const spec = /^selection-(?<digest>[a-f0-9]{64})$/u.exec(entry.name)?.groups?.digest;
+      if (spec === undefined || (appSpecDigest !== undefined && spec !== appSpecDigest)) {
+        continue;
+      }
+      const selected = path.join(owned, entry.name);
+      await assertDirectory(selected);
+      const { frames } = await scanSelections(selected, undefined, true);
+      for (const frame of frames) {
+        if (
+          frame.selection.appId !== context.target.appId ||
+          frame.selection.appSpecDigest !== spec
+        ) {
+          throw operatorArtifactUnavailable();
+        }
+        candidates.push(frame.selection);
+      }
+      await input.assertCurrentOwner(context);
+    }
+    await input.assertCurrentOwner(context);
+    return candidates;
+  };
   const selections: OperatorArtifactSelections = {
     async read(context, appSpecDigest): Promise<CompiledOperatorReleaseSelection | undefined> {
       const owned = await selectionDirectory(context, appSpecDigest);
@@ -268,33 +299,13 @@ export const createLocalOperatorArtifactStorage = async (input: {
       ) {
         throw operatorArtifactUnavailable();
       }
-      const owned = await directory(context);
-      const candidates: CompiledOperatorReleaseSelection[] = [];
-      const entries = await opendir(owned);
-      for await (const entry of entries) {
-        const spec = /^selection-(?<digest>[a-f0-9]{64})$/u.exec(entry.name)?.groups?.digest;
-        if (
-          spec === undefined ||
-          (lookup.appSpecDigest !== undefined && spec !== lookup.appSpecDigest)
-        ) {
-          continue;
-        }
-        const selected = path.join(owned, entry.name);
-        await assertDirectory(selected);
-        const { frames } = await scanSelections(selected, undefined, true);
-        for (const frame of frames) {
-          if (
-            frame.selection.appId !== context.target.appId ||
-            frame.selection.appSpecDigest !== spec
-          ) {
-            throw operatorArtifactUnavailable();
-          }
-          candidates.push(frame.selection);
-        }
-        await input.assertCurrentOwner(context);
-      }
-      await input.assertCurrentOwner(context);
+      const candidates = await readRetainedSelections(context, lookup.appSpecDigest);
       return selectExactCompiledOperatorRelease(candidates, lookup);
+    },
+    async readPublishedSource(context, lookupInput) {
+      const lookup = publishedAppSourceLookupSchema.parse(lookupInput);
+      const candidates = await readRetainedSelections(context);
+      return selectExactPublishedAppSource(candidates, lookup);
     },
     async record(context, callId, selectionInput) {
       const selection = compiledOperatorReleaseSelectionSchema.parse(selectionInput);

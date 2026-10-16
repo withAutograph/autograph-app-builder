@@ -19,6 +19,7 @@ import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import type { AppBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { repositoryAccessReceiptState } from "@/lib/agent/repository-access-state";
 import { prepareWithVerifiedGitHubFetchRecovery } from "@/lib/agent/verified-github-fetch-recovery";
+import { readPublishedOperatorSourceForSession } from "@/lib/agent/compiled-operator-artifacts";
 import { resolveAcceptedAppSpecContent } from "@/lib/agent/accepted-app-spec-content";
 import { recoverLegacyAppSpecTransport } from "@/lib/repository/legacy-app-spec-recovery";
 import { appBaselineState } from "@/lib/agent/app-baseline-state";
@@ -212,6 +213,22 @@ export default defineTool({
     const lineage = reconciliationLineageRequest(state, original);
     const source = await runtime.inspectExistingDraftReconciliationSource({
       ...lineage,
+      readPublishedSource: async (draft) =>
+        await readPublishedOperatorSourceForSession({
+          appId: state.appSpec.appId,
+          appSpecDigest: state.appSpec.digest,
+          root: state.applyReceipt.applyRoot,
+          callId: ctx.callId,
+          sessionAuth: ctx.session.auth,
+          adapterSessionId: ctx.session.id,
+          signal: ctx.abortSignal,
+          lookup: {
+            repositoryId: draft.repositoryId,
+            branch: draft.headBranch,
+            gitSha: draft.headSha,
+            gitTree: draft.headTree,
+          },
+        }),
       name: state.githubSource.repository.name,
       owner: state.githubSource.repository.owner,
       pullRequestNumber: input.pullRequestNumber,
