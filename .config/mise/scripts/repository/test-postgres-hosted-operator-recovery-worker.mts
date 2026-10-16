@@ -79,7 +79,7 @@ const exitIfScenario = (
   }
 };
 // Each condition is a distinct journal durability boundary in the acceptance matrix.
-// oxlint-disable eslint(complexity) -- These two fixture adapters map finite protected CAS fault points.
+// oxlint-disable-next-line eslint/complexity -- Map all before-write protected CAS boundaries in one test adapter.
 const failBeforeJournalWrite = (
   input: JournalCasInput,
   fresh: Awaited<ReturnType<typeof journal.read>>,
@@ -149,6 +149,7 @@ const failBeforeJournalWrite = (
   );
 };
 // Each condition represents the response-loss side of a durable CAS boundary.
+// oxlint-disable-next-line eslint/complexity -- Map all after-write protected CAS boundaries in one test adapter.
 const processLossAfterJournalWrite = (
   input: JournalCasInput,
   fresh: Awaited<ReturnType<typeof journal.read>>,
@@ -202,7 +203,6 @@ const processLossAfterJournalWrite = (
   const committingProof = input.record.status === "prepared" && input.record.proof !== undefined;
   exitIfScenario(committingProof, config.failure, "proof-after", 88);
 };
-// oxlint-enable eslint(complexity)
 const store = {
   ...journal,
   async compareAndSet(input: Parameters<typeof journal.compareAndSet>[0]) {
