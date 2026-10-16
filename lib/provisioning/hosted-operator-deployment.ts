@@ -118,6 +118,7 @@ import {
 } from "./hosted-operator-owner";
 import { createHostedOperatorOwnerContextResolver } from "./hosted-operator-owner-context";
 import type { HostedOperatorContext, HostedOperatorEffectContext } from "./hosted-operator-service";
+import type { HostedOperatorPlan } from "./hosted-operator-contract";
 import {
   HostedOperatorError,
   operatorPlanDigest,
@@ -357,6 +358,15 @@ export const selectAuthPlanningResourceBindingRow = (
     },
   };
 };
+
+/** Compare transport only with the canonical approved plan; older plans retain their captured endpoint. */
+export const matchesApprovedMembershipJwks = (
+  plan: HostedOperatorPlan,
+  capturedEndpointOrigin: string | undefined,
+  jwksUrl: string,
+): boolean =>
+  `${plan.deploymentBoundary?.verification.gatewayOrigin ?? capturedEndpointOrigin}/_platform/jwks.json` ===
+  jwksUrl;
 
 /**
  * Composes the production control-plane readers and fences already owned by
@@ -1310,8 +1320,11 @@ export const createHostedOperatorControlPlane = async (input: {
           link?.authResourceId === inputContext.plan.authDatabase.resourceId,
           link?.issuer === capturedMembership.identityVerification.issuer,
           link?.audience === capturedMembership.identityVerification.audience,
-          `${link?.endpointOrigin}/_platform/jwks.json` ===
+          matchesApprovedMembershipJwks(
+            inputContext.plan,
+            link?.endpointOrigin,
             capturedMembership.identityVerification.jwksUrl,
+          ),
         ].every(Boolean);
         if (!matches) {
           throw new HostedOperatorError("auth_identity_required");

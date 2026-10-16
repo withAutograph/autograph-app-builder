@@ -57,6 +57,16 @@ independently verified native Gateway/JWKS probe may use a different deployment
 URL; it is not another browser origin. Replacing that server endpoint does not
 require expanding browser trust or changing the approved operation.
 
+New planning reuses the existing owner-scoped provider read to resolve the
+approved public alias and pin its current verified immutable Gateway endpoint.
+A shared Gateway source refresh must not leave owner verification calling old
+code. Keep the consumed proof and its issuer, audience, actor, session,
+organization and physical Auth resource unchanged; use the current qualified
+endpoint for the new plan's JWKS and readback. Frozen operations retain their
+approved endpoint. Never substitute a moving browser URL or rewrite the saved
+identity link to refresh transport. This adds no provider calls, resources,
+grants or acceptance gates.
+
 ## Normal accounts and organization sessions
 
 For apps requiring several participants, Builder derives `normalActorProgram`

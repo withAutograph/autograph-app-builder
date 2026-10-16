@@ -146,6 +146,8 @@ export const readVerifiedRealmAccess = async (input: {
   resource: z.infer<typeof realmPhysicalResourceSchema>;
   getKey: JWTVerifyGetKey;
   pending: PendingRealmIdentityLink;
+  /** Private caller-qualified immutable Gateway origin; never an override from a public request or proof. */
+  transportOrigin?: string;
   readback: (request: Request) => Promise<Response>;
   proof: string;
   assertCurrent: () => Promise<void>;
@@ -174,7 +176,7 @@ export const readVerifiedRealmAccess = async (input: {
   const claims = await verifySignedRealmIdentityProof(verificationInput);
   const url = new URL(
     "/api/auth/platform/operator-identity/readback",
-    input.pending.endpointOrigin,
+    input.transportOrigin ?? input.pending.endpointOrigin,
   );
   const body = new URLSearchParams({ proof: input.proof });
   if (captureTime !== undefined) {

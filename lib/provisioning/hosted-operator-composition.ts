@@ -623,13 +623,15 @@ export const resolveFullPlan = async (
   // Only the app delivery plan needs the actual published Git source.
   const delivery = resolvePublishedAppDelivery(application, selectedRelease);
   const privateProof = await controlPlane.readCapturedRealmIdentityProof(context);
+  const transportOrigin =
+    base.deploymentBoundary?.verification.gatewayOrigin ?? captured.endpointOrigin;
   const transport = createHostedOperatorRealmHttpTransport(
     configuration,
     "operator",
     transportIo,
-    captured.endpointOrigin,
+    transportOrigin,
   );
-  const getKey = createRemoteJWKSet(new URL("/_platform/jwks.json", captured.endpointOrigin), {
+  const getKey = createRemoteJWKSet(new URL("/_platform/jwks.json", transportOrigin), {
     [customFetch]: transport,
   });
   const verified = await readVerifiedRealmAccess({
@@ -639,6 +641,7 @@ export const resolveFullPlan = async (
     getKey,
     pending: privateProof.link,
     proof: privateProof.proof,
+    transportOrigin,
     readback: async (request) => await transport(request),
     resource: {
       database: base.authDatabase.database,
@@ -675,7 +678,7 @@ export const resolveFullPlan = async (
       identityVerification: {
         audience: captured.audience,
         issuer: captured.issuer,
-        jwksUrl: `${captured.endpointOrigin}/_platform/jwks.json`,
+        jwksUrl: `${transportOrigin}/_platform/jwks.json`,
         transportSource: configuration.nativeNeon.configuration.operator,
       },
       kind: "create-owned-organization",

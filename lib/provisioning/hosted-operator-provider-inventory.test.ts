@@ -124,7 +124,12 @@ const fixture = () => {
     await Promise.resolve();
     const parsed = url instanceof Request ? new URL(url.url) : new URL(url);
     if (
-      ["https://gateway.example.test", "https://gateway-old.example.test"].includes(parsed.origin)
+      [
+        "https://gateway.example.test",
+        "https://gateway-old.example.test",
+        "https://gateway-current.example.test",
+        "https://gateway-successor.example.test",
+      ].includes(parsed.origin)
     ) {
       return Response.json({
         keys: [publicJwk],
@@ -513,11 +518,42 @@ describe("private read-only operator provider inventory", () => {
       resolveGatewayByPublicOrigin: true,
     });
     expect(observed.gateway.deploymentId).toBe("dpl_successor");
+    expect(observed.verification.gatewayOrigin).toBe("https://gateway-successor.example.test");
+    expect(observed.verification.jwksUrl).toBe(
+      "https://gateway-successor.example.test/_platform/jwks.json",
+    );
     expect(observed.verification.publicOrigin).toBe(configuration.verification.publicOrigin);
     expect(configuration.gateway).toBe(gateway);
     await expect(
       readHostedOperatorProviderInventory({ ...f.input, phase: "bootstrap-planning" }),
     ).rejects.toThrow("resource_mismatch");
+  });
+  it("uses the current immutable transport during fresh planning despite an old configured endpoint", async () => {
+    const f = movedPublicAlias();
+    f.payloads.set("/v2/deployments/dpl_current/aliases", {
+      aliases: [{ alias: "gateway.example.test" }],
+    });
+    const observed = await readHostedOperatorProviderInventory({
+      ...f.input,
+      phase: "bootstrap-planning",
+      resolveGatewayByPublicOrigin: true,
+    });
+    expect(observed.gateway.deploymentId).toBe("dpl_current");
+    expect(observed.verification.gatewayOrigin).toBe("https://gateway-current.example.test");
+    expect(observed.verification.jwksUrl).toBe(
+      "https://gateway-current.example.test/_platform/jwks.json",
+    );
+    expect(observed.verification.publicOrigin).toBe(configuration.verification.publicOrigin);
+    expect(
+      f.fetcher.mock.calls.some(([request]) =>
+        String(request).startsWith("https://gateway-current.example.test/_platform/jwks.json"),
+      ),
+    ).toBe(true);
+    expect(
+      f.fetcher.mock.calls.some(([request]) =>
+        String(request).startsWith("https://gateway-old.example.test/"),
+      ),
+    ).toBe(false);
   });
   it.each([
     { ownerId: "foreign-owner" },

@@ -366,7 +366,17 @@ export const readHostedOperatorProviderInventory = async (input: {
       observe(config.operator),
     ]);
     const publicOrigin = origin(config.verification.publicOrigin);
-    const gatewayOrigin = origin(config.verification.gatewayOrigin);
+    // Only new planning follows the already qualified public alias to immutable source.
+    // Frozen execution continues to use its exact configured transport endpoint.
+    const currentGatewayTransport =
+      bootstrapPlanning && input.resolveGatewayByPublicOrigin === true
+        ? gateway.deployment
+        : undefined;
+    const gatewayOrigin = origin(
+      currentGatewayTransport === undefined
+        ? config.verification.gatewayOrigin
+        : `https://${currentGatewayTransport.url}`,
+    );
     if (gateway.deployment !== undefined) {
       const aliases = aliasSchema.parse(
         await request(`/v2/deployments/${encodeURIComponent(gateway.deployment.id)}/aliases`),
