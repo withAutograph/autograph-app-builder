@@ -192,7 +192,9 @@ describe("direct app creation", () => {
       };
       const sandbox = {
         readBinaryFile: vi.fn(async ({ path }: { path: string }) => {
-          if (path.includes("prototype/")) return Buffer.from(content);
+          if (path.includes("prototype/")) {
+            return Buffer.from(content);
+          }
           const value = files.get(path);
           return value === undefined ? null : Buffer.from(value);
         }),
