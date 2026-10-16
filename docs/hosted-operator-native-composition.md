@@ -168,6 +168,25 @@ candidate ID, pins one independently READY candidate matching the approved
 project/environment/repository/commit/configuration, and does not rewrite the
 old frozen inventory.
 
+App-only REST delivery must explicitly send `target: "staging"`, Vercel's native
+Preview target. A first deployment can otherwise default to Production when the
+target is omitted, despite the API documentation describing Preview as the
+default. Confirm the actual native deployment target and its OIDC environment
+through provider readback before using it as the app Preview. A successful POST
+or a source fixture does not establish that environment. Retain any rejected
+non-Preview attempt in the operation audit; never promote it into the Preview
+candidate inventory. Keep the existing Production deny policy unchanged. The
+Gateway delivery pathway remains unchanged.
+
+A trusted `projectSettings` repair may be planned while app delivery is pending.
+Use the normal structured planning and approval flow for the changed frozen
+settings. Preserve the same resources, completed receipts, owned environment
+rows, private credentials, and original retention expiry. Reconcile the old
+exact approved attempt before a new deployment POST; an unknown outcome still
+requires reconciliation rather than a duplicate submission. Retain the old
+plan, approval, attempt, and observations as audit history. A settings repair or
+its approval is not evidence that the repaired Preview has deployed successfully.
+
 For an explicitly unlinked app-only project, the provider's physical Preview
 environment may be generic rather than branch-named. Keep the approved logical
 branch from the Git source on the durable owned environment row and delivery

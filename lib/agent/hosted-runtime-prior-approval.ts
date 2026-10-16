@@ -56,7 +56,7 @@ export interface HostedRuntimePriorApproval {
   callId: string;
 }
 
-const sameInput = (
+export const matchesHostedRuntimePreparationReceipt = (
   receipt: PrivateHostedApprovalReceipt,
   input: z.infer<typeof hostedRuntimePreparationInputSchema>,
 ) =>
@@ -144,7 +144,7 @@ export const createHostedRuntimePriorApprovalReader =
       throw new HostedOperatorError("authorization_required");
     }
     const matching = (session.privateApprovalReceipts ?? [])
-      .filter((receipt) => sameInput(receipt, parsed))
+      .filter((receipt) => matchesHostedRuntimePreparationReceipt(receipt, parsed))
       .toSorted((left, right) => left.sequence - right.sequence);
     const latest = matching.at(-1);
     if (latest?.outcome === "cancelled") {
@@ -167,7 +167,7 @@ export const createHostedRuntimePriorApprovalReader =
     if (
       receipt?.outcome !== "approved" ||
       receipt.responderPrincipalId !== owner.principal.ownerUserId ||
-      !sameInput(receipt, parsed)
+      !matchesHostedRuntimePreparationReceipt(receipt, parsed)
     ) {
       throw new HostedOperatorError("authorization_required");
     }
@@ -424,18 +424,20 @@ export const createHostedRuntimeExecutionApprovalReader =
     return await dependencies.readPrior(input, ctx, operator, options);
   };
 
+/** One existing authenticated catch-up, separate from receipt-only durable polling. */
+export const captureHostedRuntimeExecutionApproval = async (ctx: Context, operator: Operator) => {
+  const configuration = readHostedOperatorOwnerReaderConfiguration(process.env);
+  const store = await openHostedRuntimeApprovalStore();
+  await captureHostedRuntimeApproval({
+    ownerContext: operatorOwnerContextSchema.parse(operator.ownerContext),
+    store,
+    baseUrl: new URL(configuration.resource).origin,
+    workloadIdentity: createVercelWorkloadIdentity(),
+    signal: ctx.abortSignal,
+  });
+};
+
 export const readHostedRuntimeExecutionApproval = createHostedRuntimeExecutionApprovalReader({
   readPrior: readHostedRuntimePriorApproval,
-  capture: async (ctx, operator) => {
-    const configuration = readHostedOperatorOwnerReaderConfiguration(process.env);
-    deploymentStore ??= openDeploymentStore();
-    const store = await deploymentStore;
-    await captureHostedRuntimeApproval({
-      ownerContext: operatorOwnerContextSchema.parse(operator.ownerContext),
-      store,
-      baseUrl: new URL(configuration.resource).origin,
-      workloadIdentity: createVercelWorkloadIdentity(),
-      signal: ctx.abortSignal,
-    });
-  },
+  capture: captureHostedRuntimeExecutionApproval,
 });

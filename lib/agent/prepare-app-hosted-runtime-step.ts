@@ -110,6 +110,19 @@ const preparationResult = (
       ),
     };
   }
+  if (
+    inputValidated &&
+    result.status === "blocked" &&
+    result.code === "app_delivery_configuration_changed"
+  ) {
+    return {
+      ...result,
+      nextAction: preparationPlanningAction(
+        input,
+        "The trusted native app build settings changed after this delivery plan was approved. Plan the current settings in this session, then use the normal approval flow for the returned plan. The existing resources stay attached to this operation, and its earlier delivery attempt will be reconciled before another Preview request.",
+      ),
+    };
+  }
   if (!inputValidated || result.status !== "blocked" || result.code !== "operator_unavailable") {
     return result;
   }

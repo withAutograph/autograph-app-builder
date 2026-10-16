@@ -8,6 +8,10 @@ import type { ApprovalContext, ApprovalStatus } from "eve/tools/approval";
 import { z } from "zod";
 import { createHook, sleep } from "workflow";
 
+import {
+  waitForHostedRuntimeApprovalReceipt,
+  readHostedRuntimeApprovalReceiptStep,
+} from "../../lib/agent/hosted-runtime-approval-wait";
 import { prepareHostedRuntimeStep } from "../../lib/agent/prepare-app-hosted-runtime-step";
 import type { readHostedRuntimePriorApproval } from "../../lib/agent/hosted-runtime-prior-approval";
 import type { HostedRuntimeApprovalEnvelope } from "../../lib/agent/prepare-app-hosted-runtime-step";
@@ -218,6 +222,12 @@ export default defineWorkflowTool({
         return result;
       };
     }
+    await waitForHostedRuntimeApprovalReceipt(approved, ctx, {
+      read: readHostedRuntimeApprovalReceiptStep,
+      sleepUntil: async (deadline) => {
+        await sleep(deadline);
+      },
+    });
     return yield* continueHostedRuntimeOwnerPreparation(approved, ctx, prepare, {
       createHook: () => createHook<HostedRuntimeIdentityWake>(),
       register,

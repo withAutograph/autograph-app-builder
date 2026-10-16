@@ -7,7 +7,10 @@ import {
 /* oxlint-disable eslint/require-await -- Typed in-memory journal and provider callbacks intentionally resolve without external I/O. */
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { createProjectSettingsSuccessorPlan } from "./hosted-operator-project-settings-successor";
+import {
+  createProjectSettingsSuccessorPlan,
+  projectSettingsDeliveryProvenance,
+} from "./hosted-operator-project-settings-successor";
 import { createHostedOperatorClient } from "./hosted-operator-client";
 import { createProtectedHostedOperatorHandler } from "./hosted-operator-service";
 import type { ProtectedHostedOperatorDependencies } from "./hosted-operator-service";
@@ -1252,6 +1255,27 @@ describe("pending native app project settings repair", () => {
 
   it("preserves completed effects and unknown attempt history under fresh normal approval", async () => {
     const { f, original, previous, repaired, execute } = await interruptedBindings();
+    f.deps.readAppProjectSettings = async () => repaired.delivery?.projectSettings;
+    let resumedEffectCalls = 0;
+    let resumedReconcileCalls = 0;
+    f.deps.executeEffect = async (input) => {
+      resumedEffectCalls += 1;
+      return await execute(input);
+    };
+    const { reconcile } = f.deps;
+    f.deps.reconcile = async (input) => {
+      resumedReconcileCalls += 1;
+      return await reconcile(input);
+    };
+    const beforeResume = structuredClone(f.row);
+    expect(await f.client.request(original)).toMatchObject({
+      code: "app_delivery_configuration_changed",
+      status: "blocked",
+    });
+    expect(f.row).toEqual(beforeResume);
+    expect(resumedEffectCalls).toBe(0);
+    expect(resumedReconcileCalls).toBe(0);
+
     const { readApproval } = f.deps;
     f.deps.readApproval = async (input) =>
       input.planDigest === original.planDigest ? await readApproval(input) : null;
@@ -1289,6 +1313,184 @@ describe("pending native app project settings repair", () => {
     };
     expect(await f.client.request(successor)).toMatchObject({ status: "prepared" });
     expect(effects).toEqual(["bindings", "delivery"]);
+  });
+
+  it("retains a pending delivery's old plan provenance while carrying completed bindings forward", async () => {
+    const f = fixture();
+    const originalPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      stage: "app",
+      delivery: {
+        branch: selection.branch,
+        gitSha: "1".repeat(40),
+        projectId: selection.projectId,
+        repoId: "fixture-repository",
+      },
+      effects: [
+        ...plan.effects,
+        { id: "delivery", kind: "delivery", description: "Deploy accepted app source" },
+      ],
+    });
+    f.deps.plan = async () => originalPlan;
+    const original = await prepared(f);
+    const execute = f.deps.executeEffect;
+    let deliveryExecutions = 0;
+    let deliveryReconciliations = 0;
+    let priorAppDelivery: unknown;
+    let currentDeliveryCandidates: unknown;
+    const { reconcile } = f.deps;
+    f.deps.reconcile = async (input) => {
+      if (input.effect.kind === "delivery") {
+        deliveryReconciliations += 1;
+        ({ priorAppDelivery, deliveryCandidates: currentDeliveryCandidates } = input);
+      }
+      return await reconcile(input);
+    };
+    f.deps.executeEffect = async (input) => {
+      if (input.effect.kind === "delivery") {
+        deliveryExecutions += 1;
+        throw new HostedOperatorError("operator_unavailable");
+      }
+      return await execute(input);
+    };
+    f.approve();
+    expect(await f.client.request(original)).toMatchObject({ code: "operator_unavailable" });
+    const previous = f.row;
+    if (previous?.record.operator === undefined) {
+      throw new Error("Missing interrupted delivery fixture");
+    }
+    f.deps.readAppProjectSettings = async () => ({
+      framework: "fixture-framework",
+      rootDirectory: "apps/fixture",
+      sourceFilesOutsideRootDirectory: true,
+    });
+    const beforeResume = structuredClone(f.row);
+    expect(await f.client.request(original)).toMatchObject({
+      code: "app_delivery_configuration_changed",
+      status: "blocked",
+    });
+    expect(f.row).toEqual(beforeResume);
+    expect(deliveryExecutions).toBe(1);
+    expect(deliveryReconciliations).toBe(1);
+    const ownedRows = [
+      "SPEND_REVIEW_DATABASE_URL",
+      "PLATFORM_ORIGIN",
+      "PLATFORM_PUBLIC_ORIGIN",
+      "PLATFORM_JWKS_URL",
+      "PLATFORM_APP_BOUNDARY",
+    ].map((key, index) => ({
+      branch: selection.branch,
+      comment: `App Builder protected operator ${original.operationRef}`,
+      id: `env_owned_${index}`,
+      key,
+      operationRef: original.operationRef,
+      projectId: selection.projectId,
+    }));
+    previous.record.operator.managedEnvironment = ownedRows;
+    previous.record.operator.deliveryCandidates = [
+      {
+        branch: originalPlan.delivery?.branch ?? selection.branch,
+        deploymentId: "dpl_blocked_old_plan",
+        operationRef: original.operationRef,
+        origin: "https://blocked-app.example.test",
+        projectId: selection.projectId,
+        readyState: "BLOCKED",
+        repoId: "fixture-repository",
+      },
+    ];
+    f.row = previous;
+    const repaired = hostedOperatorPlanSchema.parse({
+      ...originalPlan,
+      delivery: {
+        ...originalPlan.delivery,
+        projectSettings: {
+          framework: "fixture-framework",
+          rootDirectory: "apps/fixture",
+          sourceFilesOutsideRootDirectory: true,
+        },
+      },
+    });
+    expect(
+      createProjectSettingsSuccessorPlan(
+        previous.record,
+        repaired.delivery?.projectSettings,
+        Date.now(),
+      ),
+    ).toEqual(repaired);
+    const alreadyReady = structuredClone(previous.record);
+    if (alreadyReady.operator?.deliveryCandidates?.[0] === undefined) {
+      throw new Error("Missing blocked deployment fixture");
+    }
+    alreadyReady.operator.deliveryCandidates[0].readyState = "READY";
+    expect(
+      createProjectSettingsSuccessorPlan(
+        alreadyReady,
+        repaired.delivery?.projectSettings,
+        Date.now(),
+      ),
+    ).toBeUndefined();
+
+    f.deps.plan = async () => repaired;
+    const successorPlan = await f.client.request({
+      action: "plan",
+      operation: "prepare",
+      selection,
+    });
+    expect(successorPlan).toMatchObject({ status: "planned" });
+    const successor = {
+      action: "execute" as const,
+      callId: "settings-repair-call",
+      operationRef: z.uuid().parse(successorPlan.operationRef),
+      planDigest: z.string().parse(successorPlan.planDigest),
+      selection,
+    };
+    const active = f.row?.record.operator;
+    expect(successor.operationRef).toBe(original.operationRef);
+    expect(successor.planDigest).toBe(operatorPlanDigest(repaired));
+    expect(active).toMatchObject({
+      operationRef: original.operationRef,
+      fenceGeneration: previous.record.operator.fenceGeneration,
+      pendingEffectId: "delivery",
+      receipts: previous.record.operator.receipts,
+      managedEnvironment: ownedRows,
+      deliveryCandidates: [],
+      retainedProjectSettingsOperations: [
+        {
+          approvedByCallId: original.callId,
+          operator: {
+            planDigest: original.planDigest,
+            pendingEffectId: "delivery",
+            pendingEffectAttempt: previous.record.operator.pendingEffectAttempt,
+            deliveryCandidates: previous.record.operator.deliveryCandidates,
+          },
+        },
+      ],
+    });
+    expect(f.row?.record.privateState).toEqual(previous.record.privateState);
+    expect(
+      active === undefined ? undefined : projectSettingsDeliveryProvenance(active, repaired),
+    ).toMatchObject({
+      approvedByCallId: original.callId,
+      plan: originalPlan,
+      planDigest: original.planDigest,
+      operationRef: original.operationRef,
+    });
+
+    f.deps.executeEffect = execute;
+    const { readApproval } = f.deps;
+    f.deps.readApproval = async (input) =>
+      input.planDigest === original.planDigest ? null : await readApproval(input);
+    expect(await f.client.request(successor)).toMatchObject({ code: "authorization_required" });
+    expect(priorAppDelivery).toBeUndefined();
+    f.deps.readApproval = readApproval;
+    expect(await f.client.request(successor)).toMatchObject({ status: "prepared" });
+    expect(priorAppDelivery).toMatchObject({
+      deliveryCandidates: previous.record.operator.deliveryCandidates,
+      operationRef: original.operationRef,
+      plan: originalPlan,
+      planDigest: original.planDigest,
+    });
+    expect(currentDeliveryCandidates).toEqual([]);
   });
 
   it.each(["approval", "lease", "source", "expiry", "delivery-started"])(

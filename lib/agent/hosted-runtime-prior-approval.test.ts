@@ -3,6 +3,8 @@ import type { ApprovalContext } from "eve/tools/approval";
 import type { MessageStreamEvent } from "eve/client";
 import { describe, expect, it, vi } from "vitest";
 
+import { createHostedRuntimeApprovalReceiptReader } from "./hosted-runtime-approval-receipt";
+import { waitForHostedRuntimeApprovalReceipt } from "./hosted-runtime-approval-wait";
 import { createHostedRuntimeApprovedReferenceReader } from "./hosted-runtime-approved-reference";
 import { evaluateHostedRuntimePreparationApproval } from "../../agent/tools/prepare-app-hosted-runtime";
 import { nativeObservationStateSchema } from "../eve/native-observation-state";
@@ -1060,5 +1062,182 @@ describe("owned approved operation reference", () => {
       expect(operator).toBe(f.operator);
       expect(policy).toMatchObject({ recoverOriginalPlan: false });
     }
+  });
+});
+
+const receiptReader = (f: Awaited<ReturnType<typeof fixture>>) =>
+  createHostedRuntimeApprovalReceiptReader({
+    store: f.store,
+    now: () => Date.parse("2026-10-14T12:00:00Z"),
+  });
+
+describe("canonical resource approval durability wait", () => {
+  it("continues the same invocation only after a delayed terminal receipt commits", async () => {
+    const f = await fixture();
+    const read = receiptReader(f);
+    const modes: boolean[] = [];
+    const sleeps: Date[] = [];
+    await waitForHostedRuntimeApprovalReceipt(f.input, f.context, {
+      read: async (input, ctx, snapshot, delayMs, catchUp) => {
+        modes.push(catchUp);
+        return await read(input, ctx, f.operator, snapshot, delayMs);
+      },
+      sleepUntil: async (deadline) => {
+        sleeps.push(deadline);
+        await f.approve();
+      },
+    });
+    expect(modes).toEqual([true, false]);
+    expect(sleeps).toEqual([new Date("2026-10-14T12:00:01Z")]);
+    expect(f.requests).toEqual([]);
+  });
+
+  it("reads cached receipts with backoff and permits one initial catch-up only", async () => {
+    const f = await fixture();
+    const read = receiptReader(f);
+    const delays: number[] = [];
+    const modes: boolean[] = [];
+    let ticks = 0;
+    await waitForHostedRuntimeApprovalReceipt(f.input, f.context, {
+      read: async (input, ctx, snapshot, delayMs, catchUp) => {
+        delays.push(delayMs);
+        modes.push(catchUp);
+        return await read(input, ctx, f.operator, snapshot, delayMs);
+      },
+      sleepUntil: async () => {
+        ticks += 1;
+        if (ticks === 7) {
+          await f.approve();
+        }
+      },
+    });
+    expect(delays).toEqual([1000, 2000, 4000, 8000, 16_000, 30_000, 30_000, 30_000]);
+    expect(modes).toEqual([true, false, false, false, false, false, false, false]);
+    expect(f.requests).toEqual([]);
+  });
+
+  it("accepts an existing real owner-approved receipt without waiting or provider reads", async () => {
+    const f = await fixture();
+    await f.approve();
+    const read = receiptReader(f);
+    expect(await read(f.input, f.context, f.operator)).toMatchObject({ status: "approved" });
+    expect(f.requests).toEqual([]);
+  });
+
+  it.each(["cancelled", "foreign-responder"])("rejects %s receipts", async (failure) => {
+    const f = await fixture();
+    await f.approve(
+      failure === "cancelled" ? { outcome: "cancelled" } : { responderPrincipalId: "other-owner" },
+    );
+    await expect(receiptReader(f)(f.input, f.context, f.operator)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(f.requests).toEqual([]);
+  });
+
+  it("stops a sleeping invocation when cancellation intent changes", async () => {
+    const f = await fixture();
+    const read = receiptReader(f);
+    await expect(
+      waitForHostedRuntimeApprovalReceipt(f.input, f.context, {
+        read: async (input, ctx, snapshot, delayMs) =>
+          await read(input, ctx, f.operator, snapshot, delayMs),
+        sleepUntil: async () => {
+          await f.store.recordCancellationIntent({
+            principal,
+            sessionId: f.saved.sessionId,
+            nowEpochMs: 11,
+          });
+        },
+      }),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    expect(f.requests).toEqual([]);
+  });
+
+  it("rejects changed call, operation, owner adapter generation and expired authority", async () => {
+    const f = await fixture();
+    const read = receiptReader(f);
+    const state = await read(f.input, f.context, f.operator);
+    await expect(
+      read(f.input, { ...f.context, callId: "different-call" }, f.operator, state.snapshot),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    await expect(
+      read({ ...f.input, operationRef: randomUUID() }, f.context, f.operator, state.snapshot),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    await expect(
+      read(f.input, f.context, {
+        ...f.operator,
+        ownerContext: {
+          ...operatorOwnerContextSchema.parse(f.operator.ownerContext),
+          adapterGeneration: 2,
+        },
+      }),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    const expired = createHostedRuntimeApprovalReceiptReader({
+      store: f.store,
+      now: () => Date.parse("2027-01-01T00:00:00Z"),
+    });
+    await expect(expired(f.input, f.context, f.operator)).rejects.toMatchObject({
+      code: "resource_mismatch",
+    });
+    expect(f.requests).toEqual([]);
+  });
+
+  it("does not treat a cached prior terminal checkpoint as cancellation of the new invocation", async () => {
+    const f = await fixture();
+    await f.approve();
+    const current = await f.store.getSession(principal, f.saved.sessionId);
+    if (current === null) {
+      throw new Error("Missing fixture session");
+    }
+    const { checkpoint } = toDurableHostedSessionRecord(current);
+    if (checkpoint === undefined) {
+      throw new Error("Missing fixture checkpoint");
+    }
+    await f.store.observeSession({
+      principal,
+      sessionId: f.saved.sessionId,
+      checkpoint: { ...checkpoint, status: "completed" },
+      nowEpochMs: 11,
+      resumability: "terminal",
+      stage: "complete",
+    });
+    expect(await receiptReader(f)(f.input, f.context, f.operator)).toMatchObject({
+      status: "approved",
+    });
+    expect(f.requests).toEqual([]);
+  });
+
+  it("stops when the original invocation is aborted during durable sleep", async () => {
+    const f = await fixture();
+    const controller = new AbortController();
+    const context = { ...f.context, abortSignal: controller.signal };
+    const read = receiptReader(f);
+    await expect(
+      waitForHostedRuntimeApprovalReceipt(f.input, context, {
+        read: async (input, ctx, snapshot, delayMs) =>
+          await read(input, ctx, f.operator, snapshot, delayMs),
+        sleepUntil: async () => {
+          controller.abort();
+          await Promise.resolve();
+        },
+      }),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(f.requests).toEqual([]);
+  });
+
+  it("surfaces malformed state and missing owner instead of waiting indefinitely", async () => {
+    const f = await fixture();
+    const missing = createHostedRuntimeApprovalReceiptReader({
+      store: { getSession: async () => await Promise.resolve(null) },
+      now: () => Date.parse("2026-10-14T12:00:00Z"),
+    });
+    await expect(missing(f.input, f.context, f.operator)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    await expect(
+      receiptReader(f)({ ...f.input, planDigest: "d".repeat(64) }, f.context, f.operator),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
+    expect(f.requests).toEqual([]);
   });
 });

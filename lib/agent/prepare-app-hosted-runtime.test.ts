@@ -780,3 +780,45 @@ describe("confirmed Gateway build failure recovery", () => {
     },
   );
 });
+
+describe("changed trusted app delivery settings recovery", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+  it.each(["returned", "thrown"] as const)(
+    "requests ordinary planning after a %s approved-profile mismatch",
+    async (mode) => {
+      if (mode === "returned") {
+        operator.request.mockResolvedValueOnce({
+          appId: input.appId,
+          authenticatedBehavior: "unassessed",
+          status: "blocked",
+          code: "app_delivery_configuration_changed",
+        });
+      } else {
+        operator.request.mockRejectedValueOnce(
+          new HostedOperatorErrorClass("app_delivery_configuration_changed"),
+        );
+      }
+      const value = await prepareHostedRuntimeWithOperator(input, ctx, operator, retain, contract);
+      expect(value.identityInput).toBeNull();
+      expect(value.result).toMatchObject({
+        status: "blocked",
+        code: "app_delivery_configuration_changed",
+        nextAction: {
+          tool: "plan-app-hosted-runtime",
+          approval: "normal-plan-approval",
+          input: {
+            appId: input.appId,
+            branch: input.branch,
+            environment: "preview",
+            projectId: input.projectId,
+            operation: "prepare",
+          },
+        },
+      });
+      expect(operator.request).toHaveBeenCalledOnce();
+      expect(operator.authIdentityInput).not.toHaveBeenCalled();
+    },
+  );
+});

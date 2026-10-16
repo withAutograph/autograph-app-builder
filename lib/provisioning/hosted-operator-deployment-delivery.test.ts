@@ -34,6 +34,16 @@ const appProjectSettings = {
   rootDirectory: ".",
   sourceFilesOutsideRootDirectory: true,
 } as const;
+type FixtureJsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | FixtureJsonValue[]
+  | { [key: string]: FixtureJsonValue };
+interface FixtureJsonObject {
+  [key: string]: FixtureJsonValue;
+}
 const plan = hostedOperatorPlanSchema.parse({
   access: [{ actorId: "actor", organizationId: "org", roles: ["reviewer"] }],
   action: "prepare",
@@ -134,6 +144,7 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
   let count = 0;
   let deny = false;
   let failCandidateReads = false;
+  let oldBlockedProduction = false;
   const calls: { method: string; path: string; body?: unknown }[] = [];
   const checkpoint = vi.fn<HostedOperatorDeploymentContext["checkpointDelivery"]>(async (rows) => {
     await Promise.resolve();
@@ -164,6 +175,17 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
     autograph_operator_operation: input.operationRef,
     autograph_operator_plan: operatorPlanDigest(deliveryPlan),
   };
+  const oldPlan = hostedOperatorPlanSchema.parse({
+    ...deliveryPlan,
+    delivery: Object.fromEntries(
+      Object.entries(deliveryPlan.delivery ?? {}).filter(([key]) => key !== "projectSettings"),
+    ),
+  });
+  const oldMeta = {
+    autograph_operator_effect: input.effect.id,
+    autograph_operator_operation: input.operationRef,
+    autograph_operator_plan: operatorPlanDigest(oldPlan),
+  };
   const project: DeliveryProjectFixture = {
     accountId: "team",
     framework: "nextjs",
@@ -182,6 +204,21 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
     projectId: delivery.projectId,
     target: deploymentTarget,
     url: "new-native.vercel.app",
+  };
+  const oldBlockedDeployment = {
+    ...deployment,
+    buildSkipped: true,
+    builds: [],
+    id: "dpl_previous",
+    meta: oldMeta,
+    oidcTokenClaims: {
+      environment: "production",
+      owner_id: "team",
+      project_id: delivery.projectId,
+    },
+    readyState: "BLOCKED",
+    target: "production",
+    url: "old-native.vercel.app",
   };
   const aliasState = {
     name: "approved-gateway.example.test",
@@ -224,43 +261,62 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
     failCandidateReads
       ? new Response(null, { status: 503 })
       : Response.json({ ...deployment, readyState: ready });
+  const deploymentPageResponse = () => {
+    const deployments = count === 0 ? [] : [{ meta, uid: "dpl_new" }];
+    return Response.json({
+      deployments: [
+        ...deployments,
+        ...(oldBlockedProduction ? [{ meta: oldMeta, uid: "dpl_previous" }] : []),
+      ],
+      pagination: { next: null },
+    });
+  };
+  const createDeploymentResponse = (body: FixtureJsonObject) => {
+    if (gateway) {
+      expect(body).not.toHaveProperty("target");
+    } else {
+      expect(body).toMatchObject({ target: "staging" });
+    }
+    count += 1;
+    return Response.json({ id: "dpl_new" });
+  };
+  const aliasReadResponse = () => {
+    if (aliasState.failNextRead) {
+      aliasState.failNextRead = false;
+      return new Response(null, { status: 500 });
+    }
+    if (aliasState.failReads) {
+      return new Response(null, { status: 500 });
+    }
+    if (aliasState.missing) {
+      return new Response(null, { status: 404 });
+    }
+    return Response.json({
+      alias: aliasState.name,
+      deploymentId: aliasState.deploymentId,
+      projectId: aliasState.projectId,
+      redirect: aliasState.redirect,
+    });
+  };
   const fetcher: typeof fetch = async (url, init) => {
     await Promise.resolve();
     const requestUrl = new URL(url instanceof Request ? url.url : url);
     expect(requestUrl.searchParams.get("teamId")).toBe(target.scopeId);
     const path = requestUrl.pathname;
     const method = init?.method ?? "GET";
-    let body;
+    let body: FixtureJsonObject | undefined;
     if (init?.body !== undefined) {
-      body = z.json().parse(JSON.parse(z.string().parse(init.body)));
+      body = z.record(z.string(), z.json()).parse(JSON.parse(z.string().parse(init.body)));
     }
     calls.push({ body, method, path });
     if (path.startsWith("/v4/aliases/")) {
-      if (aliasState.failNextRead) {
-        aliasState.failNextRead = false;
-        return new Response(null, { status: 500 });
-      }
-      if (aliasState.failReads) {
-        return new Response(null, { status: 500 });
-      }
-      if (aliasState.missing) {
-        return new Response(null, { status: 404 });
-      }
-      return Response.json({
-        alias: aliasState.name,
-        deploymentId: aliasState.deploymentId,
-        projectId: aliasState.projectId,
-        redirect: aliasState.redirect,
-      });
+      return aliasReadResponse();
     }
     if (path === "/v2/deployments/dpl_new/aliases" && method === "POST") {
       return aliasWriteResponse();
     }
     if (path === "/v7/deployments") {
-      return Response.json({
-        deployments: count === 0 ? [] : [{ meta, uid: "dpl_new" }],
-        pagination: { next: null },
-      });
+      return deploymentPageResponse();
     }
     if (path === `/v9/projects/${project.id}`) {
       return Response.json(project);
@@ -269,15 +325,15 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
       return Response.json(team);
     }
     if (path === "/v13/deployments" && method === "POST") {
-      expect(body).not.toHaveProperty("target");
-      count += 1;
-      return Response.json({ id: "dpl_new" });
+      return createDeploymentResponse(body ?? {});
     }
     if (path === "/v13/deployments/dpl_new") {
       return candidateResponse();
     }
     if (path === "/v13/deployments/dpl_previous") {
-      return Response.json(differentDeployment, { status: aliasState.differentDeploymentStatus });
+      return Response.json(oldBlockedProduction ? oldBlockedDeployment : differentDeployment, {
+        status: aliasState.differentDeploymentStatus,
+      });
     }
     throw new Error("Unexpected native request");
   };
@@ -338,6 +394,10 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
     setReady: (value: string) => {
       ready = value;
     },
+    useOldBlockedProduction: () => {
+      oldBlockedProduction = true;
+    },
+    oldPlan,
     writer,
   };
 };
@@ -364,7 +424,7 @@ it("requests standard Preview delivery from approved Git source and observes rea
   expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({
     projectSettings: appProjectSettings,
   });
-  expect(f.calls.find((call) => call.method === "POST")?.body).not.toHaveProperty("target");
+  expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({ target: "staging" });
   expect(f.calls.find((call) => call.method === "POST")?.body).not.toHaveProperty("buildCommand");
   expect(f.calls.find((call) => call.method === "POST")?.body).not.toHaveProperty("installCommand");
   expect(f.checkpoint).toHaveBeenCalled();
@@ -372,6 +432,59 @@ it("requests standard Preview delivery from approved Git source and observes rea
   const result = await f.writer.reconcile(f.input);
   expect(result.status).toBe("applied");
   expect(f.calls.filter((call) => call.method === "POST")).toHaveLength(1);
+});
+it("permits an app profile successor only after exact terminal blocked Production readback", async () => {
+  const f = fixture();
+  f.useOldBlockedProduction();
+  Object.assign(f.input, {
+    priorAppDelivery: {
+      deliveryCandidates: [
+        {
+          branch: "feature",
+          deploymentId: "dpl_previous",
+          operationRef: f.input.operationRef,
+          origin: "https://old-native.vercel.app",
+          projectId: "prj_app",
+          readyState: "BLOCKED",
+          repoId: "repo",
+        },
+      ],
+      operationRef: f.input.operationRef,
+      plan: f.oldPlan,
+      planDigest: operatorPlanDigest(f.oldPlan),
+    },
+  });
+
+  const result = await f.writer.deliver(f.input);
+
+  expect(result.status).toBe("applied");
+  expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({
+    projectSettings: appProjectSettings,
+    target: "staging",
+  });
+  expect(f.checkpoint.mock.calls.at(-1)?.[0].map((candidate) => candidate.deploymentId)).toEqual([
+    "dpl_new",
+  ]);
+  expect(f.calls.some((call) => call.path === "/v13/deployments/dpl_previous")).toBe(true);
+});
+it("does not POST a profile successor when prior Production approval identity is invalid", async () => {
+  const f = fixture();
+  f.useOldBlockedProduction();
+  Object.assign(f.input, {
+    priorAppDelivery: {
+      deliveryCandidates: [],
+      operationRef: f.input.operationRef,
+      plan: f.oldPlan,
+      planDigest: "0".repeat(64),
+    },
+  });
+
+  const result = await f.writer.deliver(f.input);
+
+  expect(result.status).toBe("unknown");
+  expect(
+    f.calls.filter((call) => call.method === "POST" && call.path === "/v13/deployments"),
+  ).toHaveLength(0);
 });
 it("does not send app project settings with Gateway delivery", async () => {
   const f = fixture(gatewayPlan, null, true);
