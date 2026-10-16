@@ -652,6 +652,124 @@ describe("hosted operator artifact ownership", () => {
   );
 });
 
+const narrowedGatewayApprovalFixture = () => {
+  const retained = retainedApprovalFixture();
+  const original = hostedOperatorPlanSchema.parse({
+    ...retained.prepareReceipt.toolInput.plan,
+    access: [],
+    stage: "auth-bootstrap",
+    bootstrap: {
+      endpointId: "ep-fixture",
+      maintenanceDatabase: "postgres",
+      role: "maintenance_owner",
+    },
+    resourcesInstaller: plan.installer,
+    effects: [
+      {
+        id: "auth-resources",
+        kind: "resources",
+        description: "Auth resources",
+        resourceId: plan.authDatabase.resourceId,
+      },
+      {
+        id: "app-resources",
+        kind: "resources",
+        description: "App resources",
+        resourceId: plan.appDatabase.resourceId,
+      },
+      { id: "auth-schema", kind: "install", description: "Install Auth" },
+      { id: "gateway-bindings", kind: "gateway-bindings", description: "Bind Gateway" },
+      { id: "gateway-delivery", kind: "gateway-delivery", description: "Deliver Gateway" },
+    ],
+    deploymentBoundary: {
+      authority: ownerContext.authority,
+      teamId: "team_1",
+      app: {
+        branch: selection.branch,
+        deploymentId: "dpl_app",
+        environment: "preview",
+        projectId: selection.projectId,
+      },
+      gateway: {
+        branch: selection.branch,
+        deploymentId: "dpl_gateway",
+        environment: "preview",
+        projectId: "prj_gateway",
+      },
+      operator: { deploymentId: "dpl_operator", environment: "preview", projectId: "prj_operator" },
+      verification: {
+        gatewayOrigin: "https://gateway.example",
+        publicOrigin: "https://gateway.example",
+        jwksUrl: "https://gateway.example/_platform/jwks.json",
+      },
+    },
+    publicGateway: {
+      branch: selection.branch,
+      origin: "https://gateway.example",
+      projectId: "prj_gateway",
+    },
+    gatewayBindings: {
+      authBrowserOrigin: "https://gateway.example",
+      builderCallbackOrigin: "https://builder.example",
+      catalogAppIds: [selection.appId],
+      operatorOrigin: "https://operator.example",
+      sourceWorkload: {
+        audience: "https://vercel.com/fixture",
+        environment: "preview",
+        issuer: "https://oidc.vercel.com/fixture",
+        ownerId: "team_1",
+        projectId: "prj_gateway",
+        subject: "fixture",
+      },
+      trustedSources: {
+        builderProduction: { projectId: "prj_builder", from: "production", to: "preview" },
+        operatorPreview: { projectId: "prj_operator", from: "preview", to: "preview" },
+      },
+    },
+    gatewayDelivery: {
+      branch: selection.branch,
+      projectId: "prj_gateway",
+      repoId: "fixture-repo",
+      gitSha: "1".repeat(40),
+    },
+  });
+  const narrowed = hostedOperatorPlanSchema.parse({
+    ...original,
+    gatewayBindings: { ...original.gatewayBindings, trustedSources: undefined },
+  });
+  retained.prepareReceipt.toolInput.plan = original;
+  retained.prepareReceipt.toolInput.planDigest = operatorPlanDigest(original);
+  retained.prepareInput.planDigest = operatorPlanDigest(original);
+  retained.record.retainedAuth = undefined;
+  retained.record.status = "pending";
+  retained.record.step = "reserved";
+  retained.record.approvedByCallId = "narrowed-call";
+  retained.record.operator = {
+    mode: "protected-operator-v1",
+    operationRef: retained.prepareReceipt.toolInput.operationRef,
+    plan: narrowed,
+    planDigest: operatorPlanDigest(narrowed),
+    approvalId: "narrowed-approval",
+    receipts: [],
+    pendingEffectId: "gateway-bindings",
+    pendingEffectAttempt: { id: "pending-original-attempt" },
+    retainedGatewayDeliveries: [
+      {
+        approvedByCallId: retained.prepareReceipt.callId,
+        operator: {
+          mode: "protected-operator-v1",
+          operationRef: retained.prepareReceipt.toolInput.operationRef,
+          plan: original,
+          planDigest: operatorPlanDigest(original),
+          approvalId: retained.prepareReceipt.requestId,
+          receipts: [],
+        },
+      },
+    ],
+  };
+  return retained;
+};
+
 describe("owner project access diagnostics", () => {
   it.each([
     ["direct", 403],
@@ -783,6 +901,84 @@ describe("owner project access diagnostics", () => {
 });
 
 describe("hosted operator owner authority", () => {
+  it("reads exact original Gateway approval after an approved host-only narrowing", async () => {
+    const retained = narrowedGatewayApprovalFixture();
+    await expect(retained.readApproval(retained.prepareInput)).resolves.toEqual({
+      action: "prepare",
+      approved: true,
+      approvalId: retained.prepareReceipt.requestId,
+      callId: retained.prepareReceipt.callId,
+      planDigest: retained.prepareReceipt.toolInput.planDigest,
+    });
+    expect(retained.observe).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "operation",
+    "source",
+    "digest",
+    "call",
+    "approval",
+    "unapproved",
+    "current-digest",
+    "foreign",
+    "cancelled",
+  ] as const)("rejects original Gateway approval with mismatched %s", async (mismatch) => {
+    const retained = narrowedGatewayApprovalFixture();
+    const current = retained.record.operator;
+    const original = current?.retainedGatewayDeliveries?.[0]?.operator;
+    if (current === undefined || original === undefined) {
+      throw new Error("Missing narrowed Gateway fixture");
+    }
+    switch (mismatch) {
+      case "operation": {
+        original.operationRef = retained.cleanupReceipt.toolInput.operationRef;
+        break;
+      }
+      case "source": {
+        const delivery = current.plan.gatewayDelivery;
+        if (delivery === undefined) {
+          throw new Error("Missing Gateway delivery fixture");
+        }
+        current.plan.gatewayDelivery = { ...delivery, gitSha: "2".repeat(40) };
+        current.planDigest = operatorPlanDigest(current.plan);
+        break;
+      }
+      case "digest": {
+        original.planDigest = "0".repeat(64);
+        break;
+      }
+      case "call": {
+        retained.prepareInput.callId = "another-call";
+        break;
+      }
+      case "approval": {
+        original.approvalId = "another-approval";
+        break;
+      }
+      case "unapproved": {
+        retained.record.approvedByCallId = "operator:unapproved-plan";
+        break;
+      }
+      case "current-digest": {
+        current.planDigest = "0".repeat(64);
+        break;
+      }
+      case "foreign": {
+        retained.prepareReceipt.responderPrincipalId = "another-owner";
+        break;
+      }
+      case "cancelled": {
+        retained.prepareReceipt.outcome = "cancelled";
+        break;
+      }
+      default: {
+        throw new Error("Unexpected narrowed approval mismatch");
+      }
+    }
+    await expect(retained.readApproval(retained.prepareInput)).rejects.toThrow();
+  });
+
   it("verifies the original account approval after a new app operation replaces the plan", async () => {
     const retained = retainedApprovalFixture();
     const program = {
