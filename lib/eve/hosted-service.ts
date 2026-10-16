@@ -2622,10 +2622,18 @@ export function createHostedEveSessionService(input: {
   ) {
     requireHostedOperationScope(principal, "respond");
     let session = await requireSession(request.sessionId);
+    const readRespondPreflight = async () => {
+      try {
+        return await readMutationPreflight(request.sessionId);
+      } catch {
+        // Only read-only preflight ran; no approval response POST has been attempted.
+        throw new SubmissionRejectedBeforeDispatchError("respond_preflight_unavailable");
+      }
+    };
     const retainedState = await privateInputsForSession(session);
     const initial =
       retainedState !== undefined && guardRequestIds(retainedState).length > 0
-        ? await readMutationPreflight(request.sessionId)
+        ? await readRespondPreflight()
         : undefined;
     if (initial !== undefined) {
       ({ session } = initial);
@@ -2714,7 +2722,10 @@ export function createHostedEveSessionService(input: {
           input.transport.respondAccepted !== undefined &&
           input.store.observeSessionPaged !== undefined &&
           input.store.readCheckpointPage !== undefined;
-        const preflight = paged ? await readMutationPreflight(request.sessionId) : undefined;
+        const preflight = paged ? await readRespondPreflight() : undefined;
+        const nativePreflight =
+          preflight !== undefined &&
+          (preflight.persisted || preflight.nativeObservationState !== undefined);
         if (preflight) {
           ({ session } = preflight);
         }
@@ -2731,12 +2742,18 @@ export function createHostedEveSessionService(input: {
           }
           await assertSessionLimitOwner(session);
         }
-        const before = preflight?.persisted
-          ? undefined
-          : await input.transport.get({
+        let before: HostedEngineSnapshot | undefined;
+        if (!nativePreflight) {
+          try {
+            before = await input.transport.get({
               adapterSessionId: session.adapterSessionId,
               principal,
             });
+          } catch {
+            // No mutation path has run, so this failed read has a known non-delivery outcome.
+            throw new SubmissionRejectedBeforeDispatchError("respond_preflight_unavailable");
+          }
+        }
         if (
           marker !== undefined &&
           before !== undefined &&
@@ -2745,7 +2762,7 @@ export function createHostedEveSessionService(input: {
         ) {
           throw new SubmissionRejectedBeforeDispatchError("input_batch_changed");
         }
-        const pendingRequests = preflight?.persisted
+        const pendingRequests = nativePreflight
           ? (preflight?.result.inputRequests ?? [])
           : outstandingInternalEveRequests(
               (before?.events ?? []).filter(
@@ -2781,7 +2798,7 @@ export function createHostedEveSessionService(input: {
             ? { sourceHandoffId: session.sourceHandoffId }
             : {}),
         };
-        if (preflight?.persisted) {
+        if (nativePreflight) {
           await input.transport.respondAccepted?.(responseInput);
           const result = await readAcceptedMutation(
             request.sessionId,
