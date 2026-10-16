@@ -77,7 +77,7 @@ describe("draft reconciliation publication review", () => {
   it("refuses to seal until both full diffs were read", async () => {
     await expect(
       sealReconciliation.execute({ expectedReviewDigest: digest }, context),
-    ).rejects.toThrow("Validate the candidate and review both current diffs");
+    ).rejects.toThrow(/^diff_progress_missing \(inspect-diff\):/u);
     expect(mocks.seal).not.toHaveBeenCalled();
     mocks.candidate = {
       ...mocks.candidate,
@@ -89,7 +89,7 @@ describe("draft reconciliation publication review", () => {
     };
     await expect(
       sealReconciliation.execute({ expectedReviewDigest: digest }, context),
-    ).rejects.toThrow("Validate the candidate and review both current diffs");
+    ).rejects.toThrow(/^head_diff_incomplete \(inspect-diff\):/u);
     expect(mocks.seal).not.toHaveBeenCalled();
   });
 
