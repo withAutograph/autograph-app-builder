@@ -103,7 +103,9 @@ export async function waitForDevelopmentMcp(input: {
   signal?: AbortSignal;
 }) {
   const timeoutMs = input.timeoutMs ?? 120_000;
-  const intervalMs = input.intervalMs ?? 250;
+  const initialIntervalMs = input.intervalMs ?? 250;
+  const maximumIntervalMs = Math.max(initialIntervalMs, 5000);
+  let retryIntervalMs = initialIntervalMs;
   const started = Date.now();
   let lastError: unknown;
   while (Date.now() - started < timeoutMs) {
@@ -118,8 +120,10 @@ export async function waitForDevelopmentMcp(input: {
       lastError = error;
     }
     try {
+      const remainingMs = Math.max(0, timeoutMs - (Date.now() - started));
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await delay(intervalMs, undefined, { signal: input.signal });
+      await delay(Math.min(retryIntervalMs, remainingMs), undefined, { signal: input.signal });
+      retryIntervalMs = Math.min(retryIntervalMs * 2, maximumIntervalMs);
     } catch {
       if (input.signal?.aborted) {
         throw abortReason(input.signal);

@@ -5,7 +5,11 @@ import {
 } from "./hosted-operator-shared-host-protection-successor";
 import type { SharedHostProtectionDeliveryProvenance } from "./hosted-operator-shared-host-protection-successor";
 import { recoverOriginalApprovedPlan } from "./hosted-operator-approved-plan";
-import { isProjectSettingsSuccessor } from "./hosted-operator-project-settings-successor";
+import {
+  createProjectSettingsSuccessorPlan,
+  isProjectSettingsSuccessor,
+  projectSettingsDeliveryProvenance,
+} from "./hosted-operator-project-settings-successor";
 import { isInstallerSourceSuccessor } from "./hosted-operator-installer-source-successor";
 import { savedPreviewEnvironmentGitBranch } from "./native-preview-environment-scope";
 import { isDeepStrictEqual } from "node:util";
@@ -94,6 +98,7 @@ import type {
   OperatorDeploymentCandidate,
   HostedOperatorAuthSignupPolicyInput,
 } from "./hosted-operator-contract";
+import type { HostedOperatorAppProjectSettings } from "./hosted-operator-app-project-settings";
 
 export interface HostedOperatorContext {
   authority: BuilderProvisionAuthority;
@@ -150,6 +155,13 @@ export type HostedOperatorEffectContext = Context & {
   gatewayDeliveryCandidates?: OperatorDeploymentCandidate[];
   /** Canonical retained approvals for an exact host-protection-only narrowing, never public input. */
   gatewayDeliveryProvenance?: readonly SharedHostProtectionDeliveryProvenance[];
+  /** Exact retained app delivery context; adapters must reconcile this old plan before new POSTs. */
+  priorAppDelivery?: {
+    plan: HostedOperatorPlan;
+    planDigest: string;
+    operationRef: string;
+    deliveryCandidates: readonly OperatorDeploymentCandidate[];
+  };
   checkpointGatewayDelivery?: (
     candidates: readonly OperatorDeploymentCandidate[],
     selectedId?: string,
@@ -200,6 +212,10 @@ export interface ProtectedHostedOperatorDependencies {
       authSignupPolicy?: HostedOperatorAuthSignupPolicyInput;
     },
   ) => Promise<HostedOperatorPlan>;
+  /** Read the trusted configured app build profile without provider or repository inventory. */
+  readAppProjectSettings?: (
+    context: Context,
+  ) => Promise<HostedOperatorAppProjectSettings | undefined>;
   /** Re-read membership, owner connection and provider grants. No ambient Neon authority. */
   assertAuthorized: (
     context: Context & { plan: HostedOperatorPlan; purpose?: "planning" },
@@ -704,7 +720,11 @@ const handlePlanOperation = async (
         nextOperator.pendingEffectId = record.operator.pendingEffectId;
         nextOperator.workerCheckpoints = record.operator.workerCheckpoints;
         nextOperator.managedEnvironment = record.operator.managedEnvironment;
-        // The old unknown binding attempt remains in history; new approval gets a fresh attempt.
+        // The previous native deployment remains available only through archived provenance.
+        // Do not feed its Production-scoped candidates to the current Preview reconciler.
+        nextOperator.deliveryCandidates = [];
+        delete nextOperator.deliveredDeploymentId;
+        // The old unknown attempt remains in history; new approval gets a fresh attempt.
       }
       if (sharedHostProtectionSuccessor) {
         nextOperator.operationRef = record.operator.operationRef;
@@ -715,7 +735,15 @@ const handlePlanOperation = async (
       if (sameAuthPreparation(record.operator.plan, plan)) {
         nextOperator.authPreparation = record.operator.authPreparation;
       }
-      Object.assign(nextOperator, retainAppDeliveryHistory(record.operator, nextOperator));
+      Object.assign(
+        nextOperator,
+        retainAppDeliveryHistory(
+          projectSettingsSuccessor
+            ? { ...record.operator, deliveryCandidates: [] }
+            : record.operator,
+          nextOperator,
+        ),
+      );
       nextOperator.gatewayDeliveryCandidates = record.operator.gatewayDeliveryCandidates;
       if (!gatewaySourceSuccessor) {
         nextOperator.deliveredGatewayDeploymentId = record.operator.deliveredGatewayDeploymentId;
@@ -1162,6 +1190,33 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           : await readApproval();
       };
       const approval = await assertApproval(false, true);
+      const pendingEffect = operator.plan.effects.find(
+        (effect) => effect.id === operator.pendingEffectId,
+      );
+      if (
+        input.action === "execute" &&
+        plan.action === "prepare" &&
+        (pendingEffect?.kind === "bindings" || pendingEffect?.kind === "delivery") &&
+        deps.readAppProjectSettings !== undefined
+      ) {
+        const configuredProjectSettings = await deps.readAppProjectSettings(context);
+        const settingsSuccessor = createProjectSettingsSuccessorPlan(
+          current.record,
+          configuredProjectSettings,
+          now(),
+        );
+        if (
+          settingsSuccessor !== undefined &&
+          operatorPlanDigest(settingsSuccessor) !== planDigest
+        ) {
+          return response({
+            appId,
+            authenticatedBehavior: "unassessed",
+            code: "app_delivery_configuration_changed",
+            status: "blocked",
+          });
+        }
+      }
       if (plan.stage === AUTH_PARTICIPANTS_STAGE) {
         if (deps.ensureNormalActorCapture === undefined) {
           throw new HostedOperatorError("operator_unavailable");
@@ -1394,6 +1449,29 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 );
                 await assertCurrent();
               }
+              const retainedAppDelivery =
+                effect.kind === "delivery"
+                  ? projectSettingsDeliveryProvenance(requireOperator(record), plan)
+                  : undefined;
+              if (retainedAppDelivery !== undefined) {
+                await assertCurrent();
+                const originalApproval = await deps.readApproval({
+                  ...context,
+                  action: "prepare",
+                  callId: retainedAppDelivery.approvedByCallId,
+                  planDigest: retainedAppDelivery.planDigest,
+                });
+                if (
+                  originalApproval?.approved !== true ||
+                  originalApproval.approvalId !== retainedAppDelivery.approvalId ||
+                  originalApproval.callId !== retainedAppDelivery.approvedByCallId ||
+                  originalApproval.planDigest !== retainedAppDelivery.planDigest ||
+                  originalApproval.action !== "prepare"
+                ) {
+                  throw new HostedOperatorError("authorization_required");
+                }
+                await assertCurrent();
+              }
               const effectInput: HostedOperatorEffectContext = {
                 ...context,
                 signal: request.signal,
@@ -1593,6 +1671,16 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 fenceGeneration,
                 gatewayDeliveryCandidates: requireOperator(record).gatewayDeliveryCandidates,
                 gatewayDeliveryProvenance,
+                ...(retainedAppDelivery === undefined
+                  ? {}
+                  : {
+                      priorAppDelivery: {
+                        deliveryCandidates: retainedAppDelivery.deliveryCandidates,
+                        operationRef: retainedAppDelivery.operationRef,
+                        plan: retainedAppDelivery.plan,
+                        planDigest: retainedAppDelivery.planDigest,
+                      },
+                    }),
                 gatewayEnvironmentRows: requireOperator(record).gatewayEnvironment,
                 managedEnvironment:
                   plan.appEnvironmentCleanup === undefined

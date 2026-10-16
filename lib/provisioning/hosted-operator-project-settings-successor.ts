@@ -1,6 +1,10 @@
 import { isDeepStrictEqual } from "node:util";
 import type { HostedOperatorAppProjectSettings } from "./hosted-operator-app-project-settings";
-import type { HostedOperatorPlan } from "./hosted-operator-contract";
+import type {
+  HostedOperatorPlan,
+  HostedOperatorRecord,
+  OperatorDeploymentCandidate,
+} from "./hosted-operator-contract";
 import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
 import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
 
@@ -38,14 +42,30 @@ export const isProjectSettingsSuccessor = (
   if (prior === undefined || !hasOnlyProjectSettingsChanged(prior.plan, candidate)) {
     return false;
   }
-  const bindingIndex = prior.plan.effects.findIndex(
+  const pendingIndex = prior.plan.effects.findIndex(
     (effect) => effect.id === prior.pendingEffectId,
   );
-  const binding = prior.plan.effects[bindingIndex];
+  const pending = prior.plan.effects[pendingIndex];
   const receiptIds = new Set(prior.receipts.map((receipt) => receipt.effectId));
   const prerequisiteIds = new Set(
-    prior.plan.effects.slice(0, bindingIndex).map((effect) => effect.id),
+    prior.plan.effects.slice(0, pendingIndex).map((effect) => effect.id),
   );
+  const pendingBindings = pending?.kind === "bindings";
+  const pendingDelivery = pending?.kind === "delivery";
+  const deliveryCandidates = prior.deliveryCandidates ?? [];
+  const candidatesAreOnlyTerminalBlockedAttempts = deliveryCandidates.every((deliveryCandidate) =>
+    [
+      deliveryCandidate.operationRef === prior.operationRef,
+      deliveryCandidate.projectId === prior.plan.delivery?.projectId,
+      deliveryCandidate.branch === prior.plan.delivery?.branch,
+      deliveryCandidate.repoId === prior.plan.delivery?.repoId,
+      deliveryCandidate.readyState === "BLOCKED",
+    ].every(Boolean),
+  );
+  const recoverableBindings = pendingBindings && deliveryCandidates.length === 0;
+  const recoverableDelivery = pendingDelivery && candidatesAreOnlyTerminalBlockedAttempts;
+  const recoverablePendingEffect =
+    (recoverableBindings || recoverableDelivery) && prior.deliveredDeploymentId === undefined;
   const expiry = Date.parse(prior.plan.retention.expiresAt);
   const leaseExpiry =
     record.leaseExpiresAt === undefined ? Number.NaN : Date.parse(record.leaseExpiresAt);
@@ -59,13 +79,65 @@ export const isProjectSettingsSuccessor = (
     record.approvedByCallId.length > 0 && record.approvedByCallId !== "operator:unapproved-plan",
     record.leaseId === undefined || (Number.isFinite(leaseExpiry) && leaseExpiry <= now),
     prior.planDigest === operatorPlanDigest(prior.plan),
-    binding?.kind === "bindings",
+    recoverablePendingEffect,
     new Set(prior.plan.effects.map((effect) => effect.id)).size === prior.plan.effects.length,
     prior.receipts.every((receipt) => prerequisiteIds.has(receipt.effectId)),
     [...prerequisiteIds].every((effectId) => receiptIds.has(effectId)),
-    (prior.deliveryCandidates?.length ?? 0) === 0,
-    prior.deliveredDeploymentId === undefined,
   ].every(Boolean);
+};
+
+/** Exact old-plan provenance for a profile successor; the adapter must reconcile it before POST. */
+export const projectSettingsDeliveryProvenance = (
+  operator: HostedOperatorRecord,
+  currentPlan: HostedOperatorPlan,
+):
+  | {
+      approvedByCallId: string;
+      approvalId: string;
+      plan: HostedOperatorPlan;
+      planDigest: string;
+      operationRef: string;
+      deliveryCandidates: readonly OperatorDeploymentCandidate[];
+    }
+  | undefined => {
+  if (currentPlan.delivery?.projectSettings === undefined) {
+    return undefined;
+  }
+  for (const retained of (operator.retainedProjectSettingsOperations ?? []).toReversed()) {
+    const prior = retained.operator;
+    const deliveryIndex = prior.plan.effects.findIndex(
+      (effect) => effect.id === prior.pendingEffectId && effect.kind === "delivery",
+    );
+    const priorEffectIds = new Set(
+      prior.plan.effects.slice(0, deliveryIndex).map((effect) => effect.id),
+    );
+    const priorReceiptIds = new Set(prior.receipts.map((receipt) => receipt.effectId));
+    if (prior.approvalId === undefined) {
+      continue;
+    }
+    const exactRetainedDelivery = [
+      operator.planDigest === operatorPlanDigest(operator.plan),
+      prior.planDigest === operatorPlanDigest(prior.plan),
+      prior.operationRef === operator.operationRef,
+      operator.pendingEffectId === prior.pendingEffectId,
+      deliveryIndex !== -1,
+      prior.receipts.every((receipt) => receipt.effectId !== prior.pendingEffectId),
+      prior.receipts.every((receipt) => priorEffectIds.has(receipt.effectId)),
+      [...priorEffectIds].every((effectId) => priorReceiptIds.has(effectId)),
+      hasOnlyProjectSettingsChanged(prior.plan, currentPlan),
+    ].every(Boolean);
+    if (exactRetainedDelivery) {
+      return {
+        approvedByCallId: retained.approvedByCallId,
+        approvalId: prior.approvalId,
+        deliveryCandidates: prior.deliveryCandidates ?? [],
+        operationRef: prior.operationRef,
+        plan: prior.plan,
+        planDigest: prior.planDigest,
+      };
+    }
+  }
+  return undefined;
 };
 
 /** Propose the same retained operation with only explicitly configured delivery settings changed. */

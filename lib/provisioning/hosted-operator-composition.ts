@@ -2100,6 +2100,8 @@ export const composeHostedOperatorDependencies = (
     normalActorRuntimeBindings: async (input) =>
       await controlPlane.readNormalActorRuntimeBindings(input),
     executeEffect,
+    readAppProjectSettings: (context) =>
+      Promise.resolve(selectedApplication(configuration, context).projectSettings),
     neonAuthorization: createHostedOperatorNeonAuthorization({
       assertCurrentOwner: consentOwner.assertCurrent,
       configuration: neonAuthorizationConfigurationSchema.parse({

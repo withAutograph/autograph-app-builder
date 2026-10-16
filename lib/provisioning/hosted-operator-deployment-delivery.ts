@@ -66,10 +66,53 @@ const deploymentSchema = z
     (deployment) => isNativePreviewDeployment(deployment),
     "Native staging target must attest the Preview environment.",
   );
+const blockedProductionSchema = z.object({
+  buildSkipped: z.literal(true),
+  builds: z.array(z.unknown()),
+  gitSource: z.object({
+    ref: id,
+    repoId: z.union([z.number(), id]),
+    sha: z.string().regex(/^[a-f0-9]{40}$/u),
+    type: z.literal("github"),
+  }),
+  id,
+  meta: z.record(z.string(), z.string()).optional(),
+  oidcTokenClaims: z.object({
+    environment: z.literal("production"),
+    owner_id: id,
+    project_id: id,
+  }),
+  ownerId: id,
+  projectId: id,
+  readyState: z.literal("BLOCKED"),
+  target: z.literal("production"),
+});
 const pageSchema = z.object({
   deployments: z.array(z.object({ meta: z.record(z.string(), z.string()).optional(), uid: id })),
   pagination: z.object({ next: z.number().nullable() }).optional(),
 });
+interface PriorAppDelivery {
+  deliveryCandidates: readonly OperatorDeploymentCandidate[];
+  operationRef: string;
+  plan: HostedOperatorPlan;
+  planDigest: string;
+}
+
+const withoutProjectSettings = (plan: HostedOperatorPlan): HostedOperatorPlan => {
+  if (plan.delivery === undefined) {
+    return plan;
+  }
+  const delivery = { ...plan.delivery };
+  delete delivery.projectSettings;
+  return { ...plan, delivery };
+};
+
+const sameAppDeliveryExceptProjectSettings = (
+  current: HostedOperatorPlan,
+  prior: HostedOperatorPlan,
+) =>
+  operatorPlanDigest(withoutProjectSettings(current)) ===
+  operatorPlanDigest(withoutProjectSettings(prior));
 const projectSchema = z.object({
   accountId: id,
   id,
@@ -228,6 +271,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
             name: string;
             project: string;
             projectSettings?: NonNullable<HostedOperatorPlan["delivery"]>["projectSettings"];
+            target?: "staging";
           }
         | { alias: string },
       allowNotFound = false,
@@ -539,6 +583,115 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       return { status: "unknown" as const };
     }
   };
+  const priorAppDeliveryIsTerminallyBlockedProduction = async (
+    input: HostedOperatorDeploymentContext,
+    reader: ReturnType<typeof io>,
+    prior: PriorAppDelivery,
+  ) => {
+    const priorDelivery = prior.plan.delivery;
+    const currentDelivery = input.plan.delivery;
+    const priorEffect = prior.plan.effects.find((effect) => effect.kind === "delivery");
+    const identityMatches = [
+      deps.target !== "gateway",
+      prior.operationRef === input.operationRef,
+      prior.planDigest === operatorPlanDigest(prior.plan),
+      prior.plan.action === "prepare",
+      priorEffect?.id === input.effect.id,
+      input.effect.kind === "delivery",
+      currentDelivery !== undefined,
+      priorDelivery !== undefined,
+      sameAppDeliveryExceptProjectSettings(input.plan, prior.plan),
+    ].every(Boolean);
+    if (
+      !identityMatches ||
+      priorEffect === undefined ||
+      priorDelivery === undefined ||
+      currentDelivery === undefined
+    ) {
+      return false;
+    }
+
+    const oldMeta = {
+      autograph_operator_effect: priorEffect.id,
+      autograph_operator_operation: prior.operationRef,
+      autograph_operator_plan: prior.planDigest,
+    };
+    const ids = new Set<string>();
+    for (const candidate of prior.deliveryCandidates) {
+      if (candidate.operationRef === prior.operationRef) {
+        ids.add(candidate.deploymentId);
+      }
+    }
+    let cursor: number | undefined;
+    const seen = new Set<number>();
+    for (;;) {
+      const query: DeploymentListQuery = {
+        branch: priorDelivery.branch,
+        limit: "100",
+        projectId: priorDelivery.projectId,
+      };
+      if (cursor !== undefined) {
+        query.until = String(cursor);
+      }
+      const page = pageSchema.parse(await reader.request("/v7/deployments", { ...query }));
+      for (const candidate of page.deployments) {
+        if (matchesMetadataIdentity(oldMeta, candidate.meta)) {
+          ids.add(candidate.uid);
+        }
+      }
+      const next = page.pagination?.next;
+      if (next === undefined || next === null) {
+        break;
+      }
+      if (seen.has(next)) {
+        return false;
+      }
+      seen.add(next);
+      cursor = next;
+    }
+    if (ids.size === 0) {
+      return false;
+    }
+
+    const observations = await Promise.all(
+      [...ids].map(async (deploymentId) => {
+        const observed = blockedProductionSchema.parse(
+          await reader.request(`/v13/deployments/${encodeURIComponent(deploymentId)}`, {
+            withGitRepoInfo: "true",
+          }),
+        );
+        const exact = [
+          observed.id === deploymentId,
+          observed.projectId === priorDelivery.projectId,
+          observed.ownerId === input.target.scopeId,
+          observed.oidcTokenClaims.owner_id === input.target.scopeId,
+          observed.oidcTokenClaims.project_id === priorDelivery.projectId,
+          String(observed.gitSource.repoId) === priorDelivery.repoId,
+          observed.gitSource.ref === priorDelivery.branch,
+          priorDelivery.gitSha !== undefined && observed.gitSource.sha === priorDelivery.gitSha,
+          matchesMetadataIdentity(oldMeta, observed.meta),
+          observed.builds.length === 0,
+        ].every(Boolean);
+        return exact;
+      }),
+    );
+    return observations.every(Boolean);
+  };
+  const priorAttemptIsProven = async (
+    input: HostedOperatorDeploymentContext,
+    reader: ReturnType<typeof io>,
+  ) => {
+    const { priorAppDelivery } = input;
+    if (priorAppDelivery === undefined) {
+      return true;
+    }
+    try {
+      return await priorAppDeliveryIsTerminallyBlockedProduction(input, reader, priorAppDelivery);
+    } catch {
+      // Unreadable prior effects stay unknown and never authorize a second POST.
+      return false;
+    }
+  };
   const assignGatewayAlias = async (
     input: HostedOperatorDeploymentContext,
     candidates: OperatorDeploymentCandidate[],
@@ -630,6 +783,9 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       // A complete no-match listing is still uncertain; this approved retry is at-least-once and may create another scoped Preview.
       await deps.assertEnvironment(input);
       await reader.assertCurrent();
+      if (!(await priorAttemptIsProven(input, reader))) {
+        return { candidates: prior.candidates ?? [], status: "unknown" as const };
+      }
       const project = projectSchema.parse(
         await reader.request(`/v9/projects/${encodeURIComponent(reader.delivery.projectId)}`),
       );
@@ -661,6 +817,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
             meta: reader.expectedMeta,
             name: project.name,
             project: project.id,
+            ...((deps.target ?? "app") === "app" ? { target: "staging" as const } : {}),
             ...((deps.target ?? "app") === "app" &&
             input.plan.delivery?.projectSettings !== undefined
               ? { projectSettings: input.plan.delivery.projectSettings }

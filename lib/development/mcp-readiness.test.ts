@@ -1,7 +1,15 @@
+import { setTimeout as delay } from "node:timers/promises";
+import type { setTimeout as timerPromiseSetTimeout } from "node:timers/promises";
 import { describe, expect, it, vi } from "vitest";
 
 import { TOOL_NAMES } from "../../scripts/portable-release";
 import { developmentMcpToolNames, waitForDevelopmentMcp } from "./mcp-readiness";
+
+// oxlint-disable-next-line anti-slop/no-module-mocking -- deterministic coverage of the retry delay without wall-clock waits
+vi.mock("node:timers/promises", async (importOriginal) => {
+  const timers = await importOriginal<{ setTimeout: typeof timerPromiseSetTimeout }>();
+  return { ...timers, setTimeout: vi.fn(timers.setTimeout) };
+});
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function response(body: unknown, status = 200, sessionId?: string) {
@@ -75,6 +83,79 @@ describe("development MCP readiness", () => {
         timeoutMs: 100,
       }),
     ).resolves.toEqual([...TOOL_NAMES]);
+  });
+
+  it("backs off after failed probes while probing immediately and honoring abort", async () => {
+    const controller = new AbortController();
+    const initializeTimes: number[] = [];
+    const requestedWaits: number[] = [];
+    let elapsedMs = 0;
+    const now = vi.spyOn(Date, "now").mockImplementation(() => elapsedMs);
+    const deterministicDelay = (ms: number, value?: unknown) => {
+      requestedWaits.push(ms);
+      elapsedMs += ms;
+      if (requestedWaits.length === 7) {
+        const aborted = new Error("test aborted");
+        controller.abort(aborted);
+        return Promise.reject(aborted);
+      }
+      return Promise.resolve(value);
+    };
+    for (let wait = 0; wait < 7; wait += 1) {
+      vi.mocked(delay).mockImplementationOnce(deterministicDelay as typeof delay);
+    }
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    const fetcher = vi.fn(async (_input, init) => {
+      const request = JSON.parse(String(init?.body)) as { method: string };
+      if (request.method === "initialize") {
+        initializeTimes.push(Date.now());
+      }
+      return response({ error: "starting" }, 503);
+    }) as typeof fetch;
+    const waiting = waitForDevelopmentMcp({
+      endpoint: "http://127.0.0.1:3210/mcp",
+      fetcher,
+      signal: controller.signal,
+      timeoutMs: 120_000,
+    });
+
+    try {
+      expect(initializeTimes).toHaveLength(1);
+      expect(requestedWaits).toEqual([]);
+      await expect(waiting).rejects.toThrow("test aborted");
+      expect(initializeTimes).toHaveLength(7);
+      expect(requestedWaits).toEqual([250, 500, 1000, 2000, 4000, 5000, 5000]);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it("clamps the last retry delay to the remaining timeout", async () => {
+    let elapsedMs = 0;
+    const requestedWaits: number[] = [];
+    const now = vi.spyOn(Date, "now").mockImplementation(() => elapsedMs);
+    const deterministicDelay = (ms: number, value?: unknown) => {
+      requestedWaits.push(ms);
+      elapsedMs += ms;
+      return Promise.resolve(value);
+    };
+    for (let wait = 0; wait < 3; wait += 1) {
+      vi.mocked(delay).mockImplementationOnce(deterministicDelay as typeof delay);
+    }
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    const fetcher = vi.fn(async () => response({ error: "starting" }, 503)) as typeof fetch;
+    try {
+      await expect(
+        waitForDevelopmentMcp({
+          endpoint: "http://127.0.0.1:3210/mcp",
+          fetcher,
+          timeoutMs: 1000,
+        }),
+      ).rejects.toThrow("did not become ready within 1000ms");
+      expect(requestedWaits).toEqual([250, 500, 250]);
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it("accepts reordered discovery with additional tools", async () => {
