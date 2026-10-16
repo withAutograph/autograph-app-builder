@@ -7,7 +7,7 @@ import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source
 export const resolvePublishedAppDelivery = (
   application: Pick<
     HostedOperatorSourceConfiguration["applications"][string],
-    "branch" | "gitSha" | "projectId" | "repoId"
+    "branch" | "gitSha" | "projectId" | "projectSettings" | "repoId"
   >,
   selectedRelease?: CompiledOperatorReleaseSelection,
 ): NonNullable<HostedOperatorPlan["delivery"]> => {
@@ -20,6 +20,9 @@ export const resolvePublishedAppDelivery = (
       branch: source.branch,
       gitSha: source.gitSha,
       projectId: application.projectId,
+      ...(application.projectSettings === undefined
+        ? {}
+        : { projectSettings: application.projectSettings }),
       repoId: source.repositoryId,
     };
   }
@@ -31,6 +34,9 @@ export const resolvePublishedAppDelivery = (
     branch: application.branch,
     gitSha: application.gitSha,
     projectId: application.projectId,
+    ...(application.projectSettings === undefined
+      ? {}
+      : { projectSettings: application.projectSettings }),
     repoId: application.repoId,
   };
 };

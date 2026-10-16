@@ -49,6 +49,7 @@ export type DevelopmentArguments = Readonly<{
   webKey?: string;
   webCa?: string;
   nextPort: number;
+  nextBundler?: "turbopack" | "webpack";
   evePort: number;
 }>;
 
@@ -87,6 +88,13 @@ const parseEmulatedWeb = (value: string) => {
   return value === "true";
 };
 
+const parseNextBundler = (value: string): NonNullable<DevelopmentArguments["nextBundler"]> => {
+  if (value !== "turbopack" && value !== "webpack") {
+    throw new Error("--next-bundler must be turbopack or webpack.");
+  }
+  return value;
+};
+
 const defaultStateRoot = (stateRoot: string | undefined, emulatedWeb = false) =>
   stateRoot ??
   (emulatedWeb
@@ -103,6 +111,7 @@ export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentA
     webKey?: string;
     webCa?: string;
     nextPort: number;
+    nextBundler?: "turbopack" | "webpack";
     evePort: number;
   } = { evePort: 2000, nextPort: 3000 };
   for (let index = 0; index < args.length; index += 2) {
@@ -138,6 +147,10 @@ export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentA
       }
       case "--web-ca": {
         parsed.webCa = value;
+        break;
+      }
+      case "--next-bundler": {
+        parsed.nextBundler = parseNextBundler(value);
         break;
       }
       case "--next-port": {
@@ -633,3 +646,8 @@ export const developmentDependencyKey = async (input: {
     }),
   );
 };
+
+/** Explicit bundler selection keeps Next defaults when the option is absent. */
+export const developmentNextBundlerArguments = (
+  args: Pick<DevelopmentArguments, "nextBundler">,
+): string[] => (args.nextBundler === undefined ? [] : [`--${args.nextBundler}`]);

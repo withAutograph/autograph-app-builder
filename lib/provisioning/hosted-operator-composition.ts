@@ -57,6 +57,7 @@ import {
   reportOperatorPlanningMismatch,
   observeOperatorPlanStage,
 } from "./hosted-operator-consent-diagnostic";
+import { createProjectSettingsSuccessorPlan } from "./hosted-operator-project-settings-successor";
 import { createInstallerSourceSuccessorPlan } from "./hosted-operator-installer-source-successor";
 import type { OperatorPlanStage } from "./hosted-operator-consent-diagnostic";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
@@ -891,12 +892,17 @@ export const composeHostedOperatorDependencies = (
       "journal_read",
       async () => await controlPlane.store.read(context),
     );
-    const planInstallerSourceSuccessor = async (): Promise<HostedOperatorPlan | undefined> => {
+    const planRetainedSuccessor = async (): Promise<HostedOperatorPlan | undefined> => {
       const configuredWorker = configuration.sandbox.workers[context.target.appId];
       const successor =
-        configuredWorker === undefined
+        (configuredWorker === undefined
           ? undefined
-          : createInstallerSourceSuccessorPlan(current?.record, configuredWorker, Date.now());
+          : createInstallerSourceSuccessorPlan(current?.record, configuredWorker, Date.now())) ??
+        createProjectSettingsSuccessorPlan(
+          current?.record,
+          application.projectSettings,
+          Date.now(),
+        );
       if (successor === undefined) {
         return undefined;
       }
@@ -946,9 +952,9 @@ export const composeHostedOperatorDependencies = (
         stage: "app",
       });
     }
-    // Repair the frozen installer before composing another app plan. Resource,
-    // release, access and retention intent remain exactly as originally approved.
-    const installerSuccessor = await planInstallerSourceSuccessor();
+    // Repair only a frozen installer or native app build profile before fresh composition.
+    // Resource, source, release, access and retention intent stay unchanged.
+    const installerSuccessor = await planRetainedSuccessor();
     if (installerSuccessor !== undefined) {
       return installerSuccessor;
     }

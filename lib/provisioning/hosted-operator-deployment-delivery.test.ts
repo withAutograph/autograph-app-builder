@@ -29,6 +29,11 @@ const target = {
   scopeType: "team" as const,
 };
 const sha = "a".repeat(40);
+const appProjectSettings = {
+  framework: "nextjs",
+  rootDirectory: ".",
+  sourceFilesOutsideRootDirectory: true,
+} as const;
 const plan = hostedOperatorPlanSchema.parse({
   access: [{ actorId: "actor", organizationId: "org", roles: ["reviewer"] }],
   action: "prepare",
@@ -50,7 +55,13 @@ const plan = hostedOperatorPlanSchema.parse({
     description: "Explicit Preview delivery may create duplicate deployments and usage costs.",
     owner: "owner",
   },
-  delivery: { branch: "feature", gitSha: sha, projectId: "prj_app", repoId: "repo" },
+  delivery: {
+    branch: "feature",
+    gitSha: sha,
+    projectId: "prj_app",
+    projectSettings: appProjectSettings,
+    repoId: "repo",
+  },
   effects: [
     { description: "resource", id: "resource", kind: "resources" },
     { description: "install", id: "install", kind: "install" },
@@ -110,7 +121,7 @@ interface DeliveryProjectFixture {
   accountId: string;
   framework?: string | null;
   id: string;
-  link: { repoId: string; type: string };
+  link?: { repoId: string; type: string } | null;
   name: string;
 }
 
@@ -350,11 +361,50 @@ it("requests standard Preview delivery from approved Git source and observes rea
       autograph_operator_plan: operatorPlanDigest(plan),
     },
   });
+  expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({
+    projectSettings: appProjectSettings,
+  });
+  expect(f.calls.find((call) => call.method === "POST")?.body).not.toHaveProperty("target");
+  expect(f.calls.find((call) => call.method === "POST")?.body).not.toHaveProperty("buildCommand");
+  expect(f.calls.find((call) => call.method === "POST")?.body).not.toHaveProperty("installCommand");
   expect(f.checkpoint).toHaveBeenCalled();
   f.setReady("READY");
   const result = await f.writer.reconcile(f.input);
   expect(result.status).toBe("applied");
   expect(f.calls.filter((call) => call.method === "POST")).toHaveLength(1);
+});
+it("does not send app project settings with Gateway delivery", async () => {
+  const f = fixture(gatewayPlan, null, true);
+  await f.writer.deliver(f.input);
+  expect(f.calls.find((call) => call.method === "POST")?.body).not.toHaveProperty(
+    "projectSettings",
+  );
+});
+it.each(["absent", "null"] as const)(
+  "delivers exact approved Git source to an app project with a %s Git link",
+  async (linkState) => {
+    const f = fixture();
+    if (linkState === "absent") {
+      Reflect.deleteProperty(f.project, "link");
+    } else {
+      f.project.link = null;
+    }
+    const delivered = await f.writer.deliver(f.input);
+    expect(delivered.status).toBe("applied");
+    expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({
+      gitSource: { ref: plan.delivery?.branch, repoId: plan.delivery?.repoId, sha, type: "github" },
+      project: plan.delivery?.projectId,
+    });
+    f.setReady("READY");
+    const reconciled = await f.writer.reconcile(f.input);
+    expect(reconciled.status).toBe("applied");
+  },
+);
+it("still requires a linked project for Gateway delivery", async () => {
+  const f = fixture(gatewayPlan, null, true);
+  Reflect.deleteProperty(f.project, "link");
+  await expect(f.writer.deliver(f.input)).rejects.toMatchObject({ code: "resource_mismatch" });
+  expect(f.calls.some((call) => call.method === "POST")).toBe(false);
 });
 it("delivers the approved published ref while retaining the resource branch", async () => {
   const branch = "codex/generated-app";
@@ -488,12 +538,18 @@ it.each(["owner", "repository"])(
     if (mismatch === "owner") {
       f.project.accountId = "another-team";
     } else {
-      f.project.link.repoId = "another-repo";
+      f.project.link = { repoId: "another-repo", type: "github" };
     }
     await expect(f.writer.deliver(f.input)).rejects.toMatchObject({ code: "resource_mismatch" });
     expect(f.calls.some((call) => call.method === "POST")).toBe(false);
   },
 );
+it("rejects a linked app project that uses an unsupported Git provider", async () => {
+  const f = fixture();
+  Object.assign(f.project, { link: { repoId: "repo", type: "gitlab" } });
+  await expect(f.writer.deliver(f.input)).rejects.toThrow();
+  expect(f.calls.some((call) => call.method === "POST")).toBe(false);
+});
 it.each(["owner", "repository", "branch", "commit"])(
   "rejects actual deployment %s mismatch",
   async (mismatch) => {

@@ -14,6 +14,7 @@ import {
 import {
   createDevelopmentSnapshot,
   developmentDependencyKey,
+  developmentNextBundlerArguments,
   parseDevelopmentArguments,
   removeDevelopmentSnapshot,
 } from "../lib/development/local-mode";
@@ -385,6 +386,7 @@ try {
     [
       await realpath(nodePath.join(repositoryRoot, "node_modules/next/dist/bin/next")),
       "dev",
+      ...developmentNextBundlerArguments(args),
       ...(web?.nextArgs ?? []),
       "--hostname",
       web === undefined ? "127.0.0.1" : "localhost",

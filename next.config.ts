@@ -1,4 +1,5 @@
 import { realpathSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { withEmulate } from "@emulators/adapter-next";
 import createMDX from "@next/mdx";
@@ -14,7 +15,7 @@ const externalDevelopmentEve =
   process.env.EVE_AGENT_HOST?.startsWith("http://127.0.0.1:") === true;
 
 const developmentTurbopackRoot = () => {
-  const dependencies = realpathSync(path.join(import.meta.dirname, "node_modules"));
+  const dependencies = realpathSync(createRequire(import.meta.url).resolve("next/package.json"));
   let root = realpathSync(import.meta.dirname);
   while (path.relative(root, dependencies).split(path.sep)[0] === "..") {
     root = path.dirname(root);

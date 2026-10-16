@@ -5,6 +5,7 @@ import {
 } from "./hosted-operator-shared-host-protection-successor";
 import type { SharedHostProtectionDeliveryProvenance } from "./hosted-operator-shared-host-protection-successor";
 import { recoverOriginalApprovedPlan } from "./hosted-operator-approved-plan";
+import { isProjectSettingsSuccessor } from "./hosted-operator-project-settings-successor";
 import { isInstallerSourceSuccessor } from "./hosted-operator-installer-source-successor";
 import { savedPreviewEnvironmentGitBranch } from "./native-preview-environment-scope";
 import { isDeepStrictEqual } from "node:util";
@@ -453,6 +454,8 @@ const handlePlanOperation = async (
     isSharedHostProtectionSuccessor(successorPrior.record, plan, now());
   const installerSuccessor =
     successorPrior !== undefined && isInstallerSourceSuccessor(successorPrior.record, plan, now());
+  const settingsSuccessor =
+    successorPrior !== undefined && isProjectSettingsSuccessor(successorPrior.record, plan, now());
   const assertPriorSuccessorApproval = async () => {
     if (successorPrior === undefined) {
       throw new HostedOperatorError("authorization_required");
@@ -474,11 +477,11 @@ const handlePlanOperation = async (
       throw new HostedOperatorError("authorization_required");
     }
   };
-  if (sharedHostSuccessor || installerSuccessor) {
+  if (sharedHostSuccessor || installerSuccessor || settingsSuccessor) {
     await assertPriorSuccessorApproval();
   }
   const recovered =
-    sharedHostSuccessor || installerSuccessor
+    sharedHostSuccessor || installerSuccessor || settingsSuccessor
       ? null
       : await recoverOriginalApprovedPlan(deps, context, input, appId, plan, now);
   if (recovered !== null) {
@@ -531,7 +534,7 @@ const handlePlanOperation = async (
     ...context,
     now,
     store: deps.store,
-    ...(installerSuccessor
+    ...(installerSuccessor || settingsSuccessor
       ? {
           beforeUpdate: async (record: HostedRuntimeJournalRecord) => {
             await deps.assertAuthorized({ ...context, plan, purpose: "planning" });
@@ -568,6 +571,16 @@ const handlePlanOperation = async (
         record.operator.approvalId === successorPrior.record.operator?.approvalId &&
         record.approvedByCallId === successorPrior.record.approvedByCallId &&
         isInstallerSourceSuccessor(record, plan, now());
+      const projectSettingsSuccessor =
+        settingsSuccessor &&
+        record.operator.operationRef === successorPrior.record.operator?.operationRef &&
+        record.operator.planDigest === successorPrior.record.operator?.planDigest &&
+        record.operator.approvalId === successorPrior.record.operator?.approvalId &&
+        record.approvedByCallId === successorPrior.record.approvedByCallId &&
+        isProjectSettingsSuccessor(record, plan, now());
+      if (settingsSuccessor && !projectSettingsSuccessor) {
+        throw new HostedOperatorError("operation_in_progress");
+      }
       if (sharedHostSuccessor && !sharedHostProtectionSuccessor) {
         throw new HostedOperatorError("operation_in_progress");
       }
@@ -578,6 +591,7 @@ const handlePlanOperation = async (
         !gatewaySourceSuccessor &&
         !sharedHostProtectionSuccessor &&
         !installerSourceSuccessor &&
+        !projectSettingsSuccessor &&
         (record.leaseId !== undefined ||
           record.operator.pendingEffectId !== undefined ||
           record.operator.pendingEffectAttempt !== undefined ||
@@ -631,12 +645,19 @@ const handlePlanOperation = async (
       }
       // Same-resource release changes keep credentials; old proof never attests the new plan.
       const nextOperator: ReturnType<typeof requireOperator> = { ...operator };
+      nextOperator.retainedProjectSettingsOperations =
+        record.operator.retainedProjectSettingsOperations;
       nextOperator.retainedGatewayDeliveries = record.operator.retainedGatewayDeliveries;
       nextOperator.retainedInstallerOperations = record.operator.retainedInstallerOperations;
       if (gatewaySourceSuccessor || sharedHostProtectionSuccessor) {
-        const { retainedGatewayDeliveries, retainedInstallerOperations, ...priorOperator } =
-          record.operator;
+        const {
+          retainedGatewayDeliveries,
+          retainedInstallerOperations,
+          retainedProjectSettingsOperations,
+          ...priorOperator
+        } = record.operator;
         void retainedInstallerOperations;
+        void retainedProjectSettingsOperations;
         nextOperator.retainedGatewayDeliveries = [
           ...(retainedGatewayDeliveries ?? []),
           { approvedByCallId: record.approvedByCallId, operator: priorOperator },
@@ -644,9 +665,14 @@ const handlePlanOperation = async (
         nextOperator.receipts = record.operator.receipts;
       }
       if (installerSourceSuccessor) {
-        const { retainedGatewayDeliveries, retainedInstallerOperations, ...priorOperator } =
-          record.operator;
+        const {
+          retainedGatewayDeliveries,
+          retainedInstallerOperations,
+          retainedProjectSettingsOperations,
+          ...priorOperator
+        } = record.operator;
         void retainedGatewayDeliveries;
+        void retainedProjectSettingsOperations;
         nextOperator.retainedInstallerOperations = [
           ...(retainedInstallerOperations ?? []),
           { approvedByCallId: record.approvedByCallId, operator: priorOperator },
@@ -658,6 +684,27 @@ const handlePlanOperation = async (
         nextOperator.workerCheckpoints = record.operator.workerCheckpoints;
         // A new worker binds a new context; the old attempt survives only in history.
         // No receipt or old unknown checkpoint grants authority for this new plan.
+      }
+      if (projectSettingsSuccessor) {
+        const {
+          retainedGatewayDeliveries,
+          retainedInstallerOperations,
+          retainedProjectSettingsOperations,
+          ...priorOperator
+        } = record.operator;
+        void retainedGatewayDeliveries;
+        void retainedInstallerOperations;
+        nextOperator.retainedProjectSettingsOperations = [
+          ...(retainedProjectSettingsOperations ?? []),
+          { approvedByCallId: record.approvedByCallId, operator: priorOperator },
+        ];
+        nextOperator.operationRef = record.operator.operationRef;
+        nextOperator.fenceGeneration = record.operator.fenceGeneration;
+        nextOperator.receipts = record.operator.receipts;
+        nextOperator.pendingEffectId = record.operator.pendingEffectId;
+        nextOperator.workerCheckpoints = record.operator.workerCheckpoints;
+        nextOperator.managedEnvironment = record.operator.managedEnvironment;
+        // The old unknown binding attempt remains in history; new approval gets a fresh attempt.
       }
       if (sharedHostProtectionSuccessor) {
         nextOperator.operationRef = record.operator.operationRef;
@@ -710,7 +757,12 @@ const handlePlanOperation = async (
         step: "reserved" as const,
       };
       delete next.proof;
-      if (gatewaySourceSuccessor || sharedHostProtectionSuccessor || installerSourceSuccessor) {
+      if (
+        gatewaySourceSuccessor ||
+        sharedHostProtectionSuccessor ||
+        installerSourceSuccessor ||
+        projectSettingsSuccessor
+      ) {
         delete next.leaseId;
         delete next.leaseExpiresAt;
       }

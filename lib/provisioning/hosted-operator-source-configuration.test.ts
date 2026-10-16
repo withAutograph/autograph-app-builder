@@ -27,6 +27,16 @@ describe("deployment-owned app publication configuration", () => {
     expect(applications.parse({ actual }).actual).toEqual(actual);
   });
 
+  it("accepts trusted source-derived native project settings without inventing app paths", () => {
+    const projectSettings = {
+      framework: "nextjs",
+      rootDirectory: "apps/actual-app",
+      sourceFilesOutsideRootDirectory: true,
+    };
+    const parsed = applications.parse({ actual: { ...application(), projectSettings } });
+    expect(parsed.actual?.projectSettings).toEqual(projectSettings);
+  });
+
   it.each(["branch", "projectId", "appDatabase"] as const)(
     "still requires the app's actual %s",
     (field) => {

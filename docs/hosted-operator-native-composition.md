@@ -28,7 +28,11 @@ current Production storage and treat migration as a separate approved operation.
 See the [database target and safe sequence](plans/2026-10-07-hosted-operator-deployment-and-spend-review-qualification.md).
 
 The deployment-owned configuration selects three distinct projects: app-only
-Next, Gateway/Auth-only, and private operator. It supplies exact native project,
+Next, Gateway/Auth-only, and private operator. The app-only project runs the
+selected generated app. It is separate from the hosted-app-runtime Services
+path, whose shared service credentials do not meet this operator's
+credential-isolation boundary. This operator does not migrate to or invoke that
+Services topology. It supplies exact native project,
 branch references; native Neon store/project/branch/endpoint;
 actual operator/workload OIDC identities; immutable Sandbox image and worker
 IDs/SHA256s; Auth/app database and role names; public browser/issuer origins;
@@ -78,6 +82,27 @@ compiled release. Generated app delivery consumes this `publishedSource`
 association; it never substitutes configured starter source, a baseline commit,
 or a latest-repository guess. An update records its newly observed head, while
 replaying the original publication retains its original completion marker.
+
+App project build settings come from the trusted app description and are frozen
+with the delivery plan as an optional `projectSettings` profile. The profile
+records the provider framework, the exact described app `workspacePath` as
+`rootDirectory`, and whether shared source files outside that root are included
+in the build. Do not derive an app path from its ID or invent install, build, or
+output commands. For the current Next app source, the profile is `nextjs` at
+that exact workspace path with outside-root source inclusion enabled for shared
+workspace packages. A missing profile remains valid for older configurations
+and frozen plans; it does not claim that provider project settings were
+configured or observed.
+
+The REST deployment request is explicitly bound to the approved repository,
+ref, and commit. A dedicated unlinked app project does not require Builder to
+create a persistent Vercel Git link: the approved Git source on the REST request
+is the delivery authority. If a project is linked, its repository and source
+authority checks still apply; a link to a different repository is not accepted.
+Project build settings travel in the same approval-covered delivery plan. The native REST transport forwards the frozen profile as
+`projectSettings`; provider acceptance and build results remain actual
+observations. A frozen source profile or REST request alone is not evidence of a
+successful build.
 
 If association recording fails after Git publication succeeds, preserve that
 success and use the same approved publication's supported recovery. Do not issue
@@ -142,6 +167,17 @@ observed without another POST. The existing journal retains every observed
 candidate ID, pins one independently READY candidate matching the approved
 project/environment/repository/commit/configuration, and does not rewrite the
 old frozen inventory.
+
+For an explicitly unlinked app-only project, the provider's physical Preview
+environment may be generic rather than branch-named. Keep the approved logical
+branch from the Git source on the durable owned environment row and delivery
+history; do not invent a branch-specific provider environment name. This
+unlinked-project handling does not relax repository, branch, commit, ownership,
+or readback checks for linked projects or other deployment sources. When
+assessing a first deployment, observe provider build settings and build results;
+a source fixture or settings profile alone is not evidence of actual deployment
+success. Existing source, project, and credential approval checks remain in
+force.
 
 ## Deployment pathways and current choice
 

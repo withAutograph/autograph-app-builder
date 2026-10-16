@@ -4,6 +4,7 @@ import { createHostedOperatorControlPlane } from "./hosted-operator-deployment";
 import { createOperatorWorkloadVerifier } from "./hosted-operator-workload";
 import type { OperatorWorkloadPolicy } from "./hosted-operator-workload";
 import { hostedOperatorAuthAdoptionSourceSchema } from "./hosted-operator-shared-auth-adoption";
+import { hostedOperatorAppProjectSettingsSchema } from "./hosted-operator-app-project-settings";
 
 const id = z.string().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -78,6 +79,7 @@ export const hostedOperatorSourceConfigurationSchema = z.strictObject({
       authAdoptionSource: hostedOperatorAuthAdoptionSourceSchema.optional(),
       branch: id,
       deploymentId: id.optional(),
+      projectSettings: hostedOperatorAppProjectSettingsSchema.optional(),
       gitSha: z
         .string()
         .regex(/^[a-f0-9]{40}$/u)

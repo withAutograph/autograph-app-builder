@@ -20,6 +20,7 @@ import {
   DEVELOPMENT_DEPENDENCY_BOOTSTRAP_VERSION,
   createDevelopmentSnapshot,
   developmentDependencyKey,
+  developmentNextBundlerArguments,
   fingerprintDevelopmentSource,
   parseDevelopmentArguments,
   waitForDevelopmentSourceChange,
@@ -270,6 +271,23 @@ describe("development dependency key", () => {
 });
 
 describe("development CLI", () => {
+  it("keeps the default bundler and passes an explicit supported selection to Next", () => {
+    const defaults = parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted"]);
+    expect(developmentNextBundlerArguments(defaults)).toEqual([]);
+    for (const nextBundler of ["turbopack", "webpack"] as const) {
+      const selected = parseDevelopmentArguments([
+        "--arrusted-root",
+        "/tmp/arrusted",
+        "--next-bundler",
+        nextBundler,
+      ]);
+      expect(selected.nextBundler).toBe(nextBundler);
+      expect(developmentNextBundlerArguments(selected)).toEqual([`--${nextBundler}`]);
+    }
+    expect(() =>
+      parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--next-bundler", "unknown"]),
+    ).toThrow("--next-bundler must be turbopack or webpack.");
+  });
   it("requires one explicit Arrusted checkout and rejects release-shaped inputs", () => {
     expect(() => parseDevelopmentArguments([])).toThrow(/--arrusted-root/u);
     expect(() =>

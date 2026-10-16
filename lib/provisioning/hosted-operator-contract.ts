@@ -6,6 +6,7 @@ import {
   normalActorProgramDigest,
   normalActorProgramSchema,
 } from "./hosted-operator-normal-actor-program";
+import { hostedOperatorAppProjectSettingsSchema } from "./hosted-operator-app-project-settings";
 
 const id = z.string().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -297,6 +298,7 @@ const hostedOperatorPlanDataSchema = z.strictObject({
         .regex(/^[a-f0-9]{40}$/u)
         .optional(),
       projectId: id,
+      projectSettings: hostedOperatorAppProjectSettingsSchema.optional(),
       repoId: id,
     })
     .optional(),
@@ -953,6 +955,10 @@ const hostedOperatorRecordBaseSchema = z.strictObject({
   workerCheckpoints: z.array(workerEffectCheckpointSchema).optional(),
 });
 const hostedOperatorRecordDataSchema = hostedOperatorRecordBaseSchema.extend({
+  /** Prior build settings and unresolved binding attempts are provenance, never new approval. */
+  retainedProjectSettingsOperations: z
+    .array(z.strictObject({ approvedByCallId: id, operator: hostedOperatorRecordBaseSchema }))
+    .optional(),
   /** Original installer intent and unresolved frames remain evidence, never successor approval. */
   retainedInstallerOperations: z
     .array(

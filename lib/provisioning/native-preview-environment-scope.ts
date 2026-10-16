@@ -6,13 +6,34 @@ const nativeProject = z.object({
     .nullable()
     .optional(),
 });
+const appNativeProject = z.object({
+  link: z
+    .object({
+      productionBranch: z.string().min(1).nullable().optional(),
+      repoId: z.union([z.number(), z.string().min(1)]),
+      type: z.literal("github"),
+    })
+    .nullable()
+    .optional(),
+});
 
-/** Logical Git identity stays fixed; the production branch uses generic physical Preview env scope. */
+/** Logical Git identity stays fixed; only app bindings may map an unlinked project to generic Preview. */
 export const resolveNativePreviewEnvironmentGitBranch = (
   logicalBranch: string,
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Parse actual provider project metadata here; absent metadata preserves the logical selector.
   project: unknown,
+  options: { allowUnlinkedProject?: boolean } = {},
 ): string | null => {
+  if (options.allowUnlinkedProject === true) {
+    const parsed = appNativeProject.safeParse(project);
+    if (!parsed.success) {
+      throw new Error("Native project Git link metadata is invalid.");
+    }
+    if (parsed.data.link === undefined || parsed.data.link === null) {
+      return null;
+    }
+    return parsed.data.link.productionBranch === logicalBranch ? null : logicalBranch;
+  }
   const parsed = nativeProject.safeParse(project);
   return parsed.success && parsed.data.link?.productionBranch === logicalBranch
     ? null
