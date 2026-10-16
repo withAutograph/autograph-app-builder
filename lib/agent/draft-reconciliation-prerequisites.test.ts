@@ -65,46 +65,6 @@ const sealCases: SealCase[] = [
     },
   },
   {
-    reason: "diff_progress_missing",
-    recovery: "inspect-diff",
-    change: (input) => {
-      delete candidateFor(input).reviewReadProgress;
-    },
-  },
-  {
-    reason: "diff_progress_review_changed",
-    recovery: "inspect-diff",
-    change: (input) => {
-      candidateFor(input).reviewReadProgress = {
-        reviewDigest: "private-old-merge-review",
-        baseComplete: true,
-        headComplete: true,
-      };
-    },
-  },
-  {
-    reason: "base_diff_incomplete",
-    recovery: "inspect-diff",
-    change: (input) => {
-      candidateFor(input).reviewReadProgress = {
-        reviewDigest: input.expectedReviewDigest,
-        baseComplete: false,
-        headComplete: true,
-      };
-    },
-  },
-  {
-    reason: "head_diff_incomplete",
-    recovery: "inspect-diff",
-    change: (input) => {
-      candidateFor(input).reviewReadProgress = {
-        reviewDigest: input.expectedReviewDigest,
-        baseComplete: true,
-        headComplete: false,
-      };
-    },
-  },
-  {
     reason: "workflow_not_reviewed",
     recovery: "review-app",
     change: (input) => {
@@ -179,12 +139,37 @@ describe("draft reconciliation prerequisite diagnostics", () => {
     expect(draftSealPrerequisiteDiagnostic(input)?.reason).toBe("candidate_review_missing");
   });
 
-  it("retains diff inspection recovery when validation already exists", () => {
+  it("diagnoses the actual workflow prerequisite when optional inspection is absent", () => {
     const input = sealInput();
     delete candidateFor(input).reviewReadProgress;
     input.state.phase = "validated";
-    expect(draftSealPrerequisiteDiagnostic(input)?.recovery).toBe("inspect-diff");
+    expect(draftSealPrerequisiteDiagnostic(input)?.recovery).toBe("review-app");
     expect(candidateFor(input).validation).toEqual({ resolvedTree: "private-tree" });
+  });
+
+  it.each([
+    { name: "absent" },
+    {
+      name: "partial",
+      progress: { reviewDigest: "private-merge-review", baseComplete: true, headComplete: false },
+    },
+    {
+      name: "stale",
+      progress: {
+        reviewDigest: "private-old-merge-review",
+        baseComplete: false,
+        headComplete: false,
+      },
+    },
+  ])("does not require $name optional inspection progress", ({ progress }) => {
+    const input = sealInput();
+    const candidate = candidateFor(input);
+    if (progress === undefined) {
+      delete candidate.reviewReadProgress;
+    } else {
+      candidate.reviewReadProgress = progress;
+    }
+    expect(draftSealPrerequisiteDiagnostic(input)).toBeNull();
   });
 
   it("preserves the existing fallback for satisfied or unclassified input", () => {

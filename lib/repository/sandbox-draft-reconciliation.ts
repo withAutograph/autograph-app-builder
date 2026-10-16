@@ -854,7 +854,7 @@ const directory = mkdtempSync(join(tmpdir(), "builder-draft-diff-"));
 const output = join(directory, "diff");
 const descriptor = openSync(output, "w+");
 try {
-  const result = spawnSync("git", ["-C", root, "diff", "--no-ext-diff", "--no-textconv", "--binary", from, to, "--", appPath], { stdio: ["ignore", descriptor, "pipe"], encoding: "utf8" });
+  const result = spawnSync("git", ["--literal-pathspecs", "-C", root, "diff", "--no-ext-diff", "--no-textconv", "--binary", from, to, "--", appPath], { stdio: ["ignore", descriptor, "pipe"], encoding: "utf8" });
   if (result.status !== 0) throw Error("Git diff failed: " + (result.stderr || "no diagnostic output"));
   const totalBytes = fstatSync(descriptor).size;
   if (cursor > totalBytes) throw Error("Diff cursor is past the end of the reviewed tree");
@@ -868,13 +868,14 @@ try {
 }
 `;
 
-/** Page the exact resolved app diff against either parent without a total-size gate. */
+/** Optionally inspect exact raw diff bytes, with an explicit file target when needed. */
 export const readDraftReconciliationDiff = async (input: {
   sandbox: SandboxSession;
   prepared: PreparedDraftReconciliation;
   resolvedTree: string;
   against: "base" | "head";
   cursor?: number;
+  path?: string;
 }): Promise<{
   cursor: number;
   nextCursor: number | null;
@@ -883,6 +884,9 @@ export const readDraftReconciliationDiff = async (input: {
 }> => {
   if (!SHA.test(input.resolvedTree)) {
     throw new Error("Builder cannot read the resolution diff: the reviewed tree ID is invalid.");
+  }
+  if (input.path !== undefined && !safeSourcePath(input.path)) {
+    throw new Error("The requested diff path must stay inside the selected repository.");
   }
   await assertDraftReconciliationCandidateAvailable(input);
   const currentTree = await checked(
@@ -896,7 +900,7 @@ export const readDraftReconciliationDiff = async (input: {
     );
   }
   const from = input.against === "base" ? input.prepared.baseSha : input.prepared.headSha;
-  const pathspec = input.against === "base" ? `apps/${input.prepared.appId}` : ".";
+  const pathspec = input.path ?? (input.against === "base" ? `apps/${input.prepared.appId}` : ".");
   const raw = await checked(
     input.sandbox,
     `read the resolved app diff against ${input.against}`,

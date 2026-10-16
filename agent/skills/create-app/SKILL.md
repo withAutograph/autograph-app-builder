@@ -280,11 +280,17 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    not review or seal yet. If a tool call is interrupted, resume the same
    saved session and repeat the pending command. A changed checkout restarts
    validation from the first command. Use
-   `review_github_draft_pr_reconciliation`, then page through both complete
-   diffs with `inspect_github_draft_pr_reconciliation`: the final diff against
-   the current base and the delta from the old PR head.
-   Seal that exact result with `seal_github_draft_pr_reconciliation`. Pass its
-   returned `approvalReceipt` verbatim to `reconcile_github_draft_pr`; the
+   `review_github_draft_pr_reconciliation` to record the exact validated
+   candidate and two-parent metadata review. Its bounded summary reports honest
+   full counts and all repository head metadata. This deterministic receipt does
+   not replace the independent app source assessment retained through
+   `accept_change_set`. Use `inspect_github_draft_pr_reconciliation` only when
+   additional inspection is useful: `kind: "changes"` pages the file index;
+   `kind: "diff"` supports raw byte cursors and path selection for the final
+   diff against the current base or the delta from the old PR head. Neither
+   pagination must be exhausted before sealing. Seal the validated, reviewed
+   result with `seal_github_draft_pr_reconciliation`. Pass its returned
+   `approvalReceipt` verbatim to `reconcile_github_draft_pr`; the
    receipt names the existing PR branch head, not the PR's base branch. Ask
    for a separate update approval before moving the branch. If the
    base or PR head moves, prepare, validate, and review the new result again.

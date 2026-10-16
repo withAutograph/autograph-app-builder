@@ -483,6 +483,38 @@ describe("isolated draft reconciliation", () => {
     expect(Buffer.from(headDiff.chunkBase64, "base64").toString("utf-8")).toContain(
       "docs/platform.md",
     );
+    const platformOnly = await readDraftReconciliationDiff({
+      against: "head",
+      path: "docs/platform.md",
+      prepared,
+      resolvedTree: result.resolvedTree,
+      sandbox,
+    });
+    const platformText = Buffer.from(platformOnly.chunkBase64, "base64").toString("utf-8");
+    expect(platformText).toContain("docs/platform.md");
+    expect(platformText).not.toContain("apps/demo/tests/journey.spec.ts");
+    const tail = await readDraftReconciliationDiff({
+      against: "head",
+      cursor: 12,
+      path: "docs/platform.md",
+      prepared,
+      resolvedTree: result.resolvedTree,
+      sandbox,
+    });
+    expect(Buffer.from(tail.chunkBase64, "base64").toString("utf-8")).toBe(platformText.slice(12));
+    writeFileSync(path.join(prepared.root, "apps/demo/release.bin"), Buffer.from([0, 1, 2, 255]));
+    git(prepared.root, "add", "--", "apps/demo/release.bin");
+    const binaryTree = git(prepared.root, "write-tree");
+    const binaryDiff = await readDraftReconciliationDiff({
+      against: "base",
+      path: "apps/demo/release.bin",
+      prepared,
+      resolvedTree: binaryTree,
+      sandbox,
+    });
+    expect(Buffer.from(binaryDiff.chunkBase64, "base64").toString("utf-8")).toContain(
+      "GIT binary patch",
+    );
   });
 
   it("rebuilds outside-scope metadata contamination while preserving app repairs, renames, deletes, modes and the old index", async () => {

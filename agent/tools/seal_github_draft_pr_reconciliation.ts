@@ -29,9 +29,6 @@ export default defineTool({
       candidate === null ||
       candidate.review === undefined ||
       candidate.validation === undefined ||
-      candidate.reviewReadProgress?.reviewDigest !== candidate.review?.digest ||
-      !candidate.reviewReadProgress.baseComplete ||
-      !candidate.reviewReadProgress.headComplete ||
       state.phase !== "reviewed" ||
       state.githubSource === undefined ||
       state.githubSource.digest !== candidate.githubSourceDigest ||

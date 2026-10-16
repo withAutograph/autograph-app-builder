@@ -17,9 +17,10 @@ its actual commands and installed versions.
 Builder's [create-app skill](../agent/skills/create-app/SKILL.md) owns the product
 and saved-session lifecycle: design and prototype, private build approval,
 repository execution, validation and paged logs, private preview, candidate
-formatting, current-base reconciliation, complete diff review, and separate
-publication approval. Preserve those implemented tools rather than recreate
-their operations with direct app edits.
+formatting, current-base reconciliation, independent semantic source review,
+optional bounded diff inspection, and separate publication approval. Preserve
+those implemented tools rather than recreate their operations with direct app
+edits.
 
 Private validation, GitHub checks, protected Preview evidence, and Production
 readiness are separate claims. Follow the selected app's current authentication
