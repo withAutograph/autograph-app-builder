@@ -168,6 +168,36 @@ const operatorExecutionFailure = operatorPlanningFailure
   });
 export type OperatorExecutionFailure = z.infer<typeof operatorExecutionFailure>;
 
+const hostedEnvironmentBindingStage = z.enum([
+  "input_validation",
+  "credential_read",
+  "project_read",
+  "environment_list",
+  "environment_value_read",
+  "checkpoint",
+  "create_post",
+  "update_patch",
+  "delete_request",
+  "readback",
+]);
+const hostedEnvironmentBindingFailure = z.strictObject({
+  stage: hostedEnvironmentBindingStage,
+  reason: z.enum([
+    "input_rejected",
+    "authorization_rejected",
+    "credential_unavailable",
+    "credential_read_failed",
+    "provider_request_failed",
+    "provider_rejected",
+    "git_reference_rejection",
+    "provider_response_invalid",
+    "checkpoint_failed",
+    "state_conflict",
+  ]),
+  httpStatus: z.number().int().min(100).max(599).optional(),
+});
+export type HostedEnvironmentBindingFailure = z.infer<typeof hostedEnvironmentBindingFailure>;
+
 const runtimePreparationStage = z.enum([
   "approval_evaluation",
   "approval_module_loading",
@@ -593,6 +623,7 @@ const metadata = z.strictObject({
   phase,
   planningFailure: operatorPlanningFailure.optional(),
   executionFailure: operatorExecutionFailure.optional(),
+  hostedEnvironmentBindingFailure: hostedEnvironmentBindingFailure.optional(),
   gatewayBindings: gatewayBindingsDiagnostic.optional(),
   planningMismatch: z
     .strictObject({
@@ -654,6 +685,32 @@ export const createHostedOperatorConsentDiagnostic = (
       /* Diagnostics never change authorization or pause behavior. */
     }
   };
+};
+
+/** Report a hosted environment-binding failure using only closed stage/reason/status values. */
+export const reportHostedEnvironmentBindingFailure = (
+  sessionId: string,
+  failure: HostedEnvironmentBindingFailure,
+  sink?: HostedOperatorConsentDiagnosticSink,
+): void => {
+  try {
+    const parsed = hostedEnvironmentBindingFailure.safeParse(failure);
+    if (!parsed.success) {
+      return;
+    }
+    createHostedOperatorConsentDiagnostic(
+      sessionId,
+      sink,
+    )({
+      boundary: "operator",
+      phase: "complete",
+      stage: "operator_request",
+      outcome: "setup_unavailable",
+      hostedEnvironmentBindingFailure: parsed.data,
+    });
+  } catch {
+    /* Reporting cannot change binding behavior. */
+  }
 };
 
 /** Report failed comparisons using fixed labels, without receiving their values. */
