@@ -64,14 +64,15 @@ export const createHostedRuntimeApprovedReferenceReader = (ports: ReferencePorts
       session.status !== "cancelled",
       session.status !== "completed",
     ].every(Boolean);
-    if (
-      !matches ||
-      (expected !== undefined &&
-        (expected.sessionId !== session.sessionId ||
-          expected.adapterSessionId !== session.adapterSessionId ||
-          expected.adapterGeneration !== session.adapterGeneration ||
-          expected.cancellationRevision !== (session.cancellationRevision ?? 0)))
-    ) {
+    const snapshotMatches =
+      expected === undefined ||
+      [
+        expected.sessionId === session.sessionId,
+        expected.adapterSessionId === session.adapterSessionId,
+        expected.adapterGeneration === session.adapterGeneration,
+        expected.cancellationRevision === (session.cancellationRevision ?? 0),
+      ].every(Boolean);
+    if (!matches || !snapshotMatches) {
       throw denied();
     }
     return session;

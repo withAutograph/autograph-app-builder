@@ -84,6 +84,16 @@ const matchesRestoredApproval = (
     restored.plan !== undefined && operatorPlanDigest(restored.plan) === original.planDigest,
   ].every(Boolean);
 
+const shouldRestoreOriginalPlan = (
+  options: HostedRuntimeApprovalReadOptions,
+  current: OperatorPublicResult,
+) =>
+  [
+    options.recoverOriginalPlan !== false,
+    current.status === "blocked",
+    current.code === "resource_mismatch",
+  ].every(Boolean);
+
 /** Reuses only a real terminal receipt and independently checks the current protected operation. */
 export const createHostedRuntimePriorApprovalReader =
   (
@@ -170,10 +180,7 @@ export const createHostedRuntimePriorApprovalReader =
       ctx.abortSignal,
     );
     ctx.abortSignal.throwIfAborted();
-    if (
-      dependencies.recoverOriginalPlan !== false &&
-      [current.status === "blocked", current.code === "resource_mismatch"].every(Boolean)
-    ) {
+    if (shouldRestoreOriginalPlan(dependencies, current)) {
       const restored = await operator.request(
         {
           action: "plan",
