@@ -1,5 +1,9 @@
 import { setBuilderSandboxNetworkPolicy } from "../../lib/sandbox/builder-sandbox";
 import { defineTool } from "eve/tools";
+import {
+  draftPreparationPrerequisiteDiagnostic,
+  draftPrerequisiteMessage,
+} from "@/lib/agent/draft-reconciliation-prerequisites";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import { z } from "zod";
 
@@ -92,7 +96,10 @@ export default defineTool({
       state.sourceReceipt.sourceKind !== "existing-repository"
     ) {
       throw new Error(
-        "Review the selected existing app and its current source before preparing a draft PR reconciliation.",
+        draftPrerequisiteMessage(
+          draftPreparationPrerequisiteDiagnostic(state),
+          "Review the selected existing app and its current source before preparing a draft PR reconciliation.",
+        ),
       );
     }
     assertExistingAppReviewScope(

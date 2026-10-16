@@ -1,4 +1,8 @@
 import { defineTool } from "eve/tools";
+import {
+  draftPrerequisiteMessage,
+  draftSealPrerequisiteDiagnostic,
+} from "@/lib/agent/draft-reconciliation-prerequisites";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import { z } from "zod";
 
@@ -35,7 +39,14 @@ export default defineTool({
       candidate.review.digest !== input.expectedReviewDigest
     ) {
       throw new Error(
-        "The selected app or resolved merge changed. Validate the candidate and review both current diffs before sealing.",
+        draftPrerequisiteMessage(
+          draftSealPrerequisiteDiagnostic({
+            candidate,
+            state,
+            expectedReviewDigest: input.expectedReviewDigest,
+          }),
+          "The selected app or resolved merge changed. Validate the candidate and review both current diffs before sealing.",
+        ),
       );
     }
     const observed = await inspectDraftReconciliation({
