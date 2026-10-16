@@ -121,6 +121,9 @@ const currentValidationStep = (step: ValidationStep, appId: string): ValidationS
       )?.groups?.task;
       return task === undefined ? step : { ...step, command: additionalCheckCommand(task) };
     }
+    default: {
+      return step;
+    }
   }
 };
 interface ValidationStepResult {

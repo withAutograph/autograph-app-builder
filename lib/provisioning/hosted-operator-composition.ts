@@ -84,22 +84,21 @@ const sharedHostProtectionPrerequisite = (
   configuration: HostedOperatorSourceConfiguration,
 ) => {
   const plan = record?.operator?.plan;
-  if (plan === undefined) {
-    return;
-  }
-  const configuredHost = [
-    sameOperatorSelection(plan.selection, {
-      appId: context.target.appId,
-      branch: context.target.branch,
-      environment: context.target.environment,
-      projectId: context.target.projectId,
-      sessionId: context.target.sessionId,
-    }),
-    plan.gatewayDelivery?.projectId === configuration.gateway.projectId,
-    plan.publicGateway?.projectId === configuration.gateway.projectId,
-    plan.deploymentBoundary?.gateway.projectId === configuration.gateway.projectId,
-    plan.deploymentBoundary?.teamId === configuration.teamId,
-  ].every(Boolean);
+  const configuredHost =
+    plan !== undefined &&
+    [
+      sameOperatorSelection(plan.selection, {
+        appId: context.target.appId,
+        branch: context.target.branch,
+        environment: context.target.environment,
+        projectId: context.target.projectId,
+        sessionId: context.target.sessionId,
+      }),
+      plan.gatewayDelivery?.projectId === configuration.gateway.projectId,
+      plan.publicGateway?.projectId === configuration.gateway.projectId,
+      plan.deploymentBoundary?.gateway.projectId === configuration.gateway.projectId,
+      plan.deploymentBoundary?.teamId === configuration.teamId,
+    ].every(Boolean);
   return configuredHost ? createSharedHostProtectionSuccessorPlan(record, Date.now()) : undefined;
 };
 
