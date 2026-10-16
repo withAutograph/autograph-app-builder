@@ -304,7 +304,9 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
         if (observed.id !== target.projectId || observed.accountId !== target.scopeId) {
           throw unavailable();
         }
-        return resolveNativePreviewEnvironmentGitBranch(deploymentTarget.branch, project);
+        return resolveNativePreviewEnvironmentGitBranch(deploymentTarget.branch, project, {
+          allowUnlinkedProject: true,
+        });
       })();
       return writeGitBranch;
     };

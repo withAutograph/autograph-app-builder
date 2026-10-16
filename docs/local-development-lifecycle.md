@@ -2,6 +2,12 @@
 
 `mise run dev` is the fast, live-code loop: edit the checkout, let Next HMR or the affected Eve/package process reload, and retry the behavior. Do not rebuild artifacts, reinstall the plugin, run broad suites, publish, or deploy after each edit.
 
+Next uses Turbopack by default. If its module resolver fails on the actual linked
+dependency layout, use `mise run dev -- --arrusted-root /absolute/path/to/arrusted
+--next-bundler webpack` to select Next's supported Webpack development bundler.
+This keeps HMR and the same Eve, Sandbox, credential, and session boundaries;
+it does not install packages or change the execution backend.
+
 Eve reads the canonical `--arrusted-root` checkout directly. Ordinary Arrusted
 source edits become the next planning input without cycling Eve or replacing
 its local queue. App Builder runtime edits and child lifecycle events retain

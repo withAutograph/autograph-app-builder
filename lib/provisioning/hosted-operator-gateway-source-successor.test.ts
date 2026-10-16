@@ -7,6 +7,7 @@ import {
 /* oxlint-disable eslint/require-await -- Typed in-memory journal and provider callbacks intentionally resolve without external I/O. */
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import { createProjectSettingsSuccessorPlan } from "./hosted-operator-project-settings-successor";
 import { createHostedOperatorClient } from "./hosted-operator-client";
 import { createProtectedHostedOperatorHandler } from "./hosted-operator-service";
 import type { ProtectedHostedOperatorDependencies } from "./hosted-operator-service";
@@ -1191,4 +1192,140 @@ describe("pending app installer repair", () => {
     });
     expect(f.row).toEqual(previous);
   });
+});
+
+describe("pending native app project settings repair", () => {
+  const interruptedBindings = async () => {
+    const f = fixture();
+    const originalPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      stage: "app",
+      delivery: {
+        branch: selection.branch,
+        gitSha: "1".repeat(40),
+        projectId: selection.projectId,
+        repoId: "fixture-repository",
+      },
+      effects: [
+        ...plan.effects,
+        { id: "delivery", kind: "delivery", description: "Deploy accepted app source" },
+      ],
+    });
+    f.deps.plan = async () => originalPlan;
+    const original = await prepared(f);
+    const execute = f.deps.executeEffect;
+    f.deps.executeEffect = async (input) => {
+      if (input.effect.kind === "bindings") {
+        throw new HostedOperatorError("operator_unavailable");
+      }
+      return await execute(input);
+    };
+    f.approve();
+    expect(await f.client.request(original)).toMatchObject({ code: "operator_unavailable" });
+    const previous = f.row;
+    if (previous?.record.operator === undefined) {
+      throw new Error("Missing interrupted binding fixture");
+    }
+    const repaired = hostedOperatorPlanSchema.parse({
+      ...originalPlan,
+      delivery: {
+        ...originalPlan.delivery,
+        projectSettings: {
+          framework: "fixture-framework",
+          rootDirectory: "apps/fixture",
+          sourceFilesOutsideRootDirectory: true,
+        },
+      },
+    });
+    const proposed = createProjectSettingsSuccessorPlan(
+      previous.record,
+      repaired.delivery?.projectSettings,
+      Date.now(),
+    );
+    expect(proposed).toEqual(repaired);
+    expect(
+      createProjectSettingsSuccessorPlan(previous.record, undefined, Date.now()),
+    ).toBeUndefined();
+    f.deps.plan = async () => repaired;
+    return { f, original, previous, repaired, execute };
+  };
+
+  it("preserves completed effects and unknown attempt history under fresh normal approval", async () => {
+    const { f, original, previous, repaired, execute } = await interruptedBindings();
+    const { readApproval } = f.deps;
+    f.deps.readApproval = async (input) =>
+      input.planDigest === original.planDigest ? await readApproval(input) : null;
+    const successor = { ...(await prepared(f)), callId: "settings-repair-call" };
+    expect(successor.operationRef).toBe(original.operationRef);
+    expect(successor.planDigest).toBe(operatorPlanDigest(repaired));
+    expect(f.row?.record).toMatchObject({
+      approvedByCallId: "operator:unapproved-plan",
+      privateState: previous.record.privateState,
+      operator: {
+        operationRef: original.operationRef,
+        fenceGeneration: previous.record.operator?.fenceGeneration,
+        receipts: previous.record.operator?.receipts,
+        pendingEffectId: "bind",
+        plan: { retention: previous.record.operator?.plan.retention },
+        retainedProjectSettingsOperations: [
+          {
+            approvedByCallId: original.callId,
+            operator: {
+              planDigest: original.planDigest,
+              pendingEffectAttempt: previous.record.operator?.pendingEffectAttempt,
+            },
+          },
+        ],
+      },
+    });
+    expect(f.row?.record.operator?.pendingEffectAttempt).toBeUndefined();
+    expect(await f.client.request(successor)).toMatchObject({ code: "authorization_required" });
+    expect(await f.client.request(original)).toMatchObject({ code: "resource_mismatch" });
+    f.deps.readApproval = readApproval;
+    const effects: string[] = [];
+    f.deps.executeEffect = async (input) => {
+      effects.push(input.effect.kind);
+      return await execute(input);
+    };
+    expect(await f.client.request(successor)).toMatchObject({ status: "prepared" });
+    expect(effects).toEqual(["bindings", "delivery"]);
+  });
+
+  it.each(["approval", "lease", "source", "expiry", "delivery-started"])(
+    "does not replace the retained operation when %s changes",
+    async (change) => {
+      const { f, original, previous, repaired } = await interruptedBindings();
+      if (change === "approval") {
+        f.deps.readApproval = async () => null;
+      }
+      if (change === "lease") {
+        previous.record.leaseId = "active-lease";
+        previous.record.leaseExpiresAt = "2099-01-01T00:00:00.000Z";
+        f.row = previous;
+      }
+      if (change === "source") {
+        f.deps.plan = async () =>
+          hostedOperatorPlanSchema.parse({
+            ...repaired,
+            delivery: { ...repaired.delivery, gitSha: "2".repeat(40) },
+          });
+      }
+      if (change === "expiry") {
+        f.deps.plan = async () => ({
+          ...repaired,
+          retention: { ...repaired.retention, expiresAt: "2028-01-01T00:00:00.000Z" },
+        });
+      }
+      if (change === "delivery-started" && previous.record.operator !== undefined) {
+        previous.record.operator.pendingEffectId = "delivery";
+        f.row = previous;
+      }
+      expect(
+        await f.client.request({ action: "plan", operation: "prepare", selection }),
+      ).toMatchObject({
+        code: change === "approval" ? "authorization_required" : "operation_in_progress",
+      });
+      expect(f.row?.record.operator?.planDigest).toBe(original.planDigest);
+    },
+  );
 });

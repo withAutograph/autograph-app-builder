@@ -38,6 +38,33 @@ it("uses the selected release's actual published repository, ref and commit", ()
   });
   expect(application.branch).toBe("main");
 });
+it("freezes configured project settings alongside the selected release source", () => {
+  const projectSettings = {
+    framework: "nextjs",
+    rootDirectory: "apps/spend-review",
+    sourceFilesOutsideRootDirectory: true,
+  };
+  const publishedSource = {
+    branch: "codex/generated-app",
+    changeSetDigest: "d".repeat(64),
+    gitSha: "e".repeat(40),
+    gitTree: "f".repeat(40),
+    repositoryId: "generated-repository",
+    reviewDigest: "b".repeat(64),
+  };
+  expect(
+    resolvePublishedAppDelivery(
+      { ...application, projectSettings },
+      { ...release, publishedSource },
+    ),
+  ).toEqual({
+    branch: publishedSource.branch,
+    gitSha: publishedSource.gitSha,
+    repoId: publishedSource.repositoryId,
+    projectId: application.projectId,
+    projectSettings,
+  });
+});
 it("does not substitute configured starter source for an unpublished generated release", () => {
   expect(() => resolvePublishedAppDelivery(application, release)).toThrow(
     "app_source_publication_required",

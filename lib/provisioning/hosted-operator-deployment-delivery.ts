@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import type { createHostedOperatorControlPlane } from "./hosted-operator-deployment";
 import { HostedOperatorError, operatorPlanDigest } from "./hosted-operator-contract";
-import type { OperatorDeploymentCandidate } from "./hosted-operator-contract";
+import type { HostedOperatorPlan, OperatorDeploymentCandidate } from "./hosted-operator-contract";
 import type { HostedOperatorDeploymentContext } from "./hosted-operator-service";
 import { isSharedHostProtectionDeliveryProvenance } from "./hosted-operator-shared-host-protection-successor";
 
@@ -73,9 +73,20 @@ const pageSchema = z.object({
 const projectSchema = z.object({
   accountId: id,
   id,
-  link: z.object({ repoId: z.union([z.number(), id]), type: z.literal("github") }),
+  link: z
+    .object({ repoId: z.union([z.number(), id]), type: z.literal("github") })
+    .nullable()
+    .optional(),
   name: id,
 });
+const projectLinkMatchesDelivery = (
+  project: z.infer<typeof projectSchema>,
+  repoId: string,
+  allowUnlinked: boolean,
+) =>
+  project.link === undefined || project.link === null
+    ? allowUnlinked
+    : String(project.link.repoId) === repoId;
 
 const aliasCategorySchema = z.enum(["ok", "not_found", "rejected", "unknown", "redirected"]);
 
@@ -216,6 +227,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
             meta: Record<string, string>;
             name: string;
             project: string;
+            projectSettings?: NonNullable<HostedOperatorPlan["delivery"]>["projectSettings"];
           }
         | { alias: string },
       allowNotFound = false,
@@ -324,6 +336,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         if (
           project.id !== delivery.projectId ||
           project.accountId !== input.target.scopeId ||
+          !projectLinkMatchesDelivery(project, delivery.repoId, deps.target !== "gateway") ||
           team.id !== input.target.scopeId
         ) {
           throw new HostedOperatorError("resource_mismatch");
@@ -627,7 +640,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       const exactProject = [
         project.id === reader.delivery.projectId,
         project.accountId === input.target.scopeId,
-        String(project.link.repoId) === reader.delivery.repoId,
+        projectLinkMatchesDelivery(project, reader.delivery.repoId, deps.target !== "gateway"),
         reader.delivery.gitSha !== undefined,
       ].every(Boolean);
       if (!exactProject) {
@@ -648,6 +661,10 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
             meta: reader.expectedMeta,
             name: project.name,
             project: project.id,
+            ...((deps.target ?? "app") === "app" &&
+            input.plan.delivery?.projectSettings !== undefined
+              ? { projectSettings: input.plan.delivery.projectSettings }
+              : {}),
           },
         ),
       );

@@ -179,7 +179,7 @@ const fixture = (configurationId?: string | null) => {
   const project = {
     id: target.projectId,
     accountId: target.scopeId,
-    link: { productionBranch: "main" },
+    link: { productionBranch: "main", repoId: "repository_fixture", type: "github" },
   };
   // oxlint-disable-next-line eslint/complexity -- One fixture covers the provider's fixed read/write endpoint behaviors.
   const fetcher = vi.fn(async (url: URL | string | Request, init?: RequestInit) => {
@@ -677,6 +677,36 @@ it("binds generic Preview for the actual production branch without changing appr
   const firstIds = result.rows.map((row) => row.id);
   await f.writer.bind(f.input, values);
   expect(f.input.managedEnvironment?.map((row) => row.id)).toEqual(firstIds);
+});
+it.each(["absent", "null"] as const)(
+  "binds app credentials to generic Preview when the app project Git link is %s",
+  async (linkState) => {
+    const f = fixture();
+    if (linkState === "absent") {
+      Reflect.deleteProperty(f.project, "link");
+    } else {
+      Object.assign(f.project, { link: null });
+    }
+    const result = await f.writer.bind(f.input, values);
+    expect(result.rows).toHaveLength(5);
+    expect(result.rows.every((row) => row.branch === target.branch && row.gitBranch === null)).toBe(
+      true,
+    );
+    for (const request of f.requests.filter((item) => item.method === "POST")) {
+      expect(request.body?.target).toEqual(["preview"]);
+      expect(request.body).not.toHaveProperty("gitBranch");
+    }
+  },
+);
+it("rejects malformed app project Git metadata before creating environment rows", async () => {
+  const f = fixture();
+  Object.assign(f.project, {
+    link: { productionBranch: 42, repoId: "repository_fixture", type: "github" },
+  });
+  await expect(f.writer.bind(f.input, values)).rejects.toMatchObject({
+    code: "operator_unavailable",
+  });
+  expect(f.requests.some((request) => request.method === "POST")).toBe(false);
 });
 it("retains legacy saved branch-specific references exactly after production-branch settings change", async () => {
   const f = fixture();
