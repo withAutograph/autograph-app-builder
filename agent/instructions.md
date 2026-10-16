@@ -231,9 +231,14 @@ iteration. Missing handoff metadata does not invalidate private app validation.
 Builder source and Preview evidence do not prove protected access or hosted
 Production readiness. Do not restore a retired demo authentication bypass to
 make a walkthrough pass.
-After technical validation, use `start_app_preview` with the repository's actual
-development command and the implemented app's route. It returns a private,
-expiring browser URL only after the running app answers an HTTP readiness check.
+Use `start_app_preview` for requested local delivery or to exercise
+uncovered behavior, with the repository's actual development command and the
+implemented app's route. For requested hosted delivery, technically validated
+and reviewed source may proceed through the existing publication approval flow
+without successful private UI startup. Report an actual startup failure; claim
+a working local or hosted Preview only after exercising that actual app.
+The tool returns a private, expiring browser URL only after the running app
+answers an HTTP readiness check.
 If the selected app has a repository-owned `app:local` task and its preview
 requires local data, call `prepare-app-local-preview` in the same private sandbox
 before checking product behavior. Match the development server's listening port
