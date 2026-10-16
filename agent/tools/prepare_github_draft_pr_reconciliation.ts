@@ -18,6 +18,8 @@ import type { DraftReconciliationCandidate } from "@/lib/agent/draft-reconciliat
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { repositoryAccessReceiptState } from "@/lib/agent/repository-access-state";
 import { prepareWithVerifiedGitHubFetchRecovery } from "@/lib/agent/verified-github-fetch-recovery";
+import { resolveAcceptedAppSpecContent } from "@/lib/agent/accepted-app-spec-content";
+import { recoverLegacyAppSpecTransport } from "@/lib/repository/legacy-app-spec-recovery";
 import { appBaselineState } from "@/lib/agent/app-baseline-state";
 import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-set";
 import { prepareDraftReconciliation } from "@/lib/repository/sandbox-draft-reconciliation";
@@ -85,6 +87,27 @@ const candidateRecoveryGuidance = (
   return undefined;
 };
 
+const legacyTransportRecoveryResult = (
+  status: Awaited<ReturnType<typeof recoverLegacyAppSpecTransport>>["status"],
+  reviewed: boolean,
+) => {
+  if (status === "restored" || (status === "already-restored" && reviewed)) {
+    return {
+      status: "review_refresh_required",
+      recovery:
+        "Builder preserved the accepted AppSpec in its private planning input and restored only its proven legacy transport file to the selected source preimage. App files, validation results, and the old merge candidate remain intact. Continue automatically in this same session with change_set_status and accept_change_set to review the current app-only diff, then prepare this existing draft again. No user Continue reply or new dependency setup is needed; the later exact GitHub update still requires publication approval.",
+    };
+  }
+  if (status === "preserved" && reviewed) {
+    return {
+      status: "needs_repair",
+      recovery:
+        "Builder preserved the source file and accepted AppSpec because its exact legacy transport preimage could not be proven. The app and old merge candidate remain intact. Inspect the current selected source and retained AppSpec through normal Builder tools, resolve its provenance, then refresh the normal change-set review before preparing this same draft. Do not delete or publish an unknown platform file; technical recovery needs no new user Continue reply.",
+    };
+  }
+  return null;
+};
+
 export default defineTool({
   description:
     "Fetch the live base and existing draft head into an isolated Builder checkout and prepare a non-force merge candidate. This does not update GitHub. It reports exact app-owned conflict paths and refuses platform-owned conflicts. If candidate validation reports outside-app metadata changes, run this tool again: Builder preserves the old checkout, creates a fresh private candidate, and carries app repairs only across the same verified draft/base/review lineage. This technical recovery needs no human lockfile edit or new private-worktree approval.",
@@ -121,6 +144,32 @@ export default defineTool({
       throw new Error(
         "Builder cannot fetch the current draft and base: the selected repository no longer matches its verified GitHub access. Reconnect this repository, then retry reconciliation.",
       );
+    }
+    const transport = await recoverLegacyAppSpecTransport({
+      sandbox,
+      sessionId: ctx.session.id,
+      repository: state.githubSource.repository,
+      appId: state.appSpec.appId,
+      artifactRevision: state.appSpec.artifactRevision,
+      appSpecDigest: state.appSpec.digest,
+      apply: state.applyReceipt,
+      baseline: appBaselineState.get(),
+      readAcceptedContent: async () =>
+        await resolveAcceptedAppSpecContent({
+          accepted: state.appSpec,
+          artifacts: state.artifacts,
+          sessionAuth: ctx.session.auth,
+          sessionId: ctx.session.id,
+        }),
+    });
+    const legacyTransportPath = `.config/app-specs/${state.appSpec.appId}.md`;
+    const reviewedTransport = state.reviewReceipt.changes.some(
+      (change) =>
+        change.path === legacyTransportPath && change.after?.digest === state.appSpec.digest,
+    );
+    const recovery = legacyTransportRecoveryResult(transport.status, reviewedTransport);
+    if (recovery !== null) {
+      return recovery;
     }
     const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
     const priorPublishedProposalDigest =
@@ -228,9 +277,9 @@ export default defineTool({
       recovery?: string;
       gitTransportRecovery?: string;
     } = result;
-    const recovery = candidateRecoveryGuidance(prepared, original);
-    if (recovery !== undefined) {
-      output.recovery = recovery;
+    const candidateRecovery = candidateRecoveryGuidance(prepared, original);
+    if (candidateRecovery !== undefined) {
+      output.recovery = candidateRecovery;
     }
     if (retriedGitFetch) {
       output.gitTransportRecovery =
