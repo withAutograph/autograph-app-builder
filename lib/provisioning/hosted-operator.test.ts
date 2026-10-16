@@ -1361,6 +1361,82 @@ describe("protected hosted operator boundary", () => {
       [retryAttemptId, "applied"],
     ]);
   });
+  it.each([undefined, "7a44b7c5-02fd-4548-99f3-eaa2c178f03d"])(
+    "reserves missing readback authority while preserving a matching attempt: %s",
+    async (existingAttemptId) => {
+      const f = fixture();
+      const request = await prepared(f);
+      f.approve();
+      const { row } = f;
+      if (row === undefined) {
+        throw new Error("Planned fixture journal is missing");
+      }
+      const operator = hostedOperatorRecordSchema.parse(row.record.operator);
+      const oldCheckpoint = {
+        attemptId: "75d86faa-e356-441e-88e9-0fd808b4cd45",
+        contextDigest: "a".repeat(64),
+        effectId: "generated_app.prepare_schema_revision",
+        fenceGeneration: 1,
+        operationRef: request.operationRef,
+        parentEffectId: "install",
+        receipt: { state: "unknown" as const },
+        resourceId: plan.appDatabase.resourceId,
+        sequence: 1,
+      };
+      f.row = {
+        ...row,
+        record: hostedRuntimeJournalRecordSchema.parse({
+          ...row.record,
+          operator: {
+            ...operator,
+            fenceGeneration: 1,
+            pendingEffectId: "install",
+            pendingEffectAttempt:
+              existingAttemptId === undefined
+                ? undefined
+                : { contextDigest: "b".repeat(64), id: existingAttemptId },
+            receipts: [
+              {
+                effectId: "resources",
+                observedAt: new Date().toISOString(),
+                resourceVersion: "existing-resources",
+              },
+            ],
+            workerCheckpoints: [oldCheckpoint],
+          },
+        }),
+      };
+      let readbackAttemptId = "";
+      let executionAttemptId = "";
+      const { reconcile, executeEffect } = f.deps;
+      f.deps.reconcile = async (input) => {
+        if (input.effect.id === "install") {
+          const current = hostedOperatorRecordSchema.parse(f.row?.record.operator);
+          expect(current.pendingEffectId).toBe(input.effect.id);
+          readbackAttemptId = z.uuid().parse(current.pendingEffectAttempt?.id);
+          expect(current.pendingEffectAttempt?.contextDigest).toBe(
+            existingAttemptId === undefined ? undefined : "b".repeat(64),
+          );
+          expect(current.workerCheckpoints).toEqual([oldCheckpoint]);
+          if (existingAttemptId !== undefined) {
+            expect(readbackAttemptId).toBe(existingAttemptId);
+          }
+        }
+        return await reconcile(input);
+      };
+      f.deps.executeEffect = async (input) => {
+        if (input.effect.id === "install") {
+          executionAttemptId = input.workerAttemptId;
+        }
+        return await executeEffect(input);
+      };
+      expect((await f.client.request(request)).status).toBe("prepared");
+      expect(readbackAttemptId).not.toBe("");
+      expect(executionAttemptId).not.toBe(readbackAttemptId);
+      expect(f.row?.record.operator?.workerCheckpoints).toEqual([oldCheckpoint]);
+      expect(f.row?.record.operator?.pendingEffectAttempt).toBeUndefined();
+    },
+  );
   it("serializes concurrent continuations of the same approved operation", async () => {
     const f = fixture();
     const request = await prepared(f);

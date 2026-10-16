@@ -891,6 +891,18 @@ export const composeHostedOperatorDependencies = (
       "journal_read",
       async () => await controlPlane.store.read(context),
     );
+    const planInstallerSourceSuccessor = async (): Promise<HostedOperatorPlan | undefined> => {
+      const configuredWorker = configuration.sandbox.workers[context.target.appId];
+      const successor =
+        configuredWorker === undefined
+          ? undefined
+          : createInstallerSourceSuccessorPlan(current?.record, configuredWorker, Date.now());
+      if (successor === undefined) {
+        return undefined;
+      }
+      await controlPlane.assertPlanningAuthorized(context);
+      return successor;
+    };
     if (context.action === "cleanup") {
       if (current?.record.operator === undefined) {
         throw new HostedOperatorError(OPERATION_IN_PROGRESS);
@@ -936,13 +948,8 @@ export const composeHostedOperatorDependencies = (
     }
     // Repair the frozen installer before composing another app plan. Resource,
     // release, access and retention intent remain exactly as originally approved.
-    const configuredWorker = configuration.sandbox.workers[context.target.appId];
-    const installerSuccessor =
-      configuredWorker === undefined
-        ? undefined
-        : createInstallerSourceSuccessorPlan(current?.record, configuredWorker, Date.now());
+    const installerSuccessor = await planInstallerSourceSuccessor();
     if (installerSuccessor !== undefined) {
-      await controlPlane.assertPlanningAuthorized(context);
       return installerSuccessor;
     }
     // Complete the exact frozen host prerequisite before composing a later app/source plan.

@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { hostedEveOperationScopes } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
+import { createHostedReadTrace } from "./hosted-read-diagnostic";
 import { toPublicEvent } from "./public-events";
 import type { InternalEveEvent } from "./public-events";
 import { nativeObservationStateSchema } from "./native-observation-state";
@@ -1666,6 +1667,51 @@ describe("same-origin canonical Eve transport", () => {
         }).get({ adapterSessionId: "wrun_1", principal }),
       ).rejects.toThrow("incompatible stream contract");
     }
+  });
+
+  it("records closed stream-contract diagnostics without copying response values", async () => {
+    const response = stream();
+    response.headers.set("x-eve-session-id", "private-session-marker");
+    response.headers.delete("x-eve-stream-tail-index");
+    const diagnostics: unknown[] = [];
+    const readTrace = createHostedReadTrace({
+      sessionId: "wrun_1",
+      sink: (diagnostic) => {
+        diagnostics.push(diagnostic);
+      },
+    });
+
+    await expect(async () => {
+      for await (const _event of streamSameOriginEveEvents({
+        config,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning fetch contract.
+        fetchImplementation: vi.fn(async () => response),
+        readTrace,
+        sessionId: "wrun_1",
+        workloadIdentity: identity(),
+      })) {
+        // The invalid headers reject before events are read.
+        expect(_event).toBeUndefined();
+      }
+    }).rejects.toThrow("incompatible stream contract");
+    readTrace.failed();
+
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toMatchObject({
+      category: "invalid_stream_contract",
+      streamContract: {
+        bodyPresent: true,
+        contentTypeMatches: true,
+        cursorWithinTail: false,
+        formatMatches: true,
+        httpStatus: 200,
+        sessionIdMatches: false,
+        tailPresent: false,
+        tailValid: false,
+        versionMatches: true,
+      },
+    });
+    expect(JSON.stringify(diagnostics)).not.toContain("private-session-marker");
   });
 });
 

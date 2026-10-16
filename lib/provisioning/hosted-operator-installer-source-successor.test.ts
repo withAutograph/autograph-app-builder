@@ -134,6 +134,21 @@ const makeRecord = (sourcePlan: HostedOperatorPlan = plan): HostedRuntimeJournal
     },
   });
 
+const requireDefined = <T>(value: T | undefined): T => {
+  if (value === undefined) {
+    throw new Error("Expected the fixture value to be defined");
+  }
+  return value;
+};
+
+const requireOperator = (record: HostedRuntimeJournalRecord) => {
+  const { operator } = record;
+  if (operator === undefined) {
+    throw new Error("Expected the fixture operator record to be defined");
+  }
+  return operator;
+};
+
 describe("hosted operator installer source successor", () => {
   it("recovers the pending app install after its separate Auth install prerequisite", () => {
     const fullPlan = hostedOperatorPlanSchema.parse({
@@ -148,7 +163,7 @@ describe("hosted operator installer source successor", () => {
       ),
     });
     const record = makeRecord(fullPlan);
-    record.operator!.receipts.push({
+    requireOperator(record).receipts.push({
       effectId: "auth-schema",
       observedAt: "2027-01-01T00:00:00.000Z",
       resourceVersion: "fixture-auth-schema",
@@ -159,17 +174,19 @@ describe("hosted operator installer source successor", () => {
       now,
     );
     expect(candidate).toBeDefined();
-    expect(isInstallerSourceSuccessor(record, candidate!, now)).toBe(true);
+    expect(isInstallerSourceSuccessor(record, requireDefined(candidate), now)).toBe(true);
 
     const pendingAuth = structuredClone(record);
-    pendingAuth.operator!.pendingEffectId = "auth-schema";
-    expect(isInstallerSourceSuccessor(pendingAuth, candidate!, now)).toBe(false);
+    requireOperator(pendingAuth).pendingEffectId = "auth-schema";
+    expect(isInstallerSourceSuccessor(pendingAuth, requireDefined(candidate), now)).toBe(false);
 
     const missingAuthReceipt = structuredClone(record);
-    missingAuthReceipt.operator!.receipts = missingAuthReceipt.operator!.receipts.filter(
-      (receipt) => receipt.effectId !== "auth-schema",
+    requireOperator(missingAuthReceipt).receipts = requireOperator(
+      missingAuthReceipt,
+    ).receipts.filter((receipt) => receipt.effectId !== "auth-schema");
+    expect(isInstallerSourceSuccessor(missingAuthReceipt, requireDefined(candidate), now)).toBe(
+      false,
     );
-    expect(isInstallerSourceSuccessor(missingAuthReceipt, candidate!, now)).toBe(false);
   });
 
   it("changes only the pinned installer digest and preserves approved plan expiry", () => {
@@ -186,7 +203,7 @@ describe("hosted operator installer source successor", () => {
       sha256: "e".repeat(64),
     });
     expect(repaired?.retention).toEqual(plan.retention);
-    expect(isInstallerSourceSuccessor(record, repaired!, now)).toBe(true);
+    expect(isInstallerSourceSuccessor(record, requireDefined(repaired), now)).toBe(true);
     expect(record.operator?.plan).toEqual(plan);
   });
 
@@ -240,9 +257,9 @@ describe("hosted operator installer source successor", () => {
 
   it("requires the matching outstanding install effect with no install receipt", () => {
     const wrongPendingEffect = makeRecord();
-    wrongPendingEffect.operator!.pendingEffectId = "access";
+    requireOperator(wrongPendingEffect).pendingEffectId = "access";
     const completedInstall = makeRecord();
-    completedInstall.operator!.receipts.push({
+    requireOperator(completedInstall).receipts.push({
       effectId: "app-install",
       observedAt: "2027-01-01T00:00:00.000Z",
       resourceVersion: "fixture-install",
@@ -276,13 +293,13 @@ describe("hosted operator installer source successor", () => {
 
   it("rejects receipts outside already observed prerequisite effects and corrupt old digests", () => {
     const afterInstall = makeRecord();
-    afterInstall.operator!.receipts.push({
+    requireOperator(afterInstall).receipts.push({
       effectId: "access",
       observedAt: "2027-01-01T00:00:00.000Z",
       resourceVersion: "fixture-access",
     });
     const corruptDigest = makeRecord();
-    corruptDigest.operator!.planDigest = "f".repeat(64);
+    requireOperator(corruptDigest).planDigest = "f".repeat(64);
     const candidate = hostedOperatorPlanSchema.parse({
       ...plan,
       installer: { ...plan.installer, sha256: "e".repeat(64) },

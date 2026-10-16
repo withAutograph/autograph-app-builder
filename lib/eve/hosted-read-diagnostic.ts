@@ -63,6 +63,17 @@ const failureCategory = {
   public_spool: "public_spool_failure",
   workload_identity: "workload_identity_failure",
 } as const;
+const streamContractSchema = z.strictObject({
+  httpStatus: z.number().int().min(100).max(599),
+  bodyPresent: z.boolean(),
+  contentTypeMatches: z.boolean(),
+  sessionIdMatches: z.boolean(),
+  formatMatches: z.boolean(),
+  versionMatches: z.boolean(),
+  tailPresent: z.boolean(),
+  tailValid: z.boolean(),
+  cursorWithinTail: z.boolean(),
+});
 export interface HostedReadDiagnostic {
   event: "builder.hosted_read";
   outcome: "completed" | "failed" | "timeout";
@@ -83,6 +94,7 @@ export interface HostedReadDiagnostic {
   resolveGithubSourceRequested: number;
   resolveGithubSourceCompleted: number;
   resolveGithubSourceFailed: number;
+  streamContract?: z.infer<typeof streamContractSchema>;
 }
 export type HostedReadDiagnosticSink = (diagnostic: HostedReadDiagnostic) => void | Promise<void>;
 
@@ -104,6 +116,7 @@ export const createHostedReadTrace = (input: {
   const started = readClock();
   let phaseStarted = started;
   let phase: z.infer<typeof phaseSchema> = "authority";
+  let streamContract: z.infer<typeof streamContractSchema> | undefined;
   let reported = false;
   let expired = false;
   const counters = {
@@ -142,6 +155,7 @@ export const createHostedReadTrace = (input: {
       phaseElapsedMs: Math.max(0, Math.round(at - phaseStarted)),
       sessionIdHash,
       ...counters,
+      ...(streamContract === undefined ? {} : { streamContract }),
     };
     try {
       if (input.sink === undefined) {
@@ -210,6 +224,12 @@ export const createHostedReadTrace = (input: {
     set(counter: z.infer<typeof counterSchema>, value: number) {
       if (counterSchema.safeParse(counter).success && Number.isSafeInteger(value) && value >= 0) {
         counters[counter] = value;
+      }
+    },
+    setStreamContract(value: z.infer<typeof streamContractSchema>) {
+      const parsed = streamContractSchema.safeParse(value);
+      if (parsed.success) {
+        streamContract = parsed.data;
       }
     },
     watch(signal?: AbortSignal) {
