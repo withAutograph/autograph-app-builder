@@ -11,7 +11,10 @@ import {
   assertApprovalReceipt,
 } from "@/lib/agent/approval-receipt";
 import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
-import { draftReconciliationState } from "@/lib/agent/draft-reconciliation-state";
+import {
+  draftReconciliationState,
+  updateExactDraftReconciliation,
+} from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { recordPublishedAppSourceForSession } from "@/lib/agent/published-app-source";
 import { inspectDraftReconciliation } from "@/lib/repository/sandbox-draft-reconciliation";
@@ -91,6 +94,12 @@ export default defineTool({
     };
     const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
     const publication = await runtime.reconcileExistingDraft({ contentSource, proposal, review });
+    updateExactDraftReconciliation({
+      expected: candidate,
+      operation: "recording the provider-verified published merge",
+      transition: (current) =>
+        current === null ? null : { ...current, publishedReconciliation: proposal },
+    });
     try {
       const recording = await recordPublishedAppSourceForSession({
         appId: state.appSpec.appId,

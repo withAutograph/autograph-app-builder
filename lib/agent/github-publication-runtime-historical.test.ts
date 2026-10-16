@@ -90,6 +90,7 @@ const missingPublicationReceipt = async (): Promise<undefined> => {
 
 const ownedDraftFixture = (
   receiptOverrides: Partial<Omit<DraftPullRequestSuccessReceipt, "digest">> = {},
+  adapterOverrides: Partial<GitHubPublicationAdapter> = {},
 ) => {
   const installation = createGitHubInstallationIdentity({
     accountId: "200",
@@ -166,6 +167,7 @@ const ownedDraftFixture = (
       inspectExistingDraft: () => Promise.resolve(draft),
       inspectRepository: () => Promise.resolve(repository),
       inspectInstallation: () => Promise.resolve(installation),
+      ...adapterOverrides,
     },
     enabled: true,
     proposals: { read: vi.fn(), save: vi.fn() },
@@ -189,6 +191,125 @@ describe("same-session owned draft repair", () => {
     expect(read).toHaveBeenCalledWith(receipt.proposalDigest);
   });
 
+  it.each([true, false])(
+    "uses the last approved merge as the second revision baseline only with provider proof (%s)",
+    async (applied) => {
+      const inspectAppliedDraftReconciliation = vi.fn(() => Promise.resolve(applied));
+      const { draft, receipt, repository, runtime } = ownedDraftFixture(
+        {},
+        {
+          inspectAppliedDraftReconciliation,
+        },
+      );
+      const review = createReconciliationReviewReceipt({
+        appId: "demo",
+        baseChanges: [],
+        baseSha: repository.headSha,
+        baseTree: repository.headTree,
+        headChanges: [],
+        headSha: draft.headSha,
+        headTree: draft.headTree,
+        resolvedTree: "5".repeat(40),
+        version: 1,
+      });
+      const proposal = await runtime.sealExistingDraftReconciliation({
+        githubSource: {
+          version: GITHUB_PUBLICATION_VERSION,
+          digest: "f".repeat(64),
+          installationIdentityDigest: repository.installationIdentityDigest,
+          repository,
+          resolvedByCallId: "original-source",
+          resolvedRef: "refs/heads/main",
+          resolvedSha: repository.headSha,
+          resolvedTree: repository.headTree,
+        },
+        priorPublishedProposalDigest: receipt.proposalDigest,
+        pullRequestNumber: draft.number,
+        review,
+        selectedCheckoutHeadSha: draft.headSha,
+        selectedCheckoutHeadTree: draft.headTree,
+      });
+      // The private sealed candidate survives publication and the next app review.
+      draft.headSha = "8".repeat(40);
+      draft.headTree = review.resolvedTree;
+      const result = await runtime.inspectExistingDraftReconciliationSource({
+        name: draft.name,
+        owner: draft.owner,
+        repositoryId: draft.repositoryId,
+        pullRequestNumber: draft.number,
+        priorPublishedProposalDigest: receipt.proposalDigest,
+        previousReconciliation: proposal,
+      });
+      expect(result.publishedHeadSha).toBe(applied ? draft.headSha : receipt.branchSha);
+      expect(inspectAppliedDraftReconciliation).toHaveBeenCalledWith(proposal, draft);
+      const unrelated = await runtime.inspectExistingDraftReconciliationSource({
+        name: draft.name,
+        owner: draft.owner,
+        repositoryId: draft.repositoryId,
+        pullRequestNumber: draft.number,
+        priorPublishedProposalDigest: receipt.proposalDigest,
+        previousReconciliation: { ...proposal, branchName: "another-draft" },
+      });
+      expect(unrelated.publishedHeadSha).toBe(receipt.branchSha);
+      if (!applied || result.publishedReconciliation === undefined) {
+        return;
+      }
+      const nextReview = createReconciliationReviewReceipt({
+        appId: review.appId,
+        baseChanges: review.baseChanges,
+        baseSha: review.baseSha,
+        baseTree: review.baseTree,
+        headChanges: review.headChanges,
+        headSha: draft.headSha,
+        headTree: draft.headTree,
+        resolvedTree: "9".repeat(40),
+        version: 1,
+      });
+      const nextProposal = await runtime.sealExistingDraftReconciliation({
+        githubSource: {
+          version: GITHUB_PUBLICATION_VERSION,
+          digest: "f".repeat(64),
+          installationIdentityDigest: repository.installationIdentityDigest,
+          repository,
+          resolvedByCallId: "original-source",
+          resolvedRef: "refs/heads/main",
+          resolvedSha: repository.headSha,
+          resolvedTree: repository.headTree,
+        },
+        priorPublishedProposalDigest: receipt.proposalDigest,
+        pullRequestNumber: draft.number,
+        review: nextReview,
+        selectedCheckoutHeadSha: draft.headSha,
+        selectedCheckoutHeadTree: draft.headTree,
+      });
+      // A rebuilt candidate's new sealed review is still unpublished; retain the proven merge.
+      const rebuilt = await runtime.inspectExistingDraftReconciliationSource({
+        name: draft.name,
+        owner: draft.owner,
+        repositoryId: draft.repositoryId,
+        pullRequestNumber: draft.number,
+        priorPublishedProposalDigest: receipt.proposalDigest,
+        previousReconciliation: nextProposal,
+        publishedReconciliation: result.publishedReconciliation,
+      });
+      expect(rebuilt.publishedReconciliation).toEqual(proposal);
+      expect(rebuilt.publishedHeadSha).toBe(draft.headSha);
+      // Recover a succeeded write even if recording its new published marker was interrupted.
+      draft.headSha = "a".repeat(40);
+      draft.headTree = nextReview.resolvedTree;
+      const recovered = await runtime.inspectExistingDraftReconciliationSource({
+        name: draft.name,
+        owner: draft.owner,
+        repositoryId: draft.repositoryId,
+        pullRequestNumber: draft.number,
+        priorPublishedProposalDigest: receipt.proposalDigest,
+        previousReconciliation: nextProposal,
+        publishedReconciliation: result.publishedReconciliation,
+      });
+      expect(recovered.publishedReconciliation).toEqual(nextProposal);
+      expect(recovered.publishedHeadSha).toBe(draft.headSha);
+    },
+  );
   it("recovers the owned publication baseline when the workflow marker is absent", async () => {
     const { draft, findDraftByPullRequest, receipt, runtime } = ownedDraftFixture();
     const result = await runtime.inspectExistingDraftReconciliationSource({
