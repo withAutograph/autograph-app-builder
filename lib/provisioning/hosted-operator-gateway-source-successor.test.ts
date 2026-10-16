@@ -1081,16 +1081,25 @@ describe("shared host protection plan successor", () => {
 describe("pending app installer repair", () => {
   const interruptedInstall = async () => {
     const f = fixture();
+    const appInstallId = plan.effects.find((effect) => effect.kind === "install")!.id;
     const originalPlan = hostedOperatorPlanSchema.parse({
       ...plan,
       stage: "app",
       installer: { reference: "generated-app-protected-installer-v1", sha256: "1".repeat(64) },
+      effects: plan.effects.flatMap((effect) =>
+        effect.id === appInstallId
+          ? [
+              { id: "auth-schema", kind: "install", description: "Prepare shared Auth schema" },
+              effect,
+            ]
+          : [effect],
+      ),
     });
     f.deps.plan = async () => originalPlan;
     const original = await prepared(f);
     const execute = f.deps.executeEffect;
     f.deps.executeEffect = async (input) => {
-      if (input.effect.kind !== "install") return await execute(input);
+      if (input.effect.id !== appInstallId) return await execute(input);
       const checkpoint = await input.bindWorkerContext({ contextDigest: "6".repeat(64) });
       await checkpoint({
         contextDigest: "6".repeat(64),

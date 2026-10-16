@@ -63,15 +63,17 @@ export const isInstallerSourceSuccessor = (
     return false;
   }
 
-  const installs = prior.plan.effects.filter((effect) => effect.kind === "install");
+  const install = prior.plan.effects.find((effect) => effect.id === prior.pendingEffectId);
   if (
-    installs.length !== 1 ||
+    install?.kind !== "install" ||
+    // The existing router assigns this reserved effect to the separate Auth worker.
+    install.id === "auth-schema" ||
+    (install.resourceId !== undefined &&
+      install.resourceId !== prior.plan.appDatabase.resourceId) ||
     new Set(prior.plan.effects.map((effect) => effect.id)).size !== prior.plan.effects.length
   ) {
     return false;
   }
-  const install = installs[0];
-  if (install === undefined) return false;
   const expiry = Date.parse(prior.plan.retention.expiresAt);
   const leaseExpiry =
     record.leaseExpiresAt === undefined ? Number.NaN : Date.parse(record.leaseExpiresAt);
