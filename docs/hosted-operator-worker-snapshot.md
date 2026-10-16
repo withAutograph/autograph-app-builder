@@ -27,3 +27,20 @@ Read back the actual snapshot and worker hashes before selecting it for an
 operator deployment. Snapshot retention and replacement remain reviewed
 provider operations. A source fixture or prepared image alone does not prove
 normal hosted preparation, authenticated app behavior or recovery.
+
+## Repairing an interrupted app install
+
+A repaired generated-app worker may propose a new technical plan for an
+interrupted app install. Only its installer digest may change: the worker
+identity, app release, resources, access, effects and original retention expiry
+remain unchanged. The operator rechecks current ownership and the old durable
+approval before reserving that plan. A live operation lease prevents replacement.
+
+The original operation, fence, private resources and unresolved checkpoints are
+retained. The previous plan, approval and attempt remain private history; they do
+not approve the replacement plan or establish that an uncertain effect applied.
+The new plan requires its own ordinary public approval before execution. Its
+pinned worker then reconciles the existing database and resumes a matching
+prepared revision. Unknown or conflicting state remains unresolved. No journal
+editing, replacement app, resource recreation or relaxed binary verification is
+part of this recovery.

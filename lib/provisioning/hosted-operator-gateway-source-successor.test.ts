@@ -1077,3 +1077,96 @@ describe("shared host protection plan successor", () => {
     },
   );
 });
+
+describe("pending app installer repair", () => {
+  const interruptedInstall = async () => {
+    const f = fixture();
+    const originalPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      stage: "app",
+      installer: { reference: "generated-app-protected-installer-v1", sha256: "1".repeat(64) },
+    });
+    f.deps.plan = async () => originalPlan;
+    const original = await prepared(f);
+    const execute = f.deps.executeEffect;
+    f.deps.executeEffect = async (input) => {
+      if (input.effect.kind !== "install") return await execute(input);
+      const checkpoint = await input.bindWorkerContext({ contextDigest: "6".repeat(64) });
+      await checkpoint({
+        contextDigest: "6".repeat(64),
+        effectId: "generated_app.prepare_schema_revision",
+        fenceGeneration: input.fenceGeneration,
+        operationId: input.operationRef,
+        receipt: { state: "unknown" },
+        resourceId: originalPlan.appDatabase.resourceId,
+        sequence: 1,
+        tenantId: originalPlan.access[0]!.organizationId,
+      });
+      throw new HostedOperatorError("reconciliation_required");
+    };
+    f.approve();
+    expect(await f.client.request(original)).toMatchObject({ code: "reconciliation_required" });
+    const previous = structuredClone(f.row!);
+    const repaired = hostedOperatorPlanSchema.parse({
+      ...originalPlan,
+      installer: { ...originalPlan.installer, sha256: "2".repeat(64) },
+    });
+    f.deps.plan = async () => repaired;
+    return { f, original, previous, repaired, execute };
+  };
+
+  it("retains uncertain history and resources but requires the repaired plan's own approval", async () => {
+    const { f, original, previous, repaired, execute } = await interruptedInstall();
+    const readApproval = f.deps.readApproval;
+    f.deps.readApproval = async (input) =>
+      input.planDigest === original.planDigest ? await readApproval(input) : null;
+    const successor = { ...(await prepared(f)), callId: "repaired-installer-call" };
+    expect(successor.operationRef).toBe(original.operationRef);
+    expect(successor.planDigest).toBe(operatorPlanDigest(repaired));
+    const retained = f.row?.record;
+    expect(retained?.privateState).toEqual(previous.record.privateState);
+    expect(retained?.approvedByCallId).toBe("operator:unapproved-plan");
+    expect(retained?.operator?.fenceGeneration).toBe(previous.record.operator?.fenceGeneration);
+    expect(retained?.operator?.pendingEffectAttempt).toBeUndefined();
+    expect(retained?.operator?.workerCheckpoints).toEqual(
+      previous.record.operator?.workerCheckpoints,
+    );
+    expect(retained?.operator?.retainedInstallerOperations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          approvedByCallId: original.callId,
+          operator: expect.objectContaining({
+            planDigest: original.planDigest,
+            pendingEffectAttempt: previous.record.operator?.pendingEffectAttempt,
+          }),
+        }),
+      ]),
+    );
+    expect(await f.client.request(successor)).toMatchObject({ code: "authorization_required" });
+    expect(await f.client.request(original)).toMatchObject({ code: "resource_mismatch" });
+    f.deps.readApproval = readApproval;
+    f.deps.executeEffect = execute;
+    expect(await f.client.request(successor)).toMatchObject({ status: "prepared" });
+    expect(f.row?.record.operator?.workerCheckpoints).toEqual(
+      expect.arrayContaining([expect.objectContaining({ receipt: { state: "unknown" } })]),
+    );
+  });
+
+  it("leaves the pending operation unchanged when old approval or current ownership is unavailable", async () => {
+    const { f, previous } = await interruptedInstall();
+    f.deps.readApproval = async () => null;
+    expect(
+      await f.client.request({ action: "plan", operation: "prepare", selection }),
+    ).toMatchObject({
+      code: "authorization_required",
+    });
+    expect(f.row).toEqual(previous);
+    f.revoke();
+    expect(
+      await f.client.request({ action: "plan", operation: "prepare", selection }),
+    ).toMatchObject({
+      code: "authorization_required",
+    });
+    expect(f.row).toEqual(previous);
+  });
+});

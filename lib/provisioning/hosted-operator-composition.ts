@@ -57,6 +57,7 @@ import {
   reportOperatorPlanningMismatch,
   observeOperatorPlanStage,
 } from "./hosted-operator-consent-diagnostic";
+import { createInstallerSourceSuccessorPlan } from "./hosted-operator-installer-source-successor";
 import type { OperatorPlanStage } from "./hosted-operator-consent-diagnostic";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
 import { readOwnedOperatorPlanningSelection } from "./hosted-operator-planning-authority";
@@ -932,6 +933,17 @@ export const composeHostedOperatorDependencies = (
 
         stage: "app",
       });
+    }
+    // Repair the frozen installer before composing another app plan. Resource,
+    // release, access and retention intent remain exactly as originally approved.
+    const configuredWorker = configuration.sandbox.workers[context.target.appId];
+    const installerSuccessor =
+      configuredWorker === undefined
+        ? undefined
+        : createInstallerSourceSuccessorPlan(current?.record, configuredWorker, Date.now());
+    if (installerSuccessor !== undefined) {
+      await controlPlane.assertPlanningAuthorized(context);
+      return installerSuccessor;
     }
     // Complete the exact frozen host prerequisite before composing a later app/source plan.
     const sharedHostPrerequisite = sharedHostProtectionPrerequisite(

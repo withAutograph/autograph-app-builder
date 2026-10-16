@@ -5,6 +5,7 @@ import {
 } from "./hosted-operator-shared-host-protection-successor";
 import type { SharedHostProtectionDeliveryProvenance } from "./hosted-operator-shared-host-protection-successor";
 import { recoverOriginalApprovedPlan } from "./hosted-operator-approved-plan";
+import { isInstallerSourceSuccessor } from "./hosted-operator-installer-source-successor";
 import { savedPreviewEnvironmentGitBranch } from "./native-preview-environment-scope";
 import { isDeepStrictEqual } from "node:util";
 import {
@@ -450,7 +451,12 @@ const handlePlanOperation = async (
   const sharedHostSuccessor =
     successorPrior !== undefined &&
     isSharedHostProtectionSuccessor(successorPrior.record, plan, now());
-  if (sharedHostSuccessor) {
+  const installerSuccessor =
+    successorPrior !== undefined && isInstallerSourceSuccessor(successorPrior.record, plan, now());
+  const assertPriorSuccessorApproval = async () => {
+    if (successorPrior === undefined) {
+      throw new HostedOperatorError("authorization_required");
+    }
     const priorOperator = requireOperator(successorPrior.record);
     const approval = await deps.readApproval({
       ...context,
@@ -467,10 +473,14 @@ const handlePlanOperation = async (
     ) {
       throw new HostedOperatorError("authorization_required");
     }
+  };
+  if (sharedHostSuccessor || installerSuccessor) {
+    await assertPriorSuccessorApproval();
   }
-  const recovered = sharedHostSuccessor
-    ? null
-    : await recoverOriginalApprovedPlan(deps, context, input, appId, plan, now);
+  const recovered =
+    sharedHostSuccessor || installerSuccessor
+      ? null
+      : await recoverOriginalApprovedPlan(deps, context, input, appId, plan, now);
   if (recovered !== null) {
     return response(recovered);
   }
@@ -521,6 +531,16 @@ const handlePlanOperation = async (
     ...context,
     now,
     store: deps.store,
+    ...(installerSuccessor
+      ? {
+          beforeUpdate: async (record: HostedRuntimeJournalRecord) => {
+            await deps.assertAuthorized({ ...context, plan, purpose: "planning" });
+            if (record.operator?.planDigest !== planDigest) {
+              await assertPriorSuccessorApproval();
+            }
+          },
+        }
+      : {}),
     update: (record) => {
       if (!record.operator) {
         throw new HostedOperatorError("legacy_runtime_requires_migration");
@@ -541,12 +561,23 @@ const handlePlanOperation = async (
         record.operator.approvalId === successorPrior.record.operator?.approvalId &&
         record.approvedByCallId === successorPrior.record.approvedByCallId &&
         isSharedHostProtectionSuccessor(record, plan, now());
+      const installerSourceSuccessor =
+        installerSuccessor &&
+        record.operator.operationRef === successorPrior.record.operator?.operationRef &&
+        record.operator.planDigest === successorPrior.record.operator?.planDigest &&
+        record.operator.approvalId === successorPrior.record.operator?.approvalId &&
+        record.approvedByCallId === successorPrior.record.approvedByCallId &&
+        isInstallerSourceSuccessor(record, plan, now());
       if (sharedHostSuccessor && !sharedHostProtectionSuccessor) {
+        throw new HostedOperatorError("operation_in_progress");
+      }
+      if (installerSuccessor && !installerSourceSuccessor) {
         throw new HostedOperatorError("operation_in_progress");
       }
       if (
         !gatewaySourceSuccessor &&
         !sharedHostProtectionSuccessor &&
+        !installerSourceSuccessor &&
         (record.leaseId !== undefined ||
           record.operator.pendingEffectId !== undefined ||
           record.operator.pendingEffectAttempt !== undefined ||
@@ -601,13 +632,32 @@ const handlePlanOperation = async (
       // Same-resource release changes keep credentials; old proof never attests the new plan.
       const nextOperator: ReturnType<typeof requireOperator> = { ...operator };
       nextOperator.retainedGatewayDeliveries = record.operator.retainedGatewayDeliveries;
+      nextOperator.retainedInstallerOperations = record.operator.retainedInstallerOperations;
       if (gatewaySourceSuccessor || sharedHostProtectionSuccessor) {
-        const { retainedGatewayDeliveries, ...priorOperator } = record.operator;
+        const { retainedGatewayDeliveries, retainedInstallerOperations, ...priorOperator } =
+          record.operator;
+        void retainedInstallerOperations;
         nextOperator.retainedGatewayDeliveries = [
           ...(retainedGatewayDeliveries ?? []),
           { approvedByCallId: record.approvedByCallId, operator: priorOperator },
         ];
         nextOperator.receipts = record.operator.receipts;
+      }
+      if (installerSourceSuccessor) {
+        const { retainedGatewayDeliveries, retainedInstallerOperations, ...priorOperator } =
+          record.operator;
+        void retainedGatewayDeliveries;
+        nextOperator.retainedInstallerOperations = [
+          ...(retainedInstallerOperations ?? []),
+          { approvedByCallId: record.approvedByCallId, operator: priorOperator },
+        ];
+        nextOperator.operationRef = record.operator.operationRef;
+        nextOperator.fenceGeneration = record.operator.fenceGeneration;
+        nextOperator.receipts = record.operator.receipts;
+        nextOperator.pendingEffectId = record.operator.pendingEffectId;
+        nextOperator.workerCheckpoints = record.operator.workerCheckpoints;
+        // A new worker binds a new context; the old attempt survives only in history.
+        // No receipt or old unknown checkpoint grants authority for this new plan.
       }
       if (sharedHostProtectionSuccessor) {
         nextOperator.operationRef = record.operator.operationRef;
@@ -660,7 +710,7 @@ const handlePlanOperation = async (
         step: "reserved" as const,
       };
       delete next.proof;
-      if (gatewaySourceSuccessor || sharedHostProtectionSuccessor) {
+      if (gatewaySourceSuccessor || sharedHostProtectionSuccessor || installerSourceSuccessor) {
         delete next.leaseId;
         delete next.leaseExpiresAt;
       }
