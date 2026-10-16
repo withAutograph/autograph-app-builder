@@ -27,7 +27,7 @@ const fixture = (files: Record<string, string>) => {
         await Promise.resolve(files[path.replace(/^\/workspace\/repository\//u, "")] ?? null),
     ),
   };
-  return { baseline: undefined, metadata, paths: Object.keys(files), sandbox };
+  return { baseline: undefined, files, metadata, paths: Object.keys(files), sandbox };
 };
 const drain = async (input: Parameters<typeof readRepositoryInspectionPage>[0]) => {
   const pages: Awaited<ReturnType<typeof readRepositoryInspectionPage>>[] = [];
@@ -134,10 +134,48 @@ describe("repository inspection paging", () => {
     expect(result.files.get("large.txt")).toBe("content".repeat(EVE_NATIVE_RESULT_PAGE_BYTES / 7));
   });
 
-  it.each([1, 3])("rejects invalid UTF-8 byte offset %s", async (offsetBytes) => {
-    await expect(
-      readRepositoryInspectionPage({ ...fixture({ "unicode.txt": "é" }), offsetBytes }),
-    ).rejects.toThrow("UTF-8 character boundary");
+  it("restarts an invalid Unicode cursor at byte zero and retrieves the whole current file", async () => {
+    const content = "🙂é".repeat(Math.ceil(EVE_NATIVE_RESULT_PAGE_BYTES / 4));
+    const input = fixture({ "unicode.txt": content });
+    const first = await readRepositoryInspectionPage({ ...input, offsetBytes: 1 });
+    const [firstChunk] = first.files;
+    expect(firstChunk).toMatchObject({
+      content: expect.any(String),
+      offsetBytes: 0,
+      restartedFromOffsetBytes: 1,
+    });
+    expect(first.continuation).toBeDefined();
+
+    let combined = firstChunk?.content ?? "";
+    let cursor = first.continuation;
+    while (cursor !== undefined) {
+      const page = await readRepositoryInspectionPage({ ...input, ...cursor });
+      const [chunk] = page.files;
+      expect(chunk?.offsetBytes).toBe(Buffer.byteLength(combined, "utf-8"));
+      combined += chunk?.content ?? "";
+      cursor = page.continuation;
+    }
+    expect(combined).toBe(content);
+    expect(combined).not.toContain("�");
+  });
+
+  it("restarts an old cursor beyond a truncated file and returns its complete current content", async () => {
+    const input = fixture({ "large.txt": "a".repeat(EVE_NATIVE_RESULT_PAGE_BYTES * 2) });
+    const original = await readRepositoryInspectionPage(input);
+    expect(original.continuation).toBeDefined();
+    const previousOffset = original.continuation?.offsetBytes;
+    input.files["large.txt"] = "current🙂";
+
+    const restarted = await readRepositoryInspectionPage({ ...input, ...original.continuation });
+    expect(restarted.files).toEqual([
+      {
+        content: "current🙂",
+        offsetBytes: 0,
+        path: "large.txt",
+        restartedFromOffsetBytes: previousOffset,
+      },
+    ]);
+    expect(restarted.continuation).toBeUndefined();
   });
 
   it("rechecks the existing baseline restriction before any continued content read", async () => {
