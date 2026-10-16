@@ -42,6 +42,7 @@ const hooks = vi.hoisted(() => {
       originalReviewDigest: digest,
       root: "/workspace/resolved",
       workspaceRoot: "/workspace",
+      publishedReconciliation: undefined as unknown,
     },
   };
 });
@@ -70,6 +71,22 @@ vi.mock("./app-baseline-state", () => ({ appBaselineState: { get: () => null } }
 vi.mock("../repository/reviewed-change-set", () => ({ assertExistingAppReviewScope: () => {} }));
 vi.mock("./draft-reconciliation-state", () => ({
   draftReconciliationState: { get: () => hooks.candidate },
+  updateExactDraftReconciliation: ({
+    expected,
+    operation,
+    transition,
+  }: {
+    expected: unknown;
+    operation: string;
+    transition: (current: typeof hooks.candidate) => typeof hooks.candidate;
+  }) => {
+    if (JSON.stringify(hooks.candidate) !== JSON.stringify(expected)) {
+      throw new Error(
+        `The draft reconciliation changed while Builder was ${operation}. Inspect its current state, then retry.`,
+      );
+    }
+    hooks.candidate = transition(hooks.candidate);
+  },
 }));
 vi.mock("./source-bound-sandbox", () => ({
   getSourceBoundSandbox: async () => await Promise.resolve({}),
@@ -109,6 +126,7 @@ describe("publication records actual source for its compiled app release", () =>
     hooks.record.mockReset().mockResolvedValue({ status: "recorded" });
     hooks.assertApproval.mockReset();
     hooks.inspect.mockResolvedValue({ unresolvedConflicts: [], resolvedTree: "tree" });
+    hooks.candidate.publishedReconciliation = undefined;
   });
 
   for (const entry of tools) {
@@ -150,6 +168,9 @@ describe("publication records actual source for its compiled app release", () =>
         expect(result).not.toHaveProperty("appSourceRecording.recoveryRequired");
         expect(entry.publish).toHaveBeenCalledTimes(1);
         expect(hooks.record).toHaveBeenCalledTimes(1);
+        if (entry.tool === reconcileTool) {
+          expect(hooks.candidate.publishedReconciliation).toEqual(hooks.candidate.proposal);
+        }
         expect(hooks.record.mock.invocationCallOrder[0]).toBeGreaterThan(
           entry.publish.mock.invocationCallOrder[0] ?? 0,
         );
@@ -172,6 +193,7 @@ describe("publication records actual source for its compiled app release", () =>
     });
 
     it(`${entry.name} does not record an unverified or failed publication`, async () => {
+      const candidateBefore = structuredClone(hooks.candidate);
       entry.publish.mockRejectedValue(new Error("publication outcome unknown"));
       // SAFETY: The mocked Eve/publication ports consume only the supplied session, call ID and sandbox fields.
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Framework fixture supplies precisely the production execute path's consumed context.
@@ -179,6 +201,7 @@ describe("publication records actual source for its compiled app release", () =>
         "publication outcome unknown",
       );
       expect(hooks.record).not.toHaveBeenCalled();
+      expect(hooks.candidate).toEqual(candidateBefore);
     });
 
     it(`${entry.name} retains the publication approval boundary`, async () => {

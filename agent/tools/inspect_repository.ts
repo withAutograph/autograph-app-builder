@@ -44,6 +44,7 @@ interface RepositoryInspectionFile {
   content: string;
   path: string;
   offsetBytes?: number;
+  restartedFromOffsetBytes?: number;
 }
 interface RepositoryInspectionContinuation {
   pathIndex: number;
@@ -61,10 +62,20 @@ const repositoryFilePage = (input: {
   index: number;
   pathCount: number;
   offset: number;
+  restartedFromOffsetBytes?: number;
   prefix: RepositoryInspectionPage;
   metadata: NativeActionResultMetadata;
 }): RepositoryInspectionPage | undefined => {
-  const { content, requestedPath, index, pathCount, offset, prefix, metadata } = input;
+  const {
+    content,
+    requestedPath,
+    index,
+    pathCount,
+    offset,
+    restartedFromOffsetBytes,
+    prefix,
+    metadata,
+  } = input;
   const contentBytes = content === null ? 0 : Buffer.byteLength(content, "utf-8");
   const makePage = (chunkContent: string, nextOffsetBytes: number): RepositoryInspectionPage => {
     let continuation: RepositoryInspectionContinuation | undefined;
@@ -76,7 +87,10 @@ const repositoryFilePage = (input: {
     const file = {
       content: chunkContent,
       path: requestedPath,
-      ...(offset === 0 && nextOffsetBytes === contentBytes ? {} : { offsetBytes: offset }),
+      ...(offset === 0 && nextOffsetBytes === contentBytes && restartedFromOffsetBytes === undefined
+        ? {}
+        : { offsetBytes: offset }),
+      ...(restartedFromOffsetBytes === undefined ? {} : { restartedFromOffsetBytes }),
     };
     return {
       files: content === null ? prefix.files : [...prefix.files, file],
@@ -115,6 +129,15 @@ const repositoryFilePage = (input: {
   }
 };
 
+const isValidRepositoryOffset = (content: string, offsetBytes: number): boolean => {
+  const bytes = Buffer.from(content, "utf-8");
+  if (!Number.isSafeInteger(offsetBytes) || offsetBytes < 0 || offsetBytes > bytes.byteLength) {
+    return false;
+  }
+  const byte = bytes[offsetBytes] ?? 0;
+  return offsetBytes === 0 || byte < 0x80 || byte > 0xbf;
+};
+
 /** Bound one serialized native result while retaining explicit access to every requested byte. */
 export const readRepositoryInspectionPage = async (input: {
   sandbox: Pick<SandboxSession, "readTextFile">;
@@ -126,7 +149,7 @@ export const readRepositoryInspectionPage = async (input: {
 }): Promise<RepositoryInspectionPage> => {
   const { sandbox, paths, metadata } = input;
   const pathIndex = input.pathIndex ?? 0;
-  const offsetBytes = input.offsetBytes ?? 0;
+  const requestedOffsetBytes = input.offsetBytes ?? 0;
   const readable = await readableAppBaselinePaths(sandbox, input.baseline, paths);
   if (readable.length !== paths.length) {
     throw new Error(
@@ -149,9 +172,14 @@ export const readRepositoryInspectionPage = async (input: {
     if (requestedPath === undefined) {
       break;
     }
-    const offset = index === pathIndex ? offsetBytes : 0;
+    const requestedOffset = index === pathIndex ? requestedOffsetBytes : 0;
     const relativePath = requestedPath.replace(/^\/workspace\/repository\//u, "");
     const content = await sandbox.readTextFile({ path: `/workspace/repository/${relativePath}` });
+    const restartedFromOffsetBytes =
+      content !== null && !isValidRepositoryOffset(content, requestedOffset)
+        ? requestedOffset
+        : undefined;
+    const offset = restartedFromOffsetBytes === undefined ? requestedOffset : 0;
     const filePage = repositoryFilePage({
       content,
       index,
@@ -160,6 +188,7 @@ export const readRepositoryInspectionPage = async (input: {
       pathCount: paths.length,
       prefix: page,
       requestedPath,
+      restartedFromOffsetBytes,
     });
     if (filePage === undefined) {
       return finish({ offsetBytes: offset, pathIndex: index });
@@ -174,7 +203,7 @@ export const readRepositoryInspectionPage = async (input: {
 
 export default defineTool({
   description:
-    "Inspect the current repository. With paths, read repository-relative text files, including public component exports, implementations, stories, and documentation. Resolve public imports from the current repository's tsconfig, workspace path maps, or package exports before requesting barrels. Read actual component props before composing a preview; do not guess APIs. Large results are paged. Repeat the same paths with the returned continuation.pathIndex and continuation.offsetBytes until continuation is absent; append each file chunk at its offsetBytes (omitted means byte 0). Without paths, return the repository overview. Never writes or publishes.",
+    "Inspect the current repository. With paths, read repository-relative text files, including public component exports, implementations, stories, and documentation. Resolve public imports from the current repository's tsconfig, workspace path maps, or package exports before requesting barrels. Read actual component props before composing a preview; do not guess APIs. Large results are paged. Repeat the same paths with the returned continuation.pathIndex and continuation.offsetBytes verbatim until continuation is absent; append each file chunk at its offsetBytes (omitted means byte 0). If a file chunk includes restartedFromOffsetBytes, replace that file's previously collected partial content with the returned chunk, then resume with the returned continuation verbatim. Without paths, return the repository overview. Never writes or publishes.",
   async execute({ path, paths, pathIndex, offsetBytes }, ctx) {
     if (!canAutoSelectDevelopmentSource() && sourceWorkflowState.get().phase === "empty") {
       throw new Error(
