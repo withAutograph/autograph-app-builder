@@ -12,10 +12,12 @@ import {
   createPrivateHostedApprovalRecorder,
   hydratePrivateHostedApprovalCaptureState,
   serializePrivateHostedApprovalCaptureState,
+  privateHostedApprovalCaptureStateSchema,
   privateHostedApprovalReceiptSchema,
   readPrivateHostedApproval,
 } from "./private-hosted-approval";
 import type { PrivateHostedApprovalReceipt } from "./private-hosted-approval";
+import { createHostedApprovalObservationDiagnostic } from "./hosted-approval-observation-diagnostic";
 import { projectInstalledEveEvent } from "./public-events";
 import {
   hostedSessionRecordSchema,
@@ -616,5 +618,152 @@ describe("private approval delta checkpoints", () => {
     });
     await current.observe(approvalSettled("unrelated-delta"));
     expect(current.values()).toEqual(resumed.values());
+  });
+
+  it("summarizes approval checkpoint alignment without exposing request or response data", () => {
+    const currentPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      installer: { ...plan.installer, sha256: "c".repeat(64) },
+    });
+    const currentToolInput = {
+      ...toolInput,
+      plan: currentPlan,
+      planDigest: operatorPlanDigest(currentPlan),
+    };
+    const oldReceipt = {
+      ...receipt(sessionId),
+      callId: "old-private-call-id",
+      requestId: "old-private-request-id",
+    };
+    const capture = privateHostedApprovalCaptureStateSchema.parse({
+      pendingRequests: [
+        {
+          callId: "current-private-call-id",
+          requestId: "current-private-request-id",
+          toolInput: currentToolInput,
+          toolName: "prepare-app-hosted-runtime",
+        },
+      ],
+      receipts: [oldReceipt],
+      sessionId,
+      version: 1,
+    });
+    const publicRequest = {
+      allowFreeform: false,
+      description: "private public description",
+      kind: "approval" as const,
+      options: [
+        { id: "approve", label: "private approve label" },
+        { id: "deny", label: "private deny label" },
+      ],
+      requestId: "current-private-request-id",
+      title: "private approval title",
+    };
+    const nativeBatch = {
+      requests: [
+        {
+          allowFreeform: false,
+          kind: "tool-approval" as const,
+          optionIds: ["approve", "deny"],
+          requestId: publicRequest.requestId,
+          toolName: "prepare-app-hosted-runtime",
+        },
+      ],
+      sequence: 9,
+      stepIndex: 3,
+      turnId: "private-native-turn-id",
+    };
+    const diagnostic = createHostedApprovalObservationDiagnostic({
+      coldReadProgress: true,
+      inlineReceipts: [oldReceipt],
+      nativeState: {
+        nextNativeIndex: 42,
+        pendingRequests: [publicRequest],
+        privateInputState: {
+          pending: [nativeBatch],
+          resolved: [
+            {
+              batch: nativeBatch,
+              resolutions: [
+                {
+                  kind: "tool-approval",
+                  outcome: "approved",
+                  requestId: publicRequest.requestId,
+                  response: {
+                    optionId: "approve",
+                    requestId: publicRequest.requestId,
+                    text: "private response text",
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        publicEventCount: 4,
+      },
+      privateCapture: capture,
+      publicPendingRequests: [publicRequest],
+      sessionId,
+    });
+
+    expect(diagnostic).toMatchObject({
+      coldReadProgress: true,
+      event: "builder.hosted_approval_observation",
+      inlineReceiptCount: 1,
+      nativeStatePresent: true,
+      nativeNextIndex: 42,
+      nativePendingCount: 1,
+      nativePublicEventCount: 4,
+      privateCapturePendingCount: 1,
+      privateCaptureReceiptCount: 1,
+      privateCapturePresent: true,
+      publicPendingRequestCount: 1,
+      publicPendingRequests: [
+        {
+          capturePending: true,
+          captureReceipt: false,
+          inlineReceipt: false,
+          kind: "approval",
+          nativePending: true,
+          nativeResolved: true,
+          planDigest: currentToolInput.planDigest,
+          resolution: {
+            approvedOptionMatch: true,
+            kind: "tool-approval",
+            outcome: "approved",
+          },
+        },
+      ],
+    });
+    expect(diagnostic?.protectedApprovalReferences).toContainEqual(
+      expect.objectContaining({
+        outcome: "approved",
+        planDigest: oldReceipt.toolInput.planDigest,
+        source: "inline_receipt",
+      }),
+    );
+    const serialized = JSON.stringify(diagnostic);
+    for (const secret of [
+      "current-private-request-id",
+      "old-private-request-id",
+      "current-private-call-id",
+      "old-private-call-id",
+      "private public description",
+      "private approval title",
+      "private approve label",
+      "private response text",
+      "private-native-turn-id",
+      "owner_1",
+    ]) {
+      expect(serialized).not.toContain(secret);
+    }
+    expect(
+      createHostedApprovalObservationDiagnostic({
+        coldReadProgress: false,
+        inlineReceipts: [],
+        publicPendingRequests: [],
+        sessionId,
+      }),
+    ).toBeUndefined();
   });
 });

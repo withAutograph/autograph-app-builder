@@ -63,6 +63,7 @@ import type { HostedSubmissionDiagnosticSink } from "./hosted-submission-diagnos
 const DEFAULT_TIMEOUT_MS = 10_000;
 const SESSION_READ_TIMEOUT_MS = 30_000;
 const SESSION_SETTLEMENT_POLL_INTERVAL_MS = 200;
+const SESSION_SETTLEMENT_MAX_POLL_INTERVAL_MS = 2000;
 const VERCEL_TRUSTED_OIDC_HEADER = "x-vercel-trusted-oidc-idp-token";
 const EVE_STREAM_FORMAT = "ndjson";
 const EVE_STREAM_VERSION = "25";
@@ -1137,6 +1138,7 @@ async function readRespondSettlement(input: {
   >[0]["internalSessionLimitResponse"];
 }): Promise<HostedEngineSnapshot> {
   const readSignal = AbortSignal.timeout(SESSION_READ_TIMEOUT_MS);
+  let pollIntervalMs = SESSION_SETTLEMENT_POLL_INTERVAL_MS;
   while (true) {
     if (readSignal.aborted) {
       throw new HostedSessionReadTimeoutError();
@@ -1158,7 +1160,8 @@ async function readRespondSettlement(input: {
     }
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- retry only after the prior durable snapshot was observed
-      await delay(SESSION_SETTLEMENT_POLL_INTERVAL_MS, undefined, { signal: readSignal });
+      await delay(pollIntervalMs, undefined, { signal: readSignal });
+      pollIntervalMs = Math.min(pollIntervalMs * 2, SESSION_SETTLEMENT_MAX_POLL_INTERVAL_MS);
     } catch (error) {
       if (readSignal.aborted) {
         throw new HostedSessionReadTimeoutError();
@@ -1199,6 +1202,7 @@ async function readRespondSettlementIncremental(input: {
   let { nativeObservationState } = input;
   const seeded = nativeObservationState !== undefined;
   const readSignal = AbortSignal.timeout(SESSION_READ_TIMEOUT_MS);
+  let pollIntervalMs = SESSION_SETTLEMENT_POLL_INTERVAL_MS;
   while (true) {
     if (readSignal.aborted) {
       throw new HostedSessionReadTimeoutError();
@@ -1233,7 +1237,8 @@ async function readRespondSettlementIncremental(input: {
     }
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- Poll only after the prior durable tail was observed.
-      await delay(SESSION_SETTLEMENT_POLL_INTERVAL_MS, undefined, { signal: readSignal });
+      await delay(pollIntervalMs, undefined, { signal: readSignal });
+      pollIntervalMs = Math.min(pollIntervalMs * 2, SESSION_SETTLEMENT_MAX_POLL_INTERVAL_MS);
     } catch (error) {
       if (readSignal.aborted) {
         throw new HostedSessionReadTimeoutError();
