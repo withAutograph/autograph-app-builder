@@ -12,8 +12,15 @@ type ResourceLeaseInput = HostedOperatorContext & {
   plan: HostedOperatorPlan;
 };
 
-type Fence = { fenceGeneration: number; leaseId: string; operationRef: string };
-type AdvisoryLockParts = { classId: string; objectId: string };
+interface Fence {
+  fenceGeneration: number;
+  leaseId: string;
+  operationRef: string;
+}
+interface AdvisoryLockParts {
+  classId: string;
+  objectId: string;
+}
 
 const leaseAuthorityUnavailable = "Protected resource lease authority is unavailable.";
 const leaseSessionLost = "Protected resource lease session was lost.";
@@ -93,14 +100,14 @@ const readLeaseSnapshot = async (
     throw new Error(leaseAuthorityUnavailable);
   }
   const operator = hostedOperatorRecordSchema.parse(record.operator);
-  if (
-    record.leaseId === undefined ||
-    record.leaseExpiresAt === undefined ||
-    Date.parse(record.leaseExpiresAt) <= now() ||
-    operator.operationRef !== input.operationRef ||
-    operator.fenceGeneration === undefined ||
-    operator.planDigest !== operatorPlanDigest(input.plan)
-  ) {
+  const hasLiveLease =
+    record.leaseId !== undefined &&
+    record.leaseExpiresAt !== undefined &&
+    Date.parse(record.leaseExpiresAt) > now();
+  const hasCurrentFence =
+    operator.operationRef === input.operationRef && operator.fenceGeneration !== undefined;
+  const hasCurrentPlan = operator.planDigest === operatorPlanDigest(input.plan);
+  if (!hasLiveLease || !hasCurrentFence || !hasCurrentPlan) {
     throw new Error(leaseAuthorityUnavailable);
   }
   return {
@@ -132,12 +139,11 @@ export const createPostgresHostedOperatorResourceLease = (input: {
   ): Promise<T> => {
     let connectionClosed = false;
     let leaseActive = false;
-    const connectionLost = Promise.withResolvers<never>();
-    void connectionLost.promise.catch(() => undefined);
+    const connectionLost = Promise.withResolvers<{ error: Error; kind: "lost" }>();
     const database = input.openLockClient(() => {
       connectionClosed = true;
       leaseActive = false;
-      connectionLost.reject(new Error(leaseSessionLost));
+      connectionLost.resolve({ error: new Error(leaseSessionLost), kind: "lost" });
     });
     leaseActive = true;
     const sessionUnavailable = () => connectionClosed || !leaseActive;
@@ -227,9 +233,18 @@ export const createPostgresHostedOperatorResourceLease = (input: {
 
       // Revalidate the same backend, all acquired locks and the durable fence after acquisition.
       await assertFence();
-      const callback = run(assertFence);
-      const completed = await Promise.race([callback, connectionLost.promise]);
-      return completed;
+      const callbackOutcome = async () => {
+        try {
+          return { kind: "completed" as const, value: await run(assertFence) };
+        } catch (error) {
+          return { error, kind: "failed" as const };
+        }
+      };
+      const outcome = await Promise.race([callbackOutcome(), connectionLost.promise]);
+      if (outcome.kind === "lost" || outcome.kind === "failed") {
+        throw outcome.error;
+      }
+      return outcome.value;
     } finally {
       leaseActive = false;
       // Do not issue pg_advisory_unlock: the client may have disconnected and reconnected.

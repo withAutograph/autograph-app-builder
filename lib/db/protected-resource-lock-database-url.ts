@@ -1,7 +1,7 @@
 import { parseHostedDatabaseUrl } from "./postgres-connection-policy";
 
 /** Derives the direct Neon endpoint required for session-scoped protected resource locks. */
-export function parseProtectedResourceLockDatabaseUrl(value: unknown): string {
+export const parseProtectedResourceLockDatabaseUrl = (value: string): string => {
   const pooled = parseHostedDatabaseUrl(value);
   const url = new URL(pooled);
   if (!url.hostname.endsWith(".neon.tech")) {
@@ -14,4 +14,4 @@ export function parseProtectedResourceLockDatabaseUrl(value: unknown): string {
   }
   url.hostname = [endpoint.slice(0, -"-pooler".length), ...domain].join(".");
   return url.toString();
-}
+};
