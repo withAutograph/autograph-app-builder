@@ -1081,7 +1081,11 @@ describe("shared host protection plan successor", () => {
 describe("pending app installer repair", () => {
   const interruptedInstall = async () => {
     const f = fixture();
-    const appInstallId = plan.effects.find((effect) => effect.kind === "install")!.id;
+    const appInstall = plan.effects.find((effect) => effect.kind === "install");
+    if (appInstall === undefined) {
+      throw new Error("Expected the fixture plan to contain an install effect");
+    }
+    const appInstallId = appInstall.id;
     const originalPlan = hostedOperatorPlanSchema.parse({
       ...plan,
       stage: "app",
@@ -1099,7 +1103,13 @@ describe("pending app installer repair", () => {
     const original = await prepared(f);
     const execute = f.deps.executeEffect;
     f.deps.executeEffect = async (input) => {
-      if (input.effect.id !== appInstallId) return await execute(input);
+      if (input.effect.id !== appInstallId) {
+        return await execute(input);
+      }
+      const [firstAccess] = originalPlan.access;
+      if (firstAccess === undefined) {
+        throw new Error("Expected the fixture plan to contain access");
+      }
       const checkpoint = await input.bindWorkerContext({ contextDigest: "6".repeat(64) });
       await checkpoint({
         contextDigest: "6".repeat(64),
@@ -1109,13 +1119,17 @@ describe("pending app installer repair", () => {
         receipt: { state: "unknown" },
         resourceId: originalPlan.appDatabase.resourceId,
         sequence: 1,
-        tenantId: originalPlan.access[0]!.organizationId,
+        tenantId: firstAccess.organizationId,
       });
       throw new HostedOperatorError("reconciliation_required");
     };
     f.approve();
     expect(await f.client.request(original)).toMatchObject({ code: "reconciliation_required" });
-    const previous = structuredClone(f.row!);
+    const { row } = f;
+    if (row === undefined) {
+      throw new Error("Expected the interrupted fixture journal row");
+    }
+    const previous = structuredClone(row);
     const repaired = hostedOperatorPlanSchema.parse({
       ...originalPlan,
       installer: { ...originalPlan.installer, sha256: "2".repeat(64) },
@@ -1126,30 +1140,29 @@ describe("pending app installer repair", () => {
 
   it("retains uncertain history and resources but requires the repaired plan's own approval", async () => {
     const { f, original, previous, repaired, execute } = await interruptedInstall();
-    const readApproval = f.deps.readApproval;
+    const { readApproval } = f.deps;
     f.deps.readApproval = async (input) =>
       input.planDigest === original.planDigest ? await readApproval(input) : null;
     const successor = { ...(await prepared(f)), callId: "repaired-installer-call" };
     expect(successor.operationRef).toBe(original.operationRef);
     expect(successor.planDigest).toBe(operatorPlanDigest(repaired));
     const retained = f.row?.record;
-    expect(retained?.privateState).toEqual(previous.record.privateState);
-    expect(retained?.approvedByCallId).toBe("operator:unapproved-plan");
-    expect(retained?.operator?.fenceGeneration).toBe(previous.record.operator?.fenceGeneration);
-    expect(retained?.operator?.pendingEffectAttempt).toBeUndefined();
-    expect(retained?.operator?.workerCheckpoints).toEqual(
-      previous.record.operator?.workerCheckpoints,
+    if (retained?.operator === undefined) {
+      throw new Error("Expected the recovered fixture operator record");
+    }
+    const { operator } = retained;
+    expect(retained.privateState).toEqual(previous.record.privateState);
+    expect(retained.approvedByCallId).toBe("operator:unapproved-plan");
+    expect(operator.fenceGeneration).toBe(previous.record.operator?.fenceGeneration);
+    expect(operator.pendingEffectAttempt).toBeUndefined();
+    expect(operator.workerCheckpoints).toEqual(previous.record.operator?.workerCheckpoints);
+    const retainedInstallerOperation = operator.retainedInstallerOperations?.find(
+      (operation) => operation.approvedByCallId === original.callId,
     );
-    expect(retained?.operator?.retainedInstallerOperations).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          approvedByCallId: original.callId,
-          operator: expect.objectContaining({
-            planDigest: original.planDigest,
-            pendingEffectAttempt: previous.record.operator?.pendingEffectAttempt,
-          }),
-        }),
-      ]),
+    expect(retainedInstallerOperation?.approvedByCallId).toBe(original.callId);
+    expect(retainedInstallerOperation?.operator.planDigest).toBe(original.planDigest);
+    expect(retainedInstallerOperation?.operator.pendingEffectAttempt).toEqual(
+      previous.record.operator?.pendingEffectAttempt,
     );
     expect(await f.client.request(successor)).toMatchObject({ code: "authorization_required" });
     expect(await f.client.request(original)).toMatchObject({ code: "resource_mismatch" });

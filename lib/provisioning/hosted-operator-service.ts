@@ -1285,6 +1285,36 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
               ) {
                 continue;
               }
+              // A source-successor plan retains the uncertain effect but archives its
+              // old worker attempt. Reserve a new unbound attempt before credential
+              // readback; this records no provider outcome or worker context.
+              if (
+                requireOperator(record).pendingEffectId === effect.id &&
+                requireOperator(record).pendingEffectAttempt === undefined
+              ) {
+                const readbackAttemptId = randomUUID();
+                record = (
+                  await ownedUpdate((value) => {
+                    const currentOperator = requireOperator(value);
+                    if (
+                      currentOperator.pendingEffectId !== effect.id ||
+                      currentOperator.fenceGeneration !== fenceGeneration
+                    ) {
+                      throw new HostedOperatorError("operation_in_progress");
+                    }
+                    if (currentOperator.pendingEffectAttempt !== undefined) {
+                      return value;
+                    }
+                    return {
+                      ...value,
+                      operator: {
+                        ...currentOperator,
+                        pendingEffectAttempt: { id: readbackAttemptId },
+                      },
+                    };
+                  })
+                ).record;
+              }
               const gatewayDeliveryProvenance =
                 effect.kind === GATEWAY_DELIVERY_EFFECT
                   ? sharedHostProtectionDeliveryProvenance(record)

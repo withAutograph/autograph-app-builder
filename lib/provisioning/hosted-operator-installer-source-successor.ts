@@ -4,6 +4,9 @@ import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
 
 const UNAPPROVED_PLAN = "operator:unapproved-plan";
 
+const isAppPreparePlan = (plan: HostedOperatorPlan): boolean =>
+  plan.action === "prepare" && plan.stage === "app";
+
 export interface RepairedInstallerSource {
   id: string;
   sha256: string;
@@ -13,14 +16,13 @@ const hasOnlyInstallerDigestChanged = (
   prior: HostedOperatorPlan,
   candidate: HostedOperatorPlan,
 ): boolean => {
-  if (
-    prior.action !== "prepare" ||
-    prior.stage !== "app" ||
-    candidate.action !== "prepare" ||
-    candidate.stage !== "app" ||
-    prior.installer.reference !== candidate.installer.reference ||
-    prior.installer.sha256 === candidate.installer.sha256
-  ) {
+  if (!isAppPreparePlan(prior) || !isAppPreparePlan(candidate)) {
+    return false;
+  }
+  if (prior.installer.reference !== candidate.installer.reference) {
+    return false;
+  }
+  if (prior.installer.sha256 === candidate.installer.sha256) {
     return false;
   }
 
@@ -64,14 +66,20 @@ export const isInstallerSourceSuccessor = (
   }
 
   const install = prior.plan.effects.find((effect) => effect.id === prior.pendingEffectId);
+  if (install === undefined || install.kind !== "install") {
+    return false;
+  }
+  // The existing router assigns this reserved effect to the separate Auth worker.
+  if (install.id === "auth-schema") {
+    return false;
+  }
   if (
-    install?.kind !== "install" ||
-    // The existing router assigns this reserved effect to the separate Auth worker.
-    install.id === "auth-schema" ||
-    (install.resourceId !== undefined &&
-      install.resourceId !== prior.plan.appDatabase.resourceId) ||
-    new Set(prior.plan.effects.map((effect) => effect.id)).size !== prior.plan.effects.length
+    install.resourceId !== undefined &&
+    install.resourceId !== prior.plan.appDatabase.resourceId
   ) {
+    return false;
+  }
+  if (new Set(prior.plan.effects.map((effect) => effect.id)).size !== prior.plan.effects.length) {
     return false;
   }
   const expiry = Date.parse(prior.plan.retention.expiresAt);

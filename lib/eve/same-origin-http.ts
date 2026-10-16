@@ -342,6 +342,30 @@ export async function* streamSameOriginEveEvents(input: {
     throw error;
   }
   input.readTrace?.enter("headers");
+  try {
+    const contentType = response.headers.get("content-type")?.split(";", 1)[0];
+    const observedSessionId = response.headers.get("x-eve-session-id");
+    const observedFormat = response.headers.get("x-eve-stream-format");
+    const observedVersion = response.headers.get("x-eve-stream-version");
+    const observedTail = response.headers.get("x-eve-stream-tail-index");
+    const tailSyntaxIsValid = observedTail !== null && /^-?\d+$/u.test(observedTail);
+    const observedTailNumber = Number(observedTail);
+    const tailIsValid =
+      tailSyntaxIsValid && Number.isSafeInteger(observedTailNumber) && observedTailNumber >= -1;
+    input.readTrace?.setStreamContract({
+      bodyPresent: response.body !== null,
+      contentTypeMatches: contentType === "application/x-ndjson",
+      cursorWithinTail: tailIsValid && startIndex <= observedTailNumber + 1,
+      formatMatches: observedFormat === EVE_STREAM_FORMAT,
+      httpStatus: response.status,
+      sessionIdMatches: observedSessionId === input.sessionId,
+      tailPresent: observedTail !== null,
+      tailValid: tailIsValid,
+      versionMatches: observedVersion === EVE_STREAM_VERSION,
+    });
+  } catch {
+    /* Diagnostic extraction must never affect the stream contract or reader. */
+  }
   if (response.status >= 300 && response.status < 400) {
     throw new Error("Canonical Eve redirects are not allowed.");
   }
