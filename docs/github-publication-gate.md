@@ -107,6 +107,15 @@ tree, both diffs, the draft PR, and the tenant-scoped repository. GitHub receive
 a merge commit through an expected-head update without force pushing. A moved
 base or head requires a fresh merge, validation, review, and approval.
 
+Later revisions retain the latest provider-proved approved reconciliation as
+their publication baseline, independently of a new unpublished candidate.
+Reuse requires the same owned repository, draft, branch and original publication
+receipt, plus provider verification of the applied merge's parents, tree and
+commit marker. Candidate replacement preserves that proven proposal, and a
+verified successful publication records its successor before optional app-source
+recording. An unproved head leaves the original baseline and existing conflict
+protection in place; independent edits are still preserved and refused on conflict.
+
 `hosted_github_installation` binds that same tenant tuple to one exact GitHub
 App installation and expected account identity. Binding is available only
 through the owner-only, confirmation-digest-bound

@@ -43,6 +43,8 @@ export interface DraftReconciliationCandidate {
     headComplete: boolean;
   };
   proposal?: ExistingDraftReconciliationProposal;
+  /** Last provider-proved approved merge, independent of the current unpublished candidate. */
+  publishedReconciliation?: ExistingDraftReconciliationProposal;
 }
 
 export const draftReconciliationState = defineState<DraftReconciliationCandidate | null>(

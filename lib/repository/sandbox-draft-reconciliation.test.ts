@@ -315,6 +315,85 @@ describe("isolated draft reconciliation", () => {
     },
   );
 
+  it.each([false, true])(
+    "replays a second generated revision from its approved merge baseline while preserving third-party changes (%s)",
+    async (thirdPartyChange) => {
+      const { root, sandbox, baseSha } = fixture();
+      const checkout = path.join(root, "repository");
+      const relative = "apps/demo/generated/release.json";
+      const generatedPath = path.join(checkout, relative);
+      mkdirSync(path.dirname(generatedPath), { recursive: true });
+      const published = '{"release":"approved-merge"}\n';
+      const revised = '{"release":"second-revision"}\n';
+      writeFileSync(generatedPath, published);
+      git(checkout, "add", ".");
+      git(
+        checkout,
+        "-c",
+        "user.name=Fixture",
+        "-c",
+        "user.email=fixture@example.test",
+        "commit",
+        "-m",
+        "approved merged generated result",
+      );
+      const publishedHead = git(checkout, "rev-parse", "HEAD");
+      if (thirdPartyChange) {
+        writeFileSync(generatedPath, '{"release":"someone-else"}\n');
+        git(checkout, "add", ".");
+        git(
+          checkout,
+          "-c",
+          "user.name=Fixture",
+          "-c",
+          "user.email=fixture@example.test",
+          "commit",
+          "-m",
+          "independent generated edit",
+        );
+      }
+      const headSha = git(checkout, "rev-parse", "HEAD");
+      git(checkout, "push", "origin", "draft");
+      const readFile = () =>
+        Promise.resolve({
+          bytes: Buffer.from(revised),
+          digest: digest(revised),
+          mode: "100644",
+        });
+      const preparation = prepareDraftReconciliation({
+        appId: "demo",
+        baseBranch: "main",
+        baseSha,
+        headBranch: "draft",
+        headSha,
+        repository: { name: "arrusted-development", owner: "withAutograph" },
+        sandbox,
+        workspaceRoot: root,
+        unpublished: {
+          priorPublishedHeadSha: publishedHead,
+          reviewDigest: "e".repeat(64),
+          changes: [
+            {
+              path: relative,
+              kind: "modified",
+              before: { digest: digest('{"release":"selected-source"}\n'), mode: "100644" },
+              after: { digest: digest(revised), mode: "100644" },
+            },
+          ],
+          contentSource: { readFile },
+        },
+      });
+      if (thirdPartyChange) {
+        await expect(preparation).rejects.toThrow("matches neither");
+        expect(readFileSync(generatedPath, "utf-8")).toBe('{"release":"someone-else"}\n');
+        return;
+      }
+      const prepared = await preparation;
+      expect(readFileSync(path.join(prepared.root, relative), "utf-8")).toBe(revised);
+      expect(readFileSync(generatedPath, "utf-8")).toBe(published);
+    },
+  );
+
   it("preserves later third-party changes to the same published file", async () => {
     const { root, sandbox, baseSha, headSha: publishedHead } = fixture();
     const checkout = path.join(root, "repository");

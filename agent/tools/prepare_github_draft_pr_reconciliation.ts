@@ -174,7 +174,14 @@ export default defineTool({
     const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
     const priorPublishedProposalDigest =
       state.publishedGitHubDraftProposalDigest ?? state.githubDraftProposal?.proposal.digest;
+    const original = draftReconciliationState.get();
+    const previousReconciliation =
+      original?.appId === state.appSpec.appId ? original.proposal : undefined;
+    const publishedReconciliation =
+      original?.appId === state.appSpec.appId ? original.publishedReconciliation : undefined;
     const source = await runtime.inspectExistingDraftReconciliationSource({
+      ...(previousReconciliation === undefined ? {} : { previousReconciliation }),
+      ...(publishedReconciliation === undefined ? {} : { publishedReconciliation }),
       ...(priorPublishedProposalDigest === undefined ? {} : { priorPublishedProposalDigest }),
       name: state.githubSource.repository.name,
       owner: state.githubSource.repository.owner,
@@ -186,7 +193,6 @@ export default defineTool({
       publishedHeadSha: source.publishedHeadSha,
       resolvedRef: state.githubSource.resolvedRef,
     });
-    const original = draftReconciliationState.get();
     const unpublished =
       state.reviewReceipt.changes.length === 0
         ? undefined
@@ -253,8 +259,13 @@ export default defineTool({
     void _created;
     void _preserved;
     void _replayed;
+    const retainedPublishedReconciliation =
+      source.publishedReconciliation ?? publishedReconciliation;
     const candidate = {
       ...preparedCandidate,
+      ...(retainedPublishedReconciliation === undefined
+        ? {}
+        : { publishedReconciliation: retainedPublishedReconciliation }),
       githubSourceDigest: state.githubSource.digest,
       originalReviewDigest: state.reviewReceipt.digest,
       pullRequestNumber: input.pullRequestNumber,

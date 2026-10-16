@@ -4,6 +4,16 @@ import type { VercelInstallationBinding } from "../integrations/vercel-installat
 import { readHostedOperatorProviderInventory } from "./hosted-operator-provider-inventory";
 import type { OperatorInventoryConfiguration } from "./hosted-operator-provider-inventory";
 
+const requestUrl = (request: Parameters<typeof fetch>[0]): string => {
+  if (request instanceof Request) {
+    return request.url;
+  }
+  if (request instanceof URL) {
+    return request.href;
+  }
+  return request;
+};
+
 const publicJwk = {
   ...generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }),
   alg: "EdDSA",
@@ -546,12 +556,12 @@ describe("private read-only operator provider inventory", () => {
     expect(observed.verification.publicOrigin).toBe(configuration.verification.publicOrigin);
     expect(
       f.fetcher.mock.calls.some(([request]) =>
-        String(request).startsWith("https://gateway-current.example.test/_platform/jwks.json"),
+        requestUrl(request).startsWith("https://gateway-current.example.test/_platform/jwks.json"),
       ),
     ).toBe(true);
     expect(
       f.fetcher.mock.calls.some(([request]) =>
-        String(request).startsWith("https://gateway-old.example.test/"),
+        requestUrl(request).startsWith("https://gateway-old.example.test/"),
       ),
     ).toBe(false);
   });

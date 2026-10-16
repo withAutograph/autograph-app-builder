@@ -105,6 +105,57 @@ const readOwnedDraftPublication = async (input: {
   return prior;
 };
 
+const readAppliedOwnedReconciliation = async (input: {
+  adapter: GitHubPublicationAdapter;
+  draft: ExistingDraftObservation;
+  prior: DraftPullRequestSuccessReceipt | undefined;
+  candidates: readonly (ExistingDraftReconciliationProposal | undefined)[];
+}): Promise<ExistingDraftReconciliationProposal | undefined> => {
+  const { prior } = input;
+  const inspect = input.adapter.inspectAppliedDraftReconciliation;
+  if (prior === undefined || inspect === undefined) {
+    return undefined;
+  }
+  const { draft } = input;
+  const candidates = input.candidates.filter(
+    (candidate): candidate is ExistingDraftReconciliationProposal =>
+      candidate !== undefined &&
+      candidate.expectedHeadSha !== draft.headSha &&
+      candidate.resolvedTree === draft.headTree &&
+      isDeepStrictEqual(
+        [
+          candidate.repositoryId,
+          candidate.owner,
+          candidate.name,
+          candidate.pullRequestId,
+          candidate.pullRequestNumber,
+          candidate.branchName,
+          candidate.baseBranch,
+          candidate.priorPublicationDigest,
+        ],
+        [
+          draft.repositoryId,
+          draft.owner,
+          draft.name,
+          draft.pullRequestId,
+          draft.number,
+          draft.headBranch,
+          draft.baseBranch,
+          prior.digest,
+        ],
+      ),
+  );
+  const unique = [
+    ...new Map(candidates.map((candidate) => [candidate.digest, candidate])).values(),
+  ];
+  for (const candidate of unique) {
+    if (await inspect.call(input.adapter, candidate, draft)) {
+      return candidate;
+    }
+  }
+  return undefined;
+};
+
 export interface GitHubPublicationRuntimeStatus {
   version: 3;
   enabled: boolean;
@@ -209,10 +260,14 @@ export interface GitHubPublicationRuntime {
     name: string;
     pullRequestNumber: number;
     priorPublishedProposalDigest?: string;
+    /** Retained server-owned sealed candidate; never a caller-supplied baseline SHA. */
+    previousReconciliation?: ExistingDraftReconciliationProposal;
+    publishedReconciliation?: ExistingDraftReconciliationProposal;
   }) => Promise<{
     draft: ExistingDraftObservation;
     base: GitHubRepositoryObservation;
     publishedHeadSha?: string;
+    publishedReconciliation?: ExistingDraftReconciliationProposal;
   }>;
   sealExistingDraftReconciliation: (input: {
     githubSource: ImmutableGitHubSourceReceipt;
@@ -579,7 +634,20 @@ export function composeGitHubPublicationRuntime(input: {
           "The draft PR base no longer matches the connected repository's default branch. Reopen the current PR and select its intended base before reconciliation.",
         );
       }
-      return { base, draft, ...(prior === undefined ? {} : { publishedHeadSha: prior.branchSha }) };
+      const publishedReconciliation = await readAppliedOwnedReconciliation({
+        adapter,
+        draft,
+        prior,
+        candidates: [request.previousReconciliation, request.publishedReconciliation],
+      });
+      const publishedHeadSha =
+        publishedReconciliation === undefined ? prior?.branchSha : draft.headSha;
+      return {
+        base,
+        draft,
+        ...(publishedHeadSha === undefined ? {} : { publishedHeadSha }),
+        ...(publishedReconciliation === undefined ? {} : { publishedReconciliation }),
+      };
     },
     async publishDraftPullRequest(request) {
       const proposal = await proposals.read(request.expectedProposalDigest);

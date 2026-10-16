@@ -81,6 +81,23 @@ const origin = (value: string): string => {
   }
   return parsed.origin;
 };
+const qualifiedGatewayOrigin = (
+  configuredOrigin: string,
+  deployment: z.infer<typeof deploymentSchema> | undefined,
+  bootstrapPlanning: boolean,
+  resolveGatewayByPublicOrigin: true | undefined,
+): string => {
+  // Only new planning follows the already qualified public alias to immutable source.
+  // Frozen execution continues to use its exact configured transport endpoint.
+  const currentGatewayTransport =
+    bootstrapPlanning && resolveGatewayByPublicOrigin === true ? deployment : undefined;
+  return origin(
+    currentGatewayTransport === undefined
+      ? configuredOrigin
+      : `https://${currentGatewayTransport.url}`,
+  );
+};
+
 const invalidDeploymentObservation = (input: {
   deployment: z.infer<typeof deploymentSchema>;
   reference: OperatorDeploymentReference;
@@ -366,16 +383,11 @@ export const readHostedOperatorProviderInventory = async (input: {
       observe(config.operator),
     ]);
     const publicOrigin = origin(config.verification.publicOrigin);
-    // Only new planning follows the already qualified public alias to immutable source.
-    // Frozen execution continues to use its exact configured transport endpoint.
-    const currentGatewayTransport =
-      bootstrapPlanning && input.resolveGatewayByPublicOrigin === true
-        ? gateway.deployment
-        : undefined;
-    const gatewayOrigin = origin(
-      currentGatewayTransport === undefined
-        ? config.verification.gatewayOrigin
-        : `https://${currentGatewayTransport.url}`,
+    const gatewayOrigin = qualifiedGatewayOrigin(
+      config.verification.gatewayOrigin,
+      gateway.deployment,
+      bootstrapPlanning,
+      input.resolveGatewayByPublicOrigin,
     );
     if (gateway.deployment !== undefined) {
       const aliases = aliasSchema.parse(
