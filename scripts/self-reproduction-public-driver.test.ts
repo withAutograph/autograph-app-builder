@@ -579,11 +579,60 @@ describe("public self-reproduction driver", () => {
     });
     expect(calls.filter((call) => call.name === "autograph_send").map((call) => call.args)).toEqual(
       [
-        { ...pending, sessionId: "one-session" },
-        { ...pending, sessionId: "one-session" },
+        { ...pending, observationCursor: 1, sessionId: "one-session" },
+        { ...pending, observationCursor: 1, sessionId: "one-session" },
       ],
     );
     expect(current.pendingMessage).toBeUndefined();
+  });
+  it("retries a saved SEND with its observed cursor and does not regress on an older receipt page", async () => {
+    const current = state();
+    current.session = { ...session("waiting"), cursor: 4552, inputRequests: [] };
+    current.pendingMessage = {
+      clientRequestId: "same-accepted-message",
+      message: "Continue the saved app",
+    };
+    const calls: { name: string; args: Record<string, unknown> }[] = [];
+    const savedCursors: number[] = [];
+    await runPublicSession({
+      pollMs: 1,
+      save: () => {
+        savedCursors.push(current.session?.cursor ?? 0);
+      },
+      sleep: () => Promise.resolve(),
+      state: current,
+      timeoutMs: 1000,
+      transport: {
+        call: async (name, args) => {
+          calls.push({ args, name });
+          return {
+            ...session(name === "autograph_send" ? "working" : "completed"),
+            cursor: name === "autograph_send" ? 100 : 4556,
+          };
+        },
+      },
+    });
+    expect(calls.filter((call) => call.name === "autograph_send")).toEqual([
+      {
+        args: {
+          clientRequestId: "same-accepted-message",
+          message: "Continue the saved app",
+          observationCursor: 4552,
+          sessionId: "one-session",
+        },
+        name: "autograph_send",
+      },
+    ]);
+    expect(calls).toContainEqual({
+      args: { cursor: 4552, sessionId: "one-session" },
+      name: "autograph_get",
+    });
+    for (const observation of calls.filter((call) => call.name === "autograph_get")) {
+      expect(observation.args.sessionId).toBe("one-session");
+      expect(observation.args.cursor).toBeGreaterThanOrEqual(4552);
+    }
+    expect(current.session?.cursor).toBe(4556);
+    expect(savedCursors).toContain(4552);
   });
   it("observes waiting without inventing a message", async () => {
     const current = state();

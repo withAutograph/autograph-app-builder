@@ -539,7 +539,7 @@ const completeBrowserGet = async (
   return new Response(null, {
     headers: {
       ...noStore,
-      location: `${ports.builderOrigin}/`,
+      location: `${ports.builderOrigin}/auth/account-connected`,
       "set-cookie": cookieHeader("", 0, sessionId),
     },
     status: 303,

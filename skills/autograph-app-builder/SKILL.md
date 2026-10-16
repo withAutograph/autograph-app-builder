@@ -24,7 +24,8 @@ or direct filesystem implementation.
    Builder supplies an opaque handoff ID, redeem it with
    `autograph_start({ handoffId, clientRequestId })`; never decode it or ask the
    user to paste the underlying brief, provider IDs, or repository authority.
-2. Preserve the returned `sessionId` and `cursor`. A healthy active resume keeps
+2. Preserve the returned `sessionId` and the largest `cursor` observed for that
+   same session. A healthy active resume keeps
    the handle; recovery after a terminal or interrupted session may return a new
    child handle.
 3. Use `autograph_get` to obtain the current product result and continue from it.
@@ -43,7 +44,8 @@ or direct filesystem implementation.
    delivery may advance the cancelled session. Ordinary reads never resume Stop.
 6. Treat cancellation as cooperative and poll for the resulting state. If a SEND
    returns `submission_unknown`, retry the exact same call with the same
-   `clientRequestId`, session and message; do not send a new message or create a
+   `clientRequestId`, session and message, including its saved `observationCursor`
+   to read current progress after delivery settles. Do not send a new message or create a
    child to bypass the unknown outcome. A later Stop wins.
 7. Treat the MCP App as an optional progress and input-control surface only. Never
    use it to display or embed the generated app preview.

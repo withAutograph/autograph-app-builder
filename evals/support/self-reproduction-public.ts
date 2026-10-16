@@ -5,6 +5,7 @@ import { appendFileSync, chmodSync, existsSync } from "node:fs";
 import path from "node:path";
 import {
   eveRespondInputSchema,
+  retainPublicSessionCursor,
   eveSessionResultSchema,
   eveStartInputSchema,
 } from "../../lib/mcp/contracts";
@@ -432,7 +433,11 @@ const sendPendingMessage = async (options: SessionOptions, accept: AcceptSession
       throw new Error("Missing public session for pending message");
     }
     accept(
-      await transport.call("autograph_send", { ...pending, sessionId: state.session.sessionId }),
+      await transport.call("autograph_send", {
+        ...pending,
+        observationCursor: state.session.cursor,
+        sessionId: state.session.sessionId,
+      }),
     );
     delete state.pendingMessage;
     save();
@@ -520,7 +525,7 @@ export const runPublicSession = async (options: SessionOptions) => {
         "Builder returned no public session handle. The prior session and exact pending request are preserved; inspect the retained response before resuming.",
       );
     }
-    state.session = result;
+    state.session = retainPublicSessionCursor(state.session, result);
     state.outcome = state.session.status;
     delete state.error;
     save();

@@ -243,6 +243,18 @@ export const eveSessionResultSchema = z
 
 export type EveSessionResult = z.infer<typeof eveSessionResultSchema>;
 
+/** A mutation receipt may replay an earlier page for this same session. */
+export const retainPublicSessionCursor = (
+  previous: EveSessionResult | undefined,
+  result: EveSessionResult,
+): EveSessionResult => ({
+  ...result,
+  cursor:
+    previous?.sessionId === result.sessionId
+      ? Math.max(previous.cursor, result.cursor)
+      : result.cursor,
+});
+
 export const publicSessionStageSchema = z.enum([
   "starting",
   "designing",
@@ -321,6 +333,7 @@ export const eveGetInputSchema = z
     }
   });
 export const eveSendInputSchema = z.object({
+  observationCursor: eveGetInputSchema.shape.cursor.removeDefault().optional(),
   clientRequestId: z.string().min(1).max(200),
   message: z.string().trim().min(1).max(32_000),
   sessionId: z.string().min(1),
