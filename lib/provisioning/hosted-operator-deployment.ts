@@ -48,6 +48,7 @@ import {
   hostedRuntimePostgresOptions,
   parseHostedDatabaseUrl,
 } from "../db/postgres-connection-policy";
+import { parseProtectedResourceLockDatabaseUrl } from "../db/protected-resource-lock-database-url";
 import { createVercelWorkloadIdentity } from "../eve/vercel-workload-identity";
 import { parseHostedSessionRow, createPostgresHostedEveStore } from "../eve/postgres-hosted-store";
 import { createSameOriginEveTransport } from "../eve/same-origin-http";
@@ -540,9 +541,11 @@ export const createHostedOperatorControlPlane = async (input: {
     });
     const withResourceLease = createPostgresHostedOperatorResourceLease({
       openLockClient: (onConnectionClosed) =>
-        postgres(parseHostedDatabaseUrl(config.databaseUrl), {
+        postgres(parseProtectedResourceLockDatabaseUrl(config.databaseUrl), {
           ...hostedRuntimePostgresOptions,
+          idle_timeout: 0,
           max: 1,
+          max_lifetime: 0,
           onclose: onConnectionClosed,
         }),
       store,

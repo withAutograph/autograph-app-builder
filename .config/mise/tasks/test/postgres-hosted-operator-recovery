@@ -1,0 +1,12 @@
+#!/bin/sh
+#MISE description="Exercise protected hosted operator recovery against owned local PostgreSQL"
+set -eu
+case " $* " in
+  *" --database-url "*)
+    exec "$PWD/.config/mise/scripts/trusted-node-launcher" "$(mise which node)" --import tsx \
+      .config/mise/scripts/repository/test-postgres-hosted-operator-recovery.mts "$@"
+    ;;
+esac
+postgres_bin=$(dirname "$(command -v initdb)")
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" "$(mise which node)" --import tsx \
+  .config/mise/scripts/repository/test-postgres-hosted-operator-recovery.mts --postgres-bin "$postgres_bin" "$@"
