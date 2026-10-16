@@ -1683,7 +1683,7 @@ describe("same-origin canonical Eve transport", () => {
 
     await expect(async () => {
       for await (const _event of streamSameOriginEveEvents({
-        config,
+        config: { ...config, timeoutMs: 10_000 },
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning fetch contract.
         fetchImplementation: vi.fn(async () => response),
         readTrace,
