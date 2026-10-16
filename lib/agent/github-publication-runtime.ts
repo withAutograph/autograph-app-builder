@@ -65,10 +65,16 @@ const draftReceiptKind = "draft-pull-request" as const;
 
 const readOwnedDraftPublication = async (input: {
   receipts: GitHubPublicationReceiptStore;
-  proposalDigest: string;
+  proposalDigest?: string;
   draft: ExistingDraftObservation;
-}): Promise<DraftPullRequestSuccessReceipt> => {
-  const prior = await input.receipts.read(input.proposalDigest);
+}): Promise<DraftPullRequestSuccessReceipt | undefined> => {
+  const prior =
+    input.proposalDigest === undefined
+      ? await input.receipts.findDraftByPullRequest?.(input.draft.repositoryId, input.draft.number)
+      : await input.receipts.read(input.proposalDigest);
+  if (prior === undefined && input.proposalDigest === undefined) {
+    return undefined;
+  }
   if (prior !== undefined) {
     assertCanonicalGitHubMutationReceipt(prior);
   }
@@ -84,7 +90,7 @@ const readOwnedDraftPublication = async (input: {
       prior.branchName,
     ],
     [
-      input.proposalDigest,
+      input.proposalDigest ?? prior.proposalDigest,
       input.draft.repositoryId,
       input.draft.pullRequestId,
       input.draft.number,
@@ -553,14 +559,11 @@ export function composeGitHubPublicationRuntime(input: {
     },
     async inspectExistingDraftReconciliationSource(request) {
       const draft = await this.inspectExistingDraftSource(request);
-      const prior =
-        request.priorPublishedProposalDigest === undefined
-          ? undefined
-          : await readOwnedDraftPublication({
-              draft,
-              proposalDigest: request.priorPublishedProposalDigest,
-              receipts,
-            });
+      const prior = await readOwnedDraftPublication({
+        draft,
+        proposalDigest: request.priorPublishedProposalDigest,
+        receipts,
+      });
       const base = await adapter.inspectRepository({
         operation: draftPublicationOperation,
         ref: `refs/heads/${draft.baseBranch}`,
@@ -804,17 +807,11 @@ export function composeGitHubPublicationRuntime(input: {
           "The selected checkout or draft PR head moved during conflict resolution. Reopen its current branch, resolve against the current base, and review both diffs again.",
         );
       }
-      const prior =
-        request.priorPublishedProposalDigest === undefined
-          ? await receipts.findDraftByPullRequest?.(
-              request.githubSource.repository.repositoryId,
-              request.pullRequestNumber,
-            )
-          : await readOwnedDraftPublication({
-              draft: observed,
-              proposalDigest: request.priorPublishedProposalDigest,
-              receipts,
-            });
+      const prior = await readOwnedDraftPublication({
+        draft: observed,
+        proposalDigest: request.priorPublishedProposalDigest,
+        receipts,
+      });
       // oxlint-disable-next-line sonarjs/expression-complexity -- verify all tenant receipt identity fields together.
       if (
         // oxlint-disable-next-line sonarjs/expression-complexity -- one tenant receipt predicate.
@@ -874,7 +871,7 @@ export function composeGitHubPublicationRuntime(input: {
         repository,
         review: request.review,
         selectedSourceRef:
-          request.priorPublishedProposalDigest === undefined
+          prior === undefined
             ? request.githubSource.resolvedRef
             : `refs/heads/${observed.headBranch}`,
       });

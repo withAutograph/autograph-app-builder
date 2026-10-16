@@ -145,7 +145,7 @@ export const sealExistingDraftUpdate = async (input: {
   });
   if (input.selectedSourceRef !== `refs/heads/${observed.headBranch}`) {
     throw new Error(
-      "The reviewed Builder source is not this draft PR branch. Start a new Builder session, select the draft PR as the source, and review its current app diff before updating it.",
+      "The reviewed Builder source is not this draft PR branch. Continue automatically in this same session with prepare_github_draft_pr_reconciliation for this existing draft PR. Preserve the original checkout and app work; the normal reconciliation path verifies canonical publication ownership before preparing the current draft and base. Technical recovery needs no user Continue reply. Review and seal the resulting candidate through the normal workflow; the later GitHub update still requires exact publication approval.",
     );
   }
   if (

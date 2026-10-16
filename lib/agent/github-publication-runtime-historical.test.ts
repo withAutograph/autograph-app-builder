@@ -11,6 +11,7 @@ import type {
   DraftPullRequestSuccessReceipt,
   GitHubPublicationAdapter,
   ImmutableGitHubSourceReceipt,
+  GitHubPublicationReceiptStore,
 } from "../repository/github-publication";
 import type { ExistingDraftObservation } from "../repository/github-draft-update";
 import { createReconciliationReviewReceipt } from "../repository/github-draft-reconciliation";
@@ -83,6 +84,10 @@ describe("historical App source runtime", () => {
   });
 });
 
+const missingPublicationReceipt = async (): Promise<undefined> => {
+  await Promise.resolve();
+};
+
 const ownedDraftFixture = (
   receiptOverrides: Partial<Omit<DraftPullRequestSuccessReceipt, "digest">> = {},
 ) => {
@@ -151,7 +156,10 @@ const ownedDraftFixture = (
     ...unsigned,
     digest: createHash("sha256").update(JSON.stringify(unsigned)).digest("hex"),
   };
-  const read = vi.fn(() => Promise.resolve(receipt));
+  const read = vi.fn<GitHubPublicationReceiptStore["read"]>(() => Promise.resolve(receipt));
+  const findDraftByPullRequest = vi.fn<
+    NonNullable<GitHubPublicationReceiptStore["findDraftByPullRequest"]>
+  >(() => Promise.resolve(receipt));
   const runtime = composeGitHubPublicationRuntime({
     adapter: {
       ...adapterWithoutHistoricalLookup(),
@@ -161,9 +169,9 @@ const ownedDraftFixture = (
     },
     enabled: true,
     proposals: { read: vi.fn(), save: vi.fn() },
-    receipts: { compareAndSet: vi.fn(), read },
+    receipts: { compareAndSet: vi.fn(), findDraftByPullRequest, read },
   });
-  return { draft, read, receipt, repository, runtime };
+  return { draft, findDraftByPullRequest, read, receipt, repository, runtime };
 };
 
 describe("same-session owned draft repair", () => {
@@ -179,6 +187,77 @@ describe("same-session owned draft repair", () => {
     expect(result.draft.headSha).toBe(draft.headSha);
     expect(result.publishedHeadSha).toBe(receipt.branchSha);
     expect(read).toHaveBeenCalledWith(receipt.proposalDigest);
+  });
+
+  it("recovers the owned publication baseline when the workflow marker is absent", async () => {
+    const { draft, findDraftByPullRequest, receipt, runtime } = ownedDraftFixture();
+    const result = await runtime.inspectExistingDraftReconciliationSource({
+      name: draft.name,
+      owner: draft.owner,
+      repositoryId: draft.repositoryId,
+      pullRequestNumber: draft.number,
+    });
+    expect(result.publishedHeadSha).toBe(receipt.branchSha);
+    expect(result.draft.headSha).toBe(draft.headSha);
+    expect(findDraftByPullRequest).toHaveBeenCalledWith(draft.repositoryId, draft.number);
+  });
+
+  it("does not claim a publication baseline when the tenant-scoped lookup has no receipt", async () => {
+    const { draft, findDraftByPullRequest, runtime } = ownedDraftFixture();
+    findDraftByPullRequest.mockImplementationOnce(missingPublicationReceipt);
+    const result = await runtime.inspectExistingDraftReconciliationSource({
+      name: draft.name,
+      owner: draft.owner,
+      repositoryId: draft.repositoryId,
+      pullRequestNumber: draft.number,
+    });
+    expect(result).not.toHaveProperty("publishedHeadSha");
+    expect(result.draft).toEqual(draft);
+  });
+
+  it("does not substitute a discovered receipt for an unavailable explicit marker", async () => {
+    const { draft, findDraftByPullRequest, read, receipt, runtime } = ownedDraftFixture();
+    read.mockImplementationOnce(missingPublicationReceipt);
+    await expect(
+      runtime.inspectExistingDraftReconciliationSource({
+        name: draft.name,
+        owner: draft.owner,
+        repositoryId: draft.repositoryId,
+        pullRequestNumber: draft.number,
+        priorPublishedProposalDigest: receipt.proposalDigest,
+      }),
+    ).rejects.toThrow("receipt is unavailable in this tenant");
+    expect(findDraftByPullRequest).not.toHaveBeenCalled();
+  });
+
+  it("rejects a discovered receipt with a noncanonical digest", async () => {
+    const { draft, receipt, runtime } = ownedDraftFixture();
+    receipt.digest = "f".repeat(64);
+    await expect(
+      runtime.inspectExistingDraftReconciliationSource({
+        name: draft.name,
+        owner: draft.owner,
+        repositoryId: draft.repositoryId,
+        pullRequestNumber: draft.number,
+      }),
+    ).rejects.toThrow("digest");
+  });
+
+  it.each([
+    { branchName: "different-draft" },
+    { pullRequestId: "150001" },
+    { pullRequestNumber: 1501 },
+    { repositoryId: "101" },
+  ])("rejects a discovered receipt for a different published target: %j", async (overrides) => {
+    const { draft, runtime } = ownedDraftFixture(overrides);
+    await expect(
+      runtime.inspectExistingDraftReconciliationSource({
+        name: draft.name,
+        owner: draft.owner,
+        repositoryId: draft.repositoryId,
+        pullRequestNumber: draft.number,
+      }),
+    ).rejects.toThrow("does not match this workflow's tenant-owned published pull request");
   });
 
   it.each([
@@ -198,45 +277,56 @@ describe("same-session owned draft repair", () => {
     ).rejects.toThrow("does not match this workflow's tenant-owned published pull request");
   });
 
-  it("seals the exact live owned draft branch when the original selected source remains main", async () => {
-    const { draft, receipt, repository, runtime } = ownedDraftFixture();
-    const githubSource: ImmutableGitHubSourceReceipt = {
-      version: GITHUB_PUBLICATION_VERSION,
-      digest: "f".repeat(64),
-      installationIdentityDigest: repository.installationIdentityDigest,
-      repository,
-      resolvedByCallId: "original-source",
-      resolvedRef: "refs/heads/main",
-      resolvedSha: repository.headSha,
-      resolvedTree: repository.headTree,
-    };
-    const change = {
-      after: { digest: "a".repeat(64), mode: "644" },
-      kind: "added" as const,
-      path: "apps/demo/page.tsx",
-    };
-    const review = createReconciliationReviewReceipt({
-      appId: "demo",
-      baseChanges: [change],
-      baseSha: repository.headSha,
-      baseTree: repository.headTree,
-      headChanges: [change],
-      headSha: draft.headSha,
-      headTree: draft.headTree,
-      resolvedTree: "5".repeat(40),
-      version: 1,
-    });
-    const proposal = await runtime.sealExistingDraftReconciliation({
-      githubSource,
-      priorPublishedProposalDigest: receipt.proposalDigest,
-      pullRequestNumber: draft.number,
-      review,
-      selectedCheckoutHeadSha: draft.headSha,
-      selectedCheckoutHeadTree: draft.headTree,
-    });
-    expect(proposal.branchName).toBe(draft.headBranch);
-    expect(proposal.expectedHeadSha).toBe(draft.headSha);
-    expect(proposal.priorPublicationDigest).toBe(receipt.digest);
-    expect(githubSource.resolvedRef).toBe("refs/heads/main");
-  });
+  it.each(["retained", "missing", "unavailable"] as const)(
+    "uses proven publication ownership while the original source stays main (%s marker)",
+    async (marker) => {
+      const { draft, findDraftByPullRequest, receipt, repository, runtime } = ownedDraftFixture();
+      const githubSource: ImmutableGitHubSourceReceipt = {
+        version: GITHUB_PUBLICATION_VERSION,
+        digest: "f".repeat(64),
+        installationIdentityDigest: repository.installationIdentityDigest,
+        repository,
+        resolvedByCallId: "original-source",
+        resolvedRef: "refs/heads/main",
+        resolvedSha: repository.headSha,
+        resolvedTree: repository.headTree,
+      };
+      const change = {
+        after: { digest: "a".repeat(64), mode: "644" },
+        kind: "added" as const,
+        path: "apps/demo/page.tsx",
+      };
+      const review = createReconciliationReviewReceipt({
+        appId: "demo",
+        baseChanges: [change],
+        baseSha: repository.headSha,
+        baseTree: repository.headTree,
+        headChanges: [change],
+        headSha: draft.headSha,
+        headTree: draft.headTree,
+        resolvedTree: "5".repeat(40),
+        version: 1,
+      });
+      const request = {
+        githubSource,
+        ...(marker === "retained" ? { priorPublishedProposalDigest: receipt.proposalDigest } : {}),
+        pullRequestNumber: draft.number,
+        review,
+        selectedCheckoutHeadSha: draft.headSha,
+        selectedCheckoutHeadTree: draft.headTree,
+      };
+      if (marker === "unavailable") {
+        findDraftByPullRequest.mockImplementationOnce(missingPublicationReceipt);
+        await expect(runtime.sealExistingDraftReconciliation(request)).rejects.toThrow();
+        expect(findDraftByPullRequest).toHaveBeenCalledWith(draft.repositoryId, draft.number);
+        expect(githubSource.resolvedRef).toBe("refs/heads/main");
+        return;
+      }
+      const proposal = await runtime.sealExistingDraftReconciliation(request);
+      expect(proposal.branchName).toBe(draft.headBranch);
+      expect(proposal.expectedHeadSha).toBe(draft.headSha);
+      expect(proposal.priorPublicationDigest).toBe(receipt.digest);
+      expect(githubSource.resolvedRef).toBe("refs/heads/main");
+    },
+  );
 });
