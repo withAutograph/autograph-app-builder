@@ -89,13 +89,16 @@ let markLockClientEClosed: (() => void) | undefined;
 const lockClientEClosed = new Promise<void>((resolve) => {
   markLockClientEClosed = resolve;
 });
-const openLockClientE = () =>
+const openLockClientE = (onConnectionClosed: () => void) =>
   postgres({
     connection: { application_name: lockClientEApplicationName },
     database: "postgres",
     host: argument("--host"),
     max: 1,
-    onclose: () => markLockClientEClosed?.(),
+    onclose: () => {
+      markLockClientEClosed?.();
+      onConnectionClosed();
+    },
     port,
     username: "postgres",
   });
@@ -445,7 +448,7 @@ try {
   );
   const callbackErrorRejected = assert.rejects(
     callbackErrorOperation,
-    /fixture callback failed after connection loss/u,
+    /Protected resource lease session was lost/u,
   );
   await callbackErrorEntered;
   const [rawCallbackErrorSession] = await clientB`
@@ -531,6 +534,7 @@ try {
       throw new Error("Stale callback unexpectedly ran.");
     },
   );
+  const staleWaiterRejected = assert.rejects(staleWaiter, /authority|fence/u);
   await waitForAdvisoryLockWaiter();
   const changed = await storeA.compareAndSet({
     authority,
@@ -542,7 +546,7 @@ try {
   assert.ok(changed);
   releaseBlocker?.();
   await blocker;
-  await assert.rejects(staleWaiter, /authority|fence/u);
+  await staleWaiterRejected;
   assert.equal(staleCallbackRan, false, "revoked authority is rechecked after waiting for a lock");
 
   await assert.rejects(
@@ -584,6 +588,10 @@ try {
       effectContinued = true;
     },
   );
+  const lostSessionRejected = assert.rejects(
+    lostSessionOperation,
+    /Protected resource lease session was lost/u,
+  );
   await lostSessionCallback;
   const [rawLockSession] = await clientB`
     select activity.pid, activity.backend_start
@@ -615,7 +623,7 @@ try {
   const terminated = terminationReadbackSchema.parse(rawTerminated);
   assert.equal(terminated.terminated, true);
   releaseLostSession?.();
-  await assert.rejects(lostSessionOperation);
+  await lostSessionRejected;
   assert.equal(effectContinued, false, "a lost lock session cannot continue an effect");
 
   let markLostDCallback: (() => void) | undefined;
@@ -633,6 +641,10 @@ try {
       await lostDCallbackContinue;
       await assertFence();
     },
+  );
+  const lostDRejected = assert.rejects(
+    lostDOperation,
+    /Protected resource lease session was lost/u,
   );
   await lostDCallbackEntered;
   const [rawLostDSession] = await clientB`
@@ -670,7 +682,7 @@ try {
   );
   await replacementEntered;
   resumeLostDCallback?.();
-  await assert.rejects(lostDOperation);
+  await lostDRejected;
   const [rawReplacementLockProbe] = await clientB`
     select pg_try_advisory_lock(hashtextextended(${authLockKey}, 0)) as acquired
   `;
