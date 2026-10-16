@@ -2,6 +2,12 @@
 
 `mise run dev` is the fast, live-code loop: edit the checkout, let Next HMR or the affected Eve/package process reload, and retry the behavior. Do not rebuild artifacts, reinstall the plugin, run broad suites, publish, or deploy after each edit.
 
+Eve reads the canonical `--arrusted-root` checkout directly. Ordinary Arrusted
+source edits become the next planning input without cycling Eve or replacing
+its local queue. App Builder runtime edits and child lifecycle events retain
+their existing restart behavior. Snapshot identities remain diagnostics and do
+not gate live source reads or dependency setup.
+
 Vercel Sandbox is the execution backend. Use project-scoped OIDC, supported Sandbox source/file APIs, and structured commands. Do not add static keys, fallback runtimes, shell wrappers, or provider-internals checks. The checkout and generated files are writable.
 
 Dependency setup is runtime work, not a source-integrity proof. Reuse caches when convenient; misses and stale entries rebuild normally. App or Arrusted edits do not require dependency rebuilding. New source snapshots are expected, not drift failures.

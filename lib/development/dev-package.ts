@@ -327,7 +327,7 @@ export const developmentLaunchEnvironment = (input: {
   APP_BUILDER_DEVELOPMENT_SOURCE_SHA: input.sourceSha,
   APP_BUILDER_DEVELOPMENT_SOURCE_TREE: input.sourceTree,
   EVE_AGENT_HOST: `http://127.0.0.1:${input.evePort}`,
-  REPOSITORY_LOCAL_ROOTS: input.snapshotRoot,
+  REPOSITORY_LOCAL_ROOTS: input.sourceRoot,
   REPOSITORY_WORKSPACE_ROOT: input.destinationRoot,
   WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
   WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",

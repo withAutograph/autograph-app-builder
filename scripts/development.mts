@@ -16,7 +16,6 @@ import {
   developmentDependencyKey,
   parseDevelopmentArguments,
   removeDevelopmentSnapshot,
-  waitForDevelopmentSourceChange,
 } from "../lib/development/local-mode";
 import type { DevelopmentSnapshot } from "../lib/development/local-mode";
 import { waitForDevelopmentMcp } from "../lib/development/mcp-readiness";
@@ -281,13 +280,8 @@ async function runEveCycle(input: {
     if (runtimeFingerprint === undefined) {
       throw new Error("Development runtime fingerprint is unavailable.");
     }
-    const sourceChanged = waitForDevelopmentSourceChange({
-      expectedFingerprint: snapshot.fingerprint,
-      signal: watchers.signal,
-      sourceRoot: input.sourceRoot,
-      // These derived promises are inputs to the shared race below.
-      // oxlint-disable-next-line promise/prefer-await-to-then
-    }).then(() => ({ code: 0, kind: "restart" as const }));
+    // Eve reads the canonical Arrusted checkout directly. Its ordinary edits
+    // are live planning input and must not replace the child or local queue.
     const runtimeChanged = waitForDevelopmentRuntimeChange({
       expectedFingerprint: runtimeFingerprint,
       repositoryRoot,
@@ -308,7 +302,6 @@ async function runEveCycle(input: {
           fetcher: input.web?.fetcher,
           signal: watchers.signal,
         }).then(() => ({ code: 0, kind: "ready" as const })),
-        sourceChanged,
         runtimeChanged,
         eveExited,
         input.nextExited,
@@ -342,13 +335,7 @@ async function runEveCycle(input: {
       console.log("Autograph App Builder development is ready.");
       console.log("Open a fresh Codex task and select Autograph App Builder (Development).");
       console.log(`Loopback endpoint: ${packageResult.receipt.endpoint}`);
-      return await Promise.race([
-        sourceChanged,
-        runtimeChanged,
-        eveExited,
-        input.nextExited,
-        stopping,
-      ]);
+      return await Promise.race([runtimeChanged, eveExited, input.nextExited, stopping]);
     } finally {
       watchers.abort();
       await stopDevelopmentChild(eve, { processGroup: true });
