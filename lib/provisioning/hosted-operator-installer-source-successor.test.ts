@@ -135,6 +135,43 @@ const makeRecord = (sourcePlan: HostedOperatorPlan = plan): HostedRuntimeJournal
   });
 
 describe("hosted operator installer source successor", () => {
+  it("recovers the pending app install after its separate Auth install prerequisite", () => {
+    const fullPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      effects: plan.effects.flatMap((effect) =>
+        effect.id === "app-install"
+          ? [
+              { id: "auth-schema", kind: "install", description: "Prepare shared Auth schema" },
+              effect,
+            ]
+          : [effect],
+      ),
+    });
+    const record = makeRecord(fullPlan);
+    record.operator!.receipts.push({
+      effectId: "auth-schema",
+      observedAt: "2027-01-01T00:00:00.000Z",
+      resourceVersion: "fixture-auth-schema",
+    });
+    const candidate = createInstallerSourceSuccessorPlan(
+      record,
+      { id: fullPlan.installer.reference, sha256: "e".repeat(64) },
+      now,
+    );
+    expect(candidate).toBeDefined();
+    expect(isInstallerSourceSuccessor(record, candidate!, now)).toBe(true);
+
+    const pendingAuth = structuredClone(record);
+    pendingAuth.operator!.pendingEffectId = "auth-schema";
+    expect(isInstallerSourceSuccessor(pendingAuth, candidate!, now)).toBe(false);
+
+    const missingAuthReceipt = structuredClone(record);
+    missingAuthReceipt.operator!.receipts = missingAuthReceipt.operator!.receipts.filter(
+      (receipt) => receipt.effectId !== "auth-schema",
+    );
+    expect(isInstallerSourceSuccessor(missingAuthReceipt, candidate!, now)).toBe(false);
+  });
+
   it("changes only the pinned installer digest and preserves approved plan expiry", () => {
     const record = makeRecord();
     const repaired = createInstallerSourceSuccessorPlan(
