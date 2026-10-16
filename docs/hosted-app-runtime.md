@@ -41,6 +41,10 @@ lease and fence. A lost or replaced session fails closed. Closing the dedicated
 session releases its locks; the operator never sends an unlock through a
 potentially reconnected client.
 
+Neon's [transaction-pooling contract](https://neon.com/docs/connect/connection-pooling#connection-pooling-in-transaction-mode)
+excludes session advisory locks. Only this operation-scoped lock connection uses
+the direct endpoint; it preserves the configured role, password, database and TLS.
+
 The normal owner link returns through a private Gateway-to-Builder staging POST
 followed by a normal browser GET. The POST verifies the configured native Gateway
 workload and the signed Realm proof before placing an encrypted, short-lived

@@ -78,19 +78,19 @@ const readLeaseSnapshot = async (
     throw new Error(leaseAuthorityUnavailable);
   }
   const operator = hostedOperatorRecordSchema.parse(record.operator);
+  const { leaseId, leaseExpiresAt } = record;
+  const { fenceGeneration } = operator;
   const hasLiveLease =
-    record.leaseId !== undefined &&
-    record.leaseExpiresAt !== undefined &&
-    Date.parse(record.leaseExpiresAt) > now();
+    leaseId !== undefined && leaseExpiresAt !== undefined && Date.parse(leaseExpiresAt) > now();
   const hasCurrentFence =
-    operator.operationRef === input.operationRef && operator.fenceGeneration !== undefined;
+    operator.operationRef === input.operationRef && fenceGeneration !== undefined;
   const hasCurrentPlan = operator.planDigest === operatorPlanDigest(input.plan);
   if (!hasLiveLease || !hasCurrentFence || !hasCurrentPlan) {
     throw new Error(leaseAuthorityUnavailable);
   }
   return {
-    fenceGeneration: operator.fenceGeneration,
-    leaseId: record.leaseId,
+    fenceGeneration,
+    leaseId,
     operationRef: operator.operationRef,
   };
 };
