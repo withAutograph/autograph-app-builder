@@ -214,6 +214,7 @@ export const updateHostedRuntimeJournal = async (input: {
   authority: BuilderProvisionAuthority;
   target: HostedRuntimeTarget;
   now: () => number;
+  beforeUpdate?: (record: HostedRuntimeJournalRecord) => Promise<void>;
   update: (record: HostedRuntimeJournalRecord) => HostedRuntimeJournalRecord;
 }): Promise<HostedRuntimeJournalRow> => {
   for (let attempt = 0; ; attempt += 1) {
@@ -222,6 +223,9 @@ export const updateHostedRuntimeJournal = async (input: {
     if (!current) {
       throw new Error("Runtime preparation journal is unavailable.");
     }
+    // Mutable ownership and approval must be observed again after a lost CAS.
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Each authoritative journal read has its own authorization check.
+    await input.beforeUpdate?.(current.record);
     const record = hostedRuntimeJournalRecordSchema.parse(
       input.update(structuredClone(current.record)),
     );

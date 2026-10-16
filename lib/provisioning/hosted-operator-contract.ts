@@ -953,6 +953,15 @@ const hostedOperatorRecordBaseSchema = z.strictObject({
   workerCheckpoints: z.array(workerEffectCheckpointSchema).optional(),
 });
 const hostedOperatorRecordDataSchema = hostedOperatorRecordBaseSchema.extend({
+  /** Original installer intent and unresolved frames remain evidence, never successor approval. */
+  retainedInstallerOperations: z
+    .array(
+      z.strictObject({
+        approvedByCallId: id,
+        operator: hostedOperatorRecordBaseSchema,
+      }),
+    )
+    .optional(),
   /** Private provenance for source repair; prior approval never approves the successor. */
   retainedGatewayDeliveries: z
     .array(
