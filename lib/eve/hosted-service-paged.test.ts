@@ -500,7 +500,12 @@ describe("paged hosted session observation", () => {
     },
   );
 
-  it("passes the complete owner-checked native preflight to response settlement", async () => {
+  it.each([
+    { unchanged: false, failure: "none" },
+    { unchanged: true, failure: "none" },
+    { unchanged: true, failure: "post" },
+    { unchanged: true, failure: "accepted-readback" },
+  ])("passes the owner-checked native response preflight (%j)", async ({ unchanged, failure }) => {
     const question = {
       allowFreeform: true,
       kind: "question" as const,
@@ -509,6 +514,9 @@ describe("paged hosted session observation", () => {
     };
     let settled = false;
     const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async (input) => {
+      if (settled && failure === "accepted-readback") {
+        throw new HostedSessionReadTimeoutError();
+      }
       const previous = input.nativeObservationState;
       if (previous === undefined) {
         await input.onEvent({ index: 0, request: question, type: "input.requested" });
@@ -543,19 +551,61 @@ describe("paged hosted session observation", () => {
       expect(input.nativeObservationState?.pendingRequests).toEqual([question]);
       await Promise.resolve();
       settled = true;
+      if (failure === "post") {
+        throw new Error("mutation response unknown");
+      }
     });
     f.adapter.respondAccepted = accepted;
     await f.service.get({ cursor: 0, limit: 10, sessionId: f.sessionId });
-    const result = await f.service.respond({
+    if (unchanged) {
+      const saved = await f.getSession(principal, f.sessionId);
+      if (saved === null) {
+        throw new Error("Missing owner-checked checkpoint");
+      }
+      // The native tail and pending input are authoritative even when checkpoint bytes are unchanged.
+      f.observeSessionPaged.mockResolvedValueOnce(saved);
+    }
+    const request = {
       clientRequestId: randomUUID(),
       responses: [
-        { requestId: question.requestId, response: { kind: "answer", value: "isolated Preview" } },
+        {
+          requestId: question.requestId,
+          response: { kind: "answer" as const, value: "isolated Preview" },
+        },
       ],
       sessionId: f.sessionId,
-    });
+    };
+    if (failure !== "none") {
+      await expect(f.service.respond(request)).rejects.toMatchObject({
+        name: "HostedSubmissionUnknownError",
+      });
+      const operationId = stableId("op", {
+        clientRequestId: request.clientRequestId,
+        kind: "respond",
+        tenant: [
+          principal.issuer,
+          principal.audience,
+          principal.workspaceId,
+          principal.ownerUserId,
+        ],
+      });
+      expect(await f.base.getPrivateOperation(principal, operationId)).toMatchObject({
+        safeErrorCode: "submission_unknown",
+        state: "submission_unknown",
+      });
+      await expect(f.service.respond(request)).rejects.toMatchObject({
+        name: "HostedSubmissionUnknownError",
+      });
+      expect(accepted).toHaveBeenCalledOnce();
+      expect(f.adapter.respond).not.toHaveBeenCalled();
+      expect(f.adapter.get).not.toHaveBeenCalled();
+      return;
+    }
+    const result = await f.service.respond(request);
     expect(result.error).toBeUndefined();
     expect(accepted).toHaveBeenCalledOnce();
     expect(f.adapter.respond).not.toHaveBeenCalled();
+    expect(f.adapter.get).not.toHaveBeenCalled();
   });
 
   it("hydrates native reducer state and atomically appends absolute public event deltas", async () => {
@@ -1850,3 +1900,110 @@ it.each([true, false])(
     expect(observe.mock.calls[0]?.[0].nativeObservationState).toEqual(seed);
   },
 );
+
+describe("response preflight dispatch classification", () => {
+  it.each(["paged", "snapshot"] as const)(
+    "records a failed %s preflight as rejected without dispatch or replay",
+    async (path) => {
+      const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async () => {
+        await Promise.reject(new HostedSessionReadTimeoutError());
+        throw new Error("unreachable");
+      });
+      const f = await fixture(observe);
+      if (path === "paged") {
+        f.adapter.respondAccepted = vi.fn(async () => {
+          await Promise.resolve();
+        });
+      } else {
+        vi.mocked(f.adapter.get).mockRejectedValue(new HostedSessionReadTimeoutError());
+      }
+      const request = {
+        clientRequestId: randomUUID(),
+        responses: [{ requestId: "owned-request", response: { kind: "approve" as const } }],
+        sessionId: f.sessionId,
+      };
+      await expect(f.service.respond(request)).rejects.toMatchObject({
+        code: "respond_preflight_unavailable",
+      });
+      const operationId = stableId("op", {
+        clientRequestId: request.clientRequestId,
+        kind: "respond",
+        tenant: [
+          principal.issuer,
+          principal.audience,
+          principal.workspaceId,
+          principal.ownerUserId,
+        ],
+      });
+      expect(await f.base.getPrivateOperation(principal, operationId)).toMatchObject({
+        safeErrorCode: "respond_preflight_unavailable",
+        state: "rejected",
+      });
+      await expect(f.service.respond(request)).rejects.toMatchObject({
+        code: "respond_preflight_unavailable",
+      });
+      expect(path === "paged" ? observe : f.adapter.get).toHaveBeenCalledOnce();
+      if (path === "paged") {
+        expect(f.adapter.respondAccepted).not.toHaveBeenCalled();
+      }
+      expect(f.adapter.respond).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects an unavailable owner-scoped session before response dispatch", async () => {
+    const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async () => {
+      await Promise.reject(new Error("Must not observe a foreign session"));
+      throw new Error("unreachable");
+    });
+    const f = await fixture(observe);
+    f.adapter.respondAccepted = vi.fn(async () => {
+      await Promise.resolve();
+    });
+    f.getSession.mockResolvedValueOnce(null);
+    await expect(
+      f.service.respond({
+        clientRequestId: randomUUID(),
+        responses: [{ requestId: "owned-request", response: { kind: "approve" } }],
+        sessionId: f.sessionId,
+      }),
+    ).rejects.toBeInstanceOf(HostedSessionNotFoundError);
+    expect(observe).not.toHaveBeenCalled();
+    expect(f.adapter.respondAccepted).not.toHaveBeenCalled();
+    expect(f.adapter.respond).not.toHaveBeenCalled();
+    expect(f.adapter.get).not.toHaveBeenCalled();
+  });
+
+  it("rejects foreign native adapter state before dispatch", async () => {
+    const foreign = nativeState({
+      adapterSessionId: "foreign-adapter",
+      nextNativeIndex: 0,
+      publicEventCount: 0,
+    });
+    const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async () => {
+      await Promise.resolve();
+      return {
+        artifactProjectionRequiresLegacyReadback: false,
+        installedEventCount: 0,
+        nativeObservationState: foreign,
+        nextNativeIndex: 0,
+        pendingRequests: [],
+        publicEventCount: 0,
+        status: "waiting",
+      };
+    });
+    const f = await fixture(observe);
+    f.adapter.respondAccepted = vi.fn(async () => {
+      await Promise.resolve();
+    });
+    await expect(
+      f.service.respond({
+        clientRequestId: randomUUID(),
+        responses: [{ requestId: "owned-request", response: { kind: "approve" } }],
+        sessionId: f.sessionId,
+      }),
+    ).rejects.toMatchObject({ code: "respond_preflight_unavailable" });
+    expect(f.adapter.respondAccepted).not.toHaveBeenCalled();
+    expect(f.adapter.respond).not.toHaveBeenCalled();
+    expect(f.adapter.get).not.toHaveBeenCalled();
+  });
+});
