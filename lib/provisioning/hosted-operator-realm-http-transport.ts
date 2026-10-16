@@ -64,6 +64,9 @@ export const createHostedOperatorRealmHttpTransport =
     // The fixed server readback uses its approved target origin for the Gateway's mutation policy.
     if (method === "POST") {
       headers.set("origin", endpointOrigin);
+      // Carry the same verified caller through the application boundary even
+      // when Vercel consumes its reserved protection header at ingress.
+      headers.set("authorization", `Bearer ${token}`);
     }
     headers.set("x-vercel-trusted-oidc-idp-token", token);
     const body = await requestBody(input, method, init);

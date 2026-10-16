@@ -140,7 +140,10 @@ describe("private Realm readback native transport", () => {
         native,
         endpointOrigin,
       );
-      const headers = new Headers({ "content-type": "application/x-www-form-urlencoded" });
+      const headers = new Headers({
+        "content-type": "application/x-www-form-urlencoded",
+        authorization: "Bearer untrusted-caller-value",
+      });
       if (callerOrigin !== undefined) {
         headers.set("origin", callerOrigin);
       }
@@ -157,6 +160,7 @@ describe("private Realm readback native transport", () => {
       expect(sent?.[0] instanceof URL && sent[0].href).toBe(readback);
       expect(sentHeaders.get("origin")).toBe(endpointOrigin);
       expect(sentHeaders.get("x-vercel-trusted-oidc-idp-token")).toBe("private-native-token");
+      expect(sentHeaders.get("authorization")).toBe("Bearer private-native-token");
       expect(sentHeaders.has("sec-fetch-site")).toBe(false);
       expect(sent?.[1]?.redirect).toBe("error");
       expect(sent?.[1]?.method).toBe("POST");
@@ -194,6 +198,9 @@ describe("private Realm readback native transport", () => {
         callerOrigin ?? null,
       );
       expect(native.fetch.mock.calls[0]?.[1]?.method).toBe("GET");
+      expect(new Headers(native.fetch.mock.calls[0]?.[1]?.headers).has("authorization")).toBe(
+        false,
+      );
     },
   );
 
