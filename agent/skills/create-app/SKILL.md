@@ -284,7 +284,12 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    receipt names the existing PR branch head, not the PR's base branch. Ask
    for a separate update approval before moving the branch. If the
    base or PR head moves, prepare, validate, and review the new result again.
-9. Continue to the implemented app's private preview with `start_app_preview`.
+9. Use the implemented app's private preview with `start_app_preview` for
+   requested local delivery or uncovered behavioral checks. For requested
+   hosted delivery, publish technically validated and reviewed source through the
+   existing publication approval flow without waiting for successful private UI
+   startup. Report actual startup failures and claim a working local or hosted
+   Preview only after exercising that actual app.
    If the repository defines `app:local` for the selected app and the preview
    needs local data, use `prepare-app-local-preview` first in the approved
    sandbox. Report its exact task failure rather than treating an HTTP-ready
