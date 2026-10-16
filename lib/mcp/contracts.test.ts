@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   eveGetInputSchema,
   eveRespondInputSchema,
+  eveSendInputSchema,
+  retainPublicSessionCursor,
   eveStartInputSchema,
   publicInputRequestSchema,
   publicPrototypeSchema,
@@ -56,6 +58,55 @@ describe("durable session discovery contracts", () => {
     ]) {
       expect(eveStartInputSchema.safeParse(candidate).success).toBe(false);
     }
+  });
+});
+
+describe("SEND observation cursors", () => {
+  it("uses the GET cursor bounds without adding a default observation", () => {
+    const request = {
+      clientRequestId: "same-send",
+      message: "Continue",
+      sessionId: "saved-session",
+    };
+    expect(eveSendInputSchema.parse(request)).toEqual(request);
+    expect(
+      eveSendInputSchema.parse({ ...request, observationCursor: 4552 }).observationCursor,
+    ).toBe(4552);
+    for (const cursor of [-1, 1.5, Number.POSITIVE_INFINITY]) {
+      expect(eveSendInputSchema.safeParse({ ...request, observationCursor: cursor }).success).toBe(
+        false,
+      );
+      expect(eveGetInputSchema.safeParse({ sessionId: request.sessionId, cursor }).success).toBe(
+        false,
+      );
+    }
+  });
+
+  it("retains the same session's read position while preserving each returned event page", () => {
+    const previous = {
+      cursor: 4552,
+      events: [],
+      sessionId: "saved-session",
+      status: "waiting" as const,
+    };
+    const replay = {
+      cursor: 100,
+      events: [
+        {
+          index: 99,
+          text: "Earlier reply",
+          turnId: "prior-turn",
+          type: "assistant_message" as const,
+        },
+      ],
+      sessionId: previous.sessionId,
+      status: "working" as const,
+    };
+    expect(retainPublicSessionCursor(previous, replay)).toEqual({ ...replay, cursor: 4552 });
+    expect(
+      retainPublicSessionCursor(previous, { ...replay, sessionId: "different-session" }),
+    ).toEqual({ ...replay, sessionId: "different-session" });
+    expect(retainPublicSessionCursor(previous, { ...replay, cursor: 4556 }).cursor).toBe(4556);
   });
 });
 

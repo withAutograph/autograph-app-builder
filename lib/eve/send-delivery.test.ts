@@ -319,6 +319,100 @@ describe("canonical SEND delivery acknowledgement", () => {
     expect(await f.operation()).toMatchObject({ state: "succeeded" });
     expect(f.send).toHaveBeenCalledOnce();
   });
+  it("observes from the supplied cursor after recovering an exact SEND without changing its settled receipt", async () => {
+    const f = await fixture({ failReadback: true });
+    await expect(f.create().send(f.request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    const observed = {
+      ...snapshot([turnEvent("turn.started", "ours", ["ack"])]),
+      events: Array.from({ length: 151 }, (_, index) => ({
+        index,
+        text: `Reply ${index}`,
+        turnId: "ours",
+        type: "assistant.message",
+      })),
+    };
+    vi.mocked(f.adapter.get).mockResolvedValue(observed);
+    const result = await f.create().send({ ...f.request, observationCursor: 150 });
+    expect(result.cursor).toBe(151);
+    expect(result.events.map((event) => event.index)).toEqual([150]);
+    const settled = await f.operation();
+    if (settled?.state !== "succeeded") {
+      throw new Error("The recovered SEND did not settle in its canonical operation.");
+    }
+    expect(settled).toMatchObject({ state: "succeeded", result: { cursor: 100 } });
+    expect(settled?.requestDigest).toBe(
+      digest({ kind: "send", request: f.request, sessionId: f.request.sessionId }),
+    );
+    const later = {
+      ...observed,
+      events: [
+        ...observed.events,
+        { index: 151, text: "Later reply", turnId: "ours", type: "assistant.message" },
+      ],
+    };
+    vi.mocked(f.adapter.get).mockResolvedValue(later);
+    const fresh = await f.create().send({ ...f.request, observationCursor: result.cursor });
+    expect(fresh.events.map((event) => event.index)).toEqual([151]);
+    expect(fresh.cursor).toBe(152);
+    expect(await f.operation()).toEqual(settled);
+    expect(await f.create().send(f.request)).toEqual(settled.result);
+    expect(f.send).toHaveBeenCalledOnce();
+  });
+
+  it("does not promote an unproved SEND when an observation cursor is supplied", async () => {
+    const f = await fixture({ failReadback: true });
+    await expect(f.create().send({ ...f.request, observationCursor: 0 })).rejects.toBeInstanceOf(
+      HostedSubmissionUnknownError,
+    );
+    await expect(f.create().send({ ...f.request, observationCursor: 1 })).rejects.toBeInstanceOf(
+      HostedSubmissionUnknownError,
+    );
+    expect(await f.operation()).toMatchObject({ state: "submission_unknown" });
+    expect(f.send).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a newer Stop authoritative when observing a settled SEND", async () => {
+    const f = await fixture();
+    f.setEvents([turnEvent("turn.started", "ours", ["ack"])]);
+    await f.create().send(f.request);
+    await f.store.observeSession({
+      checkpoint: { capturedAtEpochMs: Date.now(), events: [], status: "cancelled", version: 1 },
+      nowEpochMs: Date.now(),
+      principal,
+      resumability: "terminal",
+      sessionId: f.request.sessionId,
+      stage: "needs_attention",
+    });
+    await f.store.recordCancellationIntent({
+      nowEpochMs: Date.now(),
+      principal,
+      sessionId: f.request.sessionId,
+    });
+    const result = await f.create().send({ ...f.request, observationCursor: 0 });
+    expect(result.status).toBe("cancelled");
+    expect(await f.store.getSession(principal, f.request.sessionId)).toMatchObject({
+      status: "cancelled",
+    });
+    expect(f.send).toHaveBeenCalledOnce();
+  });
+
+  it("requires current owner and tenant access before observing a cached SEND", async () => {
+    const f = await fixture();
+    f.setEvents([turnEvent("turn.started", "ours", ["ack"])]);
+    await f.create().send(f.request);
+    f.owner.mockRejectedValue(new Error("Owner revoked"));
+    await expect(f.create().send({ ...f.request, observationCursor: 0 })).rejects.toThrow(
+      "Owner revoked",
+    );
+    const other = createHostedEveSessionService({
+      assertSendDeliveryOwner: f.owner,
+      principal: { ...principal, ownerUserId: "another-owner" },
+      store: f.store,
+      transport: f.adapter,
+    });
+    await expect(other.send({ ...f.request, observationCursor: 0 })).rejects.toThrow();
+    expect(f.send).toHaveBeenCalledOnce();
+  });
   it("does not infer native acceptance from generic running-turn membership", async () => {
     const f = await fixture();
     f.setEvents([

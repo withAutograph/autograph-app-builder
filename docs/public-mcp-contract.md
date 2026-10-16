@@ -86,9 +86,14 @@ The local snapshot API proves retained history, not worker liveness. See the
 Successful hosted `autograph_send` and `autograph_respond` results return a
 bounded event page starting at the absolute public-event position captured
 before dispatch. They preserve the full checkpoint and the original operation
-receipt; an exact idempotent retry returns that same settled result. Continue
-reading with `autograph_get` and the returned absolute cursor rather than
-replaying the response or restarting at event zero.
+receipt; without `observationCursor`, an exact idempotent retry returns that
+same settled result. `autograph_send` may include the caller's saved
+`observationCursor` to read current progress from that absolute position after
+its canonical delivery settles. This field changes only the returned observation;
+it does not change mutation identity, send again, resume Stop, or recover work.
+Pending or unknown delivery remains unknown. Keep the largest cursor seen for
+the same session, preserving every returned event page, and continue with
+`autograph_get`. A different session starts with its own cursor.
 
 New hosted checkpoints store the complete public history in tenant-scoped,
 digest-verified pages and publish a versioned manifest only after its chunks

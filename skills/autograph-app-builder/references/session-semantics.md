@@ -14,7 +14,13 @@
 - A web handoff begins with `autograph_start` and its opaque `handoffId`. The
   server binds the first successful redemption to one session, so retrying a
   lost response returns the same session rather than creating duplicate work.
-- `cursor` is the next unread absolute event index. Pass it back to `autograph_get`.
+- `cursor` is the next unread absolute event index. Retain the largest cursor
+  observed for the same session and pass it to `autograph_get`; never transfer
+  it to a different session. Include the saved cursor as `observationCursor`
+  when sending, including exact SEND retries. This requests a fresh read only
+  after delivery settles; it is separate from the immutable message/CID receipt.
+  Without it, an exact retry may return its earlier settled page. Preserve every
+  returned event page even when its cursor is older.
 - `input_required` means the exact outstanding request must be answered before an unrelated follow-up.
 - An `authorization` input remains parked until the provider callback settles;
   it is never answered with `autograph_respond`. Refresh the same session after

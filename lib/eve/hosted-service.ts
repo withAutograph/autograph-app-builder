@@ -2567,6 +2567,22 @@ export function createHostedEveSessionService(input: {
     }
   }
 
+  const observeSettledSend = async (
+    sessionId: string,
+    cursor: number,
+  ): Promise<EveSessionResult> => {
+    await assertSendOwner(await requireSession(sessionId));
+    const result = await readSession({
+      continueWork: false,
+      cursor,
+      limit: 100,
+      recoverUnavailable: false,
+      sessionId,
+    });
+    await assertSendOwner(await requireSession(sessionId));
+    return result;
+  };
+
   // eslint-disable-next-line eslint/func-style -- Mutation preflight shares local session-service state.
   const readMutationPreflight = async (sessionId: string) => {
     const before = toDurableHostedSessionRecord(await requireSession(sessionId));
@@ -3075,7 +3091,7 @@ export function createHostedEveSessionService(input: {
       return readSession(request);
     }, // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     respond: respondRequest,
-    async send(request) {
+    async send({ observationCursor, ...request }) {
       requireHostedOperationScope(principal, "send");
       let session = await requireSession(request.sessionId);
       const initialBinding = toDurableHostedSessionRecord(session);
@@ -3083,7 +3099,7 @@ export function createHostedEveSessionService(input: {
         session.status === "cancelled" && input.store.recordCancellationIntent !== undefined
           ? (initialBinding.cancellationRevision ?? 0)
           : undefined;
-      return mutate({
+      const settledResult = await mutate({
         async dispatch(operationId) {
           const paged =
             input.transport.observe !== undefined &&
@@ -3234,6 +3250,9 @@ export function createHostedEveSessionService(input: {
         request,
         sessionId: request.sessionId,
       });
+      return observationCursor === undefined
+        ? settledResult
+        : await observeSettledSend(request.sessionId, observationCursor);
     },
     async settleStartAlias(request) {
       requireHostedOperationScope(principal, "start");

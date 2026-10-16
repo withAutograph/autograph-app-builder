@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 
 import packageManifest from "../../../package.json";
-import { eveSessionResultSchema } from "../contracts";
+import { eveSessionResultSchema, retainPublicSessionCursor } from "../contracts";
 import type { EveSessionResult } from "../contracts";
 import { createBoundedAuthorizationRefresh } from "./automatic-refresh";
 import { SessionAppView } from "./view";
@@ -25,7 +25,7 @@ function publishResult(result?: EveSessionResult) {
   identityInvitationState = result
     ? reduceIdentityInvitations(identityInvitationState, result)
     : undefined;
-  latestResult = result;
+  latestResult = result === undefined ? undefined : retainPublicSessionCursor(latestResult, result);
   for (const listener of resultListeners) {
     listener();
   }

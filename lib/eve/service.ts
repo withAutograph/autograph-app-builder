@@ -89,6 +89,7 @@ export interface EveSessionService {
     sessionId: string;
     message: string;
     clientRequestId: string;
+    observationCursor?: number;
   }) => Promise<EveSessionResult>;
   respond: (input: {
     sessionId: string;

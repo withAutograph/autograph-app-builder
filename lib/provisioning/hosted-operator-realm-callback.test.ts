@@ -431,7 +431,7 @@ describe("native private Realm identity handoff", () => {
     expect(f.ports.publish).not.toHaveBeenCalled();
     const result = await f.handler(new Request(body.continuationUrl));
     expect(result.status).toBe(303);
-    expect(result.headers.get("location")).toBe(`${f.ports.builderOrigin}/`);
+    expect(result.headers.get("location")).toBe(`${f.ports.builderOrigin}/auth/account-connected`);
     expect(f.ports.authenticate).toHaveBeenCalledWith(expect.any(Request), {
       nonceSha256: f.link.nonceSha256,
       ownerSessionId: f.ownerSessionId,
@@ -447,14 +447,14 @@ describe("native private Realm identity handoff", () => {
     expect(f.ports.publish).toHaveBeenCalledOnce();
   });
 
-  it("returns to Builder after committed linking even when the wake dispatcher fails", async () => {
+  it("shows account connection completion after committed linking even when the wake dispatcher fails", async () => {
     const f = await fixture();
     const response = await f.nativePost();
     const body = z.object({ continuationUrl: z.url() }).parse(await response.json());
     f.ports.afterLinked.mockRejectedValue(new Error("dispatch unavailable"));
     const result = await f.handler(new Request(body.continuationUrl));
     expect(result.status).toBe(303);
-    expect(result.headers.get("location")).toBe(`${f.ports.builderOrigin}/`);
+    expect(result.headers.get("location")).toBe(`${f.ports.builderOrigin}/auth/account-connected`);
     expect(f.ports.consume).toHaveBeenCalledOnce();
     expect((await f.handler(new Request(body.continuationUrl))).status).toBe(401);
   });
