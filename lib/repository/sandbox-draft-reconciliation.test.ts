@@ -1,6 +1,17 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  rmdirSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -472,6 +483,220 @@ describe("isolated draft reconciliation", () => {
     expect(Buffer.from(headDiff.chunkBase64, "base64").toString("utf-8")).toContain(
       "docs/platform.md",
     );
+  });
+
+  it("rebuilds outside-scope metadata contamination while preserving app repairs, renames, deletes, modes and the old index", async () => {
+    const f = fixture();
+    const checkout = path.join(f.root, "repository");
+    writeFileSync(path.join(checkout, "apps/demo/obsolete.txt"), "old app file\n");
+    writeFileSync(path.join(checkout, "apps/demo/rename-source.ts"), "renamed app repair\n");
+    chmodSync(path.join(checkout, "apps/demo/rename-source.ts"), 0o755);
+    writeFileSync(path.join(checkout, "apps/demo/file-to-directory"), "former file\n");
+    mkdirSync(path.join(checkout, "apps/demo/directory-to-file/nested"), { recursive: true });
+    writeFileSync(
+      path.join(checkout, "apps/demo/directory-to-file/nested/leaf.ts"),
+      "former child\n",
+    );
+    git(checkout, "add", "apps/demo");
+    git(
+      checkout,
+      "-c",
+      "user.name=Fixture",
+      "-c",
+      "user.email=fixture@example.test",
+      "commit",
+      "-m",
+      "app deletion fixture",
+    );
+    const headSha = git(checkout, "rev-parse", "HEAD");
+    git(checkout, "push", "origin", "draft");
+    const input = {
+      appId: "demo",
+      baseBranch: "main",
+      baseSha: f.baseSha,
+      headBranch: "draft",
+      headSha,
+      repository: { name: "arrusted-development", owner: "withAutograph" },
+      sandbox: f.sandbox,
+      workspaceRoot: f.root,
+    };
+    const old = await prepareDraftReconciliation(input);
+    await writeDraftReconciliationResolution({
+      content: "main\ndraft repaired\n",
+      path: "apps/demo/tests/journey.spec.ts",
+      prepared: old,
+      sandbox: f.sandbox,
+    });
+    git(old.root, "mv", "apps/demo/rename-source.ts", "apps/demo/rename-target.ts");
+    rmSync(path.join(old.root, "apps/demo/file-to-directory"));
+    mkdirSync(path.join(old.root, "apps/demo/file-to-directory"));
+    writeFileSync(
+      path.join(old.root, "apps/demo/file-to-directory/child.ts"),
+      "replacement child\n",
+    );
+    rmSync(path.join(old.root, "apps/demo/directory-to-file/nested/leaf.ts"));
+    rmdirSync(path.join(old.root, "apps/demo/directory-to-file/nested"));
+    rmdirSync(path.join(old.root, "apps/demo/directory-to-file"));
+    writeFileSync(path.join(old.root, "apps/demo/directory-to-file"), "replacement file\n");
+    rmSync(path.join(old.root, "apps/demo/obsolete.txt"));
+    writeFileSync(path.join(old.root, "apps/demo/repair.ts"), "app-owned repair\n");
+    chmodSync(path.join(old.root, "apps/demo/repair.ts"), 0o755);
+    await inspectDraftReconciliation({ sandbox: f.sandbox, prepared: old });
+    writeFileSync(path.join(old.root, "bun.lock"), "observed root metadata\n");
+    writeFileSync(path.join(old.root, "docs/platform.md"), "private outside-scope edit\n");
+    git(old.root, "add", "docs/platform.md");
+    writeFileSync(path.join(checkout, ".git/info/exclude"), "apps/demo/.env\n");
+    writeFileSync(path.join(old.root, "apps/demo/.env"), "ignored-private-fixture\n");
+    const index = git(old.root, "rev-parse", "--git-path", "index");
+    const beforeIndex = readFileSync(index);
+    const next = await prepareDraftReconciliation({
+      ...input,
+      previousCandidate: old,
+      replayPreviousCandidate: true,
+    });
+    expect(next.root).not.toBe(old.root);
+    expect(next.preservedCandidateRoot).toBe(old.root);
+    expect(next.replayedAppChanges).toBe(true);
+    expect(readFileSync(path.join(next.root, "apps/demo/tests/journey.spec.ts"), "utf8")).toBe(
+      "main\ndraft repaired\n",
+    );
+    expect(readFileSync(path.join(next.root, "apps/demo/repair.ts"), "utf8")).toBe(
+      "app-owned repair\n",
+    );
+    expect(git(next.root, "ls-files", "--stage", "apps/demo/repair.ts")).toMatch(/^100755/u);
+    expect(readFileSync(path.join(next.root, "apps/demo/file-to-directory/child.ts"), "utf8")).toBe(
+      "replacement child\n",
+    );
+    expect(lstatSync(path.join(next.root, "apps/demo/directory-to-file")).isFile()).toBe(true);
+    expect(readFileSync(path.join(next.root, "apps/demo/directory-to-file"), "utf8")).toBe(
+      "replacement file\n",
+    );
+    expect(existsSync(path.join(next.root, "apps/demo/rename-source.ts"))).toBe(false);
+    expect(readFileSync(path.join(next.root, "apps/demo/rename-target.ts"), "utf8")).toBe(
+      "renamed app repair\n",
+    );
+    expect(git(next.root, "ls-files", "--stage", "apps/demo/rename-target.ts")).toMatch(/^100755/u);
+    expect(existsSync(path.join(next.root, "apps/demo/obsolete.txt"))).toBe(false);
+    expect(existsSync(path.join(next.root, "apps/demo/.env"))).toBe(false);
+    expect(existsSync(path.join(next.root, "bun.lock"))).toBe(false);
+    expect(readFileSync(path.join(next.root, "docs/platform.md"), "utf8")).toBe("main\n");
+    expect(readFileSync(path.join(old.root, "bun.lock"), "utf8")).toBe("observed root metadata\n");
+    expect(readFileSync(path.join(old.root, "docs/platform.md"), "utf8")).toBe(
+      "private outside-scope edit\n",
+    );
+    expect(readFileSync(index)).toEqual(beforeIndex);
+    expect(next.conflicts).toEqual([]);
+    await expect(
+      inspectDraftReconciliation({ sandbox: f.sandbox, prepared: next }),
+    ).resolves.toMatchObject({ unresolvedConflicts: [] });
+  });
+
+  it("preserves unresolved app stages and bytes in a fresh candidate", async () => {
+    const f = fixture();
+    const input = {
+      appId: "demo",
+      baseBranch: "main",
+      baseSha: f.baseSha,
+      headBranch: "draft",
+      headSha: f.headSha,
+      repository: { name: "arrusted-development", owner: "withAutograph" },
+      sandbox: f.sandbox,
+      workspaceRoot: f.root,
+    };
+    const old = await prepareDraftReconciliation(input);
+    const unmerged = git(old.root, "ls-files", "--unmerged");
+    const conflict = readFileSync(path.join(old.root, "apps/demo/tests/journey.spec.ts"));
+    writeFileSync(path.join(old.root, "bun.lock"), "outside-scope metadata\n");
+    const next = await prepareDraftReconciliation({
+      ...input,
+      previousCandidate: old,
+      replayPreviousCandidate: true,
+    });
+    expect(next.conflicts).toContain("apps/demo/tests/journey.spec.ts");
+    expect(git(next.root, "ls-files", "--unmerged")).toBe(unmerged);
+    expect(git(old.root, "ls-files", "--unmerged")).toBe(unmerged);
+    expect(readFileSync(path.join(next.root, "apps/demo/tests/journey.spec.ts"))).toEqual(conflict);
+    expect(readFileSync(path.join(old.root, "apps/demo/tests/journey.spec.ts"))).toEqual(conflict);
+    expect(existsSync(path.join(next.root, "bun.lock"))).toBe(false);
+  });
+
+  it("uses ordinary fresh reconciliation when the live base changes without replaying old resolutions", async () => {
+    const f = fixture();
+    const input = {
+      appId: "demo",
+      baseBranch: "main",
+      baseSha: f.baseSha,
+      headBranch: "draft",
+      headSha: f.headSha,
+      repository: { name: "arrusted-development", owner: "withAutograph" },
+      sandbox: f.sandbox,
+      workspaceRoot: f.root,
+    };
+    const old = await prepareDraftReconciliation(input);
+    await writeDraftReconciliationResolution({
+      content: "old app repair\n",
+      path: "apps/demo/tests/journey.spec.ts",
+      prepared: old,
+      sandbox: f.sandbox,
+    });
+    const checkout = path.join(f.root, "repository");
+    git(checkout, "switch", "main");
+    writeFileSync(path.join(checkout, "docs/platform.md"), "new live base\n");
+    git(checkout, "add", "docs/platform.md");
+    git(
+      checkout,
+      "-c",
+      "user.name=Fixture",
+      "-c",
+      "user.email=fixture@example.test",
+      "commit",
+      "-m",
+      "main moves again",
+    );
+    const baseSha = git(checkout, "rev-parse", "HEAD");
+    git(checkout, "push", "origin", "main");
+    const next = await prepareDraftReconciliation({
+      ...input,
+      baseSha,
+      previousCandidate: old,
+      replayPreviousCandidate: true,
+    });
+    expect(next.baseSha).toBe(baseSha);
+    expect(next.replayedAppChanges).toBe(false);
+    expect(next.conflicts).toContain("apps/demo/tests/journey.spec.ts");
+    expect(readFileSync(path.join(next.root, "docs/platform.md"), "utf8")).toBe("new live base\n");
+    expect(readFileSync(path.join(old.root, "apps/demo/tests/journey.spec.ts"), "utf8")).toBe(
+      "old app repair\n",
+    );
+  });
+
+  it("blocks unsafe app replay without deleting the original candidate", async () => {
+    const f = fixture();
+    const input = {
+      appId: "demo",
+      baseBranch: "main",
+      baseSha: f.baseSha,
+      headBranch: "draft",
+      headSha: f.headSha,
+      repository: { name: "arrusted-development", owner: "withAutograph" },
+      sandbox: f.sandbox,
+      workspaceRoot: f.root,
+    };
+    const old = await prepareDraftReconciliation(input);
+    writeFileSync(path.join(old.root, "bun.lock"), "outside-scope metadata\n");
+    const external = path.join(f.root, "private-fixture");
+    writeFileSync(external, "private fixture bytes\n");
+    symlinkSync(external, path.join(old.root, "apps/demo/unsafe"));
+    await expect(
+      prepareDraftReconciliation({
+        ...input,
+        previousCandidate: old,
+        replayPreviousCandidate: true,
+      }),
+    ).rejects.toThrow("could not preserve every app repair");
+    expect(lstatSync(path.join(old.root, "apps/demo/unsafe")).isSymbolicLink()).toBe(true);
+    expect(readFileSync(external, "utf8")).toBe("private fixture bytes\n");
+    expect(readFileSync(path.join(old.root, "bun.lock"), "utf8")).toBe("outside-scope metadata\n");
   });
 
   it("reports a lost private candidate and rebuilds it without carrying old resolutions", async () => {

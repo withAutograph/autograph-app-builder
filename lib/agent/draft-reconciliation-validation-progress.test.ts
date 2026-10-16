@@ -5,8 +5,8 @@ import validateReconciliation from "../../agent/tools/validate_github_draft_pr_r
 
 const digest = "a".repeat(64);
 const tree = "b".repeat(40);
-const installCommand = "mise exec -- bun install --frozen-lockfile";
-const schemaCommand = "mise run --skip-tools schema:release -- compile --app spend-review";
+const installCommand = "mise exec --no-deps -- bun install --frozen-lockfile";
+const schemaCommand = "mise run --no-deps app:compile spend-review";
 const mocks = vi.hoisted(() => ({
   candidate: null as Record<string, unknown> | null,
   check: vi.fn(),
@@ -128,8 +128,8 @@ describe("draft reconciliation command progress", () => {
       commands: [
         { command: installCommand, exitCode: 0 },
         { command: schemaCommand, exitCode: 0 },
-        { command: "mise run --skip-tools app:check spend-review", exitCode: 0 },
-        { command: "mise run --skip-tools app:test spend-review 1/1", exitCode: 0 },
+        { command: "mise run --no-deps --skip-tools app:check spend-review", exitCode: 0 },
+        { command: "mise run --no-deps --skip-tools app:test spend-review 1/1", exitCode: 0 },
       ],
     });
   });
@@ -161,8 +161,8 @@ describe("draft reconciliation command progress", () => {
     expect(completed).toEqual([
       installCommand,
       schemaCommand,
-      "mise run --skip-tools app:check spend-review",
-      "mise run --skip-tools app:test spend-review 1/1",
+      "mise run --no-deps --skip-tools app:check spend-review",
+      "mise run --no-deps --skip-tools app:test spend-review 1/1",
     ]);
     expect(mocks.candidate?.validation).toMatchObject({
       commands: completed.map((command) => ({ command, exitCode: 0 })),
@@ -173,7 +173,7 @@ describe("draft reconciliation command progress", () => {
   it("keeps the pending command and does not validate after an interrupted provider call", async () => {
     await incremental(installCommand);
     await incremental(schemaCommand);
-    const check = "mise run --skip-tools app:check spend-review";
+    const check = "mise run --no-deps --skip-tools app:check spend-review";
     mocks.check.mockRejectedValueOnce(new Error("sandbox expired"));
     await expect(incremental(check)).rejects.toThrow(
       `Builder could not run ${check} during draft PR candidate validation`,
@@ -200,6 +200,79 @@ describe("draft reconciliation command progress", () => {
       status: "in_progress",
     });
     expect(mocks.run).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    {
+      kind: "install",
+      original: "mise exec -- bun install --frozen-lockfile",
+      current: installCommand,
+    },
+    {
+      kind: "check",
+      original: "mise run --skip-tools app:check spend-review",
+      current: "mise run --no-deps --skip-tools app:check spend-review",
+    },
+    {
+      kind: "check",
+      original: "mise run --skip-tools app:test spend-review 1/1",
+      current: "mise run --no-deps --skip-tools app:test spend-review 1/1",
+    },
+    {
+      kind: "additional",
+      original: "mise run --skip-tools check:vercel-services",
+      current: "mise run --no-deps --skip-tools check:vercel-services",
+    },
+  ] as const)(
+    "continues retained $kind metadata with explicit setup flags and keeps completed work",
+    async (pending) => {
+      const completed = { command: "mise run app:compile spend-review", exitCode: 0 };
+      mocks.candidate = {
+        ...mocks.candidate,
+        validationRun: {
+          commands: [completed],
+          nextIndex: 1,
+          resolvedTree: tree,
+          steps: [
+            { command: completed.command, kind: "schema" },
+            { command: pending.original, kind: pending.kind },
+            { command: "mise run app:runtime run spend-review test-e2e", kind: "browser" },
+          ],
+        },
+      };
+      await expect(incremental(pending.original)).resolves.toMatchObject({
+        command: pending.current,
+        nextCommand: "mise run --no-deps app:runtime run spend-review test-e2e",
+        status: "in_progress",
+      });
+      const executor = pending.kind === "check" ? mocks.check : mocks.run;
+      expect(executor).toHaveBeenCalledWith(expect.objectContaining({ command: pending.current }));
+      expect(mocks.candidate?.validationRun).toMatchObject({
+        commands: [completed, { command: pending.current, exitCode: 0 }],
+        nextIndex: 2,
+      });
+    },
+  );
+
+  it("accepts the current semantic command when the pending receipt still has its historical spelling", async () => {
+    mocks.candidate = {
+      ...mocks.candidate,
+      validationRun: {
+        commands: [],
+        nextIndex: 0,
+        resolvedTree: tree,
+        steps: [
+          { kind: "install", command: "mise exec -- bun install --frozen-lockfile" },
+          { kind: "schema", command: "mise run app:compile spend-review" },
+        ],
+      },
+    };
+    await expect(incremental(installCommand)).resolves.toMatchObject({
+      command: installCommand,
+      nextCommand: schemaCommand,
+      status: "in_progress",
+    });
+    expect(mocks.run).toHaveBeenCalledWith(expect.objectContaining({ command: installCommand }));
   });
 
   it("returns a command-specific failure without recording it as passed", async () => {

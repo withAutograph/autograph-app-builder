@@ -43,8 +43,8 @@ export const SUPPORTED_REPOSITORY_CONTRACT = {
   runtime: "nextjs",
   topologyOwner: "microfrontends.json",
   validationCommands: [
-    "mise run --skip-tools app:check <app-id>",
-    "mise run --skip-tools app:test <app-id> <shard>",
+    "mise run --no-deps --skip-tools app:check <app-id>",
+    "mise run --no-deps --skip-tools app:test <app-id> <shard>",
   ],
   version: 4,
 } as const;
@@ -106,11 +106,11 @@ export const supportedValidationCommands = function supportedValidationCommands(
   }
   return [
     {
-      command: `mise run --skip-tools app:check ${appId}` as const,
+      command: `mise run --no-deps --skip-tools app:check ${appId}` as const,
       name: "check-build" as const,
     },
     ...testShards.map((shard) => ({
-      command: `mise run --skip-tools app:test ${appId} ${shard}` as const,
+      command: `mise run --no-deps --skip-tools app:test ${appId} ${shard}` as const,
       name: "test" as const,
     })),
   ];

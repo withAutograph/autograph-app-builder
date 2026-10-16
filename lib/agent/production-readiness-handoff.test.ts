@@ -42,7 +42,7 @@ describe("productionReadinessHandoff", () => {
     const selectedSource = source();
     const result = await handoff(selectedSource);
     expect(selectedSource.run).toHaveBeenCalledWith({
-      command: `mise run app:describe ${app}`,
+      command: `mise run --no-deps app:describe ${app}`,
       workingDirectory: root,
     });
     expect(selectedSource.readTextFile).not.toHaveBeenCalled();

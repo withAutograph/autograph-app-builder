@@ -23,7 +23,7 @@ type LocalPreviewEnvironment = Record<string, string> & {
 };
 
 export const localPreviewSetupCommand = (appId: string): string =>
-  `MISE_TASK_RUN_AUTO_INSTALL=true MISE_AUTO_INSTALL=true mise run app:runtime prepare ${appIdSchema.parse(appId)} local`;
+  `MISE_TASK_RUN_AUTO_INSTALL=true MISE_AUTO_INSTALL=true mise run --no-deps app:runtime prepare ${appIdSchema.parse(appId)} local`;
 
 export const appDeclaresLocalSetup = async (input: {
   appId: string;

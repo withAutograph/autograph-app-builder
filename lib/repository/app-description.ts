@@ -111,7 +111,7 @@ export const describeSelectedApp = async (input: {
   signal?: AbortSignal;
 }): Promise<AppDescription> => {
   const command: Parameters<SandboxSession["run"]>[0] = {
-    command: `mise run app:describe ${appId.parse(input.appId)}`,
+    command: `mise run --no-deps app:describe ${appId.parse(input.appId)}`,
     workingDirectory: input.root,
   };
   if (input.signal !== undefined) {

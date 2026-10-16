@@ -24,7 +24,7 @@ import {
 const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 
 export const appSchemaReleaseCommand = (appId: string): string =>
-  `mise run app:compile ${appIdSchema.parse(appId)}`;
+  `mise run --no-deps app:compile ${appIdSchema.parse(appId)}`;
 
 export const compileAppSchemaRelease = async (input: {
   appId: string;

@@ -407,8 +407,12 @@ describe("installed Eve 0.68 projection", () => {
     ]);
     expect(pendingBuilderOperation(events)).toBe("Running the app's browser tests");
   });
-  it("names each draft reconciliation command while it runs and clears it on completion", () => {
-    const command = "mise run --skip-tools app:test spend-review 1/1";
+  it.each([
+    "mise run --skip-tools app:test spend-review 1/1",
+    "mise run --no-deps --skip-tools app:test spend-review 1/1",
+    "mise run app:compile spend-review",
+    "mise run --no-deps app:compile spend-review",
+  ])("names draft reconciliation command %s and clears it on completion", (command) => {
     const events = projectInstalledEveEvents([
       installedEvent({
         data: {
@@ -452,7 +456,7 @@ describe("installed Eve 0.68 projection", () => {
             {
               callId: "draft_validation_2",
               input: {
-                expectedCommand: "mise run --skip-tools app:check spend-review",
+                expectedCommand: "mise run --no-deps --skip-tools app:check spend-review",
                 incremental: true,
               },
               kind: "tool-call",
@@ -476,7 +480,7 @@ describe("installed Eve 0.68 projection", () => {
       }),
     ]);
     expect(pendingBuilderOperation(events.slice(0, 1))).toBe(
-      "Running mise run --skip-tools app:check spend-review",
+      "Running mise run --no-deps --skip-tools app:check spend-review",
     );
     expect(pendingBuilderOperation(events)).toBe("the current Builder step");
   });

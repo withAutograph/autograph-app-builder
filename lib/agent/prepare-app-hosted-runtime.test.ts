@@ -622,6 +622,115 @@ describe("confirmed Gateway build failure recovery", () => {
       expect(operator.authIdentityInput).not.toHaveBeenCalled();
     },
   );
+  it.each(["returned", "thrown"])(
+    "offers ordinary planning for a %s unavailable legacy Auth bootstrap",
+    async (mode) => {
+      const legacyPlan = hostedOperatorPlanSchema.parse({
+        ...plan,
+        stage: "auth-bootstrap",
+        gatewayBindings: {
+          ...plan.gatewayBindings,
+          trustedSources: {
+            builderProduction: { projectId: "builder", from: "production", to: "preview" },
+            operatorPreview: { projectId: "operator", from: "preview", to: "preview" },
+          },
+        },
+      });
+      const legacyInput = {
+        ...input,
+        plan: legacyPlan,
+        planDigest: operatorPlanDigest(legacyPlan),
+      };
+      const frozen = structuredClone(legacyInput);
+      if (mode === "returned") {
+        operator.request.mockResolvedValueOnce({
+          appId: input.appId,
+          authenticatedBehavior: "unassessed",
+          operationRef,
+          status: "blocked",
+          code: "operator_unavailable",
+        });
+      } else {
+        operator.request.mockRejectedValueOnce(
+          new HostedOperatorErrorClass("operator_unavailable"),
+        );
+      }
+      const value = await prepareHostedRuntimeWithOperator(
+        legacyInput,
+        ctx,
+        operator,
+        retain,
+        contract,
+      );
+      expect(value.result).toMatchObject({
+        status: "blocked",
+        code: "operator_unavailable",
+        nextAction: {
+          tool: "plan-app-hosted-runtime",
+          approval: "normal-plan-approval",
+          input: {
+            appId: input.appId,
+            branch: input.branch,
+            environment: input.environment,
+            projectId: input.projectId,
+            operation: "prepare",
+          },
+        },
+      });
+      expect(legacyInput).toEqual(frozen);
+      expect(value.identityInput).toBeNull();
+      expect(operator.request).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          action: "execute",
+          operationRef,
+          planDigest: legacyInput.planDigest,
+        }),
+        ctx.abortSignal,
+      );
+      expect(operator.authIdentityInput).not.toHaveBeenCalled();
+    },
+  );
+  it.each(["missing-trusted-sources", "non-bootstrap", "invalid-digest"])(
+    "does not suggest legacy planning for %s",
+    async (boundary) => {
+      const candidatePlan = hostedOperatorPlanSchema.parse({
+        ...plan,
+        stage: boundary === "non-bootstrap" ? undefined : "auth-bootstrap",
+        gatewayBindings: {
+          ...plan.gatewayBindings,
+          trustedSources:
+            boundary === "missing-trusted-sources"
+              ? undefined
+              : {
+                  builderProduction: { projectId: "builder", from: "production", to: "preview" },
+                  operatorPreview: { projectId: "operator", from: "preview", to: "preview" },
+                },
+        },
+      });
+      const candidate = {
+        ...input,
+        plan: candidatePlan,
+        planDigest:
+          boundary === "invalid-digest" ? "0".repeat(64) : operatorPlanDigest(candidatePlan),
+      };
+      operator.request.mockRejectedValueOnce(new HostedOperatorErrorClass("operator_unavailable"));
+      const value = await prepareHostedRuntimeWithOperator(
+        candidate,
+        ctx,
+        operator,
+        retain,
+        contract,
+      );
+      expect(value.result).not.toHaveProperty("nextAction");
+      if (boundary === "invalid-digest") {
+        expect(operator.request).not.toHaveBeenCalled();
+        operator.request.mockReset();
+      } else {
+        expect(operator.request).toHaveBeenCalledOnce();
+      }
+      expect(operator.authIdentityInput).not.toHaveBeenCalled();
+    },
+  );
   it.each(["reconciliation_required", "operator_unavailable", "operation_in_progress"] as const)(
     "preserves %s without suggesting successor planning",
     async (code) => {

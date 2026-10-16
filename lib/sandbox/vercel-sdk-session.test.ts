@@ -236,7 +236,7 @@ it("kills a running command when renewal fails and leaves no idle renewal", asyn
   });
   try {
     const pending = createVercelSdkSession(native).run({
-      command: "mise run app:describe spend-review",
+      command: "mise run --no-deps app:describe spend-review",
     });
     const rejected = expect(pending).rejects.toThrow("renewal unavailable");
     await vi.advanceTimersByTimeAsync(15_000);

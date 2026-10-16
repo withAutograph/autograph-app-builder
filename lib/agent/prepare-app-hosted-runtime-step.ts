@@ -65,44 +65,67 @@ const reportCaughtPreparationFailure = (
   }
 };
 
-const preparationResult = (result: OperatorPublicResult, input: HostedRuntimeInput) => {
-  if (result.code !== "gateway_delivery_failed") {
+const preparationPlanningAction = (input: HostedRuntimeInput, reason: string) => ({
+  tool: "plan-app-hosted-runtime" as const,
+  input: {
+    appId: input.appId,
+    branch: input.branch,
+    environment: input.environment,
+    operation: "prepare" as const,
+    projectId: input.projectId,
+    ...(input.plan.normalActorProgram === undefined
+      ? {}
+      : { normalActorProgram: input.plan.normalActorProgram }),
+    ...(input.plan.authSignupPolicy === undefined
+      ? {}
+      : {
+          authSignupPolicy: {
+            version: input.plan.authSignupPolicy.version,
+            organizationId: input.plan.authSignupPolicy.organizationId,
+            eligibility: input.plan.authSignupPolicy.eligibility,
+            ...(input.plan.authSignupPolicy.allowedEmails === undefined
+              ? {}
+              : { allowedEmails: input.plan.authSignupPolicy.allowedEmails }),
+            membershipRole: input.plan.authSignupPolicy.membershipRole,
+            appRoles: input.plan.authSignupPolicy.appRoles,
+            appPath: input.plan.authSignupPolicy.appPath,
+          },
+        }),
+  },
+  approval: "normal-plan-approval" as const,
+  reason,
+});
+
+const preparationResult = (
+  result: OperatorPublicResult,
+  input: HostedRuntimeInput,
+  inputValidated: boolean,
+) => {
+  if (result.code === "gateway_delivery_failed") {
+    return {
+      ...result,
+      nextAction: preparationPlanningAction(
+        input,
+        "The native Gateway build failed. Plan again in this session using the current trusted source. Prepare the returned plan through the existing approval flow: an identical operation retains its durable approval, while a changed plan requires ordinary approval. Keep the existing resources.",
+      ),
+    };
+  }
+  if (!inputValidated || result.status !== "blocked" || result.code !== "operator_unavailable") {
     return result;
   }
-  return {
-    ...result,
-    nextAction: {
-      tool: "plan-app-hosted-runtime" as const,
-      input: {
-        appId: input.appId,
-        branch: input.branch,
-        environment: input.environment,
-        operation: "prepare" as const,
-        projectId: input.projectId,
-        ...(input.plan.normalActorProgram === undefined
-          ? {}
-          : { normalActorProgram: input.plan.normalActorProgram }),
-        ...(input.plan.authSignupPolicy === undefined
-          ? {}
-          : {
-              authSignupPolicy: {
-                version: input.plan.authSignupPolicy.version,
-                organizationId: input.plan.authSignupPolicy.organizationId,
-                eligibility: input.plan.authSignupPolicy.eligibility,
-                ...(input.plan.authSignupPolicy.allowedEmails === undefined
-                  ? {}
-                  : { allowedEmails: input.plan.authSignupPolicy.allowedEmails }),
-                membershipRole: input.plan.authSignupPolicy.membershipRole,
-                appRoles: input.plan.authSignupPolicy.appRoles,
-                appPath: input.plan.authSignupPolicy.appPath,
-              },
-            }),
-      },
-      approval: "normal-plan-approval" as const,
-      reason:
-        "The native Gateway build failed. Plan again in this session using the current trusted source. Prepare the returned plan through the existing approval flow: an identical operation retains its durable approval, while a changed plan requires ordinary approval. Keep the existing resources.",
-    },
-  };
+  if (
+    input.plan.stage === "auth-bootstrap" &&
+    input.plan.gatewayBindings?.trustedSources !== undefined
+  ) {
+    return {
+      ...result,
+      nextAction: preparationPlanningAction(
+        input,
+        "The approved Auth bootstrap includes legacy host-owned protection settings. Plan again in this session to discover the supported prerequisite, then prepare the returned plan through the existing approval flow. A changed plan requires ordinary approval. Keep the existing resources and reconcile any unknown effect outcome before retrying it.",
+      ),
+    };
+  }
+  return result;
 };
 
 // oxlint-disable-next-line eslint/complexity -- Legacy readiness and participant preflight retain their separate approval-bound identity handoffs.
@@ -117,6 +140,7 @@ export const prepareHostedRuntimeWithOperator = async (
   const participantPlan =
     input.plan.stage === "auth-participants" && input.plan.normalActorProgram !== undefined;
   let identityRequested = false;
+  let inputValidated = false;
   let stage: RuntimePreparationStage = "input_validation";
   const requestIdentity = async () => {
     identityRequested = true;
@@ -146,6 +170,7 @@ export const prepareHostedRuntimeWithOperator = async (
     ) {
       throw createResourceMismatch();
     }
+    inputValidated = true;
     stage = "operator_execute";
     const result = await operator.request(
       {
@@ -179,7 +204,7 @@ export const prepareHostedRuntimeWithOperator = async (
       participantPlan && result.status === "blocked" && result.code === "auth_identity_required";
     const needsIdentity = legacyIdentityMissing || participantIdentityMissing;
     const identityInput = needsIdentity ? await requestIdentity() : null;
-    return { identityInput, result: preparationResult(result, input) };
+    return { identityInput, result: preparationResult(result, input, inputValidated) };
   } catch (error) {
     reportCaughtPreparationFailure(contract, stage, error);
     const result: OperatorPublicResult = {
@@ -201,7 +226,7 @@ export const prepareHostedRuntimeWithOperator = async (
         };
       }
     }
-    return { identityInput: null, result: preparationResult(result, input) };
+    return { identityInput: null, result: preparationResult(result, input, inputValidated) };
   }
 };
 

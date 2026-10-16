@@ -24,8 +24,8 @@ import { sanitizeValidationDiagnosticText } from "./validation-output-sanitize";
 export { sanitizeValidationDiagnosticText } from "./validation-output-sanitize";
 
 export type TargetValidationCommand =
-  | `mise run --skip-tools app:check ${string}`
-  | `mise run --skip-tools app:test ${string} ${string}`;
+  | `mise run --no-deps --skip-tools app:check ${string}`
+  | `mise run --no-deps --skip-tools app:test ${string} ${string}`;
 export type TargetValidationCommandName = "check-build" | "test";
 
 export type ValidationCommandExecutor = (input: {
@@ -433,7 +433,7 @@ export const sandboxValidationCommandExecutor =
       ),
       APP_RUNTIME_STATE_DIR: nodePath.posix.dirname(environmentPath),
     };
-    const executionCommand = `if [ -f '${environmentPath}' ]; then mise run app:runtime run ${appId} ${runtimeTask}${shard}; else ${command}; fi`;
+    const executionCommand = `if [ -f '${environmentPath}' ]; then mise run --no-deps app:runtime run ${appId} ${runtimeTask}${shard}; else ${command}; fi`;
     const detachedCommand = `set +e
 log=$(mktemp /tmp/app-builder-validation.XXXXXX) || exit $?
 ${executionCommand} > "$log" 2>&1
@@ -492,14 +492,15 @@ export const fixtureValidationCommandExecutor =
   ({ appId, command }) => {
     if (
       appId === "validation-interruption" &&
-      command.startsWith("mise run --skip-tools app:check ")
+      command.startsWith("mise run --no-deps --skip-tools app:check ")
     ) {
       const error = new Error("fixture validation interruption");
       error.name = "TimeoutError";
       return Promise.reject(error);
     }
     return Promise.resolve(
-      appId === "validation-failure" && command.startsWith("mise run --skip-tools app:check ")
+      appId === "validation-failure" &&
+        command.startsWith("mise run --no-deps --skip-tools app:check ")
         ? { exitCode: 1, stderr: "fixture validation failure", stdout: "" }
         : { exitCode: 0, stderr: "", stdout: `${command} passed` },
     );

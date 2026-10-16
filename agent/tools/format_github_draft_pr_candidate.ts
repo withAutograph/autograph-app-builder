@@ -13,7 +13,7 @@ import {
   validationOutputExcerpt,
 } from "@/lib/repository/target-validation";
 
-const command = "mise run --skip-tools format:app";
+const command = "mise run --no-deps --skip-tools format:app";
 
 export default defineTool({
   description:

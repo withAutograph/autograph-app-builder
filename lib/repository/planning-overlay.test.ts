@@ -27,7 +27,7 @@ const appDescription = (id: string) =>
 
 const planningCommandOutput = (command: string, mode: string): string => {
   if (command.startsWith("stat ")) return `${mode}\n`;
-  if (command.startsWith("mise run app:describe ")) {
+  if (command.startsWith("mise run --no-deps app:describe ")) {
     return appDescription(command.split(" ").at(-1) ?? "missing-app-id");
   }
   return "";
@@ -349,7 +349,7 @@ describe("planning from the current checkout", () => {
     if (!("operation" in result.proposal)) throw new Error("Expected revision");
     expect(result.proposal.iteration.changes[0]).not.toHaveProperty("after");
     expect(sandbox.run).toHaveBeenCalledWith({
-      command: "mise run app:describe example",
+      command: "mise run --no-deps app:describe example",
       workingDirectory: "/workspace/repository",
     });
   });

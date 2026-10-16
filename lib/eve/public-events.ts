@@ -80,20 +80,27 @@ const draftValidationCommandLabel = (value: unknown): string | undefined => {
   if (typeof value !== "string") {
     return undefined;
   }
-  if (value === "mise exec -- bun install --frozen-lockfile") {
+  if (/^mise exec (?:--no-deps )?-- bun install --frozen-lockfile$/u.test(value)) {
     return "Installing the candidate's locked dependencies";
   }
-  if (/^mise run --skip-tools schema:release -- compile --app [a-z][a-z0-9-]*$/u.test(value)) {
-    return `Running ${value}`;
-  }
   if (
-    /^mise run --skip-tools (?:app:check [a-z][a-z0-9-]*|app:test [a-z][a-z0-9-]* [1-9][0-9]*\/[1-9][0-9]*|\/\/apps\/[a-z][a-z0-9-]*:test-e2e|check:[A-Za-z0-9:_-]+)$/u.test(
+    /^mise run (?:--no-deps )?(?:app:compile [a-z][a-z0-9-]*|--skip-tools schema:release -- compile --app [a-z][a-z0-9-]*)$/u.test(
       value,
     )
   ) {
     return `Running ${value}`;
   }
-  const local = /mise run app:local -- (?<appId>[a-z][a-z0-9-]*) setup/u.exec(value);
+  if (
+    /^mise run (?:--no-deps )?--skip-tools (?:app:check [a-z][a-z0-9-]*|app:test [a-z][a-z0-9-]* [1-9][0-9]*\/[1-9][0-9]*|\/\/apps\/[a-z][a-z0-9-]*:test-e2e|check:[A-Za-z0-9:_-]+)$/u.test(
+      value,
+    )
+  ) {
+    return `Running ${value}`;
+  }
+  const local =
+    /mise run (?:--no-deps )?(?:app:local -- |app:runtime prepare )(?<appId>[a-z][a-z0-9-]*)(?: setup| local)/u.exec(
+      value,
+    );
   return local?.groups?.appId === undefined
     ? undefined
     : `Preparing ${local.groups.appId} local validation data`;
