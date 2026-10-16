@@ -1326,6 +1326,7 @@ export const operatorPublicResultSchema = z.strictObject({
       "operation_in_progress",
       "reconciliation_required",
       "gateway_delivery_failed",
+      "app_source_publication_required",
       "operator_unavailable",
       "legacy_runtime_requires_migration",
       "signup_not_ready",

@@ -1,6 +1,10 @@
 import { expect, it } from "vitest";
 import type { CompiledOperatorReleaseSelection } from "./hosted-operator-artifact-selection";
-import { resolvePublishedAppDelivery } from "./hosted-operator-published-app-delivery";
+import { operatorPublicResultSchema } from "./hosted-operator-contract";
+import {
+  resolvePublishedAppDelivery,
+  withAppPublicationGuidance,
+} from "./hosted-operator-published-app-delivery";
 
 const application = {
   branch: "main",
@@ -35,11 +39,35 @@ it("uses the selected release's actual published repository, ref and commit", ()
   expect(application.branch).toBe("main");
 });
 it("does not substitute configured starter source for an unpublished generated release", () => {
-  expect(() => resolvePublishedAppDelivery(application, release)).toThrow("operator_unavailable");
+  expect(() => resolvePublishedAppDelivery(application, release)).toThrow(
+    "app_source_publication_required",
+  );
 });
 it("retains explicitly configured delivery for legacy callers without a generated selection", () => {
   expect(resolvePublishedAppDelivery(application)).toEqual(application);
   expect(() => resolvePublishedAppDelivery({ branch: "main", projectId: "prj_app" })).toThrow(
     "operator_unavailable",
   );
+});
+
+it("preserves the publication prerequisite through the operator result contract", () => {
+  const result = operatorPublicResultSchema.parse({
+    appId: release.appId,
+    authenticatedBehavior: "unassessed",
+    code: "app_source_publication_required",
+    status: "blocked",
+  });
+  const enriched = withAppPublicationGuidance(result);
+  expect(enriched).toMatchObject(result);
+  expect(enriched).toHaveProperty("nextAction", expect.any(String));
+});
+
+it.each([
+  { status: "pending", code: "app_source_publication_required" },
+  { status: "blocked", code: "operator_unavailable" },
+  { status: "blocked", code: "reconciliation_required" },
+  { status: "blocked", code: "operation_in_progress" },
+  { status: "planned" },
+] as const)("preserves other operator outcomes (%j)", (result) => {
+  expect(withAppPublicationGuidance(result)).toBe(result);
 });
