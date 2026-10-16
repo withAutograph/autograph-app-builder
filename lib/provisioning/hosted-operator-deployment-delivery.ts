@@ -14,6 +14,11 @@ interface DeploymentListQuery {
   projectId: string;
   until?: string;
 }
+const matchesMetadataIdentity = (
+  expected: Readonly<Record<string, string>>,
+  observed: Record<string, string> | undefined,
+) => Object.entries(expected).every(([key, value]) => observed?.[key] === value);
+
 const id = z.string().min(1);
 const isPendingBuild = (candidate: OperatorDeploymentCandidate) =>
   ["BUILDING", "QUEUED", "INITIALIZING"].includes(candidate.readyState);
@@ -196,9 +201,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       }),
     ];
     const matchesMetadata = (metadata: Record<string, string> | undefined) =>
-      metadataIdentities.some((expected) =>
-        Object.entries(expected).every(([key, value]) => metadata?.[key] === value),
-      );
+      metadataIdentities.some((expected) => matchesMetadataIdentity(expected, metadata));
     const assertCurrent = async () => {
       input.signal?.throwIfAborted();
       await input.assertCurrent();
