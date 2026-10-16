@@ -557,31 +557,31 @@ describe("isolated draft reconciliation", () => {
     expect(next.root).not.toBe(old.root);
     expect(next.preservedCandidateRoot).toBe(old.root);
     expect(next.replayedAppChanges).toBe(true);
-    expect(readFileSync(path.join(next.root, "apps/demo/tests/journey.spec.ts"), "utf8")).toBe(
+    expect(readFileSync(path.join(next.root, "apps/demo/tests/journey.spec.ts"), "utf-8")).toBe(
       "main\ndraft repaired\n",
     );
-    expect(readFileSync(path.join(next.root, "apps/demo/repair.ts"), "utf8")).toBe(
+    expect(readFileSync(path.join(next.root, "apps/demo/repair.ts"), "utf-8")).toBe(
       "app-owned repair\n",
     );
     expect(git(next.root, "ls-files", "--stage", "apps/demo/repair.ts")).toMatch(/^100755/u);
-    expect(readFileSync(path.join(next.root, "apps/demo/file-to-directory/child.ts"), "utf8")).toBe(
-      "replacement child\n",
-    );
+    expect(
+      readFileSync(path.join(next.root, "apps/demo/file-to-directory/child.ts"), "utf-8"),
+    ).toBe("replacement child\n");
     expect(lstatSync(path.join(next.root, "apps/demo/directory-to-file")).isFile()).toBe(true);
-    expect(readFileSync(path.join(next.root, "apps/demo/directory-to-file"), "utf8")).toBe(
+    expect(readFileSync(path.join(next.root, "apps/demo/directory-to-file"), "utf-8")).toBe(
       "replacement file\n",
     );
     expect(existsSync(path.join(next.root, "apps/demo/rename-source.ts"))).toBe(false);
-    expect(readFileSync(path.join(next.root, "apps/demo/rename-target.ts"), "utf8")).toBe(
+    expect(readFileSync(path.join(next.root, "apps/demo/rename-target.ts"), "utf-8")).toBe(
       "renamed app repair\n",
     );
     expect(git(next.root, "ls-files", "--stage", "apps/demo/rename-target.ts")).toMatch(/^100755/u);
     expect(existsSync(path.join(next.root, "apps/demo/obsolete.txt"))).toBe(false);
     expect(existsSync(path.join(next.root, "apps/demo/.env"))).toBe(false);
     expect(existsSync(path.join(next.root, "bun.lock"))).toBe(false);
-    expect(readFileSync(path.join(next.root, "docs/platform.md"), "utf8")).toBe("main\n");
-    expect(readFileSync(path.join(old.root, "bun.lock"), "utf8")).toBe("observed root metadata\n");
-    expect(readFileSync(path.join(old.root, "docs/platform.md"), "utf8")).toBe(
+    expect(readFileSync(path.join(next.root, "docs/platform.md"), "utf-8")).toBe("main\n");
+    expect(readFileSync(path.join(old.root, "bun.lock"), "utf-8")).toBe("observed root metadata\n");
+    expect(readFileSync(path.join(old.root, "docs/platform.md"), "utf-8")).toBe(
       "private outside-scope edit\n",
     );
     expect(readFileSync(index)).toEqual(beforeIndex);
@@ -664,8 +664,8 @@ describe("isolated draft reconciliation", () => {
     expect(next.baseSha).toBe(baseSha);
     expect(next.replayedAppChanges).toBe(false);
     expect(next.conflicts).toContain("apps/demo/tests/journey.spec.ts");
-    expect(readFileSync(path.join(next.root, "docs/platform.md"), "utf8")).toBe("new live base\n");
-    expect(readFileSync(path.join(old.root, "apps/demo/tests/journey.spec.ts"), "utf8")).toBe(
+    expect(readFileSync(path.join(next.root, "docs/platform.md"), "utf-8")).toBe("new live base\n");
+    expect(readFileSync(path.join(old.root, "apps/demo/tests/journey.spec.ts"), "utf-8")).toBe(
       "old app repair\n",
     );
   });
@@ -695,8 +695,8 @@ describe("isolated draft reconciliation", () => {
       }),
     ).rejects.toThrow("could not preserve every app repair");
     expect(lstatSync(path.join(old.root, "apps/demo/unsafe")).isSymbolicLink()).toBe(true);
-    expect(readFileSync(external, "utf8")).toBe("private fixture bytes\n");
-    expect(readFileSync(path.join(old.root, "bun.lock"), "utf8")).toBe("outside-scope metadata\n");
+    expect(readFileSync(external, "utf-8")).toBe("private fixture bytes\n");
+    expect(readFileSync(path.join(old.root, "bun.lock"), "utf-8")).toBe("outside-scope metadata\n");
   });
 
   it("reports a lost private candidate and rebuilds it without carrying old resolutions", async () => {

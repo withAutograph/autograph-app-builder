@@ -71,7 +71,7 @@ const candidateRecoveryGuidance = (
 ): string | undefined => {
   const { preservedCandidateRoot, replayedAppChanges } = prepared;
   if (preservedCandidateRoot !== undefined) {
-    return replayedAppChanges
+    return replayedAppChanges === true
       ? `Builder preserved the old candidate at ${preservedCandidateRoot} and copied its app repairs and conflict state into this fresh candidate. Outside-app metadata was not copied. Continue normal conflict resolution and candidate validation; no GitHub update occurred.`
       : `Builder left the old candidate at ${preservedCandidateRoot} untouched and prepared the currently verified draft/base lineage. Old resolutions were not copied across changed source/review lineage. Continue normal conflict resolution and validation; nothing was published.`;
   }
