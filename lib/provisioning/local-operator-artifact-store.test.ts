@@ -1,6 +1,16 @@
 /* oxlint-disable sonarjs/no-internal-api-use, eslint/no-bitwise -- Owned filesystem fixtures exercise actual Eve approval context serialization and permission masks. Runtime internals are never product imports. */
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdtemp, mkdir, realpath, rm, stat, readdir, chmod } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  realpath,
+  rm,
+  stat,
+  readdir,
+  chmod,
+  readFile,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -88,6 +98,77 @@ const selection = (letter: string): CompiledOperatorReleaseSelection => ({
 });
 
 describe("published source selection persistence", () => {
+  it("reads an exact historical publication across specs with owner/app/session isolation", async () => {
+    const f = await fixture();
+    await contextStorage.run(f.container, async () => {
+      const storage = await createLocalOperatorArtifactStorage(f);
+      const publishedSource = {
+        repositoryId: "fixture-repository",
+        branch: "app-builder/fixture",
+        gitSha: "c".repeat(40),
+        gitTree: "d".repeat(40),
+        changeSetDigest: "e".repeat(64),
+        reviewDigest: "f".repeat(64),
+      };
+      await storage.selections.record(f.context, "old-approved-publication", {
+        ...selection("a"),
+        publishedSource,
+      });
+      await storage.selections.record(f.context, "current-unpublished-spec", {
+        ...selection("b"),
+        appSpecDigest: "b".repeat(64),
+      });
+      const read = storage.selections.readPublishedSource;
+      if (read === undefined) {
+        throw new Error("Published source reader unavailable");
+      }
+      expect(await read(f.context, publishedSource)).toEqual(publishedSource);
+      expect(await read(f.context, { ...publishedSource, gitSha: "a".repeat(40) })).toBeUndefined();
+      await expect(
+        read(
+          { ...f.context, target: { ...f.context.target, sessionId: "foreign" } },
+          publishedSource,
+        ),
+      ).rejects.toThrow();
+      await expect(
+        read(
+          { ...f.context, target: { ...f.context.target, appId: "another-app" } },
+          publishedSource,
+        ),
+      ).rejects.toThrow();
+      await expect(
+        read(
+          { ...f.context, authority: { ...f.authority, ownerUid: f.authority.ownerUid + 1 } },
+          publishedSource,
+        ),
+      ).rejects.toThrow();
+      const [owned] = await readdir(path.join(f.stateRoot, "operator-artifacts"));
+      if (owned === undefined) {
+        throw new Error("Owned fixture directory missing");
+      }
+      const selectionDirectory = path.join(
+        f.stateRoot,
+        "operator-artifacts",
+        owned,
+        `selection-${"a".repeat(64)}`,
+      );
+      const [frameName] = await readdir(selectionDirectory);
+      if (frameName === undefined) {
+        throw new Error("Retained fixture frame missing");
+      }
+      const framePath = path.join(selectionDirectory, frameName);
+      const content = await readFile(framePath, "utf-8");
+      await writeFile(
+        framePath,
+        content.replace('"appId":"fixture-app"', '"appId":"another-app"'),
+        {
+          mode: 0o600,
+        },
+      );
+      await expect(read(f.context, publishedSource)).rejects.toThrow();
+    });
+  });
+
   it("retains actual source fields and does not promote an old initial publication on replay", async () => {
     const f = await fixture();
     await contextStorage.run(f.container, async () => {

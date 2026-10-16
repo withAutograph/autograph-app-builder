@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   compiledOperatorReleaseSelectionSchema,
   selectExactCompiledOperatorRelease,
+  selectExactPublishedAppSource,
 } from "./hosted-operator-artifact-selection";
 import type { CompiledOperatorReleaseSelection } from "./hosted-operator-artifact-selection";
 
@@ -119,4 +120,52 @@ it("accepts additive source and selection metadata without changing exact releas
       publishedSource: { ...input.publishedSource, reviewDigest: "invalid" },
     }),
   ).toThrow();
+});
+
+describe("exact recorded published source across accepted specifications", () => {
+  const publishedSource = {
+    repositoryId: "fixture-repository",
+    branch: "app-builder/fixture",
+    gitSha: "d".repeat(40),
+    gitTree: "e".repeat(40),
+    changeSetDigest: "f".repeat(64),
+    reviewDigest: "a".repeat(64),
+  };
+  it("finds an older approved publication without selecting the current unpublished specification", () => {
+    const older = { ...release("a"), publishedSource };
+    const current = release("b");
+    expect(selectExactPublishedAppSource([current, older], publishedSource)).toEqual(
+      publishedSource,
+    );
+    expect(
+      selectExactPublishedAppSource([older, { ...release("c"), publishedSource }], publishedSource),
+    ).toEqual(publishedSource);
+  });
+  it.each([
+    { repositoryId: "another-repository" },
+    { branch: "another-branch" },
+    { gitSha: "b".repeat(40) },
+    { gitTree: "c".repeat(40) },
+  ])("does not substitute a different observed Git tuple: %j", (change) => {
+    expect(
+      selectExactPublishedAppSource([{ ...release("a"), publishedSource }], {
+        ...publishedSource,
+        ...change,
+      }),
+    ).toBeUndefined();
+  });
+  it("rejects malformed retained markers and returns absence for unpublished selections", () => {
+    expect(selectExactPublishedAppSource([release("a")], publishedSource)).toBeUndefined();
+    expect(() =>
+      selectExactPublishedAppSource(
+        [
+          {
+            ...release("a"),
+            publishedSource: { ...publishedSource, gitTree: "invalid" },
+          },
+        ],
+        publishedSource,
+      ),
+    ).toThrow();
+  });
 });

@@ -42,7 +42,7 @@ const hooks = vi.hoisted(() => {
       originalReviewDigest: digest,
       root: "/workspace/resolved",
       workspaceRoot: "/workspace",
-      publishedReconciliation: undefined as unknown,
+      publishedReconciliation: undefined,
     },
   };
 });

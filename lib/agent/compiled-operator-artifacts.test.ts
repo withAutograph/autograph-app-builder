@@ -6,10 +6,15 @@ import {
   compiledArtifactSandboxRelativePath,
   publishCompiledOperatorArtifactsForSession,
   recordPublishedOperatorSourceForSession,
+  readPublishedOperatorSourceForSession,
 } from "./compiled-operator-artifacts";
 import type { AppDescription } from "../repository/app-description";
 import type { OperatorArtifactContext } from "../provisioning/hosted-operator-artifact-store";
-import type { CompiledOperatorReleaseSelection } from "../provisioning/hosted-operator-artifact-selection";
+import type {
+  PublishedAppSource,
+  PublishedAppSourceLookup,
+  CompiledOperatorReleaseSelection,
+} from "../provisioning/hosted-operator-artifact-selection";
 import { mkdtemp, mkdir, realpath, rm } from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
@@ -27,6 +32,14 @@ const mocks = vi.hoisted(() => ({
   owner: null as Record<string, unknown> | null,
   record: vi.fn(),
   readSelection: vi.fn(),
+  publishedSourceLookupAvailable: true,
+  readPublishedSource:
+    vi.fn<
+      (
+        context: OperatorArtifactContext,
+        lookup: PublishedAppSourceLookup,
+      ) => Promise<PublishedAppSource | undefined>
+    >(),
   resolve: vi.fn(),
   rows: new Map<string, string>(),
   state: null as Record<string, unknown> | null,
@@ -67,6 +80,9 @@ vi.mock("../provisioning/hosted-operator-artifact-selection", async (importOrigi
   ...(await importOriginal<Record<string, unknown>>()),
   createPostgresOperatorArtifactSelections: () => ({
     read: mocks.readSelection,
+    ...(mocks.publishedSourceLookupAvailable
+      ? { readPublishedSource: mocks.readPublishedSource }
+      : {}),
     record: mocks.record,
   }),
 }));
@@ -138,6 +154,8 @@ describe("owned compiled artifact workflow hook", () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
     mocks.rows.clear();
     mocks.readSelection.mockReset();
+    mocks.readPublishedSource.mockReset();
+    mocks.publishedSourceLookupAvailable = true;
     mocks.state = {
       appSpec: { appId: "spend-review", digest },
       applyReceipt: { applyRoot: "/workspace/repository" },
@@ -161,6 +179,74 @@ describe("owned compiled artifact workflow hook", () => {
       ) => selection,
     );
   });
+  const historicalSource = {
+    repositoryId: "4242",
+    branch: "app-builder/review-existing",
+    gitSha: "b".repeat(40),
+    gitTree: "c".repeat(40),
+    changeSetDigest: "d".repeat(64),
+    reviewDigest: "e".repeat(64),
+  };
+  const historicalLookup = {
+    repositoryId: historicalSource.repositoryId,
+    branch: historicalSource.branch,
+    gitSha: historicalSource.gitSha,
+    gitTree: historicalSource.gitTree,
+  };
+
+  it("reads historical publication under the current approved app and original owner session", async () => {
+    mocks.readPublishedSource.mockResolvedValue(historicalSource);
+    const input = frame();
+    await expect(
+      readPublishedOperatorSourceForSession({ ...input, lookup: historicalLookup }),
+    ).resolves.toEqual(historicalSource);
+    expect(mocks.readPublishedSource).toHaveBeenCalledWith(
+      { authority, target: { appId: input.appId, sessionId: "durable-original" } },
+      historicalLookup,
+    );
+    expect(mocks.readSelection).not.toHaveBeenCalled();
+    expect(mocks.record).not.toHaveBeenCalled();
+    expect(input.sandbox.run).not.toHaveBeenCalled();
+  });
+
+  it("treats an unavailable optional historical reader as a miss", async () => {
+    mocks.publishedSourceLookupAvailable = false;
+    await expect(
+      readPublishedOperatorSourceForSession({ ...frame(), lookup: historicalLookup }),
+    ).resolves.toBeUndefined();
+    expect(mocks.record).not.toHaveBeenCalled();
+  });
+
+  it.each(["repositoryId", "branch", "gitSha", "gitTree"] as const)(
+    "does not trust a storage port returning a mismatched %s",
+    async (field) => {
+      mocks.readPublishedSource.mockResolvedValue({ ...historicalSource, [field]: "f".repeat(40) });
+      await expect(
+        readPublishedOperatorSourceForSession({ ...frame(), lookup: historicalLookup }),
+      ).resolves.toBeUndefined();
+      expect(mocks.record).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not return a historical marker with invalid publication evidence", async () => {
+    mocks.readPublishedSource.mockResolvedValue({ ...historicalSource, reviewDigest: "invalid" });
+    await expect(
+      readPublishedOperatorSourceForSession({ ...frame(), lookup: historicalLookup }),
+    ).resolves.toBeUndefined();
+    expect(mocks.record).not.toHaveBeenCalled();
+  });
+
+  it("does not return a historical marker after the current owner changes during its read", async () => {
+    mocks.readPublishedSource.mockImplementation(() => {
+      mocks.owner = { ...mocks.owner, adapterGeneration: 2 };
+      return Promise.resolve(historicalSource);
+    });
+    await expect(
+      readPublishedOperatorSourceForSession({ ...frame(), lookup: historicalLookup }),
+    ).rejects.toThrow("artifact is unavailable");
+    expect(mocks.record).not.toHaveBeenCalled();
+  });
+
   it("records published source on the selected tuple under the canonical public owner session", async () => {
     const selected: CompiledOperatorReleaseSelection = {
       appId: "spend-review",

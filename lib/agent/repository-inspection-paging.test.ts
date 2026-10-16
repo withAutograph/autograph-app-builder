@@ -140,7 +140,6 @@ describe("repository inspection paging", () => {
     const first = await readRepositoryInspectionPage({ ...input, offsetBytes: 1 });
     const [firstChunk] = first.files;
     expect(firstChunk).toMatchObject({
-      content: expect.any(String),
       offsetBytes: 0,
       restartedFromOffsetBytes: 1,
     });

@@ -19,11 +19,13 @@ import type { OperatorArtifactPublicationDiagnostic } from "../provisioning/host
 import {
   createPostgresOperatorArtifactSelections,
   readExactCompiledOperatorRelease,
+  publishedAppSourceSchema,
 } from "../provisioning/hosted-operator-artifact-selection";
 import type {
   CompiledOperatorReleaseSelection,
   ExactCompiledOperatorReleaseLookup,
   PublishedAppSource,
+  PublishedAppSourceLookup,
 } from "../provisioning/hosted-operator-artifact-selection";
 import { describeSelectedApp } from "../repository/app-description";
 import type { AppDescription } from "../repository/app-description";
@@ -207,6 +209,33 @@ export const recordPublishedOperatorSourceForSession = async (
     publishedSource: input.publishedSource,
   });
   return { selection, status: "recorded" };
+};
+
+/** Recover only a verified historical publication under this current app and original owner session. */
+export const readPublishedOperatorSourceForSession = async (
+  input: CompiledOperatorArtifactSessionInput & { lookup: PublishedAppSourceLookup },
+): Promise<PublishedAppSource | undefined> => {
+  input.signal?.throwIfAborted();
+  const binding = await resolveCompiledArtifactSession(input);
+  const storage = await openCompiledArtifactStorage(binding);
+  await binding.assertCurrentOwner(binding.context);
+  const source = await storage.selections.readPublishedSource?.(binding.context, input.lookup);
+  await binding.assertCurrentOwner(binding.context);
+  input.signal?.throwIfAborted();
+  if (source === undefined) {
+    return undefined;
+  }
+  const parsed = publishedAppSourceSchema.safeParse(source);
+  if (!parsed.success) {
+    return undefined;
+  }
+  const matched = [
+    parsed.data.repositoryId === input.lookup.repositoryId,
+    parsed.data.branch === input.lookup.branch,
+    parsed.data.gitSha === input.lookup.gitSha,
+    parsed.data.gitTree === input.lookup.gitTree,
+  ].every(Boolean);
+  return matched ? parsed.data : undefined;
 };
 
 /** Read only the exact retained release named by actual installed identity or a saved owned reference. */

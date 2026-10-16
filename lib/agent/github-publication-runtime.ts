@@ -50,6 +50,13 @@ import type {
   HistoricalAppSourceSelector,
 } from "../repository/historical-app-source";
 
+import { publishedAppSourceSchema } from "../provisioning/hosted-operator-artifact-selection";
+import type { PublishedAppSource } from "../provisioning/hosted-operator-artifact-selection";
+
+type PublishedSourceReader = (
+  draft: ExistingDraftObservation,
+) => Promise<PublishedAppSource | undefined>;
+
 const supportedOperations = [
   "resolve-immutable-existing-source",
   "seal-draft-pull-request-proposal",
@@ -155,6 +162,74 @@ const readAppliedOwnedReconciliation = async (input: {
     }
   }
   return undefined;
+};
+
+const reconciliationBaselineSources = [
+  "retained-reconciliation",
+  "published-source",
+  "original-publication",
+  "none",
+] as const;
+interface ReconciliationBaseline {
+  headSha: string | undefined;
+  source: (typeof reconciliationBaselineSources)[number];
+  canonicalPublishedSourceMatched: boolean;
+}
+interface ReconciliationBaselineDiagnostic extends Pick<
+  ReconciliationBaseline,
+  "source" | "canonicalPublishedSourceMatched"
+> {
+  previousReconciliationPresent: boolean;
+  publishedReconciliationPresent: boolean;
+}
+const reportReconciliationBaseline = (diagnostic: ReconciliationBaselineDiagnostic): void => {
+  try {
+    console.info(
+      JSON.stringify({ event: "app_builder.draft_reconciliation_baseline", ...diagnostic }),
+    );
+  } catch {
+    /* Diagnostic delivery cannot change ownership checks or baseline selection. */
+  }
+};
+
+const ownedPublishedHead = async (input: {
+  draft: ExistingDraftObservation;
+  prior: DraftPullRequestSuccessReceipt | undefined;
+  appliedReconciliation: ExistingDraftReconciliationProposal | undefined;
+  readPublishedSource: PublishedSourceReader | undefined;
+}): Promise<ReconciliationBaseline> => {
+  const { draft, prior, appliedReconciliation, readPublishedSource } = input;
+  if (appliedReconciliation !== undefined) {
+    return {
+      headSha: draft.headSha,
+      source: "retained-reconciliation",
+      canonicalPublishedSourceMatched: false,
+    };
+  }
+  const fallback: ReconciliationBaseline = {
+    headSha: prior?.branchSha,
+    source: prior === undefined ? "none" : "original-publication",
+    canonicalPublishedSourceMatched: false,
+  };
+  if (
+    prior === undefined ||
+    prior.branchSha === draft.headSha ||
+    readPublishedSource === undefined
+  ) {
+    return fallback;
+  }
+  const source = publishedAppSourceSchema.safeParse(await readPublishedSource(draft));
+  const matched =
+    source.success &&
+    [
+      source.data.repositoryId === draft.repositoryId,
+      source.data.branch === draft.headBranch,
+      source.data.gitSha === draft.headSha,
+      source.data.gitTree === draft.headTree,
+    ].every(Boolean);
+  return matched
+    ? { headSha: draft.headSha, source: "published-source", canonicalPublishedSourceMatched: true }
+    : fallback;
 };
 
 export interface GitHubPublicationRuntimeStatus {
@@ -264,6 +339,8 @@ export interface GitHubPublicationRuntime {
     /** Retained server-owned sealed candidate; never a caller-supplied baseline SHA. */
     previousReconciliation?: ExistingDraftReconciliationProposal;
     publishedReconciliation?: ExistingDraftReconciliationProposal;
+    /** Trusted current owner/session/app lookup; never serialized as public tool input. */
+    readPublishedSource?: PublishedSourceReader;
   }) => Promise<{
     draft: ExistingDraftObservation;
     base: GitHubRepositoryObservation;
@@ -614,41 +691,58 @@ export function composeGitHubPublicationRuntime(input: {
       return observed;
     },
     async inspectExistingDraftReconciliationSource(request) {
-      const draft = await this.inspectExistingDraftSource(request);
-      const prior = await readOwnedDraftPublication({
-        draft,
-        proposalDigest: request.priorPublishedProposalDigest,
-        receipts,
-      });
-      const base = await adapter.inspectRepository({
-        operation: draftPublicationOperation,
-        ref: `refs/heads/${draft.baseBranch}`,
-        repositoryId: request.repositoryId,
-      });
-      if (
-        base.repositoryId !== request.repositoryId ||
-        base.owner !== request.owner ||
-        base.name !== request.name ||
-        base.defaultBranch !== draft.baseBranch
-      ) {
-        throw new Error(
-          "The draft PR base no longer matches the connected repository's default branch. Reopen the current PR and select its intended base before reconciliation.",
-        );
-      }
-      const publishedReconciliation = await readAppliedOwnedReconciliation({
-        adapter,
-        draft,
-        prior,
-        candidates: [request.previousReconciliation, request.publishedReconciliation],
-      });
-      const publishedHeadSha =
-        publishedReconciliation === undefined ? prior?.branchSha : draft.headSha;
-      return {
-        base,
-        draft,
-        ...(publishedHeadSha === undefined ? {} : { publishedHeadSha }),
-        ...(publishedReconciliation === undefined ? {} : { publishedReconciliation }),
+      const diagnostic: ReconciliationBaselineDiagnostic = {
+        source: "none",
+        previousReconciliationPresent: request.previousReconciliation !== undefined,
+        publishedReconciliationPresent: request.publishedReconciliation !== undefined,
+        canonicalPublishedSourceMatched: false,
       };
+      try {
+        const draft = await this.inspectExistingDraftSource(request);
+        const prior = await readOwnedDraftPublication({
+          draft,
+          proposalDigest: request.priorPublishedProposalDigest,
+          receipts,
+        });
+        const base = await adapter.inspectRepository({
+          operation: draftPublicationOperation,
+          ref: `refs/heads/${draft.baseBranch}`,
+          repositoryId: request.repositoryId,
+        });
+        if (
+          base.repositoryId !== request.repositoryId ||
+          base.owner !== request.owner ||
+          base.name !== request.name ||
+          base.defaultBranch !== draft.baseBranch
+        ) {
+          throw new Error(
+            "The draft PR base no longer matches the connected repository's default branch. Reopen the current PR and select its intended base before reconciliation.",
+          );
+        }
+        const publishedReconciliation = await readAppliedOwnedReconciliation({
+          adapter,
+          draft,
+          prior,
+          candidates: [request.previousReconciliation, request.publishedReconciliation],
+        });
+        const baseline = await ownedPublishedHead({
+          draft,
+          prior,
+          appliedReconciliation: publishedReconciliation,
+          readPublishedSource: request.readPublishedSource,
+        });
+        diagnostic.source = baseline.source;
+        diagnostic.canonicalPublishedSourceMatched = baseline.canonicalPublishedSourceMatched;
+        const publishedHeadSha = baseline.headSha;
+        return {
+          base,
+          draft,
+          ...(publishedHeadSha === undefined ? {} : { publishedHeadSha }),
+          ...(publishedReconciliation === undefined ? {} : { publishedReconciliation }),
+        };
+      } finally {
+        reportReconciliationBaseline(diagnostic);
+      }
     },
     async publishDraftPullRequest(request) {
       const proposal = await proposals.read(request.expectedProposalDigest);

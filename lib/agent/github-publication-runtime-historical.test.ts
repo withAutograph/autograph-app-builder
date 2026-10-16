@@ -176,7 +176,106 @@ const ownedDraftFixture = (
   return { draft, findDraftByPullRequest, read, receipt, repository, runtime };
 };
 
+const recordedSource = (draft: ExistingDraftObservation) => ({
+  repositoryId: draft.repositoryId,
+  branch: draft.headBranch,
+  gitSha: draft.headSha,
+  gitTree: draft.headTree,
+  changeSetDigest: "c".repeat(64),
+  reviewDigest: "d".repeat(64),
+});
+
 describe("same-session owned draft repair", () => {
+  it("recovers the exact owned historical published head without retained reconciliation slots", async () => {
+    const { draft, runtime } = ownedDraftFixture();
+    const readPublishedSource = vi.fn(() => Promise.resolve(recordedSource(draft)));
+    const result = await runtime.inspectExistingDraftReconciliationSource({
+      name: draft.name,
+      owner: draft.owner,
+      repositoryId: draft.repositoryId,
+      pullRequestNumber: draft.number,
+      readPublishedSource,
+    });
+    expect(result.publishedHeadSha).toBe(draft.headSha);
+    expect(result.draft).toEqual(draft);
+    expect(result.publishedReconciliation).toBeUndefined();
+    expect(readPublishedSource).toHaveBeenCalledWith(draft);
+  });
+
+  it("does not let baseline diagnostic delivery change source recovery", async () => {
+    const { draft, runtime } = ownedDraftFixture();
+    const log = vi.spyOn(console, "info").mockImplementation(() => {
+      throw new Error("Diagnostic unavailable");
+    });
+    try {
+      const result = await runtime.inspectExistingDraftReconciliationSource({
+        name: draft.name,
+        owner: draft.owner,
+        repositoryId: draft.repositoryId,
+        pullRequestNumber: draft.number,
+        readPublishedSource: () => Promise.resolve(recordedSource(draft)),
+      });
+      expect(result.publishedHeadSha).toBe(draft.headSha);
+      expect(log).toHaveBeenCalledWith(
+        JSON.stringify({
+          event: "app_builder.draft_reconciliation_baseline",
+          source: "published-source",
+          previousReconciliationPresent: false,
+          publishedReconciliationPresent: false,
+          canonicalPublishedSourceMatched: true,
+        }),
+      );
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it.each(["repositoryId", "branch", "gitSha", "gitTree"] as const)(
+    "does not adopt a historical marker with changed %s",
+    async (field) => {
+      const { draft, receipt, runtime } = ownedDraftFixture();
+      const changed = { ...recordedSource(draft), [field]: "f".repeat(40) };
+      const result = await runtime.inspectExistingDraftReconciliationSource({
+        name: draft.name,
+        owner: draft.owner,
+        repositoryId: draft.repositoryId,
+        pullRequestNumber: draft.number,
+        readPublishedSource: () => Promise.resolve(changed),
+      });
+      expect(result.publishedHeadSha).toBe(receipt.branchSha);
+      expect(result.draft).toEqual(draft);
+    },
+  );
+
+  it("never consults a marker without the tenant-owned original publication receipt", async () => {
+    const { draft, findDraftByPullRequest, runtime } = ownedDraftFixture();
+    findDraftByPullRequest.mockImplementationOnce(missingPublicationReceipt);
+    const readPublishedSource = vi.fn(() => Promise.resolve(recordedSource(draft)));
+    const result = await runtime.inspectExistingDraftReconciliationSource({
+      name: draft.name,
+      owner: draft.owner,
+      repositoryId: draft.repositoryId,
+      pullRequestNumber: draft.number,
+      readPublishedSource,
+    });
+    expect(result.publishedHeadSha).toBeUndefined();
+    expect(readPublishedSource).not.toHaveBeenCalled();
+  });
+
+  it("keeps the existing original-head baseline without an additional marker read", async () => {
+    const { draft, runtime } = ownedDraftFixture({ branchSha: "1".repeat(40) });
+    const readPublishedSource = vi.fn(() => Promise.resolve(recordedSource(draft)));
+    const result = await runtime.inspectExistingDraftReconciliationSource({
+      name: draft.name,
+      owner: draft.owner,
+      repositoryId: draft.repositoryId,
+      pullRequestNumber: draft.number,
+      readPublishedSource,
+    });
+    expect(result.publishedHeadSha).toBe(draft.headSha);
+    expect(readPublishedSource).not.toHaveBeenCalled();
+  });
+
   it("resolves the canonical publication baseline while preserving the observed live draft head", async () => {
     const { draft, receipt, runtime, read } = ownedDraftFixture();
     const result = await runtime.inspectExistingDraftReconciliationSource({
