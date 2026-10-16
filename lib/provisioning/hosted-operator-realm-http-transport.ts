@@ -32,7 +32,7 @@ export const createHostedOperatorRealmHttpTransport =
       verifyOidc?: typeof verifyVercelOidcToken;
       fetch?: typeof fetch;
     } = {},
-    /** Exact operator-published immutable endpoint from its owned journal; not a caller/token URL or fresh provider observation. */
+    /** Exact trusted immutable origin from current owner-scoped provider observation or a frozen approved operation; never a caller, token or browser URL. */
     endpointOrigin: string = configuration.gateway.gatewayOrigin,
   ): typeof fetch =>
   async (input, init) => {

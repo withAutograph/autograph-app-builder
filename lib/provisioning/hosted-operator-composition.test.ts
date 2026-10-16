@@ -16,7 +16,10 @@ import {
   hostedRuntimeJournalRecordSchema,
   retainedOperatorAuthFromJournal,
 } from "./hosted-runtime-journal";
-import { selectAuthPlanningResourceBindingRow } from "./hosted-operator-deployment";
+import {
+  matchesApprovedMembershipJwks,
+  selectAuthPlanningResourceBindingRow,
+} from "./hosted-operator-deployment";
 import { requireFinalResourceBindingPhase } from "./hosted-operator-resource-binding-phase";
 import {
   composeHostedOperatorDependencies,
@@ -163,6 +166,42 @@ const bootstrapPlan = () =>
     },
     stage: "auth-bootstrap",
     version: 1,
+  });
+
+const bootstrapWithGatewayOrigin = (gatewayOrigin: string) =>
+  hostedOperatorPlanSchema.parse({
+    ...bootstrapPlan(),
+    publicGateway: {
+      branch: "gateway",
+      origin: "https://apps.example",
+      projectId: "gateway",
+    },
+    deploymentBoundary: {
+      authority,
+      teamId: "team",
+      app: {
+        projectId: context.target.projectId,
+        deploymentId: "app-deployment",
+        branch: context.target.branch,
+        environment: "preview",
+      },
+      gateway: {
+        projectId: "gateway",
+        deploymentId: "gateway-deployment",
+        branch: "gateway",
+        environment: "preview",
+      },
+      operator: {
+        projectId: "operator",
+        deploymentId: "operator-deployment",
+        environment: "preview",
+      },
+      verification: {
+        gatewayOrigin,
+        jwksUrl: `${gatewayOrigin}/_platform/jwks.json`,
+        publicOrigin: "https://apps.example",
+      },
+    },
   });
 
 const publicationFixture = (binding: { repoId?: string; gitSha?: string } = {}) => {
@@ -355,42 +394,34 @@ describe("app publication binding at plan renewal", () => {
     expect(f.unexpectedPort).not.toHaveBeenCalled();
   });
 
+  it("binds membership transport to the current approved Gateway while retaining legacy fallback", () => {
+    const current = "https://current-gateway.example";
+    const historical = "https://gateway.example";
+    const plan = bootstrapWithGatewayOrigin(current);
+    expect(matchesApprovedMembershipJwks(plan, historical, `${current}/_platform/jwks.json`)).toBe(
+      true,
+    );
+    expect(
+      matchesApprovedMembershipJwks(plan, historical, `${historical}/_platform/jwks.json`),
+    ).toBe(false);
+    expect(
+      matchesApprovedMembershipJwks(plan, historical, "https://other.example/_platform/jwks.json"),
+    ).toBe(false);
+    expect(
+      matchesApprovedMembershipJwks(
+        bootstrapPlan(),
+        historical,
+        `${historical}/_platform/jwks.json`,
+      ),
+    ).toBe(true);
+    expect(
+      matchesApprovedMembershipJwks(bootstrapPlan(), historical, `${current}/_platform/jwks.json`),
+    ).toBe(false);
+  });
+
   it("binds owner signup eligibility and roles to its approved Auth organization", async () => {
     const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
-    const base = hostedOperatorPlanSchema.parse({
-      ...bootstrapPlan(),
-      publicGateway: {
-        branch: "gateway",
-        origin: "https://apps.example",
-        projectId: "gateway",
-      },
-      deploymentBoundary: {
-        authority,
-        teamId: "team",
-        app: {
-          projectId: context.target.projectId,
-          deploymentId: "app-deployment",
-          branch: context.target.branch,
-          environment: "preview",
-        },
-        gateway: {
-          projectId: "gateway",
-          deploymentId: "gateway-deployment",
-          branch: "gateway",
-          environment: "preview",
-        },
-        operator: {
-          projectId: "operator",
-          deploymentId: "operator-deployment",
-          environment: "preview",
-        },
-        verification: {
-          gatewayOrigin: "https://gateway.example",
-          jwksUrl: "https://gateway.example/_platform/jwks.json",
-          publicOrigin: "https://apps.example",
-        },
-      },
-    });
+    const base = bootstrapWithGatewayOrigin("https://current-gateway.example");
     const result = await resolveFullPlan(
       base,
       context,
@@ -408,6 +439,9 @@ describe("app publication binding at plan renewal", () => {
         membershipRole: "member",
         organizationId: "actual-organization",
       },
+    );
+    expect(f.verifiedIdentity.mock.calls[0]?.[0].transportOrigin).toBe(
+      "https://current-gateway.example",
     );
     expect(result.authSignupPolicy).toMatchObject({
       appId: "actual",

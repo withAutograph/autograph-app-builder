@@ -300,6 +300,26 @@ it("uses the immutable consumed receipt for an expired transport proof while fre
   await expect(
     readVerifiedRealmAccess({ ...f, assertCurrent: current, pending, proof, readback }),
   ).resolves.toMatchObject({ identity: { actorId: f.claims.sub } });
+  const transportOrigin = "https://current-qualified-gateway.example";
+  const currentReadback = vi.fn(async (request: Request) => {
+    expect(request.url).toBe(`${transportOrigin}/api/auth/platform/operator-identity/readback`);
+    return await readback(request);
+  });
+  await expect(
+    readVerifiedRealmAccess({
+      ...f,
+      assertCurrent: current,
+      pending,
+      proof,
+      readback: currentReadback,
+      transportOrigin,
+    }),
+  ).resolves.toMatchObject({
+    claims: { sub: f.claims.sub, sessionId: f.claims.sessionId, iss: f.pending.issuer },
+    identity: { actorId: f.claims.sub },
+  });
+  expect(pending.endpointOrigin).toBe(f.pending.endpointOrigin);
+  expect(pending.consumedAt).toBe(capturedAt);
   await expect(
     readVerifiedRealmAccess({ ...f, assertCurrent: current, proof, readback }),
   ).rejects.toThrow();
