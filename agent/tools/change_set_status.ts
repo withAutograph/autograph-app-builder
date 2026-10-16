@@ -12,7 +12,7 @@ import {
   overlayChanges,
   reviewedOverlayTreeDigest,
 } from "@/lib/repository/target-apply";
-import { appBuilderWorkflowState, updateExactWorkflow } from "@/lib/agent/workflow-state";
+import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import type { GitHubDestinationReviewReadProgress } from "@/lib/agent/workflow-state";
 import type { OverlayChange } from "@/lib/repository/target-apply";
 import { deriveNormalizedChangeSet } from "@/lib/repository/reviewed-change-set";
@@ -245,6 +245,61 @@ export const destinationReviewReadProgress = (input: {
           afterReadable: readable,
         }),
   };
+};
+
+/** Merge observation metadata without weakening the source and review authority boundary. */
+export const mergeDestinationReviewProgress = <
+  T extends { phase: string; githubDestinationReviewRead?: GitHubDestinationReviewReadProgress },
+>(input: {
+  expected: T;
+  latest: T;
+  progress: GitHubDestinationReviewReadProgress;
+  side: "before" | "after";
+}): T => {
+  const authority = (state: T) =>
+    JSON.stringify(
+      [
+        "phase",
+        "appSpec",
+        "sourceReceipt",
+        "githubSource",
+        "identityReceipt",
+        "applyReceipt",
+        "validationReceipt",
+        "reviewReceipt",
+        "githubDestinationReview",
+      ].map((key) => Reflect.get(state, key)),
+    );
+  if (authority(input.latest) !== authority(input.expected)) {
+    throw new Error("The workflow changed concurrently before destination diff content read.");
+  }
+  const latest = currentDestinationProgress(
+    input.latest.githubDestinationReviewRead,
+    input.progress.changeSetDigest,
+  );
+  const expected = currentDestinationProgress(
+    input.expected.githubDestinationReviewRead,
+    input.progress.changeSetDigest,
+  );
+  const sideProgress = (progress: GitHubDestinationReviewReadProgress | undefined) =>
+    input.side === "before"
+      ? [progress?.beforeComplete, progress?.beforeCursor, progress?.beforeReadable]
+      : [progress?.afterComplete, progress?.afterCursor, progress?.afterReadable];
+  if (JSON.stringify(sideProgress(latest)) !== JSON.stringify(sideProgress(expected))) {
+    // A concurrent read already advanced this side; never replace it with an older page.
+    return input.latest;
+  }
+  const progress = { ...(latest ?? input.progress) };
+  if (input.side === "before") {
+    progress.beforeComplete = input.progress.beforeComplete;
+    progress.beforeCursor = input.progress.beforeCursor;
+    progress.beforeReadable = input.progress.beforeReadable;
+  } else {
+    progress.afterComplete = input.progress.afterComplete;
+    progress.afterCursor = input.progress.afterCursor;
+    progress.afterReadable = input.progress.afterReadable;
+  }
+  return { ...input.latest, githubDestinationReviewRead: progress };
 };
 
 /** Read saved coverage only for the freshly derived current destination diff. */
@@ -615,7 +670,7 @@ const exportAppliedTextFiles = async (input: {
 
 export default defineTool({
   description:
-    "Read one bounded page of the complete change metadata and optional source content after validation. Prefer view=next-page with contentSide for destination content: it reads actual content from the current session saved cursor without caller contentCursor, and returns alreadyComplete without resetting completed sides. In next-page mode repeat the same minimal call until no cursor remains. In legacy changes mode continue with the entire returned contentCursor verbatim using the same contentSide and includeContent until no cursor remains. Read destination before and after sides from their first page with includeContent=true before acceptance; metadata-only pages do not complete either side. If a cursor is lost or rejected, use view=read-progress to read current saved side coverage and exact nextCall arguments; this status read grants no completion. To restart an unreadable side, omit its contentCursor and read that side completely again. Use view=acceptance with detailSection=source-assessment and its sourceAssessmentBindingDigest reference to read saved findings without the full receipt or walkthrough. Copy each returned nextCall until complete, joining content chunks as JSON. Omit detailSection for the full saved receipt and acceptance evidence. These pages preserve the existing assessment and never rerun review. Failed validation remains explicitly unreviewed and cannot be accepted. This never publishes or changes an external repository.",
+    "Read one bounded page of the complete change metadata and optional source content after validation. Prefer view=next-page with contentSide for destination content: it reads actual content from the current session saved cursor without caller contentCursor, and returns alreadyComplete without resetting completed sides. In next-page mode repeat the same minimal call until no cursor remains. In legacy changes mode continue with the entire returned contentCursor verbatim using the same contentSide and includeContent until no cursor remains. Inspect destination before or after content as useful; full pagination is optional and is not required for acceptance. Metadata-only pages do not claim content coverage. If a cursor is lost or rejected, use view=read-progress to read current saved side coverage and exact nextCall arguments; this status read grants no completion. To restart an unreadable side, omit its contentCursor and read that side completely again. Use view=acceptance with detailSection=source-assessment and its sourceAssessmentBindingDigest reference to read saved findings without the full receipt or walkthrough. Copy each returned nextCall until complete, joining content chunks as JSON. Omit detailSection for the full saved receipt and acceptance evidence. These pages preserve the existing assessment and never rerun review. Failed validation remains explicitly unreviewed and cannot be accepted. This never publishes or changes an external repository.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (
@@ -710,11 +765,14 @@ export default defineTool({
     return await executeDestinationReviewPage({
       abortSignal: ctx.abortSignal,
       commit: (progress) => {
-        updateExactWorkflow({
-          expected: state,
-          operation: "destination diff content read",
-          transition: (latest) => ({ ...latest, githubDestinationReviewRead: progress }),
-        });
+        appBuilderWorkflowState.update((latest) =>
+          mergeDestinationReviewProgress<ReturnType<typeof appBuilderWorkflowState.get>>({
+            expected: state,
+            latest,
+            progress,
+            side: input.contentSide,
+          }),
+        );
       },
       destination: destination !== undefined,
       nextPage: input.view === NEXT_PAGE_VIEW,

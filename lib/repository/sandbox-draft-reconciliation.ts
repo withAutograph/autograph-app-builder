@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 
 import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
@@ -82,6 +83,8 @@ export interface DraftReconciliationInput {
   baseSha: string;
   unpublished?: {
     reviewDigest: string;
+    /** Exact original publication head, resolved from this workflow's tenant receipt. */
+    priorPublishedHeadSha?: string;
     changes: readonly OverlayChange[];
     contentSource: GitHubDraftPullRequestContentSource;
   };
@@ -144,6 +147,9 @@ const verifyInputs = (input: DraftReconciliationInput) => {
     [BRANCH, input.baseBranch],
     [SHA, input.headSha],
     [SHA, input.baseSha],
+    ...(input.unpublished?.priorPublishedHeadSha === undefined
+      ? []
+      : [[SHA, input.unpublished.priorPublishedHeadSha] as const]),
   ] as const;
   if (fields.some(([pattern, value]) => !pattern.test(value))) {
     throw new Error(INVALID_INPUT);
@@ -168,8 +174,8 @@ const { createHash } = require("node:crypto");
 const { closeSync, mkdtempSync, openSync, readSync, rmSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
-const [root, path] = process.argv.slice(1);
-const entry = spawnSync("git", ["-C", root, "ls-tree", "-z", "HEAD", "--", path], { encoding: "utf8" });
+const [root, path, revision] = process.argv.slice(1);
+const entry = spawnSync("git", ["-C", root, "ls-tree", "-z", revision, "--", path], { encoding: "utf8" });
 if (entry.status !== 0) throw Error(entry.stderr || "Git ls-tree failed");
 if (!entry.stdout) { console.log("null"); process.exit(0); }
 const match = /^(100644|100755) blob ([0-9a-f]{40})\t/.exec(entry.stdout);
@@ -199,11 +205,12 @@ const currentFileState = async (
   sandbox: SandboxSession,
   root: string,
   path: string,
+  revision = "HEAD",
 ): Promise<{ digest: string; mode: "644" | "755" } | null> => {
   const raw = await checked(
     sandbox,
     `inspect draft file ${path}`,
-    `node -e ${quote(preimageProgram)} ${quote(root)} ${quote(path)}`,
+    `node -e ${quote(preimageProgram)} ${quote(root)} ${quote(path)} ${quote(revision)}`,
   );
   return z
     .strictObject({ digest: z.string(), mode: z.enum(["644", "755"]) })
@@ -243,11 +250,32 @@ const stageUnpublished = async (
   ) {
     return;
   }
-  const changedPreimage = unpublished.changes.find(
+  const candidates = unpublished.changes.filter(
     (change, index) =>
       !matchesFileState(observed[index] ?? null, change.after) &&
       !matchesFileState(observed[index] ?? null, change.before),
   );
+  const { priorPublishedHeadSha } = unpublished;
+  const observedByPath = new Map(
+    unpublished.changes.map((change, index) => [change.path, observed[index] ?? null]),
+  );
+  const unchangedPublished = new Set<string>();
+  if (priorPublishedHeadSha !== undefined) {
+    await Promise.all(
+      candidates.map(async (change) => {
+        const original = await currentFileState(
+          input.sandbox,
+          root,
+          change.path,
+          priorPublishedHeadSha,
+        );
+        if (isDeepStrictEqual(observedByPath.get(change.path) ?? null, original)) {
+          unchangedPublished.add(change.path);
+        }
+      }),
+    );
+  }
+  const changedPreimage = candidates.find((change) => !unchangedPublished.has(change.path));
   if (changedPreimage !== undefined) {
     throw new Error(
       `Builder cannot replay reviewed change ${changedPreimage.path}: the current draft head matches neither its reviewed starting content nor the complete reviewed result. Reopen the current PR head and review its files again.`,

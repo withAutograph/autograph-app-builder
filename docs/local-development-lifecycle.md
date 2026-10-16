@@ -25,6 +25,13 @@ refactor must not break a test whose protected behavior still works. Exact
 identity, cursor, or ordering assertions belong only to a real functional or
 security contract.
 
+Platform CI tests Builder and shared runtime behavior using controlled inputs.
+Generated apps are custom, changing outputs, not platform test fixtures. Do not
+copy a live app and assert that it has particular roles (or no roles), a fixed
+schema, routes, release version, layout, or business workflow. Test how Builder
+handles supplied metadata and commands independently of any actual app's current
+contents. Product behavior assertions belong to tests authored for that app.
+
 Lint must not reject ordinary changes for object-key order, equivalent object
 construction, or a blanket preference for null over undefined. Missing and
 undefined inputs have real semantics and need coverage. Keep checks that detect

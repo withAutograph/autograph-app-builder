@@ -12,7 +12,7 @@ const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 
 export default defineTool({
   description:
-    "After prepare_github_draft_review, complete before/after destination diff reads, and accept_change_set, seal the initial draft pull-request proposal against that same immutable destination snapshot with freshly verified publication permissions. This performs no branch, push, pull-request, release-gate, or repository mutation.",
+    "After prepare_github_draft_review and accept_change_set, seal the initial draft pull-request proposal against that same immutable destination snapshot with freshly verified publication permissions. This performs no branch, push, pull-request, release-gate, or repository mutation.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "reviewed" || state.githubSource === undefined) {
@@ -20,7 +20,7 @@ export default defineTool({
     }
     if (state.githubDestinationReview === undefined) {
       throw new Error(
-        "Use prepare_github_draft_review, read both complete destination diff sides, and accept_change_set before sealing initial draft publication.",
+        "Use prepare_github_draft_review and accept_change_set before sealing initial draft publication.",
       );
     }
     if (

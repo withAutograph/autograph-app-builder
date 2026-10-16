@@ -45,6 +45,11 @@ type Operator = Pick<
   "ownerContext" | "request" | "sessionId"
 >;
 
+/** Private caller policy; the model cannot enable restoration on a reference-only resume. */
+export interface HostedRuntimeApprovalReadOptions {
+  recoverOriginalPlan?: false;
+}
+
 /** Private execution provenance; never accepted from the model or returned in public results. */
 export interface HostedRuntimePriorApproval {
   approvalId: string;
@@ -81,7 +86,12 @@ const matchesRestoredApproval = (
 
 /** Reuses only a real terminal receipt and independently checks the current protected operation. */
 export const createHostedRuntimePriorApprovalReader =
-  (dependencies: { store: Pick<HostedEveStore, "getSession">; now: () => number }) =>
+  (
+    dependencies: {
+      store: Pick<HostedEveStore, "getSession">;
+      now: () => number;
+    } & HostedRuntimeApprovalReadOptions,
+  ) =>
   async (
     input: HostedRuntimeApprovalEnvelope,
     ctx: Context,
@@ -160,7 +170,10 @@ export const createHostedRuntimePriorApprovalReader =
       ctx.abortSignal,
     );
     ctx.abortSignal.throwIfAborted();
-    if ([current.status === "blocked", current.code === "resource_mismatch"].every(Boolean)) {
+    if (
+      dependencies.recoverOriginalPlan !== false &&
+      [current.status === "blocked", current.code === "resource_mismatch"].every(Boolean)
+    ) {
       const restored = await operator.request(
         {
           action: "plan",
@@ -209,15 +222,8 @@ const openDeploymentStore = async (): Promise<ApprovalStore> => {
   return createPostgresHostedEveStore(openHostedPostgresDatabase(configuration.databaseUrl));
 };
 
-/** Existing server-owned owner/session/receipt APIs, with no new private operator protocol. */
-export const readHostedRuntimePriorApproval = async (
-  input: HostedRuntimeApprovalEnvelope,
-  ctx: Context,
-  existingOperator?: Operator,
-): Promise<HostedRuntimePriorApproval | null> => {
-  const { hostedOperatorClientForSession: resolveOperator } =
-    await import("../provisioning/hosted-operator-client");
-  const operator = existingOperator ?? (await resolveOperator(ctx.session.auth, ctx.session.id));
+/** Shared private store; callers still resolve and verify the current canonical owner. */
+export const openHostedRuntimeApprovalStore = async (): Promise<ApprovalStore> => {
   deploymentStore ??= openDeploymentStore();
   const pendingStore = deploymentStore;
   let store: ApprovalStore;
@@ -229,7 +235,21 @@ export const readHostedRuntimePriorApproval = async (
     }
     throw error;
   }
-  return await createHostedRuntimePriorApprovalReader({ store, now: Date.now })(
+  return store;
+};
+
+/** Existing server-owned owner/session/receipt APIs, with no new private operator protocol. */
+export const readHostedRuntimePriorApproval = async (
+  input: HostedRuntimeApprovalEnvelope,
+  ctx: Context,
+  existingOperator?: Operator,
+  options?: HostedRuntimeApprovalReadOptions,
+): Promise<HostedRuntimePriorApproval | null> => {
+  const { hostedOperatorClientForSession: resolveOperator } =
+    await import("../provisioning/hosted-operator-client");
+  const operator = existingOperator ?? (await resolveOperator(ctx.session.auth, ctx.session.id));
+  const store = await openHostedRuntimeApprovalStore();
+  return await createHostedRuntimePriorApprovalReader({ store, now: Date.now, ...options })(
     input,
     ctx,
     operator,
@@ -373,11 +393,17 @@ export const createHostedRuntimeExecutionApprovalReader =
       input: HostedRuntimeApprovalEnvelope,
       ctx: Context,
       operator: Operator,
+      options?: HostedRuntimeApprovalReadOptions,
     ) => Promise<HostedRuntimePriorApproval | null>;
     capture: (ctx: Context, operator: Operator) => Promise<void>;
   }) =>
-  async (input: HostedRuntimeApprovalEnvelope, ctx: Context, operator: Operator) => {
-    const prior = await dependencies.readPrior(input, ctx, operator);
+  async (
+    input: HostedRuntimeApprovalEnvelope,
+    ctx: Context,
+    operator: Operator,
+    options?: HostedRuntimeApprovalReadOptions,
+  ) => {
+    const prior = await dependencies.readPrior(input, ctx, operator, options);
     if (prior !== null) {
       return prior;
     }
@@ -388,7 +414,7 @@ export const createHostedRuntimeExecutionApprovalReader =
       // Only the exact fresh receipt read below decides authority, even after a lost capture response.
     }
     ctx.abortSignal.throwIfAborted();
-    return await dependencies.readPrior(input, ctx, operator);
+    return await dependencies.readPrior(input, ctx, operator, options);
   };
 
 export const readHostedRuntimeExecutionApproval = createHostedRuntimeExecutionApprovalReader({

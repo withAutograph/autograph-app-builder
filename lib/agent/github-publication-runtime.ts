@@ -63,6 +63,42 @@ const draftPublicationOperation = "publish-draft-pull-request" as const;
 const sourceReadOperation = "resolve-existing-source" as const;
 const draftReceiptKind = "draft-pull-request" as const;
 
+const readOwnedDraftPublication = async (input: {
+  receipts: GitHubPublicationReceiptStore;
+  proposalDigest: string;
+  draft: ExistingDraftObservation;
+}): Promise<DraftPullRequestSuccessReceipt> => {
+  const prior = await input.receipts.read(input.proposalDigest);
+  if (prior !== undefined) {
+    assertCanonicalGitHubMutationReceipt(prior);
+  }
+  if (prior?.status !== "succeeded" || prior.kind !== draftReceiptKind) {
+    throw new Error("The workflow's published draft receipt is unavailable in this tenant.");
+  }
+  const matches = isDeepStrictEqual(
+    [
+      prior.proposalDigest,
+      prior.repositoryId,
+      prior.pullRequestId,
+      prior.pullRequestNumber,
+      prior.branchName,
+    ],
+    [
+      input.proposalDigest,
+      input.draft.repositoryId,
+      input.draft.pullRequestId,
+      input.draft.number,
+      input.draft.headBranch,
+    ],
+  );
+  if (!matches) {
+    throw new Error(
+      "The current draft does not match this workflow's tenant-owned published pull request. Inspect its current publication before preparing a repair.",
+    );
+  }
+  return prior;
+};
+
 export interface GitHubPublicationRuntimeStatus {
   version: 3;
   enabled: boolean;
@@ -166,9 +202,11 @@ export interface GitHubPublicationRuntime {
     owner: string;
     name: string;
     pullRequestNumber: number;
+    priorPublishedProposalDigest?: string;
   }) => Promise<{
     draft: ExistingDraftObservation;
     base: GitHubRepositoryObservation;
+    publishedHeadSha?: string;
   }>;
   sealExistingDraftReconciliation: (input: {
     githubSource: ImmutableGitHubSourceReceipt;
@@ -515,6 +553,14 @@ export function composeGitHubPublicationRuntime(input: {
     },
     async inspectExistingDraftReconciliationSource(request) {
       const draft = await this.inspectExistingDraftSource(request);
+      const prior =
+        request.priorPublishedProposalDigest === undefined
+          ? undefined
+          : await readOwnedDraftPublication({
+              draft,
+              proposalDigest: request.priorPublishedProposalDigest,
+              receipts,
+            });
       const base = await adapter.inspectRepository({
         operation: draftPublicationOperation,
         ref: `refs/heads/${draft.baseBranch}`,
@@ -530,7 +576,7 @@ export function composeGitHubPublicationRuntime(input: {
           "The draft PR base no longer matches the connected repository's default branch. Reopen the current PR and select its intended base before reconciliation.",
         );
       }
-      return { base, draft };
+      return { base, draft, ...(prior === undefined ? {} : { publishedHeadSha: prior.branchSha }) };
     },
     async publishDraftPullRequest(request) {
       const proposal = await proposals.read(request.expectedProposalDigest);
@@ -764,7 +810,11 @@ export function composeGitHubPublicationRuntime(input: {
               request.githubSource.repository.repositoryId,
               request.pullRequestNumber,
             )
-          : await receipts.read(request.priorPublishedProposalDigest);
+          : await readOwnedDraftPublication({
+              draft: observed,
+              proposalDigest: request.priorPublishedProposalDigest,
+              receipts,
+            });
       // oxlint-disable-next-line sonarjs/expression-complexity -- verify all tenant receipt identity fields together.
       if (
         // oxlint-disable-next-line sonarjs/expression-complexity -- one tenant receipt predicate.
@@ -823,7 +873,10 @@ export function composeGitHubPublicationRuntime(input: {
         pullRequestNumber: request.pullRequestNumber,
         repository,
         review: request.review,
-        selectedSourceRef: request.githubSource.resolvedRef,
+        selectedSourceRef:
+          request.priorPublishedProposalDigest === undefined
+            ? request.githubSource.resolvedRef
+            : `refs/heads/${observed.headBranch}`,
       });
     },
     async reconcileExistingDraft(request) {

@@ -11,7 +11,6 @@ import {
   reviewExportChanges,
   destinationReviewReadProgress,
 } from "../../agent/tools/change_set_status";
-import { assertCompleteGitHubDestinationReview } from "./workflow-state";
 import {
   createGitHubInstallationIdentity,
   createRepositoryObservation,
@@ -221,7 +220,7 @@ describe("initial draft destination runtime", () => {
       readable: true,
       side: "after",
     });
-    assertCompleteGitHubDestinationReview(bothRead, refreshed.changeSetDigest);
+    expect(bothRead).toMatchObject({ beforeComplete: true, afterComplete: true });
     const proposal = await f.runtime.sealDraftPullRequestProposal({
       destinationReview: destination,
       githubSource: source,

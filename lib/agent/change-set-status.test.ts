@@ -12,12 +12,12 @@ import changeSetStatus, {
   reviewExportChanges,
   assertReviewExportCursorSide,
   destinationReviewReadProgress,
+  mergeDestinationReviewProgress,
   destinationReviewReadStatus,
   executeDestinationReviewPage,
 } from "../../agent/tools/change_set_status";
 import { overlayChanges } from "../repository/target-apply";
 import { assertExistingAppReviewScope } from "../repository/reviewed-change-set";
-import { assertCompleteGitHubDestinationReview } from "./workflow-state";
 
 import type { ChangeSetReviewPageInput } from "./change-set-review-pages";
 import type { GitHubDestinationReviewReadProgress } from "./workflow-state";
@@ -99,9 +99,8 @@ describe("destination review progress readback", () => {
       view: "next-page",
     });
     expect(advanced).toEqual(beforeReadback);
-    expect(() => {
-      assertCompleteGitHubDestinationReview(advanced, changeSetDigest);
-    }).toThrow("both complete sides");
+    expect(status.sides.before.complete).toBe(false);
+    expect(status.sides.after.complete).toBe(false);
     const beforeComplete = destinationReviewReadProgress({
       changeSetDigest,
       cursor: nextCursor,
@@ -112,18 +111,14 @@ describe("destination review progress readback", () => {
     expect(
       destinationReviewReadStatus({ changeSetDigest, previous: beforeComplete }).sides.before,
     ).toEqual({ complete: true, nextCall: null, readable: true });
-    expect(() => {
-      assertCompleteGitHubDestinationReview(beforeComplete, changeSetDigest);
-    }).toThrow("both complete sides");
+    expect(beforeComplete.afterComplete).toBe(false);
     const complete = destinationReviewReadProgress({
       changeSetDigest,
       previous: beforeComplete,
       readable: true,
       side: "after",
     });
-    expect(() => {
-      assertCompleteGitHubDestinationReview(complete, changeSetDigest);
-    }).not.toThrow();
+    expect(complete).toMatchObject({ beforeComplete: true, afterComplete: true });
   });
 
   it("does not expose stale completed coverage or cursors for a changed diff", () => {
@@ -171,6 +166,69 @@ describe("destination review progress readback", () => {
       destinationReviewReadStatus({ changeSetDigest, previous }).sides.before.nextCall,
     ).toEqual({ contentSide: "before", view: "next-page" });
     expect(previous.beforeCursor).toEqual(cursor);
+  });
+});
+
+describe("concurrent destination inspection metadata", () => {
+  const progress = {
+    afterComplete: false,
+    beforeComplete: false,
+    changeSetDigest: digest("diff"),
+  };
+  const expected = {
+    phase: "validated",
+    sourceReceipt: { digest: "source" },
+    githubDestinationReviewRead: progress,
+  };
+  it("reproduces the old full aggregate conflict and merges opposite-side completion", () => {
+    const latest = {
+      ...expected,
+      githubDestinationReviewRead: { ...progress, beforeComplete: true, beforeReadable: true },
+    };
+    expect(digest(JSON.stringify(latest))).not.toBe(digest(JSON.stringify(expected)));
+    const merged = mergeDestinationReviewProgress({
+      expected,
+      latest,
+      progress: { ...progress, afterComplete: true, afterReadable: true },
+      side: "after",
+    });
+    expect(merged.githubDestinationReviewRead).toMatchObject({
+      afterComplete: true,
+      beforeComplete: true,
+      beforeReadable: true,
+      afterReadable: true,
+    });
+    expect(merged.sourceReceipt).toBe(expected.sourceReceipt);
+  });
+  it("preserves unrelated internal progress while recording the page", () => {
+    const latest = { ...expected, checkoutDependencyAttempts: [{ status: "observed" }] };
+    const merged = mergeDestinationReviewProgress<typeof latest>({
+      expected,
+      latest,
+      progress,
+      side: "after",
+    });
+    expect(merged.checkoutDependencyAttempts).toBe(latest.checkoutDependencyAttempts);
+    expect(merged.githubDestinationReviewRead).toEqual(progress);
+  });
+  it("retains newer same-side coverage when an earlier read finishes late", () => {
+    const latest = {
+      ...expected,
+      githubDestinationReviewRead: { ...progress, afterComplete: true, afterReadable: true },
+    };
+    expect(mergeDestinationReviewProgress({ expected, latest, progress, side: "after" })).toBe(
+      latest,
+    );
+  });
+  it.each(["phase", "sourceReceipt"] as const)("rejects a changed %s authority", (field) => {
+    const latest =
+      field === "phase"
+        ? { ...expected, phase: "reviewed" }
+        : { ...expected, sourceReceipt: { digest: "changed-source" } };
+    expect(() =>
+      mergeDestinationReviewProgress({ expected, latest, progress, side: "after" }),
+    ).toThrow("changed concurrently");
+    expect(latest.githubDestinationReviewRead).toBe(progress);
   });
 });
 

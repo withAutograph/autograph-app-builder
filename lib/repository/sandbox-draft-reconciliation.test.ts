@@ -1,6 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -219,6 +219,145 @@ describe("isolated draft reconciliation", () => {
     });
     expect(git(prepared.root, "rev-parse", "HEAD")).toBe(headSha);
     expect(prepared.conflicts).toEqual(["apps/demo/tests/journey.spec.ts"]);
+  });
+
+  it.each([false, true])(
+    "repairs an owned published preimage from the original main checkout (executable %s)",
+    async (executable) => {
+      const { root, sandbox, baseSha, headSha: originalHead } = fixture();
+      const checkout = path.join(root, "repository");
+      let publishedHead = originalHead;
+      if (executable) {
+        chmodSync(path.join(checkout, "apps/demo/tests/journey.spec.ts"), 0o755);
+        git(checkout, "add", ".");
+        git(
+          checkout,
+          "-c",
+          "user.name=Fixture",
+          "-c",
+          "user.email=fixture@example.test",
+          "commit",
+          "-m",
+          "published executable",
+        );
+        publishedHead = git(checkout, "rev-parse", "HEAD");
+      }
+      writeFileSync(path.join(checkout, "apps/demo/retained.ts"), "third-party unrelated change\n");
+      git(checkout, "add", ".");
+      git(
+        checkout,
+        "-c",
+        "user.name=Fixture",
+        "-c",
+        "user.email=fixture@example.test",
+        "commit",
+        "-m",
+        "unrelated draft edit",
+      );
+      const liveHead = git(checkout, "rev-parse", "HEAD");
+      git(checkout, "push", "origin", "draft");
+      git(checkout, "switch", "main");
+      const mode = executable ? "100755" : "100644";
+      const prepared = await prepareDraftReconciliation({
+        appId: "demo",
+        baseBranch: "main",
+        baseSha,
+        headBranch: "draft",
+        headSha: liveHead,
+        repository: { name: "arrusted-development", owner: "withAutograph" },
+        sandbox,
+        workspaceRoot: root,
+        unpublished: {
+          priorPublishedHeadSha: publishedHead,
+          reviewDigest: "c".repeat(64),
+          changes: [
+            {
+              path: "apps/demo/tests/journey.spec.ts",
+              kind: "modified",
+              before: { digest: digest("main\n"), mode: "100644" },
+              after: { digest: digest("repaired\n"), mode },
+            },
+          ],
+          contentSource: {
+            readFile: () =>
+              Promise.resolve({
+                bytes: Buffer.from("repaired\n"),
+                digest: digest("repaired\n"),
+                mode,
+              }),
+          },
+        },
+      });
+      expect(git(prepared.root, "show", "HEAD:apps/demo/tests/journey.spec.ts")).toBe("repaired");
+      expect(git(prepared.root, "show", "HEAD:apps/demo/retained.ts")).toBe(
+        "third-party unrelated change",
+      );
+      expect(git(prepared.root, "ls-tree", "HEAD", "apps/demo/tests/journey.spec.ts")).toContain(
+        executable ? "100755" : "100644",
+      );
+      expect(git(checkout, "rev-parse", "HEAD")).toBe(baseSha);
+      expect(git(checkout, "symbolic-ref", "HEAD")).toBe("refs/heads/main");
+      expect(readFileSync(path.join(checkout, "apps/demo/tests/journey.spec.ts"), "utf-8")).toBe(
+        "main\n",
+      );
+      expect(git(checkout, "rev-parse", "refs/remotes/origin/draft")).toBe(liveHead);
+    },
+  );
+
+  it("preserves later third-party changes to the same published file", async () => {
+    const { root, sandbox, baseSha, headSha: publishedHead } = fixture();
+    const checkout = path.join(root, "repository");
+    writeFileSync(
+      path.join(checkout, "apps/demo/tests/journey.spec.ts"),
+      "third-party replacement\n",
+    );
+    git(checkout, "add", ".");
+    git(
+      checkout,
+      "-c",
+      "user.name=Fixture",
+      "-c",
+      "user.email=fixture@example.test",
+      "commit",
+      "-m",
+      "third-party edit",
+    );
+    const headSha = git(checkout, "rev-parse", "HEAD");
+    git(checkout, "push", "origin", "draft");
+    git(checkout, "switch", "main");
+    await expect(
+      prepareDraftReconciliation({
+        appId: "demo",
+        baseBranch: "main",
+        baseSha,
+        headBranch: "draft",
+        headSha,
+        repository: { name: "arrusted-development", owner: "withAutograph" },
+        sandbox,
+        workspaceRoot: root,
+        unpublished: {
+          priorPublishedHeadSha: publishedHead,
+          reviewDigest: "d".repeat(64),
+          changes: [
+            {
+              path: "apps/demo/tests/journey.spec.ts",
+              kind: "modified",
+              before: { digest: digest("main\n"), mode: "100644" },
+              after: { digest: digest("repaired\n"), mode: "100644" },
+            },
+          ],
+          contentSource: {
+            readFile: () => Promise.reject(new Error("must reject before loading the repair")),
+          },
+        },
+      }),
+    ).rejects.toThrow(
+      "matches neither its reviewed starting content nor the complete reviewed result",
+    );
+    expect(git(checkout, "show", `${headSha}:apps/demo/tests/journey.spec.ts`)).toBe(
+      "third-party replacement",
+    );
+    expect(git(checkout, "rev-parse", "HEAD")).toBe(baseSha);
   });
 
   it("explains when unpublished reviewed bytes were lost with the old sandbox", async () => {

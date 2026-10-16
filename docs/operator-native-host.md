@@ -64,11 +64,17 @@ approval of exact frozen plans before any effect.
    bearer for operator authorization and the provider Trusted Sources header for
    ingress; neither substitutes for the other. This operator ingress rule is
    separate from the Gateway rules below.
-3. Deploy the selected immutable Git commit through normal Git delivery using
+3. Deploy the selected immutable Git commit as a Git-source deployment using
    `lib/provisioning/operator-host/vercel.json`. Deployment requests must retain
    the operator project root and select this nested configuration. Its service
    root `.` is relative to `lib/provisioning/operator-host`; the service uses
    the `hono` preset and `entrypoint.ts`.
+
+   Operator-managed app and Gateway delivery calls Vercel's REST deployment API
+   with the approved repository, ref and immutable commit. Git supplies the build
+   source; this is not an automatic deployment triggered by pushing a branch.
+   The operator starts these deliveries after their approved runtime bindings
+   are ready and records the resulting deployment candidates in its journal.
 
    The repository-root `vercel.json` builds the Builder, including Eve and
    Next.js. A saved `rootDirectory: null`, or a deployment request that selects

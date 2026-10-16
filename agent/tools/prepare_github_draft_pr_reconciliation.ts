@@ -53,13 +53,19 @@ export default defineTool({
       );
     }
     const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
+    const priorPublishedProposalDigest =
+      state.publishedGitHubDraftProposalDigest ?? state.githubDraftProposal?.proposal.digest;
     const source = await runtime.inspectExistingDraftReconciliationSource({
+      ...(priorPublishedProposalDigest === undefined ? {} : { priorPublishedProposalDigest }),
       name: state.githubSource.repository.name,
       owner: state.githubSource.repository.owner,
       pullRequestNumber: input.pullRequestNumber,
       repositoryId: state.githubSource.repository.repositoryId,
     });
-    if (state.githubSource.resolvedRef !== `refs/heads/${source.draft.headBranch}`) {
+    if (
+      state.githubSource.resolvedRef !== `refs/heads/${source.draft.headBranch}` &&
+      source.publishedHeadSha === undefined
+    ) {
       throw new Error(
         "The selected Builder source is not this draft PR branch. Select that branch as the existing app source, then retry reconciliation.",
       );
@@ -70,6 +76,9 @@ export default defineTool({
         ? undefined
         : {
             changes: state.reviewReceipt.changes,
+            ...(source.publishedHeadSha === undefined
+              ? {}
+              : { priorPublishedHeadSha: source.publishedHeadSha }),
             contentSource: publicationContentSourceForReviewedWorkflow({ sandbox, state }),
             reviewDigest: state.reviewReceipt.digest,
           };

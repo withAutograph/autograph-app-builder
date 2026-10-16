@@ -56,6 +56,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   Do not substitute source-string scans, prose matching, exact CSS selectors,
   fixed file/tool counts, archive sizes, complete metadata object equality,
   snapshots of incidental fields, or the last internal mock call for behavior.
+- Platform tests exercise Builder and shared runtime behavior with controlled
+  test inputs. Never copy a changing generated app into a platform fixture and
+  require its current roles, schema, routes, release, or product workflow to
+  stay fixed. Custom apps define those details themselves. App-authored tests
+  may assert that app's requested behavior; they are not platform-wide rules.
 - Do not make object-key order, equivalent object construction, or a blanket
   preference for null over undefined a CI requirement. Keep checks for actual
   invalid values, type errors, unsafe operations, and broken behavior. Preserve
