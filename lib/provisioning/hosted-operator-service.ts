@@ -1,3 +1,7 @@
+import {
+  isSharedHostProtectionSuccessor,
+  hasRetainedSharedHostProtectionIdentity,
+} from "./hosted-operator-shared-host-protection-successor";
 import { recoverOriginalApprovedPlan } from "./hosted-operator-approved-plan";
 import { savedPreviewEnvironmentGitBranch } from "./native-preview-environment-scope";
 import { isDeepStrictEqual } from "node:util";
@@ -375,6 +379,20 @@ const isGatewaySourceSuccessor = (
   ].every(Boolean);
 };
 
+const hasCompletedAuthBootstrapEffects = (record: HostedRuntimeJournalRecord): boolean => {
+  const { operator } = record;
+  return (
+    operator !== undefined &&
+    operator.plan.stage === AUTH_BOOTSTRAP_STAGE &&
+    operator.authPreparation !== undefined &&
+    operator.pendingEffectId === undefined &&
+    operator.pendingEffectAttempt === undefined &&
+    operator.plan.effects.every((effect) =>
+      operator.receipts.some((receipt) => receipt.effectId === effect.id),
+    )
+  );
+};
+
 const retainCompletedAuth = (record: HostedRuntimeJournalRecord): HostedRuntimeJournalRecord => ({
   ...record,
   retainedAuth:
@@ -382,62 +400,6 @@ const retainCompletedAuth = (record: HostedRuntimeJournalRecord): HostedRuntimeJ
       ? (retainedOperatorAuthFromJournal(record) ?? record.retainedAuth)
       : (record.retainedAuth ?? retainedOperatorAuthFromJournal(record)),
 });
-
-/** Removing host-owned protection administration cannot discard an uncertain app/environment effect. */
-const isSharedHostProtectionSuccessor = (
-  record: HostedRuntimeJournalRecord,
-  plan: HostedOperatorPlan,
-  now: number,
-) => {
-  const prior = record.operator;
-  const binding = prior?.plan.effects.find((effect) => effect.kind === GATEWAY_BINDINGS_EFFECT);
-  if (
-    prior === undefined ||
-    binding === undefined ||
-    prior.plan.gatewayBindings?.trustedSources === undefined ||
-    plan.gatewayBindings === undefined ||
-    plan.gatewayBindings.trustedSources !== undefined ||
-    prior.plan.gatewayDelivery === undefined ||
-    plan.gatewayDelivery === undefined
-  ) {
-    return false;
-  }
-  return [
-    record.status === "pending",
-    record.step === "reserved",
-    record.privateState !== undefined,
-    prior.plan.stage === AUTH_BOOTSTRAP_STAGE,
-    prior.approvalId !== undefined,
-    record.approvedByCallId !== UNAPPROVED_PLAN,
-    record.leaseId === undefined ||
-      (record.leaseExpiresAt !== undefined && Date.parse(record.leaseExpiresAt) <= now),
-    prior.pendingEffectId === binding.id,
-    prior.plan.effects.every(
-      (effect) =>
-        effect.id === binding.id ||
-        effect.kind === GATEWAY_DELIVERY_EFFECT ||
-        prior.receipts.some((receipt) => receipt.effectId === effect.id),
-    ),
-    prior.gatewayDeliveryCandidates?.some(
-      (candidate) => candidate.gatewayAliasAttempted === true,
-    ) !== true ||
-      prior.plan.effects.some(
-        (effect) =>
-          effect.kind === GATEWAY_DELIVERY_EFFECT &&
-          prior.receipts.some((receipt) => receipt.effectId === effect.id),
-      ),
-    sameOperatorPlanExceptExpiry(prior.plan, {
-      ...plan,
-      gatewayBindings: {
-        ...plan.gatewayBindings,
-        trustedSources: prior.plan.gatewayBindings.trustedSources,
-      },
-      effects: plan.effects.map((effect) =>
-        effect.id === binding.id ? { ...effect, description: binding.description } : effect,
-      ),
-    }),
-  ].every(Boolean);
-};
 
 const handlePlanOperation = async (
   deps: ProtectedHostedOperatorDependencies,
@@ -562,15 +524,7 @@ const handlePlanOperation = async (
       if (record.operator.planDigest === planDigest) {
         return record;
       }
-      const authStageCompleted =
-        record.operator.plan.stage === AUTH_BOOTSTRAP_STAGE &&
-        record.operator.authPreparation !== undefined &&
-        record.operator.pendingEffectId === undefined &&
-        record.operator.pendingEffectAttempt === undefined &&
-        record.operator.plan.effects.every(
-          (effect) =>
-            record.operator?.receipts.some((receipt) => receipt.effectId === effect.id) === true,
-        );
+      const authStageCompleted = hasCompletedAuthBootstrapEffects(record);
       const participantsCompleted =
         record.status === PARTICIPANTS_PREPARED &&
         record.operator.plan.stage === AUTH_PARTICIPANTS_STAGE &&
@@ -991,14 +945,19 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
             currentOperator.plan.normalActorProgram === undefined &&
             currentOperator.operationRef === operationRef &&
             currentOperator.planDigest === planDigest &&
-            link?.bootstrapPlanDigest === planDigest &&
+            link !== undefined &&
+            (link.bootstrapPlanDigest === planDigest ||
+              hasRetainedSharedHostProtectionIdentity(record)) &&
             link.ownerSessionId === context.target.sessionId &&
             link.authResourceId === currentOperator.plan.authDatabase.resourceId &&
             link.browserSession === undefined &&
             link.consumedAt !== undefined &&
             link.proofRef !== undefined &&
             link.proofSha256 !== undefined;
-          status = capturedOwner ? "prepared" : "auth-schema-prepared";
+          status =
+            capturedOwner && hasCompletedAuthBootstrapEffects(record)
+              ? "prepared"
+              : "auth-schema-prepared";
         }
         const signupPolicy = operator.plan.authSignupPolicy;
         const policyInstalled =

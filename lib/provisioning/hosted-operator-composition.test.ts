@@ -986,6 +986,126 @@ describe("existing populated Auth workflow planning", () => {
       readResourceBindings,
     };
   };
+  it.each(["pending", "consumed"] as const)(
+    "plans the frozen shared-host prerequisite before changed app/source inputs with a %s identity",
+    async (identityState) => {
+      const f = setup("current");
+      const original = f.original.operator!;
+      const frozen = hostedOperatorPlanSchema.parse({
+        ...original.plan,
+        publicGateway: {
+          branch: "frozen-gateway",
+          origin: "https://apps.example",
+          projectId: "gateway",
+        },
+        gatewayDelivery: {
+          branch: "frozen-gateway",
+          gitSha: "c".repeat(40),
+          projectId: "gateway",
+          repoId: "frozen-repository",
+        },
+        gatewayBindings: {
+          authBrowserOrigin: "https://auth.example",
+          builderCallbackOrigin: "https://builder.example",
+          catalogAppIds: ["actual"],
+          operatorOrigin: "https://operator.example",
+          sourceWorkload: f.configuration.gateway.workload,
+          trustedSources: {
+            builderProduction: { projectId: "builder", from: "production", to: "preview" },
+            operatorPreview: { projectId: "operator", from: "preview", to: "preview" },
+          },
+        },
+        deploymentBoundary: {
+          app: {
+            branch: context.target.branch,
+            deploymentId: "frozen-app",
+            environment: "preview",
+            projectId: context.target.projectId,
+          },
+          gateway: {
+            branch: "frozen-gateway",
+            deploymentId: "frozen-gateway",
+            environment: "preview",
+            projectId: "gateway",
+          },
+          operator: {
+            deploymentId: "frozen-operator",
+            environment: "preview",
+            projectId: "operator",
+          },
+          authority: context.authority,
+          teamId: "team",
+          verification: {
+            gatewayOrigin: "https://gateway.example",
+            publicOrigin: "https://apps.example",
+            jwksUrl: "https://gateway.example/_platform/jwks.json",
+          },
+        },
+        effects: [
+          ...original.plan.effects,
+          {
+            description: "Frozen Gateway binding",
+            id: "gateway-bindings",
+            kind: "gateway-bindings",
+          },
+          {
+            description: "Frozen Gateway delivery",
+            id: "gateway-delivery",
+            kind: "gateway-delivery",
+          },
+        ],
+      });
+      const digest = operatorPlanDigest(frozen);
+      f.row.record = hostedRuntimeJournalRecordSchema.parse({
+        ...f.original,
+        operator: {
+          ...original,
+          plan: frozen,
+          planDigest: digest,
+          pendingEffectId: "gateway-bindings",
+          pendingEffectAttempt: { id: "00000000-0000-4000-8000-000000000002" },
+          identityLink: {
+            audience: "https://operator.example",
+            authResourceId: frozen.authDatabase.resourceId,
+            bootstrapPlanDigest: digest,
+            browserOrigin: "https://auth.example",
+            endpointOrigin: "https://gateway.example",
+            issuer: "https://apps.example",
+            ownerSessionId: context.target.sessionId,
+            organizationId: null,
+            nonceSha256: "a".repeat(64),
+            expiresAt: "2027-01-01T00:00:00Z",
+            ...(identityState === "consumed"
+              ? {
+                  consumedAt: "2026-10-15T12:00:00Z",
+                  proofRef: "captured-owner-proof",
+                  proofSha256: "b".repeat(64),
+                }
+              : {}),
+          },
+        },
+      });
+      const before = structuredClone(f.row.record);
+      f.configuration.gateway.gitSha = "e".repeat(40);
+      f.configuration.gateway.branch = "new-gateway-source";
+      f.configuration.applications.actual!.repoId = "new-app-repository";
+      f.configuration.applications.actual!.gitSha = "f".repeat(40);
+      f.readCapturedRealmIdentity.mockResolvedValue({
+        audience: "https://operator.example",
+        endpointOrigin: "https://gateway.example",
+      });
+      const next = await f.dependencies.plan({ ...context, action: "prepare" });
+      const { trustedSources, ...gatewayBindings } = frozen.gatewayBindings!;
+      expect(trustedSources).toBeDefined();
+      expect(next).toEqual({
+        ...frozen,
+        gatewayBindings,
+        retention: { ...frozen.retention, expiresAt: next.retention.expiresAt },
+      });
+      expect(f.row.record).toEqual(before);
+    },
+  );
+
   it("uses host-owned Gateway ingress while retaining native caller verification and app delivery", async () => {
     const f = setup("current");
     f.configuration.workloadPolicy.environment = "production";
@@ -1218,7 +1338,7 @@ describe("existing populated Auth workflow planning", () => {
     expect(f.readResourceBindings).not.toHaveBeenCalled();
     expect(f.propose.mock.calls[0]?.[0]).not.toHaveProperty("directMigrationUrl");
   });
-  it.each(["consumed", "pending"] as const)(
+  it.each(["consumed", "pending", "narrowed-consumed"] as const)(
     "preserves frozen identity authority when the owner nonce is %s",
     async (nonceState) => {
       const f = setup("current");
@@ -1308,6 +1428,39 @@ describe("existing populated Auth workflow planning", () => {
         proofRef: "captured-owner-proof",
         proofSha256: "b".repeat(64),
       };
+      if (nonceState === "narrowed-consumed") {
+        operator.plan.gatewayBindings!.trustedSources = {
+          builderProduction: { projectId: "builder", from: "production", to: "preview" },
+          operatorPreview: { projectId: "operator", from: "preview", to: "preview" },
+        };
+        operator.plan.gatewayDelivery = {
+          branch: "gateway-actual",
+          gitSha: "c".repeat(40),
+          projectId: "gateway",
+          repoId: "gateway-repository",
+        };
+        operator.plan.effects.push({
+          description: "Gateway delivery",
+          id: "gateway-delivery",
+          kind: "gateway-delivery",
+        });
+        operator.receipts.push({
+          effectId: "gateway-delivery",
+          observedAt: "2026-10-15T12:00:00Z",
+          resourceVersion: "owned-observation",
+        });
+        operator.planDigest = operatorPlanDigest(operator.plan);
+        operator.identityLink.bootstrapPlanDigest = operator.planDigest;
+        const originalOperator = structuredClone(operator);
+        operator.retainedGatewayDeliveries = [
+          { approvedByCallId: f.original.approvedByCallId, operator: originalOperator },
+        ];
+        const gatewayBindings = { ...operator.plan.gatewayBindings! };
+        delete gatewayBindings.trustedSources;
+        operator.plan = { ...operator.plan, gatewayBindings };
+        operator.planDigest = operatorPlanDigest(operator.plan);
+        operator.approvalId = "narrowed-approval";
+      }
       const prepareRealmIdentityLink = vi.fn(() => {
         throw new Error("fixture invitation boundary");
       });
@@ -1321,7 +1474,7 @@ describe("existing populated Auth workflow planning", () => {
         operationRef: operator.operationRef,
         plan: operator.plan,
       });
-      if (nonceState === "consumed") {
+      if (nonceState !== "pending") {
         await expect(invitation).rejects.toMatchObject({ code: "operation_in_progress" });
         expect(prepareRealmIdentityLink).not.toHaveBeenCalled();
         expect(providerInventory.readHostedOperatorProviderInventory).not.toHaveBeenCalled();

@@ -1,4 +1,9 @@
 import { retainedOperatorAuthFromJournal } from "./hosted-runtime-journal";
+import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
+import {
+  createSharedHostProtectionSuccessorPlan,
+  hasRetainedSharedHostProtectionIdentity,
+} from "./hosted-operator-shared-host-protection-successor";
 import { hasFailedGatewayDelivery } from "./hosted-operator-gateway-delivery-failure";
 import { inspectParticipantBootstrapPreparation } from "./hosted-operator-participant-bootstrap";
 import { createHostedOperatorConsentOwner } from "./hosted-operator-consent-owner";
@@ -23,6 +28,7 @@ import {
   operatorReceiptSchema,
   restrictedOperatorEnvironment,
   operatorSelectionSchema,
+  sameOperatorSelection,
 } from "./hosted-operator-contract";
 import type {
   HostedOperatorPlan,
@@ -71,6 +77,31 @@ import { resolvePublishedAppDelivery } from "./hosted-operator-published-app-del
 import type { CompiledOperatorReleaseSelection } from "./hosted-operator-artifact-selection";
 import { createHostedOperatorEnvironmentBindings } from "./hosted-operator-environment-bindings";
 import { createHostedOperatorAppReadiness } from "./hosted-operator-app-readiness";
+
+const sharedHostProtectionPrerequisite = (
+  record: HostedRuntimeJournalRecord | undefined,
+  context: HostedOperatorContext,
+  configuration: HostedOperatorSourceConfiguration,
+) => {
+  const plan = record?.operator?.plan;
+  if (plan === undefined) {
+    return undefined;
+  }
+  const configuredHost = [
+    sameOperatorSelection(plan.selection, {
+      appId: context.target.appId,
+      branch: context.target.branch,
+      environment: context.target.environment,
+      projectId: context.target.projectId,
+      sessionId: context.target.sessionId,
+    }),
+    plan.gatewayDelivery?.projectId === configuration.gateway.projectId,
+    plan.publicGateway?.projectId === configuration.gateway.projectId,
+    plan.deploymentBoundary?.gateway.projectId === configuration.gateway.projectId,
+    plan.deploymentBoundary?.teamId === configuration.teamId,
+  ].every(Boolean);
+  return configuredHost ? createSharedHostProtectionSuccessorPlan(record, Date.now()) : undefined;
+};
 
 const GATEWAY_DELIVERY = "gateway-delivery";
 const GATEWAY_BINDINGS = "gateway-bindings";
@@ -899,6 +930,15 @@ export const composeHostedOperatorDependencies = (
 
         stage: "app",
       });
+    }
+    // Complete the exact frozen host prerequisite before composing a later app/source plan.
+    const sharedHostPrerequisite = sharedHostProtectionPrerequisite(
+      current?.record,
+      context,
+      configuration,
+    );
+    if (sharedHostPrerequisite !== undefined) {
+      return sharedHostPrerequisite;
     }
     const selected = await observe(
       "accepted_spec",
@@ -1949,7 +1989,8 @@ export const composeHostedOperatorDependencies = (
     const capturedOwner = [
       operator.plan.normalActorProgram === undefined,
       link?.browserSession === undefined,
-      link?.bootstrapPlanDigest === operator.planDigest,
+      link?.bootstrapPlanDigest === operator.planDigest ||
+        hasRetainedSharedHostProtectionIdentity(current.record),
       link?.ownerSessionId === input.target.sessionId,
       link?.authResourceId === operator.plan.authDatabase.resourceId,
       link?.consumedAt !== undefined,

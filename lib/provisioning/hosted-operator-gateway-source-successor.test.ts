@@ -1,3 +1,7 @@
+import {
+  createSharedHostProtectionSuccessorPlan,
+  hasRetainedSharedHostProtectionIdentity,
+} from "./hosted-operator-shared-host-protection-successor";
 /* oxlint-disable eslint/require-await -- Typed in-memory journal and provider callbacks intentionally resolve without external I/O. */
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
@@ -737,6 +741,127 @@ describe("shared host protection plan successor", () => {
     f.deps.plan = async () => successorPlan;
     return { f, original, originalPlan, previous, successorPlan, execute };
   };
+
+  it("derives only the frozen bootstrap narrowing before fresh app planning", async () => {
+    const { previous, originalPlan } = await pendingProtection();
+    const now = Date.now();
+    const candidate = createSharedHostProtectionSuccessorPlan(previous.record, now);
+    expect(candidate).toEqual({
+      ...originalPlan,
+      gatewayBindings: { ...originalPlan.gatewayBindings, trustedSources: undefined },
+      retention: {
+        ...originalPlan.retention,
+        expiresAt: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
+      },
+    });
+    expect(previous.record.operator?.plan.gatewayBindings?.trustedSources).toBeDefined();
+    expect(candidate?.stage).toBe("auth-bootstrap");
+    expect(
+      createSharedHostProtectionSuccessorPlan(
+        {
+          ...previous.record,
+          leaseId: "active",
+          leaseExpiresAt: new Date(now + 1000).toISOString(),
+        },
+        now,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("recognizes consumed identity only through the exact approved narrowing ancestry", async () => {
+    const { f, previous } = await pendingProtection();
+    const original = previous.record.operator;
+    const candidate = createSharedHostProtectionSuccessorPlan(previous.record, Date.now());
+    if (original === undefined || candidate === undefined) {
+      throw new Error("Missing frozen bootstrap prerequisite");
+    }
+    const link = {
+      audience: "https://operator.example",
+      authResourceId: original.plan.authDatabase.resourceId,
+      bootstrapPlanDigest: original.planDigest,
+      browserOrigin: "https://gateway.example",
+      consumedAt: new Date().toISOString(),
+      endpointOrigin: "https://immutable-gateway.example",
+      expiresAt: new Date().toISOString(),
+      issuer: "https://gateway.example",
+      nonceSha256: "a".repeat(64),
+      organizationId: null,
+      ownerSessionId: selection.sessionId,
+      proofRef: "retained-proof",
+      proofSha256: "b".repeat(64),
+    };
+    const record = {
+      ...previous.record,
+      operator: {
+        ...original,
+        approvalId: "approved-narrowing",
+        authPreparation: {
+          assetSha256: "1".repeat(64),
+          catalogFingerprint: "2".repeat(64),
+          database: original.plan.authDatabase.database,
+          runtimeRole: original.plan.authDatabase.runtimeRole,
+          targetDigest: "b".repeat(64),
+          observedAt: new Date().toISOString(),
+        },
+        identityLink: link,
+        plan: candidate,
+        planDigest: operatorPlanDigest(candidate),
+        retainedGatewayDeliveries: [
+          {
+            approvedByCallId: previous.record.approvedByCallId,
+            operator: { ...original, identityLink: link },
+          },
+        ],
+      },
+    };
+    expect(hasRetainedSharedHostProtectionIdentity(record)).toBe(true);
+    f.row = { ...previous, record };
+    const statusRequest = {
+      action: "status" as const,
+      selection,
+      operationRef: original.operationRef,
+    };
+    expect(await f.client.request(statusRequest)).toMatchObject({ status: "auth-schema-prepared" });
+    f.row = {
+      ...previous,
+      record: {
+        ...record,
+        leaseId: original.operationRef,
+        leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+        operator: {
+          ...record.operator,
+          pendingEffectId: undefined,
+          pendingEffectAttempt: undefined,
+          receipts: candidate.effects.map((effect) => ({
+            effectId: effect.id,
+            observedAt: new Date().toISOString(),
+            resourceVersion: "observed",
+          })),
+        },
+      },
+    };
+    expect(await f.client.request(statusRequest)).toMatchObject({ status: "prepared" });
+    expect(record.operator.identityLink.bootstrapPlanDigest).toBe(original.planDigest);
+    expect(
+      hasRetainedSharedHostProtectionIdentity({
+        ...record,
+        operator: { ...record.operator, retainedGatewayDeliveries: [] },
+      }),
+    ).toBe(false);
+    expect(
+      hasRetainedSharedHostProtectionIdentity({
+        ...record,
+        operator: { ...record.operator, operationRef: "different-operation" },
+      }),
+    ).toBe(false);
+    const changed = { ...candidate, contextId: "changed-app-context" };
+    expect(
+      hasRetainedSharedHostProtectionIdentity({
+        ...record,
+        operator: { ...record.operator, plan: changed, planDigest: operatorPlanDigest(changed) },
+      }),
+    ).toBe(false);
+  });
 
   it("requires a new approval and preserves pending work until normal fenced reconciliation applies", async () => {
     const { f, original, previous, successorPlan, execute } = await pendingProtection();
