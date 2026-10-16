@@ -133,7 +133,9 @@ const fixture = (selectedPlan = plan, afterLockWait?: () => Promise<void> | void
   let active = true;
   let close = vi.fn<() => void>();
   const query = vi.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
-    if (!active) throw new Error("session closed");
+    if (!active) {
+      throw new Error("session closed");
+    }
     const sql = strings.join("?").replaceAll(/\s+/gu, " ").trim();
     events.push(sql);
     if (sql.includes("pg_advisory_lock")) {
@@ -147,7 +149,9 @@ const fixture = (selectedPlan = plan, afterLockWait?: () => Promise<void> | void
     if (sql.includes("as class_id")) {
       return [{ class_id: "1", object_id: `${idsByKey.get(String(values[0]))}` }];
     }
-    if (sql.includes("from pg_stat_activity")) return [{ ...backend }];
+    if (sql.includes("from pg_stat_activity")) {
+      return [{ ...backend }];
+    }
     if (sql.includes("from pg_locks")) {
       return [
         {
@@ -222,7 +226,9 @@ describe("dedicated-session protected resource lease", () => {
     await expect(
       test.lease(test.input, async (assertFence) => {
         const row = test.rows.get(keyFor(context));
-        if (row?.record.operator === undefined) throw new Error("fixture row missing");
+        if (row?.record.operator === undefined) {
+          throw new Error("fixture row missing");
+        }
         row.record.operator.pendingEffectId = "install";
         row.record.operator.pendingEffectAttempt = { id: "33333333-3333-4333-8333-333333333333" };
         await assertFence();
@@ -273,7 +279,9 @@ describe("dedicated-session protected resource lease", () => {
 
   it("uses stable physical keys and deduplicates repeated database or role identities", async () => {
     const test = fixture();
-    await test.lease(test.input, async (assertFence) => await assertFence());
+    await test.lease(test.input, async (assertFence) => {
+      await assertFence();
+    });
     const expected = [
       ["hosted_protected_operator_database_v1", "fixture-neon", "br_fixture", "shared_auth"],
       ["hosted_protected_operator_database_v1", "fixture-neon", "br_fixture", "spend"],
@@ -304,7 +312,9 @@ describe("dedicated-session protected resource lease", () => {
     const anotherOperation = "44444444-4444-4444-8444-444444444444";
     const second = fixture(anotherPlan);
     const anotherRow = rowFor(anotherContext, anotherPlan);
-    if (anotherRow.record.operator === undefined) throw new Error("fixture operator missing");
+    if (anotherRow.record.operator === undefined) {
+      throw new Error("fixture operator missing");
+    }
     anotherRow.record.operator.operationRef = anotherOperation;
     second.rows.set(keyFor(anotherContext), anotherRow);
     await second.lease(
@@ -326,7 +336,9 @@ describe("dedicated-session protected resource lease", () => {
     const pending = test.lease(test.input, callback);
     await waiting.promise;
     const row = test.rows.get(keyFor(context));
-    if (row === undefined) throw new Error("fixture row missing");
+    if (row === undefined) {
+      throw new Error("fixture row missing");
+    }
     row.record.leaseId = "55555555-5555-4555-8555-555555555555";
     release.resolve(null);
     await expect(pending).rejects.toThrow("fence is stale");
@@ -362,12 +374,21 @@ describe("dedicated-session protected resource lease", () => {
       await expect(
         test.lease(test.input, async (assertFence) => {
           const row = test.rows.get(keyFor(context));
-          if (row?.record.operator === undefined) throw new Error("fixture row missing");
-          if (change === "lease") row.record.leaseId = "55555555-5555-4555-8555-555555555555";
-          if (change === "fence") row.record.operator.fenceGeneration = 2;
-          if (change === "operation")
+          if (row?.record.operator === undefined) {
+            throw new Error("fixture row missing");
+          }
+          if (change === "lease") {
+            row.record.leaseId = "55555555-5555-4555-8555-555555555555";
+          }
+          if (change === "fence") {
+            row.record.operator.fenceGeneration = 2;
+          }
+          if (change === "operation") {
             row.record.operator.operationRef = "55555555-5555-4555-8555-555555555555";
-          if (change === "expiry") row.record.leaseExpiresAt = new Date(now).toISOString();
+          }
+          if (change === "expiry") {
+            row.record.leaseExpiresAt = new Date(now).toISOString();
+          }
           await assertFence();
           effect();
         }),
@@ -382,8 +403,12 @@ describe("dedicated-session protected resource lease", () => {
     const effect = vi.fn();
     await expect(
       test.lease(test.input, async (assertFence) => {
-        if (change === "backend") test.backend.backend_pid += 1;
-        if (change === "lock") test.held.clear();
+        if (change === "backend") {
+          test.backend.backend_pid += 1;
+        }
+        if (change === "lock") {
+          test.held.clear();
+        }
         await assertFence();
         effect();
       }),
