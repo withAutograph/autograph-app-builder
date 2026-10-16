@@ -31,6 +31,8 @@ const root = path.resolve(import.meta.dirname, "../../../..");
 const fixtureDatabaseName = "builder_cp";
 const fixtureCiphertext = "fixture-ciphertext";
 const childResultPrefix = "A515_RESULT ";
+const workerCheckpointAfterPrefix = "worker-checkpoint-after:";
+const removeBindingsEffectId = "remove-bindings";
 // oxlint-disable-next-line sonarjs/publicly-writable-directories -- mkdtemp creates a unique fixture-owned cluster directory removed in finally.
 const scratch = await mkdtemp(path.join(tmpdir(), "a515-operator-recovery-"));
 const pgdata = path.join(scratch, "pgdata");
@@ -59,7 +61,9 @@ const port =
   adminDatabaseUrl === undefined
     ? await new Promise<number>((resolve, reject) => {
         const server = createServer();
-        server.once("error", (error: Error) => reject(error));
+        server.once("error", (error: Error) => {
+          reject(error);
+        });
         server.listen(0, "127.0.0.1", () => {
           const address = z.object({ port: z.number().int().min(1) }).parse(server.address());
           server.close((error) => {
@@ -113,7 +117,7 @@ const expectedCrashCode = (failure: string): number | undefined => {
     case "verify-after": {
       return 87;
     }
-    default:
+    default: {
       if (failure.startsWith("pending-after:")) {
         return 92;
       }
@@ -123,10 +127,11 @@ const expectedCrashCode = (failure: string): number | undefined => {
       if (failure.startsWith("context-after:")) {
         return 93;
       }
-      if (failure.startsWith("worker-checkpoint-after:")) {
+      if (failure.startsWith(workerCheckpointAfterPrefix)) {
         return 94;
       }
       return undefined;
+    }
   }
 };
 const workerPath = path.join(
@@ -160,6 +165,43 @@ const resourceIdentitySchema = z.strictObject({
   endpoint: z.string(),
   projectId: z.string(),
 });
+interface SyntheticEffectRow {
+  attempts: number;
+  effect_id: string;
+  receipt?: unknown;
+  resource_identity: z.infer<typeof resourceIdentitySchema>;
+}
+const providerAppliedPrefixes = [
+  "effect-after:",
+  "effect-crash:",
+  "worker-checkpoint-before:",
+  workerCheckpointAfterPrefix,
+  "receipt-before:",
+  "receipt-after:",
+];
+const providerEffectWasApplied = (failure: string): boolean =>
+  providerAppliedPrefixes.some((prefix) => failure.startsWith(prefix));
+const assertInterruptedProviderState = (
+  failure: string,
+  effectId: string,
+  frozenPlan: HostedOperatorPlan,
+  providerRows: SyntheticEffectRow[],
+) => {
+  const providerEffect = providerRows.find((row) => row.effect_id === effectId);
+  if (failure.startsWith("effect-before:")) {
+    assert.equal(providerEffect, undefined);
+  }
+  if (providerEffectWasApplied(failure)) {
+    assert.equal(providerEffect?.attempts, 1);
+    assert.deepEqual(providerEffect?.resource_identity, {
+      appResourceId: frozenPlan.appDatabase.resourceId,
+      authResourceId: frozenPlan.authDatabase.resourceId,
+      branchId: frozenPlan.neon.branchId,
+      endpoint: frozenPlan.neon.endpoint,
+      projectId: frozenPlan.neon.projectId,
+    });
+  }
+};
 const plannedResultSchema = childResultSchema.extend({
   operationRef: z.uuid(),
   planDigest: z.string().min(1),
@@ -254,8 +296,8 @@ const makePlan = (
             { description: "Revoke synthetic actor", id: "revoke", kind: "revoke" },
             {
               description: "Remove synthetic bindings",
-              id: "remove-bindings",
-              kind: "remove-bindings",
+              id: removeBindingsEffectId,
+              kind: removeBindingsEffectId,
             },
             { description: "Retire synthetic resources", id: "retire", kind: "retire" },
           ]
@@ -341,12 +383,6 @@ try {
   const fixtureSql = sql;
   const store = createPostgresHostedRuntimeJournalStore(database);
   type JournalRead = NonNullable<Awaited<ReturnType<typeof store.read>>>;
-  interface SyntheticEffectRow {
-    attempts: number;
-    effect_id: string;
-    receipt?: unknown;
-    resource_identity: z.infer<typeof resourceIdentitySchema>;
-  }
 
   const prepareForCleanup = (selection: OperatorSelection, target: HostedRuntimeTarget): void => {
     const preparePlan = makePlan(selection);
@@ -374,6 +410,7 @@ try {
     );
   };
 
+  // oxlint-disable-next-line eslint/complexity -- Assert every independently durable journal boundary from the single interrupted row.
   const assertInterruptedJournal = (
     failure: string,
     journalRow: JournalRead,
@@ -404,7 +441,7 @@ try {
         false,
       );
     }
-    if (failure.startsWith("worker-checkpoint-after:")) {
+    if (failure.startsWith(workerCheckpointAfterPrefix)) {
       const frame = journalRow.record.operator?.workerCheckpoints?.find(
         (checkpoint) => checkpoint.parentEffectId === effectId,
       );
@@ -426,33 +463,6 @@ try {
       from a515_synthetic_effects where operation_ref=${operationRef} order by effect_id
     `;
 
-  const assertInterruptedProviderState = (
-    failure: string,
-    effectId: string,
-    frozenPlan: HostedOperatorPlan,
-    providerRows: SyntheticEffectRow[],
-  ) => {
-    const providerEffect = providerRows.find((row) => row.effect_id === effectId);
-    if (failure.startsWith("effect-before:")) assert.equal(providerEffect, undefined);
-    if (
-      failure.startsWith("effect-after:") ||
-      failure.startsWith("effect-crash:") ||
-      failure.startsWith("worker-checkpoint-before:") ||
-      failure.startsWith("worker-checkpoint-after:") ||
-      failure.startsWith("receipt-before:") ||
-      failure.startsWith("receipt-after:")
-    ) {
-      assert.equal(providerEffect?.attempts, 1);
-      assert.deepEqual(providerEffect?.resource_identity, {
-        appResourceId: frozenPlan.appDatabase.resourceId,
-        authResourceId: frozenPlan.authDatabase.resourceId,
-        branchId: frozenPlan.neon.branchId,
-        endpoint: frozenPlan.neon.endpoint,
-        projectId: frozenPlan.neon.projectId,
-      });
-    }
-  };
-
   const assertFinalScenario = async (
     failure: string,
     action: "prepare" | "cleanup",
@@ -464,7 +474,7 @@ try {
     const expectedIds =
       action === "prepare"
         ? ["access", "bind", "install", "resources"]
-        : ["remove-bindings", "retire", "revoke"];
+        : [removeBindingsEffectId, "retire", "revoke"];
     const finalEffects = await fixtureSql<
       {
         effect_id: string;
@@ -523,7 +533,9 @@ try {
     const target = targetFor(selection);
     const plan = makePlan(selection, { action });
     const base = { authority, selection, target, plan };
-    if (action === "cleanup") prepareForCleanup(selection, target);
+    if (action === "cleanup") {
+      prepareForCleanup(selection, target);
+    }
     const plannedProcess = worker({ ...base, action: "plan", operation: action });
     assert.equal(plannedProcess.status, 0, plannedProcess.stderr);
     const planned = plannedOf(plannedProcess.stdout);
@@ -630,7 +642,7 @@ try {
     await runScenario(`pending-after:${effectId}`, 92);
     await runScenario(`effect-crash:${effectId}`, 86);
   }
-  for (const effectId of ["revoke", "remove-bindings", "retire"]) {
+  for (const effectId of ["revoke", removeBindingsEffectId, "retire"]) {
     for (const stage of [
       "checkpoint-before",
       "checkpoint-after",
@@ -694,6 +706,7 @@ try {
     planDigest: unknownPlanned.planDigest,
   });
   assert.equal(resultOf(unknownResume.stdout).status, "prepared");
+  injectedCases.push("unknown");
 
   const replanSelection = selectionFor();
   const replanTarget = targetFor(replanSelection);
@@ -879,7 +892,7 @@ try {
       process.stderr.write(`Fixture database shutdown failed: ${String(error)}\n`);
     }
   }
-  if (started === true) {
+  if (started) {
     spawnSync(
       path.join(postgresBin ?? "", "pg_ctl"),
       ["-D", pgdata, "-m", "immediate", "-w", "stop"],
