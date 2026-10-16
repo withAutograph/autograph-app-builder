@@ -202,7 +202,9 @@ describe("concurrent destination inspection metadata", () => {
   });
   it("preserves unrelated internal progress while recording the page", () => {
     const latest = { ...expected, checkoutDependencyAttempts: [{ status: "observed" }] };
-    const merged = mergeDestinationReviewProgress<typeof latest>({
+    const merged = mergeDestinationReviewProgress<
+      typeof expected & { checkoutDependencyAttempts?: typeof latest.checkoutDependencyAttempts }
+    >({
       expected,
       latest,
       progress,

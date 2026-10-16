@@ -247,30 +247,48 @@ export const destinationReviewReadProgress = (input: {
   };
 };
 
+const currentDestinationProgress = (
+  progress: GitHubDestinationReviewReadProgress | undefined,
+  changeSetDigest: string,
+) => (progress?.changeSetDigest === changeSetDigest ? progress : undefined);
+
+interface DestinationReviewAuthority {
+  phase: string;
+  appSpec?: unknown;
+  sourceReceipt?: unknown;
+  githubSource?: unknown;
+  identityReceipt?: unknown;
+  applyReceipt?: unknown;
+  validationReceipt?: unknown;
+  reviewReceipt?: unknown;
+  githubDestinationReview?: unknown;
+}
+
+const destinationReviewAuthority = (state: DestinationReviewAuthority) =>
+  JSON.stringify([
+    state.phase,
+    state.appSpec,
+    state.sourceReceipt,
+    state.githubSource,
+    state.identityReceipt,
+    state.applyReceipt,
+    state.validationReceipt,
+    state.reviewReceipt,
+    state.githubDestinationReview,
+  ]);
+
 /** Merge observation metadata without weakening the source and review authority boundary. */
 export const mergeDestinationReviewProgress = <
-  T extends { phase: string; githubDestinationReviewRead?: GitHubDestinationReviewReadProgress },
+  T extends DestinationReviewAuthority & {
+    githubDestinationReviewRead?: GitHubDestinationReviewReadProgress;
+  },
 >(input: {
   expected: T;
   latest: T;
   progress: GitHubDestinationReviewReadProgress;
   side: "before" | "after";
 }): T => {
-  const authority = (state: T) =>
-    JSON.stringify(
-      [
-        "phase",
-        "appSpec",
-        "sourceReceipt",
-        "githubSource",
-        "identityReceipt",
-        "applyReceipt",
-        "validationReceipt",
-        "reviewReceipt",
-        "githubDestinationReview",
-      ].map((key) => Reflect.get(state, key)),
-    );
-  if (authority(input.latest) !== authority(input.expected)) {
+  if (destinationReviewAuthority(input.latest) !== destinationReviewAuthority(input.expected)) {
     throw new Error("The workflow changed concurrently before destination diff content read.");
   }
   const latest = currentDestinationProgress(
@@ -486,11 +504,6 @@ export const exactNormalizedChangeSet = async (
   const { changeSet } = await observeNormalizedChangeSet(input);
   return changeSet;
 };
-
-const currentDestinationProgress = (
-  progress: GitHubDestinationReviewReadProgress | undefined,
-  changeSetDigest: string,
-) => (progress?.changeSetDigest === changeSetDigest ? progress : undefined);
 
 const destinationReviewSide = (
   progress: GitHubDestinationReviewReadProgress | undefined,

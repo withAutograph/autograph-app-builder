@@ -18,6 +18,21 @@ import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-s
 import { prepareDraftReconciliation } from "@/lib/repository/sandbox-draft-reconciliation";
 import type { DraftReconciliationInput } from "@/lib/repository/sandbox-draft-reconciliation";
 
+const assertReconciliationDraftLineage = (input: {
+  headBranch: string;
+  publishedHeadSha: string | undefined;
+  resolvedRef: string;
+}): void => {
+  if (
+    input.resolvedRef !== `refs/heads/${input.headBranch}` &&
+    input.publishedHeadSha === undefined
+  ) {
+    throw new Error(
+      "The selected Builder source is not this draft PR branch. Select that branch as the existing app source, then retry reconciliation.",
+    );
+  }
+};
+
 export default defineTool({
   description:
     "Fetch the live base and existing draft head into an isolated Builder checkout and prepare a non-force merge candidate. This does not update GitHub. It reports exact app-owned conflict paths and refuses platform-owned conflicts.",
@@ -62,14 +77,11 @@ export default defineTool({
       pullRequestNumber: input.pullRequestNumber,
       repositoryId: state.githubSource.repository.repositoryId,
     });
-    if (
-      state.githubSource.resolvedRef !== `refs/heads/${source.draft.headBranch}` &&
-      source.publishedHeadSha === undefined
-    ) {
-      throw new Error(
-        "The selected Builder source is not this draft PR branch. Select that branch as the existing app source, then retry reconciliation.",
-      );
-    }
+    assertReconciliationDraftLineage({
+      headBranch: source.draft.headBranch,
+      publishedHeadSha: source.publishedHeadSha,
+      resolvedRef: state.githubSource.resolvedRef,
+    });
     const original = draftReconciliationState.get();
     const unpublished =
       state.reviewReceipt.changes.length === 0

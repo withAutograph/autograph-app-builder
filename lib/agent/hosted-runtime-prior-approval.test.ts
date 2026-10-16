@@ -1032,21 +1032,22 @@ describe("owned approved operation reference", () => {
       .mockResolvedValue(null);
     const read = createHostedRuntimeExecutionApprovalReader({
       readPrior,
-      capture: async () => await Promise.resolve(),
+      capture: async () => {
+        await Promise.resolve();
+      },
     });
     const options = { recoverOriginalPlan: false } as const;
     await read(f.input, f.context, f.operator, options);
     expect(readPrior).toHaveBeenCalled();
-    expect(
-      readPrior.mock.calls.every(
-        ([input, context, operator, policy]) =>
-          input.appId === f.input.appId &&
-          input.operationRef === f.input.operationRef &&
-          input.planDigest === f.input.planDigest &&
-          context === f.context &&
-          operator === f.operator &&
-          policy?.recoverOriginalPlan === false,
-      ),
-    ).toBe(true);
+    for (const [input, context, operator, policy] of readPrior.mock.calls) {
+      expect(input).toMatchObject({
+        appId: f.input.appId,
+        operationRef: f.input.operationRef,
+        planDigest: f.input.planDigest,
+      });
+      expect(context).toBe(f.context);
+      expect(operator).toBe(f.operator);
+      expect(policy).toMatchObject({ recoverOriginalPlan: false });
+    }
   });
 });
