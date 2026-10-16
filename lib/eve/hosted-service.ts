@@ -83,6 +83,7 @@ import {
 import type { PrivateHostedApprovalCaptureState } from "./private-hosted-approval";
 import type { NativeObservationState } from "./native-observation-state";
 import { nativeObservationStateSchema } from "./native-observation-state";
+import { createHostedApprovalObservationDiagnostic } from "./hosted-approval-observation-diagnostic";
 import { projectHostedSnapshot } from "./hosted-projection";
 import type { HostedEngineSnapshot } from "./hosted-projection";
 import { HostedSessionReadTimeoutError } from "./hosted-session-read-timeout-error";
@@ -2188,6 +2189,26 @@ export function createHostedEveSessionService(input: {
                     ? []
                     : storedPrivateApprovalCaptureState.pendingRequests,
               });
+        try {
+          const diagnostic = createHostedApprovalObservationDiagnostic({
+            coldReadProgress: coldReadProgress !== undefined,
+            inlineReceipts: session.privateApprovalReceipts ?? [],
+            ...(nativeObservationState === undefined
+              ? {}
+              : { nativeState: nativeObservationState }),
+            ...(storedPrivateApprovalCaptureState === undefined
+              ? {}
+              : { privateCapture: storedPrivateApprovalCaptureState }),
+            publicPendingRequests:
+              nativeObservationState?.pendingRequests ?? checkpointMetadata?.inputRequests ?? [],
+            sessionId,
+          });
+          if (diagnostic !== undefined) {
+            console.info("[builder:hosted-approval-observation]", diagnostic);
+          }
+        } catch {
+          /* Approval observation is diagnostic only; never affect an ordinary read. */
+        }
         spool = await spoolObservedSession({
           adapterSessionId: session.adapterSessionId,
           allowPartialObservation:

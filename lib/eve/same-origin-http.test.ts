@@ -1233,43 +1233,64 @@ describe("same-origin canonical Eve transport", () => {
     expect(fetchImplementation).toHaveBeenCalledTimes(4);
   });
 
-  it("waits for the exact accepted input response to settle", async () => {
+  it("continues both response settlement readers until the durable resolution appears", async () => {
     const requestId = "aitxt-0oQwVrjWKWZWGigsWFL0FUqy";
     const pending = pendingApprovalEvents(requestId);
     const settled = [
       ...pending,
       {
-        data: { resolutions: [{ requestId }] },
+        data: {
+          resolutions: [
+            {
+              kind: "tool-approval",
+              outcome: "denied",
+              requestId,
+              response: { optionId: "cancel", requestId },
+            },
+          ],
+        },
         meta: { at: 3, id: "evt_resolved" },
         type: "input.resolved",
       },
     ];
     let streamReads = 0;
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    // oxlint-disable-next-line eslint/require-await -- Preserve the fetch promise contract.
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
       if (String(url).includes("/stream?")) {
         streamReads += 1;
-        return stream(streamReads < 10 ? pending : settled);
+        return stream(streamReads < 3 ? pending : settled);
       }
       expect(JSON.parse(String(init?.body))).toMatchObject({
         inputResponses: [{ optionId: "cancel", requestId }],
       });
       return accepted();
     });
+    const transport = createSameOriginEveTransport({
+      config,
+      fetchImplementation,
+      workloadIdentity: identity(),
+    });
 
     await expect(
-      createSameOriginEveTransport({
-        config,
-        fetchImplementation,
-        workloadIdentity: identity(),
-      }).respond({
+      transport.respond({
         adapterSessionId: "wrun_1",
         operationId: "op_respond_settlement",
         principal,
         responses: [{ requestId, response: { kind: "deny" } }],
       }),
     ).resolves.toMatchObject({ status: "waiting" });
-    expect(streamReads).toBe(10);
+    expect(streamReads).toBe(3);
+    expect(fetchImplementation).toHaveBeenCalledTimes(4);
+
+    streamReads = 0;
+    await transport.respondAccepted?.({
+      adapterSessionId: "wrun_1",
+      operationId: "op_respond_accepted_settlement",
+      principal,
+      responses: [{ requestId, response: { kind: "deny" } }],
+    });
+    expect(streamReads).toBe(3);
+    expect(fetchImplementation).toHaveBeenCalledTimes(8);
   });
 
   it("waits for a new guarded cancel and waiting boundary", async () => {
