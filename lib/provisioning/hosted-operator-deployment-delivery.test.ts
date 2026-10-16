@@ -160,6 +160,7 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
     link: { repoId: delivery.repoId, type: "github" },
     name: "app",
   };
+  const team = { id: "team", slug: "team-slug" };
   const deployment = {
     customEnvironment: null,
     gitSource: { ref: delivery.branch, repoId: delivery.repoId, sha, type: "github" },
@@ -183,6 +184,14 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
     // SAFETY: Provider fixtures exercise both absent and nonempty redirect metadata.
     redirect: null as string | null,
     failNextRead: false,
+    differentDeploymentStatus: 200,
+  };
+  const differentDeployment = {
+    ...deployment,
+    gitSource: { ...deployment.gitSource },
+    id: "dpl_previous",
+    meta: {},
+    readyState: "READY",
   };
   const aliasWriteResponse = () => {
     if (aliasState.rejectStatus !== 0) {
@@ -246,7 +255,7 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
       return Response.json(project);
     }
     if (path === "/v2/teams/team") {
-      return Response.json({ id: "team", slug: "team-slug" });
+      return Response.json(team);
     }
     if (path === "/v13/deployments" && method === "POST") {
       expect(body).not.toHaveProperty("target");
@@ -255,6 +264,9 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
     }
     if (path === "/v13/deployments/dpl_new") {
       return candidateResponse();
+    }
+    if (path === "/v13/deployments/dpl_previous") {
+      return Response.json(differentDeployment, { status: aliasState.differentDeploymentStatus });
     }
     throw new Error("Unexpected native request");
   };
@@ -298,7 +310,9 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
     aliasState,
     observeAlias,
     project,
+    team,
     deployment,
+    differentDeployment,
     checkpoint,
     input,
     failCandidateReads: () => {
@@ -526,6 +540,261 @@ const readyGateway = async () => {
   await f.writer.reconcile(f.input);
   return f;
 };
+
+const narrowedGateway = async () => {
+  const original = hostedOperatorPlanSchema.parse({
+    ...gatewayPlan,
+    access: [],
+    stage: "auth-bootstrap",
+    resourcesInstaller: { reference: "neon-resource-bootstrap-v1", sha256: "c".repeat(64) },
+    authSchema: {
+      artifactRef: "auth-plan",
+      installer: plan.installer,
+      planDigest: "a".repeat(64),
+      targetDigest: "b".repeat(64),
+    },
+    bootstrap: { endpointId: "ep-fixture", maintenanceDatabase: "neondb", role: "neondb_owner" },
+    effects: [
+      {
+        id: "auth-resources",
+        kind: "resources",
+        resourceId: plan.authDatabase.resourceId,
+        description: "Prepare Auth",
+      },
+      {
+        id: "app-resources",
+        kind: "resources",
+        resourceId: plan.appDatabase.resourceId,
+        description: "Prepare app",
+      },
+      { id: "install", kind: "install", description: "Install Auth" },
+      { id: "gateway-bindings", kind: "gateway-bindings", description: "Bind approved protection" },
+      { id: "gateway-delivery", kind: "gateway-delivery", description: "Deliver Gateway" },
+    ],
+    gatewayBindings: {
+      authBrowserOrigin: "https://auth-preview.example.test",
+      builderCallbackOrigin: "https://builder.example",
+      catalogAppIds: [selection.appId],
+      operatorOrigin: "https://operator.example",
+      sourceWorkload: {
+        audience: "https://vercel.com",
+        environment: "preview",
+        issuer: "https://oidc.vercel.com/team",
+        ownerId: "team",
+        projectId: "prj_gateway",
+        subject: "fixture-gateway",
+      },
+      trustedSources: {
+        builderProduction: { projectId: "builder", from: "production", to: "preview" },
+        operatorPreview: { projectId: "operator", from: "preview", to: "preview" },
+      },
+    },
+  });
+  const current = hostedOperatorPlanSchema.parse({
+    ...original,
+    gatewayBindings: { ...original.gatewayBindings, trustedSources: undefined },
+  });
+  const f = fixture(current, null, true);
+  f.input.gatewayDeliveryProvenance = [
+    {
+      operationRef: f.input.operationRef,
+      plan: original,
+      planDigest: operatorPlanDigest(original),
+      approvalId: "original-approval",
+      approvedByCallId: "original-approved-call",
+    },
+  ];
+  f.deployment.meta.autograph_operator_plan = operatorPlanDigest(original);
+  f.seedCandidate();
+  await f.writer.reconcile(f.input);
+  f.input.deliveryCandidates = operatorDeploymentCandidatesSchema.parse(
+    f.input.deliveryCandidates?.map((candidate) => ({ ...candidate, gatewayAliasAttempted: true })),
+  );
+  return f;
+};
+
+it("reconciles an approved narrowing's retained metadata and reassigns only after fresh same-source negative alias evidence", async () => {
+  const f = await narrowedGateway();
+  expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "retryable" });
+  expect(await f.writer.deliver(f.input)).toMatchObject({
+    status: "applied",
+    selected: { deploymentId: "dpl_new" },
+  });
+  expect(f.calls.some((call) => call.path === "/v13/deployments/dpl_previous")).toBe(true);
+  expect(
+    f.calls.filter((call) => call.path.endsWith("/aliases") && call.method === "POST"),
+  ).toHaveLength(1);
+  expect(f.calls.some((call) => call.path === "/v13/deployments" && call.method === "POST")).toBe(
+    false,
+  );
+  expect(f.input.deliveryCandidates).toEqual([
+    expect.objectContaining({ deploymentId: "dpl_new", gatewayAliasAttempted: true }),
+  ]);
+});
+
+it.each([
+  "missing",
+  "failed",
+  "redirect",
+  "deployment-read",
+  "malformed",
+  "project",
+  "owner",
+  "project-account",
+  "team",
+  "repo",
+  "branch",
+  "sha",
+  "production",
+  "custom",
+  "not-ready",
+])("keeps narrowed alias recovery unknown for %s negative evidence", async (failure) => {
+  const f = await narrowedGateway();
+  switch (failure) {
+    case "missing": {
+      f.aliasState.missing = true;
+      break;
+    }
+    case "failed": {
+      f.aliasState.failReads = true;
+      break;
+    }
+    case "redirect": {
+      f.aliasState.redirect = "https://redirect.example.test";
+      break;
+    }
+    case "deployment-read": {
+      f.aliasState.differentDeploymentStatus = 503;
+      break;
+    }
+    case "malformed": {
+      f.differentDeployment.url = "invalid/path";
+      break;
+    }
+    case "project": {
+      f.differentDeployment.projectId = "another-project";
+      break;
+    }
+    case "owner": {
+      f.differentDeployment.ownerId = "another-owner";
+      break;
+    }
+    case "project-account": {
+      Object.assign(f.differentDeployment, { ownerId: undefined });
+      f.project.accountId = "another-owner";
+      break;
+    }
+    case "team": {
+      Object.assign(f.differentDeployment, { ownerId: undefined });
+      f.team.id = "another-team";
+      break;
+    }
+    case "repo": {
+      f.differentDeployment.gitSource.repoId = "another-repo";
+      break;
+    }
+    case "branch": {
+      f.differentDeployment.gitSource.ref = "another-branch";
+      break;
+    }
+    case "sha": {
+      f.differentDeployment.gitSource.sha = "f".repeat(40);
+      break;
+    }
+    case "production": {
+      f.differentDeployment.target = "production";
+      break;
+    }
+    case "custom": {
+      Object.assign(f.differentDeployment, { customEnvironment: "custom" });
+      break;
+    }
+    case "not-ready": {
+      f.differentDeployment.readyState = "ERROR";
+      break;
+    }
+    default: {
+      throw new Error("Unknown fixture failure");
+    }
+  }
+  expect(await f.writer.deliver(f.input)).toMatchObject({ status: "unknown" });
+  expect(f.calls.some((call) => call.method === "POST")).toBe(false);
+  expect(f.input.deliveryCandidates?.[0]?.gatewayAliasAttempted).toBe(true);
+});
+
+it("uses independently observed project and team ownership when the different alias deployment omits ownerId", async () => {
+  const f = await narrowedGateway();
+  Object.assign(f.differentDeployment, { ownerId: undefined });
+  expect(await f.writer.deliver(f.input)).toMatchObject({
+    status: "applied",
+    selected: { deploymentId: "dpl_new" },
+  });
+  expect(f.calls.some((call) => call.path === "/v9/projects/prj_gateway")).toBe(true);
+  expect(f.calls.some((call) => call.path === "/v2/teams/team")).toBe(true);
+  expect(f.input.deliveryCandidates).toEqual([
+    expect.objectContaining({ deploymentId: "dpl_new", gatewayAliasAttempted: true }),
+  ]);
+});
+
+it.each(["absent", "operation", "digest", "approval", "call", "changed-source"])(
+  "does not use unproved prior metadata for %s lineage",
+  async (failure) => {
+    const f = await narrowedGateway();
+    const provenance = f.input.gatewayDeliveryProvenance?.[0];
+    if (provenance === undefined) {
+      throw new Error("Missing fixture provenance");
+    }
+    const changed = { ...provenance };
+    switch (failure) {
+      case "absent": {
+        f.input.gatewayDeliveryProvenance = undefined;
+        break;
+      }
+      case "operation": {
+        changed.operationRef = "different-operation";
+        break;
+      }
+      case "digest": {
+        changed.planDigest = "f".repeat(64);
+        break;
+      }
+      case "approval": {
+        changed.approvalId = "";
+        break;
+      }
+      case "call": {
+        changed.approvedByCallId = "operator:unapproved-plan";
+        break;
+      }
+      case "changed-source": {
+        changed.plan = hostedOperatorPlanSchema.parse({
+          ...changed.plan,
+          gatewayDelivery: { ...changed.plan.gatewayDelivery, gitSha: "f".repeat(40) },
+        });
+        changed.planDigest = operatorPlanDigest(changed.plan);
+        break;
+      }
+      default: {
+        throw new Error("Unknown fixture lineage");
+      }
+    }
+    if (failure !== "absent") {
+      f.input.gatewayDeliveryProvenance = [changed];
+    }
+    expect(await f.writer.deliver(f.input)).toMatchObject({ status: "unknown" });
+    expect(f.calls.some((call) => call.method === "POST")).toBe(false);
+  },
+);
+
+it.each(["autograph_operator_effect", "autograph_operator_operation", "autograph_operator_plan"])(
+  "rejects a retained candidate with foreign %s metadata",
+  async (key) => {
+    const f = await narrowedGateway();
+    Object.assign(f.deployment.meta, { [key]: "foreign-metadata" });
+    expect(await f.writer.deliver(f.input)).toMatchObject({ status: "unknown" });
+    expect(f.calls.some((call) => call.method === "POST")).toBe(false);
+  },
+);
 it("assigns only the approved Gateway hostname to its exact READY deployment and independently reads it back", async () => {
   const f = await readyGateway();
   f.deployment.url = "candidate-field-is-not-alias-authority.vercel.app";

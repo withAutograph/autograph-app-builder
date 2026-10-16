@@ -6,6 +6,7 @@ import type { createHostedOperatorControlPlane } from "./hosted-operator-deploym
 import { HostedOperatorError, operatorPlanDigest } from "./hosted-operator-contract";
 import type { OperatorDeploymentCandidate } from "./hosted-operator-contract";
 import type { HostedOperatorDeploymentContext } from "./hosted-operator-service";
+import { isSharedHostProtectionDeliveryProvenance } from "./hosted-operator-shared-host-protection-successor";
 
 interface DeploymentListQuery {
   branch: string;
@@ -48,7 +49,7 @@ const deploymentSchema = z
       type: z.literal("github"),
     }),
     id,
-    meta: z.record(z.string(), z.string()),
+    meta: z.record(z.string(), z.string()).optional(),
     oidcTokenClaims: z.object({ environment: z.literal("preview") }).optional(),
     ownerId: id.optional(),
     projectId: id,
@@ -173,6 +174,31 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       autograph_operator_operation: input.operationRef,
       autograph_operator_plan: planDigest,
     };
+    const gatewayProvenance =
+      deps.target === "gateway"
+        ? (input.gatewayDeliveryProvenance ?? []).filter((provenance) =>
+            isSharedHostProtectionDeliveryProvenance(provenance, input.plan, input.operationRef),
+          )
+        : [];
+    const metadataIdentities = [
+      expectedMeta,
+      ...gatewayProvenance.flatMap((provenance) => {
+        const effect = provenance.plan.effects.find((value) => value.kind === "gateway-delivery");
+        return effect === undefined
+          ? []
+          : [
+              {
+                autograph_operator_effect: effect.id,
+                autograph_operator_operation: provenance.operationRef,
+                autograph_operator_plan: provenance.planDigest,
+              },
+            ];
+      }),
+    ];
+    const matchesMetadata = (metadata: Record<string, string> | undefined) =>
+      metadataIdentities.some((expected) =>
+        Object.entries(expected).every(([key, value]) => metadata?.[key] === value),
+      );
     const assertCurrent = async () => {
       input.signal?.throwIfAborted();
       await input.assertCurrent();
@@ -251,9 +277,10 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         }
       }
     };
-    const readCandidate = async (
+    const readDeployment = async (
       deploymentId: string,
-      verifyProject = true,
+      verifyProject: boolean,
+      requireOperatorMetadata: boolean,
     ): Promise<OperatorDeploymentCandidate> => {
       const observed = deploymentSchema.parse(
         await request(`/v13/deployments/${encodeURIComponent(deploymentId)}`, {
@@ -267,7 +294,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         String(observed.gitSource.repoId) === delivery.repoId,
         observed.gitSource.ref === delivery.branch,
         delivery.gitSha !== undefined && observed.gitSource.sha === delivery.gitSha,
-        Object.entries(expectedMeta).every(([key, value]) => observed.meta[key] === value),
+        !requireOperatorMetadata || matchesMetadata(observed.meta),
       ].every(Boolean);
       if (!matches) {
         throw new HostedOperatorError("resource_mismatch");
@@ -316,6 +343,16 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         repoId: delivery.repoId,
       };
     };
+    const readCandidate = async (deploymentId: string, verifyProject = true) =>
+      await readDeployment(deploymentId, verifyProject, true);
+    const provesDifferentGatewayAliasTarget = async (deploymentId: string | null) => {
+      if (gatewayProvenance.length === 0 || deploymentId === null) {
+        return false;
+      }
+      // This is negative evidence about the alias, never an adopted delivery candidate.
+      const observed = await readDeployment(deploymentId, true, false);
+      return observed.readyState === "READY";
+    };
     const readCandidates = async () => {
       const ids = new Set<string>();
       for (const candidate of input.deliveryCandidates ?? []) {
@@ -336,9 +373,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         }
         const page = pageSchema.parse(await request("/v7/deployments", { ...query }));
         for (const candidate of page.deployments) {
-          if (
-            Object.entries(expectedMeta).every(([key, value]) => candidate.meta?.[key] === value)
-          ) {
+          if (matchesMetadata(candidate.meta)) {
             ids.add(candidate.uid);
           }
         }
@@ -403,6 +438,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       readCandidate,
       readCandidates,
       readGatewayAlias,
+      provesDifferentGatewayAliasTarget,
       request,
     };
   };
@@ -465,7 +501,10 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
             candidate.deploymentId === alias.deploymentId && candidate.readyState === "READY",
         );
         if (assigned === undefined) {
-          if (candidates.some((candidate) => candidate.gatewayAliasAttempted === true)) {
+          if (
+            candidates.some((candidate) => candidate.gatewayAliasAttempted === true) &&
+            !(await reader.provesDifferentGatewayAliasTarget(alias.deploymentId))
+          ) {
             return { candidates, status: "unknown" as const };
           }
           return {
@@ -505,6 +544,12 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       }
       if (alias.deploymentId === selected.deploymentId) {
         return await reconcile({ ...input, deliveryCandidates: candidates });
+      }
+      if (
+        candidates.some((value) => value.gatewayAliasAttempted === true) &&
+        !(await fresh.provesDifferentGatewayAliasTarget(alias.deploymentId))
+      ) {
+        return { candidates, status: "unknown" as const };
       }
       await fresh.assertCurrent();
     } catch {

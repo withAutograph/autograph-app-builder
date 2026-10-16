@@ -123,6 +123,39 @@ const plan = hostedOperatorPlanSchema.parse({
   version: 1,
 });
 
+const legacyBootstrapPlan = hostedOperatorPlanSchema.parse({
+  ...plan,
+  stage: "auth-bootstrap",
+  authSchema: {
+    targetDigest: "c".repeat(64),
+    artifactRef: "fixture-auth-plan",
+    planDigest: "d".repeat(64),
+    installer: { reference: "auth-worker", sha256: "e".repeat(64) },
+  },
+  bootstrap: {
+    endpointId: "ep-fixture",
+    maintenanceDatabase: "postgres",
+    role: "maintenance_owner",
+  },
+  resourcesInstaller: { reference: "resource-worker", sha256: "f".repeat(64) },
+  effects: [
+    {
+      description: "Auth resources",
+      id: "auth-resources",
+      kind: "resources",
+      resourceId: plan.authDatabase.resourceId,
+    },
+    {
+      description: "App resources",
+      id: "app-resources",
+      kind: "resources",
+      resourceId: plan.appDatabase.resourceId,
+    },
+    { description: "Install Auth schema", id: "auth-install", kind: "install" },
+    ...plan.effects.filter((effect) => effect.kind === "gateway-bindings"),
+  ],
+});
+
 const operationRef = "00000000-0000-4000-8000-000000000001";
 const input = { ...plan.selection, operationRef, plan, planDigest: operatorPlanDigest(plan) };
 const order: string[] = [];
@@ -626,8 +659,7 @@ describe("confirmed Gateway build failure recovery", () => {
     "offers ordinary planning for a %s unavailable legacy Auth bootstrap",
     async (mode) => {
       const legacyPlan = hostedOperatorPlanSchema.parse({
-        ...plan,
-        stage: "auth-bootstrap",
+        ...legacyBootstrapPlan,
         gatewayBindings: {
           ...plan.gatewayBindings,
           trustedSources: {
@@ -694,8 +726,7 @@ describe("confirmed Gateway build failure recovery", () => {
     "does not suggest legacy planning for %s",
     async (boundary) => {
       const candidatePlan = hostedOperatorPlanSchema.parse({
-        ...plan,
-        stage: boundary === "non-bootstrap" ? undefined : "auth-bootstrap",
+        ...(boundary === "non-bootstrap" ? plan : legacyBootstrapPlan),
         gatewayBindings: {
           ...plan.gatewayBindings,
           trustedSources:

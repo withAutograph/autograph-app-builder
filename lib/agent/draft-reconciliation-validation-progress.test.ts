@@ -49,7 +49,7 @@ vi.mock("../../agent/tools/compile-app-schema-release", () => ({
   },
 }));
 vi.mock("../../agent/tools/run-app-browser-tests", () => ({
-  appBrowserTestCommand: () => "mise run --skip-tools //apps/spend-review:test-e2e",
+  appBrowserTestCommand: () => "mise run --no-deps app:runtime run spend-review test-e2e",
   runAppBrowserTests: vi.fn(),
 }));
 vi.mock("../repository/target-validation", () => ({
