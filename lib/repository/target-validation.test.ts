@@ -762,7 +762,7 @@ exit "$status"`,
       writeFileSync(
         mise,
         `#!/bin/sh
-if [ "$*" != "run app:runtime run example ${runtimeTask}" ]; then exit 21; fi
+if [ "$*" != "run --no-deps app:runtime run example ${runtimeTask}" ]; then exit 21; fi
 if [ "$APP_RUNTIME_STATE_DIR" != '${stateDirectory}' ]; then exit 22; fi
 if [ ! -f "$APP_RUNTIME_STATE_DIR/environment.json" ]; then exit 23; fi
 if [ "$APP_SCHEMA_TRANSITION_PREDECESSOR_FILES" != '["original.json"]' ]; then exit 24; fi

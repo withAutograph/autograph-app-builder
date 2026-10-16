@@ -1,7 +1,9 @@
 import {
   isSharedHostProtectionSuccessor,
   hasRetainedSharedHostProtectionIdentity,
+  sharedHostProtectionDeliveryProvenance,
 } from "./hosted-operator-shared-host-protection-successor";
+import type { SharedHostProtectionDeliveryProvenance } from "./hosted-operator-shared-host-protection-successor";
 import { recoverOriginalApprovedPlan } from "./hosted-operator-approved-plan";
 import { savedPreviewEnvironmentGitBranch } from "./native-preview-environment-scope";
 import { isDeepStrictEqual } from "node:util";
@@ -144,6 +146,8 @@ export type HostedOperatorEffectContext = Context & {
   checkpointAccountPreparation?: (preparation: NormalActorAccountPreparation) => Promise<void>;
   deliveryCandidates?: OperatorDeploymentCandidate[];
   gatewayDeliveryCandidates?: OperatorDeploymentCandidate[];
+  /** Canonical retained approvals for an exact host-protection-only narrowing, never public input. */
+  gatewayDeliveryProvenance?: readonly SharedHostProtectionDeliveryProvenance[];
   checkpointGatewayDelivery?: (
     candidates: readonly OperatorDeploymentCandidate[],
     selectedId?: string,
@@ -1231,6 +1235,33 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
               ) {
                 continue;
               }
+              const gatewayDeliveryProvenance =
+                effect.kind === GATEWAY_DELIVERY_EFFECT
+                  ? sharedHostProtectionDeliveryProvenance(record)
+                  : [];
+              if (gatewayDeliveryProvenance.length > 0) {
+                await assertCurrent();
+                await Promise.all(
+                  gatewayDeliveryProvenance.map(async (provenance) => {
+                    const originalApproval = await deps.readApproval({
+                      ...context,
+                      action: "prepare",
+                      callId: provenance.approvedByCallId,
+                      planDigest: provenance.planDigest,
+                    });
+                    if (
+                      originalApproval?.approved !== true ||
+                      originalApproval.approvalId !== provenance.approvalId ||
+                      originalApproval.callId !== provenance.approvedByCallId ||
+                      originalApproval.planDigest !== provenance.planDigest ||
+                      originalApproval.action !== "prepare"
+                    ) {
+                      throw new HostedOperatorError("authorization_required");
+                    }
+                  }),
+                );
+                await assertCurrent();
+              }
               const effectInput: HostedOperatorEffectContext = {
                 ...context,
                 signal: request.signal,
@@ -1429,6 +1460,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 effect,
                 fenceGeneration,
                 gatewayDeliveryCandidates: requireOperator(record).gatewayDeliveryCandidates,
+                gatewayDeliveryProvenance,
                 gatewayEnvironmentRows: requireOperator(record).gatewayEnvironment,
                 managedEnvironment:
                   plan.appEnvironmentCleanup === undefined

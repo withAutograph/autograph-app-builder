@@ -48,16 +48,7 @@ const prerequisitesObserved = (prior: OperatorRecord, bindingId: string): boolea
       prior.receipts.some((receipt) => receipt.effectId === effect.id),
   );
 
-const aliasOutcomeKnown = (prior: OperatorRecord): boolean =>
-  prior.gatewayDeliveryCandidates?.some((candidate) => candidate.gatewayAliasAttempted === true) !==
-    true ||
-  prior.plan.effects.some(
-    (effect) =>
-      effect.kind === GATEWAY_DELIVERY &&
-      prior.receipts.some((receipt) => receipt.effectId === effect.id),
-  );
-
-/** Removing host-owned protection administration cannot discard an uncertain app/environment effect. */
+/** Exact authority narrowing retains the delivery intent and every unresolved attempt. */
 export const isSharedHostProtectionSuccessor = (
   record: HostedRuntimeJournalRecord,
   plan: HostedOperatorPlan,
@@ -79,7 +70,6 @@ export const isSharedHostProtectionSuccessor = (
       (record.leaseExpiresAt !== undefined && Date.parse(record.leaseExpiresAt) <= now),
     prior.pendingEffectId === binding.id,
     prerequisitesObserved(prior, binding.id),
-    aliasOutcomeKnown(prior),
   ].every(Boolean);
 };
 
@@ -138,5 +128,68 @@ export const hasRetainedSharedHostProtectionIdentity = (
       retained.approvedByCallId !== UNAPPROVED,
       JSON.stringify(original.identityLink) === JSON.stringify(link),
     ].every(Boolean);
+  });
+};
+
+/** Private approved ancestry used only to observe the unchanged Gateway delivery intent. */
+export interface SharedHostProtectionDeliveryProvenance {
+  operationRef: string;
+  plan: HostedOperatorPlan;
+  planDigest: string;
+  approvalId: string;
+  approvedByCallId: string;
+}
+
+export const isSharedHostProtectionDeliveryProvenance = (
+  provenance: SharedHostProtectionDeliveryProvenance,
+  currentPlan: HostedOperatorPlan,
+  operationRef: string,
+): boolean => {
+  if (
+    provenance.operationRef !== operationRef ||
+    provenance.plan.stage !== AUTH_BOOTSTRAP ||
+    provenance.planDigest !== operatorPlanDigest(provenance.plan)
+  ) {
+    return false;
+  }
+  if (
+    provenance.approvalId.length === 0 ||
+    provenance.approvedByCallId.length === 0 ||
+    provenance.approvedByCallId === UNAPPROVED
+  ) {
+    return false;
+  }
+  return sameNarrowedPlan(provenance.plan, currentPlan);
+};
+
+export const sharedHostProtectionDeliveryProvenance = (
+  record: HostedRuntimeJournalRecord,
+): readonly SharedHostProtectionDeliveryProvenance[] => {
+  const current = record.operator;
+  if (
+    current === undefined ||
+    current.approvalId === undefined ||
+    record.approvedByCallId === UNAPPROVED
+  ) {
+    return [];
+  }
+  if (current.planDigest !== operatorPlanDigest(current.plan)) {
+    return [];
+  }
+  return (current.retainedGatewayDeliveries ?? []).flatMap((retained) => {
+    const original = retained.operator;
+    if (original.approvalId === undefined) {
+      return [];
+    }
+    const provenance = {
+      operationRef: original.operationRef,
+      plan: original.plan,
+      planDigest: original.planDigest,
+      approvalId: original.approvalId,
+      approvedByCallId: retained.approvedByCallId,
+    };
+    return isSharedHostProtectionDeliveryProvenance(provenance, current.plan, current.operationRef)
+      ? [provenance]
+      : [];
   });
 };

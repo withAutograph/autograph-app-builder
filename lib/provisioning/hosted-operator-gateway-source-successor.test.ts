@@ -1,6 +1,8 @@
 import {
   createSharedHostProtectionSuccessorPlan,
   hasRetainedSharedHostProtectionIdentity,
+  sharedHostProtectionDeliveryProvenance,
+  isSharedHostProtectionDeliveryProvenance,
 } from "./hosted-operator-shared-host-protection-successor";
 /* oxlint-disable eslint/require-await -- Typed in-memory journal and provider callbacks intentionally resolve without external I/O. */
 import { describe, expect, it, vi } from "vitest";
@@ -775,15 +777,19 @@ describe("shared host protection plan successor", () => {
     if (original === undefined || candidate === undefined) {
       throw new Error("Missing frozen bootstrap prerequisite");
     }
+    const { gatewayBindings, deploymentBoundary } = original.plan;
+    if (gatewayBindings === undefined || deploymentBoundary === undefined) {
+      throw new Error("Missing frozen identity origins");
+    }
     const link = {
       audience: "https://operator.example",
       authResourceId: original.plan.authDatabase.resourceId,
       bootstrapPlanDigest: original.planDigest,
-      browserOrigin: "https://gateway.example",
+      browserOrigin: gatewayBindings.authBrowserOrigin,
       consumedAt: new Date().toISOString(),
-      endpointOrigin: "https://immutable-gateway.example",
+      endpointOrigin: deploymentBoundary.verification.gatewayOrigin,
       expiresAt: new Date().toISOString(),
-      issuer: "https://gateway.example",
+      issuer: deploymentBoundary.verification.publicOrigin,
       nonceSha256: "a".repeat(64),
       organizationId: null,
       ownerSessionId: selection.sessionId,
@@ -815,7 +821,7 @@ describe("shared host protection plan successor", () => {
       },
     };
     expect(hasRetainedSharedHostProtectionIdentity(record)).toBe(true);
-    f.row = { ...previous, record };
+    f.row = { ...previous, record: hostedRuntimeJournalRecordSchema.parse(record) };
     const statusRequest = {
       action: "status" as const,
       selection,
@@ -916,6 +922,17 @@ describe("shared host protection plan successor", () => {
     const executed: string[] = [];
     f.deps.executeEffect = async (input) => {
       executed.push(input.effect.kind);
+      if (input.effect.kind === "gateway-delivery") {
+        expect(input.gatewayDeliveryProvenance).toEqual([
+          {
+            operationRef: original.operationRef,
+            plan: previous.record.operator?.plan,
+            planDigest: original.planDigest,
+            approvalId: previous.record.operator?.approvalId,
+            approvedByCallId: previous.record.approvedByCallId,
+          },
+        ]);
+      }
       return await execute(input);
     };
     f.deps.verifyAuthReadiness = async () => ({
@@ -932,7 +949,97 @@ describe("shared host protection plan successor", () => {
     expect(f.row?.record.operator?.pendingEffectAttempt).toBeUndefined();
   });
 
-  it.each(["resource", "release", "other-effect", "live-lease", "approval", "alias-write"])(
+  it("narrows only unchanged delivery authority while preserving unresolved alias history", async () => {
+    const { f, original, previous, successorPlan } = await pendingProtection();
+    const prior = previous.record.operator;
+    if (prior === undefined) {
+      throw new Error("Missing pending protection");
+    }
+    const uncertain = {
+      branch: selection.branch,
+      deploymentId: "uncertain",
+      operationRef: original.operationRef,
+      origin: "https://uncertain-gateway.example",
+      projectId: "prj_gateway",
+      repoId: "gateway-repo",
+      readyState: "READY",
+      gatewayAliasAttempted: true,
+    };
+    prior.gatewayDeliveryCandidates = [uncertain];
+    f.row = previous;
+    const narrowed = await prepared(f);
+    expect(narrowed.operationRef).toBe(original.operationRef);
+    expect(narrowed.planDigest).toBe(operatorPlanDigest(successorPlan));
+    expect(f.row?.record.operator?.gatewayDeliveryCandidates).toEqual([uncertain]);
+    expect(f.row?.record.operator?.receipts).toEqual(prior.receipts);
+    expect(f.row?.record.operator?.pendingEffectAttempt).toEqual(prior.pendingEffectAttempt);
+    expect(f.row?.record.operator?.pendingEffectId).toBe(prior.pendingEffectId);
+    const current = f.row;
+    if (current?.record.operator === undefined) {
+      throw new Error("Missing narrowed protection");
+    }
+    expect(sharedHostProtectionDeliveryProvenance(current.record)).toEqual([]);
+    const approvedRecord = {
+      ...current.record,
+      approvedByCallId: "narrowed-approval",
+      operator: { ...current.record.operator, approvalId: "narrowed-human-decision" },
+    };
+    const provenance = sharedHostProtectionDeliveryProvenance(approvedRecord);
+    expect(provenance).toEqual([
+      {
+        operationRef: prior.operationRef,
+        plan: prior.plan,
+        planDigest: prior.planDigest,
+        approvalId: prior.approvalId,
+        approvedByCallId: previous.record.approvedByCallId,
+      },
+    ]);
+    const [originalProvenance] = provenance;
+    if (originalProvenance === undefined) {
+      throw new Error("Missing approved lineage");
+    }
+    expect(
+      isSharedHostProtectionDeliveryProvenance(
+        originalProvenance,
+        successorPlan,
+        original.operationRef,
+      ),
+    ).toBe(true);
+    expect(
+      isSharedHostProtectionDeliveryProvenance(
+        { ...originalProvenance, planDigest: "0".repeat(64) },
+        successorPlan,
+        original.operationRef,
+      ),
+    ).toBe(false);
+    expect(
+      isSharedHostProtectionDeliveryProvenance(
+        originalProvenance,
+        successorPlan,
+        "different-operation",
+      ),
+    ).toBe(false);
+    const changedDelivery = hostedOperatorPlanSchema.parse({
+      ...successorPlan,
+      gatewayDelivery: { ...successorPlan.gatewayDelivery, gitSha: "2".repeat(40) },
+    });
+    expect(
+      isSharedHostProtectionDeliveryProvenance(
+        originalProvenance,
+        changedDelivery,
+        original.operationRef,
+      ),
+    ).toBe(false);
+    expect(
+      isSharedHostProtectionDeliveryProvenance(
+        { ...originalProvenance, approvedByCallId: "operator:unapproved-plan" },
+        successorPlan,
+        original.operationRef,
+      ),
+    ).toBe(false);
+  });
+
+  it.each(["resource", "release", "other-effect", "live-lease", "approval"])(
     "does not broaden partial replacement for %s",
     async (change) => {
       const { f, original, successorPlan } = await pendingProtection();
@@ -958,20 +1065,6 @@ describe("shared host protection plan successor", () => {
       }
       if (change === "approval") {
         f.deps.readApproval = async () => null;
-      }
-      if (change === "alias-write") {
-        before.record.operator.gatewayDeliveryCandidates = [
-          {
-            branch: selection.branch,
-            deploymentId: "uncertain",
-            operationRef: original.operationRef,
-            origin: "https://uncertain-gateway.example",
-            projectId: "prj_gateway",
-            repoId: "gateway-repo",
-            readyState: "READY",
-            gatewayAliasAttempted: true,
-          },
-        ];
       }
       f.row = before;
       expect(
