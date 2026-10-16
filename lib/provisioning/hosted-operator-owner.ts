@@ -1,3 +1,4 @@
+import { sharedHostProtectionDeliveryProvenance } from "./hosted-operator-shared-host-protection-successor";
 import {
   readSealedRealmContinuationAuthority,
   realmContinuationPrincipal,
@@ -567,6 +568,17 @@ const approvalCheckpoint = (
       },
       retainedPrepare: true,
     };
+  }
+  const gatewayOriginal =
+    context.action === "prepare" && record !== undefined
+      ? sharedHostProtectionDeliveryProvenance(record).find(
+          (provenance) =>
+            provenance.planDigest === context.planDigest &&
+            provenance.approvedByCallId === context.callId,
+        )
+      : undefined;
+  if (gatewayOriginal !== undefined) {
+    return { current: gatewayOriginal, retainedPrepare: true };
   }
   const retained = record?.retainedAuth;
   const retainedPrepare =
