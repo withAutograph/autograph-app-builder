@@ -155,18 +155,17 @@ describe("development Codex package", () => {
   });
 
   it("closes every publication, hosted, provider, and release capability", () => {
-    expect(
-      developmentLaunchEnvironment({
-        dependencyKey: "a".repeat(64),
-        destinationRoot: "/private/dev/destination",
-        evePort: 2000,
-        fingerprint: "f".repeat(64),
-        snapshotRoot: "/private/dev/source",
-        sourceRoot: "/private/user/arrusted",
-        sourceSha: "b".repeat(40),
-        sourceTree: "c".repeat(40),
-      }),
-    ).toMatchObject({
+    const environment = developmentLaunchEnvironment({
+      dependencyKey: "a".repeat(64),
+      destinationRoot: "/private/dev/destination",
+      evePort: 2000,
+      fingerprint: "f".repeat(64),
+      snapshotRoot: "/private/dev/source",
+      sourceRoot: "/private/user/arrusted",
+      sourceSha: "b".repeat(40),
+      sourceTree: "c".repeat(40),
+    });
+    expect(environment).toMatchObject({
       APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "0",
       APP_BUILDER_DEVELOPMENT_SNAPSHOT_ROOT: "/private/dev/source",
       APP_BUILDER_DEVELOPMENT_SOURCE_ROOT: "/private/user/arrusted",
@@ -180,23 +179,14 @@ describe("development Codex package", () => {
       APP_BUILDER_LOCAL_PUBLICATION: "0",
       APP_BUILDER_SANDBOX_PROVIDER: "vercel",
       EVE_HOSTED_ADAPTER: "0",
-      REPOSITORY_LOCAL_ROOTS: "/private/dev/source",
+      REPOSITORY_LOCAL_ROOTS: "/private/user/arrusted",
       REPOSITORY_WORKSPACE_ROOT: "/private/dev/destination",
       WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
       WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
       WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0",
     });
-    expect(
-      developmentLaunchEnvironment({
-        dependencyKey: "a".repeat(64),
-        destinationRoot: "/private/dev/destination",
-        evePort: 2000,
-        fingerprint: "f".repeat(64),
-        snapshotRoot: "/private/dev/source",
-        sourceRoot: "/private/user/arrusted",
-        sourceSha: "b".repeat(40),
-        sourceTree: "c".repeat(40),
-      }),
-    ).not.toHaveProperty("APP_BUILDER_SANDBOX_IMAGE");
+    expect(environment.REPOSITORY_LOCAL_ROOTS).toBe("/private/user/arrusted");
+    expect(environment.APP_BUILDER_DEVELOPMENT_SNAPSHOT_ROOT).toBe("/private/dev/source");
+    expect(environment).not.toHaveProperty("APP_BUILDER_SANDBOX_IMAGE");
   });
 });

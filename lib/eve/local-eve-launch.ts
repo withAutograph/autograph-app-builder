@@ -105,15 +105,11 @@ function exactRoots(repositoryRoot: string, environment: Environment) {
     throw new Error("Development Eve application root was not supervisor-bound.");
   }
   const sourceRoot = ownerDirectory(
-    required(environment, "REPOSITORY_LOCAL_ROOTS"),
+    required(environment, "APP_BUILDER_DEVELOPMENT_SOURCE_ROOT"),
     "Development Arrusted source root",
   );
-  const activeRun = nodePath.dirname(sourceRoot);
-  if (!contained(runsRoot, activeRun) || nodePath.dirname(activeRun) !== runsRoot) {
-    throw new Error("Development Arrusted source was outside the active run.");
-  }
-  if (sourceRoot !== nodePath.join(activeRun, "source")) {
-    throw new Error("Development Arrusted source was outside the active run.");
+  if (required(environment, "REPOSITORY_LOCAL_ROOTS") !== sourceRoot) {
+    throw new Error("Development Arrusted source binding was inconsistent.");
   }
   const runtimeHome = ownerDirectory(
     required(environment, "APP_BUILDER_DEV_RUNTIME_HOME"),
@@ -140,7 +136,6 @@ function exactRoots(repositoryRoot: string, environment: Environment) {
     throw new Error("Development Eve cannot reuse the live checkout root.");
   }
   return {
-    activeRun,
     applicationRoot,
     destinationRoot,
     runtimeHome,

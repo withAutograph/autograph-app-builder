@@ -1,5 +1,12 @@
 import { EventEmitter } from "node:events";
-import { chmodSync, mkdirSync, mkdtempSync, realpathSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -21,24 +28,23 @@ function fixture() {
   const runsRoot = path.join(stateRoot, "runs");
   mkdirSync(repositoryRoot, { mode: 0o700 });
   mkdirSync(runsRoot, { mode: 0o700 });
-  const activeRun = realpathSync(mkdtempSync(path.join(runsRoot, "run-")));
   const supervisorRoot = realpathSync(mkdtempSync(path.join(runsRoot, "supervisor-")));
   const cycleRoot = realpathSync(mkdtempSync(path.join(supervisorRoot, "cycle-")));
   const applicationRoot = path.join(cycleRoot, "eve-application/source");
-  const sourceRoot = path.join(activeRun, "source");
+  const sourceRoot = path.join(stateRoot, "actual-arrusted");
   const runtimeHome = path.join(cycleRoot, "home");
   const workflowData = path.join(cycleRoot, "workflow-data");
   const destinationRoot = path.join(stateRoot, "destination");
   for (const directoryPath of [
     path.join(cycleRoot, "eve-application"),
     applicationRoot,
+    sourceRoot,
     runtimeHome,
     workflowData,
     destinationRoot,
   ]) {
     mkdirSync(directoryPath, { mode: 0o700, recursive: true });
   }
-  mkdirSync(sourceRoot, { mode: 0o500 });
   const environment: Record<string, string> = {
     APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "0",
     APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY: "d".repeat(64),
@@ -46,6 +52,7 @@ function fixture() {
     APP_BUILDER_DEVELOPMENT_SOURCE_SHA: "a".repeat(40),
     APP_BUILDER_DEVELOPMENT_SOURCE_TREE: "b".repeat(40),
     APP_BUILDER_DEV_EVE_ROOT: realpathSync(applicationRoot),
+    APP_BUILDER_DEVELOPMENT_SOURCE_ROOT: realpathSync(sourceRoot),
     APP_BUILDER_DEV_RUNS_ROOT: realpathSync(runsRoot),
     APP_BUILDER_DEV_RUNTIME_HOME: realpathSync(runtimeHome),
     APP_BUILDER_DEV_SUPERVISOR_ROOT: supervisorRoot,
@@ -126,6 +133,9 @@ describe("closed local Eve launch", () => {
     expect(invocation.environment.APP_BUILDER_SANDBOX_PROVIDER).toBe("vercel");
     expect(invocation.environment.APP_BUILDER_EXECUTION_BUNDLE).toBe("local-development");
     expect(invocation.environment.WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS).toBe("0");
+    expect(invocation.environment.REPOSITORY_LOCAL_ROOTS).toBe(
+      realpathSync(path.join(path.dirname(input.repositoryRoot), "actual-arrusted")),
+    );
     expect(invocation.environment.WORKFLOW_LOCAL_BASE_URL).toBe("http://127.0.0.1:2000");
     expect(invocation.environment.APP_BUILDER_SANDBOX_IMAGE).toBeUndefined();
     expect(invocation.environment.MSB_HOME).toBeUndefined();
@@ -133,6 +143,31 @@ describe("closed local Eve launch", () => {
     expect(receipt).not.toContain(sentinel);
     expect(receipt).not.toContain("team_example");
     expect(receipt).not.toContain("prj_example");
+  });
+
+  it("keeps Eve bound to the canonical Arrusted checkout as its bytes change", () => {
+    const input = fixture();
+    const liveSourceFile = path.join(
+      input.environment.APP_BUILDER_DEVELOPMENT_SOURCE_ROOT,
+      "brief.md",
+    );
+    writeFileSync(liveSourceFile, "first planning input\n");
+    const invocation = createLocalEveInvocation({
+      environment: input.environment,
+      eveCli: "/repository/node_modules/.pnpm/eve/bin/eve.js",
+      oidcToken: "local-oidc-token",
+      pinnedNode: "/mise/node/24.18.0/bin/node",
+      repositoryRoot: input.repositoryRoot,
+      vercelProject: { orgId: "team_example", projectId: "prj_example" },
+    });
+
+    writeFileSync(liveSourceFile, "edited planning input\n");
+    expect(invocation.environment.REPOSITORY_LOCAL_ROOTS).toBe(
+      input.environment.APP_BUILDER_DEVELOPMENT_SOURCE_ROOT,
+    );
+    expect(
+      readFileSync(path.join(invocation.environment.REPOSITORY_LOCAL_ROOTS, "brief.md"), "utf-8"),
+    ).toBe("edited planning input\n");
   });
 
   it("rejects a workflow queue endpoint that differs from the Eve adapter", () => {
@@ -149,6 +184,22 @@ describe("closed local Eve launch", () => {
         vercelProject: { orgId: "team_example", projectId: "prj_example" },
       }),
     ).toThrow("Local Eve workflow queue binding was invalid.");
+  });
+
+  it("rejects a live source binding that differs from the repository source root", () => {
+    const input = fixture();
+    input.environment.REPOSITORY_LOCAL_ROOTS = input.environment.APP_BUILDER_DEV_EVE_ROOT;
+
+    expect(() =>
+      createLocalEveInvocation({
+        environment: input.environment,
+        eveCli: "/repository/node_modules/.pnpm/eve/bin/eve.js",
+        oidcToken: "local-oidc-token",
+        pinnedNode: "/mise/node/24.18.0/bin/node",
+        repositoryRoot: input.repositoryRoot,
+        vercelProject: { orgId: "team_example", projectId: "prj_example" },
+      }),
+    ).toThrow("Development Arrusted source binding was inconsistent.");
   });
 
   it.each([
