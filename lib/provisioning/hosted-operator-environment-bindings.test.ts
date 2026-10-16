@@ -8,6 +8,10 @@ import {
 import type { ManagedOperatorEnvironmentRow } from "./hosted-operator-contract";
 import type { HostedOperatorManagedEnvironmentContext } from "./hosted-operator-service";
 import { createHostedOperatorEnvironmentBindings } from "./hosted-operator-environment-bindings";
+import type {
+  HostedOperatorConsentDiagnostic,
+  HostedOperatorConsentDiagnosticSink,
+} from "./hosted-operator-consent-diagnostic";
 
 const authority = {
   audience: "https://builder.example/mcp",
@@ -148,6 +152,8 @@ const fixture = (configurationId?: string | null) => {
   }[] = [];
   let journal: ManagedOperatorEnvironmentRow[] = [];
   let unknownPost = false;
+  let postFailureResponse: Response | undefined;
+  const diagnostics: HostedOperatorConsentDiagnostic[] = [];
   let failedRead = false;
   let failedDeleteId: string | undefined;
   const assertCurrent = vi.fn(async () => {});
@@ -175,6 +181,7 @@ const fixture = (configurationId?: string | null) => {
     accountId: target.scopeId,
     link: { productionBranch: "main" },
   };
+  // oxlint-disable-next-line eslint/complexity -- One fixture covers the provider's fixed read/write endpoint behaviors.
   const fetcher = vi.fn(async (url: URL | string | Request, init?: RequestInit) => {
     const parsed = new URL(url instanceof Request ? url.url : url.toString());
     const method = init?.method ?? "GET";
@@ -206,6 +213,9 @@ const fixture = (configurationId?: string | null) => {
       return Response.json({ envs: rows.map((item) => ({ ...item, value: null })) });
     }
     if (method === "POST") {
+      if (postFailureResponse !== undefined) {
+        return postFailureResponse;
+      }
       const row: (typeof rows)[number] = {
         ...body,
         id: `env-${rows.length}`,
@@ -247,14 +257,19 @@ const fixture = (configurationId?: string | null) => {
     token: "private-oauth",
   }));
   const assertAuthorized = vi.fn(async () => {});
+  const diagnosticSink: HostedOperatorConsentDiagnosticSink = (diagnostic) => {
+    diagnostics.push(diagnostic);
+  };
   const writer = createHostedOperatorEnvironmentBindings({
     assertAuthorized,
+    diagnosticSink,
     fetch: fetcher,
     readCredential,
   });
   return {
     assertAuthorized,
     assertCurrent,
+    diagnostics,
     checkpointManagedEnvironment,
     input,
     readCredential,
@@ -266,6 +281,22 @@ const fixture = (configurationId?: string | null) => {
     },
     setFailedRead: () => {
       failedRead = true;
+    },
+    setGitFailurePost: () => {
+      postFailureResponse = Response.json(
+        { error: { code: "git_connection_missing", message: "private repository details" } },
+        { status: 400 },
+      );
+    },
+    setSlowProviderErrorPost: () => {
+      postFailureResponse = new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new Uint8Array([0]));
+          },
+        }),
+        { status: 400 },
+      );
     },
     setUnknownPost: (next: boolean) => {
       unknownPost = next;
@@ -332,6 +363,31 @@ it("keeps provider failures unknown and does not write", async () => {
   expect(await f.writer.reconcile(f.input, values)).toEqual({ status: "unknown" });
   expect(f.requests.every((request) => request.method === "GET")).toBe(true);
 });
+it("reports a bounded Git-reference rejection without exposing provider details", async () => {
+  const f = fixture();
+  f.setGitFailurePost();
+  await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
+  await Promise.resolve();
+  const failure = f.diagnostics[0]?.hostedEnvironmentBindingFailure;
+  expect(failure).toEqual({
+    stage: "create_post",
+    reason: "git_reference_rejection",
+    httpStatus: 400,
+  });
+  expect(JSON.stringify(f.diagnostics)).not.toContain("private repository details");
+  expect(JSON.stringify(f.diagnostics)).not.toContain("private-oauth");
+  expect(f.rows).toHaveLength(1);
+});
+it("bounds a stalled provider error body and still reports the HTTP rejection", async () => {
+  const f = fixture();
+  f.setSlowProviderErrorPost();
+  await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
+  expect(f.diagnostics[0]?.hostedEnvironmentBindingFailure).toEqual({
+    stage: "create_post",
+    reason: "provider_rejected",
+    httpStatus: 400,
+  });
+}, 2000);
 it.each(["integration", "foreign", "duplicate"])(
   "denies %s rows without mutation",
   async (kind) => {
