@@ -132,13 +132,45 @@ and the Gateway is delivered again. The public working surface is the approved
 Gateway browser origin; immutable native candidates remain the authority for
 provider readback.
 
-Normal Git delivery is explicitly at least once. A completed no-match listing is
+Operator-managed delivery calls Vercel's REST deployment API with the frozen Git
+repository, ref and commit. It does not rely on a branch-push deployment, which
+could start before the runtime bindings are ready. Git-source delivery through
+this API is explicitly at least once. A completed no-match listing is
 not absence; an approved retry can create additional owned matching Preview
 deployments and provider usage charges. Known queued/building candidates are
 observed without another POST. The existing journal retains every observed
 candidate ID, pins one independently READY candidate matching the approved
 project/environment/repository/commit/configuration, and does not rewrite the
 old frozen inventory.
+
+## Deployment pathways and current choice
+
+Both pathways build source from Git. The difference is what starts the build:
+
+| Pathway              | Trigger and fit                                                                                                                              | Builder integration                                                                                                                                                                                   |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Git integration      | Vercel starts a deployment on a branch push or merge. Convenient for an established project whose runtime configuration is already in place. | A Git-triggered candidate would need to be associated with the approved operation and observed through the delivery journal. The current operator does not adopt arbitrary Git-triggered deployments. |
+| REST with Git source | The operator sends `POST /v13/deployments` with the approved repository, ref and commit after preparing the relevant bindings.               | Implemented by `hosted-operator-deployment-delivery.ts`; records operation metadata, observes existing candidates and publishes the selected app into the Gateway.                                    |
+
+Use REST for the current provisioning flow: Auth bootstrap, app installation and
+Gateway projection have an execution order, and the existing adapter already
+owns that sequence and recovery. An app push does not select the Gateway's
+separately configured source. This choice does not wait for CI or introduce
+app-content requirements. App code, roles and schemas remain custom inputs.
+
+Git integration is an alternative for projects with established resources. Using
+it in this operator requires connecting its deployment observations to the same
+approved operation and recovery flow; enabling automatic builds alone does not
+provide that integration. Neither pathway changes authentication, tenant
+isolation or effect approval. Do not enable both triggers for the same delivery
+as an automatic retry: that can create duplicate builds and provider charges.
+
+Vercel can allow these mechanisms separately through deployment-source policies.
+A policy-blocked Git-triggered build is not a compiler result and does not prove
+that an allowed REST deployment failed. Inspect the actual deployment source
+and error before selecting a recovery action. See Vercel's
+[Git integration](https://vercel.com/docs/git) and
+[deployment-source policies](https://vercel.com/docs/deployments/deployment-policy#deployment-sources).
 
 Required native transport grants are directional and exact: Builder Production
 or operator Preview to the configured Gateway Preview for identity/JWKS

@@ -246,18 +246,14 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    An unavailable or clean source review never proves runtime
    success. Keep incomplete previews inspectable and report remaining checks;
    do not replace a requested backend outcome with a simulated transition.
-   Before initial draft publication, run `prepare_github_draft_review` and read
-   both destination sides with `change_set_status`, `view: "next-page"`, and
-   the selected `contentSide`. Each call reads actual bounded content from the
-   current session's saved cursor without a caller `contentCursor`. Continue
-   until no cursor remains or the side returns `alreadyComplete`. Read
-   `view: "read-progress"` and require both sides complete before
-   `accept_change_set`; its minimal `nextCall` resumes incomplete sides.
-   Metadata, progress reads, and failed calls grant no completion. For an
-   unreadable side or an intentional restart, use legacy `view: "changes"`
-   with `includeContent: true` and omit its cursor, then follow returned cursors
-   verbatim through completion. Recover after errors and explain the destination
-   changes before sealing a new proposal.
+   Before initial draft publication, run `prepare_github_draft_review` to bind the
+   actual destination snapshot. Inspect its before/after content as needed with
+   `change_set_status`, `view: "next-page"`, and the selected `contentSide`.
+   Each call uses the current session's saved cursor; `view: "read-progress"`
+   reports optional inspection progress and continuation calls. Complete-side
+   coverage is not an acceptance or publication prerequisite. Then call
+   `accept_change_set`, seal the proposal, and request ordinary publication approval.
+   Preserve the actual destination, source-content and approval protections.
    When revising an existing draft pull request, first use
    `prepare_github_draft_pr_reconciliation` to inspect its live base and head
    commits and prepare the private merge candidate. This step determines actual

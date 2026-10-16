@@ -1,3 +1,4 @@
+import type { HostedRuntimeApprovalReadOptions } from "./hosted-runtime-prior-approval";
 import type {
   reportRuntimePreparationFailure,
   reportRuntimePreparationStarted,
@@ -208,6 +209,7 @@ export const prepareHostedRuntimeWithOperator = async (
 export async function prepareHostedRuntimeStep(
   input: HostedRuntimeApprovalEnvelope,
   ctx: WorkflowStepToolContext,
+  options?: HostedRuntimeApprovalReadOptions,
 ) {
   "use step";
   let isHostedOperatorError = noHostedOperatorError;
@@ -251,6 +253,7 @@ export async function prepareHostedRuntimeStep(
       approvalInput,
       ctx,
       operator,
+      options,
     );
     stage = "operator_execute";
     return await prepareHostedRuntimeWithOperator(

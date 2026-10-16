@@ -15,7 +15,7 @@ import { checkedNativeToolResult } from "@/lib/eve/payload-envelope";
 
 export default defineTool({
   description:
-    "Prepare a fresh initial draft-PR review against the selected GitHub repository's current default branch. Read only the intended app change paths, preserve the validated private app and original source provenance, and invalidate the old review and draft proposal. Then use change_set_status with contentSide before and after to review the complete destination diff, accept_change_set, seal the new proposal, and request separate publication approval. This never writes GitHub or updates an existing PR.",
+    "Prepare a fresh initial draft-PR review against the selected GitHub repository's current default branch. Read only the intended app change paths, preserve the validated private app and original source provenance, and invalidate the old review and draft proposal. Use change_set_status with contentSide before or after to inspect destination content as needed. Then accept_change_set, seal the new proposal, and request separate publication approval. This never writes GitHub or updates an existing PR.",
   async execute(_input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (
@@ -74,7 +74,7 @@ export default defineTool({
         },
         destinationSha: binding.repository.headSha,
         destinationTree: binding.repository.headTree,
-        next: 'Read both destination diff sides with change_set_status view="next-page" and contentSide="before" or "after", without contentCursor. Repeat each minimal call until no cursor remains or alreadyComplete is returned. Use view="read-progress" to confirm both sides are complete for the current changeSetDigest, then accept_change_set, seal_github_draft_pr_proposal, and request publication approval.',
+        next: 'Inspect destination content as needed with change_set_status view="next-page" and contentSide="before" or "after"; view="read-progress" reports optional inspection progress. Then accept_change_set, seal_github_draft_pr_proposal, and request publication approval.',
         originalSourceSha: state.githubSource.resolvedSha,
         repository: `${binding.repository.owner}/${binding.repository.name}`,
         status: "destination-review-required",

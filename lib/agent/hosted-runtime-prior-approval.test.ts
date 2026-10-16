@@ -3,6 +3,7 @@ import type { ApprovalContext } from "eve/tools/approval";
 import type { MessageStreamEvent } from "eve/client";
 import { describe, expect, it, vi } from "vitest";
 
+import { createHostedRuntimeApprovedReferenceReader } from "./hosted-runtime-approved-reference";
 import { evaluateHostedRuntimePreparationApproval } from "../../agent/tools/prepare-app-hosted-runtime";
 import { nativeObservationStateSchema } from "../eve/native-observation-state";
 import { createPrivateHostedApprovalRecorder } from "../eve/private-hosted-approval";
@@ -285,8 +286,8 @@ const fixture = async () => {
     unavailable: () => {
       statusAvailable = false;
     },
-    changedCurrentPlan: () => {
-      currentDigest = "c".repeat(64);
+    changedCurrentPlan: (digest = "c".repeat(64)) => {
+      currentDigest = digest;
     },
   };
 };
@@ -782,5 +783,270 @@ describe("Builder-local approval capture before execution", () => {
     const read = createHostedRuntimeExecutionApprovalReader({ readPrior: f.reader, capture });
     await expect(read(f.input, context, f.operator)).rejects.toThrow();
     expect(f.requests).toEqual([]);
+  });
+});
+
+const referenceReader = (f: Awaited<ReturnType<typeof fixture>>) =>
+  createHostedRuntimeApprovedReferenceReader({
+    store: f.store,
+    readPrior: createHostedRuntimePriorApprovalReader({
+      store: f.store,
+      now: () => Date.parse("2026-10-14T12:00:00Z"),
+      recoverOriginalPlan: false,
+    }),
+  });
+
+describe("owned approved operation reference", () => {
+  it("hydrates only the retained full approved input and retains the original execution call", async () => {
+    const f = await fixture();
+    await f.approve();
+    const reader = referenceReader(f);
+    const loaded = await reader.load(
+      { appId: f.input.appId, operationRef: f.input.operationRef },
+      f.context,
+      f.operator,
+    );
+    expect(loaded.input).toEqual(f.input);
+    expect(loaded.snapshot).toEqual({
+      sessionId: f.saved.sessionId,
+      adapterSessionId: f.saved.adapterSessionId,
+      adapterGeneration: f.saved.adapterGeneration,
+      cancellationRevision: 0,
+    });
+    await reader.assertCurrent(loaded.snapshot, f.context, f.operator);
+    const prior = await f.read(loaded.input, f.context);
+    const result = await prepareHostedRuntimeWithOperator(
+      loaded.input,
+      { ...f.context, callId: prior?.callId ?? f.context.callId },
+      f.operator,
+      () => {},
+      {
+        createResourceMismatch: () => new HostedOperatorError("resource_mismatch"),
+        digest: operatorPlanDigest,
+        sameSelection: sameOperatorSelection,
+        isOperatorError: (error): error is HostedOperatorError =>
+          error instanceof HostedOperatorError,
+      },
+    );
+    expect(result.result.status).toBe("pending");
+    expect(f.requests.find((request) => request.action === "execute")).toMatchObject({
+      callId: "original-call",
+      operationRef: f.input.operationRef,
+      planDigest: f.input.planDigest,
+    });
+    expect(f.requests.some((request) => request.action === "plan")).toBe(false);
+  });
+
+  it.each(["missing", "cancelled", "other-operation"] as const)(
+    "denies %s retained approval without planning or executing",
+    async (mode) => {
+      const f = await fixture();
+      if (mode !== "missing") {
+        await f.approve({ outcome: mode === "cancelled" ? "cancelled" : "approved" });
+      }
+      await expect(
+        referenceReader(f).load(
+          {
+            appId: f.input.appId,
+            operationRef: mode === "other-operation" ? randomUUID() : f.input.operationRef,
+          },
+          f.context,
+          f.operator,
+        ),
+      ).rejects.toMatchObject({ code: "authorization_required" });
+      expect(f.requests.every((request) => request.action === "status")).toBe(true);
+    },
+  );
+
+  it("hydrates the current same-operation successor and ignores cancellation of its obsolete plan", async () => {
+    const f = await fixture();
+    await f.approve();
+    await f.approve({ outcome: "cancelled", requestId: "obsolete-cancel", sequence: 8 });
+    f.input.plan.contextId = "successor-context";
+    f.input.planDigest = operatorPlanDigest(f.input.plan);
+    f.changedCurrentPlan(f.input.planDigest);
+    await f.approve({ callId: "successor-call", requestId: "successor-approval", sequence: 12 });
+    const loaded = await referenceReader(f).load(f.input, f.context, f.operator);
+    expect(loaded.input).toEqual(f.input);
+    expect(await f.read(loaded.input, f.context)).toEqual({
+      approvalId: "successor-approval",
+      callId: "successor-call",
+    });
+    expect(f.requests.some((request) => request.action === "status")).toBe(true);
+    expect(f.requests.every((request) => request.action === "status")).toBe(true);
+  });
+
+  it("honors a later cancellation of the exact currently approved subject", async () => {
+    const f = await fixture();
+    await f.approve();
+    await f.approve({ outcome: "cancelled", requestId: "current-cancel", sequence: 12 });
+    await expect(referenceReader(f).load(f.input, f.context, f.operator)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(f.requests.some((request) => request.action === "status")).toBe(true);
+    expect(f.requests.every((request) => request.action === "status")).toBe(true);
+  });
+
+  it("rejects replacement between current-subject lookup and strict approval read", async () => {
+    const f = await fixture();
+    await f.approve();
+    const readPrior = createHostedRuntimePriorApprovalReader({
+      store: f.store,
+      now: () => Date.parse("2026-10-14T12:00:00Z"),
+      recoverOriginalPlan: false,
+    });
+    const reader = createHostedRuntimeApprovedReferenceReader({
+      store: f.store,
+      readPrior: async (input, context, operator) => {
+        f.changedCurrentPlan();
+        return await readPrior(input, context, operator);
+      },
+    });
+    await expect(reader.load(f.input, f.context, f.operator)).rejects.toMatchObject({
+      code: "resource_mismatch",
+    });
+    expect(f.requests.some((request) => request.action === "status")).toBe(true);
+    expect(f.requests.every((request) => request.action === "status")).toBe(true);
+  });
+
+  it("does not restore a replaced operation through the full-input planning fallback", async () => {
+    const f = await fixture();
+    await f.approve();
+    f.recover();
+    await expect(referenceReader(f).load(f.input, f.context, f.operator)).rejects.toMatchObject({
+      code: "resource_mismatch",
+    });
+    expect(f.requests.some((request) => request.action === "status")).toBe(true);
+    expect(f.requests.every((request) => request.action === "status")).toBe(true);
+  });
+
+  it("rejects a later Stop even when status and timestamp remain unchanged", async () => {
+    const f = await fixture();
+    await f.approve();
+    const reader = referenceReader(f);
+    const loaded = await reader.load(f.input, f.context, f.operator);
+    await f.store.recordCancellationIntent({
+      principal,
+      sessionId: f.saved.sessionId,
+      nowEpochMs: 10,
+    });
+    await f.store.recordCancellationIntent({
+      principal,
+      sessionId: f.saved.sessionId,
+      nowEpochMs: 10,
+    });
+    const current = await f.store.getSession(principal, f.saved.sessionId);
+    expect(current?.status).toBe(f.saved.status);
+    await expect(
+      reader.assertCurrent(loaded.snapshot, f.context, f.operator),
+    ).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(f.requests.some((request) => request.action === "status")).toBe(true);
+    expect(f.requests.every((request) => request.action === "status")).toBe(true);
+  });
+
+  it("rejects a Stop racing the canonical approval read without refreshing its marker", async () => {
+    const f = await fixture();
+    await f.approve();
+    const reader = createHostedRuntimeApprovedReferenceReader({
+      store: f.store,
+      readPrior: async (input, context, operator) => {
+        const prior = await f.reader(input, context, operator);
+        await f.store.recordCancellationIntent({
+          principal,
+          sessionId: f.saved.sessionId,
+          nowEpochMs: 10,
+        });
+        return prior;
+      },
+    });
+    await expect(reader.load(f.input, f.context, f.operator)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(f.requests.some((request) => request.action === "status")).toBe(true);
+    expect(f.requests.every((request) => request.action === "status")).toBe(true);
+  });
+
+  it.each(["cancelled", "completed"] as const)(
+    "rejects an already %s canonical session",
+    async (status) => {
+      const f = await fixture();
+      await f.approve();
+      const current = await f.store.getSession(principal, f.saved.sessionId);
+      if (current === null) {
+        throw new Error("Missing owned session");
+      }
+      vi.spyOn(f.store, "getSession").mockResolvedValue({ ...current, status });
+      await expect(referenceReader(f).load(f.input, f.context, f.operator)).rejects.toMatchObject({
+        code: "authorization_required",
+      });
+      expect(f.requests.every((request) => request.action === "status")).toBe(true);
+    },
+  );
+
+  it("rejects adapter replacement after capturing the original generation", async () => {
+    const f = await fixture();
+    await f.approve();
+    const reader = referenceReader(f);
+    const loaded = await reader.load(f.input, f.context, f.operator);
+    const current = await f.store.getSession(principal, f.saved.sessionId);
+    if (current?.version !== 2) {
+      throw new Error("Missing owned session");
+    }
+    vi.spyOn(f.store, "getSession").mockResolvedValue({
+      ...current,
+      adapterGeneration: current.adapterGeneration + 1,
+    });
+    await expect(
+      reader.assertCurrent(loaded.snapshot, f.context, f.operator),
+    ).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(f.requests.some((request) => request.action === "status")).toBe(true);
+    expect(f.requests.every((request) => request.action === "status")).toBe(true);
+  });
+
+  it("preserves abort before the retained operation lookup", async () => {
+    const f = await fixture();
+    await f.approve();
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      referenceReader(f).load(
+        f.input,
+        {
+          ...f.context,
+          abortSignal: controller.signal,
+        },
+        f.operator,
+      ),
+    ).rejects.toBeDefined();
+    expect(f.requests.every((request) => request.action === "status")).toBe(true);
+  });
+
+  it("carries disabled restoration through both execution approval reads", async () => {
+    const f = await fixture();
+    const readPrior = vi
+      .fn<Parameters<typeof createHostedRuntimeExecutionApprovalReader>[0]["readPrior"]>()
+      .mockResolvedValue(null);
+    const read = createHostedRuntimeExecutionApprovalReader({
+      readPrior,
+      capture: async () => await Promise.resolve(),
+    });
+    const options = { recoverOriginalPlan: false } as const;
+    await read(f.input, f.context, f.operator, options);
+    expect(readPrior).toHaveBeenCalled();
+    expect(
+      readPrior.mock.calls.every(
+        ([input, context, operator, policy]) =>
+          input.appId === f.input.appId &&
+          input.operationRef === f.input.operationRef &&
+          input.planDigest === f.input.planDigest &&
+          context === f.context &&
+          operator === f.operator &&
+          policy?.recoverOriginalPlan === false,
+      ),
+    ).toBe(true);
   });
 });

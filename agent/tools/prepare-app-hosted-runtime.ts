@@ -2,7 +2,7 @@ import type {
   reportRuntimePreparationFailure,
   reportRuntimePreparationStarted,
 } from "../../lib/provisioning/hosted-operator-consent-diagnostic";
-import type { ToolInputRequest, WorkflowToolContext } from "eve/tools";
+import type { ToolInputRequest, WorkflowStepToolContext, WorkflowToolContext } from "eve/tools";
 import { defineWorkflowTool } from "eve/tools";
 import type { ApprovalContext, ApprovalStatus } from "eve/tools/approval";
 import { z } from "zod";
@@ -16,6 +16,11 @@ import {
   continueHostedRuntimeOwnerPreparation,
   registerHostedRuntimeIdentityWaitStep,
 } from "../../lib/agent/hosted-runtime-identity-wait";
+import type {
+  HostedRuntimeOperationReference,
+  HostedRuntimePreparationRequest,
+  HostedRuntimeResumeSnapshot,
+} from "../../lib/agent/hosted-runtime-approved-reference";
 import type { HostedRuntimeIdentityWake } from "../../lib/agent/hosted-runtime-identity-wait";
 
 export const hostedRuntimeApprovalInputSchema = z.strictObject({
@@ -28,6 +33,14 @@ export const hostedRuntimeApprovalInputSchema = z.strictObject({
   planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   projectId: z.string().min(1),
 });
+
+export const hostedRuntimePreparationRequestSchema = z.union([
+  hostedRuntimeApprovalInputSchema,
+  z.strictObject({
+    appId: hostedRuntimeApprovalInputSchema.shape.appId,
+    operationRef: hostedRuntimeApprovalInputSchema.shape.operationRef,
+  }),
+]);
 
 export const participantIdentityInputQuestion = (identityInput: {
   browserUrl: string;
@@ -110,7 +123,7 @@ export const evaluateHostedRuntimePreparationApproval = async (
 
 // oxlint-disable-next-line eslint/func-style -- The Workflow SDK requires a top-level async function for the step boundary.
 export async function hostedRuntimePreparationApproval(
-  ctx: ApprovalContext<HostedRuntimeApprovalEnvelope>,
+  ctx: ApprovalContext<HostedRuntimePreparationRequest>,
 ): Promise<ApprovalStatus> {
   "use step";
   let diagnostic:
@@ -122,9 +135,15 @@ export async function hostedRuntimePreparationApproval(
   try {
     diagnostic = await import("../../lib/provisioning/hosted-operator-consent-diagnostic");
     diagnostic.reportRuntimePreparationStarted(ctx.session.id, "approval_module_loading");
+    const { toolInput } = ctx;
+    if (toolInput !== undefined && !("plan" in toolInput)) {
+      const reference = await import("../../lib/agent/hosted-runtime-approved-reference");
+      await reference.loadHostedRuntimeApprovedReference(toolInput, ctx);
+      return "not-applicable";
+    }
     const prior = await import("../../lib/agent/hosted-runtime-prior-approval");
     return await evaluateHostedRuntimePreparationApproval(
-      ctx,
+      { ...ctx, toolInput },
       prior.readHostedRuntimePriorApproval,
       {
         onStarted: () =>
@@ -142,20 +161,71 @@ export async function hostedRuntimePreparationApproval(
   }
 }
 
+// oxlint-disable-next-line eslint/func-style -- Workflow steps must be top-level async declarations.
+async function loadHostedRuntimeReferenceStep(
+  input: HostedRuntimeOperationReference,
+  ctx: WorkflowStepToolContext,
+) {
+  "use step";
+  const reference = await import("../../lib/agent/hosted-runtime-approved-reference");
+  return await reference.loadHostedRuntimeApprovedReference(input, ctx);
+}
+
+// oxlint-disable-next-line eslint/func-style -- Workflow steps must be top-level async declarations.
+async function assertHostedRuntimeReferenceStep(
+  snapshot: HostedRuntimeResumeSnapshot,
+  ctx: WorkflowStepToolContext,
+) {
+  "use step";
+  const reference = await import("../../lib/agent/hosted-runtime-approved-reference");
+  await reference.assertHostedRuntimeApprovedReference(snapshot, ctx);
+}
+
 export default defineWorkflowTool({
   approval: hostedRuntimePreparationApproval,
   description:
-    "After approval of the concrete protected operator plan, prepare exactly its named Preview resources/access. Pass the plan and operation reference returned by plan-app-hosted-runtime. Technical retries of the identical operation reuse its server-owned durable human approval. Changed plans require fresh approval. A gateway_delivery_failed result means an actual native Gateway build failed: follow its nextAction to request a new plan in this session, then obtain ordinary approval for the returned changed plan. Repeating an old plan does not adopt repaired Gateway source. Unknown alias or hostname assignment outcomes still require reconciliation. The protected service independently verifies the original approval and current owner authority, resumes the same journal and reports actual effects. No installer credential or repository script is sent to an app Sandbox. This does not deploy or activate Production.",
-  async *execute(input: HostedRuntimeApprovalEnvelope, ctx) {
+    "After approval of the concrete protected operator plan, prepare exactly its named Preview resources/access. Pass the plan and operation reference returned by plan-app-hosted-runtime. To resume a previously human-approved operation after context loss, pass only appId and operationRef; the server loads its exact retained full input and approval. Technical retries of the identical operation reuse its server-owned durable human approval. Changed plans require fresh approval. A gateway_delivery_failed result means an actual native Gateway build failed: follow its nextAction to request a new plan in this session, then obtain ordinary approval for the returned changed plan. Repeating an old plan does not adopt repaired Gateway source. Unknown alias or hostname assignment outcomes still require reconciliation. The protected service independently verifies the original approval and current owner authority, resumes the same journal and reports actual effects. No installer credential or repository script is sent to an app Sandbox. This does not deploy or activate Production.",
+  async *execute(input: HostedRuntimePreparationRequest, ctx) {
     "use workflow";
-    return yield* continueHostedRuntimeOwnerPreparation(input, ctx, prepareHostedRuntimeStep, {
+    let approved: HostedRuntimeApprovalEnvelope;
+    let prepare: typeof prepareHostedRuntimeStep = prepareHostedRuntimeStep;
+    let register = registerHostedRuntimeIdentityWaitStep;
+    let acknowledge = acknowledgeHostedRuntimeIdentityWaitStep;
+    if ("plan" in input) {
+      approved = input;
+    } else {
+      const loaded = await loadHostedRuntimeReferenceStep(input, ctx);
+      approved = loaded.input;
+      const { snapshot } = loaded;
+      prepare = async (original, context) => {
+        await assertHostedRuntimeReferenceStep(snapshot, context);
+        const result = await prepareHostedRuntimeStep(original, context, {
+          recoverOriginalPlan: false,
+        });
+        await assertHostedRuntimeReferenceStep(snapshot, context);
+        return result;
+      };
+      register = async (original, context, registration) => {
+        await assertHostedRuntimeReferenceStep(snapshot, context);
+        const result = await registerHostedRuntimeIdentityWaitStep(original, context, registration);
+        await assertHostedRuntimeReferenceStep(snapshot, context);
+        return result;
+      };
+      acknowledge = async (original, context, event) => {
+        await assertHostedRuntimeReferenceStep(snapshot, context);
+        const result = await acknowledgeHostedRuntimeIdentityWaitStep(original, context, event);
+        await assertHostedRuntimeReferenceStep(snapshot, context);
+        return result;
+      };
+    }
+    return yield* continueHostedRuntimeOwnerPreparation(approved, ctx, prepare, {
       createHook: () => createHook<HostedRuntimeIdentityWake>(),
-      register: registerHostedRuntimeIdentityWaitStep,
-      acknowledge: acknowledgeHostedRuntimeIdentityWaitStep,
+      register,
+      acknowledge,
       sleepUntil: async (expiresAt) => {
         await sleep(expiresAt);
       },
     });
   },
-  inputSchema: hostedRuntimeApprovalInputSchema,
+  inputSchema: hostedRuntimePreparationRequestSchema,
 });

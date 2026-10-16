@@ -217,21 +217,6 @@ export const invalidateGitHubDestinationReview = <T extends InitialDestinationRe
   return { ...validated, githubDestinationReview: binding, phase: "validated" as const };
 };
 
-export const assertCompleteGitHubDestinationReview = (
-  progress: GitHubDestinationReviewReadProgress | undefined,
-  changeSetDigest: string,
-): void => {
-  if (
-    progress?.changeSetDigest !== changeSetDigest ||
-    !progress.beforeComplete ||
-    !progress.afterComplete
-  ) {
-    throw new Error(
-      "Read both complete sides of the current destination diff before accepting its review.",
-    );
-  }
-};
-
 interface WorkspacePhase {
   /** Read-only destination preimages for a separately accepted initial draft review. */
   githubDestinationReview?: GitHubDestinationReviewBinding;
@@ -461,12 +446,22 @@ export const assertUpstreamMutationAllowed = (
   }
 };
 
+/** Read progress records inspection only; it grants no workflow or publication authority. */
+const workflowComparisonState = (state: AppBuilderWorkflowState) => {
+  const comparison = { ...state };
+  Reflect.deleteProperty(comparison, "githubDestinationReviewRead");
+  return comparison;
+};
+
 export const assertExactWorkflowState = (
   latest: AppBuilderWorkflowState,
   expected: AppBuilderWorkflowState,
   operation: string,
 ): void => {
-  if (sha256(JSON.stringify(latest)) !== sha256(JSON.stringify(expected))) {
+  if (
+    sha256(JSON.stringify(workflowComparisonState(latest))) !==
+    sha256(JSON.stringify(workflowComparisonState(expected)))
+  ) {
     throw new Error(`The workflow changed concurrently before ${operation}.`);
   }
 };

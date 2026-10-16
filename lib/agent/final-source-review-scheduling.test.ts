@@ -11,7 +11,12 @@ import { z } from "zod";
 import type { AppDescription } from "../repository/app-description";
 import { createAppValidationTool } from "../../agent/tools/validate_app_creation";
 import { createChangeSetAcceptanceTool } from "../../agent/tools/accept_change_set";
-import { appBuilderWorkflowState, APP_BUILDER_WORKFLOW_VERSION, sha256 } from "./workflow-state";
+import {
+  appBuilderWorkflowState,
+  APP_BUILDER_WORKFLOW_VERSION,
+  sha256,
+  assertExactWorkflowState,
+} from "./workflow-state";
 import type { AppBuilderWorkflowState } from "./workflow-state";
 import {
   currentProductSourceAssessment,
@@ -27,6 +32,11 @@ import {
 import { deriveNormalizedChangeSet } from "../repository/reviewed-change-set";
 import { createTargetValidationAttempt, validationBinding } from "../repository/target-validation";
 import type { TargetApplyReceipt } from "../repository/target-apply";
+import { createGitHubDestinationReviewBinding } from "../repository/github-destination-review";
+import {
+  createGitHubInstallationIdentity,
+  createRepositoryObservation,
+} from "../repository/github-publication";
 
 const staticDescription: AppDescription = {
   app: { id: "example", routes: [], workspacePath: "apps/example" },
@@ -216,7 +226,7 @@ it("repeated intermediate validation executes technical checks and returns defer
   });
 });
 
-it("final acceptance runs an independent local model assessment and reuses only matching completed source", async () => {
+it("final acceptance permits absent or incomplete destination inspection coverage and reuses only matching completed source", async () => {
   await contextStorage.run(new ContextContainer(), async () => {
     initial();
     const attempt = createTargetValidationAttempt(apply, "validation");
@@ -319,6 +329,44 @@ it("final acceptance runs an independent local model assessment and reuses only 
       phase: "validated",
       appBackendKind: "static",
     });
+    const installation = createGitHubInstallationIdentity({
+      accountId: "20",
+      accountLogin: "withAutograph",
+      accountType: "Organization",
+      installationId: "10",
+      operation: "resolve-existing-source",
+      repositorySelection: "selected",
+      selectedRepositoryIds: ["100"],
+    });
+    const repository = createRepositoryObservation({
+      defaultBranch: "main",
+      headSha: "1".repeat(40),
+      headTree: "2".repeat(40),
+      installationIdentityDigest: installation.digest,
+      name: "example",
+      owner: "withAutograph",
+      releaseGate: { configured: false, name: "REPOSITORY_RELEASE_ENABLED" },
+      repositoryId: "100",
+      visibility: "private",
+    });
+    const githubDestinationReview = createGitHubDestinationReviewBinding({
+      applyDigest: apply.digest,
+      candidatePaths: [],
+      installation,
+      postTreeDigest: apply.postTreeDigest,
+      preTree: [],
+      repository,
+      validationDigest: validation.digest,
+    });
+    appBuilderWorkflowState.update((current) => {
+      if (current.phase !== "validated") {
+        throw new Error("Expected technically validated fixture");
+      }
+      return { ...current, githubDestinationReview };
+    });
+    expect(() => {
+      assertExactWorkflowState(appBuilderWorkflowState.get(), before, "acceptance");
+    }).toThrow("changed concurrently");
     const first = await tool.execute({}, context("final-first"));
     expect(appBuilderWorkflowState.get()).toMatchObject({
       phase: "reviewed",
@@ -328,6 +376,19 @@ it("final acceptance runs an independent local model assessment and reuses only 
       sourceAssessment: { reviewCompleted: true, status: "unassessed" },
     });
     expect(model.doGenerateCalls).toHaveLength(1);
+    appBuilderWorkflowState.update((current) => {
+      if (current.phase !== "reviewed") {
+        throw new Error("Expected reviewed fixture");
+      }
+      return {
+        ...current,
+        githubDestinationReviewRead: {
+          changeSetDigest: current.reviewReceipt.changeSetDigest,
+          beforeComplete: true,
+          afterComplete: false,
+        },
+      };
+    });
     const same = await tool.execute({}, context("final-same"));
     expect(same).toMatchObject({ reused: true, sourceAssessment: { reviewCompleted: true } });
     expect(model.doGenerateCalls).toHaveLength(1);

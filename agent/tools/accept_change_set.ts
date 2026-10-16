@@ -9,7 +9,6 @@ import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
   updateExactWorkflow,
-  assertCompleteGitHubDestinationReview,
 } from "@/lib/agent/workflow-state";
 import { createReviewedChangeSetReceipt } from "@/lib/repository/reviewed-change-set";
 import { reviewedChangeSetSummary } from "@/lib/agent/review-result-summaries";
@@ -29,7 +28,7 @@ export const createChangeSetAcceptanceTool = (
 ) =>
   defineTool({
     description:
-      "Perform the final independent paid source assessment against the original product request and current implementation after repository validation succeeds and required complete diff reads finish. Reuse only completed source evidence whose current source and requirements still match. Record the reviewed change summary and return a compact receipt with current-session references; the full receipt stays authoritative in this session. Read its complete product/source evidence through change_set_status view=acceptance. This is internal and never publishes or changes an external repository.",
+      "Perform the final independent paid source assessment against the original product request and current implementation after repository validation succeeds. Reuse only completed source evidence whose current source and requirements still match. Record the reviewed change summary and return a compact receipt with current-session references; the full receipt stays authoritative in this session. Read its complete product/source evidence through change_set_status view=acceptance. This is internal and never publishes or changes an external repository.",
     async execute(_input, ctx) {
       const state = appBuilderWorkflowState.get();
       if (state.phase !== "validated" && state.phase !== "reviewed") {
@@ -39,9 +38,6 @@ export const createChangeSetAcceptanceTool = (
         sandbox: await ctx.getSandbox(),
         state,
       });
-      if (state.githubDestinationReview !== undefined) {
-        assertCompleteGitHubDestinationReview(state.githubDestinationReviewRead, changeSet.digest);
-      }
       const sourceAssessment = await runtime.reviewSource({
         abortSignal: ctx.abortSignal,
         appSpec: state.appSpec,

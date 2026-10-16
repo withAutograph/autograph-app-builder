@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   invalidateGitHubDestinationReview,
-  assertCompleteGitHubDestinationReview,
   assertExactWorkflowState,
   APP_BUILDER_WORKFLOW_VERSION,
 } from "./workflow-state";
@@ -71,21 +70,34 @@ describe("initial draft destination review workflow", () => {
     expect(original).toHaveProperty("reviewReceipt.digest", "old-review");
   });
 
-  it("requires complete fresh before and after reads for the exact accepted destination diff", () => {
+  it("allows only observational destination read progress to change during a workflow operation", () => {
+    const expected = {
+      phase: "empty" as const,
+      version: APP_BUILDER_WORKFLOW_VERSION,
+      sourceReceipt: { sourceSha: "original" },
+      approvalReceipt: { digest: "approved" },
+    };
+    const observed = {
+      ...expected,
+      githubDestinationReviewRead: {
+        changeSetDigest: "observed-diff",
+        beforeComplete: true,
+        afterComplete: false,
+      },
+    };
     expect(() => {
-      assertCompleteGitHubDestinationReview(undefined, "new-review");
-    }).toThrow("both complete sides");
-    const partial = { afterComplete: false, beforeComplete: true, changeSetDigest: "new-review" };
-    expect(() => {
-      assertCompleteGitHubDestinationReview(partial, "new-review");
-    }).toThrow("both complete sides");
-    const complete = { ...partial, afterComplete: true };
-    expect(() => {
-      assertCompleteGitHubDestinationReview(complete, "changed-review");
-    }).toThrow("both complete sides");
-    expect(() => {
-      assertCompleteGitHubDestinationReview(complete, "new-review");
+      assertExactWorkflowState(observed, expected, "acceptance");
+      assertExactWorkflowState(expected, observed, "acceptance");
     }).not.toThrow();
+    expect(observed.githubDestinationReviewRead.afterComplete).toBe(false);
+    const changedSource = { ...observed, sourceReceipt: { sourceSha: "changed" } };
+    expect(() => {
+      assertExactWorkflowState(changedSource, expected, "acceptance");
+    }).toThrow("changed concurrently");
+    const changedApproval = { ...observed, approvalReceipt: { digest: "different approval" } };
+    expect(() => {
+      assertExactWorkflowState(changedApproval, expected, "acceptance");
+    }).toThrow("changed concurrently");
   });
 
   it("retains the exact workflow concurrency guard used by destination preparation", () => {
