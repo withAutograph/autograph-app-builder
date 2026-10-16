@@ -149,6 +149,7 @@ const readAppliedOwnedReconciliation = async (input: {
     ...new Map(candidates.map((candidate) => [candidate.digest, candidate])).values(),
   ];
   for (const candidate of unique) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Each later provider read is needed only when the prior candidate proof is absent.
     if (await inspect.call(input.adapter, candidate, draft)) {
       return candidate;
     }
