@@ -115,6 +115,7 @@ export const createPostgresHostedRuntimeJournalStore = (
             predicate(input.authority, input.target),
             eq(builderProvisioningJournals.revision, input.expectedRevision),
             sql`${builderProvisioningJournals.record} ->> 'leaseId' = ${input.leaseId}`,
+            sql`(${builderProvisioningJournals.record} ->> 'leaseExpiresAt')::timestamptz > ${input.now.toISOString()}::timestamptz`,
             sql`${builderProvisioningJournals.record} #>> '{operator,operationRef}' = ${input.operationRef}`,
             sql`${builderProvisioningJournals.record} #> '{operator,fenceGeneration}' IS NULL`,
           ),
