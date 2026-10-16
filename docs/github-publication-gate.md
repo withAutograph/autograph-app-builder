@@ -92,9 +92,17 @@ When the current draft head conflicts with its live base, Builder prepares a
 private merge candidate from the exact observed head and base commits. It may
 resolve only conflicts under the selected app. The candidate runs its own
 locked dependency install, schema compilation, repository app checks and tests,
-and the app browser task when requested. Builder then exposes the complete
-resolved diff against the live base and the complete delta from the old PR head
-for review. A separate sealed approval binds both parent commits, the resolved
+and the app browser task when requested. Independent semantic source review
+remains required through the app acceptance workflow. Separately,
+`review_github_draft_pr_reconciliation` records a deterministic exact-candidate,
+two-parent receipt and returns a bounded metadata summary with honest full counts
+and all repository head metadata; it does not perform the independent app source
+assessment. Optional `inspect_github_draft_pr_reconciliation` calls with
+`kind: "changes"` page the file index, while `kind: "diff"` supports raw byte
+cursors/path selection for the resolved diff against the live base and the delta
+from the old PR head. Neither pagination must be exhausted. Inspection progress
+is not review or publication authority. A separate sealed approval binds both
+parent commits, the resolved
 tree, both diffs, the draft PR, and the tenant-scoped repository. GitHub receives
 a merge commit through an expected-head update without force pushing. A moved
 base or head requires a fresh merge, validation, review, and approval.

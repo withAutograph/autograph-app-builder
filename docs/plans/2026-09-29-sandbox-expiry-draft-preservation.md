@@ -120,7 +120,7 @@ If storage fails, preserve the last committed checkpoint, retain the live candid
 - **Incremental candidate validation**
   - **Required durable action:** Save changed source after each command and bind the command result/progress to its checkpoint. Source-generating validation is itself a mutation. Preserve failed results without promoting validation.
 - **Review and proposal sealing**
-  - **Required durable action:** Pin the precise checkpoint behind each review and proposal. Persist complete-diff read progress separately from the file inventory. No sealed proposal references a staging checkpoint.
+  - **Required durable action:** Pin the precise checkpoint behind each review and proposal. Persist optional diff-inspection progress separately from the file inventory when inspection is used. Exhaustive file-index or raw-diff reading is not a sealing prerequisite; required semantic review, validation, source ownership, and separate outward approval remain authoritative. No sealed proposal references a staging checkpoint.
 - **Waiting for product input/approval; turn completion**
   - **Required durable action:** Flush any remaining coherent private source and recovery metadata before claiming saved progress or releasing compute. These are additional boundaries, not the only autosaves.
 - **Cancellation, failure, shutdown, compute release**
@@ -171,7 +171,7 @@ Keep current publication ownership rules: existing-app publication is limited to
 - **Exact byte/mode restore, same source and merge parents**
   - **Required treatment:** Retain product decisions and immutable content reviews with their checkpoint bindings. Treat dependency/process/preview claims as historical until the replacement environment is ready. Resume or rerun the necessary validation commands; never skip installation merely because an old `validationRun.nextIndex` survived.
 - **Candidate/app edit, including a validation-generated change**
-  - **Required treatment:** Invalidate validation dependent on changed inputs, source review, complete-diff read progress, sealed proposals, and approvals bound to the superseded result. Explicitly handle `validationRun`, not just `validation`.
+  - **Required treatment:** Invalidate validation dependent on changed inputs, source review, optional diff-inspection progress, sealed proposals, and approvals bound to the superseded result. Explicitly handle `validationRun`, not just `validation`.
 - **Source/base/head moves, even with a clean merge**
   - **Required treatment:** Record new source and merge identities; recompute both applicable diffs and required checks. A reconciliation must obtain fresh review and approval because its parent bindings changed. This invalidates publication evidence, not the recoverable session or saved bytes.
 - **Lost/corrupt checkpoint or uncertain semantic restore**

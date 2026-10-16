@@ -74,44 +74,92 @@ describe("draft reconciliation publication review", () => {
     });
   });
 
-  it("refuses to seal until both full diffs were read", async () => {
+  it.each([
+    { name: "absent" },
+    {
+      name: "partial",
+      progress: { baseComplete: true, headComplete: false, reviewDigest: digest },
+    },
+    {
+      name: "stale",
+      progress: { baseComplete: false, headComplete: false, reviewDigest: "old-review" },
+    },
+    {
+      name: "complete",
+      progress: { baseComplete: true, headComplete: true, reviewDigest: digest },
+    },
+  ])(
+    "seals the exact validated tree with $name optional inspection progress",
+    async ({ progress }) => {
+      if (progress !== undefined) {
+        mocks.candidate = { ...mocks.candidate, reviewReadProgress: progress };
+      }
+      await expect(
+        sealReconciliation.execute({ expectedReviewDigest: digest }, context),
+      ).resolves.toMatchObject({
+        approvalReceipt: {
+          baseRef: "refs/heads/app-builder/spend-review",
+          baseSha: sha,
+          outcome: "update-draft-pr",
+          phase: "draft_update",
+          subjectDigest: "c".repeat(64),
+        },
+        digest: "c".repeat(64),
+      });
+      expect(mocks.seal).toHaveBeenCalledOnce();
+      expect(mocks.candidate).toHaveProperty("proposal.digest", "c".repeat(64));
+    },
+  );
+
+  it.each([
+    { field: "validation", reason: "candidate_validation_missing" },
+    { field: "review", reason: "candidate_review_missing" },
+  ])("refuses a missing candidate $field without publication", async ({ field, reason }) => {
+    if (mocks.candidate === null) {
+      throw new Error("Expected the retained fixture candidate.");
+    }
+    Reflect.deleteProperty(mocks.candidate, field);
     await expect(
       sealReconciliation.execute({ expectedReviewDigest: digest }, context),
-    ).rejects.toThrow(/^diff_progress_missing \(inspect-diff\):/u);
-    expect(mocks.seal).not.toHaveBeenCalled();
-    mocks.candidate = {
-      ...mocks.candidate,
-      reviewReadProgress: {
-        baseComplete: true,
-        headComplete: false,
-        reviewDigest: digest,
-      },
-    };
-    await expect(
-      sealReconciliation.execute({ expectedReviewDigest: digest }, context),
-    ).rejects.toThrow(/^head_diff_incomplete \(inspect-diff\):/u);
+    ).rejects.toThrow(new RegExp(`^${reason} `, "u"));
     expect(mocks.seal).not.toHaveBeenCalled();
   });
 
-  it("seals the exact validated tree after both complete diff reads", async () => {
-    mocks.candidate = {
-      ...mocks.candidate,
-      reviewReadProgress: { baseComplete: true, headComplete: true, reviewDigest: digest },
-    };
+  it.each([
+    {
+      field: "githubSource",
+      value: { digest: "changed-source" },
+      reason: "source_binding_changed",
+    },
+    {
+      field: "reviewReceipt",
+      value: { digest: "changed-app-review" },
+      reason: "app_review_changed",
+    },
+  ])("refuses changed $field authority without publication", async ({ field, value, reason }) => {
+    mocks.workflow = { ...mocks.workflow, [field]: value };
     await expect(
       sealReconciliation.execute({ expectedReviewDigest: digest }, context),
-    ).resolves.toMatchObject({
-      approvalReceipt: {
-        baseRef: "refs/heads/app-builder/spend-review",
-        baseSha: sha,
-        outcome: "update-draft-pr",
-        phase: "draft_update",
-        subjectDigest: "c".repeat(64),
-      },
-      digest: "c".repeat(64),
+    ).rejects.toThrow(new RegExp(`^${reason} `, "u"));
+    expect(mocks.seal).not.toHaveBeenCalled();
+  });
+
+  it("refuses a stale requested reconciliation review without publication", async () => {
+    await expect(
+      sealReconciliation.execute({ expectedReviewDigest: "old-review" }, context),
+    ).rejects.toThrow(/^seal_review_input_changed /u);
+    expect(mocks.seal).not.toHaveBeenCalled();
+  });
+
+  it("refuses unresolved conflicts without publication", async () => {
+    mocks.inspect.mockResolvedValue({
+      resolvedTree: sha,
+      unresolvedConflicts: ["apps/demo/main.ts"],
     });
-    expect(mocks.seal).toHaveBeenCalledOnce();
-    expect(mocks.candidate).toHaveProperty("proposal.digest", "c".repeat(64));
+    await expect(
+      sealReconciliation.execute({ expectedReviewDigest: digest }, context),
+    ).rejects.toThrow("changed after review");
+    expect(mocks.seal).not.toHaveBeenCalled();
   });
 
   it("rejects a changed resolved tree after review", async () => {

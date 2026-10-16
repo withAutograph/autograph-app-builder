@@ -49,8 +49,10 @@ and approval boundaries: they protect writes and publication.
 - Draft PRs are provisional against provider-read current-base information.
   Repository CD layout and template CI do not authorize or prevent a private
   build. Before updating a draft, prepare the current merge candidate, resolve
-  only owned conflicts, format if needed, validate, review both complete diffs,
-  and seal the exact reviewed changes before separate publication approval.
+  only owned conflicts, format if needed, validate, obtain independent semantic
+  source review, and seal the exact reviewed changes before separate publication
+  approval. Bounded summaries and optional file-index/raw-diff pages support
+  inspection; exhausting either pagination is not a publication prerequisite.
 - Private command success, product walkthrough evidence, GitHub checks, hosted
   Preview proof, and Production readiness are distinct results. Source selection
   and local validation do not activate providers or grant release authority.

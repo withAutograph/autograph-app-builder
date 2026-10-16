@@ -9,10 +9,11 @@ import {
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { createReconciliationReviewReceipt } from "@/lib/repository/github-draft-reconciliation";
 import { inspectDraftReconciliation } from "@/lib/repository/sandbox-draft-reconciliation";
+import { summarizeReconciliationChanges } from "@/lib/agent/draft-reconciliation-review-summary";
 
 export default defineTool({
   description:
-    "Reobserve the validated isolated merge and report both the final PR diff against live base and every change since the old PR head. This records an exact review receipt but does not update GitHub.",
+    "Reobserve the validated isolated merge and record both exact diffs in server state. Return counts and the first bounded metadata page for each diff; use optional inspect_github_draft_pr_reconciliation change or raw diff pages for more detail. No complete diff read is required. This does not update GitHub.",
   async execute(_input, ctx) {
     const candidate = draftReconciliationState.get();
     const state = appBuilderWorkflowState.get();
@@ -62,15 +63,25 @@ export default defineTool({
         return next;
       },
     });
+    const { changes: baseChanges, ...baseChangeSummary } = summarizeReconciliationChanges(
+      review.baseChanges,
+      candidate.appId,
+    );
+    const { changes: headChanges, ...headChangeSummary } = summarizeReconciliationChanges(
+      review.headChanges,
+      candidate.appId,
+    );
     return {
-      baseChanges: review.baseChanges,
+      status: "reviewed" as const,
+      reviewDigest: review.digest,
+      baseChangeSummary,
+      headChangeSummary,
       baseSha: review.baseSha,
-      headChanges: review.headChanges,
       headSha: review.headSha,
       resolvedTree: review.resolvedTree,
-      reviewDigest: review.digest,
-      status: "reviewed" as const,
       validation: candidate.validation,
+      baseChanges,
+      headChanges,
     };
   },
   inputSchema: z.strictObject({}),
