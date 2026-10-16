@@ -2,6 +2,7 @@ import { defineTool } from "eve/tools";
 import { publishCompiledOperatorArtifactsForSession } from "@/lib/agent/compiled-operator-artifacts";
 import type { ToolContext } from "eve/tools";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
+import { withCandidateCommandEnvironment } from "@/lib/agent/candidate-command-environment";
 import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
 
@@ -377,7 +378,7 @@ export default defineTool({
         "The prepared merge candidate no longer matches the selected app and source review. Prepare reconciliation again.",
       );
     }
-    const sandbox = await getSourceBoundSandbox(ctx);
+    const sandbox = withCandidateCommandEnvironment(await getSourceBoundSandbox(ctx));
     if (input.incremental) {
       return await runIncrementalValidation(input, ctx, candidate, sandbox);
     }

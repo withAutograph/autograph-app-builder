@@ -79,6 +79,7 @@ describe("draft reconciliation app formatter", () => {
     expect(mocks.run).toHaveBeenCalledWith({
       abortSignal: expect.any(AbortSignal),
       command: "mise run --no-deps --skip-tools format:app",
+      env: { MISE_ENV: "app-validation" },
       workingDirectory: "/workspace/candidate",
     });
     expect(mocks.candidate?.validation).toBeUndefined();

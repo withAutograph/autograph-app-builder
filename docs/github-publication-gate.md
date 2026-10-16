@@ -92,7 +92,12 @@ When the current draft head conflicts with its live base, Builder prepares a
 private merge candidate from the exact observed head and base commits. It may
 resolve only conflicts under the selected app. The candidate runs its own
 locked dependency install, schema compilation, repository app checks and tests,
-and the app browser task when requested. Independent semantic source review
+and the app browser task when requested. Candidate commands select the existing
+`app-validation` Mise environment alongside other explicitly selected profiles.
+This carries the explicit dependency-setup boundary through nested formatter,
+compiler, runtime and browser commands: dependencies are prepared by the locked
+install step, and child Mise processes inherit that policy.
+Independent semantic source review
 remains required through the app acceptance workflow. Separately,
 `review_github_draft_pr_reconciliation` records a deterministic exact-candidate,
 two-parent receipt and returns a bounded metadata summary with honest full counts
