@@ -100,11 +100,15 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
 5. Accepting the product design automatically prepares its private durable
    creation state. New apps use `mise run create:app <app-id>` through the
    builder-owned apply tool. The command derives identity and default routes
-   from the id and current catalog. The accepted Markdown is staged at
-   `.config/app-specs/<id>.md` and copied into the generated app as a snapshot.
-   Only `.config/app-specs/<id>.cue` selects CUE-backed generation; Markdown
-   alone never requests a backend. Additional routes require a separately
-   reviewed topology edit. For existing apps, supply exact app-owned changes
+   from the id and current catalog. Accepted Markdown stays in the private
+   durable artifact and external planning input, outside repository source.
+   Successful new-app creation writes its product-document snapshot directly
+   to `apps/<id>/.config/app-spec.md`. Existing-app iteration preserves that
+   snapshot unless the approved app-owned changes explicitly update it.
+   Preserve existing source Markdown and CUE; only
+   `.config/app-specs/<id>.cue` selects CUE-backed generation. Markdown alone
+   never requests a backend. Additional routes require a separately reviewed
+   topology edit. For existing apps, supply exact app-owned changes
    when accepting the design; inspect the returned paths to repair a missing
    preimage and retry acceptance. When creating or evolving a native Next App
    Router zone, load `$arrusted-next-app-like-experience` before applying it.

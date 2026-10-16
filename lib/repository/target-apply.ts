@@ -343,39 +343,6 @@ export async function materializeFreshApplyOverlay(input: {
   }
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function restorePreparedAppSpecBaseline(input: {
-  sandbox: SandboxSession;
-  applyRoot: string;
-  appSpecPath: string;
-}): Promise<void> {
-  const prepared = await input.sandbox.readBinaryFile({
-    path: `repository/${input.appSpecPath}`,
-  });
-  const applyPath = `${input.applyRoot.replace(/^\/workspace\//u, "")}/${input.appSpecPath}`;
-  if (prepared === null) {
-    await input.sandbox.removePath({ force: true, path: applyPath });
-    return;
-  }
-  await input.sandbox.writeBinaryFile({ content: prepared, path: applyPath });
-}
-
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function stageAcceptedAppSpec(input: {
-  sandbox: SandboxSession;
-  applyRoot: string;
-  appSpecPath: string;
-  acceptedAppSpec: Uint8Array;
-}): Promise<void> {
-  await ensureSandboxDirectories(input.sandbox, [
-    `${input.applyRoot.replace(/^\/workspace\//u, "")}/.config/app-specs`,
-  ]);
-  await input.sandbox.writeBinaryFile({
-    content: input.acceptedAppSpec,
-    path: `${input.applyRoot.replace(/^\/workspace\//u, "")}/${input.appSpecPath}`,
-  });
-}
-
 const snapshotLine = /^(?<mode>[0-7]{3,4})\t(?<digest>[0-9a-f]{64})\t(?<path>.+)$/u;
 
 export const OVERLAY_SNAPSHOT_SCRIPT = String.raw`
@@ -630,6 +597,31 @@ function parseTargetReceipt(
     return undefined;
   }
   return receipt;
+}
+
+/** Persist the accepted product snapshot only as an output of successful new-app creation. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+async function stageCreatedAppSpec(input: {
+  sandbox: SandboxSession;
+  applyRoot: string;
+  proposal: TargetProposal;
+  acceptedAppSpec: Uint8Array;
+  command: ApplyCommandResult;
+}): Promise<void> {
+  if (
+    "operation" in input.proposal ||
+    input.command.exitCode !== 0 ||
+    parseTargetReceipt(input.command, input.proposal) === undefined
+  ) {
+    return;
+  }
+  const relativeRoot = input.applyRoot.replace(/^\/workspace\//u, "");
+  const directory = `${relativeRoot}/apps/${input.proposal.contract.appId}/.config`;
+  await ensureSandboxDirectories(input.sandbox, [directory]);
+  await input.sandbox.writeBinaryFile({
+    content: input.acceptedAppSpec,
+    path: `${directory}/app-spec.md`,
+  });
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -907,21 +899,10 @@ export async function executeProposalBoundApply(input: {
   try {
     planning = await snapshotter(input.sandbox, overlay.applyRoot);
     prepared = await snapshotter(input.sandbox, "/workspace/repository");
-    await restorePreparedAppSpecBaseline({
-      appSpecPath: `.config/app-specs/${input.proposal.contract.appId}.md`,
-      applyRoot: overlay.applyRoot,
-      sandbox: input.sandbox,
-    });
     before = await snapshotter(input.sandbox, overlay.applyRoot);
     if ("operation" in input.proposal) {
       before = iterationBaselineSnapshot(before, input.proposal.iteration.changes);
     }
-    await stageAcceptedAppSpec({
-      acceptedAppSpec: overlay.acceptedAppSpec,
-      appSpecPath: `.config/app-specs/${input.proposal.contract.appId}.md`,
-      applyRoot: overlay.applyRoot,
-      sandbox: input.sandbox,
-    });
   } catch (error) {
     await input.sandbox.removePath({
       force: true,
@@ -935,6 +916,13 @@ export async function executeProposalBoundApply(input: {
     command = await input.executor({
       appId: input.proposal.contract.appId,
       applyRoot: overlay.applyRoot,
+      proposal: input.proposal,
+      sandbox: input.sandbox,
+    });
+    await stageCreatedAppSpec({
+      acceptedAppSpec: overlay.acceptedAppSpec,
+      applyRoot: overlay.applyRoot,
+      command,
       proposal: input.proposal,
       sandbox: input.sandbox,
     });

@@ -139,7 +139,9 @@ describe("direct app creation", () => {
         >[0]["sandbox"],
         snapshotter: async () => ({ files: [], treeDigest: "e".repeat(64) }),
       });
-      expect(writes).toEqual(["repository/.config/app-specs/inventory.md"]);
+      expect(writes).toEqual(
+        outcome === "recovered" ? ["repository/apps/inventory/.config/app-spec.md"] : [],
+      );
       if (outcome === "recovered") {
         expect(result.ok).toBe(true);
         if (result.ok) {
@@ -163,6 +165,102 @@ describe("direct app creation", () => {
           }
         }
       }
+    },
+  );
+  it.each(["create", "iterate"] as const)(
+    "keeps accepted planning outside source during %s and preserves existing source specs",
+    async (operation) => {
+      const rootMarkdown = "# Existing source-owned spec\n";
+      const rootCue = "package existing\n";
+      const previousSnapshot = "# Existing app snapshot\n";
+      const appPath = "apps/inventory/app/page.tsx";
+      const appContent = "export default function Page() { return null; }";
+      const snapshotPath = "repository/apps/inventory/.config/app-spec.md";
+      const files = new Map([
+        ["repository/.config/app-specs/inventory.md", rootMarkdown],
+        ["repository/.config/app-specs/inventory.cue", rootCue],
+        [snapshotPath, previousSnapshot],
+      ]);
+      const writes: string[] = [];
+      const iterationChanges = [
+        { path: appPath, after: { content: appContent, digest: sha256(appContent), mode: "644" } },
+      ];
+      const iterationProposal: TargetProposal = {
+        ...proposal,
+        operation: "iterate-existing-app",
+        iteration: { changes: iterationChanges, digest: sha256(JSON.stringify(iterationChanges)) },
+      };
+      const sandbox = {
+        readBinaryFile: vi.fn(async ({ path }: { path: string }) => {
+          if (path.includes("prototype/")) return Buffer.from(content);
+          const value = files.get(path);
+          return value === undefined ? null : Buffer.from(value);
+        }),
+        removePath: vi.fn(async ({ path }: { path: string }) => {
+          files.delete(path);
+        }),
+        run: vi.fn(async () => ({ exitCode: 0, stderr: "", stdout: JSON.stringify(receipt) })),
+        setNetworkPolicy: vi.fn(async () => {}),
+        writeBinaryFile: vi.fn(
+          async ({ path, content: bytes }: { path: string; content: Uint8Array }) => {
+            writes.push(path);
+            files.set(path, Buffer.from(bytes).toString("utf-8"));
+          },
+        ),
+        writeTextFile: vi.fn(async ({ path, content: text }: { path: string; content: string }) => {
+          writes.push(path);
+          files.set(path, text);
+        }),
+      };
+      const result = await executeProposalBoundApply({
+        appliedByCallId: "apply-call",
+        artifactRevision: "d".repeat(64),
+        binding: {
+          appSpecDigest: sha256(content),
+          appSpecPath: proposal.contract.appSpec.path,
+          artifactRevision: "f".repeat(64),
+          dependencyCacheContentDigest: "c".repeat(64),
+          dependencyCacheDigest: "test",
+          dependencyReceiptDigest: "a".repeat(64),
+          eligibilityDigest: "d".repeat(64),
+          identityDigest: "b".repeat(64),
+          imageDigest: "test",
+          proposalDigest: "c".repeat(64),
+          sourceReceiptDigest: "c".repeat(64),
+          sourceSha: "a".repeat(40),
+          sourceTree: "b".repeat(40),
+          workspaceDigest: "e".repeat(64),
+        },
+        executor: sandboxApplyCommandExecutor(),
+        proposal: operation === "create" ? proposal : iterationProposal,
+        // SAFETY: This double provides the sandbox methods used by the apply executor and spec snapshot writer.
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+        sandbox: sandbox as unknown as Parameters<
+          ReturnType<typeof sandboxApplyCommandExecutor>
+        >[0]["sandbox"],
+        snapshotter: async () => {
+          const snapshot = [...files]
+            .filter(([path]) => path.startsWith("repository/"))
+            .map(([path, text]) => ({
+              path: path.slice("repository/".length),
+              mode: "644",
+              digest: sha256(text),
+            }));
+          return { files: snapshot, treeDigest: sha256(JSON.stringify(snapshot)) };
+        },
+      });
+      expect(result.ok).toBe(true);
+      expect(files.get("repository/.config/app-specs/inventory.md")).toBe(rootMarkdown);
+      expect(files.get("repository/.config/app-specs/inventory.cue")).toBe(rootCue);
+      if (operation === "create") {
+        expect(files.get(snapshotPath)).toBe(content);
+        expect(writes).toContain(snapshotPath);
+      } else {
+        expect(files.get(snapshotPath)).toBe(previousSnapshot);
+        expect(files.get(`repository/${appPath}`)).toBe(appContent);
+        expect(writes.every((path) => path === `repository/${appPath}`)).toBe(true);
+      }
+      expect(writes.every((path) => path.startsWith("repository/apps/inventory/"))).toBe(true);
     },
   );
 });
