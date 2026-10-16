@@ -1,5 +1,6 @@
 import { defineTool } from "eve/tools";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
+import { withCandidateCommandEnvironment } from "@/lib/agent/candidate-command-environment";
 import { z } from "zod";
 
 import {
@@ -31,7 +32,7 @@ export default defineTool({
         "The prepared draft candidate no longer matches the selected app and source review. Prepare reconciliation again before formatting.",
       );
     }
-    const sandbox = await getSourceBoundSandbox(ctx);
+    const sandbox = withCandidateCommandEnvironment(await getSourceBoundSandbox(ctx));
     const before = await inspectDraftReconciliation({ prepared: candidate, sandbox });
     if (before.unresolvedConflicts.length > 0) {
       return {
