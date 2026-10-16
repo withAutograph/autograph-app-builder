@@ -16,6 +16,7 @@ import {
 } from "@/lib/agent/draft-reconciliation-state";
 import type { DraftReconciliationCandidate } from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import type { AppBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { repositoryAccessReceiptState } from "@/lib/agent/repository-access-state";
 import { prepareWithVerifiedGitHubFetchRecovery } from "@/lib/agent/verified-github-fetch-recovery";
 import { resolveAcceptedAppSpecContent } from "@/lib/agent/accepted-app-spec-content";
@@ -108,6 +109,41 @@ const legacyTransportRecoveryResult = (
   return null;
 };
 
+type ReviewedWorkflow = Extract<AppBuilderWorkflowState, { phase: "reviewed" }>;
+type ReconciliationSourceRequest = Parameters<
+  Awaited<
+    ReturnType<typeof githubPublicationRuntimeForSession>
+  >["inspectExistingDraftReconciliationSource"]
+>[0];
+
+const reconciliationLineageRequest = (
+  state: ReviewedWorkflow,
+  original: DraftReconciliationCandidate | null,
+): Pick<
+  ReconciliationSourceRequest,
+  "previousReconciliation" | "publishedReconciliation" | "priorPublishedProposalDigest"
+> => {
+  const priorPublishedProposalDigest =
+    state.publishedGitHubDraftProposalDigest ?? state.githubDraftProposal?.proposal.digest;
+  const previousReconciliation =
+    original?.appId === state.appSpec.appId ? original.proposal : undefined;
+  const publishedReconciliation =
+    original?.appId === state.appSpec.appId ? original.publishedReconciliation : undefined;
+  return {
+    ...(previousReconciliation === undefined ? {} : { previousReconciliation }),
+    ...(publishedReconciliation === undefined ? {} : { publishedReconciliation }),
+    ...(priorPublishedProposalDigest === undefined ? {} : { priorPublishedProposalDigest }),
+  };
+};
+
+const retainedPublishedReconciliation = (
+  current: DraftReconciliationCandidate["publishedReconciliation"],
+  previous: DraftReconciliationCandidate["publishedReconciliation"],
+): Pick<DraftReconciliationCandidate, "publishedReconciliation"> => {
+  const retained = current ?? previous;
+  return retained === undefined ? {} : { publishedReconciliation: retained };
+};
+
 export default defineTool({
   description:
     "Fetch the live base and existing draft head into an isolated Builder checkout and prepare a non-force merge candidate. This does not update GitHub. It reports exact app-owned conflict paths and refuses platform-owned conflicts. If candidate validation reports outside-app metadata changes, run this tool again: Builder preserves the old checkout, creates a fresh private candidate, and carries app repairs only across the same verified draft/base/review lineage. This technical recovery needs no human lockfile edit or new private-worktree approval.",
@@ -172,17 +208,10 @@ export default defineTool({
       return recovery;
     }
     const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
-    const priorPublishedProposalDigest =
-      state.publishedGitHubDraftProposalDigest ?? state.githubDraftProposal?.proposal.digest;
     const original = draftReconciliationState.get();
-    const previousReconciliation =
-      original?.appId === state.appSpec.appId ? original.proposal : undefined;
-    const publishedReconciliation =
-      original?.appId === state.appSpec.appId ? original.publishedReconciliation : undefined;
+    const lineage = reconciliationLineageRequest(state, original);
     const source = await runtime.inspectExistingDraftReconciliationSource({
-      ...(previousReconciliation === undefined ? {} : { previousReconciliation }),
-      ...(publishedReconciliation === undefined ? {} : { publishedReconciliation }),
-      ...(priorPublishedProposalDigest === undefined ? {} : { priorPublishedProposalDigest }),
+      ...lineage,
       name: state.githubSource.repository.name,
       owner: state.githubSource.repository.owner,
       pullRequestNumber: input.pullRequestNumber,
@@ -259,13 +288,12 @@ export default defineTool({
     void _created;
     void _preserved;
     void _replayed;
-    const retainedPublishedReconciliation =
-      source.publishedReconciliation ?? publishedReconciliation;
     const candidate = {
       ...preparedCandidate,
-      ...(retainedPublishedReconciliation === undefined
-        ? {}
-        : { publishedReconciliation: retainedPublishedReconciliation }),
+      ...retainedPublishedReconciliation(
+        source.publishedReconciliation,
+        lineage.publishedReconciliation,
+      ),
       githubSourceDigest: state.githubSource.digest,
       originalReviewDigest: state.reviewReceipt.digest,
       pullRequestNumber: input.pullRequestNumber,
