@@ -7,7 +7,7 @@ import {
 import type { TargetValidationCommandReceipt } from "../repository/target-validation";
 
 export const validationLogCommandFixture: TargetValidationCommandReceipt = {
-  command: "mise run --skip-tools app:check example",
+  command: "mise run --no-deps --skip-tools app:check example",
   exitCode: 1,
   inputTreeDigest: "c".repeat(64),
   logs: {

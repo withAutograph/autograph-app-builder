@@ -85,7 +85,7 @@ const sharedHostProtectionPrerequisite = (
 ) => {
   const plan = record?.operator?.plan;
   if (plan === undefined) {
-    return undefined;
+    return;
   }
   const configuredHost = [
     sameOperatorSelection(plan.selection, {

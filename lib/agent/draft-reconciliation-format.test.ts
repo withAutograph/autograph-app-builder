@@ -78,7 +78,7 @@ describe("draft reconciliation app formatter", () => {
     });
     expect(mocks.run).toHaveBeenCalledWith({
       abortSignal: expect.any(AbortSignal),
-      command: "mise run --skip-tools format:app",
+      command: "mise run --no-deps --skip-tools format:app",
       workingDirectory: "/workspace/candidate",
     });
     expect(mocks.candidate?.validation).toBeUndefined();
@@ -90,7 +90,7 @@ describe("draft reconciliation app formatter", () => {
   it("reports formatter failure without retaining a new review", async () => {
     mocks.run.mockResolvedValue({ exitCode: 1, stderr: "formatter failed", stdout: "" });
     await expect(formatCandidate.execute({}, context)).resolves.toMatchObject({
-      command: "mise run --skip-tools format:app",
+      command: "mise run --no-deps --skip-tools format:app",
       exitCode: 1,
       status: "needs_repair",
     });

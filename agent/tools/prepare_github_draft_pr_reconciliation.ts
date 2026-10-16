@@ -10,6 +10,7 @@ import {
   draftReconciliationState,
   updateExactDraftReconciliation,
 } from "@/lib/agent/draft-reconciliation-state";
+import type { DraftReconciliationCandidate } from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { repositoryAccessReceiptState } from "@/lib/agent/repository-access-state";
 import { prepareWithVerifiedGitHubFetchRecovery } from "@/lib/agent/verified-github-fetch-recovery";
@@ -33,9 +34,56 @@ const assertReconciliationDraftLineage = (input: {
   }
 };
 
+interface CandidateReplayLineage {
+  appId: string;
+  repositoryId: string;
+  pullRequestNumber: number;
+  githubSourceDigest: string;
+  originalReviewDigest: string;
+  headSha: string;
+  baseSha: string;
+}
+
+const previousCandidateRequest = (
+  previous: DraftReconciliationCandidate | null,
+  current: CandidateReplayLineage,
+): Pick<DraftReconciliationInput, "previousCandidate" | "replayPreviousCandidate"> => {
+  if (previous === null) {
+    return {};
+  }
+  return {
+    previousCandidate: previous,
+    replayPreviousCandidate: [
+      previous.appId === current.appId,
+      previous.repositoryId === current.repositoryId,
+      previous.pullRequestNumber === current.pullRequestNumber,
+      previous.githubSourceDigest === current.githubSourceDigest,
+      previous.originalReviewDigest === current.originalReviewDigest,
+      previous.headSha === current.headSha,
+      previous.baseSha === current.baseSha,
+    ].every(Boolean),
+  };
+};
+
+const candidateRecoveryGuidance = (
+  prepared: Awaited<ReturnType<typeof prepareDraftReconciliation>>,
+  previous: DraftReconciliationCandidate | null,
+): string | undefined => {
+  const { preservedCandidateRoot, replayedAppChanges } = prepared;
+  if (preservedCandidateRoot !== undefined) {
+    return replayedAppChanges
+      ? `Builder preserved the old candidate at ${preservedCandidateRoot} and copied its app repairs and conflict state into this fresh candidate. Outside-app metadata was not copied. Continue normal conflict resolution and candidate validation; no GitHub update occurred.`
+      : `Builder left the old candidate at ${preservedCandidateRoot} untouched and prepared the currently verified draft/base lineage. Old resolutions were not copied across changed source/review lineage. Continue normal conflict resolution and validation; nothing was published.`;
+  }
+  if (prepared.created && previous !== null) {
+    return "Builder rebuilt the private candidate from the currently verified draft and base because its saved checkout was unavailable. Old uncommitted repairs cannot be assumed to survive. Continue normal conflict resolution and validation. Only the later outward GitHub update requires publication approval.";
+  }
+  return undefined;
+};
+
 export default defineTool({
   description:
-    "Fetch the live base and existing draft head into an isolated Builder checkout and prepare a non-force merge candidate. This does not update GitHub. It reports exact app-owned conflict paths and refuses platform-owned conflicts.",
+    "Fetch the live base and existing draft head into an isolated Builder checkout and prepare a non-force merge candidate. This does not update GitHub. It reports exact app-owned conflict paths and refuses platform-owned conflicts. If candidate validation reports outside-app metadata changes, run this tool again: Builder preserves the old checkout, creates a fresh private candidate, and carries app repairs only across the same verified draft/base/review lineage. This technical recovery needs no human lockfile edit or new private-worktree approval.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (
@@ -109,6 +157,18 @@ export default defineTool({
     if (unpublished !== undefined) {
       request.unpublished = unpublished;
     }
+    Object.assign(
+      request,
+      previousCandidateRequest(original, {
+        appId: state.appSpec.appId,
+        repositoryId: state.githubSource.repository.repositoryId,
+        pullRequestNumber: input.pullRequestNumber,
+        githubSourceDigest: state.githubSource.digest,
+        originalReviewDigest: state.reviewReceipt.digest,
+        headSha: source.draft.headSha,
+        baseSha: source.base.headSha,
+      }),
+    );
     const accessRuntime = await repositoryAccessRuntimeForSession(ctx.session.auth);
     const { prepared, retriedGitFetch } = await prepareWithVerifiedGitHubFetchRecovery({
       acquireCredential: async () =>
@@ -128,7 +188,15 @@ export default defineTool({
         },
       },
     });
-    const { created, ...preparedCandidate } = prepared;
+    const {
+      created: _created,
+      preservedCandidateRoot: _preserved,
+      replayedAppChanges: _replayed,
+      ...preparedCandidate
+    } = prepared;
+    void _created;
+    void _preserved;
+    void _replayed;
     const candidate = {
       ...preparedCandidate,
       githubSourceDigest: state.githubSource.digest,
@@ -153,9 +221,9 @@ export default defineTool({
       recovery?: string;
       gitTransportRecovery?: string;
     } = result;
-    if (created && original !== null) {
-      output.recovery =
-        "Builder rebuilt the private merge candidate from the currently verified draft and base commits because the saved candidate was unavailable. Any uncommitted resolutions or edits from the old sandbox must be reapplied. Previous validation, diff review, and update approval are void; resolve current conflicts, rerun checks, review both complete diffs, and request new approval before updating the PR.";
+    const recovery = candidateRecoveryGuidance(prepared, original);
+    if (recovery !== undefined) {
+      output.recovery = recovery;
     }
     if (retriedGitFetch) {
       output.gitTransportRecovery =

@@ -42,7 +42,7 @@ describe("private local preview setup", () => {
     const input = { appId: "spend-review", root: "/workspace/repository", sandbox: { run } };
     expect(await appDeclaresLocalSetup(input)).toBe(true);
     expect(run).toHaveBeenCalledWith({
-      command: "mise run app:describe spend-review",
+      command: "mise run --no-deps app:describe spend-review",
       workingDirectory: input.root,
     });
     run.mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: descriptor({ kind: "static" }) });
@@ -91,7 +91,7 @@ describe("private local preview setup", () => {
       workingDirectory: "/workspace/repository",
     });
     expect(localPreviewExecutionCommand("spend-review")).toContain(
-      "mise run app:runtime prepare spend-review local",
+      "mise run --no-deps app:runtime prepare spend-review local",
     );
     expect(result).toMatchObject({ exitCode: 0, status: "prepared" });
     expect(() => localPreviewSetupCommand("spend-review; deploy")).toThrow();

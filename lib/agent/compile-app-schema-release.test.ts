@@ -167,7 +167,9 @@ describe("private app schema release compilation", () => {
   });
 
   it("targets only the selected app with a fixed repository task", () => {
-    expect(appSchemaReleaseCommand("spend-review")).toBe("mise run app:compile spend-review");
+    expect(appSchemaReleaseCommand("spend-review")).toBe(
+      "mise run --no-deps app:compile spend-review",
+    );
     expect(() => appSchemaReleaseCommand("spend-review; deploy")).toThrow();
   });
 
@@ -183,7 +185,7 @@ describe("private app schema release compilation", () => {
       sandbox: { run },
     });
     expect(run).toHaveBeenCalledWith({
-      command: "mise run app:compile spend-review",
+      command: "mise run --no-deps app:compile spend-review",
       workingDirectory: "/workspace/repository",
     });
     expect(result).toMatchObject({
@@ -312,7 +314,7 @@ describe("private app schema release compilation", () => {
       sandbox: { run: vi.fn().mockResolvedValue({ exitCode: 0, stderr: "", stdout: "compiled" }) },
     });
     expect(result).toMatchObject({
-      command: "mise run app:compile spend-review",
+      command: "mise run --no-deps app:compile spend-review",
       compilerExecuted: true,
       exitCode: 0,
       recovery,

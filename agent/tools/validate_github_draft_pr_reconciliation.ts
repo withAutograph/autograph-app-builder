@@ -54,7 +54,7 @@ const runAdditionalChecks = async (input: {
 }) => {
   const commands: { command: string; exitCode: number }[] = [];
   for (const task of input.tasks) {
-    const command = `mise run --skip-tools ${task}`;
+    const command = `mise run --no-deps --skip-tools ${task}`;
     let result: Awaited<ReturnType<SandboxSession["run"]>>;
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- repository checks must run sequentially against the same candidate.
@@ -82,7 +82,47 @@ const runAdditionalChecks = async (input: {
   return { commands };
 };
 
+const installCommand = "mise exec --no-deps -- bun install --frozen-lockfile";
+const additionalCheckCommand = (task: string) => `mise run --no-deps --skip-tools ${task}`;
+
 type ValidationStep = NonNullable<DraftReconciliationCandidate["validationRun"]>["steps"][number];
+
+/** Keep completed receipts; update only recognized pending repository command forms. */
+const currentValidationStep = (step: ValidationStep, appId: string): ValidationStep => {
+  switch (step.kind) {
+    case "install": {
+      return step.command === installCommand ||
+        step.command === "mise exec -- bun install --frozen-lockfile"
+        ? { ...step, command: installCommand }
+        : step;
+    }
+    case "schema": {
+      return { ...step, command: appSchemaReleaseCommand(appId) };
+    }
+    case "local": {
+      return { ...step, command: localPreviewExecutionCommand(appId) };
+    }
+    case "browser": {
+      return { ...step, command: appBrowserTestCommand(appId) };
+    }
+    case "check": {
+      const planned = supportedValidationCommands(appId).find((candidate) => {
+        const legacy =
+          candidate.name === "check-build"
+            ? `mise run --skip-tools app:check ${appId}`
+            : `mise run --skip-tools app:test ${appId} ${candidate.command.split(" ").at(-1)}`;
+        return step.command === candidate.command || step.command === legacy;
+      });
+      return planned === undefined ? step : { ...step, command: planned.command };
+    }
+    case "additional": {
+      const task = /^mise run (?:--no-deps )?--skip-tools (?<task>check:[A-Za-z0-9:_-]+)$/u.exec(
+        step.command,
+      )?.groups?.task;
+      return task === undefined ? step : { ...step, command: additionalCheckCommand(task) };
+    }
+  }
+};
 interface ValidationStepResult {
   command: string;
   exitCode: number | null;
@@ -124,7 +164,7 @@ const runIncrementalValidation = async (
       sandbox,
     });
     const steps: ValidationStep[] = [
-      { command: "mise exec -- bun install --frozen-lockfile", kind: "install" },
+      { command: installCommand, kind: "install" },
       { command: appSchemaReleaseCommand(candidate.appId), kind: "schema" },
       ...(local
         ? [{ command: localPreviewExecutionCommand(candidate.appId), kind: "local" as const }]
@@ -137,7 +177,7 @@ const runIncrementalValidation = async (
         ? [{ command: appBrowserTestCommand(candidate.appId), kind: "browser" as const }]
         : []),
       ...input.additionalCheckTasks.map((task) => ({
-        command: `mise run --skip-tools ${task}`,
+        command: additionalCheckCommand(task),
         kind: "additional" as const,
       })),
     ];
@@ -156,13 +196,25 @@ const runIncrementalValidation = async (
       },
     });
   }
+  const originalStepCommand = run.steps[run.nextIndex]?.command;
+  const nextIndexToRun = run.nextIndex;
+  run = {
+    ...run,
+    steps: run.steps.map((step, index) =>
+      index < nextIndexToRun ? step : currentValidationStep(step, candidate.appId),
+    ),
+  };
   const step = run.steps[run.nextIndex];
   if (step === undefined) {
     throw new Error(
       "Candidate validation has no next command. Inspect this saved session and restart validation.",
     );
   }
-  if (input.expectedCommand !== undefined && input.expectedCommand !== step.command) {
+  if (
+    input.expectedCommand !== undefined &&
+    input.expectedCommand !== step.command &&
+    input.expectedCommand !== originalStepCommand
+  ) {
     throw new Error(
       `Candidate validation is ready for ${step.command}, but this call supplied a different command.${checkoutChanged ? " The checkout changed since the prior validation command, so Builder restarted the check sequence." : ""} Resume with the returned nextCommand; no command was run.`,
     );
@@ -348,7 +400,6 @@ export default defineTool({
       },
     });
     const commands: { command: string; exitCode: number }[] = [];
-    const installCommand = "mise exec -- bun install --frozen-lockfile";
     let install: Awaited<ReturnType<typeof sandbox.run>>;
     try {
       install = await sandbox.run({ command: installCommand, workingDirectory: candidate.root });

@@ -285,7 +285,7 @@ describe("owned compiled artifact workflow hook", () => {
     const result = await publishCompiledOperatorArtifactsForSession(input);
     expect(result.status).toBe("published");
     expect(input.sandbox.run).toHaveBeenCalledWith({
-      command: "mise run app:describe spend-review",
+      command: "mise run --no-deps app:describe spend-review",
       workingDirectory: input.root,
     });
     expect(input.sandbox.readBinaryFile).toHaveBeenCalledTimes(GENERATED_RELEASE_MEMBERS.length);

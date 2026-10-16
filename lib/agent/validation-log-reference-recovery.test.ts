@@ -15,7 +15,7 @@ const attemptDigest = "a".repeat(64);
 const receiptDigest = "b".repeat(64);
 const commands = [
   {
-    command: "mise run --skip-tools app:check example" as const,
+    command: "mise run --no-deps --skip-tools app:check example" as const,
     exitCode: 1,
     inputTreeDigest: "c".repeat(64),
     logs: {

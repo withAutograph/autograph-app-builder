@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 
 import type { SandboxSession } from "eve/sandbox";
@@ -81,6 +81,9 @@ export interface DraftReconciliationInput {
   headSha: string;
   baseBranch: string;
   baseSha: string;
+  /** Server-retained private candidate; replay authority is checked by the prepare tool. */
+  previousCandidate?: PreparedDraftReconciliation;
+  replayPreviousCandidate?: boolean;
   unpublished?: {
     reviewDigest: string;
     /** Exact original publication head, resolved from this workflow's tenant receipt. */
@@ -113,7 +116,7 @@ export const assertDraftReconciliationCandidateAvailable = async (input: {
   );
   if (result.exitCode !== 0 || result.stdout.trim() !== "true") {
     throw new Error(
-      "Builder's private draft merge candidate is no longer in this sandbox. The sandbox may have expired; its uncommitted conflict resolutions and edits cannot be assumed to survive. Run prepare_github_draft_pr_reconciliation for this PR again to rebuild from the verified branch commits, then resolve any conflicts, rerun validation, review both complete diffs, and request a new update approval. Nothing was published.",
+      "Builder's private draft merge candidate is no longer in this sandbox. The sandbox may have expired; its uncommitted conflict resolutions and edits cannot be assumed to survive. Run prepare_github_draft_pr_reconciliation for this PR again to rebuild from the verified branch commits, then resolve any conflicts, rerun validation, review the changed source, and request exact outward update approval. Nothing was published.",
     );
   }
 };
@@ -343,10 +346,228 @@ const stageUnpublished = async (
   );
 };
 
+const outsideCandidateChanges = async (
+  input: DraftReconciliationInput,
+  root: string,
+): Promise<boolean> => {
+  const merge = await run(
+    input.sandbox,
+    "inspect the private candidate merge state",
+    git(root, ["rev-parse", "--quiet", "--verify", "MERGE_HEAD"]),
+  );
+  if (merge.exitCode !== 0 && merge.exitCode !== 1) {
+    throw new Error(
+      `Builder could not inspect its private candidate merge state (exit ${merge.exitCode}). The old candidate remains intact. Cause: ${redact(merge.stderr || merge.stdout)}`,
+    );
+  }
+  const baseline = merge.exitCode === 0 ? input.baseSha : "HEAD";
+  const changed = records(
+    await checked(
+      input.sandbox,
+      "inspect private candidate changes",
+      git(root, [
+        "--no-optional-locks",
+        DIFF_COMMAND,
+        "--no-renames",
+        NAME_ONLY,
+        ZERO_TERMINATED,
+        baseline,
+        "--",
+      ]),
+    ),
+  );
+  const untracked = records(
+    await checked(
+      input.sandbox,
+      "inspect private candidate untracked files",
+      git(root, [
+        "--no-optional-locks",
+        "ls-files",
+        "--others",
+        "--exclude-standard",
+        ZERO_TERMINATED,
+      ]),
+    ),
+  );
+  return [...changed, ...untracked].some((path) => !appPath(input.appId, path));
+};
+
+const replayCandidateProgram = String.raw`
+const { spawnSync } = require("node:child_process");
+const { createHash } = require("node:crypto");
+const { closeSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, rmSync, rmdirSync, chmodSync } = require("node:fs");
+const { tmpdir } = require("node:os");
+const { join } = require("node:path");
+const [oldRoot, newRoot, head, base, app] = process.argv.slice(1);
+const git = (root, args, input) => {
+  const temporary = mkdtempSync(join(tmpdir(), "builder-candidate-git-"));
+  const output = join(temporary, "output");
+  const fd = openSync(output, "w");
+  try {
+    const result = spawnSync("git", ["--no-optional-locks", "-C", root, ...args], {input, stdio:["pipe",fd,"pipe"], encoding:"utf8", env:{...process.env,GIT_OPTIONAL_LOCKS:"0"}});
+    if(result.status !== 0) throw Error(result.stderr || "Candidate Git read/replay failed");
+    return readFileSync(output);
+  } finally {closeSync(fd);rmSync(temporary,{force:true,recursive:true});}
+};
+const records = bytes => bytes.toString("utf8").split("\0").filter(Boolean);
+const appPath = path => path.startsWith("apps/" + app + "/") && !path.split("/").some(part => !part || part === "." || part === ".." || part === ".git" || part.includes("\\"));
+const file = (root, path) => {
+  if (!appPath(path)) throw Error("Cannot preserve unsafe candidate app path");
+  let current = root;
+  for (const part of path.split("/")) {
+    current = join(current,part);
+    try {if(lstatSync(current).isSymbolicLink()) throw Error("Cannot preserve candidate symlink at " + path);}
+    catch(error) {if(error.code === "ENOENT" || error.code === "ENOTDIR") return null;throw error;}
+  }
+  const stat=lstatSync(current);
+  if(stat.isDirectory()) return null;
+  if(!stat.isFile()) throw Error("Cannot preserve non-file candidate path " + path);
+  return {path:current,mode:stat.mode & 511};
+};
+const hash = path => {
+  const fd=openSync(path,"r");const digest=createHash("sha256");const buffer=Buffer.alloc(65536);let position=0;
+  try {for(;;){const count=readSync(fd,buffer,0,buffer.length,position);if(!count)break;digest.update(buffer.subarray(0,count));position+=count;}return digest.digest("hex");}finally{closeSync(fd);}
+};
+const scoped=["--","apps/"+app];
+const paths=[...new Set([
+  ...records(git(oldRoot,["diff","--no-renames","--name-only","-z",head,...scoped])),
+  ...records(git(oldRoot,["diff","--no-renames","--name-only","-z",base,...scoped])),
+  ...records(git(oldRoot,["ls-files","--others","--exclude-standard","-z",...scoped])),
+])].sort();
+const unmerged=git(oldRoot,["ls-files","--unmerged","-z",...scoped]);
+const oldHead=git(oldRoot,["rev-parse","HEAD"]).toString("utf8");
+const indexPath=git(oldRoot,["rev-parse","--git-path","index"]).toString("utf8").trim();
+const oldIndex=hash(indexPath);
+const snapshot=paths.map(path=>{const observed=file(oldRoot,path);return {path,observed:observed===null?null:{mode:observed.mode,digest:hash(observed.path)}};});
+const appRoot=join(newRoot,"apps",app);
+const pruneEmptyParents = path => {
+  const parts=path.split("/");parts.pop();
+  let parent=join(newRoot,...parts);
+  while(parent!==appRoot){
+    try{rmdirSync(parent);}catch(error){if(error.code==="ENOTEMPTY"||error.code==="EEXIST")break;if(error.code!=="ENOENT")throw error;}
+    parts.pop();parent=join(newRoot,...parts);
+  }
+};
+const deletions=snapshot.filter(entry=>entry.observed===null).sort((a,b)=>b.path.split("/").length-a.path.split("/").length);
+for(const {path} of deletions){
+  const existing=file(newRoot,path);
+  if(existing!==null){rmSync(existing.path);pruneEmptyParents(path);}
+}
+for(const {path,observed} of snapshot){
+  if(observed===null)continue;
+  file(newRoot,path);
+  const target=join(newRoot,path);
+  if(existsSync(target)&&lstatSync(target).isDirectory())rmdirSync(target);
+  let parent=newRoot;
+  const parts=path.split("/");parts.pop();
+  for(const part of parts){parent=join(parent,part);if(!existsSync(parent))mkdirSync(parent);const stat=lstatSync(parent);if(stat.isSymbolicLink()||!stat.isDirectory())throw Error("Candidate replay parent is not an owned directory");}
+  copyFileSync(join(oldRoot,path),target);chmodSync(target,observed.mode);
+  if(hash(target)!==observed.digest)throw Error("Candidate app copy could not be verified at " + path);
+}
+git(newRoot,["add","--all",...scoped]);
+const unresolvedPaths=[...new Set(records(unmerged).map(record=>record.slice(record.indexOf("\t")+1)))];
+if(unresolvedPaths.length){git(newRoot,["update-index","--force-remove","--",...unresolvedPaths]);git(newRoot,["update-index","-z","--index-info"],unmerged);}
+for(const {path,observed} of snapshot){
+  const before=file(oldRoot,path);const after=file(newRoot,path);
+  if(observed===null){if(before!==null||after!==null)throw Error("Candidate deletion changed during preservation at " + path);}
+  else if(before===null||after===null||before.mode!==observed.mode||after.mode!==observed.mode||hash(before.path)!==observed.digest||hash(after.path)!==observed.digest)throw Error("Candidate app changed during preservation at " + path);
+}
+if(!git(newRoot,["ls-files","--unmerged","-z",...scoped]).equals(unmerged)||!git(oldRoot,["ls-files","--unmerged","-z",...scoped]).equals(unmerged)||git(oldRoot,["rev-parse","HEAD"]).toString("utf8")!==oldHead||hash(indexPath)!==oldIndex)throw Error("Candidate merge state changed during preservation; old candidate retained");
+console.log("preserved");
+`;
+
+const replayCandidateApp = async (
+  input: DraftReconciliationInput,
+  oldRoot: string,
+  newRoot: string,
+) => {
+  try {
+    await checked(
+      input.sandbox,
+      "preserve app repairs in a fresh private candidate",
+      `node -e ${quote(replayCandidateProgram)} ${[oldRoot, newRoot, input.headSha, input.baseSha, input.appId].map(quote).join(" ")}`,
+    );
+  } catch (error) {
+    throw new Error(
+      `Builder could not preserve every app repair in a fresh private candidate. The original candidate at ${oldRoot} remains intact; no candidate was replaced or published. Inspect its app conflicts and retry preparation. Cause: ${redact(error instanceof Error ? error.message : String(error))}`,
+      { cause: error },
+    );
+  }
+};
+
+const readCandidateConflicts = async (
+  input: DraftReconciliationInput,
+  root: string,
+): Promise<string[]> => {
+  const { sandbox } = input;
+  const currentHead = await checked(
+    sandbox,
+    "inspect the isolated draft candidate",
+    git(root, ["rev-parse", "HEAD"]),
+  );
+  if (currentHead !== input.headSha && input.unpublished === undefined) {
+    throw new Error(
+      `Builder's saved reconciliation checkout has a different head (${currentHead}). Re-observe the current draft before retrying.`,
+    );
+  }
+  const conflictOutput = await checked(
+    sandbox,
+    "inspect unresolved app conflicts",
+    git(root, UNMERGED_PATHS),
+  );
+  const conflicts = records(conflictOutput);
+  const outside = conflicts.find((path) => !appPath(input.appId, path));
+  if (outside !== undefined) {
+    throw new Error(
+      `Builder cannot resolve merge conflict at ${outside}: this path is outside apps/${input.appId}/. A repository owner must resolve it before Builder can continue this draft.`,
+    );
+  }
+  return conflicts;
+};
+
+const selectCandidateRoot = async (
+  input: DraftReconciliationInput,
+  workspaceRoot: string,
+  canonicalRoot: string,
+) => {
+  const previous = input.previousCandidate;
+  const replayEligible =
+    previous !== undefined &&
+    input.replayPreviousCandidate === true &&
+    [
+      previous.appId === input.appId,
+      previous.headSha === input.headSha,
+      previous.baseSha === input.baseSha,
+      previous.workspaceRoot === workspaceRoot,
+      previous.root.startsWith(`${workspaceRoot}/.app-builder/draft-reconcile/`),
+      /^[-a-f0-9]+$/u.test(
+        previous.root.slice(`${workspaceRoot}/.app-builder/draft-reconcile/`.length),
+      ),
+    ].every(Boolean);
+  let root = replayEligible ? previous.root : canonicalRoot;
+  let created = await candidateNeedsCreation(input.sandbox, root);
+  let preservedCandidateRoot: string | undefined;
+  let replayedAppChanges = false;
+  const changedLineage = previous !== undefined && !replayEligible;
+  if (changedLineage || (!created && (await outsideCandidateChanges(input, root)))) {
+    preservedCandidateRoot = previous?.root ?? root;
+    root = `${canonicalRoot}-${randomUUID()}`;
+    created = true;
+    replayedAppChanges = replayEligible && preservedCandidateRoot === previous.root;
+  }
+  return { root, created, preservedCandidateRoot, replayedAppChanges };
+};
+
 /** Prepare a private merge candidate. This never updates the GitHub PR branch. */
 export const prepareDraftReconciliation = async (
   input: DraftReconciliationInput,
-): Promise<PreparedDraftReconciliation & { created: boolean }> => {
+): Promise<
+  PreparedDraftReconciliation & {
+    created: boolean;
+    preservedCandidateRoot?: string;
+    replayedAppChanges?: boolean;
+  }
+> => {
   verifyInputs(input);
   const { sandbox } = input;
   const workspaceRoot = input.workspaceRoot ?? DEFAULT_WORKSPACE;
@@ -372,8 +593,12 @@ export const prepareDraftReconciliation = async (
       ]),
     )
     .digest("hex");
-  const root = `${workspaceRoot}/.app-builder/draft-reconcile/${key}`;
-  const created = await candidateNeedsCreation(sandbox, root);
+  const canonicalRoot = `${workspaceRoot}/.app-builder/draft-reconcile/${key}`;
+  const { root, created, preservedCandidateRoot, replayedAppChanges } = await selectCandidateRoot(
+    input,
+    workspaceRoot,
+    canonicalRoot,
+  );
   // oxlint-disable-next-line eslint/no-negated-condition, unicorn/no-negated-condition -- creation has the longer branch and recovery is handled after it.
   if (created) {
     const head = await checked(
@@ -462,34 +687,17 @@ export const prepareDraftReconciliation = async (
       }
     }
   }
-  const currentHead = await checked(
-    sandbox,
-    "inspect the isolated draft candidate",
-    git(root, ["rev-parse", "HEAD"]),
-  );
-  if (currentHead !== input.headSha && input.unpublished === undefined) {
-    throw new Error(
-      `Builder's saved reconciliation checkout has a different head (${currentHead}). Re-observe the current draft before retrying.`,
-    );
+  if (replayedAppChanges && preservedCandidateRoot !== undefined) {
+    await replayCandidateApp(input, preservedCandidateRoot, root);
   }
-  const conflictOutput = await checked(
-    sandbox,
-    "inspect unresolved app conflicts",
-    git(root, UNMERGED_PATHS),
-  );
-  const conflicts = records(conflictOutput);
-  const outside = conflicts.find((path) => !appPath(input.appId, path));
-  if (outside !== undefined) {
-    throw new Error(
-      `Builder cannot resolve merge conflict at ${outside}: this path is outside apps/${input.appId}/. A repository owner must resolve it before Builder can continue this draft.`,
-    );
-  }
+  const conflicts = await readCandidateConflicts(input, root);
   return {
     appId: input.appId,
     baseSha: input.baseSha,
     baseTree: await inspectRevision(sandbox, checkout, input.baseSha),
     conflicts,
     created,
+    ...(preservedCandidateRoot === undefined ? {} : { preservedCandidateRoot, replayedAppChanges }),
     headSha: input.headSha,
     headTree: await inspectRevision(sandbox, checkout, input.headSha),
     root,

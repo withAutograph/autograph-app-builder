@@ -1474,11 +1474,7 @@ describe("existing populated Auth workflow planning", () => {
         operationRef: operator.operationRef,
         plan: operator.plan,
       });
-      if (nonceState !== "pending") {
-        await expect(invitation).rejects.toMatchObject({ code: "operation_in_progress" });
-        expect(prepareRealmIdentityLink).not.toHaveBeenCalled();
-        expect(providerInventory.readHostedOperatorProviderInventory).not.toHaveBeenCalled();
-      } else {
+      if (nonceState === "pending") {
         await expect(invitation).rejects.toThrow("fixture invitation boundary");
         const [observed] = vi.mocked(providerInventory.readHostedOperatorProviderInventory).mock
           .calls;
@@ -1488,6 +1484,10 @@ describe("existing populated Auth workflow planning", () => {
         expect(observed?.[0].configuration.verification.gatewayOrigin).toBe(
           "https://gateway.example",
         );
+      } else {
+        await expect(invitation).rejects.toMatchObject({ code: "operation_in_progress" });
+        expect(prepareRealmIdentityLink).not.toHaveBeenCalled();
+        expect(providerInventory.readHostedOperatorProviderInventory).not.toHaveBeenCalled();
       }
       expect(operator.identityLink).toEqual(before);
     },

@@ -295,8 +295,8 @@ describe("target validation", () => {
   });
 
   it.each([
-    ["mise run --skip-tools app:check example", "repository-check", undefined],
-    ["mise run --skip-tools app:test example 1/1", "repository-test", "1/1"],
+    ["mise run --no-deps --skip-tools app:check example", "repository-check", undefined],
+    ["mise run --no-deps --skip-tools app:test example 1/1", "repository-test", "1/1"],
   ] as const)(
     "forwards compiler inputs to owned hosted execution: %s",
     async (command, task, shard) => {
@@ -605,7 +605,7 @@ describe("target validation", () => {
     expect(result.receipt.commandFailure?.hint).toContain("Sandbox command launch failed");
     expect(result.receipt.commandFailure?.hint).toContain("workspace unavailable for apps/example");
     expect(result.receipt.commandFailure?.hint).toContain(
-      "mise run --skip-tools app:check example",
+      "mise run --no-deps --skip-tools app:check example",
     );
     expect(JSON.stringify(result)).not.toContain("private-value");
   });
@@ -713,8 +713,8 @@ describe("target validation", () => {
   });
 
   it.each([
-    "mise run --skip-tools app:check example",
-    "mise run --skip-tools app:test example 1/1",
+    "mise run --no-deps --skip-tools app:check example",
+    "mise run --no-deps --skip-tools app:test example 1/1",
   ] as const)("runs the repository-owned validation task once: %s", async (command) => {
     // oxlint-disable-next-line eslint/require-await -- model the sandbox's async command API
     const run = vi.fn(async () => ({ exitCode: 1, stderr: "Formatting issues found", stdout: "" }));
@@ -731,7 +731,7 @@ describe("target validation", () => {
     expect(run).toHaveBeenCalledExactlyOnceWith({
       command: `set +e
 log=$(mktemp /tmp/app-builder-validation.XXXXXX) || exit $?
-if [ -f '/tmp/autograph-app-runtime/b7a886d0cdd17479/example/environment.json' ]; then mise run app:runtime run example ${command.includes(" app:check ") ? "repository-check" : "repository-test 1/1"}; else ${command}; fi > "$log" 2>&1
+if [ -f '/tmp/autograph-app-runtime/b7a886d0cdd17479/example/environment.json' ]; then mise run --no-deps app:runtime run example ${command.includes(" app:check ") ? "repository-check" : "repository-test 1/1"}; else ${command}; fi > "$log" 2>&1
 status=$?
 cat "$log"
 rm -f "$log"
@@ -746,10 +746,10 @@ exit "$status"`,
   });
 
   it.each([
-    [false, "mise run --skip-tools app:check example", "repository-check"],
-    [false, "mise run --skip-tools app:test example 1/1", "repository-test 1/1"],
-    [true, "mise run --skip-tools app:check example", "repository-check"],
-    [true, "mise run --skip-tools app:test example 1/1", "repository-test 1/1"],
+    [false, "mise run --no-deps --skip-tools app:check example", "repository-check"],
+    [false, "mise run --no-deps --skip-tools app:test example 1/1", "repository-test 1/1"],
+    [true, "mise run --no-deps --skip-tools app:check example", "repository-check"],
+    [true, "mise run --no-deps --skip-tools app:test example 1/1", "repository-test 1/1"],
   ] as const)(
     "hands compiler inputs and the prepared state directory to mise with streaming=%s for %s",
     async (streaming, validationCommand, runtimeTask) => {
@@ -785,9 +785,9 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
         if (result.error !== undefined) throw result.error;
         return { exitCode: result.status ?? -1, stderr: result.stderr, stdout: result.stdout };
       };
-      expect(execute({ command: `mise run app:runtime run example ${runtimeTask}` }).exitCode).toBe(
-        22,
-      );
+      expect(
+        execute({ command: `mise run --no-deps app:runtime run example ${runtimeTask}` }).exitCode,
+      ).toBe(22);
       const run = vi.fn((input: Parameters<SandboxSession["run"]>[0]) =>
         Promise.resolve(execute(input)),
       );
@@ -862,7 +862,7 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
       });
       const result = await sandboxValidationCommandExecutor()({
         appId: "example",
-        command: "mise run --skip-tools app:test example 1/1",
+        command: "mise run --no-deps --skip-tools app:test example 1/1",
         sandbox: { run } as unknown as SandboxSession,
         validationRoot: directory,
       });

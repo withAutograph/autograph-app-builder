@@ -17,7 +17,11 @@ const sameNarrowedPlan = (prior: HostedOperatorPlan, next: HostedOperatorPlan): 
   if (
     binding === undefined ||
     prior.gatewayBindings?.trustedSources === undefined ||
-    next.gatewayBindings === undefined ||
+    next.gatewayBindings === undefined
+  ) {
+    return false;
+  }
+  if (
     next.gatewayBindings.trustedSources !== undefined ||
     prior.gatewayDelivery === undefined ||
     next.gatewayDelivery === undefined
@@ -107,11 +111,13 @@ export const hasRetainedSharedHostProtectionIdentity = (
 ): boolean => {
   const current = record.operator;
   const link = current?.identityLink;
+  if (current === undefined || link === undefined) {
+    return false;
+  }
+  if (current.approvalId === undefined || current.planDigest !== operatorPlanDigest(current.plan)) {
+    return false;
+  }
   if (
-    current === undefined ||
-    link === undefined ||
-    current.approvalId === undefined ||
-    current.planDigest !== operatorPlanDigest(current.plan) ||
     link.consumedAt === undefined ||
     link.proofRef === undefined ||
     link.proofSha256 === undefined

@@ -30,7 +30,7 @@ describe("private app browser tests", () => {
         appId,
       );
       const executeCommand = (options: SandboxRunOptions) => {
-        if (options.command === `mise run app:describe ${appId}`) {
+        if (options.command === `mise run --no-deps app:describe ${appId}`) {
           return {
             exitCode: 0,
             stderr: "",
@@ -171,7 +171,7 @@ describe("private app browser tests", () => {
       sandbox: { run },
     });
     expect(run).toHaveBeenCalledWith({
-      command: "mise run app:runtime run spend-review test-e2e",
+      command: "mise run --no-deps app:runtime run spend-review test-e2e",
       env: {
         APP_RUNTIME_STATE_DIR: path.posix.dirname(
           localRuntimeEnvironmentPath("/workspace/repository", "spend-review"),
@@ -221,7 +221,9 @@ describe("private app browser tests", () => {
     });
     expect(run).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ command: "mise run app:runtime run spend-review test-e2e" }),
+      expect.objectContaining({
+        command: "mise run --no-deps app:runtime run spend-review test-e2e",
+      }),
     );
     expect(run).toHaveBeenNthCalledWith(
       2,
