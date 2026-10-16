@@ -1,5 +1,5 @@
 import { HostedOperatorError } from "./hosted-operator-contract";
-import type { HostedOperatorPlan } from "./hosted-operator-contract";
+import type { HostedOperatorPlan, OperatorPublicResult } from "./hosted-operator-contract";
 import type { CompiledOperatorReleaseSelection } from "./hosted-operator-artifact-selection";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
 
@@ -14,7 +14,7 @@ export const resolvePublishedAppDelivery = (
   if (selectedRelease !== undefined) {
     const source = selectedRelease.publishedSource;
     if (source === undefined) {
-      throw new HostedOperatorError("operator_unavailable");
+      throw new HostedOperatorError("app_source_publication_required");
     }
     return {
       branch: source.branch,
@@ -32,5 +32,19 @@ export const resolvePublishedAppDelivery = (
     gitSha: application.gitSha,
     projectId: application.projectId,
     repoId: application.repoId,
+  };
+};
+
+/** Continue normal publication when a selected generated release has no published source yet. */
+export const withAppPublicationGuidance = <T extends Pick<OperatorPublicResult, "code" | "status">>(
+  result: T,
+) => {
+  if (result.status !== "blocked" || result.code !== "app_source_publication_required") {
+    return result;
+  }
+  return {
+    ...result,
+    nextAction:
+      "Continue this session's normal draft publication workflow for the technically validated and reviewed app source, using the existing initial publication, draft update, or reconciliation path and its separate publication approval. Verify appSourceRecording is recorded; if unavailable, resume that same approved publication to record its actual source. Then plan hosted preparation again in this session. Keep the existing resources. Hosted behavior remains unassessed until the delivered app is exercised.",
   };
 };
