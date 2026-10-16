@@ -977,7 +977,18 @@ describe("owned approved operation reference", () => {
       if (current === null) {
         throw new Error("Missing owned session");
       }
-      vi.spyOn(f.store, "getSession").mockResolvedValue({ ...current, status });
+      const { checkpoint } = toDurableHostedSessionRecord(current);
+      if (checkpoint === undefined) {
+        throw new Error("Missing owned checkpoint");
+      }
+      await f.store.observeSession({
+        principal,
+        sessionId: f.saved.sessionId,
+        checkpoint: { ...checkpoint, status },
+        nowEpochMs: current.updatedAtEpochMs,
+        resumability: "terminal",
+        stage: status === "completed" ? "complete" : "needs_attention",
+      });
       await expect(referenceReader(f).load(f.input, f.context, f.operator)).rejects.toMatchObject({
         code: "authorization_required",
       });
