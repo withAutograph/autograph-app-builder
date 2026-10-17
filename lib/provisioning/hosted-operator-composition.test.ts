@@ -36,7 +36,16 @@ import {
 import type { NormalActorAccountPreparation } from "./hosted-operator-normal-actor-journal";
 
 import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
-import type { HostedOperatorContext, HostedOperatorEffectContext } from "./hosted-operator-service";
+import type {
+  HostedOperatorContext,
+  HostedOperatorDeploymentContext,
+  HostedOperatorEffectContext,
+  HostedOperatorWorkerEffectContext,
+} from "./hosted-operator-service";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy on the provider adapter boundary while exercising real composition context routing.
+import * as deploymentDelivery from "./hosted-operator-deployment-delivery";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Inspect the environment verification context without a provider request.
+import * as gatewayBindingAdapter from "./hosted-operator-gateway-bindings";
 import type { HostedOperatorNormalActorPlanningPorts } from "./hosted-operator-composition";
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy only on the independent verified identity boundary.
 import * as realmIdentity from "./hosted-operator-auth-identity";
@@ -1675,3 +1684,125 @@ describe("retained approved Auth binding selection", () => {
     expect(() => selectAuthPlanningResourceBindingRow(row, originalPlan)).toThrow();
   });
 });
+
+it.each(["reconcile", "execute"] as const)(
+  "preserves app candidates through Gateway %s and adapter candidate clones",
+  async (mode) => {
+    const f = publicationFixture();
+    const appCandidate = {
+      branch: context.target.branch,
+      deploymentId: "app-ready",
+      operationRef: "00000000-0000-4000-8000-000000000001",
+      origin: "https://app-ready.example.test",
+      projectId: context.target.projectId,
+      projectName: "app-project",
+      readyState: "READY",
+      repoId: "app-repository",
+      scopeSlug: "fixture-team",
+    };
+    const gatewayCandidate = {
+      ...appCandidate,
+      deploymentId: "gateway-ready",
+      origin: "https://gateway-ready.example.test",
+      projectId: "gateway",
+      projectName: "gateway-project",
+      repoId: "gateway-repository",
+    };
+    const appCandidates = [appCandidate];
+    const gatewayCandidates = [gatewayCandidate];
+    const checkpointApp = vi.fn(async () => {});
+    const checkpointGateway = vi.fn(async () => {});
+    const verifyForDelivery = vi.fn(
+      async (
+        input: Parameters<
+          ReturnType<
+            typeof gatewayBindingAdapter.createHostedOperatorGatewayBindings
+          >["verifyForDelivery"]
+        >[0],
+      ) => {
+        expect(input.deliveryCandidates).toBe(appCandidates);
+        expect(input.effect.kind).toBe("gateway-delivery");
+        return { rows: [] };
+      },
+    );
+    const createBindings = gatewayBindingAdapter.createHostedOperatorGatewayBindings;
+    vi.spyOn(gatewayBindingAdapter, "createHostedOperatorGatewayBindings").mockImplementation(
+      (ports) => ({
+        ...createBindings(ports),
+        verifyForDelivery,
+      }),
+    );
+    const createDelivery = deploymentDelivery.createHostedOperatorDeploymentDelivery;
+    const runGateway = vi.fn(async (input: HostedOperatorDeploymentContext) => {
+      expect(input.deliveryCandidates).toBe(gatewayCandidates);
+      expect(input.appDeliveryCandidates).toBe(appCandidates);
+      expect(input.checkpointDelivery).toBe(checkpointGateway);
+      expect(input.leaseId).toBe("actual-lease");
+      return {
+        candidates: gatewayCandidates,
+        selected: gatewayCandidate,
+        status: "applied" as const,
+      };
+    });
+    vi.spyOn(deploymentDelivery, "createHostedOperatorDeploymentDelivery").mockImplementation(
+      (ports) => {
+        const adapter = createDelivery(ports);
+        if (ports.target !== "gateway") {
+          return adapter;
+        }
+        const observe = async (input: HostedOperatorDeploymentContext) => {
+          const result = await runGateway(input);
+          await ports.assertEnvironment({
+            ...input,
+            deliveryCandidates: [{ ...gatewayCandidate }],
+          });
+          return result;
+        };
+        return { ...adapter, reconcile: observe, deliver: observe };
+      },
+    );
+    const dependencies = composeHostedOperatorDependencies(f.configuration, {
+      ...f.controlPlane,
+      assertAuthorized: vi.fn(async () => {}),
+    } as unknown as Parameters<typeof composeHostedOperatorDependencies>[1]);
+    const plan = bootstrapWithGatewayOrigin("https://gateway.example");
+    plan.stage = "app";
+    plan.gatewayBindings = {
+      authBrowserOrigin: "https://auth.example",
+      builderCallbackOrigin: "https://builder.example",
+      catalogAppIds: [context.target.appId],
+      operatorOrigin: "https://operator.example",
+      sourceWorkload: { ...f.configuration.gateway.workload, environment: "preview" },
+    };
+    const input: HostedOperatorWorkerEffectContext = {
+      ...context,
+      assertCurrent: vi.fn(async () => {}),
+      bindWorkerContext: vi.fn(),
+      checkpoint: vi.fn(async () => {}),
+      checkpointDelivery: checkpointApp,
+      checkpointGatewayDelivery: checkpointGateway,
+      checkpointGatewayEnvironment: vi.fn(async () => {}),
+      deliveryCandidates: appCandidates,
+      effect: { id: "gateway-delivery", kind: "gateway-delivery", description: "Deliver Gateway" },
+      fenceGeneration: 3,
+      gatewayDeliveryCandidates: gatewayCandidates,
+      leaseId: "actual-lease",
+      operationRef: appCandidate.operationRef,
+      plan,
+      workerAttemptId: "actual-attempt",
+      workerCheckpoints: [],
+    };
+    if (mode === "reconcile") {
+      expect(await dependencies.reconcile(input)).toMatchObject({ status: "applied" });
+    } else {
+      expect(await dependencies.executeEffect(input)).toMatchObject({
+        effectId: "gateway-delivery",
+      });
+    }
+    expect(runGateway).toHaveBeenCalledOnce();
+    expect(verifyForDelivery).toHaveBeenCalledOnce();
+    expect(checkpointApp).not.toHaveBeenCalled();
+    expect(input.deliveryCandidates).toBe(appCandidates);
+    expect(input.gatewayDeliveryCandidates).toBe(gatewayCandidates);
+  },
+);

@@ -368,6 +368,7 @@ const deliveryContext = (input: HostedOperatorEffectContext) => {
   }
   return {
     ...input,
+    ...(gateway ? { appDeliveryCandidates: input.deliveryCandidates } : {}),
     checkpointDelivery,
     deliveryCandidates: gateway ? input.gatewayDeliveryCandidates : input.deliveryCandidates,
   };
@@ -874,7 +875,9 @@ export const composeHostedOperatorDependencies = (
   const gatewayDelivery = createHostedOperatorDeploymentDelivery({
     assertAuthorized: controlPlane.assertAuthorized,
     assertEnvironment: async (input) => {
-      await gatewayEnvironment.verifyForDelivery(gatewayContext(input));
+      await gatewayEnvironment.verifyForDelivery(
+        gatewayContext({ ...input, deliveryCandidates: input.appDeliveryCandidates }),
+      );
     },
     readCredential: controlPlane.readCredential,
     target: "gateway",

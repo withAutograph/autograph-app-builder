@@ -135,6 +135,8 @@ export type GatewayManagedEnvironmentContext = HostedOperatorEffectContext & {
   checkpointGatewayEnvironment: (rows: readonly ManagedOperatorEnvironmentRow[]) => Promise<void>;
 };
 export type HostedOperatorDeploymentContext = HostedOperatorEffectContext & {
+  /** Original app candidates remain separate while Gateway delivery observes its own deployments. */
+  appDeliveryCandidates?: OperatorDeploymentCandidate[];
   checkpointDelivery: (
     candidates: readonly OperatorDeploymentCandidate[],
     selectedId?: string,
