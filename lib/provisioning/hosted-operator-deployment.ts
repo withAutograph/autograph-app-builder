@@ -250,9 +250,58 @@ const samePrincipal = (left: HostedPrincipal, right: HostedPrincipal) =>
 
 type ResourceCredentialEffect = HostedOperatorEffectContext & { workerAttemptId?: string };
 
+const isCompletedGatewayBindingObservation = (
+  record: HostedRuntimeJournalRecord,
+  input: ResourceCredentialEffect,
+) => {
+  const { operator } = record;
+  return [
+    input.workerAttemptId === undefined,
+    input.plan.action === "prepare",
+    input.plan.stage === "app",
+    input.effect.kind === "gateway-bindings",
+    operator?.receipts.some((receipt) => receipt.effectId === input.effect.id) === true,
+    operator?.pendingEffectAttempt !== undefined,
+    operator?.plan.effects.some(
+      (effect) => effect.id === operator.pendingEffectId && effect.kind === "gateway-delivery",
+    ) === true,
+  ].every(Boolean);
+};
+
+const hasCurrentResourceCredentialEffectPhase = (
+  record: HostedRuntimeJournalRecord,
+  input: ResourceCredentialEffect,
+  completedGatewayBindingObservation: boolean,
+) => {
+  const { operator } = record;
+  if (operator === undefined) {
+    return false;
+  }
+  if (input.workerAttemptId !== undefined) {
+    return (
+      operator.pendingEffectId === input.effect.id &&
+      operator.pendingEffectAttempt?.id === input.workerAttemptId
+    );
+  }
+  const pendingMutation =
+    operator.pendingEffectId !== undefined || operator.pendingEffectAttempt !== undefined;
+  if (!pendingMutation) {
+    return true;
+  }
+  if (operator.pendingEffectId === input.effect.id && operator.pendingEffectAttempt !== undefined) {
+    return true;
+  }
+  return (
+    completedGatewayBindingObservation &&
+    isCompletedGatewayBindingObservation(record, input) &&
+    isDeepStrictEqual(input.privateState, record.privateState)
+  );
+};
+
 const requireCurrentResourceCredentialRecord = (
   record: HostedRuntimeJournalRecord | undefined,
   input: ResourceCredentialEffect,
+  completedGatewayBindingObservation = false,
 ): HostedRuntimeJournalRecord => {
   if (record === undefined || record.leaseId === undefined || record.leaseExpiresAt === undefined) {
     throw new HostedOperatorError("operation_in_progress");
@@ -267,17 +316,7 @@ const requireCurrentResourceCredentialRecord = (
   ) {
     throw new HostedOperatorError("operation_in_progress");
   }
-  if (input.workerAttemptId !== undefined) {
-    if (
-      operator.pendingEffectId !== input.effect.id ||
-      operator.pendingEffectAttempt?.id !== input.workerAttemptId
-    ) {
-      throw new HostedOperatorError("operation_in_progress");
-    }
-  } else if (
-    (operator.pendingEffectId !== undefined || operator.pendingEffectAttempt !== undefined) &&
-    (operator.pendingEffectId !== input.effect.id || operator.pendingEffectAttempt === undefined)
-  ) {
+  if (!hasCurrentResourceCredentialEffectPhase(record, input, completedGatewayBindingObservation)) {
     throw new HostedOperatorError("operation_in_progress");
   }
   if (
@@ -298,12 +337,56 @@ const readCurrentResourceCredentialRecord = async (input: {
     context: HostedOperatorContext & { plan: ResourceCredentialEffect["plan"] },
   ) => Promise<void>;
   effect: ResourceCredentialEffect;
-  store: HostedRuntimeJournalStore;
+  store: Pick<HostedRuntimeJournalStore, "read">;
+  completedGatewayBindingObservation?: boolean;
 }) => {
   await input.assertAuthorized(input.effect);
   await input.effect.assertCurrent();
   const current = await input.store.read(input.effect);
-  return requireCurrentResourceCredentialRecord(current?.record, input.effect);
+  return requireCurrentResourceCredentialRecord(
+    current?.record,
+    input.effect,
+    input.completedGatewayBindingObservation,
+  );
+};
+
+/** Read the current effect's sealed bindings; completed Gateway observations never acquire mutation authority. */
+export const readHostedOperatorEffectResourceBindings = async (
+  input: Omit<
+    Parameters<typeof readCurrentResourceCredentialRecord>[0],
+    "completedGatewayBindingObservation"
+  > & {
+    config: Parameters<typeof readHostedOperatorResourceBindings>[0]["config"];
+  },
+) => {
+  const read = async () =>
+    await readCurrentResourceCredentialRecord({
+      ...input,
+      completedGatewayBindingObservation: true,
+    });
+  const record = await read();
+  const completedObservation = isCompletedGatewayBindingObservation(record, input.effect);
+  const bindings = readHostedOperatorResourceBindings({
+    ...input.effect,
+    config: input.config,
+    record,
+  });
+  const current = await read();
+  const sameObservation =
+    !(completedObservation || isCompletedGatewayBindingObservation(current, input.effect)) ||
+    [
+      current.leaseId === record.leaseId,
+      current.operator?.pendingEffectId === record.operator?.pendingEffectId,
+      current.operator?.pendingEffectAttempt?.id === record.operator?.pendingEffectAttempt?.id,
+      isDeepStrictEqual(
+        current.operator?.receipts.find((receipt) => receipt.effectId === input.effect.effect.id),
+        record.operator?.receipts.find((receipt) => receipt.effectId === input.effect.effect.id),
+      ),
+    ].every(Boolean);
+  if (!sameObservation || !isDeepStrictEqual(current.privateState, record.privateState)) {
+    throw new HostedOperatorError("operation_in_progress");
+  }
+  return bindings;
 };
 
 type ResourceBindingContext = HostedOperatorContext & {
@@ -1774,25 +1857,12 @@ export const createHostedOperatorControlPlane = async (input: {
           throw new HostedOperatorError("authorization_required");
         }
         if ("effect" in effectInput) {
-          const record = await readCurrentResourceCredentialRecord({
+          return await readHostedOperatorEffectResourceBindings({
             assertAuthorized: owner.assertAuthorized,
             effect: effectInput,
             store,
-          });
-          const bindings = readHostedOperatorResourceBindings({
-            ...effectInput,
             config: tokenKeyring,
-            record,
           });
-          const current = await readCurrentResourceCredentialRecord({
-            assertAuthorized: owner.assertAuthorized,
-            effect: effectInput,
-            store,
-          });
-          if (JSON.stringify(current.privateState) !== JSON.stringify(record.privateState)) {
-            throw new HostedOperatorError("operation_in_progress");
-          }
-          return bindings;
         }
         await owner.assertAuthorized(effectInput);
         const current = requireFinalResourceBindingPhase(
