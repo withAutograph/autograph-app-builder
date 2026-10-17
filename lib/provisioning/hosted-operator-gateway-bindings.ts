@@ -20,6 +20,7 @@ import type { readActiveVercelInstallationToken } from "../integrations/postgres
 import {
   canonicalGatewayEnvironmentRowsSchema,
   HostedOperatorError,
+  plannedAppBranch,
 } from "./hosted-operator-contract";
 import type {
   CanonicalGatewayEnvironmentRow,
@@ -958,7 +959,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
           selected.projectName === undefined ||
           selected.scopeSlug === undefined ||
           selected.projectId !== input.target.projectId ||
-          selected.branch !== input.target.branch
+          selected.branch !== plannedAppBranch(input.plan)
         ) {
           throw unavailable();
         }
