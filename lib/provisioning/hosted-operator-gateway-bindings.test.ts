@@ -437,6 +437,45 @@ it("keeps legacy plans free of Trusted Sources writes", async () => {
   }
 });
 
+it("binds the approved published app branch while preserving the authorization target branch", async () => {
+  const f = fixture();
+  const authorizationBranch = f.input.target.branch;
+  const publishedBranch = "app-builder/published-fixture";
+  f.input.plan = hostedOperatorPlanSchema.parse({
+    ...f.input.plan,
+    effects: [
+      ...f.input.plan.effects.slice(0, -1),
+      { id: "app-delivery", kind: "delivery", description: "Deliver approved app" },
+      ...f.input.plan.effects.slice(-1),
+    ],
+    deploymentBoundary: {
+      ...f.input.plan.deploymentBoundary,
+      app: { ...f.input.plan.deploymentBoundary?.app, branch: publishedBranch },
+    },
+    delivery: {
+      branch: publishedBranch,
+      gitSha: "a".repeat(40),
+      projectId: f.input.target.projectId,
+      repoId: "fixture-repo",
+    },
+  });
+  const candidate = f.input.deliveryCandidates?.[0];
+  if (candidate === undefined) {
+    throw new Error("Missing app candidate fixture");
+  }
+  candidate.branch = publishedBranch;
+  await f.writer.bind(f.input);
+  expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "applied" });
+  expect(f.input.target.branch).toBe(authorizationBranch);
+
+  candidate.branch = authorizationBranch;
+  expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
+  expect(f.diagnostics.mock.calls.at(-1)?.[0].gatewayBindings).toMatchObject({
+    stage: "app_candidate",
+    result: "unknown",
+  });
+});
+
 it.each(["absent", "null", "present"] as const)(
   "classifies a rejected settings PATCH from its existing %s Trusted Sources observation",
   async (visibility) => {
