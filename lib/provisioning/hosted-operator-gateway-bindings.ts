@@ -258,7 +258,7 @@ const managedKeys = [
 const managedKeySchema = z.enum(managedKeys);
 
 /** Known owned values can converge without replacing their provider identities. */
-const hasOwnedRealmLinkConfigChange = (
+const hasOwnedGatewayConfigChange = (
   input: GatewayManagedEnvironmentContext,
   observation: {
     expected: GatewayValues;
@@ -275,23 +275,34 @@ const hasOwnedRealmLinkConfigChange = (
   ) {
     return false;
   }
-  return rows.every((row) => {
-    const saved = known.find((item) => item.id === row.id && item.key === row.key);
-    const value = values.get(row.id);
-    if (
-      saved === undefined ||
-      value === undefined ||
-      saved.pendingOperationRef !== undefined ||
-      saved.pendingValueSha256 !== undefined ||
-      saved.valueSha256 !== valueDigest(value)
-    ) {
-      return false;
-    }
-    const desired = expected[managedKeySchema.parse(row.key)];
-    return row.key === "PLATFORM_REALM_OPERATOR_LINK_CONFIG"
-      ? value !== desired
-      : value === desired;
-  });
+  const hasDesiredChange = rows.some(
+    (row) => values.get(row.id) !== expected[managedKeySchema.parse(row.key)],
+  );
+  return (
+    hasDesiredChange &&
+    rows.every((row) => {
+      const saved = known.find((item) => item.id === row.id && item.key === row.key);
+      const value = values.get(row.id);
+      if (
+        saved === undefined ||
+        value === undefined ||
+        saved.pendingOperationRef !== undefined ||
+        saved.pendingValueSha256 !== undefined ||
+        saved.valueSha256 !== valueDigest(value)
+      ) {
+        return false;
+      }
+      const desired = expected[managedKeySchema.parse(row.key)];
+      return (
+        value === desired ||
+        [
+          "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
+          "PLATFORM_GATEWAY_PROJECT_BINDINGS",
+          "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS",
+        ].includes(row.key)
+      );
+    })
+  );
 };
 const requiredSecretKeys = [
   "PLATFORM_GATEWAY_IDENTITY_KEY_ID",
@@ -1460,7 +1471,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
         await io.fullGuard();
         const observed = await io.inspect(false);
         await io.fullGuard();
-        if (hasOwnedRealmLinkConfigChange(input, observed)) {
+        if (hasOwnedGatewayConfigChange(input, observed)) {
           // The diagnostic vocabulary reports unapplied setup as unknown.
           observation.finish("unknown");
           return {

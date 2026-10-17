@@ -1336,6 +1336,78 @@ it("checks the fresh execution context before making any provider mutation", asy
   expect(f.requests).toHaveLength(0);
 });
 
+const ownedBootstrapGatewayFixture = async () => {
+  const f = fixture();
+  const candidates = f.input.deliveryCandidates;
+  f.input.plan.stage = "auth-bootstrap";
+  f.input.deliveryCandidates = [];
+  await f.writer.bind(f.input);
+  delete f.input.plan.stage;
+  f.input.deliveryCandidates = candidates;
+  f.requests.length = 0;
+  f.checkpointGatewayEnvironment.mockClear();
+  return f;
+};
+
+it.each([false, true])(
+  "converges owned bootstrap bindings to an approved app candidate (policy change: %s)",
+  async (policyChange) => {
+    const f = await ownedBootstrapGatewayFixture();
+    if (policyChange) {
+      f.input.gateway.catalogAppIds = [...f.input.gateway.catalogAppIds, "approved-sibling"];
+      f.input.plan.gatewayBindings!.catalogAppIds = [...f.input.gateway.catalogAppIds];
+    }
+    const identities = f.input.gatewayEnvironmentRows!.map(({ valueSha256: _hash, ...row }) => row);
+    expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "retryable" });
+    expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+    expect(f.checkpointGatewayEnvironment).not.toHaveBeenCalled();
+    await f.writer.bind(f.input);
+    const writes = f.requests.filter((request) => request.method !== "GET");
+    expect(writes).toHaveLength(policyChange ? 2 : 1);
+    expect(writes.every((request) => request.method === "PATCH")).toBe(true);
+    expect(f.input.gatewayEnvironmentRows!.map(({ valueSha256: _hash, ...row }) => row)).toEqual(
+      identities,
+    );
+    const projection = f.rows.find((row) => row.key === "PLATFORM_GATEWAY_PROJECT_BINDINGS")!;
+    expect(JSON.parse(z.string().parse(projection.value))).toMatchObject({
+      bindings: [{ appId: target.appId, approved: { deploymentId: "dpl_new_app" } }],
+    });
+    f.requests.length = 0;
+    expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "applied" });
+    expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+  },
+);
+
+it.each(["hash", "pending-operation", "pending-value", "auth-resource", "auth-url"])(
+  "keeps owned projection changes unknown when %s invalidates the acknowledged configuration",
+  async (condition) => {
+    const f = await ownedBootstrapGatewayFixture();
+    let key = "PLATFORM_GATEWAY_PROJECT_BINDINGS";
+    if (condition === "auth-resource") {
+      key = "AUTH_DATABASE_RESOURCE";
+    } else if (condition === "auth-url") {
+      key = "PLATFORM_AUTH_DATABASE_URL";
+    }
+    const row = f.rows.find((item) => item.key === key)!;
+    const reference = f.input.gatewayEnvironmentRows!.find((item) => item.id === row.id)!;
+    if (condition === "hash") {
+      reference.valueSha256 = "f".repeat(64);
+    } else if (condition === "pending-operation") {
+      reference.pendingOperationRef = f.input.operationRef;
+    } else if (condition === "pending-value") {
+      reference.pendingValueSha256 = "f".repeat(64);
+    } else {
+      row.value = "different-fixed-auth-value";
+      reference.valueSha256 = createHash("sha256")
+        .update(z.string().parse(row.value))
+        .digest("hex");
+    }
+    expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
+    expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+    expect(f.checkpointGatewayEnvironment).not.toHaveBeenCalled();
+  },
+);
+
 const ownedLegacyRealmLinkFixture = async () => {
   const f = fixture();
   await f.writer.bind(f.input);
