@@ -87,12 +87,30 @@ App project build settings come from the trusted app description and are frozen
 with the delivery plan as an optional `projectSettings` profile. The profile
 records the provider framework, the exact described app `workspacePath` as
 `rootDirectory`, and whether shared source files outside that root are included
-in the build. Do not derive an app path from its ID or invent install, build, or
-output commands. For the current Next app source, the profile is `nextjs` at
-that exact workspace path with outside-root source inclusion enabled for shared
-workspace packages. A missing profile remains valid for older configurations
-and frozen plans; it does not claim that provider project settings were
-configured or observed.
+in the build. An optional `buildCommand` carries an explicitly configured,
+source-derived command; omission preserves existing provider behavior and `null`
+is forwarded unchanged. Do not derive an app path from its ID
+or invent install, build, or output commands. For the current Next app source,
+the profile is `nextjs` at that exact workspace path with outside-root source
+inclusion enabled for shared workspace packages. A missing profile remains
+valid for older configurations and frozen plans; it does not claim that provider
+project settings were configured or observed.
+
+When native Turborepo autodetection selects a failing build path, a trusted app
+profile can explicitly invoke the accepted application's own build script. For
+example, a source using Bun with an app `build` script can configure
+`buildCommand: "bun run build"` at its actual app root. Select the command for
+each app from its accepted source. The command travels in
+`projectSettings.buildCommand` on the [supported deployment API](https://vercel.com/docs/rest-api/deployments/create-a-new-deployment),
+is covered by the plan digest and ordinary changed-plan approval, and does not
+modify Vercel project-wide settings. Deploy a Builder that recognizes the field
+before an operator publishes a plan containing it. Environment changes apply to
+new deployments, so their configuration can be prepared in advance: refresh
+Builder first, then refresh the operator that will publish the changed plan.
+A source-derived override still requires actual native build readback; it does
+not establish that a build has succeeded. Use actual provider build errors to
+diagnose repeated failures before resubmitting the same command. Normal source
+changes and explicit provider retries remain supported.
 
 The REST deployment request is explicitly bound to the approved repository,
 ref, and commit. A dedicated unlinked app project does not require Builder to
