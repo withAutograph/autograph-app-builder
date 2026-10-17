@@ -214,7 +214,7 @@ for (const provider of emulatedProviders) {
         // Exercise the real durable save while delaying its acknowledgement
         // beyond the default five-second assertion budget. Callback query
         // parameters remain on the Builder URL until that acknowledgement.
-        const response = await route.fetch();
+        const response = await route.fetch({ maxRetries: 1 });
         await delay(6000);
         await route.fulfill({ response });
       },
