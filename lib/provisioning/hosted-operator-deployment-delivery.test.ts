@@ -6,7 +6,10 @@ import {
   operatorPlanDigest,
   operatorDeploymentCandidatesSchema,
 } from "./hosted-operator-contract";
-import { createHostedOperatorDeploymentDelivery } from "./hosted-operator-deployment-delivery";
+import {
+  createHostedOperatorDeploymentDelivery,
+  reconcileGatewayAppCandidate,
+} from "./hosted-operator-deployment-delivery";
 import type { HostedOperatorDeploymentContext } from "./hosted-operator-service";
 
 const authority = {
@@ -498,7 +501,14 @@ it("requests standard Preview delivery from approved Git source and observes rea
   expect(f.checkpoint).toHaveBeenCalled();
   f.setReady("READY");
   const result = await f.writer.reconcile(f.input);
-  expect(result.status).toBe("applied");
+  expect(result).toMatchObject({
+    status: "applied",
+    selected: { projectName: f.project.name, scopeSlug: f.team.slug },
+  });
+  expect(f.input.deliveryCandidates?.[0]).toMatchObject({
+    projectName: f.project.name,
+    scopeSlug: f.team.slug,
+  });
   expect(f.calls.filter((call) => call.method === "POST")).toHaveLength(1);
 });
 it("permits an app profile successor only after exact terminal blocked Production readback", async () => {
@@ -1505,4 +1515,63 @@ it("stops on an unknown provider read during a known build without repeating cre
   expect(f.calls.some((call) => call.path.endsWith("/aliases") && call.method === "POST")).toBe(
     false,
   );
+});
+
+it("reobserves a completed app candidate under its original delivery identity before Gateway binding", async () => {
+  const f = fixture();
+  f.seedCandidate();
+  f.input.deliveryCandidates = [
+    {
+      branch: "feature",
+      deploymentId: "dpl_new",
+      operationRef: f.input.operationRef,
+      origin: "https://new-native.vercel.app",
+      projectId: "prj_app",
+      readyState: "READY",
+      repoId: "repo",
+    },
+  ];
+  const gatewayInput = {
+    ...f.input,
+    effect: {
+      id: "gateway-bindings",
+      kind: "gateway-bindings" as const,
+      description: "Bind Gateway",
+    },
+  };
+  const original = structuredClone(gatewayInput.deliveryCandidates ?? []);
+  const recovered = await reconcileGatewayAppCandidate(gatewayInput, f.writer);
+  expect(recovered.effect).toEqual(gatewayInput.effect);
+  expect(recovered.deliveryCandidates).toEqual([
+    { ...original[0], projectName: f.project.name, scopeSlug: f.team.slug },
+  ]);
+  expect(f.input.deliveryCandidates).toEqual(recovered.deliveryCandidates);
+  expect(gatewayInput.deliveryCandidates).toEqual(original);
+  expect(f.checkpoint).toHaveBeenCalledWith(recovered.deliveryCandidates, "dpl_new");
+  expect(f.calls.every((call) => call.method === "GET")).toBe(true);
+  const callCount = f.calls.length;
+  expect(await reconcileGatewayAppCandidate(recovered, f.writer)).toBe(recovered);
+  expect(f.calls).toHaveLength(callCount);
+});
+
+it("does not turn unknown completed-candidate readback into Gateway binding authority", async () => {
+  const f = fixture();
+  f.seedCandidate();
+  f.input.deliveryCandidates = [
+    {
+      branch: "feature",
+      deploymentId: "dpl_new",
+      operationRef: f.input.operationRef,
+      origin: "https://new-native.vercel.app",
+      projectId: "prj_app",
+      readyState: "READY",
+      repoId: "repo",
+    },
+  ];
+  f.project.accountId = "another-team";
+  await expect(reconcileGatewayAppCandidate(f.input, f.writer)).rejects.toMatchObject({
+    code: "reconciliation_required",
+  });
+  expect(f.calls.every((call) => call.method === "GET")).toBe(true);
+  expect(f.checkpoint).not.toHaveBeenCalled();
 });

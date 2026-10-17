@@ -73,7 +73,10 @@ import { createHostedOperatorAuthProposal } from "./hosted-operator-auth-proposa
 import { createHostedOperatorSandboxLauncher } from "./hosted-operator-sandbox-launcher";
 import { createHostedOperatorAuthReadiness } from "./hosted-operator-auth-readiness";
 import { createHostedOperatorGatewayBindings } from "./hosted-operator-gateway-bindings";
-import { createHostedOperatorDeploymentDelivery } from "./hosted-operator-deployment-delivery";
+import {
+  createHostedOperatorDeploymentDelivery,
+  reconcileGatewayAppCandidate,
+} from "./hosted-operator-deployment-delivery";
 import { createHostedOperatorPublicGateway } from "./hosted-operator-public-gateway";
 import { resolvePublishedAppDelivery } from "./hosted-operator-published-app-delivery";
 import type { CompiledOperatorReleaseSelection } from "./hosted-operator-artifact-selection";
@@ -1633,7 +1636,9 @@ export const composeHostedOperatorDependencies = (
   const reconcileGatewayBindings = async (
     input: HostedOperatorEffectContext,
   ): ReturnType<ProtectedHostedOperatorDependencies["reconcile"]> => {
-    const observed = await gatewayEnvironment.reconcile(gatewayContext(input));
+    const observed = await gatewayEnvironment.reconcile(
+      gatewayContext(await reconcileGatewayAppCandidate(input, appDelivery)),
+    );
     return observed.status === "applied"
       ? { receipt: receipt(input, hash(observed.rows)), status: "applied" }
       : observed;
@@ -1856,7 +1861,9 @@ export const composeHostedOperatorDependencies = (
   const executeEffectGatewayBindings = async (
     input: HostedOperatorWorkerEffectContext,
   ): ReturnType<ProtectedHostedOperatorDependencies["executeEffect"]> => {
-    const observed = await gatewayEnvironment.bind(gatewayContext(input));
+    const observed = await gatewayEnvironment.bind(
+      gatewayContext(await reconcileGatewayAppCandidate(input, appDelivery)),
+    );
     return receipt(input, hash(observed.rows));
   };
   const executeEffectDelivery = async (
