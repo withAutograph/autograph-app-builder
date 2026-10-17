@@ -158,3 +158,37 @@ export const createProjectSettingsSuccessorPlan = (
     ? candidate.data
     : undefined;
 };
+
+/** Re-expose a saved proposal for ordinary approval without granting its predecessor's authority. */
+export const readPendingProjectSettingsSuccessorPlan = (
+  record: HostedRuntimeJournalRecord | undefined,
+  projectSettings: HostedOperatorAppProjectSettings | undefined,
+  now: number,
+): HostedOperatorPlan | undefined => {
+  const current = record?.operator;
+  if (record === undefined || current === undefined || projectSettings === undefined) {
+    return undefined;
+  }
+  const exactProposal = [
+    record.approvedByCallId === "operator:unapproved-plan",
+    current.approvalId === undefined,
+    isDeepStrictEqual(current.plan.delivery?.projectSettings, projectSettings),
+    current.planDigest === operatorPlanDigest(current.plan),
+  ].every(Boolean);
+  if (!exactProposal) {
+    return undefined;
+  }
+  const retained = current.retainedProjectSettingsOperations ?? [];
+  return retained.some(
+    (prior) =>
+      prior.operator.operationRef === current.operationRef &&
+      prior.operator.pendingEffectId === current.pendingEffectId &&
+      isProjectSettingsSuccessor(
+        { ...record, approvedByCallId: prior.approvedByCallId, operator: prior.operator },
+        current.plan,
+        now,
+      ),
+  )
+    ? current.plan
+    : undefined;
+};
