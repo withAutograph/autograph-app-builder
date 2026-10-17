@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { decryptHostedRuntimeFiles, encryptHostedRuntimeFiles } from "./hosted-runtime-service";
-import { hostedOperatorPlanSchema } from "./hosted-operator-contract";
+import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
 import type { OperatorSelection } from "./hosted-operator-contract";
 import { hostedRuntimeJournalRecordSchema } from "./hosted-runtime-journal";
+import { readHostedOperatorEffectResourceBindings } from "./hosted-operator-deployment";
+import type { HostedOperatorEffectContext } from "./hosted-operator-service";
 import {
   assertResourceCredentialCheckpoint,
   prepareHostedOperatorResourceCredentials,
@@ -210,6 +212,254 @@ describe("owned installed resource bindings", () => {
     expect(url.hostname).toBe(plan.neon.endpoint);
   });
 });
+
+/* oxlint-disable eslint/require-await -- In-memory owner, lease and journal ports preserve the asynchronous production reader contract. */
+const completedGatewayBindingObservation = () => {
+  const operationRef = "00000000-0000-4000-8000-000000000021";
+  const bindingEffect = {
+    description: "Bind the approved Gateway configuration",
+    id: "gateway-bindings",
+    kind: "gateway-bindings" as const,
+  };
+  const gatewayDeliveryEffect = {
+    description: "Deliver the approved Gateway",
+    id: "gateway-delivery",
+    kind: "gateway-delivery" as const,
+  };
+  const gatewayPlan = hostedOperatorPlanSchema.parse({
+    ...plan,
+    delivery: {
+      branch: selection.branch,
+      gitSha: "c".repeat(40),
+      projectId: selection.projectId,
+      repoId: "app-repository",
+    },
+    deploymentBoundary: {
+      app: { branch: selection.branch, environment: "preview", projectId: selection.projectId },
+      authority,
+      gateway: {
+        branch: "gateway-preview",
+        deploymentId: "gateway-deployment",
+        environment: "preview",
+        projectId: "gateway-project",
+      },
+      operator: {
+        deploymentId: "operator-deployment",
+        environment: "preview",
+        projectId: "operator-project",
+      },
+      teamId: target.scopeId,
+      verification: {
+        gatewayOrigin: "https://gateway.example.test",
+        jwksUrl: "https://gateway.example.test/_platform/jwks.json",
+        publicOrigin: "https://apps.example.test",
+      },
+    },
+    resourcesInstaller: { reference: "resource-worker", sha256: "e".repeat(64) },
+    effects: [
+      {
+        description: "Auth resources",
+        id: "auth-resources",
+        kind: "resources",
+        resourceId: plan.authDatabase.resourceId,
+      },
+      {
+        description: "App resources",
+        id: "app-resources",
+        kind: "resources",
+        resourceId: plan.appDatabase.resourceId,
+      },
+      ...plan.effects.filter((effect) => effect.kind !== "resources"),
+      { description: "Deliver app", id: "app-delivery", kind: "delivery" },
+      bindingEffect,
+      gatewayDeliveryEffect,
+    ],
+    gatewayBindings: {
+      authBrowserOrigin: "https://auth.example.test",
+      builderCallbackOrigin: "https://builder.example.test",
+      catalogAppIds: [selection.appId],
+      operatorOrigin: "https://operator.example.test",
+      sourceWorkload: {
+        audience: "https://gateway.example.test/mcp",
+        environment: "preview",
+        issuer: "https://builder.example.test",
+        ownerId: target.scopeId,
+        projectId: "gateway-project",
+        subject: "operator-fixture",
+      },
+    },
+    gatewayDelivery: {
+      branch: "gateway-preview",
+      gitSha: "d".repeat(40),
+      projectId: "gateway-project",
+      repoId: "gateway-repository",
+    },
+    publicGateway: {
+      branch: "gateway-preview",
+      origin: "https://apps.example.test",
+      projectId: "gateway-project",
+    },
+    stage: "app",
+  });
+  const prepared = prepareHostedOperatorResourceCredentials({ ...input, plan: gatewayPlan });
+  const attemptId = "00000000-0000-4000-8000-000000000022";
+  const record = hostedRuntimeJournalRecordSchema.parse({
+    ...input.record,
+    approvedByCallId: "approved-call",
+    leaseExpiresAt: "2099-01-01T00:00:00.000Z",
+    leaseId: "00000000-0000-4000-8000-000000000023",
+    privateState: prepared.privateState,
+    status: "pending",
+    step: "reserved",
+    operator: {
+      approvalId: "approval_fixture",
+      fenceGeneration: 7,
+      mode: "protected-operator-v1",
+      operationRef,
+      pendingEffectAttempt: { id: attemptId },
+      pendingEffectId: gatewayDeliveryEffect.id,
+      plan: gatewayPlan,
+      planDigest: operatorPlanDigest(gatewayPlan),
+      receipts: [
+        {
+          effectId: bindingEffect.id,
+          observedAt: "2026-10-16T12:00:00.000Z",
+          resourceVersion: "binding-readback",
+        },
+      ],
+    },
+  });
+  const effect = {
+    authority,
+    assertCurrent: async () => {},
+    checkpoint: async () => {},
+    effect: bindingEffect,
+    fenceGeneration: 7,
+    leaseId: record.leaseId,
+    operationRef,
+    plan: gatewayPlan,
+    privateState: prepared.privateState,
+    target,
+    workerCheckpoints: [],
+  };
+  return { attemptId, effect, gatewayDeliveryEffect, gatewayPlan, record };
+};
+
+describe("completed Gateway binding resource observations", () => {
+  it("reads sealed credentials under the completed binding receipt while delivery owns the lease", async () => {
+    const fixture = completedGatewayBindingObservation();
+    let reads = 0;
+    const store = {
+      read: async () => {
+        reads += 1;
+        return { record: fixture.record, revision: reads };
+      },
+    };
+    let authorizations = 0;
+    let fences = 0;
+    const bindings = await readHostedOperatorEffectResourceBindings({
+      assertAuthorized: async () => {
+        authorizations += 1;
+      },
+      config: input.config,
+      effect: {
+        ...fixture.effect,
+        assertCurrent: async () => {
+          fences += 1;
+        },
+      },
+      store,
+    });
+    expect(reads).toBe(2);
+    expect(authorizations).toBe(2);
+    expect(fences).toBe(2);
+    expect(new URL(bindings.authDatabase.runtimeUrl).username).toBe(
+      fixture.gatewayPlan.authDatabase.runtimeRole,
+    );
+    expect(new URL(bindings.appDatabase.runtimeUrl).username).toBe(
+      fixture.gatewayPlan.appDatabase.runtimeRole,
+    );
+  });
+
+  it.each(["receipt", "phase", "attempt", "plan", "fence", "privateState"] as const)(
+    "rejects a completed Gateway binding observation with an invalid %s",
+    async (invalid) => {
+      const fixture = completedGatewayBindingObservation();
+      const record = structuredClone(fixture.record);
+      const effect: HostedOperatorEffectContext & { workerAttemptId?: string } = {
+        ...fixture.effect,
+      };
+      const { operator } = record;
+      if (operator === undefined) {
+        throw new Error("Missing canonical operator fixture");
+      }
+      if (invalid === "receipt") {
+        operator.receipts = [];
+      } else if (invalid === "phase") {
+        operator.pendingEffectId = "bind";
+      } else if (invalid === "attempt") {
+        effect.workerAttemptId = fixture.attemptId;
+      } else if (invalid === "plan") {
+        effect.plan = hostedOperatorPlanSchema.parse({
+          ...fixture.gatewayPlan,
+          release: { ...fixture.gatewayPlan.release, sha256: "e".repeat(64) },
+        });
+      } else if (invalid === "fence") {
+        effect.fenceGeneration += 1;
+      } else {
+        effect.privateState = undefined;
+      }
+      const store = {
+        read: async () => ({ record, revision: 1 }),
+      };
+      await expect(
+        readHostedOperatorEffectResourceBindings({
+          assertAuthorized: async () => {},
+          config: input.config,
+          effect,
+          store,
+        }),
+      ).rejects.toThrow();
+    },
+  );
+
+  it.each(["attempt", "privateState"] as const)(
+    "rejects if %s changes during the second journal read",
+    async (changed) => {
+      const fixture = completedGatewayBindingObservation();
+      let reads = 0;
+      const store = {
+        read: async () => {
+          reads += 1;
+          const record = structuredClone(fixture.record);
+          if (reads === 2) {
+            const attempt = record.operator?.pendingEffectAttempt;
+            const { privateState } = record;
+            if (attempt === undefined || privateState === undefined) {
+              throw new Error("Missing protected attempt fixture");
+            }
+            if (changed === "attempt") {
+              attempt.id = "00000000-0000-4000-8000-000000000024";
+            } else {
+              privateState.encryptedToken = "changed-sealed-state";
+            }
+          }
+          return { record, revision: reads };
+        },
+      };
+      await expect(
+        readHostedOperatorEffectResourceBindings({
+          assertAuthorized: async () => {},
+          config: input.config,
+          effect: fixture.effect,
+          store,
+        }),
+      ).rejects.toThrow("operation_in_progress");
+    },
+  );
+});
+
+/* oxlint-enable eslint/require-await */
 
 describe("sealed resource credential checkpoint acknowledgment", () => {
   it("accepts the actual journal parser roundtrip while preserving the same credentials", () => {
