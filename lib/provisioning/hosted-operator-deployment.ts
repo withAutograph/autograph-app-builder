@@ -329,11 +329,22 @@ export const selectAuthPlanningResourceBindingRow = (
   if (retained.planDigest !== operatorPlanDigest(plan)) {
     return row;
   }
+  const current = row.record.operator;
+  // An idle app delivery cannot mutate the completed retained Auth credentials.
+  // Keep unknown Auth/resource effects and cleanup behind the existing phase guard.
+  const pendingAppDelivery =
+    current?.plan.action === "prepare" &&
+    current.plan.stage === "app" &&
+    current.plan.effects.some(
+      (effect) => effect.kind === "delivery" && effect.id === current.pendingEffectId,
+    );
+  const pendingMutation =
+    !pendingAppDelivery &&
+    (current?.pendingEffectId !== undefined || current?.pendingEffectAttempt !== undefined);
   if (
     row.record.leaseId !== undefined ||
     row.record.leaseExpiresAt !== undefined ||
-    row.record.operator?.pendingEffectId !== undefined ||
-    row.record.operator?.pendingEffectAttempt !== undefined
+    pendingMutation
   ) {
     throw new HostedOperatorError("operation_in_progress");
   }

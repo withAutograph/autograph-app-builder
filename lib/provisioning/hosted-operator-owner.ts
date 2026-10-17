@@ -8,6 +8,7 @@ import type {
   RealmContinuationVerificationOptions,
 } from "../hosted/realm-continuation-authority";
 import type { HostedEveStore } from "../eve/hosted-store";
+import { projectSettingsDeliveryProvenance } from "./hosted-operator-project-settings-successor";
 import { hostedSessionRecordSchema, toDurableHostedSessionRecord } from "../eve/hosted-store";
 import { hostedPrincipalSchema } from "../eve/hosted-auth";
 import type { HostedPrincipal } from "../eve/hosted-auth";
@@ -547,6 +548,31 @@ export const createHostedOperatorOwnerAuthority = (deps: HostedOperatorOwnerDepe
   };
 };
 
+const projectSettingsApprovalCheckpoint = (
+  record: HostedRuntimeJournalRecord | undefined,
+  context: { action: "prepare" | "cleanup"; callId: string; planDigest: string },
+) => {
+  const retainedProjectSettingsDelivery =
+    context.action === "prepare" && record?.operator !== undefined
+      ? projectSettingsDeliveryProvenance(record.operator, record.operator.plan)
+      : undefined;
+  if (
+    retainedProjectSettingsDelivery?.planDigest === context.planDigest &&
+    retainedProjectSettingsDelivery.approvedByCallId === context.callId
+  ) {
+    return {
+      current: {
+        approvalId: retainedProjectSettingsDelivery.approvalId,
+        operationRef: retainedProjectSettingsDelivery.operationRef,
+        plan: retainedProjectSettingsDelivery.plan,
+        planDigest: retainedProjectSettingsDelivery.planDigest,
+      },
+      retainedPrepare: true,
+    };
+  }
+  return null;
+};
+
 const approvalCheckpoint = (
   record: HostedRuntimeJournalRecord | undefined,
   context: { action: "prepare" | "cleanup"; callId: string; planDigest: string },
@@ -579,6 +605,10 @@ const approvalCheckpoint = (
       : undefined;
   if (gatewayOriginal !== undefined) {
     return { current: gatewayOriginal, retainedPrepare: true };
+  }
+  const retainedSettings = projectSettingsApprovalCheckpoint(record, context);
+  if (retainedSettings !== null) {
+    return retainedSettings;
   }
   const retained = record?.retainedAuth;
   const retainedPrepare =

@@ -1558,6 +1558,73 @@ describe("existing populated Auth workflow planning", () => {
 });
 
 describe("retained approved Auth binding selection", () => {
+  const pendingDelivery = async () => {
+    const record = existingAuthRecord();
+    const originalPlan = record.operator!.plan;
+    record.retainedAuth = retainedOperatorAuthFromJournal(record);
+    const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+    const appPlan = await resolveFullPlan(originalPlan, context, f.configuration, f.controlPlane);
+    record.operator = {
+      ...record.operator!,
+      approvalId: "app-approval",
+      operationRef: "00000000-0000-4000-8000-000000000002",
+      plan: appPlan,
+      planDigest: operatorPlanDigest(appPlan),
+      pendingEffectId: appPlan.effects.find((effect) => effect.kind === "delivery")!.id,
+      pendingEffectAttempt: { id: "00000000-0000-4000-8000-000000000003" },
+    };
+    return { row: { record, revision: 5 }, originalPlan };
+  };
+
+  it("reads exact completed retained Auth while an unrelated app delivery awaits reconciliation", async () => {
+    const { row, originalPlan } = await pendingDelivery();
+    const before = structuredClone(row);
+    const selected = selectAuthPlanningResourceBindingRow(row, originalPlan);
+    const authorized = requireFinalResourceBindingPhase(selected, {
+      plan: originalPlan,
+      privateState: row.record.privateState,
+    });
+    expect(authorized.record.approvedByCallId).toBe(row.record.retainedAuth!.approvedByCallId);
+    expect(authorized.record.operator?.approvalId).toBe(row.record.retainedAuth!.approvalId);
+    expect(authorized.record.operator?.fenceGeneration).toBe(
+      row.record.retainedAuth!.fenceGeneration,
+    );
+    expect(authorized.record.operator?.plan).toEqual(originalPlan);
+    expect(authorized.record.operator?.receipts).toEqual(row.record.retainedAuth!.receipts);
+    expect(authorized.record.privateState).toEqual(row.record.privateState);
+    expect(authorized.revision).toBe(row.revision);
+    expect(row).toEqual(before);
+    expect(() =>
+      requireFinalResourceBindingPhase(selected, {
+        plan: originalPlan,
+        privateState: undefined,
+      }),
+    ).toThrow();
+    row.record.leaseId = "active-delivery-lease";
+    expect(() => selectAuthPlanningResourceBindingRow(row, originalPlan)).toThrow();
+    delete row.record.leaseId;
+    row.record.leaseExpiresAt = "2027-01-01T00:00:00Z";
+    expect(() => selectAuthPlanningResourceBindingRow(row, originalPlan)).toThrow();
+  });
+
+  it.each(["auth-resources", "auth-schema", "unknown-effect"])(
+    "continues blocking a pending %s effect from retained credential projection",
+    async (effectId) => {
+      const { row, originalPlan } = await pendingDelivery();
+      row.record.operator!.pendingEffectId = effectId;
+      expect(() => selectAuthPlanningResourceBindingRow(row, originalPlan)).toThrow();
+    },
+  );
+
+  it("continues blocking cleanup and orphan pending attempts", async () => {
+    const { row, originalPlan } = await pendingDelivery();
+    row.record.operator!.plan = { ...row.record.operator!.plan, action: "cleanup" };
+    expect(() => selectAuthPlanningResourceBindingRow(row, originalPlan)).toThrow();
+    row.record.operator!.plan = { ...row.record.operator!.plan, action: "prepare" };
+    delete row.record.operator!.pendingEffectId;
+    expect(() => selectAuthPlanningResourceBindingRow(row, originalPlan)).toThrow();
+  });
+
   it("selects only the completed original prepare evidence without replacing the journal", () => {
     const record = existingAuthRecord();
     const originalPlan = record.operator!.plan;

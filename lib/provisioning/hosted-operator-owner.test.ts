@@ -510,11 +510,164 @@ const retainedApprovalFixture = () => {
   };
 };
 
+const retainedProjectSettingsApprovalFixture = () => {
+  const fixture = makeFixture();
+  const oldPlan = hostedOperatorPlanSchema.parse({
+    ...plan,
+    stage: "app",
+    delivery: {
+      branch: selection.branch,
+      gitSha: "1".repeat(40),
+      projectId: selection.projectId,
+      repoId: "fixture-repository",
+    },
+    effects: [
+      ...plan.effects,
+      { description: "Deploy accepted app source", id: "delivery", kind: "delivery" },
+    ],
+  });
+  const currentPlan = hostedOperatorPlanSchema.parse({
+    ...oldPlan,
+    delivery: {
+      ...oldPlan.delivery,
+      projectSettings: {
+        framework: "nextjs",
+        rootDirectory: "apps/vendor-onboarding",
+        sourceFilesOutsideRootDirectory: true,
+      },
+    },
+  });
+  const operationRef = "a5c2b20f-0c08-49a8-a34f-cce64c72cc8c";
+  const callId = "original-approval-call";
+  const oldPlanDigest = operatorPlanDigest(oldPlan);
+  const approval = privateHostedApprovalReceiptSchema.parse({
+    callId,
+    format: "autograph-hosted-approval-v1",
+    outcome: "approved",
+    requestId: "original-approval-id",
+    responderPrincipalId: principal.ownerUserId,
+    sequence: 15,
+    toolInput: {
+      appId: selection.appId,
+      branch: selection.branch,
+      environment: selection.environment,
+      operationRef,
+      plan: oldPlan,
+      planDigest: oldPlanDigest,
+      projectId: selection.projectId,
+    },
+    toolName: "prepare-app-hosted-runtime",
+    turnId: "turn-1",
+  });
+  fixture.currentSession.privateApprovalReceipts = [approval];
+  const target = hostedRuntimeTargetSchema.parse({
+    ...selection,
+    installationId: "icfg_1",
+    scopeId: "team_1",
+    scopeType: "team",
+  });
+  const oldOperator = {
+    approvalId: approval.requestId,
+    mode: "protected-operator-v1" as const,
+    operationRef,
+    plan: oldPlan,
+    planDigest: oldPlanDigest,
+    receipts: oldPlan.effects.slice(0, -1).map((effect) => ({
+      effectId: effect.id,
+      observedAt: "2026-10-16T00:00:00.000Z",
+      resourceVersion: "a".repeat(64),
+    })),
+    pendingEffectId: "delivery",
+  };
+  const record = hostedRuntimeJournalRecordSchema.parse({
+    approvedByCallId: "settings-successor-call",
+    kind: "app-runtime",
+    operator: {
+      ...oldOperator,
+      approvalId: "settings-successor-approval",
+      plan: currentPlan,
+      planDigest: operatorPlanDigest(currentPlan),
+      retainedProjectSettingsOperations: [{ approvedByCallId: callId, operator: oldOperator }],
+    },
+    request: target,
+    status: "pending",
+    step: "reserved",
+    version: 1,
+  });
+  const journal: Pick<HostedRuntimeJournalStore, "read"> = {
+    read: vi.fn(() => Promise.resolve({ record, revision: 2 })),
+  };
+  const observe = vi.fn(() =>
+    Promise.resolve({
+      artifactProjectionRequiresLegacyReadback: false,
+      installedEventCount: 0,
+      pendingRequests: [],
+      publicEventCount: 0,
+      status: "waiting" as const,
+    }),
+  );
+  return {
+    approval,
+    callId,
+    fixture,
+    journal,
+    oldPlanDigest,
+    observe,
+    readApproval: createHostedOperatorReadApproval({ eve: fixture.eve, journal, observe }),
+    target,
+  };
+};
+
 const expectNoProviderReads = (fixture: ReturnType<typeof makeFixture>) => {
   expect(fixture.listVercelInstallations).not.toHaveBeenCalled();
   expect(fixture.readVercelCredential).not.toHaveBeenCalled();
   expect(fixture.fetch).not.toHaveBeenCalled();
 };
+
+describe("retained project-settings approval", () => {
+  it("reads only the exact archived prepare approval under the current owner", async () => {
+    const f = retainedProjectSettingsApprovalFixture();
+    const context = {
+      action: "prepare" as const,
+      authority: ownerContext.authority,
+      callId: f.callId,
+      ownerContext,
+      planDigest: f.oldPlanDigest,
+      target: f.target,
+    };
+
+    await expect(f.readApproval(context)).resolves.toEqual({
+      action: "prepare",
+      approvalId: f.approval.requestId,
+      approved: true,
+      callId: f.callId,
+      planDigest: f.oldPlanDigest,
+    });
+    expect(f.observe).not.toHaveBeenCalled();
+
+    await expect(f.readApproval({ ...context, callId: "different-call" })).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    await expect(f.readApproval({ ...context, planDigest: "f".repeat(64) })).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(f.observe).not.toHaveBeenCalled();
+
+    const foreignOwner = operatorOwnerContextSchema.parse({
+      ...ownerContext,
+      authority: { ...ownerContext.authority, ownerUserId: "foreign-owner" },
+      principal: { ...ownerContext.principal, ownerUserId: "foreign-owner" },
+    });
+    await expect(
+      f.readApproval({
+        ...context,
+        authority: foreignOwner.authority,
+        ownerContext: foreignOwner,
+      }),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    expect(f.observe).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("hosted operator artifact ownership", () => {
   const contextFor = (owner: OperatorOwnerContext = ownerContext) => ({
