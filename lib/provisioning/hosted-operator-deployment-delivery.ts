@@ -5,7 +5,10 @@ import { setTimeout as delay } from "node:timers/promises";
 import type { createHostedOperatorControlPlane } from "./hosted-operator-deployment";
 import { HostedOperatorError, operatorPlanDigest } from "./hosted-operator-contract";
 import type { HostedOperatorPlan, OperatorDeploymentCandidate } from "./hosted-operator-contract";
-import type { HostedOperatorDeploymentContext } from "./hosted-operator-service";
+import type {
+  HostedOperatorDeploymentContext,
+  HostedOperatorEffectContext,
+} from "./hosted-operator-service";
 import { isSharedHostProtectionDeliveryProvenance } from "./hosted-operator-shared-host-protection-successor";
 
 interface DeploymentListQuery {
@@ -389,6 +392,12 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       if (!exactOrigin) {
         throw new HostedOperatorError("resource_mismatch");
       }
+      const saved = input.deliveryCandidates?.find(
+        (candidate) =>
+          candidate.deploymentId === observed.id && candidate.operationRef === input.operationRef,
+      );
+      let projectName = saved?.projectName;
+      let scopeSlug = saved?.scopeSlug;
       // Pending polls retain deployment identity checks; project/team are checked at entry and terminal readback.
       if (verifyProject || !["BUILDING", "QUEUED", "INITIALIZING"].includes(observed.readyState)) {
         const project = projectSchema.parse(
@@ -405,11 +414,9 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         ) {
           throw new HostedOperatorError("resource_mismatch");
         }
+        projectName = project.name;
+        scopeSlug = team.slug;
       }
-      const saved = input.deliveryCandidates?.find(
-        (candidate) =>
-          candidate.deploymentId === observed.id && candidate.operationRef === input.operationRef,
-      );
       return {
         ...(saved?.gatewayAliasAttempted === undefined
           ? {}
@@ -419,8 +426,10 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         operationRef: input.operationRef,
         origin: origin.origin,
         projectId: delivery.projectId,
+        ...(projectName === undefined ? {} : { projectName }),
         readyState: observed.readyState,
         repoId: delivery.repoId,
+        ...(scopeSlug === undefined ? {} : { scopeSlug }),
       };
     };
     const readCandidate = async (deploymentId: string, verifyProject = true) =>
@@ -881,4 +890,43 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     },
     reconcile,
   };
+};
+
+/** Recover provider display identity omitted by an older delivery checkpoint, without a new deployment. */
+export const reconcileGatewayAppCandidate = async <T extends HostedOperatorEffectContext>(
+  input: T,
+  delivery: Pick<ReturnType<typeof createHostedOperatorDeploymentDelivery>, "reconcile">,
+): Promise<T> => {
+  if (input.plan.stage === "auth-bootstrap") {
+    return input;
+  }
+  const selected = input.deliveryCandidates?.find(
+    (candidate) =>
+      candidate.readyState === "READY" && candidate.operationRef === input.operationRef,
+  );
+  if (
+    selected === undefined ||
+    (selected.projectName !== undefined && selected.scopeSlug !== undefined)
+  ) {
+    return input;
+  }
+  const effect = input.plan.effects.find((value) => value.kind === "delivery");
+  const { checkpointDelivery } = input;
+  if (effect === undefined || checkpointDelivery === undefined) {
+    throw new HostedOperatorError("reconciliation_required");
+  }
+  const observed = await delivery.reconcile({
+    ...input,
+    effect,
+    checkpointDelivery: async (candidates, deploymentId) => {
+      if (deploymentId !== undefined && deploymentId !== selected.deploymentId) {
+        throw new HostedOperatorError("reconciliation_required");
+      }
+      await checkpointDelivery(candidates, deploymentId);
+    },
+  });
+  if (observed.status !== "applied" || observed.selected.deploymentId !== selected.deploymentId) {
+    throw new HostedOperatorError("reconciliation_required");
+  }
+  return { ...input, deliveryCandidates: observed.candidates };
 };
