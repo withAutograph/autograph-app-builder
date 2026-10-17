@@ -37,6 +37,20 @@ describe("deployment-owned app publication configuration", () => {
     expect(parsed.actual?.projectSettings).toEqual(projectSettings);
   });
 
+  it.each(["bun run build", "npm run build", null])(
+    "preserves an explicitly configured build command without choosing a runner: %s",
+    (buildCommand) => {
+      const projectSettings = {
+        buildCommand,
+        framework: "nextjs",
+        rootDirectory: "apps/actual-app",
+        sourceFilesOutsideRootDirectory: true,
+      };
+      const parsed = applications.parse({ actual: { ...application(), projectSettings } });
+      expect(parsed.actual?.projectSettings).toEqual(projectSettings);
+    },
+  );
+
   it.each(["branch", "projectId", "appDatabase"] as const)(
     "still requires the app's actual %s",
     (field) => {

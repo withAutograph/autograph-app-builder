@@ -38,6 +38,33 @@ it("uses the selected release's actual published repository, ref and commit", ()
   });
   expect(application.branch).toBe("main");
 });
+it.each(["bun run build", "npm run build", null])(
+  "freezes the configured build command with the actual publication: %s",
+  (buildCommand) => {
+    const projectSettings = {
+      buildCommand,
+      framework: "nextjs",
+      rootDirectory: "apps/actual-app",
+      sourceFilesOutsideRootDirectory: true,
+    };
+    const publishedSource = {
+      branch: "codex/generated-app",
+      changeSetDigest: "d".repeat(64),
+      gitSha: "e".repeat(40),
+      gitTree: "f".repeat(40),
+      repositoryId: "generated-repository",
+      reviewDigest: "b".repeat(64),
+    };
+    const delivery = resolvePublishedAppDelivery(
+      { ...application, projectSettings },
+      { ...release, publishedSource },
+    );
+    expect(delivery.projectSettings).toEqual(projectSettings);
+    expect(delivery.gitSha).toBe(publishedSource.gitSha);
+    expect(delivery.repoId).toBe(publishedSource.repositoryId);
+  },
+);
+
 it("freezes configured project settings alongside the selected release source", () => {
   const projectSettings = {
     framework: "nextjs",

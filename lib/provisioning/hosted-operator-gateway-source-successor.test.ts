@@ -1317,6 +1317,11 @@ describe("pending native app project settings repair", () => {
 
   it("retains a pending delivery's old plan provenance while carrying completed bindings forward", async () => {
     const f = fixture();
+    const priorProfileSettings = {
+      framework: "fixture-framework",
+      rootDirectory: "apps/fixture",
+      sourceFilesOutsideRootDirectory: true,
+    } as const;
     const originalPlan = hostedOperatorPlanSchema.parse({
       ...plan,
       stage: "app",
@@ -1324,6 +1329,7 @@ describe("pending native app project settings repair", () => {
         branch: selection.branch,
         gitSha: "1".repeat(40),
         projectId: selection.projectId,
+        projectSettings: priorProfileSettings,
         repoId: "fixture-repository",
       },
       effects: [
@@ -1360,6 +1366,7 @@ describe("pending native app project settings repair", () => {
       throw new Error("Missing interrupted delivery fixture");
     }
     f.deps.readAppProjectSettings = async () => ({
+      buildCommand: "bun run build",
       framework: "fixture-framework",
       rootDirectory: "apps/fixture",
       sourceFilesOutsideRootDirectory: true,
@@ -1390,12 +1397,53 @@ describe("pending native app project settings repair", () => {
     previous.record.operator.deliveryCandidates = [
       {
         branch: originalPlan.delivery?.branch ?? selection.branch,
-        deploymentId: "dpl_blocked_old_plan",
+        deploymentId: "dpl_failed_fs2",
         operationRef: original.operationRef,
-        origin: "https://blocked-app.example.test",
+        origin: "https://failed-fs2.example.test",
         projectId: selection.projectId,
-        readyState: "BLOCKED",
+        readyState: "ERROR",
         repoId: "fixture-repository",
+      },
+      {
+        branch: originalPlan.delivery?.branch ?? selection.branch,
+        deploymentId: "dpl_failed_retry",
+        operationRef: original.operationRef,
+        origin: "https://failed-retry.example.test",
+        projectId: selection.projectId,
+        readyState: "ERROR",
+        repoId: "fixture-repository",
+      },
+    ];
+    const original899Plan = hostedOperatorPlanSchema.parse({
+      ...originalPlan,
+      delivery: {
+        ...originalPlan.delivery,
+        projectSettings: undefined,
+      },
+    });
+    previous.record.operator.retainedProjectSettingsOperations = [
+      {
+        approvedByCallId: "approval-899",
+        operator: {
+          approvalId: "approval-899-id",
+          deliveryCandidates: [
+            {
+              branch: selection.branch,
+              deploymentId: "dpl_blocked_899",
+              operationRef: original.operationRef,
+              origin: "https://blocked-899.example.test",
+              projectId: selection.projectId,
+              readyState: "BLOCKED",
+              repoId: "fixture-repository",
+            },
+          ],
+          mode: "protected-operator-v1",
+          operationRef: original.operationRef,
+          pendingEffectId: "delivery",
+          plan: original899Plan,
+          planDigest: operatorPlanDigest(original899Plan),
+          receipts: previous.record.operator.receipts,
+        },
       },
     ];
     f.row = previous;
@@ -1404,9 +1452,8 @@ describe("pending native app project settings repair", () => {
       delivery: {
         ...originalPlan.delivery,
         projectSettings: {
-          framework: "fixture-framework",
-          rootDirectory: "apps/fixture",
-          sourceFilesOutsideRootDirectory: true,
+          ...priorProfileSettings,
+          buildCommand: "bun run build",
         },
       },
     });
@@ -1419,7 +1466,7 @@ describe("pending native app project settings repair", () => {
     ).toEqual(repaired);
     const alreadyReady = structuredClone(previous.record);
     if (alreadyReady.operator?.deliveryCandidates?.[0] === undefined) {
-      throw new Error("Missing blocked deployment fixture");
+      throw new Error("Missing failed Preview deployment fixture");
     }
     alreadyReady.operator.deliveryCandidates[0].readyState = "READY";
     expect(
@@ -1454,17 +1501,26 @@ describe("pending native app project settings repair", () => {
       receipts: previous.record.operator.receipts,
       managedEnvironment: ownedRows,
       deliveryCandidates: [],
-      retainedProjectSettingsOperations: [
-        {
-          approvedByCallId: original.callId,
-          operator: {
-            planDigest: original.planDigest,
-            pendingEffectId: "delivery",
-            pendingEffectAttempt: previous.record.operator.pendingEffectAttempt,
-            deliveryCandidates: previous.record.operator.deliveryCandidates,
-          },
-        },
-      ],
+    });
+    expect(active?.retainedProjectSettingsOperations).toHaveLength(2);
+    expect(active?.retainedProjectSettingsOperations?.[0]).toMatchObject({
+      approvedByCallId: "approval-899",
+      operator: {
+        planDigest: operatorPlanDigest(original899Plan),
+        deliveryCandidates: [{ deploymentId: "dpl_blocked_899", readyState: "BLOCKED" }],
+      },
+    });
+    expect(active?.retainedProjectSettingsOperations?.[1]).toMatchObject({
+      approvedByCallId: original.callId,
+      operator: {
+        planDigest: original.planDigest,
+        pendingEffectId: "delivery",
+        pendingEffectAttempt: previous.record.operator.pendingEffectAttempt,
+        deliveryCandidates: [
+          { deploymentId: "dpl_failed_fs2", readyState: "ERROR" },
+          { deploymentId: "dpl_failed_retry", readyState: "ERROR" },
+        ],
+      },
     });
     expect(f.row?.record.privateState).toEqual(previous.record.privateState);
     expect(

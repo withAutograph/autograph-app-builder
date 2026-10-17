@@ -87,6 +87,26 @@ const blockedProductionSchema = z.object({
   readyState: z.literal("BLOCKED"),
   target: z.literal("production"),
 });
+const failedNativePreviewSchema = z.object({
+  customEnvironment: z.null().optional(),
+  gitSource: z.object({
+    ref: id,
+    repoId: z.union([z.number(), id]),
+    sha: z.string().regex(/^[a-f0-9]{40}$/u),
+    type: z.literal("github"),
+  }),
+  id,
+  meta: z.record(z.string(), z.string()).optional(),
+  oidcTokenClaims: z.object({
+    environment: z.literal("preview"),
+    owner_id: id,
+    project_id: id,
+  }),
+  ownerId: id,
+  projectId: id,
+  readyState: z.literal("ERROR"),
+  target: z.union([z.null(), z.literal("staging")]),
+});
 const pageSchema = z.object({
   deployments: z.array(z.object({ meta: z.record(z.string(), z.string()).optional(), uid: id })),
   pagination: z.object({ next: z.number().nullable() }).optional(),
@@ -583,7 +603,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       return { status: "unknown" as const };
     }
   };
-  const priorAppDeliveryIsTerminallyBlockedProduction = async (
+  const priorAppDeliveryIsTerminalFailure = async (
     input: HostedOperatorDeploymentContext,
     reader: ReturnType<typeof io>,
     prior: PriorAppDelivery,
@@ -655,12 +675,31 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
 
     const observations = await Promise.all(
       [...ids].map(async (deploymentId) => {
-        const observed = blockedProductionSchema.parse(
-          await reader.request(`/v13/deployments/${encodeURIComponent(deploymentId)}`, {
-            withGitRepoInfo: "true",
-          }),
-        );
-        const exact = [
+        const raw = await reader.request(`/v13/deployments/${encodeURIComponent(deploymentId)}`, {
+          withGitRepoInfo: "true",
+        });
+        const blocked = blockedProductionSchema.safeParse(raw);
+        if (blocked.success) {
+          const observed = blocked.data;
+          return [
+            observed.id === deploymentId,
+            observed.projectId === priorDelivery.projectId,
+            observed.ownerId === input.target.scopeId,
+            observed.oidcTokenClaims.owner_id === input.target.scopeId,
+            observed.oidcTokenClaims.project_id === priorDelivery.projectId,
+            String(observed.gitSource.repoId) === priorDelivery.repoId,
+            observed.gitSource.ref === priorDelivery.branch,
+            priorDelivery.gitSha !== undefined && observed.gitSource.sha === priorDelivery.gitSha,
+            matchesMetadataIdentity(oldMeta, observed.meta),
+            observed.builds.length === 0,
+          ].every(Boolean);
+        }
+        const failedPreview = failedNativePreviewSchema.safeParse(raw);
+        if (!failedPreview.success) {
+          return false;
+        }
+        const observed = failedPreview.data;
+        return [
           observed.id === deploymentId,
           observed.projectId === priorDelivery.projectId,
           observed.ownerId === input.target.scopeId,
@@ -670,9 +709,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
           observed.gitSource.ref === priorDelivery.branch,
           priorDelivery.gitSha !== undefined && observed.gitSource.sha === priorDelivery.gitSha,
           matchesMetadataIdentity(oldMeta, observed.meta),
-          observed.builds.length === 0,
         ].every(Boolean);
-        return exact;
       }),
     );
     return observations.every(Boolean);
@@ -686,7 +723,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       return true;
     }
     try {
-      return await priorAppDeliveryIsTerminallyBlockedProduction(input, reader, priorAppDelivery);
+      return await priorAppDeliveryIsTerminalFailure(input, reader, priorAppDelivery);
     } catch {
       // Unreadable prior effects stay unknown and never authorize a second POST.
       return false;

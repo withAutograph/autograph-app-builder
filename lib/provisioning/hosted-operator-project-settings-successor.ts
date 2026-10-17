@@ -53,17 +53,17 @@ export const isProjectSettingsSuccessor = (
   const pendingBindings = pending?.kind === "bindings";
   const pendingDelivery = pending?.kind === "delivery";
   const deliveryCandidates = prior.deliveryCandidates ?? [];
-  const candidatesAreOnlyTerminalBlockedAttempts = deliveryCandidates.every((deliveryCandidate) =>
+  const candidatesAreOnlyTerminalAttempts = deliveryCandidates.every((deliveryCandidate) =>
     [
       deliveryCandidate.operationRef === prior.operationRef,
       deliveryCandidate.projectId === prior.plan.delivery?.projectId,
       deliveryCandidate.branch === prior.plan.delivery?.branch,
       deliveryCandidate.repoId === prior.plan.delivery?.repoId,
-      deliveryCandidate.readyState === "BLOCKED",
+      ["BLOCKED", "ERROR"].includes(deliveryCandidate.readyState),
     ].every(Boolean),
   );
   const recoverableBindings = pendingBindings && deliveryCandidates.length === 0;
-  const recoverableDelivery = pendingDelivery && candidatesAreOnlyTerminalBlockedAttempts;
+  const recoverableDelivery = pendingDelivery && candidatesAreOnlyTerminalAttempts;
   const recoverablePendingEffect =
     (recoverableBindings || recoverableDelivery) && prior.deliveredDeploymentId === undefined;
   const expiry = Date.parse(prior.plan.retention.expiresAt);

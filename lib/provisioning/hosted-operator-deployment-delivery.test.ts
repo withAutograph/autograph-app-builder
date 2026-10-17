@@ -30,6 +30,12 @@ const target = {
 };
 const sha = "a".repeat(40);
 const appProjectSettings = {
+  buildCommand: "bun run build",
+  framework: "nextjs",
+  rootDirectory: ".",
+  sourceFilesOutsideRootDirectory: true,
+} as const;
+const priorAppProjectSettings = {
   framework: "nextjs",
   rootDirectory: ".",
   sourceFilesOutsideRootDirectory: true,
@@ -145,6 +151,13 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
   let deny = false;
   let failCandidateReads = false;
   let oldBlockedProduction = false;
+  let oldFailedNativePreview = false;
+  let priorNativePreviewSha = sha;
+  let priorNativePreviewClaims = {
+    environment: "preview" as const,
+    owner_id: "team",
+    project_id: "prj_app",
+  };
   const calls: { method: string; path: string; body?: unknown }[] = [];
   const checkpoint = vi.fn<HostedOperatorDeploymentContext["checkpointDelivery"]>(async (rows) => {
     await Promise.resolve();
@@ -181,10 +194,22 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
       Object.entries(deliveryPlan.delivery ?? {}).filter(([key]) => key !== "projectSettings"),
     ),
   });
+  const priorProfilePlan = hostedOperatorPlanSchema.parse({
+    ...deliveryPlan,
+    delivery: {
+      ...deliveryPlan.delivery,
+      projectSettings: priorAppProjectSettings,
+    },
+  });
   const oldMeta = {
     autograph_operator_effect: input.effect.id,
     autograph_operator_operation: input.operationRef,
     autograph_operator_plan: operatorPlanDigest(oldPlan),
+  };
+  const priorProfileMeta = {
+    autograph_operator_effect: input.effect.id,
+    autograph_operator_operation: input.operationRef,
+    autograph_operator_plan: operatorPlanDigest(priorProfilePlan),
   };
   const project: DeliveryProjectFixture = {
     accountId: "team",
@@ -220,6 +245,21 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
     target: "production",
     url: "old-native.vercel.app",
   };
+  const oldFailedNativePreviewDeployment = (
+    deploymentId: string,
+    url: string,
+    nativeTarget: "staging" | null,
+  ) => ({
+    ...deployment,
+    gitSource: { ...deployment.gitSource, sha: priorNativePreviewSha },
+    id: deploymentId,
+    meta: priorProfileMeta,
+    oidcTokenClaims: priorNativePreviewClaims,
+    ownerId: "team",
+    readyState: "ERROR",
+    target: nativeTarget,
+    url,
+  });
   const aliasState = {
     name: "approved-gateway.example.test",
     projectId: "prj_gateway",
@@ -267,6 +307,12 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
       deployments: [
         ...deployments,
         ...(oldBlockedProduction ? [{ meta: oldMeta, uid: "dpl_previous" }] : []),
+        ...(oldFailedNativePreview
+          ? [
+              { meta: priorProfileMeta, uid: "dpl_failed_fs2" },
+              { meta: priorProfileMeta, uid: "dpl_failed_retry" },
+            ]
+          : []),
       ],
       pagination: { next: null },
     });
@@ -335,6 +381,16 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
         status: aliasState.differentDeploymentStatus,
       });
     }
+    if (path === "/v13/deployments/dpl_failed_fs2") {
+      return Response.json(
+        oldFailedNativePreviewDeployment("dpl_failed_fs2", "failed-fs2.vercel.app", "staging"),
+      );
+    }
+    if (path === "/v13/deployments/dpl_failed_retry") {
+      return Response.json(
+        oldFailedNativePreviewDeployment("dpl_failed_retry", "failed-retry.vercel.app", null),
+      );
+    }
     throw new Error("Unexpected native request");
   };
   const wait = vi.fn(async (_milliseconds: number, signal?: AbortSignal) => {
@@ -397,7 +453,17 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
     useOldBlockedProduction: () => {
       oldBlockedProduction = true;
     },
+    useOldFailedNativePreview: () => {
+      oldFailedNativePreview = true;
+    },
+    setPriorNativePreviewSha: (value: string) => {
+      priorNativePreviewSha = value;
+    },
+    setPriorNativePreviewClaims: (value: typeof priorNativePreviewClaims) => {
+      priorNativePreviewClaims = value;
+    },
     oldPlan,
+    priorProfilePlan,
     writer,
   };
 };
@@ -425,7 +491,9 @@ it("requests standard Preview delivery from approved Git source and observes rea
     projectSettings: appProjectSettings,
   });
   expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({ target: "staging" });
-  expect(f.calls.find((call) => call.method === "POST")?.body).not.toHaveProperty("buildCommand");
+  expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({
+    projectSettings: { buildCommand: "bun run build" },
+  });
   expect(f.calls.find((call) => call.method === "POST")?.body).not.toHaveProperty("installCommand");
   expect(f.checkpoint).toHaveBeenCalled();
   f.setReady("READY");
@@ -476,6 +544,99 @@ it("does not POST a profile successor when prior Production approval identity is
       operationRef: f.input.operationRef,
       plan: f.oldPlan,
       planDigest: "0".repeat(64),
+    },
+  });
+
+  const result = await f.writer.deliver(f.input);
+
+  expect(result.status).toBe("unknown");
+  expect(
+    f.calls.filter((call) => call.method === "POST" && call.path === "/v13/deployments"),
+  ).toHaveLength(0);
+});
+it("reconciles every exact terminal Preview failure before one approved profile successor POST", async () => {
+  const f = fixture();
+  f.useOldFailedNativePreview();
+  Object.assign(f.input, {
+    priorAppDelivery: {
+      deliveryCandidates: ["dpl_failed_fs2", "dpl_failed_retry"].map((deploymentId) => ({
+        branch: "feature",
+        deploymentId,
+        operationRef: f.input.operationRef,
+        origin: `https://${deploymentId}.vercel.app`,
+        projectId: "prj_app",
+        readyState: "ERROR",
+        repoId: "repo",
+      })),
+      operationRef: f.input.operationRef,
+      plan: f.priorProfilePlan,
+      planDigest: operatorPlanDigest(f.priorProfilePlan),
+    },
+  });
+
+  const result = await f.writer.deliver(f.input);
+
+  expect(result.status).toBe("applied");
+  expect(
+    f.calls.filter((call) => call.method === "POST" && call.path === "/v13/deployments"),
+  ).toHaveLength(1);
+  expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({
+    projectSettings: appProjectSettings,
+    target: "staging",
+  });
+  expect(f.calls.some((call) => call.path === "/v13/deployments/dpl_failed_fs2")).toBe(true);
+  expect(f.calls.some((call) => call.path === "/v13/deployments/dpl_failed_retry")).toBe(true);
+});
+it("does not POST a profile successor when any terminal Preview readback mismatches its approved SHA", async () => {
+  const f = fixture();
+  f.useOldFailedNativePreview();
+  f.setPriorNativePreviewSha("f".repeat(40));
+  Object.assign(f.input, {
+    priorAppDelivery: {
+      deliveryCandidates: ["dpl_failed_fs2", "dpl_failed_retry"].map((deploymentId) => ({
+        branch: "feature",
+        deploymentId,
+        operationRef: f.input.operationRef,
+        origin: `https://${deploymentId}.vercel.app`,
+        projectId: "prj_app",
+        readyState: "ERROR",
+        repoId: "repo",
+      })),
+      operationRef: f.input.operationRef,
+      plan: f.priorProfilePlan,
+      planDigest: operatorPlanDigest(f.priorProfilePlan),
+    },
+  });
+
+  const result = await f.writer.deliver(f.input);
+
+  expect(result.status).toBe("unknown");
+  expect(
+    f.calls.filter((call) => call.method === "POST" && call.path === "/v13/deployments"),
+  ).toHaveLength(0);
+});
+it("does not POST a profile successor when terminal Preview OIDC claims identify another project", async () => {
+  const f = fixture();
+  f.useOldFailedNativePreview();
+  f.setPriorNativePreviewClaims({
+    environment: "preview",
+    owner_id: "team",
+    project_id: "prj_other",
+  });
+  Object.assign(f.input, {
+    priorAppDelivery: {
+      deliveryCandidates: ["dpl_failed_fs2", "dpl_failed_retry"].map((deploymentId) => ({
+        branch: "feature",
+        deploymentId,
+        operationRef: f.input.operationRef,
+        origin: `https://${deploymentId}.vercel.app`,
+        projectId: "prj_app",
+        readyState: "ERROR",
+        repoId: "repo",
+      })),
+      operationRef: f.input.operationRef,
+      plan: f.priorProfilePlan,
+      planDigest: operatorPlanDigest(f.priorProfilePlan),
     },
   });
 
@@ -589,7 +750,7 @@ it.each(["services", "nextjs", null, "future-provider-framework", undefined])(
     }
   },
 );
-it("retains an actual provider build failure as retryable delivery", async () => {
+it("retains an actual app provider build failure as retryable delivery", async () => {
   const f = fixture();
   f.project.framework = "services";
   f.setReady("ERROR");
@@ -597,6 +758,9 @@ it("retains an actual provider build failure as retryable delivery", async () =>
   const reconciled = await f.writer.reconcile(f.input);
   expect(delivered.status).toBe("retryable");
   expect(reconciled.status).toBe("retryable");
+  expect(
+    f.calls.filter((call) => call.method === "POST" && call.path === "/v13/deployments"),
+  ).toHaveLength(1);
 });
 it("guides source recovery only after actual failed readback when repaired trusted source is available", async () => {
   const f = fixture(gatewayPlan, null, true);
