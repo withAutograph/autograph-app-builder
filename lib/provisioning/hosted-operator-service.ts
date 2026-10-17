@@ -7,6 +7,7 @@ import type { SharedHostProtectionDeliveryProvenance } from "./hosted-operator-s
 import { recoverOriginalApprovedPlan } from "./hosted-operator-approved-plan";
 import {
   createProjectSettingsSuccessorPlan,
+  readPendingProjectSettingsSuccessorPlan,
   isProjectSettingsSuccessor,
   projectSettingsDeliveryProvenance,
 } from "./hosted-operator-project-settings-successor";
@@ -430,6 +431,46 @@ const handlePlanOperation = async (
   appId: string,
   now: () => number,
 ) => {
+  // A saved unapproved profile repair is already a concrete proposal. Return it
+  // before fresh composition; approval and all effects still use execute's checks.
+  if (
+    input.operation === "prepare" &&
+    input.normalActorProgram === undefined &&
+    input.authSignupPolicy === undefined &&
+    deps.readAppProjectSettings !== undefined
+  ) {
+    const saved = await deps.store.read(context);
+    if (
+      saved?.record.approvedByCallId === "operator:unapproved-plan" &&
+      saved.record.operator?.retainedProjectSettingsOperations !== undefined
+    ) {
+      const pending = readPendingProjectSettingsSuccessorPlan(
+        saved.record,
+        await deps.readAppProjectSettings(context),
+        now(),
+      );
+      if (pending !== undefined) {
+        if (!sameOperatorSelection(pending.selection, input.selection)) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        await deps.assertAuthorized({ ...context, plan: pending, purpose: "planning" });
+        const current = await deps.store.read(context);
+        if (current?.revision !== saved.revision) {
+          throw new HostedOperatorError("operation_in_progress");
+        }
+        return response(
+          operatorPublicResultSchema.parse({
+            appId,
+            authenticatedBehavior: "unassessed",
+            operationRef: saved.record.operator.operationRef,
+            plan: pending,
+            planDigest: saved.record.operator.planDigest,
+            status: "planned",
+          }),
+        );
+      }
+    }
+  }
   const proposed = await observeOperatorPlanStage(
     context.target.sessionId,
     "plan_composition",

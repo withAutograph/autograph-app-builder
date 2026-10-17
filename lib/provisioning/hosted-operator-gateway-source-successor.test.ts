@@ -1253,6 +1253,61 @@ describe("pending native app project settings repair", () => {
     return { f, original, previous, repaired, execute };
   };
 
+  it("returns the same saved unapproved profile proposal without fresh composition or effects", async () => {
+    const { f, original, repaired } = await interruptedBindings();
+    f.deps.readAppProjectSettings = async () => repaired.delivery?.projectSettings;
+    const request = { action: "plan" as const, operation: "prepare" as const, selection };
+    const proposed = await f.client.request(request);
+    expect(proposed).toMatchObject({ status: "planned", operationRef: original.operationRef });
+    const before = structuredClone(f.row);
+    const compose = vi.fn<ProtectedHostedOperatorDependencies["plan"]>(async () => {
+      throw new HostedOperatorError("operation_in_progress");
+    });
+    f.deps.plan = compose;
+    const readApproval = vi.fn<ProtectedHostedOperatorDependencies["readApproval"]>(
+      async () => null,
+    );
+    f.deps.readApproval = readApproval;
+    const execute = vi.fn<ProtectedHostedOperatorDependencies["executeEffect"]>(async () => {
+      throw new Error("Readback must not execute an effect");
+    });
+    f.deps.executeEffect = execute;
+    f.deps.readApprovedPlan = async () => {
+      throw new Error("Readback must not replace the saved proposal with a historical plan");
+    };
+    expect(await f.client.request(request)).toEqual(proposed);
+    expect(f.row).toEqual(before);
+    expect(f.row?.record.approvedByCallId).toBe("operator:unapproved-plan");
+    expect(f.row?.record.operator?.approvalId).toBeUndefined();
+    expect(compose).not.toHaveBeenCalled();
+    expect(readApproval).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+    expect(
+      await f.client.request({
+        action: "execute",
+        callId: "new-unapproved-call",
+        operationRef: original.operationRef,
+        planDigest: operatorPlanDigest(repaired),
+        selection,
+      }),
+    ).toMatchObject({ code: "authorization_required" });
+    expect(execute).not.toHaveBeenCalled();
+
+    const { assertAuthorized } = f.deps;
+    f.deps.assertAuthorized = async (context) => {
+      await assertAuthorized(context);
+      if (f.row !== undefined) {
+        f.row = { ...f.row, revision: f.row.revision + 1 };
+      }
+    };
+    expect(await f.client.request(request)).toMatchObject({ code: "operation_in_progress" });
+    expect(compose).not.toHaveBeenCalled();
+    f.deps.assertAuthorized = assertAuthorized;
+    f.revoke();
+    expect(await f.client.request(request)).toMatchObject({ code: "authorization_required" });
+    expect(compose).not.toHaveBeenCalled();
+  });
+
   it("preserves completed effects and unknown attempt history under fresh normal approval", async () => {
     const { f, original, previous, repaired, execute } = await interruptedBindings();
     f.deps.readAppProjectSettings = async () => repaired.delivery?.projectSettings;
@@ -1484,6 +1539,16 @@ describe("pending native app project settings repair", () => {
       selection,
     });
     expect(successorPlan).toMatchObject({ status: "planned" });
+    const savedProposal = structuredClone(f.row);
+    const compose = vi.fn<ProtectedHostedOperatorDependencies["plan"]>(async () => {
+      throw new HostedOperatorError("operation_in_progress");
+    });
+    f.deps.plan = compose;
+    expect(await f.client.request({ action: "plan", operation: "prepare", selection })).toEqual(
+      successorPlan,
+    );
+    expect(f.row).toEqual(savedProposal);
+    expect(compose).not.toHaveBeenCalled();
     const successor = {
       action: "execute" as const,
       callId: "settings-repair-call",
