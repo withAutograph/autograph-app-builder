@@ -28,6 +28,25 @@ const value: HostedOperatorConsentMetadata = {
 };
 
 describe("closed Neon consent diagnostics", () => {
+  it("projects only closed operator response distinctions and result codes", () => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    const report = createHostedOperatorConsentDiagnostic(secret, sink);
+    report({
+      ...value,
+      operatorCode: "operator_unavailable",
+      operatorResponse: "blocked",
+    });
+    expect(sink.mock.calls[0]?.[0]).toMatchObject({
+      operatorCode: "operator_unavailable",
+      operatorResponse: "blocked",
+    });
+    for (const field of ["operatorCode", "operatorResponse"]) {
+      report({ ...value, [field]: secret });
+    }
+    expect(sink).toHaveBeenCalledOnce();
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
+
   it("projects only closed Gateway request targets and protection observations", () => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     const report = createHostedOperatorConsentDiagnostic(secret, sink);
@@ -319,6 +338,15 @@ describe("private operator planning stage observer", () => {
     "plan_validation",
     "plan_authorization",
     "plan_reservation",
+    "saved_plan_read",
+    "saved_plan_classification",
+    "saved_plan_reexposure",
+    "successor_prior_read",
+    "successor_classification",
+    "prior_successor_approval",
+    "retained_state_read",
+    "retained_approval",
+    "plan_journal_update",
   ] satisfies OperatorPlanStage[])("reports only closed metadata for %s", async (planStage) => {
     const rejection = new Error(secret);
     rejection.stack = secret;

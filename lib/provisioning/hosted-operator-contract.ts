@@ -1078,6 +1078,63 @@ const gatewayDeliveryOrigin = (operator: z.infer<typeof hostedOperatorRecordData
       candidate.deploymentId === operator.deliveredGatewayDeploymentId &&
       candidate.readyState === "READY",
   )?.origin;
+const renewalGatewaySourceMatches = (prior: HostedOperatorPlan, current: HostedOperatorPlan) =>
+  [
+    JSON.stringify(prior.publicGateway) === JSON.stringify(current.publicGateway),
+    JSON.stringify(prior.gatewayDelivery) === JSON.stringify(current.gatewayDelivery),
+    JSON.stringify(prior.gatewayBindings?.sourceWorkload) ===
+      JSON.stringify(current.gatewayBindings?.sourceWorkload),
+  ].every(Boolean);
+const retainedRenewalGatewayDeliveryOrigin = (
+  operator: z.infer<typeof hostedOperatorRecordDataSchema>,
+): string | undefined => {
+  const link = operator.identityLink;
+  if (link?.consumedAt === undefined) {
+    return undefined;
+  }
+  const retained = operator.retainedRenewalOperations?.find(
+    ({ approvedByCallId, operator: prior }) => {
+      const priorPlan = prior.plan;
+      const candidate = prior.gatewayDeliveryCandidates?.find(
+        (value) => value.deploymentId === prior.deliveredGatewayDeploymentId,
+      );
+      const priorLink = prior.identityLink;
+      return [
+        approvedByCallId !== "operator:unapproved-plan",
+        prior.approvalId !== undefined,
+        prior.operationRef === operator.operationRef,
+        prior.planDigest ===
+          createHash("sha256")
+            .update(JSON.stringify(hostedOperatorPlanSchema.parse(priorPlan)))
+            .digest("hex"),
+        priorLink !== undefined && JSON.stringify(priorLink) === JSON.stringify(link),
+        priorPlan.contextId === operator.plan.contextId,
+        JSON.stringify(priorPlan.selection) === JSON.stringify(operator.plan.selection),
+        priorPlan.authDatabase.resourceId === operator.plan.authDatabase.resourceId,
+        JSON.stringify(priorPlan.deploymentBoundary?.authority) ===
+          JSON.stringify(operator.plan.deploymentBoundary?.authority),
+        priorPlan.deploymentBoundary?.teamId === operator.plan.deploymentBoundary?.teamId,
+        priorPlan.deploymentBoundary?.verification.publicOrigin ===
+          operator.plan.deploymentBoundary?.verification.publicOrigin,
+        renewalGatewaySourceMatches(priorPlan, operator.plan),
+        priorPlan.gatewayBindings?.authBrowserOrigin ===
+          operator.plan.gatewayBindings?.authBrowserOrigin,
+        candidate !== undefined && candidate.readyState === "READY",
+        candidate?.deploymentId === prior.deliveredGatewayDeploymentId,
+        candidate?.projectId === priorPlan.publicGateway?.projectId,
+        candidate?.branch === priorPlan.publicGateway?.branch,
+        candidate?.repoId === priorPlan.gatewayDelivery?.repoId,
+        candidate?.origin === link.endpointOrigin,
+      ].every(Boolean);
+    },
+  );
+  return retained?.operator.gatewayDeliveryCandidates?.find(
+    (candidate) =>
+      candidate.deploymentId === retained.operator.deliveredGatewayDeploymentId &&
+      candidate.readyState === "READY" &&
+      candidate.origin === link.endpointOrigin,
+  )?.origin;
+};
 // oxlint-disable-next-line eslint/complexity, sonarjs/expression-complexity -- Frozen identity link and actual delivered candidate identities require every exact binding.
 const validateOperatorMetadata = (
   operator: z.infer<typeof hostedOperatorRecordDataSchema>,
@@ -1091,7 +1148,8 @@ const validateOperatorMetadata = (
       link.ownerSessionId === operator.plan.selection.sessionId,
       link.issuer === operator.plan.deploymentBoundary?.verification.publicOrigin,
       link.endpointOrigin === operator.plan.deploymentBoundary?.verification.gatewayOrigin ||
-        gatewayDeliveryOrigin(operator) === link.endpointOrigin,
+        gatewayDeliveryOrigin(operator) === link.endpointOrigin ||
+        retainedRenewalGatewayDeliveryOrigin(operator) === link.endpointOrigin,
     ].every(Boolean);
     if (!matches) {
       context.addIssue({

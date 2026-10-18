@@ -231,6 +231,24 @@ const journal = (plan = originalPlan()): HostedRuntimeJournalRecord => {
   });
 };
 
+const changeCurrentPlan = (
+  record: HostedRuntimeJournalRecord,
+  change: (plan: HostedOperatorPlan) => HostedOperatorPlan,
+) => {
+  const current = record.operator;
+  if (current === undefined) {
+    throw new Error("Expected current operator");
+  }
+  current.plan = hostedOperatorPlanSchema.parse(change(current.plan));
+  current.planDigest = operatorPlanDigest(current.plan);
+};
+const requireFixtureValue = <T>(value: T | undefined): T => {
+  if (value === undefined) {
+    throw new Error("Expected configured Gateway fixture value");
+  }
+  return value;
+};
+
 describe("approved retention renewal", () => {
   it("does not replace an unknown worker attempt with deployment-only renewal recovery", () => {
     const record = journal();
@@ -296,6 +314,201 @@ describe("approved retention renewal", () => {
     });
     expect(isRetentionRenewalSuccessor(record, changedAccess, now)).toBe(false);
     expect(isRetentionRenewalSuccessor(record, changedSource, now)).toBe(false);
+  });
+
+  it("retains a consumed Realm link only through exact approved renewal delivery evidence", () => {
+    const original = journal();
+    const originalOperator = original.operator;
+    if (originalOperator === undefined) {
+      throw new Error("Expected pending operator");
+    }
+    const linked = hostedRuntimeJournalRecordSchema.parse({
+      ...original,
+      operator: {
+        ...originalOperator,
+        gatewayDeliveryCandidates: [
+          {
+            ...gatewayCandidate,
+            operationRef: "f5e1999a-bb1e-44d1-a5f3-6a68ef53897c",
+          },
+        ],
+        deliveredGatewayDeploymentId: gatewayCandidate.deploymentId,
+        identityLink: {
+          audience: "https://app.example.test",
+          authResourceId: originalOperator.plan.authDatabase.resourceId,
+          bootstrapPlanDigest: "8".repeat(64),
+          browserOrigin: originalOperator.plan.gatewayBindings?.authBrowserOrigin,
+          consumedAt: "2026-10-17T19:30:00.000Z",
+          endpointOrigin: gatewayCandidate.origin,
+          expiresAt: "2026-10-17T20:00:00.000Z",
+          issuer: originalOperator.plan.deploymentBoundary?.verification.publicOrigin,
+          nonceSha256: "5".repeat(64),
+          organizationId: "org_fixture",
+          ownerSessionId: originalOperator.plan.selection.sessionId,
+          proofRef: "fixture-proof",
+          proofSha256: "6".repeat(64),
+        },
+      },
+    });
+    const previousOperator = linked.operator;
+    if (previousOperator === undefined) {
+      throw new Error("Expected linked pending operator");
+    }
+    const renewedPlan = createRetentionRenewalPlan(linked, now);
+    if (renewedPlan === undefined) {
+      throw new Error("Expected an eligible retained renewal");
+    }
+    const immutableEffectIds = new Set(
+      previousOperator.plan.effects
+        .filter((effect) => ["resources", "install", "auth-membership"].includes(effect.kind))
+        .map((effect) => effect.id),
+    );
+    const renewed = hostedRuntimeJournalRecordSchema.parse({
+      ...linked,
+      approvedByCallId: "operator:unapproved-plan",
+      operator: {
+        ...previousOperator,
+        approvalId: undefined,
+        plan: renewedPlan,
+        planDigest: operatorPlanDigest(renewedPlan),
+        pendingEffectId: undefined,
+        pendingEffectAttempt: undefined,
+        deliveryCandidates: [],
+        gatewayDeliveryCandidates: [],
+        deliveredGatewayDeploymentId: undefined,
+        receipts: previousOperator.receipts.filter((receipt) =>
+          immutableEffectIds.has(receipt.effectId),
+        ),
+        retainedRenewalOperations: [
+          { approvedByCallId: linked.approvedByCallId, operator: previousOperator },
+        ],
+      },
+    });
+    expect(renewed.operator?.gatewayDeliveryCandidates).toEqual([]);
+    expect(renewed.operator?.identityLink).toEqual(previousOperator.identityLink);
+
+    const invalidRecords = [
+      (record: typeof renewed) => {
+        const retained = record.operator?.retainedRenewalOperations?.[0];
+        if (retained !== undefined) {
+          retained.approvedByCallId = "operator:unapproved-plan";
+        }
+      },
+      (record: typeof renewed) => {
+        const retained = record.operator?.retainedRenewalOperations?.[0]?.operator;
+        if (retained !== undefined) {
+          retained.planDigest = "0".repeat(64);
+        }
+      },
+      (record: typeof renewed) => {
+        const retained = record.operator?.retainedRenewalOperations?.[0]?.operator;
+        if (retained !== undefined) {
+          delete retained.approvalId;
+        }
+      },
+      (record: typeof renewed) => {
+        const retained = record.operator?.retainedRenewalOperations?.[0]?.operator;
+        if (retained !== undefined) {
+          retained.deliveredGatewayDeploymentId = "other-deployment";
+        }
+      },
+      (record: typeof renewed) => {
+        const retained = record.operator?.retainedRenewalOperations?.[0]?.operator;
+        if (retained?.gatewayDeliveryCandidates?.[0] !== undefined) {
+          retained.gatewayDeliveryCandidates[0].repoId = "other-repository";
+        }
+      },
+      (record: typeof renewed) => {
+        const retained = record.operator?.retainedRenewalOperations?.[0]?.operator;
+        if (retained?.gatewayDeliveryCandidates?.[0] !== undefined) {
+          retained.gatewayDeliveryCandidates[0].readyState = "ERROR";
+        }
+      },
+      (record: typeof renewed) => {
+        const retained = record.operator?.retainedRenewalOperations?.[0]?.operator;
+        if (retained?.gatewayDeliveryCandidates?.[0] !== undefined) {
+          retained.gatewayDeliveryCandidates[0].branch = "other-branch";
+        }
+      },
+      (record: typeof renewed) => {
+        if (record.operator?.identityLink !== undefined) {
+          record.operator.identityLink.proofSha256 = "7".repeat(64);
+        }
+      },
+      (record: typeof renewed) => {
+        if (record.operator?.identityLink !== undefined) {
+          record.operator.identityLink.ownerSessionId = "other-owner-session";
+        }
+      },
+      (record: typeof renewed) => {
+        changeCurrentPlan(record, (plan) => {
+          const boundary = requireFixtureValue(plan.deploymentBoundary);
+          const gatewayBindings = requireFixtureValue(plan.gatewayBindings);
+          const sourceWorkload = requireFixtureValue(gatewayBindings.sourceWorkload);
+          const gatewayDelivery = requireFixtureValue(plan.gatewayDelivery);
+          const publicGateway = requireFixtureValue(plan.publicGateway);
+          return {
+            ...plan,
+            appTrustedSources: {
+              gatewayPreview: { from: "preview", projectId: "other-project", to: "preview" },
+            },
+            deploymentBoundary: {
+              ...boundary,
+              gateway: { ...boundary.gateway, projectId: "other-project" },
+            },
+            gatewayBindings: {
+              ...gatewayBindings,
+              sourceWorkload: { ...sourceWorkload, projectId: "other-project" },
+            },
+            gatewayDelivery: { ...gatewayDelivery, projectId: "other-project" },
+            publicGateway: { ...publicGateway, projectId: "other-project" },
+          };
+        });
+      },
+      (record: typeof renewed) => {
+        changeCurrentPlan(record, (plan) => {
+          const boundary = requireFixtureValue(plan.deploymentBoundary);
+          const gatewayDelivery = requireFixtureValue(plan.gatewayDelivery);
+          const publicGateway = requireFixtureValue(plan.publicGateway);
+          return {
+            ...plan,
+            deploymentBoundary: {
+              ...boundary,
+              gateway: { ...boundary.gateway, branch: "other-branch" },
+            },
+            gatewayDelivery: { ...gatewayDelivery, branch: "other-branch" },
+            publicGateway: { ...publicGateway, branch: "other-branch" },
+          };
+        });
+      },
+      (record: typeof renewed) => {
+        changeCurrentPlan(record, (plan) => ({
+          ...plan,
+          gatewayDelivery: {
+            ...requireFixtureValue(plan.gatewayDelivery),
+            gitSha: "9".repeat(40),
+          },
+        }));
+      },
+      (record: typeof renewed) => {
+        changeCurrentPlan(record, (plan) => {
+          const gatewayBindings = requireFixtureValue(plan.gatewayBindings);
+          const sourceWorkload = requireFixtureValue(gatewayBindings.sourceWorkload);
+          return {
+            ...plan,
+            gatewayBindings: {
+              ...gatewayBindings,
+              sourceWorkload: { ...sourceWorkload, audience: "https://other.example" },
+            },
+          };
+        });
+      },
+    ];
+    for (const mutate of invalidRecords) {
+      const invalid = structuredClone(renewed);
+      mutate(invalid);
+      expect(hostedRuntimeJournalRecordSchema.safeParse(invalid).success).toBe(false);
+    }
   });
 
   it("exposes both archived candidate sets only under the exact renewed source provenance", () => {

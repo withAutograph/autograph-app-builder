@@ -50,6 +50,21 @@ const bindingSchema = z.strictObject({
   plan: hostedOperatorPlanSchema,
   proof: hostedRuntimeProofSchema,
 });
+const operatorResponseDiagnostic = (
+  result: ReturnType<typeof operatorPublicResultSchema.safeParse>,
+): Pick<HostedOperatorConsentMetadata, "operatorResponse" | "operatorCode"> & {
+  accessClass: NonNullable<HostedOperatorConsentMetadata["accessClass"]>;
+} => {
+  if (!result.success || result.data.status !== "blocked") {
+    return { accessClass: "ok" };
+  }
+  return {
+    accessClass:
+      result.data.code === "authorization_required" ? "application_auth_denied" : "other_failed",
+    operatorResponse: "blocked",
+    ...(result.data.code === undefined ? {} : { operatorCode: result.data.code }),
+  };
+};
 /** Server-only client. An unconfigured service never falls back to an installer Sandbox. */
 export const createHostedOperatorClient = (input: {
   endpoint: string;
@@ -107,7 +122,10 @@ export const createHostedOperatorClient = (input: {
       signal,
     };
     const response = await (input.fetch ?? fetch)(new URL("/v1/runtime", url), options);
-    const emit = (accessClass: NonNullable<HostedOperatorConsentMetadata["accessClass"]>) => {
+    const emit = (
+      accessClass: NonNullable<HostedOperatorConsentMetadata["accessClass"]>,
+      detail?: Pick<HostedOperatorConsentMetadata, "operatorResponse" | "operatorCode">,
+    ) => {
       const vercelError = response.headers.get("x-vercel-error");
       let outcome: HostedOperatorConsentMetadata["outcome"] = "operator_access_denied";
       if (accessClass === "ok") {
@@ -124,6 +142,7 @@ export const createHostedOperatorClient = (input: {
         outcome,
         phase: diagnosticPhase,
         stage: "operator_request",
+        ...detail,
       };
       if (vercelError === "TRUSTED_SOURCES_ENVIRONMENT_MISMATCH") {
         metadata.vercelError = "TRUSTED_SOURCES_ENVIRONMENT_MISMATCH";
@@ -164,16 +183,13 @@ export const createHostedOperatorClient = (input: {
     try {
       value = await response.json();
     } catch (error) {
-      emit("other_failed");
+      emit("other_failed", { operatorResponse: "decode_failed" });
       throw error;
     }
-    const blocked = operatorPublicResultSchema.safeParse(value);
-    let accessClass: NonNullable<HostedOperatorConsentMetadata["accessClass"]> = "ok";
-    if (blocked.success && blocked.data.status === "blocked") {
-      accessClass =
-        blocked.data.code === "authorization_required" ? "application_auth_denied" : "other_failed";
-    }
-    emit(accessClass);
+    const { accessClass, ...detail } = operatorResponseDiagnostic(
+      operatorPublicResultSchema.safeParse(value),
+    );
+    emit(accessClass, detail);
     return value;
   };
   return {
