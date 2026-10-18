@@ -10,6 +10,8 @@ import type {
   HostedOperatorEffectContext,
 } from "./hosted-operator-service";
 import { isSharedHostProtectionDeliveryProvenance } from "./hosted-operator-shared-host-protection-successor";
+import { isRetentionRenewalDeliveryProvenance } from "./hosted-operator-retention-renewal";
+import type { RetentionRenewalDeliveryProvenance } from "./hosted-operator-retention-renewal";
 
 interface DeploymentListQuery {
   branch: string;
@@ -21,6 +23,54 @@ const matchesMetadataIdentity = (
   expected: Readonly<Record<string, string>>,
   observed: Record<string, string> | undefined,
 ) => Object.entries(expected).every(([key, value]) => observed?.[key] === value);
+
+const retainedCandidates = (
+  provenance: RetentionRenewalDeliveryProvenance | undefined,
+  target: "app" | "gateway" | undefined,
+) =>
+  target === "gateway"
+    ? (provenance?.gatewayDeliveryCandidates ?? [])
+    : (provenance?.deliveryCandidates ?? []);
+const matchesDeliveryMetadata = (
+  provenance: RetentionRenewalDeliveryProvenance,
+  kind: "delivery" | "gateway-delivery",
+  observed: Record<string, string> | undefined,
+) => {
+  const effect = provenance.plan.effects.find((value) => value.kind === kind);
+  return (
+    effect !== undefined &&
+    matchesMetadataIdentity(
+      {
+        autograph_operator_effect: effect.id,
+        autograph_operator_operation: provenance.operationRef,
+        autograph_operator_plan: provenance.planDigest,
+      },
+      observed,
+    )
+  );
+};
+
+const assertRetainedCandidateIdentity = (
+  candidate: OperatorDeploymentCandidate | undefined,
+  delivery: NonNullable<HostedOperatorPlan["delivery"]>,
+  operationRef: string,
+  origin: string,
+) => {
+  if (candidate === undefined) {
+    return;
+  }
+  if (
+    ![
+      candidate.operationRef === operationRef,
+      candidate.projectId === delivery.projectId,
+      candidate.repoId === delivery.repoId,
+      candidate.branch === delivery.branch,
+      candidate.origin === origin,
+    ].every(Boolean)
+  ) {
+    throw new HostedOperatorError("resource_mismatch");
+  }
+};
 
 const id = z.string().min(1);
 const isPendingBuild = (candidate: OperatorDeploymentCandidate) =>
@@ -232,13 +282,14 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     return { response, rejectedAssignment };
   };
   const io = (input: HostedOperatorDeploymentContext) => {
+    const deliveryKind = deps.target === "gateway" ? "gateway-delivery" : "delivery";
     const delivery = deps.target === "gateway" ? input.plan.gatewayDelivery : input.plan.delivery;
     if (delivery === undefined) {
       throw new HostedOperatorError("resource_mismatch");
     }
     const validScope = [
       input.plan.action === "prepare",
-      input.effect.kind === (deps.target === "gateway" ? "gateway-delivery" : "delivery"),
+      input.effect.kind === deliveryKind,
       input.target.environment === "preview",
       delivery.projectId ===
         (deps.target === "gateway" ? input.plan.publicGateway?.projectId : input.target.projectId),
@@ -262,10 +313,13 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
             isSharedHostProtectionDeliveryProvenance(provenance, input.plan, input.operationRef),
           )
         : [];
+    const renewalProvenance = (input.renewalDeliveryProvenance ?? []).filter((provenance) =>
+      isRetentionRenewalDeliveryProvenance(provenance, input.plan, input.operationRef),
+    );
     const metadataIdentities = [
       expectedMeta,
-      ...gatewayProvenance.flatMap((provenance) => {
-        const effect = provenance.plan.effects.find((value) => value.kind === "gateway-delivery");
+      ...[...gatewayProvenance, ...renewalProvenance].flatMap((provenance) => {
+        const effect = provenance.plan.effects.find((value) => value.kind === deliveryKind);
         return effect === undefined
           ? []
           : [
@@ -392,10 +446,18 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       if (!exactOrigin) {
         throw new HostedOperatorError("resource_mismatch");
       }
-      const saved = input.deliveryCandidates?.find(
-        (candidate) =>
-          candidate.deploymentId === observed.id && candidate.operationRef === input.operationRef,
-      );
+      const retained = retainedCandidates(
+        renewalProvenance.find((provenance) =>
+          matchesDeliveryMetadata(provenance, deliveryKind, observed.meta),
+        ),
+        deps.target,
+      ).find((candidate) => candidate.deploymentId === observed.id);
+      assertRetainedCandidateIdentity(retained, delivery, input.operationRef, origin.origin);
+      const saved =
+        input.deliveryCandidates?.find(
+          (candidate) =>
+            candidate.deploymentId === observed.id && candidate.operationRef === input.operationRef,
+        ) ?? retained;
       let projectName = saved?.projectName;
       let scopeSlug = saved?.scopeSlug;
       // Pending polls retain deployment identity checks; project/team are checked at entry and terminal readback.
@@ -448,6 +510,13 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         if (candidate.operationRef === input.operationRef) {
           ids.add(candidate.deploymentId);
         }
+      }
+      // Candidate IDs are observation hints only. Even rejected provenance must be read
+      // rather than mistaken for absence that could authorize another create.
+      for (const candidate of (input.renewalDeliveryProvenance ?? []).flatMap((provenance) =>
+        retainedCandidates(provenance, deps.target),
+      )) {
+        ids.add(candidate.deploymentId);
       }
       let cursor: number | undefined;
       const seen = new Set<number>();

@@ -9,6 +9,7 @@ import type {
 } from "../hosted/realm-continuation-authority";
 import type { HostedEveStore } from "../eve/hosted-store";
 import { projectSettingsDeliveryProvenance } from "./hosted-operator-project-settings-successor";
+import { retentionRenewalDeliveryProvenance } from "./hosted-operator-retention-renewal";
 import { hostedSessionRecordSchema, toDurableHostedSessionRecord } from "../eve/hosted-store";
 import { hostedPrincipalSchema } from "../eve/hosted-auth";
 import type { HostedPrincipal } from "../eve/hosted-auth";
@@ -573,27 +574,61 @@ const projectSettingsApprovalCheckpoint = (
   return null;
 };
 
-const approvalCheckpoint = (
+const retentionRenewalApprovalCheckpoint = (
+  record: HostedRuntimeJournalRecord | undefined,
+  context: { action: "prepare" | "cleanup"; callId: string; planDigest: string },
+) => {
+  const retained =
+    context.action === "prepare"
+      ? retentionRenewalDeliveryProvenance(record).find(
+          (provenance) =>
+            provenance.planDigest === context.planDigest &&
+            provenance.approvedByCallId === context.callId,
+        )
+      : undefined;
+  return retained === undefined
+    ? null
+    : {
+        current: {
+          approvalId: retained.approvalId,
+          operationRef: retained.operationRef,
+          plan: retained.plan,
+          planDigest: retained.planDigest,
+        },
+        retainedPrepare: true,
+      };
+};
+
+const accountApprovalCheckpoint = (
   record: HostedRuntimeJournalRecord | undefined,
   context: { action: "prepare" | "cleanup"; callId: string; planDigest: string },
 ) => {
   const accounts = record?.accountPreparation;
   if (
-    context.action === "prepare" &&
-    accounts?.accountPlanDigest === context.planDigest &&
-    accounts.accountApprovedByCallId === context.callId
+    context.action !== "prepare" ||
+    accounts?.accountPlanDigest !== context.planDigest ||
+    accounts.accountApprovedByCallId !== context.callId
   ) {
-    // Replanning creates a new app operation. The original account approval
-    // remains verifiable against its retained frozen plan and real Eve receipt.
-    return {
-      current: {
-        approvalId: accounts.accountApprovalId,
-        operationRef: accounts.accountOperationRef,
-        plan: accounts.accountPlan,
-        planDigest: accounts.accountPlanDigest,
-      },
-      retainedPrepare: true,
-    };
+    return null;
+  }
+  return {
+    current: {
+      approvalId: accounts.accountApprovalId,
+      operationRef: accounts.accountOperationRef,
+      plan: accounts.accountPlan,
+      planDigest: accounts.accountPlanDigest,
+    },
+    retainedPrepare: true,
+  };
+};
+
+const approvalCheckpoint = (
+  record: HostedRuntimeJournalRecord | undefined,
+  context: { action: "prepare" | "cleanup"; callId: string; planDigest: string },
+) => {
+  const account = accountApprovalCheckpoint(record, context);
+  if (account !== null) {
+    return account;
   }
   const gatewayOriginal =
     context.action === "prepare" && record !== undefined
@@ -609,6 +644,10 @@ const approvalCheckpoint = (
   const retainedSettings = projectSettingsApprovalCheckpoint(record, context);
   if (retainedSettings !== null) {
     return retainedSettings;
+  }
+  const retainedRenewal = retentionRenewalApprovalCheckpoint(record, context);
+  if (retainedRenewal !== null) {
+    return retainedRenewal;
   }
   const retained = record?.retainedAuth;
   const retainedPrepare =

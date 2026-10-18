@@ -8,6 +8,7 @@ import {
 } from "./hosted-operator-normal-actor-program";
 import { hostedOperatorAppProjectSettingsSchema } from "./hosted-operator-app-project-settings";
 
+const GATEWAY_BINDINGS_EFFECT = "gateway-bindings";
 const id = z.string().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const sqlName = z.string().regex(/^[a-z][a-z0-9_]{0,62}$/u);
@@ -262,6 +263,11 @@ export type ManagedOperatorEnvironmentRow = z.infer<typeof managedOperatorEnviro
 export const managedOperatorEnvironmentRowsSchema = z.array(managedOperatorEnvironmentRowSchema);
 
 const REMOVE_APP_BINDINGS = "remove-bindings";
+const appPreviewTrustedSource = z.strictObject({
+  projectId: id,
+  from: z.literal("preview"),
+  to: z.literal("preview"),
+});
 const hostedOperatorPlanDataSchema = z.strictObject({
   access: z.array(
     z.strictObject({ actorId: id, organizationId: id, roles: z.array(sqlName).min(1) }),
@@ -320,7 +326,7 @@ const hostedOperatorPlanDataSchema = z.strictObject({
         kind: z.enum([
           "resources",
           "install",
-          "gateway-bindings",
+          GATEWAY_BINDINGS_EFFECT,
           "gateway-delivery",
           "access",
           "auth-membership",
@@ -361,18 +367,22 @@ const hostedOperatorPlanDataSchema = z.strictObject({
         })
         .optional(),
       trustedSources: z
-        .strictObject({
-          builderProduction: z.strictObject({
-            projectId: id,
-            from: z.literal("production"),
-            to: z.literal("preview"),
+        .union([
+          z.strictObject({
+            builderProduction: z.strictObject({
+              projectId: id,
+              from: z.literal("production"),
+              to: z.literal("preview"),
+            }),
+            operatorPreview: z.strictObject({
+              projectId: id,
+              from: z.literal("preview"),
+              to: z.literal("preview"),
+            }),
+            appPreview: appPreviewTrustedSource.optional(),
           }),
-          operatorPreview: z.strictObject({
-            projectId: id,
-            from: z.literal("preview"),
-            to: z.literal("preview"),
-          }),
-        })
+          z.strictObject({ appPreview: appPreviewTrustedSource }),
+        ])
         .optional(),
       sourceWorkload: z.strictObject({
         audience: z.url(),
@@ -642,7 +652,7 @@ const authorizationPhases = (plan: z.infer<typeof hostedOperatorPlanDataSchema>)
     phases = ["resources", "install"];
   }
   if (plan.gatewayBindings !== undefined) {
-    phases.push("gateway-bindings");
+    phases.push(GATEWAY_BINDINGS_EFFECT);
   }
   if (plan.gatewayDelivery !== undefined) {
     phases.push("gateway-delivery");
@@ -708,7 +718,9 @@ const validateAppTrustedSources = (
   ctx: z.RefinementCtx,
 ) => {
   const gatewayPreview = plan.appTrustedSources?.gatewayPreview;
-  if (gatewayPreview === undefined) return;
+  if (gatewayPreview === undefined) {
+    return;
+  }
 
   const boundary = plan.deploymentBoundary;
   const sourceWorkload = plan.gatewayBindings?.sourceWorkload;
@@ -738,10 +750,42 @@ const validateAppTrustedSources = (
     });
   }
 };
+const validateGatewayAppTrustedSource = (
+  plan: z.infer<typeof hostedOperatorPlanDataSchema>,
+  ctx: z.RefinementCtx,
+) => {
+  const appPreview = plan.gatewayBindings?.trustedSources?.appPreview;
+  if (appPreview === undefined) {
+    return;
+  }
+  const boundary = plan.deploymentBoundary;
+  const sourceWorkload = plan.gatewayBindings?.sourceWorkload;
+  const checks = [
+    plan.action === "prepare",
+    plan.stage === "app",
+    plan.effects.some((effect) => effect.kind === GATEWAY_BINDINGS_EFFECT),
+    boundary?.app.environment === "preview",
+    boundary?.gateway.environment === "preview",
+    appPreview.projectId === plan.selection.projectId,
+    appPreview.projectId === boundary?.app.projectId,
+    plan.publicGateway?.projectId === boundary?.gateway.projectId,
+    sourceWorkload?.projectId === boundary?.gateway.projectId,
+    sourceWorkload?.ownerId === boundary?.teamId,
+  ];
+  if (!checks.every(Boolean)) {
+    ctx.addIssue({
+      code: "custom",
+      message:
+        "The Gateway JWKS grant must name its selected app Preview caller and Gateway Preview target.",
+      path: ["gatewayBindings", "trustedSources", "appPreview"],
+    });
+  }
+};
 export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine((plan, ctx) => {
   validateAuthAdoption(plan, ctx);
   validateAppEnvironmentCleanup(plan, ctx);
   validateAppTrustedSources(plan, ctx);
+  validateGatewayAppTrustedSource(plan, ctx);
 
   if ((plan.bootstrap === undefined) !== (plan.resourcesInstaller === undefined)) {
     ctx.addIssue({
@@ -999,6 +1043,7 @@ const hostedOperatorRecordBaseSchema = z.strictObject({
   retainedAppDeliveries: z.array(retainedAppDeliverySchema).optional(),
   workerCheckpoints: z.array(workerEffectCheckpointSchema).optional(),
 });
+export type HostedOperatorRecordBase = z.infer<typeof hostedOperatorRecordBaseSchema>;
 const hostedOperatorRecordDataSchema = hostedOperatorRecordBaseSchema.extend({
   /** Prior build settings and unresolved binding attempts are provenance, never new approval. */
   retainedProjectSettingsOperations: z
@@ -1021,6 +1066,10 @@ const hostedOperatorRecordDataSchema = hostedOperatorRecordBaseSchema.extend({
         operator: hostedOperatorRecordBaseSchema,
       }),
     )
+    .optional(),
+  /** The expired approved plan remains evidence; a renewed plan requires a new approval. */
+  retainedRenewalOperations: z
+    .array(z.strictObject({ approvedByCallId: id, operator: hostedOperatorRecordBaseSchema }))
     .optional(),
 });
 const gatewayDeliveryOrigin = (operator: z.infer<typeof hostedOperatorRecordDataSchema>) =>

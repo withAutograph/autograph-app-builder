@@ -437,6 +437,154 @@ it("keeps legacy plans free of Trusted Sources writes", async () => {
   }
 });
 
+const approveAppSource = (f: ReturnType<typeof fixture>, includeLegacy = false) => {
+  f.input.plan = hostedOperatorPlanSchema.parse({
+    ...f.input.plan,
+    stage: "app",
+    gatewayBindings: {
+      ...f.input.plan.gatewayBindings,
+      trustedSources: {
+        ...(includeLegacy ? approvedSources : {}),
+        appPreview: { projectId: selection.projectId, from: "preview", to: "preview" },
+      },
+    },
+  });
+};
+const existingCallerPolicy = () => ({
+  projects: {
+    prj_builder: {
+      customAllow: [{ from: { slugs: ["production"] }, to: { slugs: ["preview"] } }],
+      label: "Existing Builder",
+    },
+    prj_operator: {
+      customAllow: [{ from: { slugs: ["preview"] }, to: { slugs: ["preview"] } }],
+      label: "Existing operator",
+    },
+    prj_gateway: { label: "Implicit self" },
+  },
+  oidcProviders: {
+    "https://issuer.example": [
+      { claims: { aud: ["existing"] }, to: { slugs: ["preview"] }, label: "Keep external" },
+    ],
+  },
+  enableVercelCiSameRepository: false,
+  providerOwnedField: "preserved",
+});
+
+it.each([false, true])(
+  "adds app Preview JWKS access while preserving existing Gateway callers (legacy declared: %s)",
+  async (includeLegacy) => {
+    const f = fixture();
+    await f.writer.bind(f.input);
+    const existing = existingCallerPolicy();
+    f.project.trustedSources = structuredClone(existing);
+    approveAppSource(f, includeLegacy);
+    expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "retryable" });
+    expect(projectPatches(f)).toEqual([]);
+    f.input.effect = {
+      id: "gateway-delivery",
+      kind: "gateway-delivery",
+      description: "Verify delivery",
+    };
+    await expect(f.writer.verifyForDelivery(f.input)).rejects.toThrow("operator_unavailable");
+    f.input.effect = plan.effects.find((effect) => effect.kind === "gateway-bindings")!;
+    await f.writer.bind(f.input);
+    expect(projectPatches(f)).toHaveLength(1);
+    expect(projectPatches(f)[0]?.body).toEqual({
+      trustedSources: {
+        ...existing,
+        projects: {
+          ...existing.projects,
+          [selection.projectId]: {
+            customAllow: [{ from: { slugs: ["preview"] }, to: { slugs: ["preview"] } }],
+          },
+        },
+      },
+    });
+    expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "applied" });
+    await f.writer.bind(f.input);
+    expect(projectPatches(f)).toHaveLength(1);
+    f.input.effect = {
+      id: "gateway-delivery",
+      kind: "gateway-delivery",
+      description: "Verify delivery",
+    };
+    expect(await f.writer.verifyForDelivery(f.input)).toHaveProperty("rows");
+  },
+);
+
+it.each(["implicit", "broader"])(
+  "preserves existing %s app caller coverage without a Gateway policy write",
+  async (kind) => {
+    const f = fixture();
+    await f.writer.bind(f.input);
+    approveAppSource(f);
+    const existing = existingCallerPolicy();
+    const app =
+      kind === "implicit"
+        ? { label: "Keep implicit same-environment access" }
+        : {
+            customAllow: [
+              { from: { slugs: ["preview", "production"] }, to: { slugs: ["preview"] } },
+            ],
+          };
+    const sources = { ...existing, projects: { ...existing.projects, [selection.projectId]: app } };
+    f.project.trustedSources = structuredClone(sources);
+    expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "applied" });
+    await f.writer.bind(f.input);
+    expect(projectPatches(f)).toEqual([]);
+    expect(f.project.trustedSources).toEqual(sources);
+  },
+);
+
+it("adds the missing app Preview pair without replacing its previous custom grants", async () => {
+  const f = fixture();
+  approveAppSource(f);
+  const existing = existingCallerPolicy();
+  const previous = { from: { slugs: ["production"] }, to: { slugs: ["preview"] } };
+  f.project.trustedSources = {
+    ...existing,
+    projects: {
+      ...existing.projects,
+      [selection.projectId]: { customAllow: [previous], label: "Keep app" },
+    },
+  };
+  await f.writer.bind(f.input);
+  expect(projectPatches(f)[0]?.body).toEqual({
+    trustedSources: {
+      ...existing,
+      projects: {
+        ...existing.projects,
+        [selection.projectId]: {
+          customAllow: [previous, { from: { slugs: ["preview"] }, to: { slugs: ["preview"] } }],
+          label: "Keep app",
+        },
+      },
+    },
+  });
+});
+
+it("does not attest a newly added app caller broadened beyond its approved Preview pair", async () => {
+  const f = fixture();
+  approveAppSource(f);
+  f.project.trustedSources = existingCallerPolicy();
+  f.setProtectionReadbackTransform((value) => {
+    const sources = z.record(z.string(), z.json()).parse(value);
+    const projects = z.record(z.string(), z.json()).parse(sources.projects);
+    return {
+      ...sources,
+      projects: {
+        ...projects,
+        [selection.projectId]: {
+          customAllow: [{ from: { slugs: ["preview", "production"] }, to: { slugs: ["preview"] } }],
+        },
+      },
+    };
+  });
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(projectPatches(f)).toHaveLength(1);
+});
+
 it("binds the approved published app branch while preserving the authorization target branch", async () => {
   const f = fixture();
   const authorizationBranch = f.input.target.branch;

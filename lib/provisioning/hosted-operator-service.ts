@@ -6,6 +6,13 @@ import {
 import type { SharedHostProtectionDeliveryProvenance } from "./hosted-operator-shared-host-protection-successor";
 import { recoverOriginalApprovedPlan } from "./hosted-operator-approved-plan";
 import {
+  createRetentionRenewalPlan,
+  isRetentionRenewalSuccessor,
+  readPendingRetentionRenewalPlan,
+  retentionRenewalDeliveryProvenance,
+} from "./hosted-operator-retention-renewal";
+import type { RetentionRenewalDeliveryProvenance } from "./hosted-operator-retention-renewal";
+import {
   createProjectSettingsSuccessorPlan,
   readPendingProjectSettingsSuccessorPlan,
   isProjectSettingsSuccessor,
@@ -165,6 +172,8 @@ export type HostedOperatorEffectContext = Context & {
     operationRef: string;
     deliveryCandidates: readonly OperatorDeploymentCandidate[];
   };
+  /** Exact historical app/Gateway deployment metadata for an approved retention renewal. */
+  renewalDeliveryProvenance?: readonly RetentionRenewalDeliveryProvenance[];
   checkpointGatewayDelivery?: (
     candidates: readonly OperatorDeploymentCandidate[],
     selectedId?: string,
@@ -438,11 +447,36 @@ const handlePlanOperation = async (
   if (
     input.operation === "prepare" &&
     input.normalActorProgram === undefined &&
-    input.authSignupPolicy === undefined &&
-    deps.readAppProjectSettings !== undefined
+    input.authSignupPolicy === undefined
   ) {
     const saved = await deps.store.read(context);
+    const pendingRenewal = readPendingRetentionRenewalPlan(saved?.record, now());
+    if (saved !== undefined && pendingRenewal !== undefined) {
+      const savedOperator = saved.record.operator;
+      if (savedOperator === undefined) {
+        throw new HostedOperatorError("operation_in_progress");
+      }
+      if (!sameOperatorSelection(pendingRenewal.selection, input.selection)) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+      await deps.assertAuthorized({ ...context, plan: pendingRenewal, purpose: "planning" });
+      const current = await deps.store.read(context);
+      if (current?.revision !== saved.revision) {
+        throw new HostedOperatorError("operation_in_progress");
+      }
+      return response(
+        operatorPublicResultSchema.parse({
+          appId,
+          authenticatedBehavior: "unassessed",
+          operationRef: savedOperator.operationRef,
+          plan: pendingRenewal,
+          planDigest: savedOperator.planDigest,
+          status: "planned",
+        }),
+      );
+    }
     if (
+      deps.readAppProjectSettings !== undefined &&
       saved?.record.approvedByCallId === "operator:unapproved-plan" &&
       saved.record.operator?.retainedProjectSettingsOperations !== undefined
     ) {
@@ -473,11 +507,26 @@ const handlePlanOperation = async (
       }
     }
   }
+  let renewalPrior: Awaited<ReturnType<HostedRuntimeJournalStore["read"]>> | undefined;
   const proposed = await observeOperatorPlanStage(
     context.target.sessionId,
     "plan_composition",
-    async () =>
-      await deps.plan({
+    async () => {
+      if (
+        input.operation === "prepare" &&
+        input.normalActorProgram === undefined &&
+        input.authSignupPolicy === undefined
+      ) {
+        renewalPrior = await deps.store.read(context);
+        const renewal = createRetentionRenewalPlan(renewalPrior?.record, now());
+        if (renewal !== undefined) {
+          if (!sameOperatorSelection(renewal.selection, input.selection)) {
+            throw new HostedOperatorError("resource_mismatch");
+          }
+          return renewal;
+        }
+      }
+      return await deps.plan({
         ...context,
         action: input.operation,
         ...(input.normalActorProgram === undefined
@@ -486,7 +535,8 @@ const handlePlanOperation = async (
         ...(input.authSignupPolicy === undefined
           ? {}
           : { authSignupPolicy: input.authSignupPolicy }),
-      }),
+      });
+    },
   );
   const cleanupPrior = input.operation === "cleanup" ? await deps.store.read(context) : undefined;
   const plan = await observeOperatorPlanStage(context.target.sessionId, "plan_validation", () =>
@@ -515,6 +565,11 @@ const handlePlanOperation = async (
     successorPrior !== undefined && isInstallerSourceSuccessor(successorPrior.record, plan, now());
   const settingsSuccessor =
     successorPrior !== undefined && isProjectSettingsSuccessor(successorPrior.record, plan, now());
+  const retentionRenewal =
+    successorPrior !== undefined && isRetentionRenewalSuccessor(successorPrior.record, plan, now());
+  if (renewalPrior !== undefined && successorPrior?.revision !== renewalPrior.revision) {
+    throw new HostedOperatorError("operation_in_progress");
+  }
   const assertPriorSuccessorApproval = async () => {
     if (successorPrior === undefined) {
       throw new HostedOperatorError("authorization_required");
@@ -536,11 +591,11 @@ const handlePlanOperation = async (
       throw new HostedOperatorError("authorization_required");
     }
   };
-  if (sharedHostSuccessor || installerSuccessor || settingsSuccessor) {
+  if (sharedHostSuccessor || installerSuccessor || settingsSuccessor || retentionRenewal) {
     await assertPriorSuccessorApproval();
   }
   const recovered =
-    sharedHostSuccessor || installerSuccessor || settingsSuccessor
+    sharedHostSuccessor || installerSuccessor || settingsSuccessor || retentionRenewal
       ? null
       : await recoverOriginalApprovedPlan(deps, context, input, appId, plan, now);
   if (recovered !== null) {
@@ -549,7 +604,10 @@ const handlePlanOperation = async (
   const planDigest = operatorPlanDigest(plan);
   const operator = {
     mode: "protected-operator-v1" as const,
-    operationRef: randomUUID(),
+    operationRef:
+      retentionRenewal && successorPrior?.record.operator !== undefined
+        ? successorPrior.record.operator.operationRef
+        : randomUUID(),
     plan,
     planDigest,
     receipts: [],
@@ -593,7 +651,7 @@ const handlePlanOperation = async (
     ...context,
     now,
     store: deps.store,
-    ...(installerSuccessor || settingsSuccessor
+    ...(installerSuccessor || settingsSuccessor || retentionRenewal
       ? {
           beforeUpdate: async (record: HostedRuntimeJournalRecord) => {
             await deps.assertAuthorized({ ...context, plan, purpose: "planning" });
@@ -637,6 +695,13 @@ const handlePlanOperation = async (
         record.operator.approvalId === successorPrior.record.operator?.approvalId &&
         record.approvedByCallId === successorPrior.record.approvedByCallId &&
         isProjectSettingsSuccessor(record, plan, now());
+      const retainedRenewalSuccessor =
+        retentionRenewal &&
+        record.operator.operationRef === successorPrior.record.operator?.operationRef &&
+        record.operator.planDigest === successorPrior.record.operator?.planDigest &&
+        record.operator.approvalId === successorPrior.record.operator?.approvalId &&
+        record.approvedByCallId === successorPrior.record.approvedByCallId &&
+        isRetentionRenewalSuccessor(record, plan, now());
       if (settingsSuccessor && !projectSettingsSuccessor) {
         throw new HostedOperatorError("operation_in_progress");
       }
@@ -646,11 +711,15 @@ const handlePlanOperation = async (
       if (installerSuccessor && !installerSourceSuccessor) {
         throw new HostedOperatorError("operation_in_progress");
       }
+      if (retentionRenewal && !retainedRenewalSuccessor) {
+        throw new HostedOperatorError("operation_in_progress");
+      }
       if (
         !gatewaySourceSuccessor &&
         !sharedHostProtectionSuccessor &&
         !installerSourceSuccessor &&
         !projectSettingsSuccessor &&
+        !retainedRenewalSuccessor &&
         (record.leaseId !== undefined ||
           record.operator.pendingEffectId !== undefined ||
           record.operator.pendingEffectAttempt !== undefined ||
@@ -708,15 +777,18 @@ const handlePlanOperation = async (
         record.operator.retainedProjectSettingsOperations;
       nextOperator.retainedGatewayDeliveries = record.operator.retainedGatewayDeliveries;
       nextOperator.retainedInstallerOperations = record.operator.retainedInstallerOperations;
+      nextOperator.retainedRenewalOperations = record.operator.retainedRenewalOperations;
       if (gatewaySourceSuccessor || sharedHostProtectionSuccessor) {
         const {
           retainedGatewayDeliveries,
           retainedInstallerOperations,
           retainedProjectSettingsOperations,
+          retainedRenewalOperations,
           ...priorOperator
         } = record.operator;
         void retainedInstallerOperations;
         void retainedProjectSettingsOperations;
+        void retainedRenewalOperations;
         nextOperator.retainedGatewayDeliveries = [
           ...(retainedGatewayDeliveries ?? []),
           { approvedByCallId: record.approvedByCallId, operator: priorOperator },
@@ -728,10 +800,12 @@ const handlePlanOperation = async (
           retainedGatewayDeliveries,
           retainedInstallerOperations,
           retainedProjectSettingsOperations,
+          retainedRenewalOperations,
           ...priorOperator
         } = record.operator;
         void retainedGatewayDeliveries;
         void retainedProjectSettingsOperations;
+        void retainedRenewalOperations;
         nextOperator.retainedInstallerOperations = [
           ...(retainedInstallerOperations ?? []),
           { approvedByCallId: record.approvedByCallId, operator: priorOperator },
@@ -749,10 +823,12 @@ const handlePlanOperation = async (
           retainedGatewayDeliveries,
           retainedInstallerOperations,
           retainedProjectSettingsOperations,
+          retainedRenewalOperations,
           ...priorOperator
         } = record.operator;
         void retainedGatewayDeliveries;
         void retainedInstallerOperations;
+        void retainedRenewalOperations;
         nextOperator.retainedProjectSettingsOperations = [
           ...(retainedProjectSettingsOperations ?? []),
           { approvedByCallId: record.approvedByCallId, operator: priorOperator },
@@ -769,6 +845,36 @@ const handlePlanOperation = async (
         delete nextOperator.deliveredDeploymentId;
         // The old unknown attempt remains in history; new approval gets a fresh attempt.
       }
+      if (retainedRenewalSuccessor) {
+        const {
+          retainedGatewayDeliveries,
+          retainedInstallerOperations,
+          retainedProjectSettingsOperations,
+          retainedRenewalOperations,
+          ...priorOperator
+        } = record.operator;
+        void retainedGatewayDeliveries;
+        void retainedInstallerOperations;
+        void retainedProjectSettingsOperations;
+        nextOperator.retainedRenewalOperations = [
+          ...(retainedRenewalOperations ?? []),
+          { approvedByCallId: record.approvedByCallId, operator: priorOperator },
+        ];
+        nextOperator.operationRef = record.operator.operationRef;
+        const renewableReceiptKinds = new Set(["resources", "install", "auth-membership"]);
+        nextOperator.receipts = record.operator.receipts.filter((receipt) => {
+          const priorEffect = record.operator?.plan.effects.find(
+            (effect) => effect.id === receipt.effectId,
+          );
+          return priorEffect !== undefined && renewableReceiptKinds.has(priorEffect.kind);
+        });
+        nextOperator.managedEnvironment = record.operator.managedEnvironment;
+        nextOperator.deliveryCandidates = [];
+        nextOperator.gatewayDeliveryCandidates = [];
+        delete nextOperator.deliveredDeploymentId;
+        delete nextOperator.deliveredGatewayDeploymentId;
+        // All old receipts and the pending alias attempt survive only in the immutable snapshot.
+      }
       if (sharedHostProtectionSuccessor) {
         nextOperator.operationRef = record.operator.operationRef;
         nextOperator.pendingEffectId = record.operator.pendingEffectId;
@@ -781,14 +887,16 @@ const handlePlanOperation = async (
       Object.assign(
         nextOperator,
         retainAppDeliveryHistory(
-          projectSettingsSuccessor
+          projectSettingsSuccessor || retainedRenewalSuccessor
             ? { ...record.operator, deliveryCandidates: [] }
             : record.operator,
           nextOperator,
         ),
       );
-      nextOperator.gatewayDeliveryCandidates = record.operator.gatewayDeliveryCandidates;
-      if (!gatewaySourceSuccessor) {
+      if (!retainedRenewalSuccessor) {
+        nextOperator.gatewayDeliveryCandidates = record.operator.gatewayDeliveryCandidates;
+      }
+      if (!gatewaySourceSuccessor && !retainedRenewalSuccessor) {
         nextOperator.deliveredGatewayDeploymentId = record.operator.deliveredGatewayDeploymentId;
       }
       if (record.operator.gatewayEnvironment !== undefined) {
@@ -798,6 +906,7 @@ const handlePlanOperation = async (
         nextOperator.identityLink = record.operator.identityLink;
       }
       if (
+        !retainedRenewalSuccessor &&
         authStageCompleted &&
         record.operator.plan.authSchema?.targetDigest === plan.authSchema?.targetDigest
       ) {
@@ -832,7 +941,8 @@ const handlePlanOperation = async (
         gatewaySourceSuccessor ||
         sharedHostProtectionSuccessor ||
         installerSourceSuccessor ||
-        projectSettingsSuccessor
+        projectSettingsSuccessor ||
+        retainedRenewalSuccessor
       ) {
         delete next.leaseId;
         delete next.leaseExpiresAt;
@@ -1515,6 +1625,33 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 }
                 await assertCurrent();
               }
+              const renewalDeliveryProvenance =
+                effect.kind === "delivery" || effect.kind === GATEWAY_DELIVERY_EFFECT
+                  ? retentionRenewalDeliveryProvenance(record)
+                  : [];
+              if (renewalDeliveryProvenance.length > 0) {
+                await assertCurrent();
+                await Promise.all(
+                  renewalDeliveryProvenance.map(async (provenance) => {
+                    const originalApproval = await deps.readApproval({
+                      ...context,
+                      action: "prepare",
+                      callId: provenance.approvedByCallId,
+                      planDigest: provenance.planDigest,
+                    });
+                    if (
+                      originalApproval?.approved !== true ||
+                      originalApproval.approvalId !== provenance.approvalId ||
+                      originalApproval.callId !== provenance.approvedByCallId ||
+                      originalApproval.planDigest !== provenance.planDigest ||
+                      originalApproval.action !== "prepare"
+                    ) {
+                      throw new HostedOperatorError("authorization_required");
+                    }
+                  }),
+                );
+                await assertCurrent();
+              }
               const effectInput: HostedOperatorEffectContext = {
                 ...context,
                 signal: request.signal,
@@ -1724,6 +1861,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                         planDigest: retainedAppDelivery.planDigest,
                       },
                     }),
+                ...(renewalDeliveryProvenance.length === 0 ? {} : { renewalDeliveryProvenance }),
                 gatewayEnvironmentRows: requireOperator(record).gatewayEnvironment,
                 managedEnvironment:
                   plan.appEnvironmentCleanup === undefined

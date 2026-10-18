@@ -11,6 +11,8 @@ import {
   reconcileGatewayAppCandidate,
 } from "./hosted-operator-deployment-delivery";
 import type { HostedOperatorDeploymentContext } from "./hosted-operator-service";
+import { retentionRenewalDeliveryProvenance } from "./hosted-operator-retention-renewal";
+import { hostedRuntimeJournalRecordSchema } from "./hosted-runtime-journal";
 
 const authority = {
   audience: "https://builder.example/mcp",
@@ -883,6 +885,342 @@ const readyGateway = async () => {
   await f.writer.reconcile(f.input);
   return f;
 };
+
+const renewedDelivery = (gateway: boolean, addAppGrant = false) => {
+  const original = hostedOperatorPlanSchema.parse({
+    ...gatewayPlan,
+    stage: "app",
+    ...(addAppGrant
+      ? {}
+      : {
+          appTrustedSources: {
+            gatewayPreview: { projectId: "prj_gateway", from: "preview", to: "preview" },
+          },
+        }),
+    gatewayBindings: {
+      authBrowserOrigin: "https://auth-preview.example.test",
+      builderCallbackOrigin: "https://builder.example",
+      catalogAppIds: [selection.appId],
+      operatorOrigin: "https://operator.example",
+      sourceWorkload: {
+        audience: "https://vercel.com",
+        environment: "preview",
+        issuer: "https://oidc.vercel.com/team",
+        ownerId: "team",
+        projectId: "prj_gateway",
+        subject: "fixture-gateway",
+      },
+    },
+    effects: [
+      ...plan.effects.map((effect) =>
+        effect.kind === "bindings"
+          ? {
+              ...effect,
+              id: "bindings",
+              description: addAppGrant
+                ? "Bind only app-owned runtime URL and public verification context."
+                : "Bind app-owned runtime URL and public verification context, and allow the configured Gateway Preview to reach this app Preview.",
+            }
+          : effect,
+      ),
+      { id: "gateway-bindings", kind: "gateway-bindings", description: "Bind Gateway" },
+      gatewayPlan.effects[5],
+    ],
+  });
+  const current = hostedOperatorPlanSchema.parse({
+    ...original,
+    retention: { ...original.retention, expiresAt: "2027-01-02T00:00:00Z" },
+    gatewayBindings: {
+      ...original.gatewayBindings,
+      trustedSources: {
+        ...original.gatewayBindings?.trustedSources,
+        appPreview: { projectId: selection.projectId, from: "preview", to: "preview" },
+      },
+    },
+    effects: original.effects.map((effect) => {
+      if (effect.kind === "gateway-bindings") {
+        return {
+          ...effect,
+          description:
+            "Bind shared Gateway runtime and allow this app Preview to read the Gateway's public signing keys.",
+        };
+      }
+      if (addAppGrant && effect.kind === "bindings") {
+        return {
+          ...effect,
+          description:
+            "Bind app-owned runtime URL and public verification context, and allow the configured Gateway Preview to reach this app Preview.",
+        };
+      }
+      return effect;
+    }),
+    ...(addAppGrant
+      ? {
+          appTrustedSources: {
+            gatewayPreview: { projectId: "prj_gateway", from: "preview", to: "preview" },
+          },
+        }
+      : {}),
+  });
+  const f = fixture(current, null, gateway);
+  const delivery = gateway ? current.gatewayDelivery : current.delivery;
+  if (delivery === undefined) {
+    throw new Error("Missing renewal fixture delivery");
+  }
+  const retained = {
+    branch: delivery.branch,
+    deploymentId: "dpl_new",
+    ...(gateway ? { gatewayAliasAttempted: true } : {}),
+    operationRef: f.input.operationRef,
+    origin: "https://new-native.vercel.app",
+    projectId: delivery.projectId,
+    readyState: "READY",
+    repoId: delivery.repoId,
+  };
+  f.input.renewalDeliveryProvenance = [
+    {
+      operationRef: f.input.operationRef,
+      plan: original,
+      planDigest: operatorPlanDigest(original),
+      approvalId: "original-approval",
+      approvedByCallId: "original-approved-call",
+      deliveryCandidates: gateway ? [] : [retained],
+      gatewayDeliveryCandidates: gateway ? [retained] : [],
+    },
+  ];
+  f.deployment.meta.autograph_operator_plan = operatorPlanDigest(original);
+  f.input.deliveryCandidates = [];
+  if (gateway) {
+    f.aliasState.deploymentId = "dpl_new";
+  }
+  return f;
+};
+
+it.each([
+  { gateway: false, addAppGrant: false },
+  { gateway: true, addAppGrant: false },
+  { gateway: false, addAppGrant: true },
+  { gateway: true, addAppGrant: true },
+])(
+  "retains an approved renewal's existing delivery without POST (%j)",
+  async ({ gateway, addAppGrant }) => {
+    const f = renewedDelivery(gateway, addAppGrant);
+    expect(await f.writer.deliver(f.input)).toMatchObject({
+      status: "applied",
+      selected: { deploymentId: "dpl_new", operationRef: f.input.operationRef },
+    });
+    expect(f.calls.every((call) => call.method === "GET")).toBe(true);
+    expect(f.calls.some((call) => call.path === "/v13/deployments/dpl_new")).toBe(true);
+    if (gateway) {
+      expect(f.calls.some((call) => call.path.startsWith("/v4/aliases/"))).toBe(true);
+      expect(f.input.deliveryCandidates?.[0]?.gatewayAliasAttempted).toBe(true);
+    }
+  },
+);
+
+it.each([false, true])(
+  "reconciles the current operation from mixed archived Gateway history (gateway=%s)",
+  async (gateway) => {
+    const f = renewedDelivery(gateway, true);
+    const original = f.input.renewalDeliveryProvenance?.[0];
+    const appDelivery = original?.plan.delivery;
+    const gatewayDelivery = original?.plan.gatewayDelivery;
+    if (original === undefined || appDelivery === undefined || gatewayDelivery === undefined) {
+      throw new Error("Expected both approved delivery scopes");
+    }
+    const appCandidate = original.deliveryCandidates[0] ?? {
+      branch: appDelivery.branch,
+      deploymentId: "retained-app",
+      operationRef: original.operationRef,
+      origin: "https://retained-app.example.test",
+      projectId: appDelivery.projectId,
+      readyState: "READY",
+      repoId: appDelivery.repoId,
+    };
+    const gatewayCandidate = original.gatewayDeliveryCandidates[0] ?? {
+      branch: gatewayDelivery.branch,
+      deploymentId: "retained-gateway",
+      gatewayAliasAttempted: true,
+      operationRef: original.operationRef,
+      origin: "https://retained-gateway.example.test",
+      projectId: gatewayDelivery.projectId,
+      readyState: "READY",
+      repoId: gatewayDelivery.repoId,
+    };
+    const olderGateways = Array.from({ length: 9 }, (_, index) => ({
+      ...gatewayCandidate,
+      deploymentId: `older-gateway-${index}`,
+      operationRef: `11111111-1111-4111-8111-${String(index + 1).padStart(12, "0")}`,
+    }));
+    const archivedGateways = [...olderGateways, gatewayCandidate];
+    const record = hostedRuntimeJournalRecordSchema.parse({
+      approvedByCallId: "new-approved-call",
+      kind: "app-runtime",
+      request: target,
+      status: "pending",
+      step: "reserved",
+      version: 1,
+      operator: {
+        mode: "protected-operator-v1",
+        operationRef: f.input.operationRef,
+        plan: f.input.plan,
+        planDigest: operatorPlanDigest(f.input.plan),
+        receipts: [],
+        retainedRenewalOperations: [
+          {
+            approvedByCallId: original.approvedByCallId,
+            operator: {
+              approvalId: original.approvalId,
+              mode: "protected-operator-v1",
+              operationRef: original.operationRef,
+              plan: original.plan,
+              planDigest: original.planDigest,
+              receipts: [],
+              deliveryCandidates: [appCandidate],
+              gatewayDeliveryCandidates: archivedGateways,
+            },
+          },
+        ],
+      },
+    });
+    f.input.renewalDeliveryProvenance = retentionRenewalDeliveryProvenance(record);
+    expect(f.input.renewalDeliveryProvenance[0]?.deliveryCandidates).toEqual([appCandidate]);
+    expect(f.input.renewalDeliveryProvenance[0]?.gatewayDeliveryCandidates).toEqual([
+      gatewayCandidate,
+    ]);
+    expect(await f.writer.deliver(f.input)).toMatchObject({
+      status: "applied",
+      selected: { deploymentId: "dpl_new", operationRef: f.input.operationRef },
+    });
+    expect(f.calls.every((call) => call.method === "GET")).toBe(true);
+    expect(f.calls.some((call) => call.path.includes("older-gateway-"))).toBe(false);
+    expect(
+      record.operator?.retainedRenewalOperations?.[0]?.operator.gatewayDeliveryCandidates,
+    ).toEqual(archivedGateways);
+    if (gateway) {
+      expect(f.input.deliveryCandidates?.[0]?.gatewayAliasAttempted).toBe(true);
+    }
+  },
+);
+
+it.each(["absent", "operation", "digest", "approval", "call", "changed-source", "changed-intent"])(
+  "does not adopt renewal delivery metadata with %s provenance",
+  async (failure) => {
+    const f = renewedDelivery(true, true);
+    const provenance = f.input.renewalDeliveryProvenance?.[0];
+    if (provenance === undefined) {
+      throw new Error("Missing renewal fixture provenance");
+    }
+    const changed = structuredClone(provenance);
+    switch (failure) {
+      case "absent": {
+        f.input.deliveryCandidates = [...provenance.gatewayDeliveryCandidates];
+        f.input.renewalDeliveryProvenance = undefined;
+        break;
+      }
+      case "operation": {
+        changed.operationRef = "another-operation";
+        break;
+      }
+      case "digest": {
+        changed.planDigest = "f".repeat(64);
+        break;
+      }
+      case "approval": {
+        changed.approvalId = "";
+        break;
+      }
+      case "call": {
+        changed.approvedByCallId = "operator:unapproved-plan";
+        break;
+      }
+      case "changed-source": {
+        changed.plan = hostedOperatorPlanSchema.parse({
+          ...changed.plan,
+          gatewayDelivery: { ...changed.plan.gatewayDelivery, gitSha: "f".repeat(40) },
+        });
+        changed.planDigest = operatorPlanDigest(changed.plan);
+        break;
+      }
+      case "changed-intent": {
+        changed.plan = hostedOperatorPlanSchema.parse({
+          ...changed.plan,
+          access: [{ actorId: "another-actor", organizationId: "org", roles: ["reviewer"] }],
+        });
+        changed.planDigest = operatorPlanDigest(changed.plan);
+        break;
+      }
+      default: {
+        throw new Error("Unknown renewal fixture failure");
+      }
+    }
+    if (failure !== "absent") {
+      f.input.renewalDeliveryProvenance = [changed];
+    }
+    expect(await f.writer.deliver(f.input)).toMatchObject({ status: "unknown" });
+    expect(f.calls.some((call) => call.method === "POST")).toBe(false);
+  },
+);
+
+it.each(["source", "project", "owner"])(
+  "retains exact provider %s checks while accepting historical renewal metadata",
+  async (failure) => {
+    const f = renewedDelivery(false, true);
+    if (failure === "source") {
+      f.deployment.gitSource.sha = "f".repeat(40);
+    }
+    if (failure === "project") {
+      f.deployment.projectId = "another-project";
+    }
+    if (failure === "owner") {
+      f.deployment.ownerId = "another-owner";
+    }
+    expect(await f.writer.deliver(f.input)).toMatchObject({ status: "unknown" });
+    expect(f.calls.some((call) => call.method === "POST")).toBe(false);
+  },
+);
+
+it("does not drop an unknown alias attempt when its retained candidate identity conflicts", async () => {
+  const f = renewedDelivery(true, true);
+  const provenance = f.input.renewalDeliveryProvenance?.[0];
+  if (provenance === undefined) {
+    throw new Error("Missing renewal fixture provenance");
+  }
+  f.input.renewalDeliveryProvenance = [
+    {
+      ...provenance,
+      gatewayDeliveryCandidates: provenance.gatewayDeliveryCandidates.map((candidate) => ({
+        ...candidate,
+        origin: "https://another-native.vercel.app",
+      })),
+    },
+  ];
+  f.aliasState.missing = true;
+  expect(await f.writer.deliver(f.input)).toMatchObject({ status: "unknown" });
+  expect(f.calls.some((call) => call.method === "POST")).toBe(false);
+});
+
+it.each(["missing", "failed", "redirect", "different"])(
+  "keeps a retained renewal alias attempt unknown after %s readback without POST",
+  async (failure) => {
+    const f = renewedDelivery(true, true);
+    if (failure === "missing") {
+      f.aliasState.missing = true;
+    }
+    if (failure === "failed") {
+      f.aliasState.failReads = true;
+    }
+    if (failure === "redirect") {
+      f.aliasState.redirect = "https://redirect.example.test";
+    }
+    if (failure === "different") {
+      f.aliasState.deploymentId = "dpl_previous";
+    }
+    expect(await f.writer.deliver(f.input)).toMatchObject({ status: "unknown" });
+    expect(f.calls.some((call) => call.method === "POST")).toBe(false);
+    expect(f.input.deliveryCandidates?.[0]?.gatewayAliasAttempted).toBe(true);
+  },
+);
 
 const narrowedGateway = async () => {
   const original = hostedOperatorPlanSchema.parse({

@@ -199,6 +199,13 @@ Deploy a Builder that reads this optional plan field before an operator starts
 publishing proposals containing it. This requires compatible readers and
 writers, not identical deployment commits or a new configuration secret.
 
+The reverse `gatewayBindings.trustedSources.appPreview` rule allows the selected
+app Preview to fetch the protected Gateway's public signing keys with the app's
+own short-lived OIDC token. Add that Preview-to-Preview pair through the existing
+Gateway binder while preserving other callers. The public JWKS handler does not
+require another account role or a realm readonly attester. A legacy plan can
+approve this app rule alone without inventing Builder or operator grants.
+
 Older frozen plans without this field perform no new policy reads or writes.
 Do not silently add a grant to an approved digest, clear completed receipts, or
 rebuild an already delivered app to repair provider access. A separately approved
@@ -207,6 +214,23 @@ saved plan, approvals, receipts, deployment candidates, and retention expiry.
 Record that action's provenance; it is not evidence of automatic provisioning
 by the older workflow. A changed-plan recovery instead needs fresh approval and
 the original approved delivery provenance for every retained candidate.
+
+For an interrupted app-stage operation whose approval has expired, propose a
+new concrete expiry and both configured Preview service call directions
+through the normal Builder approval. Keep the original session, account,
+resources, release, source commits, roles, and app intent. The previous approval
+is historical provenance; it cannot authorize more execution or extend itself.
+Archive its full operator record, receipts, deployment candidates, pending
+attempt, and alias intent before starting the renewed execution.
+
+Under the fresh approval, reconcile access and runtime bindings again, apply
+and read back the approved service grant, and read both existing native
+candidates and the canonical Gateway alias. Historical metadata must remain
+paired with its exact approved plan and actual provider identity. Keep prior
+receipts in history; they do not replace the renewed operation's observations.
+An unresolved old deployment or alias attempt remains unresolved and cannot be
+converted to absence to authorize a duplicate request. This does not require a
+provider probe before proposing the plan or another account-selection step.
 
 Provider policy readback and READY deployments do not establish authenticated
 Preview behavior. Open the approved Gateway browser URL explicitly with the
