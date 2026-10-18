@@ -269,6 +269,15 @@ const hostedOperatorPlanDataSchema = z.strictObject({
   action: z.enum(["prepare", "cleanup"]),
   appDatabase: databaseResource,
   appEnvironmentCleanup: managedOperatorEnvironmentRowsSchema.optional(),
+  appTrustedSources: z
+    .strictObject({
+      gatewayPreview: z.strictObject({
+        from: z.literal("preview"),
+        projectId: id,
+        to: z.literal("preview"),
+      }),
+    })
+    .optional(),
   authAdoption: sharedAuthAdoptionSchema.optional(),
   authDatabase: databaseResource,
   authMembership: hostedOperatorAuthMembershipSchema.optional(),
@@ -694,9 +703,45 @@ const validateAppEnvironmentCleanup = (
     }
   }
 };
+const validateAppTrustedSources = (
+  plan: z.infer<typeof hostedOperatorPlanDataSchema>,
+  ctx: z.RefinementCtx,
+) => {
+  const gatewayPreview = plan.appTrustedSources?.gatewayPreview;
+  if (gatewayPreview === undefined) return;
+
+  const boundary = plan.deploymentBoundary;
+  const sourceWorkload = plan.gatewayBindings?.sourceWorkload;
+  const checks = {
+    action: plan.action === "prepare",
+    stage: plan.stage === "app",
+    bindingEffect: plan.effects.some((effect) => effect.kind === "bindings"),
+    deliveryEffect: plan.effects.some((effect) => effect.kind === "delivery"),
+    boundary: boundary !== undefined,
+    workload: sourceWorkload !== undefined,
+    workloadEnvironment: sourceWorkload?.environment === "preview",
+    sourceProject: sourceWorkload?.projectId === gatewayPreview.projectId,
+    gatewayProject: sourceWorkload?.projectId === boundary?.gateway.projectId,
+    team: sourceWorkload?.ownerId === boundary?.teamId,
+    gatewayEnvironment: boundary?.gateway.environment === "preview",
+    appEnvironment: boundary?.app.environment === "preview",
+    appProject: boundary?.app.projectId === plan.selection.projectId,
+    deliveryProject: plan.delivery?.projectId === boundary?.app.projectId,
+  };
+  const valid = Object.values(checks).every(Boolean);
+  if (!valid) {
+    ctx.addIssue({
+      code: "custom",
+      message:
+        "The app Preview grant must name its configured Gateway Preview workload and selected app deployment.",
+      path: ["appTrustedSources", "gatewayPreview"],
+    });
+  }
+};
 export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine((plan, ctx) => {
   validateAuthAdoption(plan, ctx);
   validateAppEnvironmentCleanup(plan, ctx);
+  validateAppTrustedSources(plan, ctx);
 
   if ((plan.bootstrap === undefined) !== (plan.resourcesInstaller === undefined)) {
     ctx.addIssue({

@@ -175,6 +175,45 @@ and the Gateway is delivered again. The public working surface is the approved
 Gateway browser origin; immutable native candidates remain the authority for
 provider readback.
 
+### Gateway access to a protected app
+
+Provider protection has two separate caller directions. Gateway Trusted Sources
+for Builder or the operator do not grant the Gateway access to the app project.
+An app protected by Vercel Authentication must also trust its configured Gateway
+workload. Forwarding a valid OIDC token alone does not create that grant; see
+[Vercel Trusted Sources](https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/trusted-sources).
+
+New app-stage proposals freeze the service grant in
+`appTrustedSources.gatewayPreview`: add Preview-to-Preview access from the
+configured Gateway project to the selected app project. The ordinary plan
+approval covers this explicit access change. App environment binding observes
+the target project's current policy, adds only this approved rule, and reads the
+policy back. Preserve implicit app self-access and existing project grants,
+OIDC providers, and provider-owned policy fields. A
+pre-existing rule that already covers the requested access needs no policy
+write. Do not disable Vercel Authentication, add Production access, introduce
+static bypass secrets, or relax the app's signed-principal verification.
+The provider policy update is a read-merge-write operation; readback does not
+make it atomic with another administrator's concurrent policy changes.
+Deploy a Builder that reads this optional plan field before an operator starts
+publishing proposals containing it. This requires compatible readers and
+writers, not identical deployment commits or a new configuration secret.
+
+Older frozen plans without this field perform no new policy reads or writes.
+Do not silently add a grant to an approved digest, clear completed receipts, or
+rebuild an already delivered app to repair provider access. A separately approved
+grant may be applied as an explicit operator setup action while preserving the
+saved plan, approvals, receipts, deployment candidates, and retention expiry.
+Record that action's provenance; it is not evidence of automatic provisioning
+by the older workflow. A changed-plan recovery instead needs fresh approval and
+the original approved delivery provenance for every retained candidate.
+
+Provider policy readback and READY deployments do not establish authenticated
+Preview behavior. Open the approved Gateway browser URL explicitly with the
+normal account and verify app use and persistence. A direct native-app denial
+does not identify the failed handoff; distinguish the first Gateway response
+from later browser navigation before changing routing or authentication.
+
 Operator-managed delivery calls Vercel's REST deployment API with the frozen Git
 repository, ref and commit. It does not rely on a branch-push deployment, which
 could start before the runtime bindings are ready. Git-source delivery through

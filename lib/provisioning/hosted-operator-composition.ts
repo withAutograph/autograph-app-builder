@@ -116,6 +116,19 @@ const AUTH_MEMBERSHIP = "auth-membership";
 const AUTH_SIGNUP_POLICY = "auth-signup-policy";
 const OPERATION_IN_PROGRESS = "operation_in_progress";
 const RECONCILIATION_REQUIRED = "reconciliation_required";
+const appTrustedSourcesForNewPlan = (
+  base: HostedOperatorPlan,
+  configuration: HostedOperatorSourceConfiguration,
+): HostedOperatorPlan["appTrustedSources"] =>
+  base.gatewayBindings === undefined || base.deploymentBoundary === undefined
+    ? undefined
+    : {
+        gatewayPreview: {
+          from: "preview",
+          projectId: configuration.gateway.workload.projectId,
+          to: "preview",
+        },
+      };
 const bindSignupPolicy = (
   policy: HostedOperatorAuthSignupPolicyInput,
   plan: HostedOperatorPlan,
@@ -502,6 +515,7 @@ const resolveParticipantPlan = async (
     throw new HostedOperatorError("operator_unavailable");
   }
   const application = selectedApplication(configuration, context);
+  const appTrustedSources = appTrustedSourcesForNewPlan(base, configuration);
   const delivery = resolvePublishedAppDelivery(application, selectedRelease);
   const organizations = await controlPlane.readNormalActorOrganizationProofs({
     ...context,
@@ -543,7 +557,10 @@ const resolveParticipantPlan = async (
     {
       id: "bindings",
       kind: "bindings",
-      description: "Bind app-owned runtime URL and public verification context.",
+      description:
+        appTrustedSources === undefined
+          ? "Bind app-owned runtime URL and public verification context."
+          : "Bind app-owned runtime URL and public verification context, and allow the configured Gateway Preview to reach this app Preview.",
     },
     {
       id: "delivery",
@@ -556,6 +573,7 @@ const resolveParticipantPlan = async (
   await controlPlane.assertPlanningAuthorized(context);
   return hostedOperatorPlanSchema.parse({
     ...base,
+    ...(appTrustedSources === undefined ? {} : { appTrustedSources }),
     ...(signupPolicy === undefined
       ? {}
       : {
@@ -627,6 +645,7 @@ export const resolveFullPlan = async (
   const application = selectedApplication(configuration, context);
   // Bootstrap prepares owned Auth and database resources before app publication.
   // Only the app delivery plan needs the actual published Git source.
+  const appTrustedSources = appTrustedSourcesForNewPlan(base, configuration);
   const delivery = resolvePublishedAppDelivery(application, selectedRelease);
   const privateProof = await controlPlane.readCapturedRealmIdentityProof(context);
   const transportOrigin =
@@ -725,7 +744,10 @@ export const resolveFullPlan = async (
       kind: "access",
     },
     {
-      description: "Bind only app-owned runtime URL and public verification context.",
+      description:
+        appTrustedSources === undefined
+          ? "Bind only app-owned runtime URL and public verification context."
+          : "Bind app-owned runtime URL and public verification context, and allow the configured Gateway Preview to reach this app Preview.",
       id: "bindings",
       kind: "bindings",
     },
@@ -738,6 +760,7 @@ export const resolveFullPlan = async (
   );
   return hostedOperatorPlanSchema.parse({
     ...base,
+    ...(appTrustedSources === undefined ? {} : { appTrustedSources }),
     ...(signupPolicy === undefined
       ? {}
       : {
@@ -925,12 +948,14 @@ export const composeHostedOperatorDependencies = (
         delivery: oldDelivery,
         gatewayBindings: oldBindings,
         gatewayDelivery: oldGatewayDelivery,
+        appTrustedSources: oldAppTrustedSources,
         ...cleanupBase
       } = retained;
       void oldMembership;
       void oldDelivery;
       void oldBindings;
       void oldGatewayDelivery;
+      void oldAppTrustedSources;
       return hostedOperatorPlanSchema.parse({
         ...cleanupBase,
         action: "cleanup",
