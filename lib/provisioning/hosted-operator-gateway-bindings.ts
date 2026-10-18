@@ -73,13 +73,11 @@ const trustedProjectSnapshot = z.object({
   accountId: z.string(),
   trustedSources: trustedSourcesSchema.nullish(),
 });
-type TrustedSourceRule =
-  | NonNullable<
-      NonNullable<GatewayManagedEnvironmentContext["plan"]["gatewayBindings"]>["trustedSources"]
-    >["builderProduction"]
-  | NonNullable<
-      NonNullable<GatewayManagedEnvironmentContext["plan"]["gatewayBindings"]>["trustedSources"]
-    >["operatorPreview"];
+type ApprovedTrustedSources = NonNullable<
+  NonNullable<GatewayManagedEnvironmentContext["plan"]["gatewayBindings"]>["trustedSources"]
+>;
+type SourceRuleValues<T> = T extends object ? T[keyof T] : never;
+type TrustedSourceRule = NonNullable<SourceRuleValues<ApprovedTrustedSources>>;
 const coversTrustedSource = (
   sources: z.infer<typeof trustedSourcesSchema>,
   rule: TrustedSourceRule,
@@ -734,6 +732,9 @@ export const createHostedOperatorGatewayBindings = (deps: {
       return previewGitBranch;
     };
     const approvedTrustedSources = input.plan.gatewayBindings?.trustedSources;
+    const approvedTrustedSourceRules = Object.values(approvedTrustedSources ?? {}).filter(
+      (rule): rule is TrustedSourceRule => rule !== undefined,
+    );
     const observeTrustedSources = async () => {
       if (approvedTrustedSources === undefined) {
         // oxlint-disable-next-line unicorn/no-useless-undefined -- Absent approved settings preserve the legacy path without a provider security observation.
@@ -752,7 +753,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
         throw unavailable();
       }
       const sources = project.trustedSources ?? {};
-      const missing = Object.values(approvedTrustedSources).filter(
+      const missing = approvedTrustedSourceRules.filter(
         (rule) => !coversTrustedSource(sources, rule),
       );
       let visibility: NonNullable<OperatorGatewayBindingsDiagnostic["trustedSourcesVisibility"]> =
@@ -818,11 +819,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
         actual.missing.length !== 0 ||
         !preservesTrustedSources(actual.sources, sources) ||
         !createdProjectIds.every((id) =>
-          hasOnlyApprovedSourcePairs(
-            actual.sources,
-            id,
-            Object.values(approvedTrustedSources ?? {}),
-          ),
+          hasOnlyApprovedSourcePairs(actual.sources, id, approvedTrustedSourceRules),
         )
       ) {
         throw unavailable();

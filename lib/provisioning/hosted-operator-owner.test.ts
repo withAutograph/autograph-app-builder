@@ -38,6 +38,7 @@ import {
 } from "./hosted-runtime-journal";
 import type { OperatorWorkloadPolicy } from "./hosted-operator-workload";
 import { normalActorProgramDigest } from "./hosted-operator-normal-actor-program";
+import { createRetentionRenewalPlan } from "./hosted-operator-retention-renewal";
 
 import type {
   HostedOperatorConsentDiagnostic,
@@ -618,6 +619,181 @@ const retainedProjectSettingsApprovalFixture = () => {
   };
 };
 
+const retainedRenewalApprovalFixture = () => {
+  const fixture = makeFixture();
+  const priorPlan = hostedOperatorPlanSchema.parse({
+    ...plan,
+    deploymentBoundary: {
+      app: {
+        branch: selection.branch,
+        deploymentId: "app-deployment",
+        environment: "preview",
+        projectId: selection.projectId,
+      },
+      authority: plan.deploymentBoundary?.authority ?? {
+        audience: ownerContext.authority.audience,
+        issuer: ownerContext.authority.issuer,
+        ownerUserId: ownerContext.authority.ownerUserId,
+        workspaceId: ownerContext.authority.workspaceId,
+      },
+      gateway: {
+        branch: selection.branch,
+        deploymentId: "gateway-deployment",
+        environment: "preview",
+        projectId: "prj_gateway",
+      },
+      operator: {
+        deploymentId: "operator-deployment",
+        environment: "production",
+        projectId: "prj_operator",
+      },
+      teamId: "team",
+      verification: {
+        gatewayOrigin: "https://gateway.example",
+        jwksUrl: "https://gateway.example/_platform/jwks.json",
+        publicOrigin: "https://apps.example",
+      },
+    },
+    delivery: {
+      branch: selection.branch,
+      gitSha: "1".repeat(40),
+      projectId: selection.projectId,
+      repoId: "fixture-repository",
+    },
+    effects: [
+      ...plan.effects,
+      { description: "Deploy accepted app source", id: "delivery", kind: "delivery" },
+      { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
+      { description: "Deploy Gateway", id: "gateway-delivery", kind: "gateway-delivery" },
+    ],
+    gatewayBindings: {
+      authBrowserOrigin: "https://auth.example",
+      builderCallbackOrigin: "https://builder.example",
+      catalogAppIds: [selection.appId],
+      operatorOrigin: "https://operator.example",
+      sourceWorkload: {
+        audience: "https://vercel.com/team",
+        environment: "preview",
+        issuer: "https://oidc.vercel.com/team",
+        ownerId: "team",
+        projectId: "prj_gateway",
+        subject: "gateway-workload",
+      },
+    },
+    gatewayDelivery: {
+      branch: selection.branch,
+      gitSha: "2".repeat(40),
+      projectId: "prj_gateway",
+      repoId: "gateway-repository",
+    },
+    publicGateway: {
+      branch: selection.branch,
+      origin: "https://apps.example",
+      projectId: "prj_gateway",
+    },
+    retention: { ...plan.retention, expiresAt: "2026-10-17T00:00:00Z" },
+    stage: "app",
+  });
+  const callId = "original-renewal-approval-call";
+  const operationRef = "a5c2b20f-0c08-49a8-a34f-cce64c72cc8c";
+  const oldPlanDigest = operatorPlanDigest(priorPlan);
+  const approval = privateHostedApprovalReceiptSchema.parse({
+    callId,
+    format: "autograph-hosted-approval-v1",
+    outcome: "approved",
+    requestId: "original-renewal-approval-id",
+    responderPrincipalId: principal.ownerUserId,
+    sequence: 16,
+    toolInput: {
+      appId: selection.appId,
+      branch: selection.branch,
+      environment: selection.environment,
+      operationRef,
+      plan: priorPlan,
+      planDigest: oldPlanDigest,
+      projectId: selection.projectId,
+    },
+    toolName: "prepare-app-hosted-runtime",
+    turnId: "turn-1",
+  });
+  fixture.currentSession.privateApprovalReceipts = [approval];
+  const target = hostedRuntimeTargetSchema.parse({
+    ...selection,
+    installationId: "icfg_1",
+    scopeId: "team_1",
+    scopeType: "team",
+  });
+  const oldOperator = {
+    approvalId: approval.requestId,
+    mode: "protected-operator-v1" as const,
+    operationRef,
+    plan: priorPlan,
+    planDigest: oldPlanDigest,
+    receipts: priorPlan.effects.slice(0, -1).map((effect) => ({
+      effectId: effect.id,
+      observedAt: "2026-10-16T00:00:00.000Z",
+      resourceVersion: "a".repeat(64),
+    })),
+    pendingEffectId: "gateway-delivery",
+  };
+  const oldRecord = hostedRuntimeJournalRecordSchema.parse({
+    approvedByCallId: callId,
+    kind: "app-runtime",
+    operator: oldOperator,
+    privateState: {
+      encryptedToken: "ciphertext",
+      keyVersion: "key-v1",
+      tokenIv: "iv",
+      tokenTag: "tag",
+    },
+    request: target,
+    status: "pending",
+    step: "reserved",
+    version: 1,
+  });
+  const renewedPlan = createRetentionRenewalPlan(oldRecord, Date.parse("2026-10-18T00:00:00Z"));
+  if (renewedPlan === undefined) {
+    throw new Error("Fixture must produce the canonical retention renewal");
+  }
+  const unapprovedPrior = structuredClone(oldOperator);
+  Reflect.deleteProperty(unapprovedPrior, "approvalId");
+  const record = hostedRuntimeJournalRecordSchema.parse({
+    ...oldRecord,
+    approvedByCallId: "operator:unapproved-plan",
+    operator: {
+      ...unapprovedPrior,
+      plan: renewedPlan,
+      planDigest: operatorPlanDigest(renewedPlan),
+      receipts: oldOperator.receipts.filter((receipt) =>
+        ["resources", "install"].includes(receipt.effectId),
+      ),
+      pendingEffectId: undefined,
+      retainedRenewalOperations: [{ approvedByCallId: callId, operator: oldOperator }],
+    },
+  });
+  const journal: Pick<HostedRuntimeJournalStore, "read"> = {
+    read: vi.fn(() => Promise.resolve({ record, revision: 3 })),
+  };
+  const observe = vi.fn(() =>
+    Promise.resolve({
+      artifactProjectionRequiresLegacyReadback: false,
+      installedEventCount: 0,
+      pendingRequests: [],
+      publicEventCount: 0,
+      status: "waiting" as const,
+    }),
+  );
+  return {
+    approval,
+    callId,
+    journal,
+    oldPlanDigest,
+    observe,
+    readApproval: createHostedOperatorReadApproval({ eve: fixture.eve, journal, observe }),
+    target,
+  };
+};
+
 const expectNoProviderReads = (fixture: ReturnType<typeof makeFixture>) => {
   expect(fixture.listVercelInstallations).not.toHaveBeenCalled();
   expect(fixture.readVercelCredential).not.toHaveBeenCalled();
@@ -652,6 +828,48 @@ describe("retained project-settings approval", () => {
       code: "authorization_required",
     });
     expect(f.observe).not.toHaveBeenCalled();
+
+    const foreignOwner = operatorOwnerContextSchema.parse({
+      ...ownerContext,
+      authority: { ...ownerContext.authority, ownerUserId: "foreign-owner" },
+      principal: { ...ownerContext.principal, ownerUserId: "foreign-owner" },
+    });
+    await expect(
+      f.readApproval({
+        ...context,
+        authority: foreignOwner.authority,
+        ownerContext: foreignOwner,
+      }),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    expect(f.observe).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("retained renewal approval", () => {
+  it("resolves only the archived original approval for the exact renewal predecessor", async () => {
+    const f = retainedRenewalApprovalFixture();
+    const context = {
+      action: "prepare" as const,
+      authority: ownerContext.authority,
+      callId: f.callId,
+      ownerContext,
+      planDigest: f.oldPlanDigest,
+      target: f.target,
+    };
+
+    await expect(f.readApproval(context)).resolves.toEqual({
+      action: "prepare",
+      approvalId: f.approval.requestId,
+      approved: true,
+      callId: f.callId,
+      planDigest: f.oldPlanDigest,
+    });
+    await expect(f.readApproval({ ...context, callId: "different-call" })).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    await expect(f.readApproval({ ...context, planDigest: "f".repeat(64) })).rejects.toMatchObject({
+      code: "authorization_required",
+    });
 
     const foreignOwner = operatorOwnerContextSchema.parse({
       ...ownerContext,

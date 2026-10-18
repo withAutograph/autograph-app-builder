@@ -432,6 +432,12 @@ describe("app publication binding at plan renewal", () => {
     expect(plan.effects.find((effect) => effect.kind === "bindings")?.description).toContain(
       "allow the configured Gateway Preview to reach this app Preview",
     );
+    expect(plan.gatewayBindings?.trustedSources).toEqual({
+      appPreview: { from: "preview", projectId: context.target.projectId, to: "preview" },
+    });
+    expect(plan.effects.find((effect) => effect.kind === "gateway-bindings")?.description).toBe(
+      "Bind shared Gateway runtime and allow this app Preview to read the Gateway's public signing keys.",
+    );
     expect(plan.delivery).toEqual({
       ...binding,
       branch: context.target.branch,
@@ -442,6 +448,47 @@ describe("app publication binding at plan renewal", () => {
     ]);
     expect(f.readCapturedRealmIdentityProof).toHaveBeenCalledWith(context);
     expect(f.unexpectedPort).not.toHaveBeenCalled();
+  });
+
+  it("adds the app Preview grant without dropping existing Gateway trust sources", async () => {
+    const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+    const base = bootstrapWithGatewayOrigin("https://gateway.example");
+    const plan = await resolveFullPlan(
+      hostedOperatorPlanSchema.parse({
+        ...base,
+        gatewayBindings: {
+          ...base.gatewayBindings,
+          trustedSources: {
+            builderProduction: {
+              from: "production",
+              projectId: "builder-project",
+              to: "preview",
+            },
+            operatorPreview: {
+              from: "preview",
+              projectId: "operator-project",
+              to: "preview",
+            },
+          },
+        },
+      }),
+      context,
+      f.configuration,
+      f.controlPlane,
+    );
+    expect(plan.gatewayBindings?.trustedSources).toEqual({
+      appPreview: { from: "preview", projectId: context.target.projectId, to: "preview" },
+      builderProduction: {
+        from: "production",
+        projectId: "builder-project",
+        to: "preview",
+      },
+      operatorPreview: {
+        from: "preview",
+        projectId: "operator-project",
+        to: "preview",
+      },
+    });
   });
 
   it("validates a trusted source against the exact Gateway workload, team and app Preview while accepting legacy plans", async () => {
@@ -456,9 +503,7 @@ describe("app publication binding at plan renewal", () => {
     const legacyPlan = structuredClone(plan);
     delete legacyPlan.appTrustedSources;
     expect(hostedOperatorPlanSchema.safeParse(legacyPlan).success).toBe(true);
-    const boundary = plan.deploymentBoundary;
-    const gatewayBindings = plan.gatewayBindings;
-    const delivery = plan.delivery;
+    const { deploymentBoundary: boundary, gatewayBindings, delivery } = plan;
     if (boundary === undefined || gatewayBindings === undefined || delivery === undefined) {
       throw new Error("The trusted app Preview plan must retain its deployment bindings.");
     }
@@ -861,6 +906,12 @@ describe("participant plan resolution", () => {
         to: "preview",
       },
     });
+    expect(result.gatewayBindings?.trustedSources).toEqual({
+      appPreview: { from: "preview", projectId: context.target.projectId, to: "preview" },
+    });
+    expect(result.effects.find((effect) => effect.kind === "gateway-bindings")?.description).toBe(
+      "Bind shared Gateway runtime and allow this app Preview to read the Gateway's public signing keys.",
+    );
     expect(result.access).toEqual([
       { actorId: "normal-owner-from-session", organizationId: "first-org", roles: ["member"] },
       { actorId: "normal-owner-from-session", organizationId: "second-org", roles: ["member"] },

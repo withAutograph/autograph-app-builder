@@ -172,7 +172,7 @@ const environment = {
   SPEND_REVIEW_DATABASE_URL: `postgres://spend_runtime:synthetic-app@${plan.neon.endpoint}/spend?sslmode=verify-full`,
 };
 
-const fixture = () => {
+const fixture = (clock?: () => number) => {
   let row: HostedRuntimeJournalRow | undefined;
   let member = true;
   let approved = false;
@@ -240,6 +240,7 @@ const fixture = () => {
     },
   };
   const deps: ProtectedHostedOperatorDependencies = {
+    ...(clock === undefined ? {} : { now: clock }),
     async assertAuthorized() {
       if (!member) {
         throw new HostedOperatorError("authorization_required");
@@ -2408,6 +2409,137 @@ describe("native bindings integration", () => {
       selection,
     });
     expect(refreshed.nativePreview?.gateway).toEqual(replacement);
+  });
+});
+
+describe("approved retention renewal planning", () => {
+  it("saves and re-exposes one unapproved successor without recomposing or inheriting execution authority", async () => {
+    const now = Date.parse("2026-10-18T00:00:00Z");
+    const f = fixture(() => now);
+    const oldPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      delivery: {
+        branch: selection.branch,
+        gitSha: "c".repeat(40),
+        projectId: selection.projectId,
+        repoId: "repo-app",
+      },
+      effects: [
+        ...plan.effects,
+        { description: "Native app delivery", id: "delivery", kind: "delivery" },
+        { description: "Gateway bindings", id: "gateway-bindings", kind: "gateway-bindings" },
+        {
+          description: "Native Gateway delivery",
+          id: "gateway-delivery",
+          kind: "gateway-delivery",
+        },
+      ],
+      gatewayBindings: {
+        authBrowserOrigin: "https://auth-preview.example.test",
+        builderCallbackOrigin: "https://builder.example.test",
+        catalogAppIds: [selection.appId],
+        operatorOrigin: "https://operator.example.test",
+        sourceWorkload: {
+          audience: "https://vercel.com/team_fixture",
+          environment: "preview",
+          issuer: "https://oidc.vercel.com/team_fixture",
+          ownerId: "team_fixture",
+          projectId: "prj_gateway",
+          subject: "gateway-workload",
+        },
+      },
+      gatewayDelivery: {
+        branch: selection.branch,
+        gitSha: "d".repeat(40),
+        projectId: "prj_gateway",
+        repoId: "repo-gateway",
+      },
+      retention: { ...plan.retention, expiresAt: "2026-10-17T00:00:00Z" },
+      stage: "app",
+    });
+    const operationRef = "a5c2b20f-0c08-49a8-a34f-cce64c72cc8c";
+    const oldReceipts = oldPlan.effects.slice(0, -1).map((effect) => ({
+      effectId: effect.id,
+      observedAt: "2026-10-16T00:00:00.000Z",
+      resourceVersion: "a".repeat(64),
+    }));
+    f.row = {
+      record: hostedRuntimeJournalRecordSchema.parse({
+        approvedByCallId: "original-approved-call",
+        kind: "app-runtime",
+        operator: {
+          approvalId: "durable-human-decision",
+          mode: "protected-operator-v1",
+          operationRef,
+          plan: oldPlan,
+          planDigest: operatorPlanDigest(oldPlan),
+          receipts: oldReceipts,
+          pendingEffectId: "gateway-delivery",
+        },
+        privateState: {
+          encryptedToken: "ciphertext",
+          keyVersion: "key-v1",
+          tokenIv: "iv",
+          tokenTag: "tag",
+        },
+        request: target,
+        status: "pending",
+        step: "reserved",
+        version: 1,
+      }),
+      revision: 10,
+    };
+    f.approve();
+    f.deps.plan = vi.fn(async () => {
+      throw new Error("renewal should not recompose the approved source plan");
+    });
+
+    const first = await f.client.request({ action: "plan", operation: "prepare", selection });
+    expect(first).toMatchObject({ status: "planned", operationRef });
+    const firstPlan = first.plan;
+    if (firstPlan === undefined) {
+      throw new Error("The retention renewal response must include its frozen plan");
+    }
+    expect(Date.parse(firstPlan.retention.expiresAt)).toBe(now + 24 * 60 * 60 * 1000);
+    expect(firstPlan.appTrustedSources?.gatewayPreview).toEqual({
+      from: "preview",
+      projectId: "prj_gateway",
+      to: "preview",
+    });
+    expect(firstPlan.gatewayBindings?.trustedSources?.appPreview).toEqual({
+      from: "preview",
+      projectId: selection.projectId,
+      to: "preview",
+    });
+    expect(f.deps.plan).not.toHaveBeenCalled();
+
+    const renewed = f.row?.record.operator;
+    expect(renewed).toMatchObject({
+      operationRef,
+      planDigest: first.planDigest,
+      receipts: oldReceipts.filter((receipt) =>
+        ["resources", "install"].includes(receipt.effectId),
+      ),
+    });
+    expect(f.row?.record.approvedByCallId).toBe("operator:unapproved-plan");
+    expect(renewed?.approvalId).toBeUndefined();
+    expect(renewed?.pendingEffectId).toBeUndefined();
+    expect(renewed?.pendingEffectAttempt).toBeUndefined();
+    expect(renewed?.fenceGeneration).toBeUndefined();
+    expect(renewed?.retainedRenewalOperations?.[0]).toMatchObject({
+      approvedByCallId: "original-approved-call",
+      operator: {
+        approvalId: "durable-human-decision",
+        pendingEffectId: "gateway-delivery",
+        planDigest: operatorPlanDigest(oldPlan),
+        receipts: oldReceipts,
+      },
+    });
+
+    const repeated = await f.client.request({ action: "plan", operation: "prepare", selection });
+    expect(repeated.plan).toEqual(first.plan);
+    expect(repeated.planDigest).toBe(first.planDigest);
+    expect(f.deps.plan).not.toHaveBeenCalled();
   });
 });
 

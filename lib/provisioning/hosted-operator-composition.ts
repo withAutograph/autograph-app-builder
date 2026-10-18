@@ -129,6 +129,47 @@ const appTrustedSourcesForNewPlan = (
           to: "preview",
         },
       };
+const gatewayBindingsForNewAppPlan = (
+  base: HostedOperatorPlan,
+): HostedOperatorPlan["gatewayBindings"] => {
+  const { gatewayBindings } = base;
+  const appBoundary = base.deploymentBoundary?.app;
+  if (
+    gatewayBindings === undefined ||
+    appBoundary?.environment !== "preview" ||
+    appBoundary.projectId !== base.selection.projectId
+  ) {
+    return gatewayBindings;
+  }
+  return {
+    ...gatewayBindings,
+    trustedSources: {
+      ...gatewayBindings.trustedSources,
+      appPreview: {
+        from: "preview",
+        projectId: appBoundary.projectId,
+        to: "preview",
+      },
+    },
+  };
+};
+const appStageEffects = (
+  effects: HostedOperatorPlan["effects"],
+  gatewayBindings: HostedOperatorPlan["gatewayBindings"],
+): HostedOperatorPlan["effects"] => {
+  if (gatewayBindings?.trustedSources?.appPreview === undefined) {
+    return effects;
+  }
+  return effects.map((effect) =>
+    effect.kind === GATEWAY_BINDINGS
+      ? {
+          ...effect,
+          description:
+            "Bind shared Gateway runtime and allow this app Preview to read the Gateway's public signing keys.",
+        }
+      : effect,
+  );
+};
 const bindSignupPolicy = (
   policy: HostedOperatorAuthSignupPolicyInput,
   plan: HostedOperatorPlan,
@@ -516,6 +557,7 @@ const resolveParticipantPlan = async (
   }
   const application = selectedApplication(configuration, context);
   const appTrustedSources = appTrustedSourcesForNewPlan(base, configuration);
+  const gatewayBindings = gatewayBindingsForNewAppPlan(base);
   const delivery = resolvePublishedAppDelivery(application, selectedRelease);
   const organizations = await controlPlane.readNormalActorOrganizationProofs({
     ...context,
@@ -605,7 +647,8 @@ const resolveParticipantPlan = async (
             ...base.deploymentBoundary,
             app: { ...base.deploymentBoundary.app, branch: delivery.branch },
           },
-    effects,
+    ...(gatewayBindings === undefined ? {} : { gatewayBindings }),
+    effects: appStageEffects(effects, gatewayBindings),
   });
 };
 
@@ -646,6 +689,7 @@ export const resolveFullPlan = async (
   // Bootstrap prepares owned Auth and database resources before app publication.
   // Only the app delivery plan needs the actual published Git source.
   const appTrustedSources = appTrustedSourcesForNewPlan(base, configuration);
+  const gatewayBindings = gatewayBindingsForNewAppPlan(base);
   const delivery = resolvePublishedAppDelivery(application, selectedRelease);
   const privateProof = await controlPlane.readCapturedRealmIdentityProof(context);
   const transportOrigin =
@@ -783,12 +827,16 @@ export const resolveFullPlan = async (
             ...base.deploymentBoundary,
             app: { ...base.deploymentBoundary.app, branch: delivery.branch },
           },
-    effects: [
-      ...effects,
-      ...base.effects.filter((effect) =>
-        [GATEWAY_BINDINGS, GATEWAY_DELIVERY].includes(effect.kind),
-      ),
-    ],
+    ...(gatewayBindings === undefined ? {} : { gatewayBindings }),
+    effects: appStageEffects(
+      [
+        ...effects,
+        ...base.effects.filter((effect) =>
+          [GATEWAY_BINDINGS, GATEWAY_DELIVERY].includes(effect.kind),
+        ),
+      ],
+      gatewayBindings,
+    ),
     stage: "app",
   });
 };
