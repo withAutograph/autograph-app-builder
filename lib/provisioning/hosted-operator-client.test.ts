@@ -79,6 +79,67 @@ describe("operator Auth identity input results", () => {
 });
 
 describe("closed outbound operator action diagnostics", () => {
+  const diagnosticRequest = { action: "status" as const, selection, operationRef };
+
+  it("labels a JSON decode failure without logging its response body or changing the error", async () => {
+    const logs = vi.spyOn(console, "info").mockImplementation(() => {});
+    const failure = new SyntaxError("RAW_PRIVATE_RESPONSE_BODY could not be decoded");
+    const response = new Response("RAW_PRIVATE_RESPONSE_BODY");
+    vi.spyOn(response, "json").mockRejectedValue(failure);
+    const transport = vi.fn<typeof fetch>(async () => await Promise.resolve(response));
+    const client = createHostedOperatorClient({
+      endpoint: "https://operator.example",
+      fetch: transport,
+      token: async () => await Promise.resolve("private-bearer"),
+    });
+    try {
+      await expect(client.request(diagnosticRequest)).rejects.toBe(failure);
+      expect(transport).toHaveBeenCalledTimes(1);
+      expect(logs).toHaveBeenCalledWith(
+        "[builder:hosted-neon-consent]",
+        expect.objectContaining({
+          httpStatus: 200,
+          accessClass: "other_failed",
+          operatorResponse: "decode_failed",
+        }),
+      );
+      expect(JSON.stringify(logs.mock.calls)).not.toContain("RAW_PRIVATE_RESPONSE_BODY");
+    } finally {
+      logs.mockRestore();
+    }
+  });
+
+  it("labels a parsed blocked result with its public code and returns it unchanged", async () => {
+    const logs = vi.spyOn(console, "info").mockImplementation(() => {});
+    const result = {
+      appId: selection.appId,
+      authenticatedBehavior: "unassessed",
+      status: "blocked",
+      operationRef,
+      code: "operation_in_progress",
+    };
+    const transport = vi.fn<typeof fetch>(async () => await Promise.resolve(Response.json(result)));
+    const client = createHostedOperatorClient({
+      endpoint: "https://operator.example",
+      fetch: transport,
+      token: async () => await Promise.resolve("private-bearer"),
+    });
+    try {
+      await expect(client.request(diagnosticRequest)).resolves.toEqual(result);
+      expect(transport).toHaveBeenCalledTimes(1);
+      expect(logs).toHaveBeenCalledWith(
+        "[builder:hosted-neon-consent]",
+        expect.objectContaining({
+          httpStatus: 200,
+          operatorResponse: "blocked",
+          operatorCode: "operation_in_progress",
+        }),
+      );
+    } finally {
+      logs.mockRestore();
+    }
+  });
+
   it.each(["status", "execute"] as const)(
     "distinguishes %s without changing requests or results",
     async (action) => {

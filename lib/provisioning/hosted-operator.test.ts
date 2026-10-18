@@ -2540,6 +2540,26 @@ describe("approved retention renewal planning", () => {
     expect(repeated.plan).toEqual(first.plan);
     expect(repeated.planDigest).toBe(first.planDigest);
     expect(f.deps.plan).not.toHaveBeenCalled();
+
+    const privateError = new TypeError("private authorization detail owner-token");
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      f.deps.assertAuthorized = vi.fn(async () => {
+        throw privateError;
+      });
+      expect(
+        await f.client.request({ action: "plan", operation: "prepare", selection }),
+      ).toMatchObject({ status: "blocked", code: "operator_unavailable" });
+      expect(log.mock.calls).toContainEqual([
+        "[builder:hosted-neon-consent]",
+        expect.objectContaining({
+          planningFailure: { stage: "saved_plan_reexposure", errorClass: "type_error" },
+        }),
+      ]);
+      expect(JSON.stringify(log.mock.calls)).not.toContain(privateError.message);
+    } finally {
+      log.mockRestore();
+    }
   });
 });
 

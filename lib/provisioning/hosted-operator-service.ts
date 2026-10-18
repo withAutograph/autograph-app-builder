@@ -449,8 +449,16 @@ const handlePlanOperation = async (
     input.normalActorProgram === undefined &&
     input.authSignupPolicy === undefined
   ) {
-    const saved = await deps.store.read(context);
-    const pendingRenewal = readPendingRetentionRenewalPlan(saved?.record, now());
+    const saved = await observeOperatorPlanStage(
+      context.target.sessionId,
+      "saved_plan_read",
+      async () => await deps.store.read(context),
+    );
+    const pendingRenewal = await observeOperatorPlanStage(
+      context.target.sessionId,
+      "saved_plan_classification",
+      () => readPendingRetentionRenewalPlan(saved?.record, now()),
+    );
     if (saved !== undefined && pendingRenewal !== undefined) {
       const savedOperator = saved.record.operator;
       if (savedOperator === undefined) {
@@ -459,50 +467,70 @@ const handlePlanOperation = async (
       if (!sameOperatorSelection(pendingRenewal.selection, input.selection)) {
         throw new HostedOperatorError("resource_mismatch");
       }
-      await deps.assertAuthorized({ ...context, plan: pendingRenewal, purpose: "planning" });
-      const current = await deps.store.read(context);
-      if (current?.revision !== saved.revision) {
-        throw new HostedOperatorError("operation_in_progress");
-      }
-      return response(
-        operatorPublicResultSchema.parse({
-          appId,
-          authenticatedBehavior: "unassessed",
-          operationRef: savedOperator.operationRef,
-          plan: pendingRenewal,
-          planDigest: savedOperator.planDigest,
-          status: "planned",
-        }),
+      return await observeOperatorPlanStage(
+        context.target.sessionId,
+        "saved_plan_reexposure",
+        async () => {
+          await deps.assertAuthorized({ ...context, plan: pendingRenewal, purpose: "planning" });
+          const current = await deps.store.read(context);
+          if (current?.revision !== saved.revision) {
+            throw new HostedOperatorError("operation_in_progress");
+          }
+          return response(
+            operatorPublicResultSchema.parse({
+              appId,
+              authenticatedBehavior: "unassessed",
+              operationRef: savedOperator.operationRef,
+              plan: pendingRenewal,
+              planDigest: savedOperator.planDigest,
+              status: "planned",
+            }),
+          );
+        },
       );
     }
+    const readAppProjectSettings = deps.readAppProjectSettings?.bind(deps);
     if (
-      deps.readAppProjectSettings !== undefined &&
+      readAppProjectSettings !== undefined &&
       saved?.record.approvedByCallId === "operator:unapproved-plan" &&
       saved.record.operator?.retainedProjectSettingsOperations !== undefined
     ) {
-      const pending = readPendingProjectSettingsSuccessorPlan(
-        saved.record,
-        await deps.readAppProjectSettings(context),
-        now(),
+      const savedOperationRef = saved.record.operator.operationRef;
+      const savedPlanDigest = saved.record.operator.planDigest;
+      const pending = await observeOperatorPlanStage(
+        context.target.sessionId,
+        "saved_plan_classification",
+        async () =>
+          readPendingProjectSettingsSuccessorPlan(
+            saved.record,
+            await readAppProjectSettings(context),
+            now(),
+          ),
       );
       if (pending !== undefined) {
         if (!sameOperatorSelection(pending.selection, input.selection)) {
           throw new HostedOperatorError("resource_mismatch");
         }
-        await deps.assertAuthorized({ ...context, plan: pending, purpose: "planning" });
-        const current = await deps.store.read(context);
-        if (current?.revision !== saved.revision) {
-          throw new HostedOperatorError("operation_in_progress");
-        }
-        return response(
-          operatorPublicResultSchema.parse({
-            appId,
-            authenticatedBehavior: "unassessed",
-            operationRef: saved.record.operator.operationRef,
-            plan: pending,
-            planDigest: saved.record.operator.planDigest,
-            status: "planned",
-          }),
+        return await observeOperatorPlanStage(
+          context.target.sessionId,
+          "saved_plan_reexposure",
+          async () => {
+            await deps.assertAuthorized({ ...context, plan: pending, purpose: "planning" });
+            const current = await deps.store.read(context);
+            if (current?.revision !== saved.revision) {
+              throw new HostedOperatorError("operation_in_progress");
+            }
+            return response(
+              operatorPublicResultSchema.parse({
+                appId,
+                authenticatedBehavior: "unassessed",
+                operationRef: savedOperationRef,
+                plan: pending,
+                planDigest: savedPlanDigest,
+                status: "planned",
+              }),
+            );
+          },
         );
       }
     }
@@ -557,16 +585,26 @@ const handlePlanOperation = async (
     await deps.assertAuthorized({ ...context, plan, purpose: "planning" });
   });
   assertUnexpired(plan, now());
-  const successorPrior = await deps.store.read(context);
-  const sharedHostSuccessor =
-    successorPrior !== undefined &&
-    isSharedHostProtectionSuccessor(successorPrior.record, plan, now());
-  const installerSuccessor =
-    successorPrior !== undefined && isInstallerSourceSuccessor(successorPrior.record, plan, now());
-  const settingsSuccessor =
-    successorPrior !== undefined && isProjectSettingsSuccessor(successorPrior.record, plan, now());
-  const retentionRenewal =
-    successorPrior !== undefined && isRetentionRenewalSuccessor(successorPrior.record, plan, now());
+  const successorPrior = await observeOperatorPlanStage(
+    context.target.sessionId,
+    "successor_prior_read",
+    async () => await deps.store.read(context),
+  );
+  const { sharedHostSuccessor, installerSuccessor, settingsSuccessor, retentionRenewal } =
+    await observeOperatorPlanStage(context.target.sessionId, "successor_classification", () => ({
+      sharedHostSuccessor:
+        successorPrior !== undefined &&
+        isSharedHostProtectionSuccessor(successorPrior.record, plan, now()),
+      installerSuccessor:
+        successorPrior !== undefined &&
+        isInstallerSourceSuccessor(successorPrior.record, plan, now()),
+      settingsSuccessor:
+        successorPrior !== undefined &&
+        isProjectSettingsSuccessor(successorPrior.record, plan, now()),
+      retentionRenewal:
+        successorPrior !== undefined &&
+        isRetentionRenewalSuccessor(successorPrior.record, plan, now()),
+    }));
   if (renewalPrior !== undefined && successorPrior?.revision !== renewalPrior.revision) {
     throw new HostedOperatorError("operation_in_progress");
   }
@@ -592,7 +630,11 @@ const handlePlanOperation = async (
     }
   };
   if (sharedHostSuccessor || installerSuccessor || settingsSuccessor || retentionRenewal) {
-    await assertPriorSuccessorApproval();
+    await observeOperatorPlanStage(
+      context.target.sessionId,
+      "prior_successor_approval",
+      assertPriorSuccessorApproval,
+    );
   }
   const recovered =
     sharedHostSuccessor || installerSuccessor || settingsSuccessor || retentionRenewal
@@ -623,20 +665,32 @@ const handlePlanOperation = async (
         operator,
       }),
   );
-  const prior = await deps.store.read(context);
-  const retainedCandidate =
-    (prior?.record.retainedAuth === undefined ||
-      prior.record.operator?.plan.stage === AUTH_BOOTSTRAP_STAGE) &&
-    prior?.record.operator?.planDigest !== planDigest
-      ? prior && retainedOperatorAuthFromJournal(prior.record)
-      : undefined;
+  const { prior, retainedCandidate } = await observeOperatorPlanStage(
+    context.target.sessionId,
+    "retained_state_read",
+    async () => {
+      const priorRow = await deps.store.read(context);
+      const retainedApprovalCandidate =
+        (priorRow?.record.retainedAuth === undefined ||
+          priorRow.record.operator?.plan.stage === AUTH_BOOTSTRAP_STAGE) &&
+        priorRow?.record.operator?.planDigest !== planDigest
+          ? priorRow && retainedOperatorAuthFromJournal(priorRow.record)
+          : undefined;
+      return { prior: priorRow, retainedCandidate: retainedApprovalCandidate };
+    },
+  );
   if (retainedCandidate !== undefined) {
-    const approval = await deps.readApproval({
-      ...context,
-      action: "prepare",
-      callId: retainedCandidate.approvedByCallId,
-      planDigest: retainedCandidate.planDigest,
-    });
+    const approval = await observeOperatorPlanStage(
+      context.target.sessionId,
+      "retained_approval",
+      async () =>
+        await deps.readApproval({
+          ...context,
+          action: "prepare",
+          callId: retainedCandidate.approvedByCallId,
+          planDigest: retainedCandidate.planDigest,
+        }),
+    );
     if (
       approval?.approved !== true ||
       approval.approvalId !== retainedCandidate.approvalId ||
@@ -647,309 +701,319 @@ const handlePlanOperation = async (
       throw new HostedOperatorError("authorization_required");
     }
   }
-  const row = await updateHostedRuntimeJournal({
-    ...context,
-    now,
-    store: deps.store,
-    ...(installerSuccessor || settingsSuccessor || retentionRenewal
-      ? {
-          beforeUpdate: async (record: HostedRuntimeJournalRecord) => {
-            await deps.assertAuthorized({ ...context, plan, purpose: "planning" });
-            if (record.operator?.planDigest !== planDigest) {
-              await assertPriorSuccessorApproval();
+  const row = await observeOperatorPlanStage(
+    context.target.sessionId,
+    "plan_journal_update",
+    async () =>
+      await updateHostedRuntimeJournal({
+        ...context,
+        now,
+        store: deps.store,
+        ...(installerSuccessor || settingsSuccessor || retentionRenewal
+          ? {
+              beforeUpdate: async (record: HostedRuntimeJournalRecord) => {
+                await deps.assertAuthorized({ ...context, plan, purpose: "planning" });
+                if (record.operator?.planDigest !== planDigest) {
+                  await observeOperatorPlanStage(
+                    context.target.sessionId,
+                    "prior_successor_approval",
+                    assertPriorSuccessorApproval,
+                  );
+                }
+              },
             }
-          },
-        }
-      : {}),
-    update: (record) => {
-      if (!record.operator) {
-        throw new HostedOperatorError("legacy_runtime_requires_migration");
-      }
-      if (record.operator.planDigest === planDigest) {
-        return record;
-      }
-      const authStageCompleted = hasCompletedAuthBootstrapEffects(record);
-      const participantsCompleted =
-        record.status === PARTICIPANTS_PREPARED &&
-        record.operator.plan.stage === AUTH_PARTICIPANTS_STAGE &&
-        record.accountPreparation !== undefined;
-      const gatewaySourceSuccessor = isGatewaySourceSuccessor(record, plan, now());
-      const sharedHostProtectionSuccessor =
-        sharedHostSuccessor &&
-        record.operator.operationRef === successorPrior.record.operator?.operationRef &&
-        record.operator.planDigest === successorPrior.record.operator?.planDigest &&
-        record.operator.approvalId === successorPrior.record.operator?.approvalId &&
-        record.approvedByCallId === successorPrior.record.approvedByCallId &&
-        isSharedHostProtectionSuccessor(record, plan, now());
-      const installerSourceSuccessor =
-        installerSuccessor &&
-        record.operator.operationRef === successorPrior.record.operator?.operationRef &&
-        record.operator.planDigest === successorPrior.record.operator?.planDigest &&
-        record.operator.approvalId === successorPrior.record.operator?.approvalId &&
-        record.approvedByCallId === successorPrior.record.approvedByCallId &&
-        isInstallerSourceSuccessor(record, plan, now());
-      const projectSettingsSuccessor =
-        settingsSuccessor &&
-        record.operator.operationRef === successorPrior.record.operator?.operationRef &&
-        record.operator.planDigest === successorPrior.record.operator?.planDigest &&
-        record.operator.approvalId === successorPrior.record.operator?.approvalId &&
-        record.approvedByCallId === successorPrior.record.approvedByCallId &&
-        isProjectSettingsSuccessor(record, plan, now());
-      const retainedRenewalSuccessor =
-        retentionRenewal &&
-        record.operator.operationRef === successorPrior.record.operator?.operationRef &&
-        record.operator.planDigest === successorPrior.record.operator?.planDigest &&
-        record.operator.approvalId === successorPrior.record.operator?.approvalId &&
-        record.approvedByCallId === successorPrior.record.approvedByCallId &&
-        isRetentionRenewalSuccessor(record, plan, now());
-      if (settingsSuccessor && !projectSettingsSuccessor) {
-        throw new HostedOperatorError("operation_in_progress");
-      }
-      if (sharedHostSuccessor && !sharedHostProtectionSuccessor) {
-        throw new HostedOperatorError("operation_in_progress");
-      }
-      if (installerSuccessor && !installerSourceSuccessor) {
-        throw new HostedOperatorError("operation_in_progress");
-      }
-      if (retentionRenewal && !retainedRenewalSuccessor) {
-        throw new HostedOperatorError("operation_in_progress");
-      }
-      if (
-        !gatewaySourceSuccessor &&
-        !sharedHostProtectionSuccessor &&
-        !installerSourceSuccessor &&
-        !projectSettingsSuccessor &&
-        !retainedRenewalSuccessor &&
-        (record.leaseId !== undefined ||
-          record.operator.pendingEffectId !== undefined ||
-          record.operator.pendingEffectAttempt !== undefined ||
-          (record.operator.receipts.length > 0 &&
-            !["prepared", "cleaned"].includes(record.status) &&
-            !authStageCompleted &&
-            !participantsCompleted))
-      ) {
-        throw new HostedOperatorError("operation_in_progress");
-      }
-      const hasResources =
-        record.status !== "cleaned" &&
-        (record.privateState !== undefined ||
-          record.operator.receipts.length > 0 ||
-          record.status === "prepared");
-      if (hasResources && resourceIdentity(record.operator.plan) !== resourceIdentity(plan)) {
-        throw new HostedOperatorError("resource_mismatch");
-      }
-      if (
-        retainedCandidate !== undefined &&
-        (JSON.stringify(retainedOperatorAuthFromJournal(record)) !==
-          JSON.stringify(retainedCandidate) ||
-          JSON.stringify(record.privateState) !== JSON.stringify(prior?.record.privateState))
-      ) {
-        throw new HostedOperatorError("operation_in_progress");
-      }
-      const retainedAuth =
-        record.operator.plan.stage === AUTH_BOOTSTRAP_STAGE
-          ? (retainedCandidate ?? record.retainedAuth)
-          : (record.retainedAuth ?? retainedCandidate);
-      if (record.accountPreparation !== undefined) {
-        const preparation = record.accountPreparation;
-        if (
-          plan.normalActorProgram === undefined ||
-          preparation.programDigest !== normalActorProgramDigest(plan.normalActorProgram)
-        ) {
-          throw new HostedOperatorError("resource_mismatch");
-        }
-        if (plan.stage === "app") {
-          const proposedPreparation = plan.normalActorPreparation;
+          : {}),
+        update: (record) => {
+          if (!record.operator) {
+            throw new HostedOperatorError("legacy_runtime_requires_migration");
+          }
+          if (record.operator.planDigest === planDigest) {
+            return record;
+          }
+          const authStageCompleted = hasCompletedAuthBootstrapEffects(record);
+          const participantsCompleted =
+            record.status === PARTICIPANTS_PREPARED &&
+            record.operator.plan.stage === AUTH_PARTICIPANTS_STAGE &&
+            record.accountPreparation !== undefined;
+          const gatewaySourceSuccessor = isGatewaySourceSuccessor(record, plan, now());
+          const sharedHostProtectionSuccessor =
+            sharedHostSuccessor &&
+            record.operator.operationRef === successorPrior?.record.operator?.operationRef &&
+            record.operator.planDigest === successorPrior?.record.operator?.planDigest &&
+            record.operator.approvalId === successorPrior?.record.operator?.approvalId &&
+            record.approvedByCallId === successorPrior?.record.approvedByCallId &&
+            isSharedHostProtectionSuccessor(record, plan, now());
+          const installerSourceSuccessor =
+            installerSuccessor &&
+            record.operator.operationRef === successorPrior?.record.operator?.operationRef &&
+            record.operator.planDigest === successorPrior?.record.operator?.planDigest &&
+            record.operator.approvalId === successorPrior?.record.operator?.approvalId &&
+            record.approvedByCallId === successorPrior?.record.approvedByCallId &&
+            isInstallerSourceSuccessor(record, plan, now());
+          const projectSettingsSuccessor =
+            settingsSuccessor &&
+            record.operator.operationRef === successorPrior?.record.operator?.operationRef &&
+            record.operator.planDigest === successorPrior?.record.operator?.planDigest &&
+            record.operator.approvalId === successorPrior?.record.operator?.approvalId &&
+            record.approvedByCallId === successorPrior?.record.approvedByCallId &&
+            isProjectSettingsSuccessor(record, plan, now());
+          const retainedRenewalSuccessor =
+            retentionRenewal &&
+            record.operator.operationRef === successorPrior?.record.operator?.operationRef &&
+            record.operator.planDigest === successorPrior?.record.operator?.planDigest &&
+            record.operator.approvalId === successorPrior?.record.operator?.approvalId &&
+            record.approvedByCallId === successorPrior?.record.approvedByCallId &&
+            isRetentionRenewalSuccessor(record, plan, now());
+          if (settingsSuccessor && !projectSettingsSuccessor) {
+            throw new HostedOperatorError("operation_in_progress");
+          }
+          if (sharedHostSuccessor && !sharedHostProtectionSuccessor) {
+            throw new HostedOperatorError("operation_in_progress");
+          }
+          if (installerSuccessor && !installerSourceSuccessor) {
+            throw new HostedOperatorError("operation_in_progress");
+          }
+          if (retentionRenewal && !retainedRenewalSuccessor) {
+            throw new HostedOperatorError("operation_in_progress");
+          }
           if (
-            proposedPreparation === undefined ||
-            proposedPreparation.accountOperationRef !== preparation.accountOperationRef ||
-            proposedPreparation.accountPlanDigest !== preparation.accountPlanDigest ||
-            proposedPreparation.accountApprovalId !== preparation.accountApprovalId ||
-            proposedPreparation.accountApprovedByCallId !== preparation.accountApprovedByCallId
+            !gatewaySourceSuccessor &&
+            !sharedHostProtectionSuccessor &&
+            !installerSourceSuccessor &&
+            !projectSettingsSuccessor &&
+            !retainedRenewalSuccessor &&
+            (record.leaseId !== undefined ||
+              record.operator.pendingEffectId !== undefined ||
+              record.operator.pendingEffectAttempt !== undefined ||
+              (record.operator.receipts.length > 0 &&
+                !["prepared", "cleaned"].includes(record.status) &&
+                !authStageCompleted &&
+                !participantsCompleted))
           ) {
+            throw new HostedOperatorError("operation_in_progress");
+          }
+          const hasResources =
+            record.status !== "cleaned" &&
+            (record.privateState !== undefined ||
+              record.operator.receipts.length > 0 ||
+              record.status === "prepared");
+          if (hasResources && resourceIdentity(record.operator.plan) !== resourceIdentity(plan)) {
             throw new HostedOperatorError("resource_mismatch");
           }
-        }
-      }
-      // Same-resource release changes keep credentials; old proof never attests the new plan.
-      const nextOperator: ReturnType<typeof requireOperator> = { ...operator };
-      nextOperator.retainedProjectSettingsOperations =
-        record.operator.retainedProjectSettingsOperations;
-      nextOperator.retainedGatewayDeliveries = record.operator.retainedGatewayDeliveries;
-      nextOperator.retainedInstallerOperations = record.operator.retainedInstallerOperations;
-      nextOperator.retainedRenewalOperations = record.operator.retainedRenewalOperations;
-      if (gatewaySourceSuccessor || sharedHostProtectionSuccessor) {
-        const {
-          retainedGatewayDeliveries,
-          retainedInstallerOperations,
-          retainedProjectSettingsOperations,
-          retainedRenewalOperations,
-          ...priorOperator
-        } = record.operator;
-        void retainedInstallerOperations;
-        void retainedProjectSettingsOperations;
-        void retainedRenewalOperations;
-        nextOperator.retainedGatewayDeliveries = [
-          ...(retainedGatewayDeliveries ?? []),
-          { approvedByCallId: record.approvedByCallId, operator: priorOperator },
-        ];
-        nextOperator.receipts = record.operator.receipts;
-      }
-      if (installerSourceSuccessor) {
-        const {
-          retainedGatewayDeliveries,
-          retainedInstallerOperations,
-          retainedProjectSettingsOperations,
-          retainedRenewalOperations,
-          ...priorOperator
-        } = record.operator;
-        void retainedGatewayDeliveries;
-        void retainedProjectSettingsOperations;
-        void retainedRenewalOperations;
-        nextOperator.retainedInstallerOperations = [
-          ...(retainedInstallerOperations ?? []),
-          { approvedByCallId: record.approvedByCallId, operator: priorOperator },
-        ];
-        nextOperator.operationRef = record.operator.operationRef;
-        nextOperator.fenceGeneration = record.operator.fenceGeneration;
-        nextOperator.receipts = record.operator.receipts;
-        nextOperator.pendingEffectId = record.operator.pendingEffectId;
-        nextOperator.workerCheckpoints = record.operator.workerCheckpoints;
-        // A new worker binds a new context; the old attempt survives only in history.
-        // No receipt or old unknown checkpoint grants authority for this new plan.
-      }
-      if (projectSettingsSuccessor) {
-        const {
-          retainedGatewayDeliveries,
-          retainedInstallerOperations,
-          retainedProjectSettingsOperations,
-          retainedRenewalOperations,
-          ...priorOperator
-        } = record.operator;
-        void retainedGatewayDeliveries;
-        void retainedInstallerOperations;
-        void retainedRenewalOperations;
-        nextOperator.retainedProjectSettingsOperations = [
-          ...(retainedProjectSettingsOperations ?? []),
-          { approvedByCallId: record.approvedByCallId, operator: priorOperator },
-        ];
-        nextOperator.operationRef = record.operator.operationRef;
-        nextOperator.fenceGeneration = record.operator.fenceGeneration;
-        nextOperator.receipts = record.operator.receipts;
-        nextOperator.pendingEffectId = record.operator.pendingEffectId;
-        nextOperator.workerCheckpoints = record.operator.workerCheckpoints;
-        nextOperator.managedEnvironment = record.operator.managedEnvironment;
-        // The previous native deployment remains available only through archived provenance.
-        // Do not feed its Production-scoped candidates to the current Preview reconciler.
-        nextOperator.deliveryCandidates = [];
-        delete nextOperator.deliveredDeploymentId;
-        // The old unknown attempt remains in history; new approval gets a fresh attempt.
-      }
-      if (retainedRenewalSuccessor) {
-        const {
-          retainedGatewayDeliveries,
-          retainedInstallerOperations,
-          retainedProjectSettingsOperations,
-          retainedRenewalOperations,
-          ...priorOperator
-        } = record.operator;
-        void retainedGatewayDeliveries;
-        void retainedInstallerOperations;
-        void retainedProjectSettingsOperations;
-        nextOperator.retainedRenewalOperations = [
-          ...(retainedRenewalOperations ?? []),
-          { approvedByCallId: record.approvedByCallId, operator: priorOperator },
-        ];
-        nextOperator.operationRef = record.operator.operationRef;
-        const renewableReceiptKinds = new Set(["resources", "install", "auth-membership"]);
-        nextOperator.receipts = record.operator.receipts.filter((receipt) => {
-          const priorEffect = record.operator?.plan.effects.find(
-            (effect) => effect.id === receipt.effectId,
+          if (
+            retainedCandidate !== undefined &&
+            (JSON.stringify(retainedOperatorAuthFromJournal(record)) !==
+              JSON.stringify(retainedCandidate) ||
+              JSON.stringify(record.privateState) !== JSON.stringify(prior?.record.privateState))
+          ) {
+            throw new HostedOperatorError("operation_in_progress");
+          }
+          const retainedAuth =
+            record.operator.plan.stage === AUTH_BOOTSTRAP_STAGE
+              ? (retainedCandidate ?? record.retainedAuth)
+              : (record.retainedAuth ?? retainedCandidate);
+          if (record.accountPreparation !== undefined) {
+            const preparation = record.accountPreparation;
+            if (
+              plan.normalActorProgram === undefined ||
+              preparation.programDigest !== normalActorProgramDigest(plan.normalActorProgram)
+            ) {
+              throw new HostedOperatorError("resource_mismatch");
+            }
+            if (plan.stage === "app") {
+              const proposedPreparation = plan.normalActorPreparation;
+              if (
+                proposedPreparation === undefined ||
+                proposedPreparation.accountOperationRef !== preparation.accountOperationRef ||
+                proposedPreparation.accountPlanDigest !== preparation.accountPlanDigest ||
+                proposedPreparation.accountApprovalId !== preparation.accountApprovalId ||
+                proposedPreparation.accountApprovedByCallId !== preparation.accountApprovedByCallId
+              ) {
+                throw new HostedOperatorError("resource_mismatch");
+              }
+            }
+          }
+          // Same-resource release changes keep credentials; old proof never attests the new plan.
+          const nextOperator: ReturnType<typeof requireOperator> = { ...operator };
+          nextOperator.retainedProjectSettingsOperations =
+            record.operator.retainedProjectSettingsOperations;
+          nextOperator.retainedGatewayDeliveries = record.operator.retainedGatewayDeliveries;
+          nextOperator.retainedInstallerOperations = record.operator.retainedInstallerOperations;
+          nextOperator.retainedRenewalOperations = record.operator.retainedRenewalOperations;
+          if (gatewaySourceSuccessor || sharedHostProtectionSuccessor) {
+            const {
+              retainedGatewayDeliveries,
+              retainedInstallerOperations,
+              retainedProjectSettingsOperations,
+              retainedRenewalOperations,
+              ...priorOperator
+            } = record.operator;
+            void retainedInstallerOperations;
+            void retainedProjectSettingsOperations;
+            void retainedRenewalOperations;
+            nextOperator.retainedGatewayDeliveries = [
+              ...(retainedGatewayDeliveries ?? []),
+              { approvedByCallId: record.approvedByCallId, operator: priorOperator },
+            ];
+            nextOperator.receipts = record.operator.receipts;
+          }
+          if (installerSourceSuccessor) {
+            const {
+              retainedGatewayDeliveries,
+              retainedInstallerOperations,
+              retainedProjectSettingsOperations,
+              retainedRenewalOperations,
+              ...priorOperator
+            } = record.operator;
+            void retainedGatewayDeliveries;
+            void retainedProjectSettingsOperations;
+            void retainedRenewalOperations;
+            nextOperator.retainedInstallerOperations = [
+              ...(retainedInstallerOperations ?? []),
+              { approvedByCallId: record.approvedByCallId, operator: priorOperator },
+            ];
+            nextOperator.operationRef = record.operator.operationRef;
+            nextOperator.fenceGeneration = record.operator.fenceGeneration;
+            nextOperator.receipts = record.operator.receipts;
+            nextOperator.pendingEffectId = record.operator.pendingEffectId;
+            nextOperator.workerCheckpoints = record.operator.workerCheckpoints;
+            // A new worker binds a new context; the old attempt survives only in history.
+            // No receipt or old unknown checkpoint grants authority for this new plan.
+          }
+          if (projectSettingsSuccessor) {
+            const {
+              retainedGatewayDeliveries,
+              retainedInstallerOperations,
+              retainedProjectSettingsOperations,
+              retainedRenewalOperations,
+              ...priorOperator
+            } = record.operator;
+            void retainedGatewayDeliveries;
+            void retainedInstallerOperations;
+            void retainedRenewalOperations;
+            nextOperator.retainedProjectSettingsOperations = [
+              ...(retainedProjectSettingsOperations ?? []),
+              { approvedByCallId: record.approvedByCallId, operator: priorOperator },
+            ];
+            nextOperator.operationRef = record.operator.operationRef;
+            nextOperator.fenceGeneration = record.operator.fenceGeneration;
+            nextOperator.receipts = record.operator.receipts;
+            nextOperator.pendingEffectId = record.operator.pendingEffectId;
+            nextOperator.workerCheckpoints = record.operator.workerCheckpoints;
+            nextOperator.managedEnvironment = record.operator.managedEnvironment;
+            // The previous native deployment remains available only through archived provenance.
+            // Do not feed its Production-scoped candidates to the current Preview reconciler.
+            nextOperator.deliveryCandidates = [];
+            delete nextOperator.deliveredDeploymentId;
+            // The old unknown attempt remains in history; new approval gets a fresh attempt.
+          }
+          if (retainedRenewalSuccessor) {
+            const {
+              retainedGatewayDeliveries,
+              retainedInstallerOperations,
+              retainedProjectSettingsOperations,
+              retainedRenewalOperations,
+              ...priorOperator
+            } = record.operator;
+            void retainedGatewayDeliveries;
+            void retainedInstallerOperations;
+            void retainedProjectSettingsOperations;
+            nextOperator.retainedRenewalOperations = [
+              ...(retainedRenewalOperations ?? []),
+              { approvedByCallId: record.approvedByCallId, operator: priorOperator },
+            ];
+            nextOperator.operationRef = record.operator.operationRef;
+            const renewableReceiptKinds = new Set(["resources", "install", "auth-membership"]);
+            nextOperator.receipts = record.operator.receipts.filter((receipt) => {
+              const priorEffect = record.operator?.plan.effects.find(
+                (effect) => effect.id === receipt.effectId,
+              );
+              return priorEffect !== undefined && renewableReceiptKinds.has(priorEffect.kind);
+            });
+            nextOperator.managedEnvironment = record.operator.managedEnvironment;
+            nextOperator.deliveryCandidates = [];
+            nextOperator.gatewayDeliveryCandidates = [];
+            delete nextOperator.deliveredDeploymentId;
+            delete nextOperator.deliveredGatewayDeploymentId;
+            // All old receipts and the pending alias attempt survive only in the immutable snapshot.
+          }
+          if (sharedHostProtectionSuccessor) {
+            nextOperator.operationRef = record.operator.operationRef;
+            nextOperator.pendingEffectId = record.operator.pendingEffectId;
+            nextOperator.pendingEffectAttempt = record.operator.pendingEffectAttempt;
+            nextOperator.workerCheckpoints = record.operator.workerCheckpoints;
+          }
+          if (sameAuthPreparation(record.operator.plan, plan)) {
+            nextOperator.authPreparation = record.operator.authPreparation;
+          }
+          Object.assign(
+            nextOperator,
+            retainAppDeliveryHistory(
+              projectSettingsSuccessor || retainedRenewalSuccessor
+                ? { ...record.operator, deliveryCandidates: [] }
+                : record.operator,
+              nextOperator,
+            ),
           );
-          return priorEffect !== undefined && renewableReceiptKinds.has(priorEffect.kind);
-        });
-        nextOperator.managedEnvironment = record.operator.managedEnvironment;
-        nextOperator.deliveryCandidates = [];
-        nextOperator.gatewayDeliveryCandidates = [];
-        delete nextOperator.deliveredDeploymentId;
-        delete nextOperator.deliveredGatewayDeploymentId;
-        // All old receipts and the pending alias attempt survive only in the immutable snapshot.
-      }
-      if (sharedHostProtectionSuccessor) {
-        nextOperator.operationRef = record.operator.operationRef;
-        nextOperator.pendingEffectId = record.operator.pendingEffectId;
-        nextOperator.pendingEffectAttempt = record.operator.pendingEffectAttempt;
-        nextOperator.workerCheckpoints = record.operator.workerCheckpoints;
-      }
-      if (sameAuthPreparation(record.operator.plan, plan)) {
-        nextOperator.authPreparation = record.operator.authPreparation;
-      }
-      Object.assign(
-        nextOperator,
-        retainAppDeliveryHistory(
-          projectSettingsSuccessor || retainedRenewalSuccessor
-            ? { ...record.operator, deliveryCandidates: [] }
-            : record.operator,
-          nextOperator,
-        ),
-      );
-      if (!retainedRenewalSuccessor) {
-        nextOperator.gatewayDeliveryCandidates = record.operator.gatewayDeliveryCandidates;
-      }
-      if (!gatewaySourceSuccessor && !retainedRenewalSuccessor) {
-        nextOperator.deliveredGatewayDeploymentId = record.operator.deliveredGatewayDeploymentId;
-      }
-      if (record.operator.gatewayEnvironment !== undefined) {
-        nextOperator.gatewayEnvironment = record.operator.gatewayEnvironment;
-      }
-      if (plan.action === "prepare" && record.operator.identityLink?.consumedAt !== undefined) {
-        nextOperator.identityLink = record.operator.identityLink;
-      }
-      if (
-        !retainedRenewalSuccessor &&
-        authStageCompleted &&
-        record.operator.plan.authSchema?.targetDigest === plan.authSchema?.targetDigest
-      ) {
-        nextOperator.receipts = record.operator.receipts.filter((receipt) => {
-          const priorEffect = record.operator?.plan.effects.find(
-            (effect) => effect.id === receipt.effectId,
-          );
-          const nextEffect = plan.effects.find((effect) => effect.id === receipt.effectId);
-          return (
-            priorEffect !== undefined &&
-            nextEffect !== undefined &&
-            ["resources", "install"].includes(priorEffect.kind) &&
-            priorEffect.kind === nextEffect.kind &&
-            priorEffect.resourceId === nextEffect.resourceId
-          );
-        });
-      }
-      const next = {
-        ...record,
-        approvedByCallId: UNAPPROVED_PLAN,
-        environmentBound: false,
-        operator: nextOperator,
-        retainedAuth:
-          retainedAuth !== undefined && sameAuthPreparation(retainedAuth.plan, plan)
-            ? retainedAuth
-            : undefined,
-        status: "pending" as const,
-        step: "reserved" as const,
-      };
-      delete next.proof;
-      if (
-        gatewaySourceSuccessor ||
-        sharedHostProtectionSuccessor ||
-        installerSourceSuccessor ||
-        projectSettingsSuccessor ||
-        retainedRenewalSuccessor
-      ) {
-        delete next.leaseId;
-        delete next.leaseExpiresAt;
-      }
-      return next;
-    },
-  });
+          if (!retainedRenewalSuccessor) {
+            nextOperator.gatewayDeliveryCandidates = record.operator.gatewayDeliveryCandidates;
+          }
+          if (!gatewaySourceSuccessor && !retainedRenewalSuccessor) {
+            nextOperator.deliveredGatewayDeploymentId =
+              record.operator.deliveredGatewayDeploymentId;
+          }
+          if (record.operator.gatewayEnvironment !== undefined) {
+            nextOperator.gatewayEnvironment = record.operator.gatewayEnvironment;
+          }
+          if (plan.action === "prepare" && record.operator.identityLink?.consumedAt !== undefined) {
+            nextOperator.identityLink = record.operator.identityLink;
+          }
+          if (
+            !retainedRenewalSuccessor &&
+            authStageCompleted &&
+            record.operator.plan.authSchema?.targetDigest === plan.authSchema?.targetDigest
+          ) {
+            nextOperator.receipts = record.operator.receipts.filter((receipt) => {
+              const priorEffect = record.operator?.plan.effects.find(
+                (effect) => effect.id === receipt.effectId,
+              );
+              const nextEffect = plan.effects.find((effect) => effect.id === receipt.effectId);
+              return (
+                priorEffect !== undefined &&
+                nextEffect !== undefined &&
+                ["resources", "install"].includes(priorEffect.kind) &&
+                priorEffect.kind === nextEffect.kind &&
+                priorEffect.resourceId === nextEffect.resourceId
+              );
+            });
+          }
+          const next = {
+            ...record,
+            approvedByCallId: UNAPPROVED_PLAN,
+            environmentBound: false,
+            operator: nextOperator,
+            retainedAuth:
+              retainedAuth !== undefined && sameAuthPreparation(retainedAuth.plan, plan)
+                ? retainedAuth
+                : undefined,
+            status: "pending" as const,
+            step: "reserved" as const,
+          };
+          delete next.proof;
+          if (
+            gatewaySourceSuccessor ||
+            sharedHostProtectionSuccessor ||
+            installerSourceSuccessor ||
+            projectSettingsSuccessor ||
+            retainedRenewalSuccessor
+          ) {
+            delete next.leaseId;
+            delete next.leaseExpiresAt;
+          }
+          return next;
+        },
+      }),
+  );
   return response(
     operatorPublicResultSchema.parse({
       appId,

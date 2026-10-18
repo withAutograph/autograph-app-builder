@@ -223,6 +223,13 @@ is historical provenance; it cannot authorize more execution or extend itself.
 Archive its full operator record, receipts, deployment candidates, pending
 attempt, and alias intent before starting the renewed execution.
 
+Preserve a consumed Realm identity link when its original delivered Gateway
+candidate moves into that history. Its endpoint must still match the exact
+retained READY candidate and unchanged consumed proof, with the current Auth
+resource, owner session, browser origin, and issuer bindings intact. Retained
+origin evidence does not authorize another identity-link consumption or replace
+fresh deployment observation under the new approval.
+
 Under the fresh approval, reconcile access and runtime bindings again, apply
 and read back the approved service grant, and read both existing native
 candidates and the canonical Gateway alias. Historical metadata must remain
