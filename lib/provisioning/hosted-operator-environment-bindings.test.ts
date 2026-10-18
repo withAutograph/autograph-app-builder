@@ -141,6 +141,12 @@ const parseFixtureBody = (value: RequestInit["body"]) => {
     bodyText === undefined ? undefined : z.record(z.string(), z.json()).parse(JSON.parse(bodyText));
   return body;
 };
+interface FixtureAppProject {
+  id: string;
+  accountId: string;
+  link: { productionBranch: string; repoId: string; type: string };
+  trustedSources?: z.infer<typeof z.json>;
+}
 const fixture = (configurationId?: string | null) => {
   const rows: Record<string, z.infer<typeof z.json>>[] = [
     { id: "unrelated", key: "APP_TITLE", target: ["production"], type: "plain", value: "existing" },
@@ -176,12 +182,12 @@ const fixture = (configurationId?: string | null) => {
     target,
     workerCheckpoints: [],
   };
-  const project = {
+  const project: FixtureAppProject = {
     id: target.projectId,
     accountId: target.scopeId,
     link: { productionBranch: "main", repoId: "repository_fixture", type: "github" },
   };
-  // oxlint-disable-next-line eslint/complexity -- One fixture covers the provider's fixed read/write endpoint behaviors.
+  // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- One fixture covers the provider's fixed read/write endpoint behaviors.
   const fetcher = vi.fn(async (url: URL | string | Request, init?: RequestInit) => {
     const parsed = new URL(url instanceof Request ? url.url : url.toString());
     const method = init?.method ?? "GET";
@@ -202,6 +208,9 @@ const fixture = (configurationId?: string | null) => {
       return new Response("private provider failure", { status: 500 });
     }
     if (parsed.pathname === `/v9/projects/${target.projectId}`) {
+      if (method === "PATCH" && body?.trustedSources !== undefined) {
+        project.trustedSources = body.trustedSources;
+      }
       return Response.json(project);
     }
     if (method === "GET" && parsed.pathname.startsWith("/v1/")) {
@@ -271,6 +280,7 @@ const fixture = (configurationId?: string | null) => {
     assertCurrent,
     diagnostics,
     checkpointManagedEnvironment,
+    fetcher,
     input,
     readCredential,
     requests,
@@ -783,4 +793,268 @@ it("does not adopt unjournaled generic rows when the current mapping is branch-s
   expect(await f.writer.reconcile(f.input, values)).toEqual({ status: "unknown" });
   await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
   expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+});
+
+const approveAppTrustedSource = (f: ReturnType<typeof fixture>) => {
+  f.input.plan = hostedOperatorPlanSchema.parse({
+    ...f.input.plan,
+    stage: "app",
+    delivery: {
+      branch: target.branch,
+      gitSha: "a".repeat(40),
+      projectId: target.projectId,
+      repoId: "fixture-repository",
+    },
+    effects: [
+      ...f.input.plan.effects,
+      { id: "app-delivery", kind: "delivery", description: "Deliver approved app" },
+      { id: "gateway-bindings", kind: "gateway-bindings", description: "Bind Gateway" },
+    ],
+    gatewayBindings: {
+      authBrowserOrigin: "https://auth-preview.example.test",
+      builderCallbackOrigin: "https://builder-preview.example.test",
+      catalogAppIds: [target.appId],
+      operatorOrigin: "https://operator-preview.example.test",
+      sourceWorkload: {
+        audience: "https://vercel.com/fixture",
+        environment: "preview",
+        issuer: "https://oidc.vercel.com/fixture",
+        ownerId: target.scopeId,
+        projectId: "prj_gateway",
+        subject: "fixture-gateway",
+      },
+    },
+    appTrustedSources: {
+      gatewayPreview: { projectId: "prj_gateway", from: "preview", to: "preview" },
+    },
+  });
+};
+const appPolicyWrites = (f: ReturnType<typeof fixture>) =>
+  f.requests.filter(
+    (request) => request.method === "PATCH" && request.path === `/v9/projects/${target.projectId}`,
+  );
+
+it("leaves legacy plans free of app Trusted Sources reads and writes", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input, values);
+  f.requests.length = 0;
+  expect(await f.writer.reconcile(f.input, values)).toMatchObject({ status: "applied" });
+  // The existing branch selector read remains; no optional policy read is added.
+  expect(
+    f.requests.filter((request) => request.path === `/v9/projects/${target.projectId}`),
+  ).toHaveLength(1);
+  expect(appPolicyWrites(f)).toEqual([]);
+});
+
+it.each(["absent", "null", "configured"] as const)(
+  "adds only the approved Gateway Preview caller while preserving %s app policy",
+  async (visibility) => {
+    const f = fixture();
+    await f.writer.bind(f.input, values);
+    if (visibility === "null") {
+      f.project.trustedSources = null;
+    } else if (visibility === "configured") {
+      f.project.trustedSources = {
+        projects: {
+          [target.projectId]: { label: "implicit self" },
+          prj_unrelated: {
+            label: "existing explicit",
+            customAllow: [{ from: { slugs: ["development"] }, to: { slugs: ["preview"] } }],
+          },
+        },
+        oidcProviders: {
+          "https://issuer.example.test": [
+            {
+              label: "existing OIDC",
+              claims: { sub: ["existing-subject"] },
+              to: { slugs: ["preview"] },
+            },
+          ],
+        },
+        enableVercelCiSameRepository: true,
+        providerOwnedField: "retained",
+      };
+    }
+    const prior = structuredClone(f.project.trustedSources ?? {});
+    approveAppTrustedSource(f);
+    f.requests.length = 0;
+    expect(await f.writer.reconcile(f.input, values)).toMatchObject({ status: "retryable" });
+    expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+    await f.writer.bind(f.input, values);
+    expect(appPolicyWrites(f)).toHaveLength(1);
+    expect(appPolicyWrites(f)[0]?.body).toEqual({
+      trustedSources: {
+        ...z.record(z.string(), z.json()).parse(prior),
+        projects: {
+          ...z
+            .record(z.string(), z.json())
+            .parse(z.record(z.string(), z.json()).parse(prior).projects ?? {}),
+          prj_gateway: {
+            customAllow: [{ from: { slugs: ["preview"] }, to: { slugs: ["preview"] } }],
+          },
+        },
+      },
+    });
+    f.requests.length = 0;
+    expect(await f.writer.reconcile(f.input, values)).toMatchObject({ status: "applied" });
+    await f.writer.bind(f.input, values);
+    expect(appPolicyWrites(f)).toEqual([]);
+    f.input.effect = {
+      id: "delivery",
+      kind: "delivery",
+      description: "Verify accepted app delivery",
+    };
+    f.input.plan = {
+      ...f.input.plan,
+      delivery: {
+        branch: target.branch,
+        gitSha: "a".repeat(40),
+        projectId: target.projectId,
+        repoId: "fixture-repository",
+      },
+    };
+    await expect(f.writer.verifyForDelivery(f.input, values)).resolves.toHaveProperty("rows");
+  },
+);
+
+it("preserves an existing implicit same-environment Gateway caller without replacing its defaults", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input, values);
+  f.project.trustedSources = {
+    projects: { prj_gateway: { label: "implicit environment defaults" } },
+  };
+  approveAppTrustedSource(f);
+  expect(await f.writer.reconcile(f.input, values)).toMatchObject({ status: "applied" });
+  await f.writer.bind(f.input, values);
+  expect(appPolicyWrites(f)).toEqual([]);
+  expect(f.project.trustedSources).toEqual({
+    projects: { prj_gateway: { label: "implicit environment defaults" } },
+  });
+});
+
+it("recovers an applied app policy PATCH after its response is lost without repeating the write", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input, values);
+  approveAppTrustedSource(f);
+  const original = f.fetcher.getMockImplementation()!;
+  f.fetcher.mockImplementation(async (url, init) => {
+    const response = await original(url, init);
+    const parsed = new URL(url instanceof Request ? url.url : url.toString());
+    if (init?.method === "PATCH" && parsed.pathname === `/v9/projects/${target.projectId}`) {
+      throw new Error("Lost policy response");
+    }
+    return response;
+  });
+  await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
+  expect(await f.writer.reconcile(f.input, values)).toMatchObject({ status: "applied" });
+  await f.writer.bind(f.input, values);
+  expect(appPolicyWrites(f)).toHaveLength(1);
+});
+
+it("refuses app policy writes after current authorization is revoked", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input, values);
+  approveAppTrustedSource(f);
+  f.assertAuthorized.mockRejectedValue(new Error("Revoked"));
+  f.requests.length = 0;
+  await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
+  expect(f.requests).toHaveLength(0);
+});
+
+it("rejects a foreign app project policy snapshot before PATCH", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input, values);
+  approveAppTrustedSource(f);
+  f.project.accountId = "foreign-team";
+  expect(await f.writer.reconcile(f.input, values)).toMatchObject({ status: "unknown" });
+  await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
+  expect(appPolicyWrites(f)).toEqual([]);
+});
+
+it("does not attest an app policy grant that is absent from provider readback", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input, values);
+  approveAppTrustedSource(f);
+  const original = f.fetcher.getMockImplementation()!;
+  f.fetcher.mockImplementation(async (url, init) => {
+    const response = await original(url, init);
+    if (init?.method === "PATCH") {
+      f.project.trustedSources = {};
+    }
+    return response;
+  });
+  await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
+  expect(await f.writer.reconcile(f.input, values)).toMatchObject({ status: "retryable" });
+});
+
+it("preserves a broader existing Gateway source rule without adding or removing access", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input, values);
+  const prior = {
+    projects: {
+      prj_gateway: {
+        label: "provider-owned existing scope",
+        customAllow: [{ from: { slugs: ["preview", "production"] }, to: { slugs: ["preview"] } }],
+      },
+    },
+  };
+  f.project.trustedSources = structuredClone(prior);
+  approveAppTrustedSource(f);
+  expect(await f.writer.reconcile(f.input, values)).toMatchObject({ status: "applied" });
+  await f.writer.bind(f.input, values);
+  expect(appPolicyWrites(f)).toEqual([]);
+  expect(f.project.trustedSources).toEqual(prior);
+});
+
+it("adds the missing Preview pair alongside the Gateway's existing explicit rule", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input, values);
+  const prior = { from: { slugs: ["development"] }, to: { slugs: ["preview"] } };
+  f.project.trustedSources = {
+    projects: { prj_gateway: { label: "existing explicit scope", customAllow: [prior] } },
+  };
+  approveAppTrustedSource(f);
+  await f.writer.bind(f.input, values);
+  expect(appPolicyWrites(f)[0]?.body).toEqual({
+    trustedSources: {
+      projects: {
+        prj_gateway: {
+          label: "existing explicit scope",
+          customAllow: [prior, { from: { slugs: ["preview"] }, to: { slugs: ["preview"] } }],
+        },
+      },
+    },
+  });
+});
+
+it("rejects an unexpected broader rule created by provider readback without requesting Production access", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input, values);
+  approveAppTrustedSource(f);
+  const original = f.fetcher.getMockImplementation()!;
+  f.fetcher.mockImplementation(async (url, init) => {
+    const response = await original(url, init);
+    if (init?.method === "PATCH") {
+      f.project.trustedSources = {
+        projects: {
+          prj_gateway: {
+            customAllow: [
+              { from: { slugs: ["preview", "production"] }, to: { slugs: ["preview"] } },
+            ],
+          },
+        },
+      };
+    }
+    return response;
+  });
+  await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
+  expect(appPolicyWrites(f)[0]?.body).toEqual({
+    trustedSources: {
+      projects: {
+        prj_gateway: {
+          customAllow: [{ from: { slugs: ["preview"] }, to: { slugs: ["preview"] } }],
+        },
+      },
+    },
+  });
 });

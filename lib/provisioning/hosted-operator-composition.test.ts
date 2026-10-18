@@ -180,10 +180,35 @@ const bootstrapPlan = () =>
 const bootstrapWithGatewayOrigin = (gatewayOrigin: string) =>
   hostedOperatorPlanSchema.parse({
     ...bootstrapPlan(),
+    effects: [
+      ...bootstrapPlan().effects,
+      { description: "Gateway bindings", id: "gateway-bindings", kind: "gateway-bindings" },
+      { description: "Gateway delivery", id: "gateway-delivery", kind: "gateway-delivery" },
+    ],
     publicGateway: {
       branch: "gateway",
       origin: "https://apps.example",
       projectId: "gateway",
+    },
+    gatewayBindings: {
+      authBrowserOrigin: "https://auth.example",
+      builderCallbackOrigin: "https://builder.example",
+      catalogAppIds: ["actual"],
+      operatorOrigin: "https://operator.example",
+      sourceWorkload: {
+        audience: "https://vercel.com/team",
+        environment: "preview",
+        issuer: "https://oidc.vercel.com/team",
+        ownerId: "team",
+        projectId: "gateway",
+        subject: "builder-workload",
+      },
+    },
+    gatewayDelivery: {
+      branch: "gateway",
+      gitSha: "d".repeat(40),
+      projectId: "gateway",
+      repoId: "gateway-repository",
     },
     deploymentBoundary: {
       authority,
@@ -367,6 +392,7 @@ describe("app publication binding at plan renewal", () => {
     expect(plan).toEqual(base);
     expect(plan.stage).toBe("auth-bootstrap");
     expect(plan.delivery).toBeUndefined();
+    expect(plan.appTrustedSources).toBeUndefined();
     expect(plan.appDatabase).toEqual(resource("app"));
     expect(plan.authDatabase).toEqual(resource("auth"));
     expect(f.readCapturedRealmIdentityProof).not.toHaveBeenCalled();
@@ -389,8 +415,23 @@ describe("app publication binding at plan renewal", () => {
   it("renews the app plan with the exact actual repository, commit, branch, and project", async () => {
     const binding = { repoId: "actual-repository-id", gitSha: "c".repeat(40) };
     const f = publicationFixture(binding);
-    const plan = await resolveFullPlan(bootstrapPlan(), context, f.configuration, f.controlPlane);
+    const plan = await resolveFullPlan(
+      bootstrapWithGatewayOrigin("https://gateway.example"),
+      context,
+      f.configuration,
+      f.controlPlane,
+    );
     expect(plan.stage).toBe("app");
+    expect(plan.appTrustedSources).toEqual({
+      gatewayPreview: {
+        from: "preview",
+        projectId: f.configuration.gateway.workload.projectId,
+        to: "preview",
+      },
+    });
+    expect(plan.effects.find((effect) => effect.kind === "bindings")?.description).toContain(
+      "allow the configured Gateway Preview to reach this app Preview",
+    );
     expect(plan.delivery).toEqual({
       ...binding,
       branch: context.target.branch,
@@ -401,6 +442,67 @@ describe("app publication binding at plan renewal", () => {
     ]);
     expect(f.readCapturedRealmIdentityProof).toHaveBeenCalledWith(context);
     expect(f.unexpectedPort).not.toHaveBeenCalled();
+  });
+
+  it("validates a trusted source against the exact Gateway workload, team and app Preview while accepting legacy plans", async () => {
+    const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+    const plan = await resolveFullPlan(
+      bootstrapWithGatewayOrigin("https://gateway.example"),
+      context,
+      f.configuration,
+      f.controlPlane,
+    );
+    expect(hostedOperatorPlanSchema.safeParse(plan).success).toBe(true);
+    const legacyPlan = structuredClone(plan);
+    delete legacyPlan.appTrustedSources;
+    expect(hostedOperatorPlanSchema.safeParse(legacyPlan).success).toBe(true);
+    const boundary = plan.deploymentBoundary;
+    const gatewayBindings = plan.gatewayBindings;
+    const delivery = plan.delivery;
+    if (boundary === undefined || gatewayBindings === undefined || delivery === undefined) {
+      throw new Error("The trusted app Preview plan must retain its deployment bindings.");
+    }
+
+    expect(
+      hostedOperatorPlanSchema.safeParse({
+        ...plan,
+        appTrustedSources: {
+          gatewayPreview: { from: "preview", projectId: "different-gateway", to: "preview" },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      hostedOperatorPlanSchema.safeParse({
+        ...plan,
+        deploymentBoundary: {
+          ...boundary,
+          teamId: "different-team",
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      hostedOperatorPlanSchema.safeParse({
+        ...plan,
+        gatewayBindings: {
+          ...gatewayBindings,
+          sourceWorkload: { ...gatewayBindings.sourceWorkload, ownerId: "different-team" },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      hostedOperatorPlanSchema.safeParse({
+        ...plan,
+        delivery: { ...delivery, projectId: "different-app" },
+      }).success,
+    ).toBe(false);
+    expect(
+      hostedOperatorPlanSchema.safeParse({
+        ...plan,
+        appTrustedSources: {
+          gatewayPreview: { from: "preview", projectId: "gateway", to: "production" },
+        },
+      }).success,
+    ).toBe(false);
   });
 
   it("binds membership transport to the current approved Gateway while retaining legacy fallback", () => {
@@ -607,9 +709,15 @@ const participantResolutionFixture = () => {
     ],
   });
   const base = hostedOperatorPlanSchema.parse({
-    ...bootstrapPlan(),
+    ...bootstrapWithGatewayOrigin("https://gateway.example"),
     normalActorProgram: program,
     publicGateway: { projectId: "gateway", branch: "gateway-actual", origin: program.origin },
+    gatewayDelivery: {
+      branch: "gateway-actual",
+      gitSha: "d".repeat(40),
+      projectId: "gateway",
+      repoId: "gateway-repository",
+    },
     deploymentBoundary: {
       authority,
       teamId: "team",
@@ -746,6 +854,13 @@ describe("participant plan resolution", () => {
     const f = participantResolutionFixture();
     const result = await resolveFullPlan(f.base, context, f.configuration, f.ports, {}, true, true);
     expect(result.stage).toBe("app");
+    expect(result.appTrustedSources).toEqual({
+      gatewayPreview: {
+        from: "preview",
+        projectId: f.configuration.gateway.workload.projectId,
+        to: "preview",
+      },
+    });
     expect(result.access).toEqual([
       { actorId: "normal-owner-from-session", organizationId: "first-org", roles: ["member"] },
       { actorId: "normal-owner-from-session", organizationId: "second-org", roles: ["member"] },
@@ -1168,6 +1283,37 @@ describe("existing populated Auth workflow planning", () => {
       expect.arrayContaining(["gateway-bindings", "gateway-delivery"]),
     );
   });
+  it("omits app trusted sources from cleanup while retaining the approved resources and policy", async () => {
+    const f = setup("current");
+    const publication = publicationFixture({
+      repoId: "actual-repository-id",
+      gitSha: "c".repeat(40),
+    });
+    const appPlan = await resolveFullPlan(
+      bootstrapWithGatewayOrigin("https://gateway.example"),
+      context,
+      publication.configuration,
+      publication.controlPlane,
+    );
+    expect(appPlan.appTrustedSources).toBeDefined();
+    f.row.record.operator!.plan = appPlan;
+    f.row.record.operator!.planDigest = operatorPlanDigest(appPlan);
+
+    const cleanup = await f.dependencies.plan({ ...context, action: "cleanup" });
+
+    expect(cleanup.action).toBe("cleanup");
+    expect(cleanup.appTrustedSources).toBeUndefined();
+    expect(cleanup.appDatabase).toEqual(appPlan.appDatabase);
+    expect(cleanup.authDatabase).toEqual(appPlan.authDatabase);
+    expect(cleanup.authSchema).toEqual(appPlan.authSchema);
+    expect(cleanup.retention).toEqual(appPlan.retention);
+    expect(cleanup.cost).toEqual(appPlan.cost);
+    expect(cleanup.effects.map(({ kind }) => kind)).toEqual([
+      "revoke",
+      "remove-bindings",
+      "retire",
+    ]);
+  });
   it("does not invent Production source authority for a Preview Builder workload", async () => {
     const f = setup("current");
     const plan = await f.dependencies.plan({ ...context, action: "prepare" });
@@ -1568,8 +1714,8 @@ describe("existing populated Auth workflow planning", () => {
 
 describe("retained approved Auth binding selection", () => {
   const pendingDelivery = async () => {
-    const record = existingAuthRecord();
-    const originalPlan = record.operator!.plan;
+    const originalPlan = bootstrapWithGatewayOrigin("https://gateway.example");
+    const record = existingAuthRecord(originalPlan);
     record.retainedAuth = retainedOperatorAuthFromJournal(record);
     const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
     const appPlan = await resolveFullPlan(originalPlan, context, f.configuration, f.controlPlane);
