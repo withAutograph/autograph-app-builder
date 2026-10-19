@@ -3,7 +3,10 @@ import { isNativePreviewDeployment } from "./hosted-operator-deployment-delivery
 import type { readPreparedVercelAccess } from "../agent/prepared-provider-context";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { HostedOperatorError } from "./hosted-operator-contract";
-import { reportOperatorPlanningMismatch } from "./hosted-operator-consent-diagnostic";
+import {
+  reportOperatorPlanningMismatch,
+  reportOperatorExecutionFailure,
+} from "./hosted-operator-consent-diagnostic";
 import type { HostedOperatorContext } from "./hosted-operator-service";
 import { readVercelManagedNeonResource } from "./hosted-runtime-marketplace-resource";
 import type { MarketplaceJsonValue } from "./hosted-runtime-marketplace-resource";
@@ -492,6 +495,13 @@ export const readHostedOperatorProviderInventory = async (input: {
       verification: { gatewayOrigin, jwksUrl, publicKeyIds, publicOrigin },
     };
   } catch (error) {
+    if (input.phase !== "bootstrap-planning") {
+      reportOperatorExecutionFailure(
+        input.context.target.sessionId,
+        "final_inventory_readback",
+        error,
+      );
+    }
     if (error instanceof HostedOperatorError) {
       throw error;
     }

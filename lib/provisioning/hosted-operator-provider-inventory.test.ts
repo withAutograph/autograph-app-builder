@@ -173,6 +173,29 @@ const fixture = () => {
 };
 
 describe("private read-only operator provider inventory", () => {
+  it("reports malformed final inventory before preserving its sanitized public error", async () => {
+    const f = fixture();
+    const secret = "https://private-host/private-path?token=private-token";
+    f.payloads.set("/v9/projects/prj_app", { privatePayload: secret });
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      await expect(readHostedOperatorProviderInventory(f.input)).rejects.toThrow(
+        "operator_unavailable",
+      );
+      expect(log.mock.calls).toContainEqual([
+        "[builder:hosted-neon-consent]",
+        expect.objectContaining({
+          executionFailure: {
+            stage: "final_inventory_readback",
+            errorClass: "validation_error",
+          },
+        }),
+      ]);
+      expect(JSON.stringify(log.mock.calls)).not.toContain(secret);
+    } finally {
+      log.mockRestore();
+    }
+  });
   it("accepts null provider configuration IDs without inventing native integration proof", async () => {
     const f = fixture();
     f.payloads.set("/v10/projects/prj_app/env", {

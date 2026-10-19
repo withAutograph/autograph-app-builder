@@ -4,6 +4,8 @@ import { z } from "zod";
 import { hostedOperatorPlanSchema } from "./hosted-operator-contract";
 import type { HostedOperatorPlan } from "./hosted-operator-contract";
 import type { HostedOperatorContext } from "./hosted-operator-service";
+import { reportOperatorExecutionFailure } from "./hosted-operator-consent-diagnostic";
+import type { OperatorRuntimeReadinessStage } from "./hosted-operator-consent-diagnostic";
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
 const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
@@ -143,7 +145,10 @@ const actorBindingSchema = z.strictObject({
 
 export interface AppRuntimeSnapshotReader {
   readIdentity: () => Promise<z.infer<typeof identitySchema>>;
-  readOrganization: (scope: OperatorAppMetadataScope) => Promise<z.infer<typeof observationSchema>>;
+  readOrganization: (
+    scope: OperatorAppMetadataScope,
+    observeStage?: (stage: OperatorRuntimeReadinessStage) => void,
+  ) => Promise<z.infer<typeof observationSchema>>;
 }
 export type ReadAppRuntimeSnapshot = (
   runtimeUrl: string,
@@ -169,7 +174,8 @@ export const readAppRuntimeSnapshot: ReadAppRuntimeSnapshot = async (runtimeUrl,
             }
             return identitySchema.parse(rows[0]);
           },
-          readOrganization: async (scope) => {
+          readOrganization: async (scope, observeStage) => {
+            observeStage?.("actor_binding");
             const bindings = await tx.unsafe(
               "select public.kernel_read_actor_binding($1::jsonb) as binding",
               [
@@ -196,6 +202,7 @@ export const readAppRuntimeSnapshot: ReadAppRuntimeSnapshot = async (runtimeUrl,
             ) {
               throw reject();
             }
+            observeStage?.("runtime_context");
             await tx.unsafe(
               "select set_config('kernel.actor_id',$1,true),set_config('kernel.actor_role',$2,true),set_config('kernel.actor_fence_generation',$3,true),set_config('kernel.app_id',$4,true),set_config('kernel.customer_id',$5,true)",
               [
@@ -206,6 +213,7 @@ export const readAppRuntimeSnapshot: ReadAppRuntimeSnapshot = async (runtimeUrl,
                 scope.organizationId,
               ],
             );
+            observeStage?.("runtime_release");
             const rows = await tx.unsafe(
               "select public.kernel_read_runtime_release_observability($1::jsonb) as observation",
               [tx.json({ app_id: scope.appId, customer_id: scope.organizationId })],
@@ -245,6 +253,10 @@ export interface AppReadinessDependencies {
 /** Independent restricted-runtime readback; does not establish app business behavior. */
 export const createHostedOperatorAppReadiness =
   (deps: AppReadinessDependencies) => async (input: AppReadinessInput) => {
+    let runtimeReadinessStage: OperatorRuntimeReadinessStage = "selection";
+    const observeStage = (stage: OperatorRuntimeReadinessStage) => {
+      runtimeReadinessStage = stage;
+    };
     try {
       const plan = hostedOperatorPlanSchema.parse(input.plan);
       const { target } = input;
@@ -261,10 +273,14 @@ export const createHostedOperatorAppReadiness =
         throw reject();
       }
       const guard = async () => {
+        const priorStage = runtimeReadinessStage;
+        observeStage("authority");
         await input.assertCurrent();
         await deps.assertAuthorized({ ...input, plan });
+        observeStage(priorStage);
       };
       await guard();
+      observeStage("approved_access");
       const approvedByOrganization = new Map<string, HostedOperatorPlan["access"][number]>();
       for (const access of plan.access) {
         if (!approvedByOrganization.has(access.organizationId)) {
@@ -277,6 +293,7 @@ export const createHostedOperatorAppReadiness =
       if (organizations.length === 0) {
         throw reject();
       }
+      observeStage("release_manifest");
       const bytes = await deps.readReleaseManifest(input);
       if (digest(bytes) !== plan.release.sha256) {
         throw reject();
@@ -286,31 +303,39 @@ export const createHostedOperatorAppReadiness =
         throw reject();
       }
       const artifactHash = manifest.hashes.schema.slice("sha256:".length);
+      observeStage("runtime_credential");
       const runtimeUrl = await deps.readRuntimeUrl(input);
       assertRuntimeUrl(runtimeUrl, plan);
       await guard();
+      observeStage("runtime_connection");
       const observations = await (deps.readRuntimeSnapshot ?? readAppRuntimeSnapshot)(
         runtimeUrl,
         async (reader) => {
+          observeStage("runtime_identity");
           assertIdentity(await reader.readIdentity(), plan);
           const results = [];
           // eslint-disable-next-line react-doctor/async-await-in-loop -- Tenant-scoped configuration and authorization must be serialized on this single snapshot connection.
           for (const organizationId of organizations) {
             // eslint-disable-next-line no-await-in-loop, react-doctor/async-await-in-loop -- Serialize tenant-scoped reads on one locking metadata transaction and recheck authority between them.
             await guard();
+            observeStage("approved_access");
             // eslint-disable-next-line no-await-in-loop, react-doctor/async-await-in-loop -- One runtime transaction provides a consistent release observation for the approved tenant batch.
             const approved = approvedByOrganization.get(organizationId);
             const [role] = approved?.roles.toSorted() ?? [];
             if (approved === undefined || role === undefined) {
               throw reject();
             }
+            observeStage("runtime_release");
             // eslint-disable-next-line no-await-in-loop, react-doctor/async-await-in-loop -- Keep approved tenant contexts sequential on one locking metadata transaction.
-            const result = await reader.readOrganization({
-              actorId: approved.actorId,
-              appId: plan.selection.appId,
-              organizationId,
-              role,
-            });
+            const result = await reader.readOrganization(
+              {
+                actorId: approved.actorId,
+                appId: plan.selection.appId,
+                organizationId,
+                role,
+              },
+              observeStage,
+            );
             const { data: observation } = result;
             const active = observation.releases.filter(
               (release) => release.schema_revision_id === observation.active_schema_revision_id,
@@ -341,6 +366,7 @@ export const createHostedOperatorAppReadiness =
             });
           }
           await guard();
+          observeStage("runtime_connection");
           return results;
         },
       );
@@ -358,8 +384,18 @@ export const createHostedOperatorAppReadiness =
         source: "reviewed-plan-app-runtime" as const,
         tenants: observations.length,
       };
-    } catch {
+    } catch (error) {
       // URL, SQL errors and provider payloads remain private, including auth failures.
+      reportOperatorExecutionFailure(
+        input.target.sessionId,
+        "final_runtime_readiness",
+        error,
+        undefined,
+        {
+          stage: "final_runtime_readiness",
+          runtimeReadinessStage,
+        },
+      );
       throw reject();
     }
   };

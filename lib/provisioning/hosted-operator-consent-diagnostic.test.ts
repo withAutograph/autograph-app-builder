@@ -8,6 +8,7 @@ import {
   reportOperatorPlanningMismatch,
   observeOperatorPlanStage,
   observeOperatorExecutionStage,
+  reportOperatorExecutionFailure,
   projectAuthStartupDiagnostic,
   reportRuntimePreparationFailure,
 } from "./hosted-operator-consent-diagnostic";
@@ -892,6 +893,90 @@ it("preserves execution failures and redacts arbitrary error properties", async 
     errorClass: "unexpected",
   });
   expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+});
+it.each([
+  [
+    "operator_error",
+    new HostedOperatorError("operator_unavailable"),
+    "operator_unavailable",
+    undefined,
+  ],
+  ["validation_error", new z.ZodError([]), undefined, undefined],
+  ["type_error", new TypeError(secret), undefined, undefined],
+  [
+    "unexpected",
+    Object.assign(new Error(secret), { code: "42501", url: secret, sql: secret, payload: secret }),
+    undefined,
+    "42501",
+  ],
+] as const)(
+  "reports %s execution failures at final verifier stages with closed classification",
+  (errorClass, error, code, sqlState) => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    const priorCode: unknown = Object.getOwnPropertyDescriptor(error, "code")?.value;
+    reportOperatorExecutionFailure("private-session", "final_runtime_readiness", error, sink, {
+      stage: "final_runtime_readiness",
+      mode: "inspect",
+    });
+    expect(sink.mock.calls[0]?.[0].executionFailure).toEqual({
+      stage: "final_runtime_readiness",
+      mode: "inspect",
+      errorClass,
+      ...(code === undefined ? {} : { code }),
+      ...(sqlState === undefined ? {} : { sqlState }),
+    });
+    expect(Object.getOwnPropertyDescriptor(error, "code")?.value).toBe(priorCode);
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+    expect(JSON.stringify(sink.mock.calls)).not.toContain("private-session");
+  },
+);
+it("keeps final inventory diagnostic reporting nonthrowing for hostile failures and sinks", () => {
+  const hostile = new Proxy(
+    {},
+    {
+      getOwnPropertyDescriptor: () => {
+        throw new Error(secret);
+      },
+    },
+  );
+  expect(() => {
+    reportOperatorExecutionFailure("private-session", "final_inventory_readback", hostile, () => {
+      throw new Error(secret);
+    });
+  }).not.toThrow();
+});
+it("retains only a closed runtime readiness stage in execution diagnostics", () => {
+  const validSink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+  reportOperatorExecutionFailure(
+    "private-session",
+    "final_runtime_readiness",
+    new Error(secret),
+    validSink,
+    {
+      stage: "final_runtime_readiness",
+      runtimeReadinessStage: "runtime_credential",
+    },
+  );
+  expect(validSink.mock.calls[0]?.[0].executionFailure).toMatchObject({
+    stage: "final_runtime_readiness",
+    runtimeReadinessStage: "runtime_credential",
+  });
+  const invalidSink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+  for (const field of ["runtimeReadinessStage"]) {
+    reportOperatorExecutionFailure(
+      "private-session",
+      "final_runtime_readiness",
+      new Error(secret),
+      invalidSink,
+      {
+        stage: "final_runtime_readiness",
+        [field]: secret,
+      },
+    );
+  }
+  expect(invalidSink).not.toHaveBeenCalled();
+  expect(JSON.stringify(validSink.mock.calls)).not.toContain(secret);
+  expect(JSON.stringify(validSink.mock.calls)).not.toContain("private-session");
 });
 it("does not let a diagnostic sink failure replace the original execution failure", async () => {
   const error = new HostedOperatorError("operator_unavailable");

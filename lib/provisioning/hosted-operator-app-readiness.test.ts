@@ -169,6 +169,74 @@ const fixture = () => {
     verify: createHostedOperatorAppReadiness(deps),
   };
 };
+it("reports a closed runtime failure before preserving the sanitized readiness rejection", async () => {
+  const f = fixture();
+  const secret = "postgresql://private-user:private-password@private-host/private-database";
+  f.deps.readRuntimeSnapshot.mockRejectedValueOnce(
+    Object.assign(new Error(secret), { code: "42501" }),
+  );
+  const log = vi.spyOn(console, "info").mockImplementation(() => {});
+  try {
+    await expect(f.verify(f.input)).rejects.toThrow("hosted_app_runtime_readiness_unconfirmed");
+    expect(log.mock.calls).toContainEqual([
+      "[builder:hosted-neon-consent]",
+      expect.objectContaining({
+        executionFailure: {
+          stage: "final_runtime_readiness",
+          errorClass: "unexpected",
+          sqlState: "42501",
+          runtimeReadinessStage: "runtime_connection",
+        },
+      }),
+    ]);
+    expect(JSON.stringify(log.mock.calls)).not.toContain(secret);
+  } finally {
+    log.mockRestore();
+  }
+});
+it.each([
+  "authority",
+  "release_manifest",
+  "runtime_credential",
+  "runtime_identity",
+  "actor_binding",
+  "runtime_context",
+  "runtime_release",
+] as const)("identifies the existing %s substep without changing its failure", async (stage) => {
+  const f = fixture();
+  const error = new TypeError("private-runtime-failure");
+  if (stage === "authority") {
+    f.input.assertCurrent.mockRejectedValueOnce(error);
+  } else if (stage === "release_manifest") {
+    f.deps.readReleaseManifest.mockRejectedValueOnce(error);
+  } else if (stage === "runtime_credential") {
+    f.deps.readRuntimeUrl.mockRejectedValueOnce(error);
+  } else if (stage === "runtime_identity") {
+    f.reader.readIdentity = () => Promise.reject(error);
+  } else {
+    f.reader.readOrganization = (_scope, observeStage) => {
+      observeStage?.(stage);
+      return Promise.reject(error);
+    };
+  }
+  const log = vi.spyOn(console, "info").mockImplementation(() => {});
+  try {
+    await expect(f.verify(f.input)).rejects.toThrow("hosted_app_runtime_readiness_unconfirmed");
+    expect(log.mock.calls).toContainEqual([
+      "[builder:hosted-neon-consent]",
+      expect.objectContaining({
+        executionFailure: {
+          stage: "final_runtime_readiness",
+          runtimeReadinessStage: stage,
+          errorClass: "type_error",
+        },
+      }),
+    ]);
+    expect(JSON.stringify(log.mock.calls)).not.toContain(error.message);
+  } finally {
+    log.mockRestore();
+  }
+});
 it("independently reads each exact approved organization without exposing credentials", async () => {
   const f = fixture();
   const proof = await f.verify(f.input);

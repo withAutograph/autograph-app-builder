@@ -56,6 +56,7 @@ import { openHostedOperatorCompositionResources } from "./hosted-operator-source
 import {
   reportOperatorPlanningMismatch,
   observeOperatorPlanStage,
+  observeOperatorExecutionStage,
 } from "./hosted-operator-consent-diagnostic";
 import { createProjectSettingsSuccessorPlan } from "./hosted-operator-project-settings-successor";
 import { createInstallerSourceSuccessorPlan } from "./hosted-operator-installer-source-successor";
@@ -2316,42 +2317,52 @@ export const composeHostedOperatorDependencies = (
       ) {
         throw new HostedOperatorError(RECONCILIATION_REQUIRED);
       }
-      await readHostedOperatorProviderInventory({
-        assertCurrentOwner: async () => {
-          await controlPlane.assertAuthorized(input);
-          await privateBindings(input);
-        },
-        configuration: {
-          app: {
-            branch: app.branch,
-            deploymentId: app.deploymentId,
-            environment: "preview",
-            projectId: app.projectId,
-          },
-          gateway: {
-            branch: gateway.branch,
-            deploymentId: gateway.deploymentId,
-            environment: "preview",
-            projectId: gateway.projectId,
-          },
-          operator: configuration.operator,
-          verification: {
-            gatewayOrigin: gateway.origin,
-            publicOrigin: input.plan.deploymentBoundary.verification.publicOrigin,
-          },
-        },
-        context: input,
-        approvedAppBranch: input.plan.deploymentBoundary.app.branch,
-        readVercelCredential: async ({ authority, installationId }) =>
-          await controlPlane.readCredential(authority, installationId),
-      });
-      return await appReadiness({
-        ...input,
-        assertCurrent: async () => {
-          await controlPlane.assertAuthorized(input);
-          await privateBindings(input);
-        },
-      });
+      await observeOperatorExecutionStage(
+        input.target.sessionId,
+        "final_inventory_readback",
+        async () =>
+          await readHostedOperatorProviderInventory({
+            assertCurrentOwner: async () => {
+              await controlPlane.assertAuthorized(input);
+              await privateBindings(input);
+            },
+            configuration: {
+              app: {
+                branch: app.branch,
+                deploymentId: app.deploymentId,
+                environment: "preview",
+                projectId: app.projectId,
+              },
+              gateway: {
+                branch: gateway.branch,
+                deploymentId: gateway.deploymentId,
+                environment: "preview",
+                projectId: gateway.projectId,
+              },
+              operator: configuration.operator,
+              verification: {
+                gatewayOrigin: gateway.origin,
+                publicOrigin: input.plan.deploymentBoundary.verification.publicOrigin,
+              },
+            },
+            context: input,
+            approvedAppBranch: input.plan.deploymentBoundary.app.branch,
+            readVercelCredential: async ({ authority, installationId }) =>
+              await controlPlane.readCredential(authority, installationId),
+          }),
+      );
+      return await observeOperatorExecutionStage(
+        input.target.sessionId,
+        "final_runtime_readiness",
+        async () =>
+          await appReadiness({
+            ...input,
+            assertCurrent: async () => {
+              await controlPlane.assertAuthorized(input);
+              await privateBindings(input);
+            },
+          }),
+      );
     },
     verifyAuthReadiness: async (input) => await authReadiness.verify(input),
     verifyNormalActorAccounts: async (input) => await controlPlane.verifyNormalActorAccounts(input),
