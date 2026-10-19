@@ -886,6 +886,9 @@ it.each([
         };
         break;
       }
+      default: {
+        throw new Error("Unsupported test policy state.");
+      }
     }
     f.setFailedPatch("project_settings", "not_found");
     await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
