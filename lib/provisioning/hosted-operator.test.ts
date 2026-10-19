@@ -2616,7 +2616,7 @@ describe("approved retention renewal planning", () => {
               approvedByCallId: "original-approved-call",
               approvalId: "durable-human-decision",
               effectId: pendingEffectId,
-              kind: pendingEffectId,
+              kind: pendingKind,
               operationRef,
               pendingEffectAttempt: {
                 id: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799",
