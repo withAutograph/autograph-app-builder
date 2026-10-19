@@ -273,12 +273,16 @@ describe("dedicated-session protected resource lease", () => {
     expect(hostedOperatorVercelProjectLockKeys(external, context.target.scopeId)).toEqual(
       hostedOperatorVercelProjectLockKeys(legacy, context.target.scopeId),
     );
+    const boundary = legacy.deploymentBoundary;
+    if (boundary === undefined) {
+      throw new Error("fixture deployment boundary missing");
+    }
     const otherApp = hostedOperatorPlanSchema.parse({
       ...legacy,
       selection: { ...legacy.selection, projectId: "other-app" },
       deploymentBoundary: {
-        ...legacy.deploymentBoundary,
-        app: { ...legacy.deploymentBoundary!.app, projectId: "other-app" },
+        ...boundary,
+        app: { ...boundary.app, projectId: "other-app" },
       },
     });
     const shared = hostedOperatorVercelProjectLockKeys(legacy, context.target.scopeId).filter(
@@ -451,7 +455,9 @@ describe("dedicated-session protected resource lease", () => {
     release.resolve(null);
     await expect(pending).rejects.toThrow("fence is stale");
     expect(callback).not.toHaveBeenCalled();
-    expect(test.acquired).toHaveLength(6 + hostedOperatorVercelProjectLockKeys(test.input.plan, context.target.scopeId).length);
+    expect(test.acquired).toHaveLength(
+      6 + hostedOperatorVercelProjectLockKeys(test.input.plan, context.target.scopeId).length,
+    );
     expect(test.events.at(-1)).toBe("end");
   });
 
