@@ -1,3 +1,4 @@
+import type { MessageStreamEvent } from "eve/client";
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { createHostedReadTrace } from "./hosted-read-diagnostic";
@@ -5,7 +6,147 @@ import type { HostedReadDiagnosticSink } from "./hosted-read-diagnostic";
 
 const secret = "private-session https://provider.example/?token=private password=private";
 
+type RequestedEvent = Extract<MessageStreamEvent, { type: "actions.requested" }>;
+type ResultEvent = Extract<MessageStreamEvent, { type: "action.result" }>;
+const requested = (toolName: string, workflow = false): RequestedEvent => ({
+  data: {
+    actions: [
+      workflow
+        ? {
+            callId: secret,
+            input: { secret },
+            kind: "workflow-tool-call",
+            toolName,
+            workflowId: secret,
+          }
+        : { callId: secret, input: { secret }, kind: "tool-call", toolName },
+    ],
+    sequence: 1,
+    stepIndex: 1,
+    turnId: secret,
+  },
+  meta: { at: "2026-10-19T18:00:00.000Z", id: secret },
+  type: "actions.requested",
+});
+const result = (toolName: string, status: "completed" | "failed" | "rejected"): ResultEvent => ({
+  data: {
+    error: { code: secret, message: secret },
+    result: { callId: secret, kind: "tool-result", output: { code: "blocked", secret }, toolName },
+    sequence: 2,
+    status,
+    stepIndex: 1,
+    turnId: secret,
+  },
+  meta: { at: "2026-10-19T18:00:01.000Z", id: secret },
+  type: "action.result",
+});
+
 describe("safe hosted read trace", () => {
+  it("counts actual tool and workflow action metadata without reading private fields", () => {
+    const sink = vi.fn<HostedReadDiagnosticSink>();
+    const trace = createHostedReadTrace({ sessionId: secret, sink });
+    const getter = vi.fn(() => {
+      throw new Error(secret);
+    });
+    const events = [
+      requested("prepare_workspace"),
+      requested(secret, true),
+      result("resolve_github_source", "completed"),
+      result(secret, "failed"),
+      result(secret, "rejected"),
+    ];
+    for (const event of events) {
+      if (event.type === "actions.requested") {
+        Object.defineProperty(event.data.actions[0], "input", { get: getter });
+        Object.defineProperty(event.data.actions[0], "workflowId", { get: getter });
+      } else {
+        for (const key of ["output", "isError", "callId"]) {
+          Object.defineProperty(event.data.result, key, { get: getter });
+        }
+        Object.defineProperty(event.data, "error", { get: getter });
+      }
+      trace.observeNativeAction(event);
+    }
+    trace.completed();
+    expect(getter).not.toHaveBeenCalled();
+    expect(sink.mock.calls[0]?.[0]).toMatchObject({
+      toolRequested: 2,
+      toolCompleted: 1,
+      toolFailed: 1,
+      prepareWorkspaceRequested: 1,
+      resolveGithubSourceCompleted: 1,
+    });
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+    expect(JSON.stringify(sink.mock.calls)).not.toContain("blocked");
+    const fresh = createHostedReadTrace({ sessionId: secret, sink });
+    fresh.completed();
+    expect(sink.mock.calls[1]?.[0]).toMatchObject({
+      toolRequested: 0,
+      toolCompleted: 0,
+      toolFailed: 0,
+    });
+  });
+
+  it("projects unknown and hostile tool names only into numeric aggregates at the existing log sink", () => {
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const trace = createHostedReadTrace({ sessionId: secret });
+      for (const name of [secret, "__proto__", "constructor", "unknown future tool"]) {
+        trace.observeNativeAction(requested(name));
+        trace.observeNativeAction(result(name, "completed"));
+        trace.observeNativeAction(result(name, "failed"));
+      }
+      trace.completed();
+      expect(log.mock.calls[0]?.[1]).toMatchObject({
+        toolRequested: 4,
+        toolCompleted: 4,
+        toolFailed: 4,
+        prepareWorkspaceRequested: 0,
+        resolveGithubSourceRequested: 0,
+      });
+      const serialized = JSON.stringify(log.mock.calls);
+      for (const name of [secret, "__proto__", "constructor", "unknown future tool"]) {
+        expect(serialized).not.toContain(name);
+      }
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("ignores accessor or proxy metadata without invoking it and continues counting valid events", () => {
+    const sink = vi.fn<HostedReadDiagnosticSink>();
+    const trace = createHostedReadTrace({ sessionId: secret, sink });
+    const getter = vi.fn(() => {
+      throw new Error(secret);
+    });
+    const event = requested("prepare_workspace");
+    Object.defineProperty(event, "data", { get: getter });
+    const badKind = requested("prepare_workspace");
+    Object.defineProperty(badKind.data.actions[0], "kind", { get: getter });
+    const badName = requested("prepare_workspace");
+    Object.defineProperty(badName.data.actions[0], "toolName", { get: getter });
+    const badStatus = result("prepare_workspace", "completed");
+    Object.defineProperty(badStatus.data, "status", { get: getter });
+    const revoked = Proxy.revocable(requested("prepare_workspace"), {});
+    revoked.revoke();
+    for (const value of [event, badKind, badName, badStatus, revoked.proxy]) {
+      expect(() => {
+        trace.observeNativeAction(value);
+      }).not.toThrow();
+    }
+    trace.observeNativeAction(result("resolve_github_source", "completed"));
+    trace.completed();
+    expect(getter).not.toHaveBeenCalled();
+    expect(sink.mock.calls[0]?.[0]).toMatchObject({
+      toolRequested: 1,
+      toolCompleted: 1,
+      toolFailed: 0,
+      prepareWorkspaceRequested: 0,
+      resolveGithubSourceCompleted: 1,
+    });
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
+
   it("reports an existing signal timeout while a private callback remains held", async () => {
     let now = 0;
     const sink = vi.fn<HostedReadDiagnosticSink>();
@@ -135,6 +276,9 @@ describe("safe hosted read trace", () => {
       prepareWorkspaceRequested: 0,
       privateCallbacks: 0,
       publicSpoolEvents: 0,
+      toolRequested: 0,
+      toolCompleted: 0,
+      toolFailed: 0,
       resolveGithubSourceCompleted: 0,
       resolveGithubSourceFailed: 0,
       resolveGithubSourceRequested: 0,

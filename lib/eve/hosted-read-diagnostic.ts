@@ -20,6 +20,9 @@ const counterSchema = z.enum([
   "decodedEvents",
   "privateCallbacks",
   "publicSpoolEvents",
+  "toolRequested",
+  "toolCompleted",
+  "toolFailed",
   "prepareWorkspaceRequested",
   "prepareWorkspaceCompleted",
   "prepareWorkspaceFailed",
@@ -53,6 +56,22 @@ const nativeActionCounter = (
   } as const;
   return counters[toolName][status];
 };
+// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- Untrusted advisory metadata is read only from own data descriptors; accessors and arbitrary values are never logged.
+const ownActionMetadata = (value: unknown, key: string): unknown => {
+  try {
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Only object descriptors may supply the closed native metadata fields.
+    return value !== null && typeof value === "object"
+      ? Object.getOwnPropertyDescriptor(value, key)?.value
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
+const genericActionCounters = {
+  requested: "toolRequested",
+  completed: "toolCompleted",
+  failed: "toolFailed",
+} as const;
 const failureCategory = {
   authority: "authority_failure",
   checkpoint: "checkpoint_failure",
@@ -88,6 +107,9 @@ export interface HostedReadDiagnostic {
   decodedEvents: number;
   privateCallbacks: number;
   publicSpoolEvents: number;
+  toolRequested: number;
+  toolCompleted: number;
+  toolFailed: number;
   prepareWorkspaceRequested: number;
   prepareWorkspaceCompleted: number;
   prepareWorkspaceFailed: number;
@@ -129,6 +151,9 @@ export const createHostedReadTrace = (input: {
     prepareWorkspaceRequested: 0,
     privateCallbacks: 0,
     publicSpoolEvents: 0,
+    toolRequested: 0,
+    toolCompleted: 0,
+    toolFailed: 0,
     resolveGithubSourceCompleted: 0,
     resolveGithubSourceFailed: 0,
     resolveGithubSourceRequested: 0,
@@ -199,23 +224,51 @@ export const createHostedReadTrace = (input: {
       emit(expired ? "timeout" : "failed");
     },
     increment,
-    /** Counts only consumed native metadata; cursor bounds describe this observation's interval. */
+    /** Counts consumed native metadata in this read interval; completed is not business success or a liveness signal. */
     observeNativeAction(event: MessageStreamEvent) {
       try {
-        const count = (toolName: string, status: string) => {
-          const counter = nativeActionCounter(toolName, status);
-          if (counter !== undefined) {
-            increment(counter);
-          }
-        };
-        if (event.type === "actions.requested") {
-          for (const action of event.data.actions) {
-            if (action.kind === "tool-call" || action.kind === "workflow-tool-call") {
-              count(action.toolName, "requested");
+        const count = (
+          // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The native action descriptor is projected to closed numeric counters, never retained.
+          action: unknown,
+          status: keyof typeof genericActionCounters,
+        ) => {
+          increment(genericActionCounters[status]);
+          const toolName = ownActionMetadata(action, "toolName");
+          if (toolName === "prepare_workspace" || toolName === "resolve_github_source") {
+            const counter = nativeActionCounter(toolName, status);
+            if (counter !== undefined) {
+              increment(counter);
             }
           }
-        } else if (event.type === "action.result" && event.data.result.kind === "tool-result") {
-          count(event.data.result.toolName, event.data.status);
+        };
+        const type = ownActionMetadata(event, "type");
+        const data = ownActionMetadata(event, "data");
+        if (type === "actions.requested") {
+          const actions = ownActionMetadata(data, "actions");
+          const length = ownActionMetadata(actions, "length");
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- The array's own length bounds indexed metadata, without invoking its iterator or accessors.
+          if (!Array.isArray(actions) || typeof length !== "number") {
+            return;
+          }
+          for (const index of Object.keys(actions)) {
+            if (!/^(?:0|[1-9][0-9]*)$/u.test(index) || Number(index) >= length) {
+              continue;
+            }
+            const action = ownActionMetadata(actions, index);
+            const kind = ownActionMetadata(action, "kind");
+            if (kind === "tool-call" || kind === "workflow-tool-call") {
+              count(action, "requested");
+            }
+          }
+        } else if (type === "action.result") {
+          const result = ownActionMetadata(data, "result");
+          const status = ownActionMetadata(data, "status");
+          if (
+            ownActionMetadata(result, "kind") === "tool-result" &&
+            (status === "completed" || status === "failed")
+          ) {
+            count(result, status);
+          }
         }
       } catch {
         /* Malformed diagnostic metadata must never change stream behavior. */
