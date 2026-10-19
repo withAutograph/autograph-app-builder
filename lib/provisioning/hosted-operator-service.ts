@@ -1699,6 +1699,11 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
             }
             const claimedRecord = {
               ...record,
+              // A new approved attempt verifies under its live lease. Completed
+              // resource reads remain idle-only until this attempt settles.
+              ...(plan.action === "prepare" && record.status === "prepared"
+                ? { status: "pending" as const }
+                : {}),
               approvedByCallId: input.callId,
               leaseExpiresAt: new Date(now() + 60_000).toISOString(),
               leaseId,

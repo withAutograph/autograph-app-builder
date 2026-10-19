@@ -237,11 +237,22 @@ const inContext = async <T>(run: (store: Map<string, unknown>) => T | Promise<T>
   return await stateStorage.run(store, async () => await run(store));
 };
 const retainedReference = () => ({ appId, operationRef, planDigest });
-const runPreparationStep = async (observed: boolean) =>
+const runPreparationStep = async (
+  observed: boolean,
+  terminalStatus: "prepared" | "waiting_for_signup" = "prepared",
+) =>
   await inContext(async (stepState) => {
+    const terminalOutput =
+      terminalStatus === "waiting_for_signup"
+        ? output({
+            appUrl: "https://apps-preview.example.test/spend-review",
+            signupUrl: "https://apps-preview.example.test/auth/sign-up",
+            status: terminalStatus,
+          })
+        : output({ status: terminalStatus });
     const operator = {
       authIdentityInput: vi.fn(),
-      request: vi.fn().mockResolvedValue(output()),
+      request: vi.fn().mockResolvedValue(terminalOutput),
       sessionId: publicSessionId,
     };
     const result = await prepareHostedRuntimeWithOperator(
@@ -262,9 +273,21 @@ const runPreparationStep = async (observed: boolean) =>
           error instanceof HostedOperatorError,
         sameSelection: sameOperatorSelection,
       },
-      ...(observed ? [output()] : []),
+      ...(observed ? [terminalOutput] : []),
     );
-    expect(result.result).toMatchObject({ appId, operationRef, planDigest, status: "prepared" });
+    expect(result.result).toMatchObject({
+      appId,
+      authenticatedBehavior: "unassessed",
+      operationRef,
+      planDigest,
+      status: terminalStatus,
+    });
+    if (terminalStatus === "waiting_for_signup") {
+      expect(result.result).toMatchObject({
+        appUrl: "https://apps-preview.example.test/spend-review",
+        signupUrl: "https://apps-preview.example.test/auth/sign-up",
+      });
+    }
     expect(preparedRuntimeSelections.get()[appId]).toMatchObject({
       appId,
       operationRef,
@@ -318,10 +341,17 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("hosted runtime selection handoff across Eve contexts", () => {
-  it.each(["immediate", "observed"] as const)(
+  it.each([
+    ["immediate", "prepared"],
+    ["observed", "prepared"],
+    ["signup-ready", "waiting_for_signup"],
+  ] as const)(
     "rebinds the %s step result in its owner context before native Preview",
-    async (mode) => {
-      const { output: toolOutput, stepState } = await runPreparationStep(mode === "observed");
+    async (mode, terminalStatus) => {
+      const { output: toolOutput, stepState } = await runPreparationStep(
+        mode === "observed",
+        terminalStatus,
+      );
       const ownerState = new Map<string, unknown>();
       expect(stepState).not.toBe(ownerState);
 
