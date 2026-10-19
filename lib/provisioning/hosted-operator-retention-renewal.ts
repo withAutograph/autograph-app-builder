@@ -130,7 +130,9 @@ const renewalPlanFrom = (prior: HostedOperatorPlan, expiresAt: string) => {
         : {}),
     },
     effects: prior.effects.map((effect) => {
-      if (prior.hostProtection !== undefined) return effect;
+      if (prior.hostProtection !== undefined) {
+        return effect;
+      }
       if (effect.kind === "bindings") {
         return { ...effect, description: RENEWED_BINDINGS_DESCRIPTION };
       }

@@ -5,10 +5,8 @@ import type {
   OperatorDeploymentCandidate,
 } from "./hosted-operator-contract";
 import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
-import {
-  readyDeliveryReplacementIntentSchema,
-  type ReadyDeliveryReplacementIntent,
-} from "./hosted-operator-ready-delivery-replacement-intent";
+import { readyDeliveryReplacementIntentSchema } from "./hosted-operator-ready-delivery-replacement-intent";
+import type { ReadyDeliveryReplacementIntent } from "./hosted-operator-ready-delivery-replacement-intent";
 import { retentionRenewalDeliveryProvenance } from "./hosted-operator-retention-renewal";
 import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
 

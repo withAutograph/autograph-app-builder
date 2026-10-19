@@ -10,6 +10,7 @@ import type {
 import type { HostedEveStore } from "../eve/hosted-store";
 import { projectSettingsDeliveryProvenance } from "./hosted-operator-project-settings-successor";
 import { retentionRenewalDeliveryProvenance } from "./hosted-operator-retention-renewal";
+import { readyReplacementPriorOperators } from "./hosted-operator-native-preview-recovery";
 import { hostedSessionRecordSchema, toDurableHostedSessionRecord } from "../eve/hosted-store";
 import { hostedPrincipalSchema } from "../eve/hosted-auth";
 import type { HostedPrincipal } from "../eve/hosted-auth";
@@ -599,6 +600,26 @@ const retentionRenewalApprovalCheckpoint = (
       };
 };
 
+/** Resolve only the validated READY replacement lineage; the caller still verifies
+ * the canonical owner's private terminal receipt against this exact checkpoint. */
+const readyReplacementApprovalCheckpoint = (
+  record: HostedRuntimeJournalRecord | undefined,
+  context: { action: "prepare" | "cleanup"; callId: string; planDigest: string },
+) => {
+  const current = record?.operator;
+  if (context.action !== "prepare" || record === undefined || current === undefined) {
+    return null;
+  }
+  const retained = readyReplacementPriorOperators(record, current.plan).find(
+    (prior) =>
+      prior.operator.planDigest === context.planDigest &&
+      prior.approvedByCallId === context.callId &&
+      prior.operator.approvalId !== undefined &&
+      prior.operator.operationRef === current.operationRef,
+  );
+  return retained === undefined ? null : { current: retained.operator, retainedPrepare: true };
+};
+
 const accountApprovalCheckpoint = (
   record: HostedRuntimeJournalRecord | undefined,
   context: { action: "prepare" | "cleanup"; callId: string; planDigest: string },
@@ -648,6 +669,10 @@ const approvalCheckpoint = (
   const retainedRenewal = retentionRenewalApprovalCheckpoint(record, context);
   if (retainedRenewal !== null) {
     return retainedRenewal;
+  }
+  const retainedReady = readyReplacementApprovalCheckpoint(record, context);
+  if (retainedReady !== null) {
+    return retainedReady;
   }
   const retained = record?.retainedAuth;
   const retainedPrepare =

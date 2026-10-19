@@ -813,8 +813,9 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
           prior.pendingEffectId === input.effect.id &&
           prior.pendingEffectAttempt !== undefined,
       )
-    )
+    ) {
       return false;
+    }
     const { priorAppDelivery } = input;
     if (priorAppDelivery === undefined) {
       return true;
@@ -861,7 +862,9 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       if (aliasAuthority === "applied") {
         return await reconcile({ ...input, deliveryCandidates: candidates });
       }
-      if (aliasAuthority === "unknown") return { candidates, status: "unknown" as const };
+      if (aliasAuthority === "unknown") {
+        return { candidates, status: "unknown" as const };
+      }
       await fresh.assertCurrent();
     } catch {
       // No assignment was dispatched; a later corrected read may safely try again.

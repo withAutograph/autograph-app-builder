@@ -567,7 +567,9 @@ const handlePlanOperation = async (
     async () => {
       if (input.operation === "prepare") {
         const replacement = await deps.readReadyDeliveryReplacementPlan?.(context);
-        if (replacement !== undefined) return replacement;
+        if (replacement !== undefined) {
+          return replacement;
+        }
       }
       if (
         input.operation === "prepare" &&
@@ -675,8 +677,9 @@ const handlePlanOperation = async (
         successorPrior.record,
         plan.appDeliveryReplacement,
       );
-      if (!predecessor || !deps.verifyReadyDeliveryReplacement)
+      if (!predecessor || !deps.verifyReadyDeliveryReplacement) {
         throw new HostedOperatorError("reconciliation_required");
+      }
       const original = await deps.readApproval({
         ...context,
         action: "prepare",
@@ -684,13 +687,14 @@ const handlePlanOperation = async (
         planDigest: predecessor.originatingOperator.planDigest,
       });
       if (
-        !original?.approved ||
+        original?.approved !== true ||
         original.approvalId !== predecessor.originatingOperator.approvalId ||
         original.callId !== predecessor.approvedByCallId ||
         original.planDigest !== predecessor.originatingOperator.planDigest ||
         original.action !== "prepare"
-      )
+      ) {
         throw new HostedOperatorError("authorization_required");
+      }
       await deps.verifyReadyDeliveryReplacement(context, plan, predecessor);
     }
   };
@@ -851,8 +855,9 @@ const handlePlanOperation = async (
               { ...plan, appDeliveryReplacement: plan.appDeliveryReplacement },
               now(),
             );
-          if (readySuccessor && !readyDeliverySuccessor)
+          if (readySuccessor && !readyDeliverySuccessor) {
             throw new HostedOperatorError("operation_in_progress");
+          }
           if (settingsSuccessor && !projectSettingsSuccessor) {
             throw new HostedOperatorError("operation_in_progress");
           }
@@ -2093,23 +2098,28 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 (effect.kind === "delivery" || effect.kind === GATEWAY_DELIVERY_EFFECT)
               ) {
                 const predecessor = readyReplacementHistory(record, plan, now());
-                if (!predecessor) throw new HostedOperatorError("reconciliation_required");
-                for (const prior of readyReplacementPriorOperators(record, plan, now())) {
-                  const original = await deps.readApproval({
-                    ...context,
-                    action: "prepare",
-                    callId: prior.approvedByCallId,
-                    planDigest: prior.operator.planDigest,
-                  });
-                  if (
-                    !original?.approved ||
-                    original.approvalId !== prior.operator.approvalId ||
-                    original.callId !== prior.approvedByCallId ||
-                    original.planDigest !== prior.operator.planDigest ||
-                    original.action !== "prepare"
-                  )
-                    throw new HostedOperatorError("authorization_required");
+                if (!predecessor) {
+                  throw new HostedOperatorError("reconciliation_required");
                 }
+                await Promise.all(
+                  readyReplacementPriorOperators(record, plan, now()).map(async (prior) => {
+                    const original = await deps.readApproval({
+                      ...context,
+                      action: "prepare",
+                      callId: prior.approvedByCallId,
+                      planDigest: prior.operator.planDigest,
+                    });
+                    if (
+                      original?.approved !== true ||
+                      original.approvalId !== prior.operator.approvalId ||
+                      original.callId !== prior.approvedByCallId ||
+                      original.planDigest !== prior.operator.planDigest ||
+                      original.action !== "prepare"
+                    ) {
+                      throw new HostedOperatorError("authorization_required");
+                    }
+                  }),
+                );
                 effectInput.readyReplacement = {
                   originatingOperator: predecessor.originatingOperator,
                   appCandidate: predecessor.appCandidate,

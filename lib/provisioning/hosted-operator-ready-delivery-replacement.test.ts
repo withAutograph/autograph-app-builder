@@ -1,14 +1,20 @@
+import { z } from "zod";
 import { describe, expect, it, vi } from "vitest";
-import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
-import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
+import {
+  hostedOperatorPlanSchema,
+  operatorPlanDigest,
+  operatorPublicResultSchema,
+} from "./hosted-operator-contract";
+import type {
+  HostedRuntimeJournalRecord,
+  HostedRuntimeJournalStore,
+} from "./hosted-runtime-journal";
 import {
   createRetentionRenewalPlan,
   retentionRenewalDeliveryProvenance,
 } from "./hosted-operator-retention-renewal";
-import {
-  readyDeliveryReplacementIntentSchema,
-  type ReadyDeliveryReplacementIntent,
-} from "./hosted-operator-ready-delivery-replacement-intent";
+import type { ReadyDeliveryReplacementIntent } from "./hosted-operator-ready-delivery-replacement-intent";
+import { readyDeliveryReplacementIntentSchema } from "./hosted-operator-ready-delivery-replacement-intent";
 import {
   isReadyDeliveryReplacementSuccessor,
   resolveReadyDeliveryReplacementPredecessor,
@@ -23,9 +29,11 @@ import type { ProtectedHostedOperatorDependencies } from "./hosted-operator-serv
 import { createHostedOperatorDeploymentDelivery } from "./hosted-operator-deployment-delivery";
 import { createReadyReplacementNativeReader } from "./hosted-operator-ready-replacement-native";
 import { hostedRuntimeJournalRecordSchema } from "./hosted-runtime-journal";
-import type { HostedRuntimeJournalStore } from "./hosted-runtime-journal";
 import type { ExternallyManagedTrustedSources } from "./hosted-operator-host-protection";
 import { publicApprovalDescription } from "../agent/approval-receipt";
+
+const readOperatorResponse = async (response: Response) =>
+  operatorPublicResultSchema.parse(await response.json());
 
 const externalPolicy: ExternallyManagedTrustedSources = {
   mode: "externally-managed-trusted-sources",
@@ -360,7 +368,9 @@ describe("native externally managed policy recovery integration", () => {
         read: async () => structuredClone(row),
         reserve: async () => structuredClone(row),
         compareAndSet: async (input) => {
-          if (input.expectedRevision !== row.revision) return undefined;
+          if (input.expectedRevision !== row.revision) {
+            return undefined;
+          }
           row = {
             record: hostedRuntimeJournalRecordSchema.parse(input.record),
             revision: row.revision + 1,
@@ -376,7 +386,7 @@ describe("native externally managed policy recovery integration", () => {
       const ordinary = structuredClone(f.record.operator!.plan);
       if (planningCase === "unapproved-expired-replacement") {
         delete ordinary.appDeliveryReplacement;
-        ordinary.retention.expiresAt = new Date(now + 86400000).toISOString();
+        ordinary.retention.expiresAt = new Date(now + 86_400_000).toISOString();
         ordinary.delivery!.gitSha = "7".repeat(40);
       }
       const plan = vi.fn(async () => structuredClone(ordinary));
@@ -388,8 +398,9 @@ describe("native externally managed policy recovery integration", () => {
         authorize: async () => context,
         assertAuthorized: async () => {},
         plan,
-        ...(planningCase !== "approved-default"
-          ? {
+        ...(planningCase === "approved-default"
+          ? {}
+          : {
               readReadyDeliveryReplacementPlan: async () =>
                 await readNativePreviewRecoveryPlan({
                   record: row.record,
@@ -397,8 +408,7 @@ describe("native externally managed policy recovery integration", () => {
                   now,
                   readGatewayAlias,
                 }),
-            }
-          : {}),
+            }),
         readApproval: async (input) => ({ ...input, approved: true, approvalId: "approval-notes" }),
         withResourceLease: async (_input, run) => await run(async () => {}),
         reconcile: async () => ({ status: "absent" }),
@@ -408,7 +418,7 @@ describe("native externally managed policy recovery integration", () => {
           expect(input.plan.gatewayBindings!.trustedSources).toEqual(
             f.record.operator!.plan.gatewayBindings!.trustedSources,
           );
-          if (input.effect.kind === "gateway-delivery")
+          if (input.effect.kind === "gateway-delivery") {
             await input.checkpointGatewayDelivery!(
               [
                 {
@@ -423,6 +433,7 @@ describe("native externally managed policy recovery integration", () => {
               ],
               "default-gateway",
             );
+          }
           return {
             effectId: input.effect.id,
             observedAt: new Date(now).toISOString(),
@@ -450,8 +461,11 @@ describe("native externally managed policy recovery integration", () => {
       vi.spyOn(Date, "now").mockReturnValue(now);
       try {
         expect(
-          (await (await handler(request({ action: "plan", operation: "prepare" }))).json())
-            .planDigest,
+          (
+            await readOperatorResponse(
+              await handler(request({ action: "plan", operation: "prepare" })),
+            )
+          ).planDigest,
         ).toBe(operatorPlanDigest(ordinary));
         if (planningCase !== "approved-default") {
           expect(row.record.operator!.plan.hostProtection).toEqual(externalPolicy);
@@ -461,7 +475,7 @@ describe("native externally managed policy recovery integration", () => {
           expect(readGatewayAlias).not.toHaveBeenCalled();
           return;
         }
-        const result = await (
+        const result = await readOperatorResponse(
           await handler(
             request({
               action: "execute",
@@ -469,8 +483,8 @@ describe("native externally managed policy recovery integration", () => {
               operationRef,
               planDigest: oldDigest,
             }),
-          )
-        ).json();
+          ),
+        );
         expect(result.status).toBe("prepared");
         expect(row.record.operator!.planDigest).toBe(oldDigest);
         expect(row.record.operator!.retainedReadyDeliveryOperations).toBeUndefined();
@@ -562,8 +576,12 @@ describe("native externally managed policy recovery integration", () => {
         resourceVersion: "reserved-owned-row",
       }));
       operator.retainedRenewalOperations = [];
-      if (state === "missing-attempt") delete operator.pendingEffectAttempt;
-      if (state === "unapproved") record.approvedByCallId = "operator:unapproved-plan";
+      if (state === "missing-attempt") {
+        delete operator.pendingEffectAttempt;
+      }
+      if (state === "unapproved") {
+        record.approvedByCallId = "operator:unapproved-plan";
+      }
       if (state === "no-marker") {
         delete operator.pendingEffectId;
         delete operator.pendingEffectAttempt;
@@ -587,16 +605,23 @@ describe("native externally managed policy recovery integration", () => {
     (change) => {
       const f = recoveryFixture();
       const plan = structuredClone(f.proposed);
-      if (change === "team") plan.hostProtection!.teamId = "foreign-team";
-      if (change === "app") plan.hostProtection!.appPreview.targetProjectId = "foreign-app";
-      if (change === "gateway")
+      if (change === "team") {
+        plan.hostProtection!.teamId = "foreign-team";
+      }
+      if (change === "app") {
+        plan.hostProtection!.appPreview.targetProjectId = "foreign-app";
+      }
+      if (change === "gateway") {
         plan.hostProtection!.gatewayPreview.sourceProjectId = "foreign-source";
-      if (change === "environment")
+      }
+      if (change === "environment") {
         Object.assign(plan.hostProtection!.appPreview, { from: "production" });
-      if (change === "policy-write")
+      }
+      if (change === "policy-write") {
         plan.appTrustedSources = {
           gatewayPreview: { projectId: "project-gateway", from: "preview", to: "preview" },
         };
+      }
       expect(hostedOperatorPlanSchema.safeParse(plan).success).toBe(false);
     },
   );
@@ -630,20 +655,30 @@ describe("native externally managed policy recovery integration", () => {
       const store: HostedRuntimeJournalStore = {
         read: vi.fn(async () => structuredClone(row)),
         reserve: vi.fn(async () => structuredClone(row)),
-        compareAndSet: vi.fn(async (input) => {
-          if (input.expectedRevision !== row.revision) return undefined;
-          row = {
-            record: hostedRuntimeJournalRecordSchema.parse(input.record),
-            revision: row.revision + 1,
-          };
-          return structuredClone(row);
-        }),
-        reserveFenceGeneration: vi.fn(async (input) => {
-          if (input.expectedRevision !== row.revision) return undefined;
-          row.record.operator!.fenceGeneration = 2;
-          row.revision++;
-          return structuredClone(row);
-        }),
+        compareAndSet: vi.fn(
+          async (input: Parameters<HostedRuntimeJournalStore["compareAndSet"]>[0]) => {
+            if (input.expectedRevision !== row.revision) {
+              return undefined;
+            }
+            row = {
+              record: hostedRuntimeJournalRecordSchema.parse(input.record),
+              revision: row.revision + 1,
+            };
+            return structuredClone(row);
+          },
+        ),
+        reserveFenceGeneration: vi.fn(
+          async (
+            input: Parameters<NonNullable<HostedRuntimeJournalStore["reserveFenceGeneration"]>>[0],
+          ) => {
+            if (input.expectedRevision !== row.revision) {
+              return undefined;
+            }
+            row.record.operator!.fenceGeneration = 2;
+            row.revision++;
+            return structuredClone(row);
+          },
+        ),
       };
       const raw: Record<string, Record<string, unknown>> = {};
       const metadata = (kind: string, op = f.original) => ({
@@ -693,12 +728,15 @@ describe("native externally managed policy recovery integration", () => {
         const url = new URL(input instanceof Request ? input.url : String(input));
         expect(url.origin).toBe("https://api.vercel.com");
         const method = init?.method ?? "GET";
-        const body = init?.body
-          ? (JSON.parse(String(init.body)) as Record<string, unknown>)
-          : undefined;
+        const body =
+          init?.body === undefined
+            ? undefined
+            : z.record(z.string(), z.unknown()).parse(JSON.parse(z.string().parse(init.body)));
         calls.push({ method, path: url.pathname, body });
         if (url.pathname.startsWith("/v4/aliases/")) {
-          if (guardReadUnavailable) throw new Error("synthetic transient alias guard GET failure");
+          if (guardReadUnavailable) {
+            throw new Error("synthetic transient alias guard GET failure");
+          }
           return Response.json({
             alias: "notes.example.test",
             projectId: "project-gateway",
@@ -718,25 +756,34 @@ describe("native externally managed policy recovery integration", () => {
             },
           });
         }
-        if (url.pathname.startsWith("/v2/teams/"))
+        if (url.pathname.startsWith("/v2/teams/")) {
           return Response.json({ id: "team-notes", slug: "notes" });
-        if (url.pathname === "/v7/deployments")
+        }
+        if (url.pathname === "/v7/deployments") {
           return Response.json({
             deployments: Object.values(raw)
               .filter((value) => value.projectId === url.searchParams.get("projectId"))
               .map((value) => ({ uid: value.id, meta: value.meta })),
             pagination: { next: null },
           });
+        }
         if (url.pathname === "/v13/deployments" && method === "POST") {
           expect(approved).toBe(true);
           expect(body).not.toHaveProperty("target");
-          const project = String(body!.project);
+          const project = z.string().parse(body?.project);
           const app = project === "project-notes";
           expect(app ? appBound : gatewayBoundOrigin === "https://fresh-notes.example.test").toBe(
             true,
           );
           const id = app ? "fresh-notes" : "fresh-gateway";
-          const gitSource = body!.gitSource as Record<string, unknown>;
+          const gitSource = z
+            .object({
+              ref: z.string(),
+              repoId: z.string(),
+              sha: z.string(),
+              type: z.literal("github"),
+            })
+            .parse(body?.gitSource);
           raw[id] = {
             id,
             projectId: project,
@@ -748,26 +795,36 @@ describe("native externally managed policy recovery integration", () => {
             gitSource,
           };
           if (app && loseCreate) {
-            if (outcome === "expired-create-missing") delete raw[id];
-            if (outcome === "expired-create-foreign")
+            if (outcome === "expired-create-missing") {
+              Reflect.deleteProperty(raw, id);
+            }
+            if (outcome === "expired-create-foreign") {
               raw[id].meta = { autograph_operator_plan: "9".repeat(64) };
+            }
             throw new Error("synthetic lost app create acknowledgement");
           }
-          if (!app && outcome === "drift") aliasTarget = "unrelated-ready-gateway";
-          if (!app && outcome === "already-applied") aliasTarget = id;
+          if (!app && outcome === "drift") {
+            aliasTarget = "unrelated-ready-gateway";
+          }
+          if (!app && outcome === "already-applied") {
+            aliasTarget = id;
+          }
           return Response.json({ id });
         }
-        if (url.pathname.startsWith("/v13/deployments/"))
+        if (url.pathname.startsWith("/v13/deployments/")) {
           return outcome === "denied"
             ? new Response(null, { status: 403 })
             : Response.json(raw[url.pathname.split("/")[3]]);
+        }
         if (url.pathname.endsWith("/aliases") && method === "POST") {
-          if (loseAlias) throw new Error("synthetic lost alias acknowledgement");
+          if (loseAlias) {
+            throw new Error("synthetic lost alias acknowledgement");
+          }
           aliasTarget = url.pathname.split("/")[3];
           return Response.json({});
         }
         return new Response(null, { status: 404 });
-      }) as typeof fetch;
+      });
       const readCredential = vi.fn(async () => ({
         token: "synthetic-private-credential",
         binding: {
@@ -807,7 +864,9 @@ describe("native externally managed policy recovery integration", () => {
         assertEnvironment: async () => {
           expect(gatewayBoundOrigin).toBe("https://fresh-notes.example.test");
         },
-        beforeCreate: async (input) => await native.verify(input.plan, input.readyReplacement!),
+        beforeCreate: async (input) => {
+          await native.verify(input.plan, input.readyReplacement!);
+        },
         beforeAliasWrite: async (input, selected) => {
           guardReadUnavailable = failNextGuardRead;
           failNextGuardRead = false;
@@ -821,8 +880,9 @@ describe("native externally managed policy recovery integration", () => {
       const executed: string[] = [];
       let ordinaryPlan: typeof f.proposed | undefined;
       const ordinaryPlanning = vi.fn(async () => {
-        if (!ordinaryPlan)
+        if (!ordinaryPlan) {
           throw new Error("fresh generic planning must not replace this pending proposal");
+        }
         return ordinaryPlan;
       });
       const deps: ProtectedHostedOperatorDependencies = {
@@ -839,8 +899,9 @@ describe("native externally managed policy recovery integration", () => {
             now: testNow,
             readGatewayAlias: async (plan) => await native.readGatewayAlias(plan),
           }),
-        verifyReadyDeliveryReplacement: async (_context, plan, predecessor) =>
-          await native.verify(plan, predecessor),
+        verifyReadyDeliveryReplacement: async (_context, plan, predecessor) => {
+          await native.verify(plan, predecessor);
+        },
         readApproval: async (input) => ({
           ...input,
           approved: input.callId !== "new-human-call" || approved,
@@ -857,12 +918,15 @@ describe("native externally managed policy recovery integration", () => {
         reconcile: async () => ({ status: "absent" }),
         executeEffect: async (input) => {
           executed.push(input.effect.kind);
-          if (input.effect.kind === "bindings") appBound = true;
-          if (input.effect.kind === "gateway-bindings")
+          if (input.effect.kind === "bindings") {
+            appBound = true;
+          }
+          if (input.effect.kind === "gateway-bindings") {
             gatewayBoundOrigin = input.deliveryCandidates?.find(
               (candidate) =>
                 candidate.operationRef === input.operationRef && candidate.readyState === "READY",
             )?.origin;
+          }
           if (input.effect.kind === "delivery" || input.effect.kind === "gateway-delivery") {
             const delivery = input.effect.kind === "delivery" ? app : gateway;
             const result = await delivery.deliver({
@@ -875,7 +939,9 @@ describe("native externally managed policy recovery integration", () => {
                 ? input.checkpointDelivery
                 : input.checkpointGatewayDelivery)!,
             });
-            if (result.status !== "applied") throw new Error("reconciliation required");
+            if (result.status !== "applied") {
+              throw new Error("reconciliation required");
+            }
           }
           return {
             effectId: input.effect.id,
@@ -904,7 +970,7 @@ describe("native externally managed policy recovery integration", () => {
       vi.spyOn(Date, "now").mockImplementation(() => testNow);
       try {
         const planned = await handler(request({ action: "plan", operation: "prepare" }));
-        const proposed = await planned.json();
+        const proposed = await readOperatorResponse(planned);
         if (outcome === "denied") {
           expect(proposed.status).toBe("blocked");
           expect(calls.some((call) => call.method !== "GET")).toBe(false);
@@ -921,9 +987,9 @@ describe("native externally managed policy recovery integration", () => {
         const readsAfterProposal = calls.filter((call) =>
           call.path.startsWith("/v4/aliases/"),
         ).length;
-        const savedProposal = await (
-          await handler(request({ action: "plan", operation: "prepare" }))
-        ).json();
+        const savedProposal = await readOperatorResponse(
+          await handler(request({ action: "plan", operation: "prepare" })),
+        );
         expect(savedProposal.status).toBe("planned");
         expect(savedProposal.planDigest).toBe(proposed.planDigest);
         expect(savedProposal.operationRef).toBe(proposed.operationRef);
@@ -936,10 +1002,12 @@ describe("native externally managed policy recovery integration", () => {
           operationRef: proposed.operationRef,
           planDigest: proposed.planDigest,
         };
-        expect((await (await handler(request(execute))).json()).status).toBe("blocked");
+        expect((await readOperatorResponse(await handler(request(execute)))).status).toBe(
+          "blocked",
+        );
         expect(calls.filter((call) => call.method === "POST")).toHaveLength(0);
         approved = true;
-        const result = await (await handler(request(execute))).json();
+        const result = await readOperatorResponse(await handler(request(execute)));
         expect(result.status).toBe(
           outcome === "applied" || outcome === "already-applied" ? "prepared" : "blocked",
         );
@@ -953,18 +1021,18 @@ describe("native externally managed policy recovery integration", () => {
           const callsBeforeRenewal = calls.length;
           testNow = Date.parse(uncertain.plan.retention.expiresAt) + 1000;
           expect(createRetentionRenewalPlan(row.record, testNow)).toBeDefined();
-          const renewed = await (
-            await handler(request({ action: "plan", operation: "prepare" }))
-          ).json();
+          const renewed = await readOperatorResponse(
+            await handler(request({ action: "plan", operation: "prepare" })),
+          );
           expect(renewed.status).toBe("planned");
           expect(calls).toHaveLength(callsBeforeRenewal);
-          expect(renewed.plan.hostProtection).toEqual(uncertain.plan.hostProtection);
-          expect(renewed.plan.appDeliveryReplacement).toEqual(
+          expect(renewed.plan?.hostProtection).toEqual(uncertain.plan.hostProtection);
+          expect(renewed.plan?.appDeliveryReplacement).toEqual(
             uncertain.plan.appDeliveryReplacement,
           );
-          expect(renewed.plan.appTrustedSources).toBeUndefined();
-          expect(renewed.plan.gatewayBindings.trustedSources).toBeUndefined();
-          expect(renewed.plan.effects).toEqual(uncertain.plan.effects);
+          expect(renewed.plan?.appTrustedSources).toBeUndefined();
+          expect(renewed.plan?.gatewayBindings?.trustedSources).toBeUndefined();
+          expect(renewed.plan?.effects).toEqual(uncertain.plan.effects);
           expect(renewed.planDigest).not.toBe(uncertain.planDigest);
           expect(
             row.record.operator!.retainedReadyDeliveryOperations![0].operator
@@ -977,9 +1045,9 @@ describe("native externally managed policy recovery integration", () => {
               pendingEffectAttempt: uncertain.pendingEffectAttempt,
             }),
           );
-          const resumed = await (
-            await handler(request({ ...execute, planDigest: renewed.planDigest }))
-          ).json();
+          const resumed = await readOperatorResponse(
+            await handler(request({ ...execute, planDigest: renewed.planDigest })),
+          );
           expect(resumed.status).toBe(
             outcome === "expired-create-visible" ? "prepared" : "blocked",
           );
@@ -997,9 +1065,9 @@ describe("native externally managed policy recovery integration", () => {
           } else {
             expect(row.record.operator!.deliveredDeploymentId).toBeUndefined();
             expect(calls.filter((call) => call.method === "POST")).toHaveLength(1);
-            const retried = await (
-              await handler(request({ ...execute, planDigest: renewed.planDigest }))
-            ).json();
+            const retried = await readOperatorResponse(
+              await handler(request({ ...execute, planDigest: renewed.planDigest })),
+            );
             expect(retried.status).toBe("blocked");
             expect(calls.filter((call) => call.method === "POST")).toHaveLength(1);
           }
@@ -1043,7 +1111,7 @@ describe("native externally managed policy recovery integration", () => {
           expect(
             calls.filter((call) => call.path.endsWith("/aliases") && call.method === "POST"),
           ).toHaveLength(0);
-          const resumed = await (await handler(request(execute))).json();
+          const resumed = await readOperatorResponse(await handler(request(execute)));
           expect(resumed.status).toBe("prepared");
           expect(aliasTarget).toBe("fresh-gateway");
           expect(
@@ -1053,10 +1121,11 @@ describe("native externally managed policy recovery integration", () => {
             calls.filter((call) => call.path === "/v13/deployments" && call.method === "POST"),
           ).toHaveLength(2);
         }
-        if (outcome === "already-applied")
+        if (outcome === "already-applied") {
           expect(
             calls.filter((call) => call.path.endsWith("/aliases") && call.method === "POST"),
           ).toHaveLength(0);
+        }
         expect(
           row.record.operator!.retainedReadyDeliveryOperations![0].operator
             .retainedRenewalOperations,
@@ -1079,16 +1148,16 @@ describe("native externally managed policy recovery integration", () => {
           const readsBeforeRevision = calls.filter((call) =>
             call.path.startsWith("/v4/aliases/"),
           ).length;
-          const revised = await (
-            await handler(request({ action: "plan", operation: "prepare" }))
-          ).json();
+          const revised = await readOperatorResponse(
+            await handler(request({ action: "plan", operation: "prepare" })),
+          );
           expect(calls.filter((call) => call.path.startsWith("/v4/aliases/"))).toHaveLength(
             readsBeforeRevision,
           );
           expect(revised.status).toBe("planned");
-          expect(revised.plan.delivery.gitSha).toBe("5".repeat(40));
-          expect(revised.plan.release.id).toBe("notes-revised-release");
-          expect(revised.plan.appDeliveryReplacement).toBeUndefined();
+          expect(revised.plan?.delivery?.gitSha).toBe("5".repeat(40));
+          expect(revised.plan?.release.id).toBe("notes-revised-release");
+          expect(revised.plan?.appDeliveryReplacement).toBeUndefined();
           expect(revised.planDigest).not.toBe(completedDigest);
           expect(ordinaryPlanning).toHaveBeenCalledOnce();
         }
@@ -1201,12 +1270,24 @@ describe("explicit READY delivery replacement", () => {
   ])("rejects a named app candidate that is %s", (change) => {
     const { record, intent, candidate } = fixture();
     const app = record.operator!.deliveryCandidates![0];
-    if (change === "absent") record.operator!.deliveryCandidates = [];
-    if (change === "foreign-operation") app.operationRef = "c1d096d4-d743-46d7-a4db-c20e67ca65a4";
-    if (change === "foreign-project") app.projectId = "foreign-project";
-    if (change === "foreign-branch") app.branch = "foreign-branch";
-    if (change === "foreign-repo") app.repoId = "foreign-repo";
-    if (change === "not-ready") app.readyState = "BUILDING";
+    if (change === "absent") {
+      record.operator!.deliveryCandidates = [];
+    }
+    if (change === "foreign-operation") {
+      app.operationRef = "c1d096d4-d743-46d7-a4db-c20e67ca65a4";
+    }
+    if (change === "foreign-project") {
+      app.projectId = "foreign-project";
+    }
+    if (change === "foreign-branch") {
+      app.branch = "foreign-branch";
+    }
+    if (change === "foreign-repo") {
+      app.repoId = "foreign-repo";
+    }
+    if (change === "not-ready") {
+      app.readyState = "BUILDING";
+    }
     expect(resolveReadyDeliveryReplacementPredecessor(record, intent)).toBeUndefined();
     expect(isReadyDeliveryReplacementSuccessor(record, candidate, now)).toBe(false);
   });
@@ -1219,11 +1300,21 @@ describe("explicit READY delivery replacement", () => {
     "named-digest-mismatch",
   ])("rejects invalid approval provenance: %s", (change) => {
     const { record, intent, candidate } = fixture();
-    if (change === "missing-approval") delete record.operator!.approvalId;
-    if (change === "unapproved-call") record.approvedByCallId = "operator:unapproved-plan";
-    if (change === "empty-call") record.approvedByCallId = "";
-    if (change === "digest-mismatch") record.operator!.planDigest = "f".repeat(64);
-    if (change === "named-digest-mismatch") intent.predecessor.planDigest = "e".repeat(64);
+    if (change === "missing-approval") {
+      delete record.operator!.approvalId;
+    }
+    if (change === "unapproved-call") {
+      record.approvedByCallId = "operator:unapproved-plan";
+    }
+    if (change === "empty-call") {
+      record.approvedByCallId = "";
+    }
+    if (change === "digest-mismatch") {
+      record.operator!.planDigest = "f".repeat(64);
+    }
+    if (change === "named-digest-mismatch") {
+      intent.predecessor.planDigest = "e".repeat(64);
+    }
     expect(resolveReadyDeliveryReplacementPredecessor(record, intent)).toBeUndefined();
     expect(isReadyDeliveryReplacementSuccessor(record, candidate, now)).toBe(false);
   });
@@ -1254,20 +1345,42 @@ describe("explicit READY delivery replacement", () => {
     "gateway",
   ])("rejects non-Preview or foreign ownership: %s", (change) => {
     const { record, candidate } = fixture();
-    if (change === "action") candidate.action = "cleanup";
-    if (change === "environment")
-      (candidate.selection as { environment: string }).environment = "production";
-    if (change === "app") candidate.selection.appId = "foreign-app";
-    if (change === "session") candidate.selection.sessionId = "foreign-session";
-    if (change === "project") candidate.selection.projectId = "foreign-project";
-    if (change === "database") candidate.appDatabase.resourceId = "foreign-resource";
-    if (change === "auth") candidate.authDatabase.resourceId = "foreign-auth";
-    if (change === "neon") candidate.neon.branchId = "foreign-neon";
-    if (change === "context") candidate.contextId = "foreign-context";
-    if (change === "authority")
+    if (change === "action") {
+      candidate.action = "cleanup";
+    }
+    if (change === "environment") {
+      Object.assign(candidate.selection, { environment: "production" });
+    }
+    if (change === "app") {
+      candidate.selection.appId = "foreign-app";
+    }
+    if (change === "session") {
+      candidate.selection.sessionId = "foreign-session";
+    }
+    if (change === "project") {
+      candidate.selection.projectId = "foreign-project";
+    }
+    if (change === "database") {
+      candidate.appDatabase.resourceId = "foreign-resource";
+    }
+    if (change === "auth") {
+      candidate.authDatabase.resourceId = "foreign-auth";
+    }
+    if (change === "neon") {
+      candidate.neon.branchId = "foreign-neon";
+    }
+    if (change === "context") {
+      candidate.contextId = "foreign-context";
+    }
+    if (change === "authority") {
       candidate.deploymentBoundary!.authority.ownerUserId = "foreign-owner";
-    if (change === "team") candidate.deploymentBoundary!.teamId = "foreign-team";
-    if (change === "gateway") candidate.publicGateway!.origin = "https://foreign.example.test";
+    }
+    if (change === "team") {
+      candidate.deploymentBoundary!.teamId = "foreign-team";
+    }
+    if (change === "gateway") {
+      candidate.publicGateway!.origin = "https://foreign.example.test";
+    }
     expect(isReadyDeliveryReplacementSuccessor(record, candidate, now)).toBe(false);
   });
 

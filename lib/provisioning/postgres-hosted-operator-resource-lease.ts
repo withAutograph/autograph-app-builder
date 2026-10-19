@@ -18,13 +18,16 @@ export const hostedOperatorVercelProjectLockKeys = (plan: HostedOperatorPlan, sc
   const projects = new Set<string>();
   if (
     plan.effects.some((effect) => ["bindings", "delivery", "remove-bindings"].includes(effect.kind))
-  )
+  ) {
     projects.add(plan.delivery?.projectId ?? plan.selection.projectId);
+  }
   if (
     plan.effects.some((effect) => ["gateway-bindings", "gateway-delivery"].includes(effect.kind))
   ) {
     const projectId = plan.gatewayDelivery?.projectId ?? plan.publicGateway?.projectId;
-    if (projectId !== undefined) projects.add(projectId);
+    if (projectId !== undefined) {
+      projects.add(projectId);
+    }
   }
   return [...projects]
     .map((projectId) =>

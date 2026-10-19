@@ -952,8 +952,12 @@ export const composeHostedOperatorDependencies = (
   });
   const appDelivery = createHostedOperatorDeploymentDelivery({
     beforeCreate: async (input) => {
-      if (!input.plan.appDeliveryReplacement) return;
-      if (!input.readyReplacement) throw new HostedOperatorError(RECONCILIATION_REQUIRED);
+      if (!input.plan.appDeliveryReplacement) {
+        return;
+      }
+      if (!input.readyReplacement) {
+        throw new HostedOperatorError(RECONCILIATION_REQUIRED);
+      }
       await createReadyReplacementNativeReader({
         context: input,
         readCredential: controlPlane.readCredential,
@@ -968,10 +972,16 @@ export const composeHostedOperatorDependencies = (
   });
   const gatewayDelivery = createHostedOperatorDeploymentDelivery({
     beforeAliasWrite: async (input, selected) => {
-      if (!input.plan.appDeliveryReplacement) return "write";
-      const predecessor = input.plan.appDeliveryReplacement.predecessor.gatewayDeploymentId;
-      if (!predecessor || input.readyReplacement?.gatewayCandidate?.deploymentId !== predecessor)
+      if (!input.plan.appDeliveryReplacement) {
+        return "write";
+      }
+      const predecessorId = input.plan.appDeliveryReplacement.predecessor.gatewayDeploymentId;
+      if (
+        predecessorId === undefined ||
+        input.readyReplacement?.gatewayCandidate?.deploymentId !== predecessorId
+      ) {
         return "unknown";
+      }
       return await createReadyReplacementNativeReader({
         context: input,
         readCredential: controlPlane.readCredential,
@@ -979,8 +989,12 @@ export const composeHostedOperatorDependencies = (
       }).aliasWriteAuthority(input.plan, selected.deploymentId);
     },
     beforeCreate: async (input) => {
-      if (!input.plan.appDeliveryReplacement) return;
-      if (!input.readyReplacement) throw new HostedOperatorError(RECONCILIATION_REQUIRED);
+      if (!input.plan.appDeliveryReplacement) {
+        return;
+      }
+      if (!input.readyReplacement) {
+        throw new HostedOperatorError(RECONCILIATION_REQUIRED);
+      }
       await createReadyReplacementNativeReader({
         context: input,
         readCredential: controlPlane.readCredential,
@@ -2218,27 +2232,33 @@ export const composeHostedOperatorDependencies = (
     assertAuthorized: controlPlane.assertAuthorized,
     readReadyDeliveryReplacementPlan: async (context) => {
       const policy = selectedApplication(configuration, context).hostProtection;
-      if (policy === undefined) return undefined;
+      if (policy === undefined) {
+        return undefined;
+      }
       await controlPlane.assertPlanningAuthorized(context);
       const current = await controlPlane.store.read(context);
       return await readNativePreviewRecoveryPlan({
         record: current?.record,
         policy,
         now: Date.now(),
-        readGatewayAlias: async (plan) =>
+        readGatewayAlias: async (deliveryPlan) =>
           await createReadyReplacementNativeReader({
             context,
             readCredential: controlPlane.readCredential,
-            assertCurrent: async () => await controlPlane.assertPlanningAuthorized(context),
-          }).readGatewayAlias(plan),
+            assertCurrent: async () => {
+              await controlPlane.assertPlanningAuthorized(context);
+            },
+          }).readGatewayAlias(deliveryPlan),
       });
     },
-    verifyReadyDeliveryReplacement: async (context, plan, predecessor) => {
+    verifyReadyDeliveryReplacement: async (context, replacementPlan, predecessor) => {
       await createReadyReplacementNativeReader({
         context,
         readCredential: controlPlane.readCredential,
-        assertCurrent: async () => await controlPlane.assertPlanningAuthorized(context),
-      }).verify(plan, predecessor);
+        assertCurrent: async () => {
+          await controlPlane.assertPlanningAuthorized(context);
+        },
+      }).verify(replacementPlan, predecessor);
     },
     assertCanonicalOwner: controlPlane.assertCanonicalOwner,
     authIdentityInput,
