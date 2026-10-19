@@ -7,6 +7,7 @@ import { hostedEveOperationScopes } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
 import {
   bindSendDelivery,
+  canProjectQueuedSendAcknowledgement,
   hostedOperationRecordSchema,
   InMemoryHostedEveStore,
   isProvedSendDelivery,
@@ -119,14 +120,38 @@ class PagedSendDiagnosticStore extends InMemoryHostedEveStore {
   private events: PublicEveEvent[] = [];
   private revision = 0;
 
+  constructor(queuedAcknowledgements = false) {
+    super();
+    if (!queuedAcknowledgements) {
+      this.readUnsettledSendAcknowledgements = undefined;
+    }
+  }
+
   override async getSession(candidate: HostedPrincipal, sessionId: string) {
     const owned = await super.getSession(candidate, sessionId);
-    return owned === null ? null : (this.paged ?? owned);
+    if (owned === null || this.paged === undefined) {
+      return owned;
+    }
+    if (
+      owned.status === "cancelled" ||
+      (owned.version === 2 &&
+        this.paged.version === 2 &&
+        owned.adapterGeneration !== this.paged.adapterGeneration)
+    ) {
+      return owned;
+    }
+    return {
+      ...this.paged,
+      ...(owned.version === 2 ? { cancellationRevision: owned.cancellationRevision } : {}),
+    };
   }
   observeSessionPaged: NonNullable<HostedEveStore["observeSessionPaged"]> = async (input) => {
     const current = await this.getSession(input.principal, input.sessionId);
     if (current?.version !== 2 || current.checkpointDigest !== input.expectedCheckpointDigest) {
       throw new Error("Fixture checkpoint mismatch");
+    }
+    if (current.status === "cancelled") {
+      return current;
     }
     const events: PublicEveEvent[] = [];
     for await (const event of input.events) {
@@ -174,7 +199,507 @@ class PagedSendDiagnosticStore extends InMemoryHostedEveStore {
   };
 }
 
+const attachPagedTransport = (f: Awaited<ReturnType<typeof fixture>>) => {
+  let deliverySequence = 0;
+  const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(
+    async (input) =>
+      await observeSameOriginEveStream({
+        config: { baseUrl: "https://builder.example.test", timeoutMs: 1000 },
+        workloadIdentity: { token: () => Promise.resolve("synthetic-oidc") },
+        fetchImplementation: (url) => {
+          const start = Number(
+            new URL(url instanceof Request ? url.url : url).searchParams.get("startIndex") ?? 0,
+          );
+          return Promise.resolve(
+            new Response(
+              `${f
+                .getEvents()
+                .slice(start)
+                .map((event) => JSON.stringify(event))
+                .join("\n")}\n`,
+              {
+                headers: {
+                  "content-type": "application/x-ndjson",
+                  "x-eve-session-id": "native",
+                  "x-eve-stream-format": "ndjson",
+                  "x-eve-stream-tail-index": String(f.getEvents().length - 1),
+                  "x-eve-stream-version": "25",
+                },
+              },
+            ),
+          );
+        },
+        onEvent: input.onEvent,
+        onPrivateEvent: input.onPrivateEvent,
+        sessionId: input.adapterSessionId,
+        nativeObservationState: input.nativeObservationState,
+      }),
+  );
+  f.adapter.observe = observe;
+  const accepted = vi.fn<NonNullable<HostedEveTransport["sendAccepted"]>>(async (input) => {
+    deliverySequence += 1;
+    await input.onAccepted?.(deliverySequence === 1 ? "ack" : `ack-${deliverySequence}`);
+  });
+  f.adapter.sendAccepted = accepted;
+  return { observe, accepted };
+};
+const queuedFixture = async () => {
+  const f = await fixture({ store: new PagedSendDiagnosticStore(true) });
+  return { ...f, ...attachPagedTransport(f) };
+};
+
 describe("canonical SEND delivery acknowledgement", () => {
+  it("acknowledges saved queued SEND and keeps GET working until exact native start without replay", async () => {
+    const f = await queuedFixture();
+    const submitted = await f.create().send(f.request);
+    expect(submitted).toMatchObject({ status: "working", events: [] });
+    expect(submitted.error).toBeUndefined();
+    expect(f.observe).toHaveBeenCalledTimes(2);
+    expect(f.accepted).toHaveBeenCalledOnce();
+    expect(await f.operation()).toMatchObject({
+      state: "submission_unknown",
+      sendDelivery: { deliveryId: "ack" },
+    });
+    expect(JSON.stringify(await f.operation())).not.toContain("cancellationRevisionAtDispatch");
+    const saved = await f.store.getSession(principal, f.request.sessionId);
+    expect(saved?.status).toBe("waiting");
+    expect(
+      await f.create().get({ sessionId: f.request.sessionId, cursor: 0, limit: 100 }),
+    ).toMatchObject({ status: "working" });
+    expect(await f.create().send(f.request)).toMatchObject({ status: "working" });
+    expect(f.accepted).toHaveBeenCalledOnce();
+    expect(await f.operation()).toMatchObject({ state: "submission_unknown" });
+    f.setEvents([...f.getEvents(), turnEvent("turn.started", "delivered", ["ack"])]);
+    expect(
+      await f.create().get({ sessionId: f.request.sessionId, cursor: 0, limit: 100 }),
+    ).toMatchObject({ status: "working" });
+    expect(await f.operation()).toMatchObject({ state: "succeeded" });
+    expect(f.accepted).toHaveBeenCalledOnce();
+    f.setEvents([
+      ...f.getEvents(),
+      turnEvent("turn.completed", "delivered", ["ack"]),
+      waiting(["ack"]),
+    ]);
+    expect(
+      await f.create().get({ sessionId: f.request.sessionId, cursor: 0, limit: 100 }),
+    ).toMatchObject({ status: "waiting" });
+  });
+  it.each(["before-ack", "after-ack"] as const)(
+    "preserves a newer Stop %s and never replays SEND",
+    async (when) => {
+      const f = await queuedFixture();
+      f.accepted.mockImplementationOnce(async (input) => {
+        if (when === "after-ack") {
+          await input.onAccepted?.("ack");
+        }
+        await f.store.recordCancellationIntent({
+          principal,
+          sessionId: f.request.sessionId,
+          nowEpochMs: Date.now(),
+        });
+        if (when === "before-ack") {
+          await input.onAccepted?.("ack");
+        }
+      });
+      await expect(f.create().send(f.request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+      expect(await f.store.getSession(principal, f.request.sessionId)).toMatchObject({
+        cancellationRevision: 1,
+      });
+      await expect(f.create().send(f.request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+      expect(f.accepted).toHaveBeenCalledOnce();
+      expect(await f.operation()).toMatchObject({ state: "submission_unknown" });
+    },
+  );
+  it("lets an observed Stop win over an earlier queued ACK on GET", async () => {
+    const f = await queuedFixture();
+    await f.create().send(f.request);
+    await f.store.recordCancellationIntent({
+      principal,
+      sessionId: f.request.sessionId,
+      nowEpochMs: Date.now(),
+    });
+    await f.store.observeSession({
+      principal,
+      sessionId: f.request.sessionId,
+      checkpoint: { capturedAtEpochMs: Date.now(), events: [], status: "cancelled", version: 1 },
+      nowEpochMs: Date.now(),
+      resumability: "terminal",
+      stage: "needs_attention",
+    });
+    expect(
+      await f.create().get({ sessionId: f.request.sessionId, cursor: 0, limit: 100 }),
+    ).toMatchObject({ status: "cancelled" });
+    expect(f.accepted).toHaveBeenCalledOnce();
+    expect(await f.operation()).toMatchObject({ state: "submission_unknown" });
+  });
+  it.each(["input_required", "completed", "failed"] as const)(
+    "preserves actual %s ahead of queued projection",
+    async (status) => {
+      const f = await queuedFixture();
+      await f.create().send(f.request);
+      const original = f.observe.getMockImplementation();
+      if (original === undefined) {
+        throw new Error("Missing observer fixture");
+      }
+      const question = {
+        allowFreeform: true,
+        kind: "question" as const,
+        requestId: "real-question",
+        title: "Which account?",
+      };
+      f.observe.mockImplementationOnce(async (input) => {
+        const observed = await original(input);
+        if (observed.nativeObservationState === undefined) {
+          throw new Error("Missing reducer checkpoint");
+        }
+        return {
+          ...observed,
+          status,
+          pendingRequests: status === "input_required" ? [question] : [],
+          nativeObservationState: {
+            ...observed.nativeObservationState,
+            boundary: status,
+            pendingRequests: status === "input_required" ? [question] : [],
+          },
+        };
+      });
+      const result = await f
+        .create()
+        .get({ sessionId: f.request.sessionId, cursor: 0, limit: 100 });
+      expect(result.status).toBe(status);
+      if (status === "input_required") {
+        expect(result.inputRequests).toEqual([question]);
+      }
+      expect(await f.operation()).toMatchObject({ state: "submission_unknown" });
+      expect(f.accepted).toHaveBeenCalledOnce();
+    },
+  );
+  it("keeps an incomplete post-ACK native read unknown without replay", async () => {
+    const f = await queuedFixture();
+    const original = f.observe.getMockImplementation();
+    if (original === undefined) {
+      throw new Error("Missing observer fixture");
+    }
+    f.observe.mockImplementationOnce(original).mockImplementationOnce(async (input) => ({
+      ...(await original(input)),
+      observationComplete: false,
+    }));
+    await expect(f.create().send(f.request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    expect(await f.operation()).toMatchObject({
+      state: "submission_unknown",
+      sendDelivery: { deliveryId: "ack" },
+    });
+    expect(f.accepted).toHaveBeenCalledOnce();
+    expect(f.observe).toHaveBeenCalledTimes(2);
+  });
+  it("does not project a queued ACK after the adapter binding is replaced", async () => {
+    const f = await queuedFixture();
+    f.accepted.mockImplementationOnce(async (input) => {
+      await input.onAccepted?.("ack");
+      const stored = await f.store.getSession(principal, f.request.sessionId);
+      if (stored === null) {
+        throw new Error("Missing session fixture");
+      }
+      const current = toDurableHostedSessionRecord(stored);
+      await f.store.replaceSessionAdapter({
+        principal,
+        sessionId: f.request.sessionId,
+        adapterSessionId: "replacement",
+        expectedAdapterGeneration: current.adapterGeneration,
+        expectedCheckpointDigest: toDurableHostedSessionRecord(
+          (await f.store.getSession(principal, f.request.sessionId)) ?? stored,
+        ).checkpointDigest,
+        checkpoint: { capturedAtEpochMs: Date.now(), events: [], status: "waiting", version: 1 },
+        nowEpochMs: Date.now(),
+        resumability: "live",
+        stage: "planning",
+      });
+    });
+    await expect(f.create().send(f.request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    expect(f.accepted).toHaveBeenCalledOnce();
+    expect(await f.operation()).toMatchObject({ state: "submission_unknown" });
+  });
+  it("does not lose the earlier queued ACK when another valid SEND is accepted", async () => {
+    const f = await queuedFixture();
+    await f.create().send(f.request);
+    await f
+      .create()
+      .send({ ...f.request, clientRequestId: "second-send", message: "Additional direction" });
+    expect(f.accepted).toHaveBeenCalledTimes(2);
+    f.setEvents([
+      ...f.getEvents(),
+      turnEvent("turn.started", "first-delivered", ["ack"]),
+      turnEvent("turn.completed", "first-delivered", ["ack"]),
+      waiting(["ack"]),
+    ]);
+    expect(
+      await f.create().get({ sessionId: f.request.sessionId, cursor: 0, limit: 100 }),
+    ).toMatchObject({ status: "working" });
+    expect(await f.operation()).toMatchObject({ state: "succeeded" });
+    expect(await f.store.getPrivateOperation(principal, operationId("second-send"))).toMatchObject({
+      state: "submission_unknown",
+      sendDelivery: { deliveryId: "ack-2" },
+    });
+    expect(f.accepted).toHaveBeenCalledTimes(2);
+  });
+  it("does not backfill an older ACK baseline or project it over native waiting", async () => {
+    const f = await queuedFixture();
+    const record = f.store.recordSendDelivery.bind(f.store);
+    vi.spyOn(f.store, "recordSendDelivery").mockImplementation((input) => {
+      const { cancellationRevisionAtDispatch, ...legacy } = input;
+      void cancellationRevisionAtDispatch;
+      return record(legacy);
+    });
+    await expect(f.create().send(f.request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    const operation = hostedOperationRecordSchema.parse(await f.operation());
+    if (operation.sendDelivery === undefined) {
+      throw new Error("Missing fixture ACK");
+    }
+    await record({
+      principal,
+      operationId: operation.operationId,
+      delivery: operation.sendDelivery,
+      cancellationRevisionAtDispatch: 0,
+      nowEpochMs: Date.now(),
+    });
+    const page = await f.store.readUnsettledSendAcknowledgements?.({
+      principal,
+      sessionId: f.request.sessionId,
+      limit: 1,
+    });
+    expect(page?.acknowledgements[0]?.cancellationRevisionAtDispatch).toBeNull();
+    expect(
+      await f.create().get({ sessionId: f.request.sessionId, cursor: 0, limit: 100 }),
+    ).toMatchObject({ status: "waiting" });
+    expect(f.accepted).toHaveBeenCalledOnce();
+  });
+  it("does not recover queued acceptance from an unreadable ACK view or revoked owner", async () => {
+    const f = await queuedFixture();
+    await f.create().send(f.request);
+    const read = f.store.readUnsettledSendAcknowledgements;
+    if (read === undefined) {
+      throw new Error("Missing ACK reader");
+    }
+    f.store.readUnsettledSendAcknowledgements = () => Promise.reject(new Error("Unavailable"));
+    await expect(f.create().send(f.request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    f.store.readUnsettledSendAcknowledgements = read;
+    f.owner.mockRejectedValue(new Error("Owner revoked"));
+    await expect(f.create().send(f.request)).rejects.toThrow();
+    expect(f.accepted).toHaveBeenCalledOnce();
+    expect(await f.operation()).toMatchObject({ state: "submission_unknown" });
+  });
+  it("rechecks Stop arriving during final queued ACK materialization", async () => {
+    const f = await queuedFixture();
+    await f.create().send(f.request);
+    const read = f.store.readUnsettledSendAcknowledgements;
+    if (read === undefined) {
+      throw new Error("Missing ACK reader");
+    }
+    f.store.readUnsettledSendAcknowledgements = async (input) => {
+      const page = await read(input);
+      if (input.operationId !== undefined) {
+        await f.store.recordCancellationIntent({
+          principal,
+          sessionId: f.request.sessionId,
+          nowEpochMs: Date.now(),
+        });
+        await f.store.observeSession({
+          principal,
+          sessionId: f.request.sessionId,
+          checkpoint: {
+            capturedAtEpochMs: Date.now(),
+            events: [],
+            status: "cancelled",
+            version: 1,
+          },
+          nowEpochMs: Date.now(),
+          resumability: "terminal",
+          stage: "needs_attention",
+        });
+      }
+      return page;
+    };
+    expect(
+      await f.create().get({ sessionId: f.request.sessionId, cursor: 0, limit: 100 }),
+    ).toMatchObject({ status: "cancelled" });
+    expect(f.accepted).toHaveBeenCalledOnce();
+    expect(await f.operation()).toMatchObject({ state: "submission_unknown" });
+  });
+  it("paginates all tenant/session queued ACKs and retains baselines outside operation JSON", async () => {
+    const f = await queuedFixture();
+    await f.create().send(f.request);
+    await f
+      .create()
+      .send({ ...f.request, clientRequestId: "another-send", message: "More direction" });
+    const read = f.store.readUnsettledSendAcknowledgements;
+    if (read === undefined) {
+      throw new Error("Missing ACK reader");
+    }
+    const first = await read({ principal, sessionId: f.request.sessionId, limit: 1 });
+    expect(first.acknowledgements).toHaveLength(1);
+    expect(first.nextCursor).toBeDefined();
+    const second = await read({
+      principal,
+      sessionId: f.request.sessionId,
+      cursor: first.nextCursor,
+      limit: 1,
+    });
+    expect(second.acknowledgements).toHaveLength(1);
+    expect(second.nextCursor).toBeUndefined();
+    expect(second.acknowledgements[0]?.operation.operationId).not.toBe(
+      first.acknowledgements[0]?.operation.operationId,
+    );
+    expect(
+      [...first.acknowledgements, ...second.acknowledgements].map(
+        (ack) => ack.cancellationRevisionAtDispatch,
+      ),
+    ).toEqual([0, 0]);
+    expect(
+      await read({
+        principal: { ...principal, ownerUserId: "foreign" },
+        sessionId: f.request.sessionId,
+        limit: 1,
+      }),
+    ).toEqual({ acknowledgements: [] });
+    expect(await read({ principal, sessionId: "foreign-session", limit: 1 })).toEqual({
+      acknowledgements: [],
+    });
+    const exact = await read({
+      principal,
+      sessionId: f.request.sessionId,
+      operationId: operationId(f.request.clientRequestId),
+      limit: 1,
+    });
+    expect(exact.acknowledgements).toHaveLength(1);
+    const operation = hostedOperationRecordSchema.parse(await f.operation());
+    if (operation.sendDelivery === undefined) {
+      throw new Error("Missing fixture ACK");
+    }
+    await expect(
+      f.store.recordSendDelivery({
+        principal,
+        operationId: operation.operationId,
+        delivery: operation.sendDelivery,
+        cancellationRevisionAtDispatch: 1,
+        nowEpochMs: Date.now(),
+      }),
+    ).rejects.toThrow();
+    expect(JSON.stringify(operation)).not.toContain("cancellationRevisionAtDispatch");
+  });
+  it("rejects final ACK readback changing the canonical request binding", async () => {
+    const f = await queuedFixture();
+    await f.create().send(f.request);
+    const read = f.store.readUnsettledSendAcknowledgements;
+    if (read === undefined) {
+      throw new Error("Missing ACK reader");
+    }
+    let exactReads = 0;
+    f.store.readUnsettledSendAcknowledgements = async (input) => {
+      const page = await read(input);
+      if (input.operationId !== undefined) {
+        exactReads += 1;
+      }
+      return exactReads < 2
+        ? page
+        : {
+            ...page,
+            acknowledgements: page.acknowledgements.map((ack) => ({
+              ...ack,
+              operation: { ...ack.operation, clientRequestId: "another-request" },
+            })),
+          };
+    };
+    await expect(f.create().send(f.request)).rejects.toThrow();
+    expect(f.accepted).toHaveBeenCalledOnce();
+    expect(await f.operation()).toMatchObject({ state: "submission_unknown" });
+  });
+  it.each([
+    "missing-baseline",
+    "cancel-revision",
+    "observed-generation",
+    "foreign-owner",
+    "wrong-digest",
+    "incomplete",
+    "missing-tail",
+    "not-at-tail",
+  ] as const)(
+    "denies queued projection for %s without changing exact native proof",
+    async (fault) => {
+      const f = await queuedFixture();
+      const result = await f.create().send(f.request);
+      const current = await f.store.getSession(principal, f.request.sessionId);
+      const page = await f.store.readUnsettledSendAcknowledgements?.({
+        principal,
+        sessionId: f.request.sessionId,
+        limit: 1,
+      });
+      const acknowledgement = page?.acknowledgements[0];
+      if (current === null || acknowledgement === undefined) {
+        throw new Error("Missing queued fixture");
+      }
+      const durable = toDurableHostedSessionRecord(current);
+      const candidate: Parameters<typeof canProjectQueuedSendAcknowledgement>[0] = {
+        acknowledgement,
+        current,
+        result,
+        observation: {
+          nativeStartIndex: 1,
+          nativeNextIndex: 1,
+          nativeTailIndex: 0,
+          observationComplete: true,
+          currentTurnPresent: false,
+        },
+        observedBinding: {
+          adapterSessionId: durable.adapterSessionId,
+          adapterGeneration: durable.adapterGeneration,
+          cancellationRevision: 0,
+        },
+      };
+      expect(canProjectQueuedSendAcknowledgement(candidate)).toBe(true);
+      switch (fault) {
+        case "missing-baseline": {
+          candidate.acknowledgement = { ...acknowledgement, cancellationRevisionAtDispatch: null };
+          break;
+        }
+        case "cancel-revision": {
+          candidate.current = { ...durable, cancellationRevision: 1 };
+          break;
+        }
+        case "observed-generation": {
+          candidate.observedBinding.adapterGeneration += 1;
+          break;
+        }
+        case "foreign-owner": {
+          candidate.current = { ...durable, principal: { ...principal, ownerUserId: "foreign" } };
+          break;
+        }
+        case "wrong-digest": {
+          candidate.acknowledgement = {
+            ...acknowledgement,
+            operation: { ...acknowledgement.operation, requestDigest: `sha256:${"f".repeat(64)}` },
+          };
+          break;
+        }
+        case "incomplete": {
+          candidate.observation.observationComplete = false;
+          break;
+        }
+        case "missing-tail": {
+          delete candidate.observation.nativeTailIndex;
+          break;
+        }
+        case "not-at-tail": {
+          candidate.observation.nativeNextIndex = 0;
+          break;
+        }
+        default: {
+          throw new Error("Unknown guard fixture");
+        }
+      }
+      expect(canProjectQueuedSendAcknowledgement(candidate)).toBe(false);
+      expect(f.accepted).toHaveBeenCalledOnce();
+    },
+  );
   it.each([true, false])(
     "reports the exact post-ACK paged read with stamped metadata %s and no additional native reads",
     async (stamped) => {
@@ -182,46 +707,7 @@ describe("canonical SEND delivery acknowledgement", () => {
       f.setEvents([
         turnEvent("turn.started", "unrelated-active-turn", stamped ? ["unrelated-delivery"] : []),
       ]);
-      const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(
-        async (input) =>
-          await observeSameOriginEveStream({
-            config: { baseUrl: "https://builder.example.test", timeoutMs: 1000 },
-            workloadIdentity: { token: () => Promise.resolve("synthetic-oidc") },
-            fetchImplementation: (url) => {
-              const start = Number(
-                new URL(url instanceof Request ? url.url : url).searchParams.get("startIndex") ?? 0,
-              );
-              return Promise.resolve(
-                new Response(
-                  `${f
-                    .getEvents()
-                    .slice(start)
-                    .map((event) => JSON.stringify(event))
-                    .join("\n")}\n`,
-                  {
-                    headers: {
-                      "content-type": "application/x-ndjson",
-                      "x-eve-session-id": "native",
-                      "x-eve-stream-format": "ndjson",
-                      "x-eve-stream-tail-index": String(f.getEvents().length - 1),
-                      "x-eve-stream-version": "25",
-                    },
-                  },
-                ),
-              );
-            },
-            onEvent: input.onEvent,
-            onPrivateEvent: input.onPrivateEvent,
-            sessionId: input.adapterSessionId,
-            nativeObservationState: input.nativeObservationState,
-          }),
-      );
-      f.adapter.observe = observe;
-      f.adapter.sendAccepted = vi.fn<NonNullable<HostedEveTransport["sendAccepted"]>>(
-        async (input) => {
-          await input.onAccepted?.("ack");
-        },
-      );
+      const { observe } = attachPagedTransport(f);
       await expect(f.create().send(f.request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
       expect(f.diagnostics).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -767,7 +1253,66 @@ describe("canonical SEND delivery acknowledgement", () => {
       true,
     );
     expect(second.nativeObservationState.nextNativeIndex).toBe(2);
+    events = [...events, turnEvent("turn.started", "next", ["next-ack"])];
+    const third = await observeSameOriginEveStream({
+      ...common,
+      nativeObservationState: second.nativeObservationState,
+    });
+    expect(third.status).toBe("working");
+    expect(third.activeTurnId).toBe("next");
   });
+  it.each(["input_required", "cancelled", "completed", "failed"] as const)(
+    "preserves real %s after turn.started resets an earlier waiting boundary",
+    async (expected) => {
+      const events: unknown[] = [waiting(), turnEvent("turn.started", "current", ["ack"])];
+      if (expected === "input_required") {
+        events.push(
+          {
+            type: "input.requested",
+            data: {
+              requests: [
+                {
+                  allowFreeform: true,
+                  display: "text",
+                  kind: "question",
+                  prompt: "Choose",
+                  requestId: "real-question",
+                },
+              ],
+            },
+          },
+          turnEvent("turn.started", "current", ["ack"]),
+        );
+      } else {
+        events.push({
+          type: expected === "cancelled" ? "turn.cancelled" : `session.${expected}`,
+          data:
+            expected === "failed"
+              ? { code: "synthetic_failure", message: "Synthetic failure", turnId: "current" }
+              : { turnId: "current" },
+        });
+      }
+      const result = await observeSameOriginEveStream({
+        config: { baseUrl: "https://builder.example.test", timeoutMs: 1000 },
+        workloadIdentity: { token: () => Promise.resolve("synthetic-oidc") },
+        fetchImplementation: () =>
+          Promise.resolve(
+            new Response(`${events.map((event) => JSON.stringify(event)).join("\n")}\n`, {
+              headers: {
+                "content-type": "application/x-ndjson",
+                "x-eve-session-id": "native",
+                "x-eve-stream-format": "ndjson",
+                "x-eve-stream-tail-index": String(events.length - 1),
+                "x-eve-stream-version": "25",
+              },
+            }),
+          ),
+        onEvent: () => {},
+        sessionId: "native",
+      });
+      expect(result.status).toBe(expected);
+    },
+  );
   it("preserves old terminal-only proofs and refuses legacy membership without a boundary", () => {
     const marker = {
       adapterGeneration: 1,

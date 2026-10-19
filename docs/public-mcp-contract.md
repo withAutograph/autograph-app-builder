@@ -57,6 +57,15 @@ controls. After an accepted `autograph_respond` whose settlement cannot be
 observed within 30 seconds, Builder reports `submission_unknown`; callers must
 read the same session before taking further action and must not replay that
 response.
+A durable `autograph_send` acknowledgement can precede its native turn start.
+With the same current owner, adapter binding, and cancellation revision, a complete
+native read at the tail returns normal `working` while that saved feedback waits
+to start. `autograph_get` retains this state without another send or an extra
+user reply. It does not claim a turn started or settle the SEND receipt; only the
+matching stamped native start or boundary can do that. Stop, current input,
+terminal state, and a replaced adapter take precedence. Missing acknowledgement,
+legacy acknowledgement without a saved cancellation baseline, or incomplete
+readback cannot establish this queued state.
 Unknown hosted submissions emit server-only `[builder:hosted-submission]`
 diagnostics with the failing lookup, reservation, transport, settlement, or
 recovery phase. SHA-256 hashes of the original request, operation, and observed

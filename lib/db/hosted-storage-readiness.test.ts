@@ -87,7 +87,7 @@ describe("hosted storage read-only readiness", () => {
       format: "autograph-hosted-storage-readiness-v1",
       migrations: {
         additiveOnly: true,
-        count: 28,
+        count: 29,
         exactOrder: true,
         noPendingMigration: true,
       },
@@ -124,6 +124,35 @@ describe("hosted storage read-only readiness", () => {
         ).rejects.toThrow();
       }),
     );
+  });
+
+  it("requires the nullable queued SEND sidecar, check and partial lookup index", async () => {
+    const readBack = await exactReadBack();
+    expect(readBack.columns).toContainEqual({
+      table: "agent_operation",
+      column: "send_cancellation_revision_at_dispatch",
+      type: "integer",
+      notNull: false,
+    });
+    for (const [field, name] of [
+      ["columns", "send_cancellation_revision_at_dispatch"],
+      ["constraints", "agent_operation_send_cancellation_revision_check"],
+      ["indexes", "agent_operation_unsettled_send_ack_idx"],
+    ] as const) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Each independent negative readback must reject before the next fixture is checked.
+      await expect(
+        verifyHostedStorageReadBack({
+          observedAt: new Date(),
+          repositoryRoot: process.cwd(),
+          readBack: {
+            ...readBack,
+            [field]: readBack[field].filter(
+              (row) => ("column" in row ? row.column : row.name) !== name,
+            ),
+          },
+        }),
+      ).rejects.toThrow();
+    }
   });
 
   it("rejects migration order, schema drift, and writable verification", async () => {

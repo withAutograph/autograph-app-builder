@@ -144,6 +144,31 @@ This relies on the pinned `eve@0.68.0` authenticated create-once contract in
 claim before its `session.started` event. The local tests prove the guarded
 candidate handling and exact operation reuse with simulated responses; they do
 not substitute for provider-owned deduplication or live upgrade evidence.
+Ordinary SEND acknowledgements save their dispatch cancellation revision in the
+nullable `agent_operation.send_cancellation_revision_at_dispatch` column, outside
+the strict operation JSON. Migration `0029_send_ack_cancellation_revision.sql`
+adds that column, its nonnegative check, and a partial tenant/session/keyset index
+for unresolved ordinary SEND acknowledgements. It has no default or backfill;
+legacy NULL rows remain unknown. Apply the reviewed migration before deploying
+any new reader/writer: the default full operation-row selection already requires
+the column. Old application code tolerates the additive nullable column. Review
+and approve the database upgrade before merging if merge automatically deploys.
+The normal runner (`lib/db/migrate.mts`) uses Drizzle's PostgreSQL migrator, which
+executes pending statements and their migration-journal inserts in one
+transaction. `ADD COLUMN`/`ADD CHECK` take an exclusive table lock retained until
+commit; the validated check scans existing rows. The ordinary (non-concurrent)
+index build also occurs in that transaction, extending the lock duration and
+blocking competing reads/writes while the exclusive lock is held. Schedule the
+approved migration with this impact in mind, verify the new schema/index/check
+and migration journal, then deploy the new application readers. This source
+change does not apply a migration or authorize a database upgrade.
+The existing complete native read can project a saved, still-current ACK as
+`working` before a matching native turn appears. GET checks all unresolved ACKs
+through tenant/session-scoped keyset pages, rechecks the chosen row and current
+binding/cancellation authority, and settles only exact stamped native proof.
+Queued projection changes no checkpoint, public schema, canonical receipt, or
+provider action. It never resubmits an unknown SEND. A second legitimate SEND
+does not erase the first ACK; no total history scan cap is imposed.
 Reservation responses and unsuccessful settlements are parsed as closed
 runtime discriminated unions and rebound to the exact principal, kind, client
 request ID, request digest, state, and session before they grant any authority.
