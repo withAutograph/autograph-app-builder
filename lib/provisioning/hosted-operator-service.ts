@@ -1414,27 +1414,28 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
       };
       const approval = await assertApproval(false, true);
       // A revoked predecessor cannot authorize prerequisite work before its renewed binding.
-      for (const effect of plan.effects) {
-        const provenance = retentionRenewalBindingProvenance(current.record, effect.id);
-        if (provenance === undefined) {
-          continue;
-        }
-        const originalApproval = await deps.readApproval({
-          ...context,
-          action: "prepare",
-          callId: provenance.approvedByCallId,
-          planDigest: provenance.planDigest,
-        });
-        if (
-          originalApproval?.approved !== true ||
-          originalApproval.approvalId !== provenance.approvalId ||
-          originalApproval.callId !== provenance.approvedByCallId ||
-          originalApproval.planDigest !== provenance.planDigest ||
-          originalApproval.action !== "prepare"
-        ) {
-          throw new HostedOperatorError("authorization_required");
-        }
-      }
+      const bindingRenewals = plan.effects
+        .map((effect) => retentionRenewalBindingProvenance(current.record, effect.id))
+        .filter((provenance) => provenance !== undefined);
+      await Promise.all(
+        bindingRenewals.map(async (provenance) => {
+          const originalApproval = await deps.readApproval({
+            ...context,
+            action: "prepare",
+            callId: provenance.approvedByCallId,
+            planDigest: provenance.planDigest,
+          });
+          if (
+            originalApproval?.approved !== true ||
+            originalApproval.approvalId !== provenance.approvalId ||
+            originalApproval.callId !== provenance.approvedByCallId ||
+            originalApproval.planDigest !== provenance.planDigest ||
+            originalApproval.action !== "prepare"
+          ) {
+            throw new HostedOperatorError("authorization_required");
+          }
+        }),
+      );
       const pendingEffect = operator.plan.effects.find(
         (effect) => effect.id === operator.pendingEffectId,
       );

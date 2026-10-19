@@ -6,12 +6,12 @@ import {
   createRetentionRenewalPlan,
   retentionRenewalBindingProvenance,
 } from "./hosted-operator-retention-renewal";
-import { operatorPlanDigest } from "./hosted-operator-contract";
 import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
 import { expect, it, vi } from "vitest";
 import {
   canonicalGatewayEnvironmentRowsSchema,
   hostedOperatorPlanSchema,
+  operatorPlanDigest,
 } from "./hosted-operator-contract";
 import type {
   CanonicalGatewayEnvironmentRow,
