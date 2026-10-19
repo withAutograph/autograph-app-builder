@@ -9,7 +9,8 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 import { z } from "zod";
 
-import { builderProvisioningJournals } from "../../../../lib/db/schema";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Register the complete schema required by the journal store's Database type.
+import * as schema from "../../../../lib/db/schema";
 import { operatorPlanDigest } from "../../../../lib/provisioning/hosted-operator-contract";
 import { createPostgresHostedOperatorResourceLease } from "../../../../lib/provisioning/postgres-hosted-operator-resource-lease";
 import { createPostgresHostedRuntimeJournalStore } from "../../../../lib/provisioning/postgres-hosted-runtime-journal";
@@ -89,13 +90,16 @@ let markLockClientEClosed: (() => void) | undefined;
 const lockClientEClosed = new Promise<void>((resolve) => {
   markLockClientEClosed = resolve;
 });
-const openLockClientE = () =>
+const openLockClientE = (onConnectionClosed: () => void) =>
   postgres({
     connection: { application_name: lockClientEApplicationName },
     database: "postgres",
     host: argument("--host"),
     max: 1,
-    onclose: () => markLockClientEClosed?.(),
+    onclose: () => {
+      markLockClientEClosed?.();
+      onConnectionClosed();
+    },
     port,
     username: "postgres",
   });
@@ -106,7 +110,6 @@ const clientB = postgres({
   port,
   username: "postgres",
 });
-const schema = { builderProvisioningJournals };
 const databaseA = drizzle(clientA, { schema });
 const databaseB = drizzle(clientB, { schema });
 const storeA = createPostgresHostedRuntimeJournalStore(databaseA);
@@ -118,12 +121,12 @@ const authority = {
   workspaceId: `workspace-${randomUUID()}`,
 };
 const now = new Date();
-const target = (sessionId: string): HostedRuntimeTarget => ({
+const target = (sessionId: string, projectId = "prj_fixture"): HostedRuntimeTarget => ({
   appId: "spend-review",
   branch: "preview",
   environment: "preview",
   installationId: "icfg_fixture",
-  projectId: "prj_fixture",
+  projectId,
   scopeId: "team_fixture",
   scopeType: "team",
   sessionId,
@@ -194,9 +197,10 @@ const reserve = async (
     authDatabaseName?: string;
     authResourceId?: string;
     connectionRef?: string;
+    projectId?: string;
   } = {},
 ) => {
-  const selected = target(sessionId);
+  const selected = target(sessionId, overrides.projectId);
   const selectedPlan = plan(selected, overrides);
   const operationRef = randomUUID();
   const record = await storeA.reserve({
@@ -261,7 +265,7 @@ try {
   assert.equal(concurrent.filter(Boolean).length, 1, "CAS permits one generation write");
   const afterRestart = await storeB.read({ authority, target: first.target });
   const generation = afterRestart?.record.operator?.fenceGeneration;
-  assert.ok(Number.isSafeInteger(generation) && generation > 0);
+  assert.ok(generation !== undefined && Number.isSafeInteger(generation) && generation > 0);
   assert.equal(afterRestart?.record.operator?.operationRef, first.operationRef);
   const repeated = await storeA.reserveFenceGeneration({
     ...reserveInput,
@@ -296,6 +300,7 @@ try {
     appResourceId: "app_resource_independent",
     authDatabaseName: "auth_independent",
     authResourceId: "auth_resource_independent",
+    projectId: "prj_independent",
   });
   const independentGeneration = await storeA.reserveFenceGeneration({
     authority,
@@ -362,7 +367,7 @@ try {
   assert.notEqual(secondPlan, undefined);
   let independentEntered = false;
   const independentPlan = independentGeneration.record.operator?.plan;
-  assert.notEqual(independentPlan, undefined);
+  assert.ok(independentPlan);
   const holdingLease = resourceLeaseA(
     { authority, operationRef: first.operationRef, plan: firstPlan, target: first.target },
     async (assertFence) => {
@@ -404,7 +409,7 @@ try {
   assert.equal(
     independentEntered,
     true,
-    "disjoint Auth and app databases can proceed concurrently",
+    "disjoint Auth/app databases and Vercel projects can proceed concurrently",
   );
   const [rawLockProbe] = await clientB`
     select pg_try_advisory_lock(hashtextextended(${authLockKey}, 0)) as acquired
@@ -445,7 +450,7 @@ try {
   );
   const callbackErrorRejected = assert.rejects(
     callbackErrorOperation,
-    /fixture callback failed after connection loss/u,
+    /Protected resource lease session was lost/u,
   );
   await callbackErrorEntered;
   const [rawCallbackErrorSession] = await clientB`
@@ -531,6 +536,7 @@ try {
       throw new Error("Stale callback unexpectedly ran.");
     },
   );
+  const staleWaiterRejected = assert.rejects(staleWaiter, /authority|fence/u);
   await waitForAdvisoryLockWaiter();
   const changed = await storeA.compareAndSet({
     authority,
@@ -542,7 +548,7 @@ try {
   assert.ok(changed);
   releaseBlocker?.();
   await blocker;
-  await assert.rejects(staleWaiter, /authority|fence/u);
+  await staleWaiterRejected;
   assert.equal(staleCallbackRan, false, "revoked authority is rechecked after waiting for a lock");
 
   await assert.rejects(
@@ -584,6 +590,10 @@ try {
       effectContinued = true;
     },
   );
+  const lostSessionRejected = assert.rejects(
+    lostSessionOperation,
+    /Protected resource lease session was lost/u,
+  );
   await lostSessionCallback;
   const [rawLockSession] = await clientB`
     select activity.pid, activity.backend_start
@@ -615,7 +625,7 @@ try {
   const terminated = terminationReadbackSchema.parse(rawTerminated);
   assert.equal(terminated.terminated, true);
   releaseLostSession?.();
-  await assert.rejects(lostSessionOperation);
+  await lostSessionRejected;
   assert.equal(effectContinued, false, "a lost lock session cannot continue an effect");
 
   let markLostDCallback: (() => void) | undefined;
@@ -633,6 +643,10 @@ try {
       await lostDCallbackContinue;
       await assertFence();
     },
+  );
+  const lostDRejected = assert.rejects(
+    lostDOperation,
+    /Protected resource lease session was lost/u,
   );
   await lostDCallbackEntered;
   const [rawLostDSession] = await clientB`
@@ -670,7 +684,7 @@ try {
   );
   await replacementEntered;
   resumeLostDCallback?.();
-  await assert.rejects(lostDOperation);
+  await lostDRejected;
   const [rawReplacementLockProbe] = await clientB`
     select pg_try_advisory_lock(hashtextextended(${authLockKey}, 0)) as acquired
   `;

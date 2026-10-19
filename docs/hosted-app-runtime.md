@@ -31,6 +31,20 @@ The operator still has to compare the receipt with the independently resolved
 owner, membership, plan digest and selected target; receipt persistence alone
 is not evidence of hosted provider authority.
 
+Protected runtime work takes shared physical-resource advisory locks on a
+dedicated PostgreSQL session using the direct endpoint derived from the
+configured pooled Neon URL. The durable journal continues to use its ordinary
+pooled connection. Provider and installer calls run without a database
+transaction held open; before effects and on every fence assertion, the operator
+checks the same live backend, all expected session locks and the current journal
+lease and fence. A lost or replaced session fails closed. Closing the dedicated
+session releases its locks; the operator never sends an unlock through a
+potentially reconnected client.
+
+Neon's [transaction-pooling contract](https://neon.com/docs/connect/connection-pooling#connection-pooling-in-transaction-mode)
+excludes session advisory locks. Only this operation-scoped lock connection uses
+the direct endpoint; it preserves the configured role, password, database and TLS.
+
 The normal owner link returns through a private Gateway-to-Builder staging POST
 followed by a normal browser GET. The POST verifies the configured native Gateway
 workload and the signed Realm proof before placing an encrypted, short-lived

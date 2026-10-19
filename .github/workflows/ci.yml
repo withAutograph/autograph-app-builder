@@ -16,6 +16,43 @@ env:
   CI_MISE_VERSION: "2026.9.2"
 
 jobs:
+  protected-operator-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: docker.io/library/postgres@sha256:48c8ad3a7284b82be4482a52076d47d879fd6fb084a1cbfccbd551f9331b0e40
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 54328:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 1s
+          --health-timeout 2s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v3
+        with:
+          version: ${{ env.CI_MISE_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: mise run dependencies:install
+      - run: |
+          set -euo pipefail
+          mkdir -p .artifacts/protected-operator-recovery
+          mise run test:postgres-hosted-operator-recovery -- --database-url 'postgres://postgres@127.0.0.1:54328/postgres?sslmode=disable' | tee .artifacts/protected-operator-recovery/result.log
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: protected-operator-recovery-${{ github.event.pull_request.head.sha || github.sha }}
+          path: .artifacts/protected-operator-recovery
+          if-no-files-found: warn
+
   repository:
     runs-on: ubuntu-latest
     # Repository validation normally completes in a few minutes. Bound an
@@ -245,6 +282,7 @@ jobs:
   check:
     if: ${{ always() }}
     needs:
+      - protected-operator-recovery
       - repository
       - eve-general
       - eve-fresh-bootstrap
@@ -258,6 +296,7 @@ jobs:
     steps:
       - name: Require every CI lane
         run: |
+          test "${{ needs.protected-operator-recovery.result }}" = success
           test "${{ needs.repository.result }}" = success
           test "${{ needs.eve-general.result }}" = success
           test "${{ needs.eve-fresh-bootstrap.result }}" = success

@@ -120,7 +120,7 @@ const rowFor = (
   revision: 1,
 });
 
-const fixture = (selectedPlan = plan) => {
+const fixture = (selectedPlan = plan, afterLockWait?: () => Promise<void> | void) => {
   const events: string[] = [];
   const rows = new Map([[keyFor(context), rowFor(context, selectedPlan)]]);
   const store: HostedRuntimeJournalStore = {
@@ -129,66 +129,50 @@ const fixture = (selectedPlan = plan) => {
     reserve: vi.fn(),
     reserveFenceGeneration: vi.fn(),
   };
-  const backend = { backend_pid: 101, backend_start: "2026-10-09T11:00:00.000Z" };
+  const backend = { backend_pid: 101, backend_start: "2026-10-09 11:00:00+00" };
   const acquired: string[] = [];
   const held = new Set<string>();
-  let active = false;
+  const idsByKey = new Map<string, number>();
+  let active = true;
   let close = vi.fn<() => void>();
-  const disconnect = Promise.withResolvers<never>();
   const query = vi.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
     if (!active) {
-      throw new Error("transaction closed");
+      throw new Error("session closed");
     }
     const sql = strings.join("?").replaceAll(/\s+/gu, " ").trim();
     events.push(sql);
-    if (sql.includes("pg_advisory_xact_lock")) {
+    if (sql.includes("pg_advisory_lock")) {
       const key = String(values[0]);
       acquired.push(key);
-      held.add(`${acquired.length}`);
+      await afterLockWait?.();
+      idsByKey.set(key, acquired.length);
+      held.add(`1:${acquired.length}`);
       return [];
     }
     if (sql.includes("as class_id")) {
-      return [{ class_id: "1", object_id: `${acquired.length}` }];
+      return [{ class_id: "1", object_id: `${idsByKey.get(String(values[0]))}` }];
+    }
+    if (sql.includes("from pg_stat_activity")) {
+      return [{ ...backend }];
     }
     if (sql.includes("from pg_locks")) {
-      return [{ held: values[0] === backend.backend_pid && held.has(String(values[2])) }];
-    }
-    if (sql === "set local idle_in_transaction_session_timeout = 0") {
-      return [];
+      return [
+        {
+          held:
+            values[0] === backend.backend_pid &&
+            held.has(`${String(values[1])}:${String(values[2])}`),
+        },
+      ];
     }
     throw new Error(`Unexpected fixture query: ${sql}`);
   });
-  const unsafe = vi.fn(async () => {
-    if (!active) {
-      throw new Error("transaction closed");
-    }
-    events.push("backend identity");
-    return [{ ...backend }];
-  });
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- SAFETY: Only the fixture's implemented tagged-query and unsafe ports are used by the lease.
-  const transaction = Object.assign(query, { unsafe }) as unknown as postgres.TransactionSql;
-  const begin = vi.fn(async <T>(run: (sql: postgres.TransactionSql) => Promise<T>) => {
-    events.push("begin");
-    active = true;
-    try {
-      const result = await Promise.race([run(transaction), disconnect.promise]);
-      events.push("commit");
-      return result;
-    } catch (error) {
-      events.push("rollback");
-      throw error;
-    } finally {
-      active = false;
-      held.clear();
-    }
-  });
   const end = vi.fn(async () => {
-    expect(active).toBe(false);
-    expect(held.size).toBe(0);
+    active = false;
+    held.clear();
     events.push("end");
   });
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- SAFETY: This fixture implements exactly the BEGIN and cleanup ports consumed by the operation-owned client.
-  const client = { begin, end } as unknown as postgres.Sql;
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- SAFETY: This fixture implements the tagged-query and cleanup ports consumed by the operator lock.
+  const client = Object.assign(query, { end }) as unknown as postgres.Sql;
   const lease = createPostgresHostedOperatorResourceLease({
     now: () => now,
     openLockClient: (onConnectionClosed) => {
@@ -200,12 +184,10 @@ const fixture = (selectedPlan = plan) => {
   return {
     acquired,
     backend,
-    begin,
     disconnect() {
-      close();
       active = false;
       held.clear();
-      disconnect.reject(new Error("fixture connection lost"));
+      close();
     },
     end,
     events,
@@ -215,11 +197,10 @@ const fixture = (selectedPlan = plan) => {
     query,
     rows,
     store,
-    unsafe,
   };
 };
 
-describe("pooled protected resource lease", () => {
+describe("dedicated-session protected resource lease", () => {
   const gatewayPlan = () =>
     hostedOperatorPlanSchema.parse({
       ...plan,
@@ -292,12 +273,16 @@ describe("pooled protected resource lease", () => {
     expect(hostedOperatorVercelProjectLockKeys(external, context.target.scopeId)).toEqual(
       hostedOperatorVercelProjectLockKeys(legacy, context.target.scopeId),
     );
+    const boundary = legacy.deploymentBoundary;
+    if (boundary === undefined) {
+      throw new Error("fixture deployment boundary missing");
+    }
     const otherApp = hostedOperatorPlanSchema.parse({
       ...legacy,
       selection: { ...legacy.selection, projectId: "other-app" },
       deploymentBoundary: {
-        ...legacy.deploymentBoundary,
-        app: { ...legacy.deploymentBoundary!.app, projectId: "other-app" },
+        ...boundary,
+        app: { ...boundary.app, projectId: "other-app" },
       },
     });
     const shared = hostedOperatorVercelProjectLockKeys(legacy, context.target.scopeId).filter(
@@ -322,7 +307,7 @@ describe("pooled protected resource lease", () => {
     );
     expect(left.some((key) => right.includes(key))).toBe(false);
   });
-  it("holds transaction locks throughout the callback and commits before client cleanup", async () => {
+  it("keeps session advisory locks through provider work without opening a transaction", async () => {
     const test = fixture();
     let retainedFence: (() => Promise<void>) | undefined;
     const result = await test.lease(test.input, async (assertFence) => {
@@ -330,27 +315,27 @@ describe("pooled protected resource lease", () => {
       expect(test.held.size).toBe(
         6 + hostedOperatorVercelProjectLockKeys(test.input.plan, context.target.scopeId).length,
       );
-      expect(test.events).not.toContain("commit");
+      expect(test.events.some((event) => event === "begin")).toBe(false);
+      expect(test.events.some((event) => event.includes("pg_advisory_lock("))).toBe(true);
       await assertFence();
       return ["first", "second"];
     });
     expect(result).toEqual(["first", "second"]);
-    expect(test.events[0]).toBe("begin");
-    expect(test.events[1]).toBe("set local idle_in_transaction_session_timeout = 0");
-    expect(test.events.slice(-2)).toEqual(["commit", "end"]);
-    expect(test.end).toHaveBeenCalledWith({ timeout: 0 });
-    const queries = test.query.mock.calls.length + test.unsafe.mock.calls.length;
+    expect(test.events.at(-1)).toBe("end");
+    expect(test.held.size).toBe(0);
+    expect(
+      test.query.mock.calls.some(([strings]) => strings.join("").includes("pg_advisory_unlock")),
+    ).toBe(false);
+    const queries = test.query.mock.calls.length;
     await expect(retainedFence?.()).rejects.toThrow("session was lost");
-    expect(test.query.mock.calls.length + test.unsafe.mock.calls.length).toBe(queries);
+    expect(test.query.mock.calls.length).toBe(queries);
   });
 
-  it("rolls back on callback failure while keeping attempted state in the separate journal", async () => {
+  it("closes the lock session on callback failure while preserving separate journal state", async () => {
     const test = fixture();
-    const failed = new Error("worker outcome unknown");
-    let retainedFence: (() => Promise<void>) | undefined;
+    const failure = new Error("provider outcome unknown");
     await expect(
       test.lease(test.input, async (assertFence) => {
-        retainedFence = assertFence;
         const row = test.rows.get(keyFor(context));
         if (row?.record.operator === undefined) {
           throw new Error("fixture row missing");
@@ -358,62 +343,52 @@ describe("pooled protected resource lease", () => {
         row.record.operator.pendingEffectId = "install";
         row.record.operator.pendingEffectAttempt = { id: "33333333-3333-4333-8333-333333333333" };
         await assertFence();
-        throw failed;
+        throw failure;
       }),
-    ).rejects.toBe(failed);
-    expect(test.events.slice(-2)).toEqual(["rollback", "end"]);
+    ).rejects.toBe(failure);
+    expect(test.events.at(-1)).toBe("end");
     expect(test.rows.get(keyFor(context))?.record.operator?.pendingEffectId).toBe("install");
-    await expect(retainedFence?.()).rejects.toThrow("session was lost");
   });
 
-  it("fails on disconnect and denies a callback that completes after the transaction rejected", async () => {
+  it("fails closed on disconnect and rejects a callback that resumes afterward", async () => {
     const test = fixture();
     const entered = Promise.withResolvers<() => Promise<void>>();
     const resumed = Promise.withResolvers<null>();
-    const finished = Promise.withResolvers<null>();
     const pending = test.lease(test.input, async (assertFence) => {
       entered.resolve(assertFence);
       await resumed.promise;
-      try {
-        await expect(assertFence()).rejects.toThrow("session was lost");
-        finished.resolve(null);
-      } catch (error) {
-        finished.reject(error);
-        throw error;
-      }
+      await assertFence();
       return "late result";
     });
     const assertFence = await entered.promise;
-    const rejected = expect(pending).rejects.toThrow("fixture connection lost");
+    const rejected = expect(pending).rejects.toThrow("session was lost");
     test.disconnect();
     await rejected;
-    expect(test.events.slice(-2)).toEqual(["rollback", "end"]);
     await expect(assertFence()).rejects.toThrow("session was lost");
     resumed.resolve(null);
-    await finished.promise;
   });
 
-  it("denies an assertion already awaiting journal read when its transaction ends", async () => {
+  it("denies an assertion whose journal read completes after the session closes", async () => {
     const test = fixture();
-    const waiting = Promise.withResolvers<null>();
-    const resume = Promise.withResolvers<null>();
+    const readStarted = Promise.withResolvers<null>();
+    const resumeRead = Promise.withResolvers<null>();
     let pendingAssertion: Promise<void> | undefined;
     await test.lease(test.input, async (assertFence) => {
       vi.mocked(test.store.read).mockImplementationOnce(async (input) => {
-        waiting.resolve(null);
-        await resume.promise;
+        readStarted.resolve(null);
+        await resumeRead.promise;
         return test.rows.get(keyFor(input));
       });
       pendingAssertion = assertFence();
-      await waiting.promise;
-      return "finished callback";
+      await readStarted.promise;
+      return "callback finished";
     });
     const denied = expect(pendingAssertion).rejects.toThrow("session was lost");
-    resume.resolve(null);
+    resumeRead.resolve(null);
     await denied;
   });
 
-  it("uses deterministic physical resource keys independent of owner, app and operation", async () => {
+  it("uses stable physical keys and deduplicates repeated database or role identities", async () => {
     const test = fixture();
     await test.lease(test.input, async (assertFence) => {
       await assertFence();
@@ -430,10 +405,13 @@ describe("pooled protected resource lease", () => {
       .map((parts) => JSON.stringify(parts))
       .toSorted();
     expect(test.acquired).toEqual(expected);
-    expect(test.events.some((event) => event.includes("pg_advisory_lock("))).toBe(false);
+  });
 
-    const changed = fixture();
-    const otherContext = {
+  it("compares the same physical locks across owners, apps and operation references", async () => {
+    const first = fixture();
+    await first.lease(first.input, async () => "first");
+
+    const anotherContext: HostedOperatorContext = {
       ...context,
       authority: { ...authority, ownerUserId: "another-owner", workspaceId: "another-workspace" },
       target: { ...context.target, appId: "another-app", sessionId: "another-session" },
@@ -444,18 +422,43 @@ describe("pooled protected resource lease", () => {
       selection: { ...selection, appId: "another-app", sessionId: "another-session" },
     });
     const anotherOperation = "44444444-4444-4444-8444-444444444444";
-    const anotherRow = rowFor(otherContext, anotherPlan);
+    const second = fixture(anotherPlan);
+    const anotherRow = rowFor(anotherContext, anotherPlan);
     if (anotherRow.record.operator === undefined) {
       throw new Error("fixture operator missing");
     }
     anotherRow.record.operator.operationRef = anotherOperation;
-    changed.rows.set(keyFor(otherContext), anotherRow);
-    await changed.lease(
-      { ...otherContext, operationRef: anotherOperation, plan: anotherPlan },
-      async () => "done",
+    second.rows.set(keyFor(anotherContext), anotherRow);
+    await second.lease(
+      { ...anotherContext, operationRef: anotherOperation, plan: anotherPlan },
+      async () => "second",
     );
-    expect(changed.acquired).toEqual(expected);
-    expect(changed.rows.get(keyFor(context))?.record.operator?.operationRef).toBe(operationRef);
+
+    expect(second.acquired).toEqual(first.acquired);
+  });
+
+  it("rechecks the journal after lock acquisition and denies a changed lease", async () => {
+    const waiting = Promise.withResolvers<null>();
+    const release = Promise.withResolvers<null>();
+    const test = fixture(plan, async () => {
+      waiting.resolve(null);
+      await release.promise;
+    });
+    const callback = vi.fn(async () => "must not run");
+    const pending = test.lease(test.input, callback);
+    await waiting.promise;
+    const row = test.rows.get(keyFor(context));
+    if (row === undefined) {
+      throw new Error("fixture row missing");
+    }
+    row.record.leaseId = "55555555-5555-4555-8555-555555555555";
+    release.resolve(null);
+    await expect(pending).rejects.toThrow("fence is stale");
+    expect(callback).not.toHaveBeenCalled();
+    expect(test.acquired).toHaveLength(
+      6 + hostedOperatorVercelProjectLockKeys(test.input.plan, context.target.scopeId).length,
+    );
+    expect(test.events.at(-1)).toBe("end");
   });
 
   it("retains database and provider project locks without creating bootstrap role locks", async () => {
@@ -487,7 +490,7 @@ describe("pooled protected resource lease", () => {
   });
 
   it.each(["lease", "fence", "operation", "expiry"])(
-    "denies a changed journal %s before a further resource effect",
+    "rejects changed journal %s before a further effect",
     async (change) => {
       const test = fixture();
       const effect = vi.fn();
@@ -514,32 +517,29 @@ describe("pooled protected resource lease", () => {
         }),
       ).rejects.toThrow();
       expect(effect).not.toHaveBeenCalled();
-      expect(test.events.slice(-2)).toEqual(["rollback", "end"]);
+      expect(test.events.at(-1)).toBe("end");
     },
   );
 
-  it.each(["backend", "lock"])(
-    "denies a lost %s before another resource effect",
-    async (change) => {
-      const test = fixture();
-      const effect = vi.fn();
-      await expect(
-        test.lease(test.input, async (assertFence) => {
-          if (change === "backend") {
-            test.backend.backend_pid += 1;
-          }
-          if (change === "lock") {
-            test.held.clear();
-          }
-          await assertFence();
-          effect();
-        }),
-      ).rejects.toThrow();
-      expect(effect).not.toHaveBeenCalled();
-    },
-  );
+  it.each(["backend", "lock"])("rejects lost %s authority", async (change) => {
+    const test = fixture();
+    const effect = vi.fn();
+    await expect(
+      test.lease(test.input, async (assertFence) => {
+        if (change === "backend") {
+          test.backend.backend_pid += 1;
+        }
+        if (change === "lock") {
+          test.held.clear();
+        }
+        await assertFence();
+        effect();
+      }),
+    ).rejects.toThrow();
+    expect(effect).not.toHaveBeenCalled();
+  });
 
-  it("does not borrow another application's journal lease for shared physical resources", async () => {
+  it("does not borrow another application's journal fence", async () => {
     const test = fixture();
     const callback = vi.fn();
     const anotherContext = { ...context, target: { ...context.target, appId: "other-app" } };
@@ -548,6 +548,5 @@ describe("pooled protected resource lease", () => {
     );
     expect(callback).not.toHaveBeenCalled();
     expect(test.acquired).toHaveLength(0);
-    expect(test.rows.get(keyFor(context))?.record.leaseId).toBe(leaseId);
   });
 });
