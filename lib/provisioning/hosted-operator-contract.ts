@@ -1183,14 +1183,14 @@ const retainedRenewalGatewayDeliveryOrigin = (
       candidate.origin === link.endpointOrigin,
   )?.origin;
 };
-// oxlint-disable-next-line eslint/complexity, sonarjs/expression-complexity -- Frozen identity link and actual delivered candidate identities require every exact binding.
-const validateOperatorMetadata = (
+/** Exact identity scope shared by validation and successor metadata composition. */
+export const matchesHostedOperatorIdentityLinkScope = (
   operator: z.infer<typeof hostedOperatorRecordDataSchema>,
-  context: z.RefinementCtx,
-) => {
+): boolean => {
   const link = operator.identityLink;
-  if (link !== undefined) {
-    const matches = [
+  return (
+    link === undefined ||
+    [
       link.authResourceId === operator.plan.authDatabase.resourceId,
       link.browserOrigin === operator.plan.gatewayBindings?.authBrowserOrigin,
       link.ownerSessionId === operator.plan.selection.sessionId,
@@ -1198,14 +1198,20 @@ const validateOperatorMetadata = (
       link.endpointOrigin === operator.plan.deploymentBoundary?.verification.gatewayOrigin ||
         gatewayDeliveryOrigin(operator) === link.endpointOrigin ||
         retainedRenewalGatewayDeliveryOrigin(operator) === link.endpointOrigin,
-    ].every(Boolean);
-    if (!matches) {
-      context.addIssue({
-        code: "custom",
-        message:
-          "Realm identity link must match the owned Auth resource, exact issuer and canonical owner session.",
-      });
-    }
+    ].every(Boolean)
+  );
+};
+// oxlint-disable-next-line eslint/complexity, sonarjs/expression-complexity -- Frozen identity link and actual delivered candidate identities require every exact binding.
+const validateOperatorMetadata = (
+  operator: z.infer<typeof hostedOperatorRecordDataSchema>,
+  context: z.RefinementCtx,
+) => {
+  if (!matchesHostedOperatorIdentityLinkScope(operator)) {
+    context.addIssue({
+      code: "custom",
+      message:
+        "Realm identity link must match the owned Auth resource, exact issuer and canonical owner session.",
+    });
   }
   const gatewayCandidates = operator.gatewayDeliveryCandidates ?? [];
   if (

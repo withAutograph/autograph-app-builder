@@ -13,6 +13,7 @@ import {
 } from "./hosted-operator-shared-host-protection-successor";
 import type { SharedHostProtectionDeliveryProvenance } from "./hosted-operator-shared-host-protection-successor";
 import { recoverOriginalApprovedPlan } from "./hosted-operator-approved-plan";
+import { retainedConsumedIdentityLink } from "./hosted-operator-identity-link-carry";
 import {
   createRetentionRenewalPlan,
   isRetentionRenewalSuccessor,
@@ -1095,9 +1096,7 @@ const handlePlanOperation = async (
           if (record.operator.gatewayEnvironment !== undefined) {
             nextOperator.gatewayEnvironment = record.operator.gatewayEnvironment;
           }
-          if (plan.action === "prepare" && record.operator.identityLink?.consumedAt !== undefined) {
-            nextOperator.identityLink = record.operator.identityLink;
-          }
+          nextOperator.identityLink = retainedConsumedIdentityLink(record.operator, nextOperator);
           if (
             !retainedRenewalSuccessor &&
             !readyDeliverySuccessor &&
