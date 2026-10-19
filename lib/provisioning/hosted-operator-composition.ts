@@ -1834,16 +1834,23 @@ export const composeHostedOperatorDependencies = (
       const state = assertParticipantOrganization(input, prepared.state);
       return { receipt: receipt(input, normalActorFingerprint(state)), status: "applied" };
     }
+    // Keep private reads and live capture authority on the current approved plan.
+    // Only SELECT-only worker input may use an approved historical ownership marker.
+    const prepared = await membershipInput(input);
+    // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Both readers renew the same live execution lease through journal CAS.
+    const historical = await controlPlane.readMembershipInspectionPlan(input);
     const observed = await launcher.inspect({
       ...input,
+      ...prepared,
+      ...historical,
       assertCurrent: async () => {
         await controlPlane.assertMembershipCapture(input);
       },
-      ...(await membershipInput(input)),
       readbackOnly: true,
     });
     if (observed?.status === "absent") {
-      return { status: "absent" };
+      // Missing historical state never grants permission to recreate it under an old plan.
+      return { status: historical === undefined ? "absent" : "unknown" };
     }
     if (observed?.status === "applied" && observed.readback_sha256 !== undefined) {
       return { receipt: receipt(input, observed.readback_sha256), status: "applied" };

@@ -10,6 +10,7 @@ import type {
 import type { HostedEveStore } from "../eve/hosted-store";
 import { projectSettingsDeliveryProvenance } from "./hosted-operator-project-settings-successor";
 import { retentionRenewalDeliveryProvenance } from "./hosted-operator-retention-renewal";
+import { matchRetainedMembershipInspectionProvenance } from "./hosted-operator-membership-inspection-provenance";
 import { readyReplacementPriorOperators } from "./hosted-operator-native-preview-recovery";
 import { hostedSessionRecordSchema, toDurableHostedSessionRecord } from "../eve/hosted-store";
 import { hostedPrincipalSchema } from "../eve/hosted-auth";
@@ -643,6 +644,20 @@ const accountApprovalCheckpoint = (
   };
 };
 
+const membershipInspectionApprovalCheckpoint = (
+  record: HostedRuntimeJournalRecord | undefined,
+  context: { action: "prepare" | "cleanup"; callId: string; planDigest: string },
+) => {
+  if (context.action !== "prepare" || record?.operator === undefined) {
+    return null;
+  }
+  const retained = matchRetainedMembershipInspectionProvenance(record, record.operator.plan, {
+    approvedByCallId: context.callId,
+    planDigest: context.planDigest,
+  });
+  return retained === undefined ? null : { current: retained.operator, retainedPrepare: true };
+};
+
 const approvalCheckpoint = (
   record: HostedRuntimeJournalRecord | undefined,
   context: { action: "prepare" | "cleanup"; callId: string; planDigest: string },
@@ -673,6 +688,10 @@ const approvalCheckpoint = (
   const retainedReady = readyReplacementApprovalCheckpoint(record, context);
   if (retainedReady !== null) {
     return retainedReady;
+  }
+  const retainedMembership = membershipInspectionApprovalCheckpoint(record, context);
+  if (retainedMembership !== null) {
+    return retainedMembership;
   }
   const retained = record?.retainedAuth;
   const retainedPrepare =
