@@ -1,0 +1,184 @@
+import { isDeepStrictEqual } from "node:util";
+import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
+import type { HostedOperatorPlan, HostedOperatorRecordBase } from "./hosted-operator-contract";
+import type { ExternallyManagedTrustedSources } from "./hosted-operator-host-protection";
+import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
+import {
+  isReadyDeliveryReplacementSuccessor,
+  resolveReadyDeliveryReplacementPredecessor,
+} from "./hosted-operator-ready-delivery-replacement";
+
+export const withExternallyManagedHostProtection = (
+  plan: HostedOperatorPlan,
+  policy: ExternallyManagedTrustedSources | undefined,
+): HostedOperatorPlan => {
+  if (policy === undefined || plan.stage !== "app" || plan.action !== "prepare") return plan;
+  const { appTrustedSources, gatewayBindings, ...base } = plan;
+  void appTrustedSources;
+  if (!gatewayBindings)
+    throw new Error("External host configuration requires the owned Gateway bindings.");
+  const { trustedSources, ...gateway } = gatewayBindings;
+  void trustedSources;
+  return hostedOperatorPlanSchema.parse({
+    ...base,
+    hostProtection: policy,
+    gatewayBindings: gateway,
+    effects: plan.effects.map((effect) =>
+      effect.kind === "bindings" || effect.kind === "gateway-bindings"
+        ? {
+            ...effect,
+            description:
+              "Bind and read back only owned Preview environment rows; consume the explicitly configured administrator-managed Trusted Sources policy without setting or claiming fresh policy proof.",
+          }
+        : effect,
+    ),
+  });
+};
+
+/** A fresh explicit delivery proposal uses the approved source and ownership. No old receipt becomes new success. */
+export const createNativePreviewRecoveryPlan = (
+  record: HostedRuntimeJournalRecord | undefined,
+  policy: ExternallyManagedTrustedSources,
+  now: number,
+  gatewayDeploymentId?: string,
+): HostedOperatorPlan | undefined => {
+  const current = record?.operator;
+  if (!record || !current || current.plan.stage !== "app" || current.plan.action !== "prepare")
+    return undefined;
+  if (
+    current.plan.appDeliveryReplacement &&
+    isDeepStrictEqual(current.plan.hostProtection, policy) &&
+    Date.parse(current.plan.retention.expiresAt) > now
+  ) {
+    return current.plan;
+  }
+  const previous = current.plan;
+  const { appTrustedSources, gatewayBindings, appDeliveryReplacement, ...base } = previous;
+  void appTrustedSources;
+  void appDeliveryReplacement;
+  if (!gatewayBindings || !previous.delivery || !previous.gatewayDelivery) return undefined;
+  const { trustedSources, ...bindings } = gatewayBindings;
+  void trustedSources;
+  for (const origin of [
+    { operator: current },
+    ...(current.retainedRenewalOperations ?? []).toReversed(),
+  ]) {
+    const operator = origin.operator;
+    const candidates = (operator.deliveryCandidates ?? []).filter(
+      (value) => value.readyState === "READY",
+    );
+    const app =
+      candidates.find((value) => value.deploymentId === operator.deliveredDeploymentId) ??
+      (candidates.length === 1 ? candidates[0] : undefined);
+    if (!app) continue;
+    const gatewayCandidates = (operator.gatewayDeliveryCandidates ?? []).filter(
+      (value) => value.readyState === "READY",
+    );
+    const gateway =
+      gatewayCandidates.find(
+        (value) =>
+          value.deploymentId === (gatewayDeploymentId ?? operator.deliveredGatewayDeploymentId),
+      ) ??
+      (gatewayDeploymentId === undefined && gatewayCandidates.length === 1
+        ? gatewayCandidates[0]
+        : undefined);
+    if (gatewayDeploymentId !== undefined && !gateway) continue;
+    const intent = {
+      version: 1 as const,
+      predecessor: {
+        operationRef: operator.operationRef,
+        planDigest: operator.planDigest,
+        appDeploymentId: app.deploymentId,
+        ...(gateway ? { gatewayDeploymentId: gateway.deploymentId } : {}),
+      },
+    };
+    if (!resolveReadyDeliveryReplacementPredecessor(record, intent)) continue;
+    const proposed = hostedOperatorPlanSchema.parse({
+      ...base,
+      hostProtection: policy,
+      gatewayBindings: bindings,
+      appDeliveryReplacement: intent,
+      retention: {
+        ...previous.retention,
+        expiresAt: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
+      },
+      effects: previous.effects.map((effect) =>
+        effect.kind === "bindings" || effect.kind === "gateway-bindings"
+          ? {
+              ...effect,
+              description:
+                "Bind and read back only owned Preview environment rows; consume the explicitly configured administrator-managed Trusted Sources policy without setting or claiming fresh policy proof.",
+            }
+          : effect.kind === "delivery" || effect.kind === "gateway-delivery"
+            ? {
+                ...effect,
+                description:
+                  "Create and verify a fresh native Preview under this new approval, replacing the named READY predecessor. This may create duplicate deployment usage charges.",
+              }
+            : effect,
+      ),
+    });
+    if (
+      isReadyDeliveryReplacementSuccessor(
+        record,
+        { ...proposed, appDeliveryReplacement: intent },
+        now,
+      )
+    )
+      return proposed;
+  }
+  return undefined;
+};
+
+/** Resolve the exact archived transition source; old unknown markers remain evidence only. */
+export const readyReplacementHistory = (
+  record: HostedRuntimeJournalRecord,
+  plan: HostedOperatorPlan,
+  now = Date.now(),
+) => {
+  if (!plan.appDeliveryReplacement) return undefined;
+  for (const archived of record.operator?.retainedReadyDeliveryOperations?.toReversed() ?? []) {
+    const snapshot: HostedRuntimeJournalRecord = {
+      ...record,
+      approvedByCallId: archived.approvedByCallId,
+      operator: archived.operator,
+    };
+    const predecessor = resolveReadyDeliveryReplacementPredecessor(
+      snapshot,
+      plan.appDeliveryReplacement,
+    );
+    if (
+      predecessor &&
+      isReadyDeliveryReplacementSuccessor(
+        { ...snapshot, leaseId: undefined, leaseExpiresAt: undefined },
+        { ...plan, appDeliveryReplacement: plan.appDeliveryReplacement },
+        now,
+      )
+    )
+      return predecessor;
+  }
+  return undefined;
+};
+
+export const readyReplacementPriorOperators = (
+  record: HostedRuntimeJournalRecord,
+  plan: HostedOperatorPlan,
+  now = Date.now(),
+): { approvedByCallId: string; operator: HostedOperatorRecordBase }[] => {
+  const predecessor = readyReplacementHistory(record, plan, now);
+  if (!predecessor) return [];
+  return [
+    {
+      approvedByCallId: predecessor.snapshot.approvedByCallId,
+      operator: predecessor.snapshot.operator!,
+    },
+    { approvedByCallId: predecessor.approvedByCallId, operator: predecessor.originatingOperator },
+  ].filter(
+    (value, index, all) =>
+      all.findIndex(
+        (item) =>
+          item.operator.planDigest === value.operator.planDigest &&
+          item.operator.operationRef === value.operator.operationRef,
+      ) === index,
+  );
+};

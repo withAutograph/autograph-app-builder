@@ -15,6 +15,8 @@ type OperatorRecord = NonNullable<HostedRuntimeJournalRecord["operator"]>;
 const sameNarrowedPlan = (prior: HostedOperatorPlan, next: HostedOperatorPlan): boolean => {
   const binding = prior.effects.find((effect) => effect.kind === GATEWAY_BINDINGS);
   if (
+    prior.stage !== AUTH_BOOTSTRAP ||
+    next.stage !== AUTH_BOOTSTRAP ||
     binding === undefined ||
     prior.gatewayBindings?.trustedSources === undefined ||
     next.gatewayBindings === undefined

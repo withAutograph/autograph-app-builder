@@ -6,7 +6,10 @@ import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-
 import type { HostedOperatorPlan } from "./hosted-operator-contract";
 import type { HostedOperatorContext } from "./hosted-operator-service";
 import type { HostedRuntimeJournalRow, HostedRuntimeJournalStore } from "./hosted-runtime-journal";
-import { createPostgresHostedOperatorResourceLease } from "./postgres-hosted-operator-resource-lease";
+import {
+  createPostgresHostedOperatorResourceLease,
+  hostedOperatorVercelProjectLockKeys,
+} from "./postgres-hosted-operator-resource-lease";
 
 const now = Date.parse("2026-10-09T12:00:00.000Z");
 const operationRef = "11111111-1111-4111-8111-111111111111";
@@ -217,12 +220,116 @@ const fixture = (selectedPlan = plan) => {
 };
 
 describe("pooled protected resource lease", () => {
+  const gatewayPlan = () =>
+    hostedOperatorPlanSchema.parse({
+      ...plan,
+      publicGateway: {
+        projectId: "shared-gateway",
+        branch: "gateway",
+        origin: "https://apps.example.test",
+      },
+      gatewayDelivery: {
+        projectId: "shared-gateway",
+        branch: "gateway",
+        repoId: "shared-repo",
+        gitSha: "d".repeat(40),
+      },
+      deploymentBoundary: {
+        authority,
+        teamId: context.target.scopeId,
+        app: {
+          projectId: plan.selection.projectId,
+          branch: plan.selection.branch,
+          environment: "preview",
+        },
+        gateway: { projectId: "shared-gateway", branch: "gateway", environment: "preview" },
+        operator: {
+          projectId: "operator",
+          deploymentId: "operator-deployment",
+          environment: "preview",
+        },
+        verification: {
+          gatewayOrigin: "https://gateway.example.test",
+          jwksUrl: "https://gateway.example.test/_platform/jwks.json",
+          publicOrigin: "https://apps.example.test",
+        },
+      },
+      effects: [
+        ...plan.effects,
+        {
+          id: "gateway-delivery",
+          kind: "gateway-delivery",
+          description: "Deliver the shared Gateway",
+        },
+      ],
+    });
+  it("uses the same shared Gateway fence across legacy and externally managed policy modes", () => {
+    const legacy = gatewayPlan();
+    const external = hostedOperatorPlanSchema.parse({
+      ...legacy,
+      hostProtection: {
+        mode: "externally-managed-trusted-sources",
+        teamId: context.target.scopeId,
+        appPreview: {
+          sourceProjectId: "shared-gateway",
+          targetProjectId: legacy.selection.projectId,
+          from: "preview",
+          to: "preview",
+        },
+        gatewayPreview: {
+          sourceProjectId: legacy.selection.projectId,
+          targetProjectId: "shared-gateway",
+          from: "preview",
+          to: "preview",
+        },
+        observedAt: "2026-10-19T12:00:00Z",
+        provenance: {
+          kind: "administrator-provider-readback",
+          reference: "synthetic-independent-readback",
+        },
+      },
+    });
+    expect(hostedOperatorVercelProjectLockKeys(external, context.target.scopeId)).toEqual(
+      hostedOperatorVercelProjectLockKeys(legacy, context.target.scopeId),
+    );
+    const otherApp = hostedOperatorPlanSchema.parse({
+      ...legacy,
+      selection: { ...legacy.selection, projectId: "other-app" },
+      deploymentBoundary: {
+        ...legacy.deploymentBoundary,
+        app: { ...legacy.deploymentBoundary!.app, projectId: "other-app" },
+      },
+    });
+    const shared = hostedOperatorVercelProjectLockKeys(legacy, context.target.scopeId).filter(
+      (key) => hostedOperatorVercelProjectLockKeys(otherApp, context.target.scopeId).includes(key),
+    );
+    expect(shared).toEqual([
+      JSON.stringify([
+        "hosted_protected_operator_vercel_project_v1",
+        context.target.scopeId,
+        "shared-gateway",
+      ]),
+    ]);
+  });
+  it("keeps unrelated provider projects independent of another target's lease", () => {
+    const left = hostedOperatorVercelProjectLockKeys(plan, context.target.scopeId);
+    const right = hostedOperatorVercelProjectLockKeys(
+      hostedOperatorPlanSchema.parse({
+        ...plan,
+        selection: { ...plan.selection, projectId: "independent-app" },
+      }),
+      context.target.scopeId,
+    );
+    expect(left.some((key) => right.includes(key))).toBe(false);
+  });
   it("holds transaction locks throughout the callback and commits before client cleanup", async () => {
     const test = fixture();
     let retainedFence: (() => Promise<void>) | undefined;
     const result = await test.lease(test.input, async (assertFence) => {
       retainedFence = assertFence;
-      expect(test.held.size).toBe(6);
+      expect(test.held.size).toBe(
+        6 + hostedOperatorVercelProjectLockKeys(test.input.plan, context.target.scopeId).length,
+      );
       expect(test.events).not.toContain("commit");
       await assertFence();
       return ["first", "second"];
@@ -318,6 +425,7 @@ describe("pooled protected resource lease", () => {
       ["hosted_protected_operator_role_v1", "fixture-neon", "br_fixture", "shared_auth_runtime"],
       ["hosted_protected_operator_role_v1", "fixture-neon", "br_fixture", "spend_owner"],
       ["hosted_protected_operator_role_v1", "fixture-neon", "br_fixture", "spend_runtime"],
+      ["hosted_protected_operator_vercel_project_v1", "team_fixture", "prj_fixture"],
     ]
       .map((parts) => JSON.stringify(parts))
       .toSorted();
@@ -350,7 +458,7 @@ describe("pooled protected resource lease", () => {
     expect(changed.rows.get(keyFor(context))?.record.operator?.operationRef).toBe(operationRef);
   });
 
-  it("locks only databases when no bootstrap roles are created", async () => {
+  it("retains database and provider project locks without creating bootstrap role locks", async () => {
     const existing = structuredClone(plan);
     delete existing.bootstrap;
     delete existing.resourcesInstaller;
@@ -363,10 +471,19 @@ describe("pooled protected resource lease", () => {
     });
     const test = fixture(existingPlan);
     await test.lease(test.input, async () => "done");
-    expect(test.acquired).toHaveLength(2);
     expect(
-      test.acquired.every((key) => key.startsWith('["hosted_protected_operator_database_v1",')),
-    ).toBe(true);
+      test.acquired.filter((key) => key.startsWith('["hosted_protected_operator_database_v1",')),
+    ).toHaveLength(2);
+    expect(
+      test.acquired.some((key) => key.startsWith('["hosted_protected_operator_role_v1",')),
+    ).toBe(false);
+    expect(test.acquired).toContain(
+      JSON.stringify([
+        "hosted_protected_operator_vercel_project_v1",
+        "team_fixture",
+        "prj_fixture",
+      ]),
+    );
   });
 
   it.each(["lease", "fence", "operation", "expiry"])(

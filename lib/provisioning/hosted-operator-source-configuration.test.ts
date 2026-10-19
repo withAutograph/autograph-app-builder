@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { hostedOperatorSourceConfigurationSchema } from "./hosted-operator-source-configuration";
+import { matchesExternalTrustedSources } from "./hosted-operator-host-protection";
+
+// Parser tests never open the private provider/control-plane factory.
+vi.mock("./hosted-operator-deployment", () => ({ createHostedOperatorControlPlane: vi.fn() }));
 
 const application = () => ({
   accessRoles: ["member"],
@@ -15,6 +19,63 @@ const application = () => ({
 const { applications } = hostedOperatorSourceConfigurationSchema.shape;
 
 describe("deployment-owned app publication configuration", () => {
+  const hostProtection = {
+    mode: "externally-managed-trusted-sources",
+    teamId: "team",
+    appPreview: {
+      sourceProjectId: "gateway",
+      targetProjectId: "prj_actual_app",
+      from: "preview",
+      to: "preview",
+    },
+    gatewayPreview: {
+      sourceProjectId: "prj_actual_app",
+      targetProjectId: "gateway",
+      from: "preview",
+      to: "preview",
+    },
+    observedAt: "2026-10-19T14:31:17Z",
+    provenance: {
+      kind: "administrator-provider-readback",
+      reference: "independent-policy-readback",
+    },
+  } as const;
+  it("accepts external administrator evidence only for the actual team and both project pairs", () => {
+    const parsed = applications.parse({ actual: { ...application(), hostProtection } }).actual
+      .hostProtection!;
+    expect(matchesExternalTrustedSources(parsed, "team", "prj_actual_app", "gateway")).toBe(true);
+    expect(matchesExternalTrustedSources(parsed, "foreign-team", "prj_actual_app", "gateway")).toBe(
+      false,
+    );
+    expect(matchesExternalTrustedSources(parsed, "team", "other-app", "gateway")).toBe(false);
+    expect(matchesExternalTrustedSources(parsed, "team", "prj_actual_app", "other-gateway")).toBe(
+      false,
+    );
+  });
+  it.each(["provenance", "observedAt", "appPreview", "gatewayPreview"] as const)(
+    "requires explicit external policy %s",
+    (field) => {
+      const { [field]: removed, ...incomplete } = hostProtection;
+      void removed;
+      expect(
+        applications.safeParse({ actual: { ...application(), hostProtection: incomplete } })
+          .success,
+      ).toBe(false);
+    },
+  );
+  it("rejects Production or custom-environment external pairs", () => {
+    expect(
+      applications.safeParse({
+        actual: {
+          ...application(),
+          hostProtection: {
+            ...hostProtection,
+            appPreview: { ...hostProtection.appPreview, from: "production" },
+          },
+        },
+      }).success,
+    ).toBe(false);
+  });
   it("accepts an app before publication without inventing a repository or commit", () => {
     const parsed = applications.parse({ actual: application() });
     expect(parsed.actual).toEqual(application());

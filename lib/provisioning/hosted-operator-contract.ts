@@ -7,6 +7,11 @@ import {
   normalActorProgramSchema,
 } from "./hosted-operator-normal-actor-program";
 import { hostedOperatorAppProjectSettingsSchema } from "./hosted-operator-app-project-settings";
+import {
+  externallyManagedTrustedSourcesSchema,
+  matchesExternalTrustedSources,
+} from "./hosted-operator-host-protection";
+import { readyDeliveryReplacementIntentSchema } from "./hosted-operator-ready-delivery-replacement-intent";
 
 const GATEWAY_BINDINGS_EFFECT = "gateway-bindings";
 const id = z.string().min(1);
@@ -406,6 +411,8 @@ const hostedOperatorPlanDataSchema = z.strictObject({
     })
     .optional(),
   installer: z.strictObject({ reference: id, sha256: digest }),
+  hostProtection: externallyManagedTrustedSourcesSchema.optional(),
+  appDeliveryReplacement: readyDeliveryReplacementIntentSchema.optional(),
   neon: z.strictObject({
     branchId: id,
     connectionRef: id,
@@ -782,6 +789,36 @@ const validateGatewayAppTrustedSource = (
   }
 };
 export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine((plan, ctx) => {
+  if (
+    plan.hostProtection !== undefined &&
+    (plan.deploymentBoundary === undefined ||
+      plan.publicGateway === undefined ||
+      !matchesExternalTrustedSources(
+        plan.hostProtection,
+        plan.deploymentBoundary.teamId,
+        plan.selection.projectId,
+        plan.publicGateway.projectId,
+      ) ||
+      plan.appTrustedSources !== undefined ||
+      plan.gatewayBindings?.trustedSources !== undefined)
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["hostProtection"],
+      message:
+        "External host policy must name the exact owned team and both Preview project pairs without authorizing policy writes.",
+    });
+  }
+  if (
+    plan.appDeliveryReplacement !== undefined &&
+    (plan.action !== "prepare" || plan.stage !== "app" || plan.delivery === undefined)
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["appDeliveryReplacement"],
+      message: "READY replacement requires an explicit full App Preview delivery plan.",
+    });
+  }
   validateAuthAdoption(plan, ctx);
   validateAppEnvironmentCleanup(plan, ctx);
   validateAppTrustedSources(plan, ctx);
@@ -1044,7 +1081,7 @@ const hostedOperatorRecordBaseSchema = z.strictObject({
   workerCheckpoints: z.array(workerEffectCheckpointSchema).optional(),
 });
 export type HostedOperatorRecordBase = z.infer<typeof hostedOperatorRecordBaseSchema>;
-const hostedOperatorRecordDataSchema = hostedOperatorRecordBaseSchema.extend({
+const hostedOperatorRecordHistorySchema = hostedOperatorRecordBaseSchema.extend({
   /** Prior build settings and unresolved binding attempts are provenance, never new approval. */
   retainedProjectSettingsOperations: z
     .array(z.strictObject({ approvedByCallId: id, operator: hostedOperatorRecordBaseSchema }))
@@ -1070,6 +1107,17 @@ const hostedOperatorRecordDataSchema = hostedOperatorRecordBaseSchema.extend({
   /** The expired approved plan remains evidence; a renewed plan requires a new approval. */
   retainedRenewalOperations: z
     .array(z.strictObject({ approvedByCallId: id, operator: hostedOperatorRecordBaseSchema }))
+    .optional(),
+});
+const hostedOperatorRecordDataSchema = hostedOperatorRecordHistorySchema.extend({
+  /** Exact predecessor snapshots, including old unknown attempts and existing histories; never replay authority. */
+  retainedReadyDeliveryOperations: z
+    .array(
+      z.strictObject({
+        approvedByCallId: id,
+        operator: hostedOperatorRecordHistorySchema,
+      }),
+    )
     .optional(),
 });
 const gatewayDeliveryOrigin = (operator: z.infer<typeof hostedOperatorRecordDataSchema>) =>

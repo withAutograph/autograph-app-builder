@@ -14,7 +14,25 @@ type ResourceLeaseInput = HostedOperatorContext & {
 
 const leaseAuthorityUnavailable = "Protected resource lease authority is unavailable.";
 
-const lockKey = (plan: HostedOperatorPlan) => {
+export const hostedOperatorVercelProjectLockKeys = (plan: HostedOperatorPlan, scopeId: string) => {
+  const projects = new Set<string>();
+  if (
+    plan.effects.some((effect) => ["bindings", "delivery", "remove-bindings"].includes(effect.kind))
+  )
+    projects.add(plan.delivery?.projectId ?? plan.selection.projectId);
+  if (
+    plan.effects.some((effect) => ["gateway-bindings", "gateway-delivery"].includes(effect.kind))
+  ) {
+    const projectId = plan.gatewayDelivery?.projectId ?? plan.publicGateway?.projectId;
+    if (projectId !== undefined) projects.add(projectId);
+  }
+  return [...projects]
+    .map((projectId) =>
+      JSON.stringify(["hosted_protected_operator_vercel_project_v1", scopeId, projectId]),
+    )
+    .toSorted();
+};
+const lockKey = (plan: HostedOperatorPlan, scopeId: string) => {
   const databases = [plan.authDatabase, plan.appDatabase];
   const keys = [...new Set(databases.map((resource) => resource.database))].map((database) =>
     JSON.stringify([
@@ -37,6 +55,7 @@ const lockKey = (plan: HostedOperatorPlan) => {
       );
     }
   }
+  keys.push(...hostedOperatorVercelProjectLockKeys(plan, scopeId));
   return keys.toSorted();
 };
 
@@ -94,7 +113,7 @@ export const createPostgresHostedOperatorResourceLease = (input: {
   ) =>
     await lease(
       {
-        lockKeys: lockKey(leaseInput.plan),
+        lockKeys: lockKey(leaseInput.plan, leaseInput.target.scopeId),
         readCurrentFence: async () => await readLeaseSnapshot(input.store, leaseInput, now),
       },
       run,

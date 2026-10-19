@@ -231,6 +231,11 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
   target?: "app" | "gateway";
   wait?: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
   observeAlias?: (diagnostic: GatewayAliasDiagnostic) => void | Promise<void>;
+  beforeCreate?: (input: HostedOperatorDeploymentContext) => Promise<void>;
+  beforeAliasWrite?: (
+    input: HostedOperatorDeploymentContext,
+    selected: OperatorDeploymentCandidate,
+  ) => Promise<"write" | "applied" | "unknown">;
 }) => {
   const observeAlias = (diagnostic: GatewayAliasDiagnostic) => {
     try {
@@ -849,6 +854,10 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     await input.checkpointDelivery(marked);
     const markedInput = { ...input, deliveryCandidates: marked };
     try {
+      const aliasAuthority = await deps.beforeAliasWrite?.(markedInput, selected);
+      if (aliasAuthority === "applied") return await reconcile(markedInput);
+      if (aliasAuthority === "unknown") return { candidates: marked, status: "unknown" as const };
+      await fresh.assertCurrent();
       await fresh.request(
         `/v2/deployments/${encodeURIComponent(selected.deploymentId)}/aliases`,
         {},
@@ -917,6 +926,8 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       if (!exactProject) {
         throw new HostedOperatorError("resource_mismatch");
       }
+      await reader.assertCurrent();
+      await deps.beforeCreate?.(input);
       await reader.assertCurrent();
       const response = z.object({ id }).parse(
         await reader.request(

@@ -215,13 +215,23 @@ const operatorApprovalDescription = (record: Record<string, unknown>, toolName: 
     signupPolicy === undefined
       ? ""
       : ` Public signup: eligibility ${signupPolicy.eligibility}; organization ${signupPolicy.organizationId}; member role ${signupPolicy.membershipRole}; app roles ${signupPolicy.appRoles.join(", ") || "none"}.`;
+  const host = plan.hostProtection;
+  const hostApproval =
+    host === undefined
+      ? ""
+      : ` Deployment Protection: consume externally managed Trusted Sources in team ${host.teamId}: ${host.appPreview.sourceProjectId} Preview → ${host.appPreview.targetProjectId} Preview and ${host.gatewayPreview.sourceProjectId} Preview → ${host.gatewayPreview.targetProjectId} Preview. Administrator evidence ${host.provenance.reference}, observed ${host.observedAt}. No policy-setting write or fresh operator policy proof is authorized.`;
+  const replacement = plan.appDeliveryReplacement?.predecessor;
+  const replacementApproval =
+    replacement === undefined
+      ? ""
+      : ` Replace READY App deployment ${replacement.appDeploymentId}${replacement.gatewayDeploymentId === undefined ? "" : ` and Gateway deployment ${replacement.gatewayDeploymentId}`} from operation ${replacement.operationRef}, plan ${replacement.planDigest}, with freshly delivered native Previews. This can incur duplicate deployment usage; old unknown attempts remain archived without success claims.`;
   return (
     `${plan.action === "cleanup" ? "Clean up" : "Prepare"} ${plan.selection.appId} on Preview branch ${plan.selection.branch} in Vercel project ${plan.selection.projectId}. ` +
     `Context ${plan.contextId}; Neon project ${plan.neon.projectId}, branch ${plan.neon.branchId} (${plan.neon.source}). ` +
     `Auth database ${plan.authDatabase.database} with runtime role ${plan.authDatabase.runtimeRole} and migrator role ${plan.authDatabase.migratorRole}; app database ${plan.appDatabase.database} with runtime role ${plan.appDatabase.runtimeRole} and migrator role ${plan.appDatabase.migratorRole}. ` +
     `Release ${plan.release.id} (${plan.release.sha256}); trusted installer ${plan.installer.reference} (${plan.installer.sha256}). Effects: ${plan.effects.map((effect) => effect.description).join("; ")}. ` +
     `Access: ${grants || "no new actor grants"}.${signupApproval} Cost owner: ${plan.cost.owner}; ${plan.cost.class}: ${plan.cost.description}. ` +
-    `Retention: ${plan.retention.policy}; expires ${plan.retention.expiresAt}. This does not deploy or activate Production.`
+    `Retention: ${plan.retention.policy}; expires ${plan.retention.expiresAt}.${hostApproval}${replacementApproval} This does not deploy or activate Production.`
   );
 };
 
