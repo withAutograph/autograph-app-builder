@@ -323,11 +323,7 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
     });
   };
   const createDeploymentResponse = (body: FixtureJsonObject) => {
-    if (gateway) {
-      expect(body).not.toHaveProperty("target");
-    } else {
-      expect(body).toMatchObject({ target: "staging" });
-    }
+    expect(body).not.toHaveProperty("target");
     count += 1;
     return Response.json({ id: "dpl_new" });
   };
@@ -495,7 +491,7 @@ it("requests standard Preview delivery from approved Git source and observes rea
   expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({
     projectSettings: appProjectSettings,
   });
-  expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({ target: "staging" });
+  expect(f.calls.find((call) => call.method === "POST")?.body).not.toHaveProperty("target");
   expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({
     projectSettings: { buildCommand: "bun run build" },
   });
@@ -540,7 +536,6 @@ it("permits an app profile successor only after exact terminal blocked Productio
   expect(result.status).toBe("applied");
   expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({
     projectSettings: appProjectSettings,
-    target: "staging",
   });
   expect(f.checkpoint.mock.calls.at(-1)?.[0].map((candidate) => candidate.deploymentId)).toEqual([
     "dpl_new",
@@ -594,7 +589,6 @@ it("reconciles every exact terminal Preview failure before one approved profile 
   ).toHaveLength(1);
   expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({
     projectSettings: appProjectSettings,
-    target: "staging",
   });
   expect(f.calls.some((call) => call.path === "/v13/deployments/dpl_failed_fs2")).toBe(true);
   expect(f.calls.some((call) => call.path === "/v13/deployments/dpl_failed_retry")).toBe(true);
