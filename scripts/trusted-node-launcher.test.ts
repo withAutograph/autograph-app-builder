@@ -275,6 +275,123 @@ describe("trusted Node launcher", () => {
     });
   });
 
+  it.each(
+    [false, true].flatMap((privateHome) =>
+      ["/owner/application data", "", undefined].map((dataHome) => ({ privateHome, dataHome })),
+    ),
+  )(
+    "projects XDG data through OIDC startup without escaping private home: %j",
+    ({ privateHome, dataHome }) => {
+      const scratch = realpathSync(mkdtempSync(pathModule.join(tmpdir(), "launcher-oidc-xdg-")));
+      const projectRoot = pathModule.join(scratch, "project");
+      const runtimeHome = pathModule.join(scratch, "runtime");
+      mkdirSync(projectRoot, { mode: 0o700 });
+      mkdirSync(runtimeHome, { mode: 0o700 });
+      mkdirSync(pathModule.join(projectRoot, ".vercel"), { mode: 0o700 });
+      const project = { orgId: "team_fixture", projectId: "prj_fixture", projectName: "fixture" };
+      const now = 2_000_000_000;
+      const claims = {
+        aud: "https://vercel.com/fixture-owner",
+        environment: "development",
+        iat: now - 10,
+        iss: "https://oidc.vercel.com/fixture-owner",
+        nbf: now - 10,
+        owner: "fixture-owner",
+        owner_id: project.orgId,
+        project: project.projectName,
+        project_id: project.projectId,
+        sub: "owner:fixture-owner:project:fixture:environment:development",
+      };
+      const jwt = (expiresAt: number) =>
+        [
+          Buffer.from("{}").toString("base64url"),
+          Buffer.from(JSON.stringify({ ...claims, exp: expiresAt })).toString("base64url"),
+          "signature",
+        ].join(".");
+      writeFileSync(pathModule.join(projectRoot, ".vercel/project.json"), JSON.stringify(project), {
+        mode: 0o600,
+      });
+      writeFileSync(
+        pathModule.join(projectRoot, ".env.local"),
+        `VERCEL_OIDC_TOKEN=${jwt(now + 60)}\n`,
+        {
+          mode: 0o600,
+        },
+      );
+      const cleanEnvironment: NodeJS.ProcessEnv = {
+        ...process.env,
+        HOME: "/untrusted/ambient/home",
+        XDG_CONFIG_HOME: "/owner/unneeded-config",
+        XDG_CACHE_HOME: "/owner/unneeded-cache",
+        XDG_STATE_HOME: "/owner/unneeded-state",
+        VERCEL_OIDC_TOKEN: "must-not-be-forwarded",
+        VERCEL_TOKEN: "must-not-be-forwarded",
+        AI_GATEWAY_API_KEY: "must-not-be-forwarded",
+        OPENAI_API_KEY: "must-not-be-forwarded",
+      };
+      delete cleanEnvironment.NODE_OPTIONS;
+      delete cleanEnvironment.XDG_DATA_HOME;
+      delete cleanEnvironment.APP_BUILDER_DEV_RUNTIME_HOME;
+      if (dataHome !== undefined) cleanEnvironment.XDG_DATA_HOME = dataHome;
+      if (privateHome) cleanEnvironment.APP_BUILDER_DEV_RUNTIME_HOME = runtimeHome;
+      const probe = `
+        const { ensureLocalDevelopmentOidc } = await import(process.argv[1]);
+        const { writeFileSync } = await import("node:fs");
+        const { join } = await import("node:path");
+        const { token, ...input } = JSON.parse(process.argv[2]);
+        const invocations = [];
+        const result = ensureLocalDevelopmentOidc({ ...input, runCommand(invocation) {
+          invocations.push({
+            operation: invocation.operation,
+            home: invocation.environment.HOME,
+            dataHome: invocation.environment.XDG_DATA_HOME ?? null,
+            dataPresent: Object.hasOwn(invocation.environment, "XDG_DATA_HOME"),
+            unexpected: ["XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME", "VERCEL_TOKEN", "VERCEL_OIDC_TOKEN", "AI_GATEWAY_API_KEY", "OPENAI_API_KEY"].filter(name => Object.hasOwn(invocation.environment, name)),
+          });
+          if (invocation.operation === "development-env-pull") {
+            writeFileSync(join(input.repositoryRoot, ".env.local"), "VERCEL_OIDC_TOKEN=" + token + "\\n", { mode: 0o600 });
+          }
+        }});
+        process.stdout.write(JSON.stringify({ result, home: process.env.HOME, invocations }));
+      `;
+      const result = spawnSync(
+        launcher,
+        [
+          pinnedNode,
+          "--import",
+          "tsx",
+          "--input-type=module",
+          "-e",
+          probe,
+          pathToFileURL(pathModule.join(repositoryRoot, "lib/development/local-oidc-startup.ts"))
+            .href,
+          JSON.stringify({
+            repositoryRoot: projectRoot,
+            nowEpochSeconds: now,
+            vercelExecutable: "/fixture/vercel",
+            miseExecutable: "/fixture/mise",
+            token: jwt(now + 3600),
+          }),
+        ],
+        { cwd: repositoryRoot, encoding: "utf-8", env: cleanEnvironment },
+      );
+      expect(result.status, result.stderr).toBe(0);
+      const expectedHome = privateHome ? runtimeHome : accountHome;
+      const expectedDataHome = privateHome ? undefined : dataHome;
+      expect(JSON.parse(result.stdout)).toEqual({
+        result: { refreshed: true },
+        home: expectedHome,
+        invocations: ["development-env-pull", "owner-bind"].map((operation) => ({
+          operation,
+          home: expectedHome,
+          dataHome: expectedDataHome ?? null,
+          dataPresent: expectedDataHome !== undefined,
+          unexpected: [],
+        })),
+      });
+    },
+  );
+
   it("uses only an owner-only development runtime home when explicitly scoped", () => {
     const runtimeHome = realpathSync(
       mkdtempSync(pathModule.join(tmpdir(), "app-builder-runtime-")),
