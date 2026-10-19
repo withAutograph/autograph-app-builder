@@ -438,6 +438,7 @@ const composed = (active = true) => {
     readActiveSharedAuth: unavailable,
     readApproval: unavailable,
     readAuthPlan: unavailable,
+    readMembershipInspectionPlan: async (): Promise<undefined> => {},
     readCapturedRealmIdentity: unavailable,
     readCapturedRealmIdentityProof: unavailable,
     readCredential: unavailable,
