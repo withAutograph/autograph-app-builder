@@ -2160,7 +2160,7 @@ export const createHostedOperatorControlPlane = async (input: {
       desired: HostedOperatorPlan,
       bootstrap: CompletedParticipantBootstrap,
     ) => {
-      await owner.assertPlanningAuthorized(context);
+      await owner.assertArtifactAuthorized(context);
       const accounts = await normalActorJournal.read(context);
       if (
         accounts?.preparation.accountOperationRef !== preparation.accountOperationRef ||
@@ -2176,7 +2176,7 @@ export const createHostedOperatorControlPlane = async (input: {
       ) {
         throw new HostedOperatorError("operation_in_progress");
       }
-      await owner.assertPlanningAuthorized(context);
+      await owner.assertArtifactAuthorized(context);
     };
     const collectOrganizationOwnerProof = createHostedOperatorNormalActorProofCollector({
       journalPorts: normalActorJournalPorts,

@@ -360,9 +360,12 @@ const fixture = async () => {
       return artifacts.get(ref);
     },
   };
+  const assertPlanningAuthorized = vi.fn(async () => {
+    await assertAuthorized();
+  });
   const collect = createHostedOperatorNormalActorProofCollector({
     journalPorts,
-    assertPlanningAuthorized: assertAuthorized,
+    assertPlanningAuthorized,
     normalRealmFetch: async (input) => {
       expect(input.origin).toBe(program.origin);
       return normalFetch;
@@ -679,6 +682,7 @@ const fixture = async () => {
   };
   return {
     proposeAccess,
+    assertPlanningAuthorized,
     completeBootstrapRefresh,
     collect,
     input,
@@ -731,7 +735,10 @@ describe("normal organization owner proof collector", () => {
     ).length;
     await f.completeBootstrapRefresh();
     f.validPrivateResponse();
+    f.assertPlanningAuthorized.mockClear();
     const result = await f.collect(await f.input("org-one"));
+    // Retain the six existing provider boundaries; private bootstrap guards use canonical ownership.
+    expect(f.assertPlanningAuthorized).toHaveBeenCalledTimes(6);
     expect(result.identityVerification.jwksUrl).toBe(
       "https://new-gateway.example.test/_platform/jwks.json",
     );

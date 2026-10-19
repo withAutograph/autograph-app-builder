@@ -530,7 +530,7 @@ const createCompletedParticipantBootstrapHandoff = (
   plan: HostedOperatorPlan,
   record: HostedRuntimeJournalRecord | undefined,
   context: HostedOperatorContext,
-  controlPlane: Pick<ControlPlane, "assertPlanningAuthorized" | "readApproval" | "store">,
+  controlPlane: Pick<ControlPlane, "assertCanonicalOwner" | "readApproval" | "store">,
   eligible: boolean,
 ) => {
   const bootstrap = eligible ? inspectCompletedParticipantBootstrap(plan, record) : undefined;
@@ -539,7 +539,7 @@ const createCompletedParticipantBootstrapHandoff = (
     : {
         bootstrap,
         assertCurrent: async () => {
-          await controlPlane.assertPlanningAuthorized(context);
+          await controlPlane.assertCanonicalOwner(context);
           await assertCompletedParticipantBootstrapApproval(
             context,
             bootstrap,
@@ -554,7 +554,7 @@ const createCompletedParticipantBootstrapHandoff = (
           ) {
             throw new HostedOperatorError(OPERATION_IN_PROGRESS);
           }
-          await controlPlane.assertPlanningAuthorized(context);
+          await controlPlane.assertCanonicalOwner(context);
         },
       };
 };

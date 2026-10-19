@@ -365,7 +365,7 @@ export const createHostedOperatorNormalActorProofCollector = (
         if (assertBootstrapCurrent === undefined) {
           throw mismatch();
         }
-        await assertCurrent();
+        await assertBootstrapCurrent();
         const row = await deps.journalPorts.store.read(input);
         if (
           !isDeepStrictEqual(
@@ -375,7 +375,7 @@ export const createHostedOperatorNormalActorProofCollector = (
         ) {
           throw mismatch();
         }
-        await assertCurrent();
+        await assertBootstrapCurrent();
       }
       assertRealmBinding(input, preparation, binding);
       observe({ stage: "proof_preparation" });
