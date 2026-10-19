@@ -852,6 +852,83 @@ const appPolicyWrites = (f: ReturnType<typeof fixture>) =>
     (request) => request.method === "PATCH" && request.path === `/v9/projects/${target.projectId}`,
   );
 
+it.each([
+  ["absent", "absent", false],
+  ["null", "null", false],
+  ["empty", "present", false],
+  ["noncovering", "present", true],
+] as const)(
+  "retains the %s app policy observation through a rejected settings PATCH",
+  async (state, trustedSourcesVisibility, approvedSourcePresent) => {
+    const f = fixture();
+    await f.writer.bind(f.input, values);
+    approveAppTrustedSource(f);
+    switch (state) {
+      case "absent": {
+        delete f.project.trustedSources;
+        break;
+      }
+      case "null": {
+        f.project.trustedSources = null;
+        break;
+      }
+      case "empty": {
+        f.project.trustedSources = {};
+        break;
+      }
+      case "noncovering": {
+        f.project.trustedSources = {
+          projects: {
+            prj_gateway: {
+              customAllow: [{ from: { slugs: ["development"] }, to: { slugs: ["preview"] } }],
+            },
+          },
+        };
+        break;
+      }
+    }
+    f.setFailedPatch("project_settings", "not_found");
+    await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
+    expect(f.diagnostics.at(-1)?.hostedEnvironmentBindingFailure).toEqual({
+      stage: "update_patch",
+      requestTarget: "project_settings",
+      reason: "provider_rejected",
+      providerCode: "not_found",
+      httpStatus: 404,
+      trustedSourcesVisibility,
+      approvedSourcePresent,
+      approvedPairCovered: false,
+    });
+    expect(JSON.stringify(f.diagnostics)).not.toContain("private PATCH rejection");
+    expect(JSON.stringify(f.diagnostics)).not.toContain("prj_gateway");
+    expect(JSON.stringify(f.diagnostics)).not.toContain("private-oauth");
+  },
+);
+
+it("retains current app policy coverage when a later checkpoint fails without a policy write", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input, values);
+  approveAppTrustedSource(f);
+  f.project.trustedSources = {
+    projects: {
+      prj_gateway: {
+        customAllow: [{ from: { slugs: ["preview"] }, to: { slugs: ["preview"] } }],
+      },
+    },
+  };
+  f.requests.length = 0;
+  f.checkpointManagedEnvironment.mockRejectedValue(new Error("private checkpoint failure"));
+  expect(await f.writer.reconcile(f.input, values)).toEqual({ status: "unknown" });
+  expect(f.diagnostics.at(-1)?.hostedEnvironmentBindingFailure).toMatchObject({
+    stage: "checkpoint",
+    reason: "checkpoint_failed",
+    trustedSourcesVisibility: "present",
+    approvedSourcePresent: true,
+    approvedPairCovered: true,
+  });
+  expect(appPolicyWrites(f)).toEqual([]);
+});
+
 it("leaves legacy plans free of app Trusted Sources reads and writes", async () => {
   const f = fixture();
   await f.writer.bind(f.input, values);
@@ -1108,12 +1185,21 @@ it.each([
     await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
     expect(f.requests).toEqual(control.requests.slice(0, f.requests.length));
     expect(f.requests.at(-1)?.method).toBe("PATCH");
+    const protection =
+      requestTarget === "project_settings"
+        ? {
+            trustedSourcesVisibility: "absent",
+            approvedSourcePresent: false,
+            approvedPairCovered: false,
+          }
+        : {};
     expect(f.diagnostics[0]?.hostedEnvironmentBindingFailure).toEqual({
       stage: "update_patch",
       reason: "provider_rejected",
       httpStatus: 404,
       requestTarget,
       providerCode,
+      ...protection,
     });
     const serialized = JSON.stringify(f.diagnostics);
     for (const privateValue of [

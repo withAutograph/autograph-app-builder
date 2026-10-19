@@ -192,6 +192,9 @@ const hostedEnvironmentBindingStage = z.enum([
 const hostedEnvironmentBindingFailure = z.strictObject({
   stage: hostedEnvironmentBindingStage,
   requestTarget: z.enum(["environment_row", "project_settings"]).optional(),
+  trustedSourcesVisibility: z.enum(["absent", "null", "present"]).optional(),
+  approvedSourcePresent: z.boolean().optional(),
+  approvedPairCovered: z.boolean().optional(),
   providerCode: z
     .enum([
       "not_found",

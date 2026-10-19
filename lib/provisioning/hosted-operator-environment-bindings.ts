@@ -358,6 +358,15 @@ const createFailureReporter = (
   };
   return {
     stage: () => failure.stage,
+    trustedSources: (
+      visibility: NonNullable<HostedEnvironmentBindingFailure["trustedSourcesVisibility"]>,
+      approvedSourcePresent: boolean,
+      approvedPairCovered: boolean,
+    ) => {
+      failure.trustedSourcesVisibility = visibility;
+      failure.approvedSourcePresent = approvedSourcePresent;
+      failure.approvedPairCovered = approvedPairCovered;
+    },
     requestTarget: (requestTarget: HostedEnvironmentBindingFailure["requestTarget"]) => {
       if (requestTarget === undefined) {
         delete failure.requestTarget;
@@ -504,7 +513,20 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
         throw unavailable();
       }
       const sources = project.trustedSources ?? {};
-      return { sources, missing: !coversTrustedSource(sources, approvedTrustedSource) };
+      let visibility: NonNullable<HostedEnvironmentBindingFailure["trustedSourcesVisibility"]> =
+        "present";
+      if (project.trustedSources === undefined) {
+        visibility = "absent";
+      } else if (project.trustedSources === null) {
+        visibility = "null";
+      }
+      const covered = coversTrustedSource(sources, approvedTrustedSource);
+      diagnostics.trustedSources(
+        visibility,
+        sources.projects?.[approvedTrustedSource.projectId] !== undefined,
+        covered,
+      );
+      return { sources, missing: !covered };
     };
     const bindTrustedSources = async () => {
       const observed = await observeTrustedSources();
