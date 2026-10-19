@@ -1,17 +1,24 @@
-import { createHash } from "node:crypto";
+import { createHash, generateKeyPairSync } from "node:crypto";
 import { observeOperatorExecutionStage } from "./hosted-operator-consent-diagnostic";
 import type { HostedOperatorConsentDiagnosticSink } from "./hosted-operator-consent-diagnostic";
 import {
   OPERATOR_EXECUTION_OBSERVATION_HEADER,
   OPERATOR_EXECUTION_OBSERVATION_PREFERENCE,
 } from "./hosted-operator-execution-observation-protocol";
-import { composeHostedOperatorAuthorizationDependencies } from "./hosted-operator-composition";
+import {
+  composeHostedOperatorAuthorizationDependencies,
+  composeHostedOperatorDependencies,
+} from "./hosted-operator-composition";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Inject only the SQL snapshot transport while retaining the actual readiness producer and all its checks.
+import * as appReadiness from "./hosted-operator-app-readiness";
+import type { AppRuntimeSnapshotReader } from "./hosted-operator-app-readiness";
+import { readHostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
 /* oxlint-disable eslint/require-await, eslint/no-await-in-loop, sonarjs/no-hardcoded-passwords, unicorn/no-await-expression-member -- Synthetic service adapters and credentials only; plan replacements run sequentially against one journal. */
 import { once } from "node:events";
 import { text } from "node:stream/consumers";
 import { z } from "zod";
 import { createServer } from "node:http";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createHostedOperatorClient,
   hostedOperatorClientForSession,
@@ -29,6 +36,7 @@ import {
 import type { ManagedOperatorEnvironmentRow, OperatorSelection } from "./hosted-operator-contract";
 import {
   hostedRuntimeIdentity,
+  hostedRuntimeProofSchema,
   hostedRuntimeJournalRecordSchema,
   retainedOperatorAuthFromJournal,
 } from "./hosted-runtime-journal";
@@ -3025,6 +3033,359 @@ describe("closed prepare pre-effect diagnostics", () => {
     );
     expect(JSON.stringify(sink.mock.calls)).not.toContain(privateError.message);
   });
+});
+
+describe("canonical runtime proof through the production verifier and handler", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+  it.each(["ready", "release_mismatch", "manifest_mismatch", "authority_denied"] as const)(
+    "accepts actual rich readiness after preserving %s behavior without effect replay",
+    async (initialScenario) => {
+      let scenario = initialScenario;
+      const f = fixture();
+      const artifactHash = "c".repeat(64);
+      const manifest = Buffer.from(
+        JSON.stringify({
+          app: selection.appId,
+          hashes: { schema: `sha256:${artifactHash}` },
+          schema_version: plan.release.id,
+        }),
+      );
+      const selectedPlan = hostedOperatorPlanSchema.parse({
+        ...plan,
+        neon: { ...plan.neon, branchId: "br-fixture" },
+        delivery: { branch: selection.branch, projectId: selection.projectId, repoId: "repo-app" },
+        gatewayDelivery: {
+          branch: selection.branch,
+          projectId: "prj_gateway",
+          repoId: "repo-gateway",
+        },
+        effects: [
+          ...plan.effects,
+          { id: "delivery", kind: "delivery", description: "Observe app delivery" },
+          {
+            id: "gateway-delivery",
+            kind: "gateway-delivery",
+            description: "Observe Gateway delivery",
+          },
+        ],
+        release: { ...plan.release, sha256: createHash("sha256").update(manifest).digest("hex") },
+      });
+      f.deps.plan = vi.fn(async () => selectedPlan);
+      const execute = await prepared(f);
+      f.approve();
+      const operator = f.row?.record.operator;
+      if (operator === undefined) {
+        throw new Error("Missing planned fixture operator");
+      }
+      const candidate = (kind: "app" | "gateway") => ({
+        branch: selection.branch,
+        deploymentId: `dpl_${kind}`,
+        operationRef: execute.operationRef,
+        origin: `https://${kind}-preview.example.test`,
+        projectId: kind === "app" ? selection.projectId : "prj_gateway",
+        readyState: "READY",
+        repoId: `repo-${kind}`,
+      });
+      operator.deliveryCandidates = [candidate("app")];
+      operator.gatewayDeliveryCandidates = [candidate("gateway")];
+      operator.deliveredDeploymentId = "dpl_app";
+      operator.deliveredGatewayDeploymentId = "dpl_gateway";
+
+      const workload = {
+        audience: "https://vercel.com/team_fixture",
+        environment: "preview",
+        issuer: "https://oidc.vercel.com/team_fixture",
+        ownerId: target.scopeId,
+        projectId: "prj_operator",
+        subject: "fixture-builder",
+      };
+      const worker = {
+        executablePath: "/fixture-worker",
+        id: "fixture-worker",
+        operationScope: "auth-protected-schema-v1",
+        sha256: "a".repeat(64),
+        subcommand: "auth-protected-schema",
+      };
+      const configuration = readHostedOperatorSourceConfiguration({
+        PROTECTED_HOSTED_OPERATOR_CONFIGURATION: JSON.stringify({
+          applications: {
+            [selection.appId]: {
+              accessRoles: ["reviewer"],
+              appDatabase: plan.appDatabase,
+              branch: selection.branch,
+              projectId: selection.projectId,
+            },
+          },
+          authDatabase: plan.authDatabase,
+          builderCallbackOrigin: "https://builder.example",
+          catalogAppIds: [selection.appId],
+          gateway: {
+            authBrowserOrigin: "https://auth.example.test",
+            branch: selection.branch,
+            environment: "preview",
+            gatewayOrigin: candidate("gateway").origin,
+            gitSha: "d".repeat(40),
+            projectId: "prj_gateway",
+            protectedApplicationIds: [selection.appId],
+            publicOrigin: "https://apps-preview.example.test",
+            repoId: "repo-gateway",
+            workload: { ...workload, projectId: "prj_gateway" },
+          },
+          nativeNeon: {
+            configuration: {
+              connector: "fixture",
+              nativeStore: {
+                configurationId: target.installationId,
+                resourceId: "fixture-store",
+                sourceProjectId: "prj_operator",
+              },
+              operator: {
+                audience: workload.audience,
+                environment: workload.environment,
+                issuer: workload.issuer,
+                ownerId: workload.ownerId,
+                projectId: workload.projectId,
+              },
+            },
+            scope: {
+              branchId: selectedPlan.neon.branchId,
+              endpointId: "ep-fixture",
+              hostname: plan.neon.endpoint,
+              maintenanceDatabase: "neondb",
+              maintenanceRole: "neondb_owner",
+              projectId: plan.neon.projectId,
+            },
+          },
+          operator: {
+            deploymentId: "dpl_operator",
+            environment: "preview",
+            origin: "https://operator.example",
+            projectId: "prj_operator",
+          },
+          sandbox: {
+            accessWorker: worker,
+            authProposal: { executablePath: "/proposal", id: "proposal", sha256: "b".repeat(64) },
+            authWorker: worker,
+            image: "fixture",
+            projectId: "prj_operator",
+            resourcesWorker: worker,
+            teamId: target.scopeId,
+            workers: { [selection.appId]: worker },
+          },
+          teamId: target.scopeId,
+          workloadPolicy: { ...workload, projectId: "prj_builder" },
+        }),
+      });
+      const reader: AppRuntimeSnapshotReader = {
+        readIdentity: async () => ({
+          branch: selectedPlan.neon.branchId,
+          can_create: false,
+          can_temp: false,
+          comment: `protected-resource:v1:app_database:${plan.appDatabase.resourceId}:database`,
+          database: plan.appDatabase.database,
+          endpoint: "ep-fixture",
+          login: plan.appDatabase.runtimeRole,
+          owner: plan.appDatabase.migratorRole,
+          owns_public_objects: false,
+          privileged_membership: false,
+          project: plan.neon.projectId,
+          rolbypassrls: false,
+          rolcreatedb: false,
+          rolcreaterole: false,
+          role: plan.appDatabase.runtimeRole,
+          rolreplication: false,
+          rolsuper: false,
+        }),
+        readOrganization: async (scope) => ({
+          ok: true,
+          data: {
+            active_base_revision: plan.release.id,
+            active_effective_artifact_hash: artifactHash,
+            active_schema_revision_id: 7,
+            app_id: scope.appId,
+            customer_id: scope.organizationId,
+            releases: [
+              {
+                artifact_hashes: {
+                  base: artifactHash,
+                  effective: artifactHash,
+                  schema: "d".repeat(64),
+                },
+                base_revision: plan.release.id,
+                preparation: { state: "active" },
+                release_id: plan.release.id,
+                runtime_schema: { status: "stored_schema_hash_matches" },
+                schema_revision_id: 7,
+              },
+            ],
+          },
+        }),
+      };
+      const realReadiness = appReadiness.createHostedOperatorAppReadiness;
+      const richResults: Awaited<ReturnType<ReturnType<typeof realReadiness>>>[] = [];
+      const readRuntimeSnapshot = vi.fn<appReadiness.ReadAppRuntimeSnapshot>(
+        async (_url, read) => await read(reader),
+      );
+      vi.spyOn(appReadiness, "createHostedOperatorAppReadiness").mockImplementation(
+        (dependencies) => {
+          const verify = realReadiness({ ...dependencies, readRuntimeSnapshot });
+          return async (input) => {
+            const richResult = await verify(input);
+            richResults.push(richResult);
+            return richResult;
+          };
+        },
+      );
+      const payloads = new Map<string, object>();
+      for (const kind of ["app", "gateway", "operator"] as const) {
+        const projectId = kind === "app" ? selection.projectId : `prj_${kind}`;
+        payloads.set(`/v9/projects/${projectId}`, { id: projectId, accountId: target.scopeId });
+        payloads.set(`/v13/deployments/dpl_${kind}`, {
+          id: `dpl_${kind}`,
+          projectId,
+          ownerId: target.scopeId,
+          readyState: "READY",
+          target: null,
+          gitSource: { ref: selection.branch },
+          url: `${kind}-preview.example.test`,
+          env: [],
+        });
+        payloads.set(`/v10/projects/${projectId}/env`, { envs: [] });
+      }
+      payloads.set("/v2/deployments/dpl_gateway/aliases", {
+        aliases: [{ alias: "apps-preview.example.test" }],
+      });
+      const publicJwk = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" });
+      const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+        const url = new URL(input instanceof Request ? input.url : input);
+        expect(init?.method).toBe("GET");
+        if (url.origin === candidate("gateway").origin) {
+          expect(url.pathname).toBe("/_platform/jwks.json");
+          return Response.json({ keys: [{ ...publicJwk, kid: "fixture-key" }] });
+        }
+        expect(url.origin).toBe("https://api.vercel.com");
+        expect(url.searchParams.get("teamId")).toBe(target.scopeId);
+        const payload = payloads.get(url.pathname);
+        if (payload === undefined) {
+          throw new Error("Unexpected synthetic provider request");
+        }
+        return Response.json(payload);
+      });
+      vi.stubGlobal("fetch", fetcher);
+      const controlPlane = {
+        assertAuthorized: vi.fn(async () => {
+          if (scenario === "authority_denied") {
+            throw new HostedOperatorError("authorization_required");
+          }
+          await f.deps.assertAuthorized({ authority, target, plan: selectedPlan });
+        }),
+        store: f.deps.store,
+        readResourceBindings: vi.fn(async () => ({
+          appDatabase: { runtimeUrl: environment.SPEND_REVIEW_DATABASE_URL },
+        })),
+        readGeneratedSelection: vi.fn(async () => ({
+          artifactRef: selectedPlan.release.artifactRef,
+          manifestSha256: selectedPlan.release.sha256,
+          releaseId: scenario === "release_mismatch" ? "other-release" : selectedPlan.release.id,
+        })),
+        readGeneratedRelease: vi.fn(async () => ({
+          files: {
+            "release-manifest.json":
+              scenario === "manifest_mismatch" ? Buffer.from("wrong-manifest") : manifest,
+          },
+        })),
+        readCredential: vi.fn(async () => ({
+          binding: {
+            active: true,
+            installationId: target.installationId,
+            scopeId: target.scopeId,
+            scopeType: target.scopeType,
+          },
+          token: "fixture-private-owner-token",
+        })),
+      };
+      const composed = composeHostedOperatorDependencies(
+        configuration,
+        // SAFETY: Only verify is delegated; all its control-plane ports are implemented here, and the real inventory and readiness checks run over synthetic transports.
+        // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- This fixture intentionally implements only the final verifier's control-plane ports.
+        controlPlane as unknown as Parameters<typeof composeHostedOperatorDependencies>[1],
+      );
+      const verify = vi.fn(composed.verify);
+      f.deps.verify = verify;
+      const log = vi.spyOn(console, "info").mockImplementation(() => {});
+      try {
+        if (initialScenario !== "ready") {
+          const denied = await f.client.request(execute);
+          expect(denied).toMatchObject({
+            status: "blocked",
+            code:
+              initialScenario === "authority_denied"
+                ? "authorization_required"
+                : "operator_unavailable",
+          });
+          expect(f.row?.record.proof).toBeUndefined();
+          expect(readRuntimeSnapshot).not.toHaveBeenCalled();
+          expect(richResults).toHaveLength(0);
+          scenario = "ready";
+        }
+        const result = await f.client.request(execute);
+        expect(f.deps.executeEffect).toHaveBeenCalledTimes(selectedPlan.effects.length);
+        expect(fetcher).toHaveBeenCalled();
+        expect(readRuntimeSnapshot).toHaveBeenCalledOnce();
+        const [richResult] = richResults;
+        expect(richResult).toMatchObject({
+          actors: 0,
+          authenticatedBehavior: "unassessed",
+          source: "reviewed-plan-app-runtime",
+          resourceId: selectedPlan.appDatabase.resourceId,
+          observations: [{ organizationId: "synthetic-org" }],
+        });
+        expect(richResult?.observedAt).toEqual(expect.any(String));
+        expect(hostedRuntimeProofSchema.safeParse(richResult).success).toBe(false);
+        expect(log.mock.calls).not.toContainEqual([
+          "[builder:hosted-neon-consent]",
+          expect.objectContaining({
+            executionFailure: { stage: "final_proof_parse", errorClass: "validation_error" },
+          }),
+        ]);
+        expect(result).toMatchObject({ status: "prepared", authenticatedBehavior: "unassessed" });
+        const persisted = hostedRuntimeProofSchema.parse(f.row?.record.proof);
+        expect(persisted).toMatchObject({
+          actors: 0,
+          authenticatedBehavior: "unassessed",
+          tenants: 1,
+        });
+        expect(Object.keys(persisted).toSorted()).toEqual([
+          "actors",
+          "artifactHash",
+          "authenticatedBehavior",
+          "manifestSha256",
+          "releaseId",
+          "tenants",
+        ]);
+        expect(persisted).toEqual(await verify.mock.results.at(-1)?.value);
+        const bindings = await f.client.bindings({
+          action: "bindings",
+          operationRef: execute.operationRef,
+          selection,
+        });
+        expect(bindings.proof).toEqual(persisted);
+        expect(bindings.nativePreview).toMatchObject({
+          app: candidate("app"),
+          gateway: candidate("gateway"),
+        });
+        expect(readRuntimeSnapshot).toHaveBeenCalledTimes(2);
+        expect(f.deps.executeEffect).toHaveBeenCalledTimes(selectedPlan.effects.length);
+      } finally {
+        vi.restoreAllMocks();
+        vi.unstubAllGlobals();
+        log.mockRestore();
+      }
+    },
+  );
 });
 
 describe("closed prepare final verification diagnostics", () => {
