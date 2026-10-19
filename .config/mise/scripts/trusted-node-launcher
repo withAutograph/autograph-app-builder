@@ -113,6 +113,13 @@ if [ "$kind" = pnpm ]; then
   verify_pinned_executable "$pinned_node"
 fi
 
+# Keep the account's CLI data lookup only while using the OS account home.
+# Private development homes must not inherit an external credential directory.
+set -- "$executable" "$@"
+if [ -z "${APP_BUILDER_DEV_RUNTIME_HOME:-}" ] && [ "${XDG_DATA_HOME+x}" = x ]; then
+  set -- "XDG_DATA_HOME=$XDG_DATA_HOME" "$@"
+fi
+
 case "$kind" in
   node|pnpm)
     exec 3<&0
@@ -207,7 +214,7 @@ case "$kind" in
       EVE_AGENT_HOST="${EVE_AGENT_HOST:-}" \
       REPOSITORY_LOCAL_ROOTS="${REPOSITORY_LOCAL_ROOTS:-}" \
       REPOSITORY_WORKSPACE_ROOT="${REPOSITORY_WORKSPACE_ROOT:-}" \
-      "$executable" "$@" <&3 3<&- &
+      "$@" <&3 3<&- &
     child_pid=$!
     exec 3<&-
     trap 'kill -TERM "$child_pid" 2>/dev/null || true' HUP INT TERM
