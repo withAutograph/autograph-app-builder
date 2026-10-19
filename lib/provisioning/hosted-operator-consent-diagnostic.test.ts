@@ -101,6 +101,39 @@ describe("closed Neon consent diagnostics", () => {
     },
   );
 
+  it("projects only closed app protection observations", () => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    const report = createHostedOperatorConsentDiagnostic(secret, sink);
+    const failure = {
+      stage: "update_patch" as const,
+      reason: "provider_rejected" as const,
+      requestTarget: "project_settings" as const,
+      approvedSourcePresent: true,
+      approvedPairCovered: false,
+    };
+    for (const trustedSourcesVisibility of ["absent", "null", "present"] as const) {
+      const observed = { ...failure, trustedSourcesVisibility };
+      report({ ...value, hostedEnvironmentBindingFailure: observed });
+      expect(sink.mock.calls.at(-1)?.[0].hostedEnvironmentBindingFailure).toEqual(observed);
+    }
+    for (const field of [
+      "trustedSourcesVisibility",
+      "approvedSourcePresent",
+      "approvedPairCovered",
+      "trustedSources",
+      "projectId",
+    ]) {
+      report({ ...value, hostedEnvironmentBindingFailure: { ...failure, [field]: secret } });
+    }
+    for (const invalid of [null, 0, 1, {}, []]) {
+      for (const field of ["approvedSourcePresent", "approvedPairCovered"]) {
+        report({ ...value, hostedEnvironmentBindingFailure: { ...failure, [field]: invalid } });
+      }
+    }
+    expect(sink).toHaveBeenCalledTimes(3);
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
+
   it("projects only closed Gateway request targets and protection observations", () => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     const report = createHostedOperatorConsentDiagnostic(secret, sink);
