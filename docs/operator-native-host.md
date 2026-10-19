@@ -148,6 +148,50 @@ qualification step. Source checks, provider policy readback, runtime access or
 a repair to the current native session do not establish automatic hosted recovery or
 [out-of-the-box self-reproduction](evals/self-reproduction.md).
 
+### Explicit administrator-managed app/Gateway Preview policy
+
+An administrator can configure `applications[appId].hostProtection` in the
+deployment-owned `PROTECTED_HOSTED_OPERATOR_CONFIGURATION` with
+`mode: "externally-managed-trusted-sources"`. The configuration names `teamId`,
+the exact Gateway Preview → App Preview pair in `appPreview`, the exact App
+Preview → Gateway Preview pair in `gatewayPreview`, `observedAt`, and
+`provenance: { kind: "administrator-provider-readback", reference }`. Each pair
+contains `sourceProjectId`, `targetProjectId`, `from: "preview"`, and
+`to: "preview"`. Both projects must match the selected app and configured Gateway.
+Retain the independent administrator evidence behind the provenance reference.
+The operator's installation grant is not assumed to expose that policy.
+
+The same object is frozen in the new full plan as `hostProtection`. That plan
+omits `appTrustedSources` and `gatewayBindings.trustedSources`; it authorizes no
+protection-setting write. Its binding receipts cover only owned environment-row
+readback and the configured mode. They do not attest fresh provider policy.
+Native OIDC caller verification, current owner/installation authorization,
+project/environment and environment-row ownership checks, and application Auth
+remain enforced. A runtime 403 remains a failure. There is no bypass credential,
+cookie, header fallback or added provider grant in this mode. Omitting the
+configuration retains existing default behavior and frozen-plan semantics.
+
+### Newly approved replacement of a READY Preview
+
+A concrete `appDeliveryReplacement` intent names the original approved
+operation/digest and exact READY App deployment, plus its Gateway predecessor
+when the current native alias names one. The protected planner resolves these
+through approved retained-renewal ancestry and independently checks native
+project/team, source, Preview, READY, immutable origin and current alias before
+archiving the transition. Existing `staging` metadata remains Preview only with
+the already supported verified Preview claims.
+
+The new plan requires a fresh human approval of its complete digest, including
+duplicate deployment usage. The previous operator, approval reference, receipts,
+unknown binding/creation/alias attempts, candidates, rows and existing histories
+remain in `retainedReadyDeliveryOperations`. Resource `privateState` keeps its
+existing custody. Old unknown operations receive no new success receipt and
+their creators are not replayed. App and Gateway delivery select fresh candidates
+using the new exact operation/effect/plan metadata. Both native projects share
+physical fences across default and administrator-managed modes, alongside the
+existing Neon fences. A lost new alias assignment stays subject to normal
+reconciliation; it never authorizes a blind second assignment.
+
 ## Preparation before normal Auth identity
 
 A source-owned `auth-bootstrap` plan has two resource effects and exactly one

@@ -5,6 +5,10 @@ import { createOperatorWorkloadVerifier } from "./hosted-operator-workload";
 import type { OperatorWorkloadPolicy } from "./hosted-operator-workload";
 import { hostedOperatorAuthAdoptionSourceSchema } from "./hosted-operator-shared-auth-adoption";
 import { hostedOperatorAppProjectSettingsSchema } from "./hosted-operator-app-project-settings";
+import {
+  externallyManagedTrustedSourcesSchema,
+  matchesExternalTrustedSources,
+} from "./hosted-operator-host-protection";
 
 const id = z.string().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -76,6 +80,7 @@ export const hostedOperatorSourceConfigurationSchema = z.strictObject({
     z.strictObject({
       accessRoles: z.array(z.string().regex(/^[a-z][a-z0-9_]{0,62}$/u)).min(1),
       appDatabase: resource,
+      hostProtection: externallyManagedTrustedSourcesSchema.optional(),
       authAdoptionSource: hostedOperatorAuthAdoptionSourceSchema.optional(),
       branch: id,
       deploymentId: id.optional(),
@@ -146,6 +151,16 @@ export const readHostedOperatorSourceConfiguration = (
     ),
     config.sandbox.projectId === config.operator.projectId,
     config.sandbox.teamId === config.teamId,
+    Object.values(config.applications).every(
+      (app) =>
+        app.hostProtection === undefined ||
+        matchesExternalTrustedSources(
+          app.hostProtection,
+          config.teamId,
+          app.projectId,
+          config.gateway.projectId,
+        ),
+    ),
     new Set([config.operator.projectId, config.gateway.projectId]).size === 2,
   ].every(Boolean);
   if (!ownedConfiguration) {

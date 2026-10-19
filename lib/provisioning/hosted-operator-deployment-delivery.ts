@@ -231,6 +231,11 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
   target?: "app" | "gateway";
   wait?: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
   observeAlias?: (diagnostic: GatewayAliasDiagnostic) => void | Promise<void>;
+  beforeCreate?: (input: HostedOperatorDeploymentContext) => Promise<void>;
+  beforeAliasWrite?: (
+    input: HostedOperatorDeploymentContext,
+    selected: OperatorDeploymentCandidate,
+  ) => Promise<"write" | "applied" | "unknown">;
 }) => {
   const observeAlias = (diagnostic: GatewayAliasDiagnostic) => {
     try {
@@ -796,6 +801,20 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     input: HostedOperatorDeploymentContext,
     reader: ReturnType<typeof io>,
   ) => {
+    // Renewal preserves an uncertain replacement create for observation only. An empty
+    // listing cannot prove that its saved reserved attempt never reached Vercel.
+    if (
+      deps.target !== "gateway" &&
+      input.plan.hostProtection !== undefined &&
+      input.plan.appDeliveryReplacement !== undefined &&
+      (input.renewalDeliveryProvenance ?? []).some(
+        (prior) =>
+          isRetentionRenewalDeliveryProvenance(prior, input.plan, input.operationRef) &&
+          prior.pendingEffectId === input.effect.id &&
+          prior.pendingEffectAttempt !== undefined,
+      )
+    )
+      return false;
     const { priorAppDelivery } = input;
     if (priorAppDelivery === undefined) {
       return true;
@@ -835,6 +854,14 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       ) {
         return { candidates, status: "unknown" as const };
       }
+      const aliasAuthority = await deps.beforeAliasWrite?.(
+        { ...input, deliveryCandidates: candidates },
+        selected,
+      );
+      if (aliasAuthority === "applied") {
+        return await reconcile({ ...input, deliveryCandidates: candidates });
+      }
+      if (aliasAuthority === "unknown") return { candidates, status: "unknown" as const };
       await fresh.assertCurrent();
     } catch {
       // No assignment was dispatched; a later corrected read may safely try again.
@@ -849,6 +876,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     await input.checkpointDelivery(marked);
     const markedInput = { ...input, deliveryCandidates: marked };
     try {
+      await fresh.assertCurrent();
       await fresh.request(
         `/v2/deployments/${encodeURIComponent(selected.deploymentId)}/aliases`,
         {},
@@ -917,6 +945,8 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       if (!exactProject) {
         throw new HostedOperatorError("resource_mismatch");
       }
+      await reader.assertCurrent();
+      await deps.beforeCreate?.(input);
       await reader.assertCurrent();
       const response = z.object({ id }).parse(
         await reader.request(

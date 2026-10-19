@@ -111,6 +111,15 @@ import type {
   HostedOperatorAuthSignupPolicyInput,
 } from "./hosted-operator-contract";
 import type { HostedOperatorAppProjectSettings } from "./hosted-operator-app-project-settings";
+import {
+  isReadyDeliveryReplacementSuccessor,
+  resolveReadyDeliveryReplacementPredecessor,
+} from "./hosted-operator-ready-delivery-replacement";
+import type { ReadyDeliveryReplacementPredecessor } from "./hosted-operator-ready-delivery-replacement";
+import {
+  readyReplacementHistory,
+  readyReplacementPriorOperators,
+} from "./hosted-operator-native-preview-recovery";
 
 export interface HostedOperatorContext {
   authority: BuilderProvisionAuthority;
@@ -154,6 +163,10 @@ export type HostedOperatorDeploymentContext = HostedOperatorEffectContext & {
   ) => Promise<void>;
 };
 export type HostedOperatorEffectContext = Context & {
+  readyReplacement?: Pick<
+    ReadyDeliveryReplacementPredecessor,
+    "originatingOperator" | "appCandidate" | "gatewayCandidate"
+  >;
   /** Cancellation of the actual operator execution request. */
   signal?: AbortSignal;
   effect: Effect;
@@ -234,6 +247,12 @@ export interface ProtectedHostedOperatorDependencies {
   readAppProjectSettings?: (
     context: Context,
   ) => Promise<HostedOperatorAppProjectSettings | undefined>;
+  readReadyDeliveryReplacementPlan?: (context: Context) => Promise<HostedOperatorPlan | undefined>;
+  verifyReadyDeliveryReplacement?: (
+    context: Context,
+    plan: HostedOperatorPlan,
+    predecessor: ReadyDeliveryReplacementPredecessor,
+  ) => Promise<void>;
   /** Re-read membership, owner connection and provider grants. No ambient Neon authority. */
   assertAuthorized: (
     context: Context & { plan: HostedOperatorPlan; purpose?: "planning" },
@@ -546,6 +565,10 @@ const handlePlanOperation = async (
     context.target.sessionId,
     "plan_composition",
     async () => {
+      if (input.operation === "prepare") {
+        const replacement = await deps.readReadyDeliveryReplacementPlan?.(context);
+        if (replacement !== undefined) return replacement;
+      }
       if (
         input.operation === "prepare" &&
         input.normalActorProgram === undefined &&
@@ -596,21 +619,34 @@ const handlePlanOperation = async (
     "successor_prior_read",
     async () => await deps.store.read(context),
   );
-  const { sharedHostSuccessor, installerSuccessor, settingsSuccessor, retentionRenewal } =
-    await observeOperatorPlanStage(context.target.sessionId, "successor_classification", () => ({
-      sharedHostSuccessor:
-        successorPrior !== undefined &&
-        isSharedHostProtectionSuccessor(successorPrior.record, plan, now()),
-      installerSuccessor:
-        successorPrior !== undefined &&
-        isInstallerSourceSuccessor(successorPrior.record, plan, now()),
-      settingsSuccessor:
-        successorPrior !== undefined &&
-        isProjectSettingsSuccessor(successorPrior.record, plan, now()),
-      retentionRenewal:
-        successorPrior !== undefined &&
-        isRetentionRenewalSuccessor(successorPrior.record, plan, now()),
-    }));
+  const {
+    sharedHostSuccessor,
+    installerSuccessor,
+    settingsSuccessor,
+    retentionRenewal,
+    readySuccessor,
+  } = await observeOperatorPlanStage(context.target.sessionId, "successor_classification", () => ({
+    sharedHostSuccessor:
+      successorPrior !== undefined &&
+      isSharedHostProtectionSuccessor(successorPrior.record, plan, now()),
+    installerSuccessor:
+      successorPrior !== undefined &&
+      isInstallerSourceSuccessor(successorPrior.record, plan, now()),
+    settingsSuccessor:
+      successorPrior !== undefined &&
+      isProjectSettingsSuccessor(successorPrior.record, plan, now()),
+    retentionRenewal:
+      successorPrior !== undefined &&
+      isRetentionRenewalSuccessor(successorPrior.record, plan, now()),
+    readySuccessor:
+      successorPrior !== undefined &&
+      plan.appDeliveryReplacement !== undefined &&
+      isReadyDeliveryReplacementSuccessor(
+        successorPrior.record,
+        { ...plan, appDeliveryReplacement: plan.appDeliveryReplacement },
+        now(),
+      ),
+  }));
   if (renewalPrior !== undefined && successorPrior?.revision !== renewalPrior.revision) {
     throw new HostedOperatorError("operation_in_progress");
   }
@@ -634,8 +670,37 @@ const handlePlanOperation = async (
     ) {
       throw new HostedOperatorError("authorization_required");
     }
+    if (readySuccessor && plan.appDeliveryReplacement !== undefined) {
+      const predecessor = resolveReadyDeliveryReplacementPredecessor(
+        successorPrior.record,
+        plan.appDeliveryReplacement,
+      );
+      if (!predecessor || !deps.verifyReadyDeliveryReplacement)
+        throw new HostedOperatorError("reconciliation_required");
+      const original = await deps.readApproval({
+        ...context,
+        action: "prepare",
+        callId: predecessor.approvedByCallId,
+        planDigest: predecessor.originatingOperator.planDigest,
+      });
+      if (
+        !original?.approved ||
+        original.approvalId !== predecessor.originatingOperator.approvalId ||
+        original.callId !== predecessor.approvedByCallId ||
+        original.planDigest !== predecessor.originatingOperator.planDigest ||
+        original.action !== "prepare"
+      )
+        throw new HostedOperatorError("authorization_required");
+      await deps.verifyReadyDeliveryReplacement(context, plan, predecessor);
+    }
   };
-  if (sharedHostSuccessor || installerSuccessor || settingsSuccessor || retentionRenewal) {
+  if (
+    sharedHostSuccessor ||
+    installerSuccessor ||
+    settingsSuccessor ||
+    retentionRenewal ||
+    readySuccessor
+  ) {
     await observeOperatorPlanStage(
       context.target.sessionId,
       "prior_successor_approval",
@@ -643,7 +708,11 @@ const handlePlanOperation = async (
     );
   }
   const recovered =
-    sharedHostSuccessor || installerSuccessor || settingsSuccessor || retentionRenewal
+    sharedHostSuccessor ||
+    installerSuccessor ||
+    settingsSuccessor ||
+    retentionRenewal ||
+    readySuccessor
       ? null
       : await recoverOriginalApprovedPlan(deps, context, input, appId, plan, now);
   if (recovered !== null) {
@@ -715,7 +784,7 @@ const handlePlanOperation = async (
         ...context,
         now,
         store: deps.store,
-        ...(installerSuccessor || settingsSuccessor || retentionRenewal
+        ...(installerSuccessor || settingsSuccessor || retentionRenewal || readySuccessor
           ? {
               beforeUpdate: async (record: HostedRuntimeJournalRecord) => {
                 await deps.assertAuthorized({ ...context, plan, purpose: "planning" });
@@ -770,6 +839,20 @@ const handlePlanOperation = async (
             record.operator.approvalId === successorPrior?.record.operator?.approvalId &&
             record.approvedByCallId === successorPrior?.record.approvedByCallId &&
             isRetentionRenewalSuccessor(record, plan, now());
+          const readyDeliverySuccessor =
+            readySuccessor &&
+            record.operator.operationRef === successorPrior?.record.operator?.operationRef &&
+            record.operator.planDigest === successorPrior?.record.operator?.planDigest &&
+            record.operator.approvalId === successorPrior?.record.operator?.approvalId &&
+            record.approvedByCallId === successorPrior?.record.approvedByCallId &&
+            plan.appDeliveryReplacement !== undefined &&
+            isReadyDeliveryReplacementSuccessor(
+              record,
+              { ...plan, appDeliveryReplacement: plan.appDeliveryReplacement },
+              now(),
+            );
+          if (readySuccessor && !readyDeliverySuccessor)
+            throw new HostedOperatorError("operation_in_progress");
           if (settingsSuccessor && !projectSettingsSuccessor) {
             throw new HostedOperatorError("operation_in_progress");
           }
@@ -788,6 +871,7 @@ const handlePlanOperation = async (
             !installerSourceSuccessor &&
             !projectSettingsSuccessor &&
             !retainedRenewalSuccessor &&
+            !readyDeliverySuccessor &&
             (record.leaseId !== undefined ||
               record.operator.pendingEffectId !== undefined ||
               record.operator.pendingEffectAttempt !== undefined ||
@@ -846,14 +930,18 @@ const handlePlanOperation = async (
           nextOperator.retainedGatewayDeliveries = record.operator.retainedGatewayDeliveries;
           nextOperator.retainedInstallerOperations = record.operator.retainedInstallerOperations;
           nextOperator.retainedRenewalOperations = record.operator.retainedRenewalOperations;
+          nextOperator.retainedReadyDeliveryOperations =
+            record.operator.retainedReadyDeliveryOperations;
           if (gatewaySourceSuccessor || sharedHostProtectionSuccessor) {
             const {
               retainedGatewayDeliveries,
               retainedInstallerOperations,
               retainedProjectSettingsOperations,
               retainedRenewalOperations,
+              retainedReadyDeliveryOperations,
               ...priorOperator
             } = record.operator;
+            void retainedReadyDeliveryOperations;
             void retainedInstallerOperations;
             void retainedProjectSettingsOperations;
             void retainedRenewalOperations;
@@ -869,8 +957,10 @@ const handlePlanOperation = async (
               retainedInstallerOperations,
               retainedProjectSettingsOperations,
               retainedRenewalOperations,
+              retainedReadyDeliveryOperations,
               ...priorOperator
             } = record.operator;
+            void retainedReadyDeliveryOperations;
             void retainedGatewayDeliveries;
             void retainedProjectSettingsOperations;
             void retainedRenewalOperations;
@@ -892,9 +982,11 @@ const handlePlanOperation = async (
               retainedInstallerOperations,
               retainedProjectSettingsOperations,
               retainedRenewalOperations,
+              retainedReadyDeliveryOperations,
               ...priorOperator
             } = record.operator;
             void retainedGatewayDeliveries;
+            void retainedReadyDeliveryOperations;
             void retainedInstallerOperations;
             void retainedRenewalOperations;
             nextOperator.retainedProjectSettingsOperations = [
@@ -919,9 +1011,11 @@ const handlePlanOperation = async (
               retainedInstallerOperations,
               retainedProjectSettingsOperations,
               retainedRenewalOperations,
+              retainedReadyDeliveryOperations,
               ...priorOperator
             } = record.operator;
             void retainedGatewayDeliveries;
+            void retainedReadyDeliveryOperations;
             void retainedInstallerOperations;
             void retainedProjectSettingsOperations;
             nextOperator.retainedRenewalOperations = [
@@ -943,6 +1037,22 @@ const handlePlanOperation = async (
             delete nextOperator.deliveredGatewayDeploymentId;
             // All old receipts and the pending alias attempt survive only in the immutable snapshot.
           }
+          if (readyDeliverySuccessor) {
+            const { retainedReadyDeliveryOperations, ...predecessorOperator } = record.operator;
+            nextOperator.retainedReadyDeliveryOperations = [
+              ...(retainedReadyDeliveryOperations ?? []),
+              { approvedByCallId: record.approvedByCallId, operator: predecessorOperator },
+            ];
+            // Preserve the actual row lineage while requiring fresh approval and independent receipts.
+            nextOperator.operationRef = record.operator.operationRef;
+            nextOperator.managedEnvironment = record.operator.managedEnvironment;
+            nextOperator.gatewayEnvironment = record.operator.gatewayEnvironment;
+            nextOperator.receipts = [];
+            nextOperator.deliveryCandidates = [];
+            nextOperator.gatewayDeliveryCandidates = [];
+            delete nextOperator.deliveredDeploymentId;
+            delete nextOperator.deliveredGatewayDeploymentId;
+          }
           if (sharedHostProtectionSuccessor) {
             nextOperator.operationRef = record.operator.operationRef;
             nextOperator.pendingEffectId = record.operator.pendingEffectId;
@@ -955,16 +1065,16 @@ const handlePlanOperation = async (
           Object.assign(
             nextOperator,
             retainAppDeliveryHistory(
-              projectSettingsSuccessor || retainedRenewalSuccessor
+              projectSettingsSuccessor || retainedRenewalSuccessor || readyDeliverySuccessor
                 ? { ...record.operator, deliveryCandidates: [] }
                 : record.operator,
               nextOperator,
             ),
           );
-          if (!retainedRenewalSuccessor) {
+          if (!retainedRenewalSuccessor && !readyDeliverySuccessor) {
             nextOperator.gatewayDeliveryCandidates = record.operator.gatewayDeliveryCandidates;
           }
-          if (!gatewaySourceSuccessor && !retainedRenewalSuccessor) {
+          if (!gatewaySourceSuccessor && !retainedRenewalSuccessor && !readyDeliverySuccessor) {
             nextOperator.deliveredGatewayDeploymentId =
               record.operator.deliveredGatewayDeploymentId;
           }
@@ -976,6 +1086,7 @@ const handlePlanOperation = async (
           }
           if (
             !retainedRenewalSuccessor &&
+            !readyDeliverySuccessor &&
             authStageCompleted &&
             record.operator.plan.authSchema?.targetDigest === plan.authSchema?.targetDigest
           ) {
@@ -1011,7 +1122,8 @@ const handlePlanOperation = async (
             sharedHostProtectionSuccessor ||
             installerSourceSuccessor ||
             projectSettingsSuccessor ||
-            retainedRenewalSuccessor
+            retainedRenewalSuccessor ||
+            readyDeliverySuccessor
           ) {
             delete next.leaseId;
             delete next.leaseExpiresAt;
@@ -1976,6 +2088,36 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                   (checkpoint) => checkpoint.parentEffectId === effect.id,
                 ),
               };
+              if (
+                plan.appDeliveryReplacement !== undefined &&
+                (effect.kind === "delivery" || effect.kind === GATEWAY_DELIVERY_EFFECT)
+              ) {
+                const predecessor = readyReplacementHistory(record, plan, now());
+                if (!predecessor) throw new HostedOperatorError("reconciliation_required");
+                for (const prior of readyReplacementPriorOperators(record, plan, now())) {
+                  const original = await deps.readApproval({
+                    ...context,
+                    action: "prepare",
+                    callId: prior.approvedByCallId,
+                    planDigest: prior.operator.planDigest,
+                  });
+                  if (
+                    !original?.approved ||
+                    original.approvalId !== prior.operator.approvalId ||
+                    original.callId !== prior.approvedByCallId ||
+                    original.planDigest !== prior.operator.planDigest ||
+                    original.action !== "prepare"
+                  )
+                    throw new HostedOperatorError("authorization_required");
+                }
+                effectInput.readyReplacement = {
+                  originatingOperator: predecessor.originatingOperator,
+                  appCandidate: predecessor.appCandidate,
+                  ...(predecessor.gatewayCandidate
+                    ? { gatewayCandidate: predecessor.gatewayCandidate }
+                    : {}),
+                };
+              }
               // Always inspect before first execution as well as uncertain retry. Provider timeouts cannot create new identities.
               const observed = await observePrepare("effect_reconciliation", async () => {
                 const result = await deps.reconcile(effectInput);

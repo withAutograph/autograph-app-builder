@@ -82,6 +82,11 @@ import { resolvePublishedAppDelivery } from "./hosted-operator-published-app-del
 import type { CompiledOperatorReleaseSelection } from "./hosted-operator-artifact-selection";
 import { createHostedOperatorEnvironmentBindings } from "./hosted-operator-environment-bindings";
 import { createHostedOperatorAppReadiness } from "./hosted-operator-app-readiness";
+import {
+  readNativePreviewRecoveryPlan,
+  withExternallyManagedHostProtection,
+} from "./hosted-operator-native-preview-recovery";
+import { createReadyReplacementNativeReader } from "./hosted-operator-ready-replacement-native";
 
 const sharedHostProtectionPrerequisite = (
   record: HostedRuntimeJournalRecord | undefined,
@@ -343,6 +348,15 @@ const assertParticipantSignupPolicyState = (
 const hash = (
   value: ManagedOperatorEnvironmentRow[] | OperatorDeploymentCandidate | { rows: never[] },
 ) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const environmentHash = (
+  input: HostedOperatorEffectContext,
+  rows: ManagedOperatorEnvironmentRow[],
+) =>
+  input.plan.hostProtection === undefined
+    ? hash(rows)
+    : createHash("sha256")
+        .update(JSON.stringify({ rows, configuredHostProtection: input.plan.hostProtection }))
+        .digest("hex");
 const selectedApplication = (
   configuration: Pick<HostedOperatorSourceConfiguration, "applications" | "teamId">,
   context: HostedOperatorContext,
@@ -937,6 +951,15 @@ export const composeHostedOperatorDependencies = (
     readCredential: controlPlane.readCredential,
   });
   const appDelivery = createHostedOperatorDeploymentDelivery({
+    beforeCreate: async (input) => {
+      if (!input.plan.appDeliveryReplacement) return;
+      if (!input.readyReplacement) throw new HostedOperatorError(RECONCILIATION_REQUIRED);
+      await createReadyReplacementNativeReader({
+        context: input,
+        readCredential: controlPlane.readCredential,
+        assertCurrent: input.assertCurrent,
+      }).verify(input.plan, input.readyReplacement);
+    },
     assertAuthorized: controlPlane.assertAuthorized,
     assertEnvironment: async (input) => {
       await appEnvironment.verifyForDelivery(managedContext(input), await bindings(input));
@@ -944,6 +967,26 @@ export const composeHostedOperatorDependencies = (
     readCredential: controlPlane.readCredential,
   });
   const gatewayDelivery = createHostedOperatorDeploymentDelivery({
+    beforeAliasWrite: async (input, selected) => {
+      if (!input.plan.appDeliveryReplacement) return "write";
+      const predecessor = input.plan.appDeliveryReplacement.predecessor.gatewayDeploymentId;
+      if (!predecessor || input.readyReplacement?.gatewayCandidate?.deploymentId !== predecessor)
+        return "unknown";
+      return await createReadyReplacementNativeReader({
+        context: input,
+        readCredential: controlPlane.readCredential,
+        assertCurrent: input.assertCurrent,
+      }).aliasWriteAuthority(input.plan, selected.deploymentId);
+    },
+    beforeCreate: async (input) => {
+      if (!input.plan.appDeliveryReplacement) return;
+      if (!input.readyReplacement) throw new HostedOperatorError(RECONCILIATION_REQUIRED);
+      await createReadyReplacementNativeReader({
+        context: input,
+        readCredential: controlPlane.readCredential,
+        assertCurrent: input.assertCurrent,
+      }).verify(input.plan, input.readyReplacement);
+    },
     assertAuthorized: controlPlane.assertAuthorized,
     assertEnvironment: async (input) => {
       await gatewayEnvironment.verifyForDelivery(
@@ -997,6 +1040,7 @@ export const composeHostedOperatorDependencies = (
         gatewayBindings: oldBindings,
         gatewayDelivery: oldGatewayDelivery,
         appTrustedSources: oldAppTrustedSources,
+        appDeliveryReplacement: oldAppDeliveryReplacement,
         ...cleanupBase
       } = retained;
       void oldMembership;
@@ -1004,6 +1048,7 @@ export const composeHostedOperatorDependencies = (
       void oldBindings;
       void oldGatewayDelivery;
       void oldAppTrustedSources;
+      void oldAppDeliveryReplacement;
       return hostedOperatorPlanSchema.parse({
         ...cleanupBase,
         action: "cleanup",
@@ -1404,7 +1449,7 @@ export const composeHostedOperatorDependencies = (
       await authReadiness.verify(verification);
       participantsBootstrapPrepared = true;
     }
-    return await observe(
+    const resolved = await observe(
       "identity_plan_resolution",
       async () =>
         await resolveFullPlan(
@@ -1420,6 +1465,7 @@ export const composeHostedOperatorDependencies = (
           context.authSignupPolicy,
         ),
     );
+    return withExternallyManagedHostProtection(resolved, application.hostProtection);
   };
 
   const workerInput = async (input: HostedOperatorEffectContext) => {
@@ -1706,7 +1752,7 @@ export const composeHostedOperatorDependencies = (
       await bindings(input),
     );
     return observed.status === "applied"
-      ? { receipt: receipt(input, hash(observed.rows)), status: "applied" }
+      ? { receipt: receipt(input, environmentHash(input, observed.rows)), status: "applied" }
       : observed;
   };
   const reconcileGatewayBindings = async (
@@ -1716,7 +1762,7 @@ export const composeHostedOperatorDependencies = (
       gatewayContext(await reconcileGatewayAppCandidate(input, appDelivery)),
     );
     return observed.status === "applied"
-      ? { receipt: receipt(input, hash(observed.rows)), status: "applied" }
+      ? { receipt: receipt(input, environmentHash(input, observed.rows)), status: "applied" }
       : observed;
   };
   const reconcileDelivery = async (
@@ -1932,7 +1978,7 @@ export const composeHostedOperatorDependencies = (
       { ...input, checkpointManagedEnvironment: input.checkpointManagedEnvironment },
       await bindings(input),
     );
-    return receipt(input, hash(observed.rows));
+    return receipt(input, environmentHash(input, observed.rows));
   };
   const executeEffectGatewayBindings = async (
     input: HostedOperatorWorkerEffectContext,
@@ -1940,7 +1986,7 @@ export const composeHostedOperatorDependencies = (
     const observed = await gatewayEnvironment.bind(
       gatewayContext(await reconcileGatewayAppCandidate(input, appDelivery)),
     );
-    return receipt(input, hash(observed.rows));
+    return receipt(input, environmentHash(input, observed.rows));
   };
   const executeEffectDelivery = async (
     input: HostedOperatorWorkerEffectContext,
@@ -1960,7 +2006,7 @@ export const composeHostedOperatorDependencies = (
     input: HostedOperatorWorkerEffectContext,
   ): ReturnType<ProtectedHostedOperatorDependencies["executeEffect"]> => {
     const observed = await appEnvironment.remove(managedContext(input), await bindings(input));
-    return receipt(input, hash(observed.rows));
+    return receipt(input, environmentHash(input, observed.rows));
   };
   const executeEffectRetire = async (
     input: HostedOperatorWorkerEffectContext,
@@ -2170,6 +2216,30 @@ export const composeHostedOperatorDependencies = (
   };
   return {
     assertAuthorized: controlPlane.assertAuthorized,
+    readReadyDeliveryReplacementPlan: async (context) => {
+      const policy = selectedApplication(configuration, context).hostProtection;
+      if (policy === undefined) return undefined;
+      await controlPlane.assertPlanningAuthorized(context);
+      const current = await controlPlane.store.read(context);
+      return await readNativePreviewRecoveryPlan({
+        record: current?.record,
+        policy,
+        now: Date.now(),
+        readGatewayAlias: async (plan) =>
+          await createReadyReplacementNativeReader({
+            context,
+            readCredential: controlPlane.readCredential,
+            assertCurrent: async () => await controlPlane.assertPlanningAuthorized(context),
+          }).readGatewayAlias(plan),
+      });
+    },
+    verifyReadyDeliveryReplacement: async (context, plan, predecessor) => {
+      await createReadyReplacementNativeReader({
+        context,
+        readCredential: controlPlane.readCredential,
+        assertCurrent: async () => await controlPlane.assertPlanningAuthorized(context),
+      }).verify(plan, predecessor);
+    },
     assertCanonicalOwner: controlPlane.assertCanonicalOwner,
     authIdentityInput,
     authorize: controlPlane.authorize,
