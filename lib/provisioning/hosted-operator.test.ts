@@ -2415,7 +2415,7 @@ describe("native bindings integration", () => {
 describe("approved retention renewal planning", () => {
   it.each(["bindings", "gateway-bindings", "gateway-delivery"] as const)(
     "saves and re-exposes pending %s without recomposing or inheriting execution authority",
-    async (pendingEffectId) => {
+    async (pendingKind) => {
       const now = Date.parse("2026-10-18T00:00:00Z");
       const f = fixture(() => now);
       const oldPlan = hostedOperatorPlanSchema.parse({
@@ -2460,6 +2460,11 @@ describe("approved retention renewal planning", () => {
         stage: "app",
       });
       const operationRef = "a5c2b20f-0c08-49a8-a34f-cce64c72cc8c";
+      const pendingEffect = oldPlan.effects.find((effect) => effect.kind === pendingKind);
+      if (pendingEffect === undefined) {
+        throw new Error("Expected the selected renewal effect in the fixture plan");
+      }
+      const pendingEffectId = pendingEffect.id;
       const pendingIndex = oldPlan.effects.findIndex((effect) => effect.id === pendingEffectId);
       const oldReceipts = oldPlan.effects.slice(0, pendingIndex).map((effect) => ({
         effectId: effect.id,
@@ -2573,7 +2578,7 @@ describe("approved retention renewal planning", () => {
         log.mockRestore();
         f.deps.assertAuthorized = assertAuthorized;
       }
-      if (pendingEffectId !== "gateway-delivery") {
+      if (pendingKind !== "gateway-delivery") {
         const readApproval = f.deps.readApproval;
         const approvalRead = vi.fn<ProtectedHostedOperatorDependencies["readApproval"]>(
           async (input) => (input.callId === "renewed-call" ? null : await readApproval(input)),
