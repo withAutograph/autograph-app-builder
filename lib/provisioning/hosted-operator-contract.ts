@@ -1527,41 +1527,51 @@ export const operatorAuthIdentityInputSchema = z.strictObject({
   operationRef: z.uuid(),
   sessionId: id,
 });
+const operatorPublicCodeSchema = z.enum([
+  "protected_operator_required",
+  "auth_identity_required",
+  "auth_membership_required",
+  "auth_schema_not_ready",
+  "authorization_required",
+  "resource_mismatch",
+  "operation_in_progress",
+  "reconciliation_required",
+  "gateway_delivery_failed",
+  "app_delivery_configuration_changed",
+  "app_source_publication_required",
+  "operator_unavailable",
+  "legacy_runtime_requires_migration",
+  "signup_not_ready",
+]);
+const operatorPublicStatusSchema = z.enum([
+  "planned",
+  "pending",
+  "prepared",
+  "cleaned",
+  "blocked",
+  "auth-schema-prepared",
+  "participants-prepared",
+  "waiting_for_signup",
+  "ready",
+]);
+export const operatorExecutionOutcomeSchema = z.strictObject({
+  status: operatorPublicStatusSchema,
+  code: operatorPublicCodeSchema.optional(),
+});
+export const operatorExecutionObservationSchema = z.discriminatedUnion("state", [
+  z.strictObject({ state: z.literal("running") }),
+  z.strictObject({ state: z.literal("unknown") }),
+  z.strictObject({ state: z.literal("settled"), outcome: operatorExecutionOutcomeSchema }),
+]);
 export const operatorPublicResultSchema = z.strictObject({
   appId: id,
   authenticatedBehavior: z.literal("unassessed"),
-  code: z
-    .enum([
-      "protected_operator_required",
-      "auth_identity_required",
-      "auth_membership_required",
-      "auth_schema_not_ready",
-      "authorization_required",
-      "resource_mismatch",
-      "operation_in_progress",
-      "reconciliation_required",
-      "gateway_delivery_failed",
-      "app_delivery_configuration_changed",
-      "app_source_publication_required",
-      "operator_unavailable",
-      "legacy_runtime_requires_migration",
-      "signup_not_ready",
-    ])
-    .optional(),
+  code: operatorPublicCodeSchema.optional(),
   operationRef: z.uuid().optional(),
   plan: hostedOperatorPlanSchema.optional(),
   planDigest: digest.optional(),
-  status: z.enum([
-    "planned",
-    "pending",
-    "prepared",
-    "cleaned",
-    "blocked",
-    "auth-schema-prepared",
-    "participants-prepared",
-    "waiting_for_signup",
-    "ready",
-  ]),
+  status: operatorPublicStatusSchema,
+  execution: operatorExecutionObservationSchema.optional(),
   appUrl: z.url().optional(),
   signupUrl: z.url().optional(),
 });

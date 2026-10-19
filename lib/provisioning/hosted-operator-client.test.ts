@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createHostedOperatorClient,
   createHostedOperatorDispatcher,
+  isHostedOperatorTransportUnknown,
 } from "./hosted-operator-client";
 import { HostedOperatorError } from "./hosted-operator-contract";
 
@@ -81,6 +82,82 @@ describe("operator Auth identity input results", () => {
 describe("closed outbound operator action diagnostics", () => {
   const diagnosticRequest = { action: "status" as const, selection, operationRef };
 
+  it("negotiates optional status observations and accepts the legacy status response", async () => {
+    const transport = vi.fn<typeof fetch>(async (_url, init) => {
+      const headers = new Headers(init?.headers);
+      expect(headers.get("x-autograph-execution-observation")).toBe("requested");
+      return await Promise.resolve(
+        Response.json({
+          appId: selection.appId,
+          authenticatedBehavior: "unassessed",
+          status: "pending",
+          operationRef,
+        }),
+      );
+    });
+    const client = createHostedOperatorClient({
+      endpoint: "https://operator.example",
+      fetch: transport,
+      token: async () => await Promise.resolve("private-bearer"),
+    });
+    await expect(client.request(diagnosticRequest)).resolves.toMatchObject({ status: "pending" });
+    expect(transport).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [
+      "bindings",
+      (client: ReturnType<typeof createHostedOperatorClient>) =>
+        client.bindings({ action: "bindings", selection, operationRef }),
+    ],
+    [
+      "auth-identity-input",
+      (client: ReturnType<typeof createHostedOperatorClient>) =>
+        client.authIdentityInput({ action: "auth-identity-input", selection, operationRef }),
+    ],
+    [
+      "neon-authorization",
+      (client: ReturnType<typeof createHostedOperatorClient>) =>
+        client.neonAuthorization({
+          action: "neon-authorization",
+          phase: "check",
+          sessionId: selection.sessionId,
+        }),
+    ],
+    [
+      "resolve-preview-target",
+      (client: ReturnType<typeof createHostedOperatorClient>) =>
+        client.resolvePreviewTarget({
+          action: "resolve-preview-target",
+          appId: selection.appId,
+          sessionId: selection.sessionId,
+        }),
+    ],
+  ] as const)("reports malformed %s payloads as schema-invalid", async (_action, invoke) => {
+    const logs = vi.spyOn(console, "info").mockImplementation(() => {});
+    const client = createHostedOperatorClient({
+      endpoint: "https://operator.example",
+      fetch: vi.fn<typeof fetch>(async (_url, init) => {
+        expect(new Headers(init?.headers).has("x-autograph-execution-observation")).toBe(false);
+        return await Promise.resolve(Response.json({ private: "payload" }));
+      }),
+      token: async () => await Promise.resolve("private-bearer"),
+    });
+    try {
+      await expect(invoke(client)).rejects.toBeDefined();
+      expect(logs).toHaveBeenCalledWith(
+        "[builder:hosted-neon-consent]",
+        expect.objectContaining({
+          operatorResponse: "schema_invalid",
+          accessClass: "other_failed",
+        }),
+      );
+      expect(JSON.stringify(logs.mock.calls)).not.toContain("private");
+    } finally {
+      logs.mockRestore();
+    }
+  });
+
   it("labels a JSON decode failure without logging its response body or changing the error", async () => {
     const logs = vi.spyOn(console, "info").mockImplementation(() => {});
     const failure = new SyntaxError("RAW_PRIVATE_RESPONSE_BODY could not be decoded");
@@ -150,7 +227,7 @@ describe("closed outbound operator action diagnostics", () => {
         status: "pending",
         operationRef,
       };
-      const request = {
+      const requestPayload = {
         action,
         selection,
         operationRef,
@@ -158,7 +235,13 @@ describe("closed outbound operator action diagnostics", () => {
       };
       const transport = vi.fn<typeof fetch>(async (_url, init) => {
         const body = z.string().parse(init?.body);
-        expect(JSON.parse(body)).toEqual(request);
+        expect(JSON.parse(body)).toEqual(requestPayload);
+        const observationPreference = new Headers(init?.headers).get(
+          "x-autograph-execution-observation",
+        );
+        expect(observationPreference).toBe(
+          action === "status" || action === "execute" ? "requested" : null,
+        );
         return await Promise.resolve(Response.json(result));
       });
       const client = createHostedOperatorClient({
@@ -292,7 +375,7 @@ describe("operator request transport", () => {
     },
   );
 
-  it("preserves a transport failure without another operator attempt", async () => {
+  it("marks status transport failure as unknown without another operator attempt", async () => {
     const failure = new TypeError("Transport unavailable");
     const transport = vi.fn<typeof fetch>(async () => await Promise.reject(failure));
     const client = createHostedOperatorClient({
@@ -300,7 +383,103 @@ describe("operator request transport", () => {
       fetch: transport,
       token: async () => await Promise.resolve("bearer"),
     });
-    await expect(client.request(request)).rejects.toBe(failure);
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The predicate narrows the transport error with the exported guard.
+    await expect(client.request(request)).rejects.toSatisfy((error: unknown) => {
+      expect(isHostedOperatorTransportUnknown(error)).toBe(true);
+      expect(error).toMatchObject({ cause: failure });
+      return true;
+    });
     expect(transport).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks execute fetch rejection as an unknown transport outcome and preserves its cause", async () => {
+    const failure = new TypeError("private transport detail");
+    const transport = vi.fn<typeof fetch>(async () => await Promise.reject(failure));
+    const client = createHostedOperatorClient({
+      endpoint: "https://operator.example",
+      fetch: transport,
+      token: async () => await Promise.resolve("bearer"),
+    });
+    const result = client.request({
+      action: "execute",
+      selection,
+      operationRef,
+      callId: "private-call",
+      planDigest: "a".repeat(64),
+    });
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The predicate narrows the transport error with the exported guard.
+    await expect(result).rejects.toSatisfy((error: unknown) => {
+      expect(isHostedOperatorTransportUnknown(error)).toBe(true);
+      expect(error).toMatchObject({ cause: failure });
+      return true;
+    });
+    expect(transport).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks execute body read failure as unknown but preserves JSON syntax failures", async () => {
+    const bodyReadFailure = new TypeError("stream terminated");
+    const response = Response.json({});
+    vi.spyOn(response, "json").mockRejectedValue(bodyReadFailure);
+    const client = createHostedOperatorClient({
+      endpoint: "https://operator.example",
+      fetch: vi.fn<typeof fetch>(async () => await Promise.resolve(response)),
+      token: async () => await Promise.resolve("bearer"),
+    });
+    const executeRequest = {
+      action: "execute" as const,
+      selection,
+      operationRef,
+      callId: "private-call",
+      planDigest: "a".repeat(64),
+    };
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The predicate narrows the unknown transport failure with the exported guard.
+    await expect(client.request(executeRequest)).rejects.toSatisfy((error: unknown) => {
+      expect(isHostedOperatorTransportUnknown(error)).toBe(true);
+      expect(error).toMatchObject({ cause: bodyReadFailure });
+      return true;
+    });
+
+    const syntaxFailure = new SyntaxError("invalid JSON");
+    const syntaxResponse = Response.json({});
+    vi.spyOn(syntaxResponse, "json").mockRejectedValue(syntaxFailure);
+    const syntaxClient = createHostedOperatorClient({
+      endpoint: "https://operator.example",
+      fetch: vi.fn<typeof fetch>(async () => await Promise.resolve(syntaxResponse)),
+      token: async () => await Promise.resolve("bearer"),
+    });
+    await expect(syntaxClient.request(executeRequest)).rejects.toBe(syntaxFailure);
+  });
+
+  it("reports schema-invalid public execute results without exposing response data", async () => {
+    const logs = vi.spyOn(console, "info").mockImplementation(() => {});
+    const client = createHostedOperatorClient({
+      endpoint: "https://operator.example",
+      fetch: vi.fn<typeof fetch>(
+        async () => await Promise.resolve(Response.json({ secret: "private" })),
+      ),
+      token: async () => await Promise.resolve("bearer"),
+    });
+    try {
+      await expect(
+        client.request({
+          action: "execute",
+          selection,
+          operationRef,
+          callId: "private-call",
+          planDigest: "a".repeat(64),
+        }),
+      ).rejects.toBeInstanceOf(z.ZodError);
+      expect(logs).toHaveBeenCalledWith(
+        "[builder:hosted-neon-consent]",
+        expect.objectContaining({
+          operatorAction: "execute",
+          operatorResponse: "schema_invalid",
+          accessClass: "other_failed",
+        }),
+      );
+      expect(JSON.stringify(logs.mock.calls)).not.toContain("private");
+    } finally {
+      logs.mockRestore();
+    }
   });
 });

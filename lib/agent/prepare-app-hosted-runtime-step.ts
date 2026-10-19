@@ -45,6 +45,8 @@ interface HostedRuntimeContract {
   sameSelection: (left: OperatorSelection, right: OperatorSelection) => boolean;
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Caught exceptions are classified by the injected closed diagnostic boundary.
   onFailure?: (stage: RuntimePreparationStage, error: unknown) => void;
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Classify a caught transport exception without trusting its shape or exposing its bytes.
+  isTransportUnknown?: (error: unknown) => boolean;
 }
 
 type HostedOperatorErrorClassifier = (value: unknown) => value is HostedOperatorErrorType;
@@ -141,14 +143,17 @@ const preparationResult = (
   return result;
 };
 
-// oxlint-disable-next-line eslint/complexity -- Legacy readiness and participant preflight retain their separate approval-bound identity handoffs.
+// oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Legacy readiness and participant preflight retain their separate approval-bound identity handoffs.
 export const prepareHostedRuntimeWithOperator = async (
   input: HostedRuntimeInput,
   ctx: HostedRuntimeContext,
   operator: HostedOperatorClient,
   retain: (selection: PreparedRuntimeSelection) => void,
   contract: HostedRuntimeContract,
+  observedResult?: OperatorPublicResult,
+  // oxlint-disable-next-line sonarjs/cognitive-complexity -- Preserve distinct legacy readiness, identity handoff, and private transport-recovery outcomes.
 ) => {
+  ctx.abortSignal.throwIfAborted();
   const { createResourceMismatch, digest, isOperatorError, sameSelection } = contract;
   const participantPlan =
     input.plan.stage === "auth-participants" && input.plan.normalActorProgram !== undefined;
@@ -185,16 +190,26 @@ export const prepareHostedRuntimeWithOperator = async (
     }
     inputValidated = true;
     stage = "operator_execute";
-    const result = await operator.request(
-      {
-        action: "execute",
-        callId: ctx.callId,
-        operationRef: input.operationRef,
-        planDigest: input.planDigest,
-        selection,
-      },
-      ctx.abortSignal,
-    );
+    if (
+      observedResult !== undefined &&
+      (observedResult.appId !== input.appId ||
+        observedResult.operationRef !== input.operationRef ||
+        observedResult.planDigest !== input.planDigest)
+    ) {
+      throw createResourceMismatch();
+    }
+    const result =
+      observedResult ??
+      (await operator.request(
+        {
+          action: "execute",
+          callId: ctx.callId,
+          operationRef: input.operationRef,
+          planDigest: input.planDigest,
+          selection,
+        },
+        ctx.abortSignal,
+      ));
     stage = "result_mapping";
     if (
       result.operationRef !== undefined &&
@@ -219,6 +234,22 @@ export const prepareHostedRuntimeWithOperator = async (
     const identityInput = needsIdentity ? await requestIdentity() : null;
     return { identityInput, result: preparationResult(result, input, inputValidated) };
   } catch (error) {
+    if (ctx.abortSignal.aborted || (error instanceof Error && error.name === "AbortError")) {
+      throw error;
+    }
+    if (stage === "operator_execute" && contract.isTransportUnknown?.(error) === true) {
+      return {
+        identityInput: null,
+        observeExecution: true as const,
+        result: {
+          appId: input.appId,
+          authenticatedBehavior: "unassessed" as const,
+          operationRef: input.operationRef,
+          planDigest: input.planDigest,
+          status: "pending" as const,
+        },
+      };
+    }
     reportCaughtPreparationFailure(contract, stage, error);
     const result: OperatorPublicResult = {
       appId: input.appId,
@@ -309,12 +340,16 @@ export async function prepareHostedRuntimeStep(
         digest: contract.operatorPlanDigest,
         isOperatorError: (error): error is HostedOperatorErrorType =>
           error instanceof contract.HostedOperatorError,
+        isTransportUnknown: clientModule.isHostedOperatorTransportUnknown,
         sameSelection: (left, right) => contract.sameOperatorSelection(left, right),
         onFailure: (failureStage, error) =>
           diagnostic?.reportRuntimePreparationFailure(ctx.session.id, failureStage, error),
       },
     );
   } catch (error) {
+    if (ctx.abortSignal.aborted || (error instanceof Error && error.name === "AbortError")) {
+      throw error;
+    }
     diagnostic?.reportRuntimePreparationFailure(ctx.session.id, stage, error);
     return blockedPreparation(
       error instanceof Error ? error : new Error("Unknown hosted runtime preparation failure"),

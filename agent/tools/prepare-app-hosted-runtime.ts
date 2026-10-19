@@ -1,3 +1,4 @@
+import { readHostedRuntimeExecutionStep } from "../../lib/agent/hosted-runtime-execution-wait";
 import type {
   reportRuntimePreparationFailure,
   reportRuntimePreparationStarted,
@@ -222,13 +223,20 @@ export default defineWorkflowTool({
         return result;
       };
     }
-    await waitForHostedRuntimeApprovalReceipt(approved, ctx, {
+    const approval = await waitForHostedRuntimeApprovalReceipt(approved, ctx, {
       read: readHostedRuntimeApprovalReceiptStep,
       sleepUntil: async (deadline) => {
         await sleep(deadline);
       },
     });
     return yield* continueHostedRuntimeOwnerPreparation(approved, ctx, prepare, {
+      execution: {
+        snapshot: approval.snapshot,
+        read: readHostedRuntimeExecutionStep,
+        sleepUntil: async (deadline) => {
+          await sleep(deadline);
+        },
+      },
       createHook: () => createHook<HostedRuntimeIdentityWake>(),
       register,
       acknowledge,

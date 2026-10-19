@@ -1,4 +1,5 @@
 import { requireFinalResourceBindingPhase } from "./hosted-operator-resource-binding-phase";
+import { readApprovedRetainedMembershipInspection } from "./hosted-operator-membership-inspection";
 import { nativeObservationStateSchema } from "../eve/native-observation-state";
 import { realmContinuationPendingBaseline } from "./hosted-operator-realm-pending";
 import { createHostedOperatorRealmIdentityWait } from "./hosted-operator-realm-identity-wait";
@@ -1740,6 +1741,18 @@ export const createHostedOperatorControlPlane = async (input: {
       ) {
         const artifacts = ownedArtifacts(context);
         return await artifacts.publication.readAuthPlan(artifacts.context, selection);
+      },
+      async readMembershipInspectionPlan(effect: HostedOperatorEffectContext) {
+        return await readApprovedRetainedMembershipInspection({
+          effect,
+          readApproval,
+          readCurrentRecord: async () =>
+            await readCurrentResourceCredentialRecord({
+              assertAuthorized: owner.assertAuthorized,
+              effect,
+              store,
+            }),
+        });
       },
       async readCapturedRealmIdentity(context: HostedOperatorContext) {
         await owner.assertPlanningAuthorized(context);

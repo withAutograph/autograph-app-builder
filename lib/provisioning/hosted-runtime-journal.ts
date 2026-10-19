@@ -6,7 +6,11 @@ import { z } from "zod";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import type { BuilderProvisionAuthority } from "./journal";
 import { builderAppIdSchema } from "./names";
-import { hostedOperatorRecordSchema, retainedOperatorAuthSchema } from "./hosted-operator-contract";
+import {
+  hostedOperatorRecordSchema,
+  retainedOperatorAuthSchema,
+  operatorExecutionOutcomeSchema,
+} from "./hosted-operator-contract";
 import type { RetainedOperatorAuth } from "./hosted-operator-contract";
 
 import { normalActorAccountPreparationSchema } from "./hosted-operator-normal-actor-journal";
@@ -65,6 +69,28 @@ export const hostedRuntimeJournalRecordSchema = z.strictObject({
   kind: z.literal("app-runtime"),
   leaseExpiresAt: z.iso.datetime({ offset: true }).optional(),
   leaseId: z.uuid().optional(),
+  /** Closed execution acknowledgement, separate from resource credential custody. */
+  executionObservation: z
+    .discriminatedUnion("state", [
+      z.strictObject({
+        state: z.literal("running"),
+        attemptRef: z.uuid(),
+        operationRef: z.uuid(),
+        planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+        callId: z.string().min(1),
+        approvalId: z.string().min(1),
+      }),
+      z.strictObject({
+        state: z.literal("settled"),
+        attemptRef: z.uuid(),
+        operationRef: z.uuid(),
+        planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+        callId: z.string().min(1),
+        approvalId: z.string().min(1),
+        outcome: operatorExecutionOutcomeSchema,
+      }),
+    ])
+    .optional(),
   operator: hostedOperatorRecordSchema.optional(),
   privateState: encryptedStateSchema.optional(),
   /** Authored Workflow hook capability; kept encrypted and outside public operator results. */

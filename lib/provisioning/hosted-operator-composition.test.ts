@@ -34,6 +34,8 @@ import {
   normalActorProgramSchema,
 } from "./hosted-operator-normal-actor-program";
 import type { NormalActorAccountPreparation } from "./hosted-operator-normal-actor-journal";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Exercise real composition with only the worker transport stubbed.
+import * as membershipLauncher from "./hosted-operator-sandbox-launcher";
 
 import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
 import type {
@@ -2003,3 +2005,183 @@ it.each(["reconcile", "execute"] as const)(
     expect(input.gatewayDeliveryCandidates).toBe(gatewayCandidates);
   },
 );
+
+describe("approved historical organization inspection", () => {
+  const setup = (historical: boolean, status: "applied" | "absent") => {
+    const f = publicationFixture();
+    f.configuration.sandbox.membershipWorker = {
+      executablePath: "/membership-worker",
+      id: "auth-owned-organization-v1",
+      operationScope: "auth-protected-membership-v1",
+      sha256: "a".repeat(64),
+      subcommand: "auth-protected-membership",
+    };
+    const prior = hostedOperatorPlanSchema.parse({
+      ...bootstrapWithGatewayOrigin("https://gateway.example"),
+      stage: "app",
+      retention: { expiresAt: "2026-10-01T00:00:00Z", policy: "Original approved retention" },
+      effects: [
+        ...bootstrapPlan().effects,
+        { id: "app-install", kind: "install", description: "Install app" },
+        {
+          id: "auth-membership",
+          kind: "auth-membership",
+          description: "Create owned organization",
+        },
+        { id: "access", kind: "access", description: "Grant approved access" },
+        { id: "bindings", kind: "bindings", description: "Bind app" },
+        { id: "gateway-bindings", kind: "gateway-bindings", description: "Bind Gateway" },
+        { id: "gateway-delivery", kind: "gateway-delivery", description: "Deliver Gateway" },
+      ],
+      authMembership: {
+        kind: "create-owned-organization",
+        actorId: "fixture-owner",
+        organizationId: "fixture-organization",
+        name: "Fixture organization",
+        slug: "fixture-organization",
+        bootstrapPlanDigest: "a".repeat(64),
+        identityNonceSha256: "b".repeat(64),
+        identityProof: { reference: "frozen-proof", sha256: "c".repeat(64) },
+        identityCapture: { capturedAt: "2026-10-15T12:00:00Z", realmSessionId: "frozen-session" },
+        identityVerification: {
+          audience: "https://operator.example",
+          issuer: "https://apps.example",
+          jwksUrl: "https://gateway.example/_platform/jwks.json",
+          transportSource: {
+            audience: "https://vercel.com/team",
+            issuer: "https://oidc.vercel.com/team",
+            ownerId: "team",
+            projectId: "operator",
+            environment: "preview",
+          },
+        },
+      },
+    });
+    const plan = hostedOperatorPlanSchema.parse({
+      ...prior,
+      release: { ...prior.release, id: "current-release" },
+      retention: { expiresAt: "2030-01-01T00:00:00Z", policy: "Current approved retention" },
+    });
+    const effect = plan.effects.find((entry) => entry.kind === "auth-membership");
+    if (effect === undefined) {
+      throw new Error("Fixture membership effect missing");
+    }
+    const input: HostedOperatorEffectContext = {
+      ...context,
+      plan,
+      effect,
+      operationRef: "11111111-1111-4111-8111-111111111111",
+      fenceGeneration: 9,
+      leaseId: "current-lease",
+      workerCheckpoints: [],
+      assertCurrent: vi.fn(async () => {}),
+      checkpoint: vi.fn(async () => {}),
+    };
+    const inspect = vi.fn<
+      ReturnType<typeof membershipLauncher.createHostedOperatorSandboxLauncher>["inspect"]
+    >(async (observed) => {
+      await observed.assertCurrent();
+      return {
+        version: 1,
+        operation_id: input.operationRef,
+        context_digest: "d".repeat(64),
+        fence_generation: input.fenceGeneration,
+        status,
+        readback_sha256: "e".repeat(64),
+      };
+    });
+    const execute = vi.fn(async () => {});
+    vi.spyOn(membershipLauncher, "createHostedOperatorSandboxLauncher").mockReturnValue({
+      inspect,
+      execute,
+    });
+    vi.stubEnv(
+      "VERCEL_OIDC_TOKEN",
+      `fixture.${Buffer.from(JSON.stringify({ exp: 2_000_000_000 })).toString("base64url")}.fixture`,
+    );
+    const readResourceBindings = vi.fn(async () => ({
+      authDatabase: { migrationUrl: "private-current-auth", runtimeUrl: "private-current-runtime" },
+      appDatabase: {
+        migrationUrl: "private-current-app",
+        runtimeUrl: "private-current-app-runtime",
+      },
+    }));
+    const readMembershipInspectionPlan = vi.fn(async () =>
+      historical ? { plan: prior, effect } : undefined,
+    );
+    const assertMembershipCapture = vi.fn(async (current: HostedOperatorEffectContext) => {
+      await current.assertCurrent();
+    });
+    f.readCapturedRealmIdentityProof.mockResolvedValue({
+      link: { proofSha256: "c".repeat(64) },
+      proof: "fixture-private-proof",
+    });
+    const controlPlane = {
+      ...f.controlPlane,
+      readResourceBindings,
+      readMembershipInspectionPlan,
+      assertMembershipCapture,
+      assertAuthorized: vi.fn(async () => {}),
+    };
+    const dependencies = composeHostedOperatorDependencies(
+      f.configuration,
+      controlPlane as unknown as Parameters<typeof composeHostedOperatorDependencies>[1],
+    );
+    return {
+      f,
+      input,
+      prior,
+      inspect,
+      execute,
+      readResourceBindings,
+      readMembershipInspectionPlan,
+      assertMembershipCapture,
+      dependencies,
+    };
+  };
+
+  it("reads current credentials and capture but inspects the original approved full plan with today's fence", async () => {
+    const f = setup(true, "applied");
+    await expect(f.dependencies.reconcile(f.input)).resolves.toMatchObject({
+      status: "applied",
+      receipt: { effectId: f.input.effect.id, resourceVersion: "e".repeat(64) },
+    });
+    expect(f.readResourceBindings).toHaveBeenCalledWith(f.input);
+    expect(f.f.readCapturedRealmIdentityProof).toHaveBeenCalledWith(f.input);
+    expect(f.readMembershipInspectionPlan).toHaveBeenCalledWith(f.input);
+    expect(f.assertMembershipCapture).toHaveBeenCalledWith(f.input);
+    expect(f.inspect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        plan: f.prior,
+        operationRef: f.input.operationRef,
+        fenceGeneration: 9,
+        leaseId: "current-lease",
+        readbackOnly: true,
+        directDatabaseUrl: "private-current-auth",
+      }),
+    );
+    expect(f.execute).not.toHaveBeenCalled();
+  });
+
+  it("keeps missing historical ownership unknown without authorizing recreation", async () => {
+    const f = setup(true, "absent");
+    await expect(f.dependencies.reconcile(f.input)).resolves.toEqual({ status: "unknown" });
+    expect(f.execute).not.toHaveBeenCalled();
+  });
+
+  it("preserves ordinary current-plan absence for a first organization creation", async () => {
+    const f = setup(false, "absent");
+    await expect(f.dependencies.reconcile(f.input)).resolves.toEqual({ status: "absent" });
+    expect(f.inspect).toHaveBeenCalledWith(
+      expect.objectContaining({ plan: f.input.plan, readbackOnly: true }),
+    );
+    expect(f.execute).not.toHaveBeenCalled();
+  });
+
+  it("rejects a lost current capture before historical observation can succeed", async () => {
+    const f = setup(true, "applied");
+    f.assertMembershipCapture.mockRejectedValue(new Error("current capture revoked"));
+    await expect(f.dependencies.reconcile(f.input)).rejects.toThrow("current capture revoked");
+    expect(f.execute).not.toHaveBeenCalled();
+  });
+});
