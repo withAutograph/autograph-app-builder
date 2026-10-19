@@ -24,7 +24,7 @@ import {
   assertHostedRuntimeExecutionObservationAuthority,
   createHostedRuntimeExecutionObserver,
   observedHostedRuntimeExecutionIsSettled,
-} from "./hosted-runtime-execution-wait";
+} from "./hosted-runtime-execution-observation-step";
 import { waitForHostedRuntimeApprovalReceipt } from "./hosted-runtime-approval-wait";
 
 const fixture = () => {
