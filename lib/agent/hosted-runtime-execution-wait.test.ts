@@ -1,3 +1,5 @@
+import { continueHostedRuntimeExecutionObservation } from "./hosted-runtime-execution-wait";
+import type { HostedRuntimeExecutionWaitPorts } from "./hosted-runtime-execution-wait";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { PreparedRuntimeSelection } from "./prepared-runtime-selection";
@@ -233,6 +235,43 @@ const fixture = () => {
 };
 
 describe("automatic observation of one approved execution", () => {
+  it("calls observation steps and sleep without serializing a function-bearing ports receiver", async () => {
+    const f = fixture();
+    const readReceivers: boolean[] = [];
+    const sleepReceivers: boolean[] = [];
+    const ports: HostedRuntimeExecutionWaitPorts = {
+      snapshot: f.snapshot,
+      read: function read(this: undefined, input, ctx, snapshot, delayMs) {
+        readReceivers.push(this === undefined);
+        expect(snapshot).toBe(f.snapshot);
+        return f.read(input, ctx, snapshot, delayMs);
+      },
+      sleepUntil: function sleepUntil(this: undefined) {
+        sleepReceivers.push(this === undefined);
+        f.setObserved({
+          ...f.observed,
+          status: "prepared",
+          execution: { state: "settled", outcome: { status: "prepared" } },
+        });
+        return Promise.resolve();
+      },
+    };
+    const prepared = await f.prepare();
+    const generator = continueHostedRuntimeExecutionObservation(
+      f.approved,
+      f.context,
+      prepared,
+      ports,
+    );
+    expect(await generator.next()).toMatchObject({ done: false, value: { status: "pending" } });
+    expect(await generator.next()).toMatchObject({
+      done: true,
+      value: { result: { status: "prepared" } },
+    });
+    expect(readReceivers).toEqual([true, true]);
+    expect(sleepReceivers).toEqual([true]);
+    expect(f.calls).toEqual(["execute", "status", "status"]);
+  });
   it.each(["prepared", "reconciliation_required"] as const)(
     "keeps waiting after lost transport and returns actual %s without another execute/plan",
     async (outcome) => {
