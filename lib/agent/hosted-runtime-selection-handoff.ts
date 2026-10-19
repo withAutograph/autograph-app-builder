@@ -27,6 +27,7 @@ const retainedStatuses = new Set([
   "pending",
   "auth-schema-prepared",
   "participants-prepared",
+  "waiting_for_signup",
 ]);
 
 /** Capture only the existing public reference in the owning result-hook context. */
