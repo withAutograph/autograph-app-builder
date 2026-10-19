@@ -37,6 +37,7 @@ const mocks = vi.hoisted(() => ({
   prepare: vi.fn(),
   publish: vi.fn(),
   review: vi.fn(),
+  runtime: vi.fn(),
   state: { current: {} as Record<string, unknown>, update: vi.fn() },
 }));
 
@@ -49,6 +50,7 @@ vi.mock("./review-applied-product-source", () => ({ reviewAppliedProductSource: 
 vi.mock("../../agent/tools/prepare-app-local-preview", () => ({
   prepareValidationLocalData: mocks.prepare,
 }));
+vi.mock("./prepared-runtime-execution", () => ({ resolvePreparedRuntimeExecution: mocks.runtime }));
 vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
 vi.mock("./workflow-state", () => ({
   APP_BUILDER_WORKFLOW_VERSION: 1,
@@ -99,6 +101,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     vi.clearAllMocks();
     mocks.attempt.mockReturnValue({ digest: "attempt" });
     mocks.prepare.mockResolvedValue(null);
+    mocks.runtime.mockResolvedValue(null);
     mocks.publish.mockResolvedValue({ status: "published" });
     mocks.describe.mockResolvedValue({ backend: { kind: "static" } });
     mocks.browser.mockResolvedValue({ status: "passed" });
@@ -181,7 +184,10 @@ describe("behavior evidence invalidation during validation repair", () => {
       expect(mocks.browser).toHaveBeenCalledOnce();
       expect(mocks.execute).toHaveBeenCalledBefore(mocks.describe);
       expect(mocks.describe).toHaveBeenCalledBefore(mocks.publish);
-      expect(mocks.publish).toHaveBeenCalledBefore(mocks.browser);
+      expect(mocks.publish).toHaveBeenCalledBefore(mocks.runtime);
+      expect(mocks.runtime).toHaveBeenCalledBefore(mocks.browser);
+      expect(mocks.prepare).toHaveBeenCalledOnce();
+      expect(mocks.runtime).toHaveBeenCalledOnce();
       expect(mocks.review).not.toHaveBeenCalled();
     } finally {
       log.mockRestore();
@@ -368,14 +374,30 @@ describe("behavior evidence invalidation during validation repair", () => {
       backend: { kind: "generated-postgres" },
       validation: { browser: null },
     });
-    const sandbox = { id: "validation-sandbox" };
+    const sandbox = {};
     const context = {
       callId: "validate_capture",
       getSandbox: () => Promise.resolve(sandbox),
       session: { auth: { owned: "auth" }, id: "adapter" },
     };
-    await validateAppCreation.execute({ implementationFiles: [] }, context as never);
+    const result = await validateAppCreation.execute({ implementationFiles: [] }, context as never);
+    expect(mocks.prepare).toHaveBeenCalledOnce();
+    expect(mocks.prepare.mock.calls[0]?.[0]).not.toHaveProperty("execution");
+    expect(mocks.execute).toHaveBeenCalledOnce();
     expect(mocks.execute).toHaveBeenCalledBefore(mocks.publish);
+    expect(mocks.publish).toHaveBeenCalledOnce();
+    expect(mocks.browser).not.toHaveBeenCalled();
+    expect(mocks.runtime).not.toHaveBeenCalled();
+    expect(mocks.review).not.toHaveBeenCalled();
+    expect(mocks.state.current.phase).toBe("validated");
+    expect(result).toMatchObject({
+      backendValidation: { status: "unassessed" },
+      productAcceptance: { productStatus: "unassessed" },
+      productBehaviorEvidence: [],
+      sourceAssessment: { reviewCompleted: false, status: "unassessed" },
+      status: "validated",
+      technicalStatus: "passed",
+    });
     expect(mocks.publish).toHaveBeenCalledWith(
       expect.objectContaining({
         adapterSessionId: "adapter",
@@ -387,6 +409,46 @@ describe("behavior evidence invalidation during validation repair", () => {
       }),
     );
   });
+  it("captures technical validation before a protected runtime error blocks browser behavior", async () => {
+    mocks.state.current = { ...workflow("validated"), phase: "applied" };
+    mocks.describe.mockResolvedValue({
+      backend: { kind: "generated-postgres" },
+      validation: { browser: { task: "test-e2e" } },
+    });
+    mocks.prepare.mockImplementation((input: { execution?: unknown }) =>
+      input.execution === undefined
+        ? Promise.resolve(null)
+        : Promise.reject(new Error("auth_identity_required")),
+    );
+    mocks.runtime.mockRejectedValue(new Error("auth_identity_required"));
+    const result = await validateAppCreation.execute({ implementationFiles: [] }, {
+      callId: "validate_before_auth",
+      getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
+      session: { auth: {}, id: "session" },
+    } as never);
+    expect(mocks.execute).toHaveBeenCalledOnce();
+    expect(mocks.prepare.mock.calls[0]?.[0]).not.toHaveProperty("execution");
+    expect(mocks.publish).toHaveBeenCalledOnce();
+    expect(mocks.execute).toHaveBeenCalledBefore(mocks.publish);
+    expect(mocks.publish).toHaveBeenCalledBefore(mocks.runtime);
+    expect(mocks.runtime).toHaveBeenCalledOnce();
+    expect(mocks.browser).not.toHaveBeenCalled();
+    expect(mocks.review).not.toHaveBeenCalled();
+    expect(mocks.state.current.phase).toBe("validated");
+    expect(result).toMatchObject({
+      backendValidation: {
+        problem: "auth_identity_required",
+        reason: "authenticated-runtime-preparation",
+        status: "blocked",
+      },
+      productAcceptance: { productStatus: "unassessed" },
+      productBehaviorEvidence: [],
+      sourceAssessment: { reviewCompleted: false, status: "unassessed" },
+      status: "needs_repair",
+      technicalStatus: "passed",
+    });
+  });
+
   it("validated generated apps rerun current commands when retrying failed capture", async () => {
     mocks.state.current = workflow("validated");
     mocks.describe.mockResolvedValue({
@@ -493,28 +555,33 @@ describe("behavior evidence invalidation during validation repair", () => {
     },
   );
 
-  it("refreshes persistent authorization evidence and reports failed browser validation", async () => {
-    mocks.state.current = workflow("validated");
-    mocks.describe.mockResolvedValue({
-      backend: { kind: "generated-postgres" },
-      validation: { browser: { task: "test-e2e" } },
-    });
-    mocks.browser.mockResolvedValue({ problem: "Assignment revoked", status: "failed" });
-    const result = await validateAppCreation.execute({ implementationFiles: [] }, {
-      callId: "validate",
-      getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
-      session: { auth: {}, id: "session" },
-    } as never);
-    expect(mocks.prepare).toHaveBeenCalledOnce();
-    expect(mocks.execute).toHaveBeenCalledOnce();
-    expect(mocks.browser).toHaveBeenCalledOnce();
-    expect(result).toMatchObject({
-      backendValidation: { status: "failed" },
-      reused: false,
-      status: "needs_repair",
-      technicalStatus: "passed",
-    });
-  });
+  it.each(["failed", "blocked"] as const)(
+    "refreshes persistent authorization evidence and reports %s browser validation",
+    async (status) => {
+      mocks.state.current = workflow("validated");
+      mocks.describe.mockResolvedValue({
+        backend: { kind: "generated-postgres" },
+        validation: { browser: { task: "test-e2e" } },
+      });
+      mocks.browser.mockResolvedValue({ problem: "Assignment revoked", status });
+      const result = await validateAppCreation.execute({ implementationFiles: [] }, {
+        callId: "validate",
+        getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
+        session: { auth: {}, id: "session" },
+      } as never);
+      expect(mocks.prepare).toHaveBeenCalledOnce();
+      expect(mocks.prepare.mock.calls[0]?.[0]).not.toHaveProperty("execution");
+      expect(mocks.runtime).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "session" }));
+      expect(mocks.execute).toHaveBeenCalledOnce();
+      expect(mocks.browser).toHaveBeenCalledOnce();
+      expect(result).toMatchObject({
+        backendValidation: { status },
+        reused: false,
+        status: "needs_repair",
+        technicalStatus: "passed",
+      });
+    },
+  );
 
   it("keeps preparation failure repairable before compilation", async () => {
     mocks.state.current = { ...workflow("validated"), phase: "applied" };

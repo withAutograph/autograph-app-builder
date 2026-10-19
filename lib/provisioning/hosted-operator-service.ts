@@ -389,7 +389,6 @@ const resourceIdentity = (plan: HostedOperatorPlan) =>
   JSON.stringify({
     appDatabase: plan.appDatabase,
     authDatabase: plan.authDatabase,
-    contextId: plan.contextId,
     neon: plan.neon,
   });
 const sameAuthPreparation = (prior: HostedOperatorPlan, next: HostedOperatorPlan) =>
