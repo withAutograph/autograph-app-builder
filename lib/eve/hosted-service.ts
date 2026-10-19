@@ -3170,9 +3170,12 @@ export function createHostedEveSessionService(input: {
           ) {
             throw new SubmissionRejectedBeforeDispatchError("send_owner_unavailable");
           }
-          // Snapshot transports need a fresh native tail; accepted transports already persisted preflight.
+          const nativePreflight =
+            preflight !== undefined &&
+            (preflight.persisted || preflight.nativeObservationState !== undefined);
+          // A complete native preflight remains authoritative when its checkpoint is unchanged.
           let responseCursor = mutationEventCursor(session);
-          if (!preflight?.persisted) {
+          if (!nativePreflight) {
             let before: HostedEngineSnapshot;
             try {
               before = await input.transport.get({
@@ -3225,7 +3228,7 @@ export function createHostedEveSessionService(input: {
               ? { sourceHandoffId: session.sourceHandoffId }
               : {}),
           };
-          if (preflight?.persisted) {
+          if (nativePreflight) {
             await input.transport.sendAccepted?.(sendInput);
             if (sendDelivery === undefined) {
               throw new HostedSubmissionUnknownError();
