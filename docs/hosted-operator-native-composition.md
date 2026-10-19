@@ -66,6 +66,16 @@ log error messages, stacks, provider responses, credentials, or app content.
 Browser acceptance receives `APP_TEST_BASE_URL` only for `test-e2e`, from the same
 owner-verified native Preview projection used to prepare runtime execution. This
 URL handoff supplies no actors, sessions, roles, or authenticated behavior proof.
+The hosted preparation Workflow returns its existing public operation reference.
+Its owner `action.result` hook synchronously retains only the app, operation, and
+plan digest in durable session state: authored Eve steps have separate contexts,
+so step-local state writes alone do not reach a later ordinary tool. The next
+Preview or runtime consumer reloads that exact retained approval, rechecks the
+current owner, adapter generation and cancellation revision, and then reads the
+protected bindings. A failed lookup remains a resource/authority failure and
+does not switch a protected preparation to a Sandbox Preview. Apps without a
+protected preparation reference retain the ordinary Sandbox path. Neither this
+handoff nor a ready Preview supplies authenticated behavior evidence.
 Existing Gateway signing and Better Auth secrets, actual provider-injected
 `VERCEL_DEPLOYMENT_ID`, and independently observed
 `AUTH_PRODUCTION_DATABASE_IDENTITY` are setup prerequisites. No Production
