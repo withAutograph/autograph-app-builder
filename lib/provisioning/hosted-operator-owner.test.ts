@@ -39,6 +39,7 @@ import {
 import type { OperatorWorkloadPolicy } from "./hosted-operator-workload";
 import { normalActorProgramDigest } from "./hosted-operator-normal-actor-program";
 import { createRetentionRenewalPlan } from "./hosted-operator-retention-renewal";
+import { withExternallyManagedHostProtection } from "./hosted-operator-native-preview-recovery";
 
 import type {
   HostedOperatorConsentDiagnostic,
@@ -786,6 +787,8 @@ const retainedRenewalApprovalFixture = () => {
   return {
     approval,
     callId,
+    fixture,
+    record,
     journal,
     oldPlanDigest,
     observe,
@@ -884,6 +887,220 @@ describe("retained renewal approval", () => {
       }),
     ).rejects.toMatchObject({ code: "authorization_required" });
     expect(f.observe).toHaveBeenCalledTimes(1);
+  });
+});
+
+const retainedReadyApprovalFixture = () => {
+  const f = retainedRenewalApprovalFixture();
+  const parent = f.record.operator;
+  const original = parent?.retainedRenewalOperations?.[0]?.operator;
+  if (
+    parent === undefined ||
+    original?.plan.delivery === undefined ||
+    original.plan.gatewayDelivery === undefined
+  ) {
+    throw new Error("Expected an approved original and its saved renewal.");
+  }
+  const operationRef = original.operationRef;
+  original.deliveryCandidates = [
+    {
+      branch: original.plan.delivery.branch,
+      deploymentId: "original-ready-app",
+      operationRef,
+      origin: "https://original-ready-app.example",
+      projectId: original.plan.delivery.projectId,
+      readyState: "READY",
+      repoId: original.plan.delivery.repoId,
+    },
+  ];
+  original.gatewayDeliveryCandidates = [
+    {
+      branch: original.plan.gatewayDelivery.branch,
+      deploymentId: "original-ready-gateway",
+      gatewayAliasAttempted: true,
+      operationRef,
+      origin: "https://original-ready-gateway.example",
+      projectId: original.plan.gatewayDelivery.projectId,
+      readyState: "READY",
+      repoId: original.plan.gatewayDelivery.repoId,
+    },
+  ];
+  parent.approvalId = "approved-renewed-parent-id";
+  const parentReceipt = privateHostedApprovalReceiptSchema.parse({
+    ...f.approval,
+    callId: "approved-renewed-parent-call",
+    requestId: parent.approvalId,
+    sequence: 17,
+    toolInput: { ...f.approval.toolInput, plan: parent.plan, planDigest: parent.planDigest },
+  });
+  const replacement = hostedOperatorPlanSchema.parse({
+    ...withExternallyManagedHostProtection(parent.plan, {
+      mode: "externally-managed-trusted-sources",
+      teamId: "team",
+      appPreview: {
+        sourceProjectId: "prj_gateway",
+        targetProjectId: selection.projectId,
+        from: "preview",
+        to: "preview",
+      },
+      gatewayPreview: {
+        sourceProjectId: selection.projectId,
+        targetProjectId: "prj_gateway",
+        from: "preview",
+        to: "preview",
+      },
+      observedAt: "2026-10-19T14:31:17Z",
+      provenance: {
+        kind: "administrator-provider-readback",
+        reference: "synthetic-owner-receipt-test",
+      },
+    }),
+    appDeliveryReplacement: {
+      version: 1,
+      predecessor: {
+        operationRef,
+        planDigest: original.planDigest,
+        appDeploymentId: "original-ready-app",
+        gatewayDeploymentId: "original-ready-gateway",
+      },
+    },
+    retention: { ...parent.plan.retention, expiresAt: "2027-01-01T00:00:00Z" },
+  });
+  f.fixture.currentSession.privateApprovalReceipts = [f.approval, parentReceipt];
+  const parentSnapshot = structuredClone(parent);
+  Object.assign(
+    f.record,
+    hostedRuntimeJournalRecordSchema.parse({
+      ...f.record,
+      approvedByCallId: "replacement-approved-call",
+      request: { ...f.record.request, scopeId: "team" },
+      operator: {
+        ...parent,
+        approvalId: "replacement-approved-id",
+        plan: replacement,
+        planDigest: operatorPlanDigest(replacement),
+        receipts: [],
+        deliveryCandidates: [],
+        gatewayDeliveryCandidates: [],
+        retainedReadyDeliveryOperations: [
+          { approvedByCallId: parentReceipt.callId, operator: parentSnapshot },
+        ],
+      },
+    }),
+  );
+  return {
+    ...f,
+    parentSnapshot,
+    parentReceipt,
+    contextFor: (
+      receipt: PrivateHostedApprovalReceipt,
+    ): Parameters<ReturnType<typeof createHostedOperatorReadApproval>>[0] => ({
+      action: "prepare" as const,
+      authority: ownerContext.authority,
+      callId: receipt.callId,
+      ownerContext,
+      planDigest: receipt.toolInput.planDigest,
+      target: f.record.request,
+    }),
+  };
+};
+
+describe("retained READY replacement private approval lookup", () => {
+  it.each(["parent", "original"] as const)(
+    "reads the canonical %s receipt after replacement",
+    async (which) => {
+      const f = retainedReadyApprovalFixture();
+      const receipt = which === "parent" ? f.parentReceipt : f.approval;
+      await expect(f.readApproval(f.contextFor(receipt))).resolves.toEqual({
+        action: "prepare",
+        approvalId: receipt.requestId,
+        approved: true,
+        callId: receipt.callId,
+        planDigest: receipt.toolInput.planDigest,
+      });
+      expect(f.observe).not.toHaveBeenCalled();
+      expectNoProviderReads(f.fixture);
+    },
+  );
+  it.each(["parent", "original"] as const)(
+    "requires a canonical private %s receipt beyond the saved snapshot",
+    async (which) => {
+      const f = retainedReadyApprovalFixture();
+      const receipt = which === "parent" ? f.parentReceipt : f.approval;
+      f.fixture.currentSession.privateApprovalReceipts = [];
+      await expect(f.readApproval(f.contextFor(receipt))).rejects.toMatchObject({
+        code: "authorization_required",
+      });
+      expect(f.observe).toHaveBeenCalledOnce();
+      expectNoProviderReads(f.fixture);
+    },
+  );
+  it.each([
+    "cancelled",
+    "foreign-responder",
+    "foreign-operation",
+    "foreign-request",
+    "foreign-owner",
+    "foreign-session",
+    "revoked-canonical-session",
+    "foreign-call",
+    "foreign-digest",
+    "changed-lineage",
+    "changed-current-operation",
+    "cleanup",
+  ] as const)("denies %s at the real receipt reader", async (mismatch) => {
+    const f = retainedReadyApprovalFixture();
+    const context = f.contextFor(f.approval);
+    const receipt = structuredClone(f.approval);
+    if (mismatch === "cancelled") {
+      receipt.outcome = "cancelled";
+    }
+    if (mismatch === "foreign-responder") {
+      receipt.responderPrincipalId = "foreign-owner";
+    }
+    if (mismatch === "foreign-operation") {
+      receipt.toolInput.operationRef = "849497e7-38e1-413c-8264-ce0fbd82f242";
+    }
+    if (mismatch === "foreign-request") {
+      receipt.requestId = "different-canonical-request";
+    }
+    if (mismatch === "foreign-owner") {
+      context.ownerContext = operatorOwnerContextSchema.parse({
+        ...ownerContext,
+        principal: { ...principal, ownerUserId: "foreign-owner" },
+        authority: { ...ownerContext.authority, ownerUserId: "foreign-owner" },
+      });
+    }
+    if (mismatch === "foreign-session") {
+      context.ownerContext = operatorOwnerContextSchema.parse({
+        ...ownerContext,
+        sessionId: "foreign-session",
+      });
+    }
+    if (
+      mismatch === "changed-lineage" &&
+      f.record.operator?.plan.appDeliveryReplacement !== undefined
+    ) {
+      f.record.operator.plan.appDeliveryReplacement.predecessor.appDeploymentId =
+        "unrelated-ready-app";
+    }
+    if (mismatch === "changed-current-operation" && f.record.operator !== undefined) {
+      f.record.operator.operationRef = "849497e7-38e1-413c-8264-ce0fbd82f242";
+    }
+    if (mismatch === "revoked-canonical-session") {
+      vi.spyOn(f.fixture.eve, "getSession").mockResolvedValue(null);
+    }
+    if (mismatch === "foreign-call") {
+      context.callId = "foreign-call";
+    }
+    if (mismatch === "foreign-digest") {
+      context.planDigest = "f".repeat(64);
+    }
+    f.fixture.currentSession.privateApprovalReceipts = [receipt, f.parentReceipt];
+    await expect(
+      f.readApproval(mismatch === "cleanup" ? { ...context, action: "cleanup" } : context),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    expectNoProviderReads(f.fixture);
   });
 });
 
