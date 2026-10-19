@@ -161,6 +161,7 @@ const fixture = (configurationId?: string | null) => {
   let postFailureResponse: Response | undefined;
   const diagnostics: HostedOperatorConsentDiagnostic[] = [];
   let failedRead = false;
+  let failedPatchTarget: "environment_row" | "project_settings" | undefined;
   let failedDeleteId: string | undefined;
   const assertCurrent = vi.fn(async () => {});
   const checkpointManagedEnvironment = vi.fn(
@@ -206,6 +207,13 @@ const fixture = (configurationId?: string | null) => {
     expect(parsed.searchParams.get("teamId")).toBe(target.scopeId);
     if (failedRead && method === "GET") {
       return new Response("private provider failure", { status: 500 });
+    }
+    if (
+      method === "PATCH" &&
+      failedPatchTarget ===
+        (parsed.pathname.includes("/env/") ? "environment_row" : "project_settings")
+    ) {
+      return Response.json({ error: { message: "private PATCH rejection" } }, { status: 404 });
     }
     if (parsed.pathname === `/v9/projects/${target.projectId}`) {
       if (method === "PATCH" && body?.trustedSources !== undefined) {
@@ -288,6 +296,9 @@ const fixture = (configurationId?: string | null) => {
     rows,
     setFailedDelete: (id: string) => {
       failedDeleteId = id;
+    },
+    setFailedPatch: (requestTarget: "environment_row" | "project_settings") => {
+      failedPatchTarget = requestTarget;
     },
     setFailedRead: () => {
       failedRead = true;
@@ -1056,5 +1067,71 @@ it("rejects an unexpected broader rule created by provider readback without requ
         },
       },
     },
+  });
+});
+
+it.each(["environment_row", "project_settings"] as const)(
+  "distinguishes the %s PATCH rejection without changing provider requests",
+  async (requestTarget) => {
+    const prepare = async () => {
+      const f = fixture();
+      await f.writer.bind(f.input, values);
+      if (requestTarget === "project_settings") {
+        approveAppTrustedSource(f);
+      } else {
+        const owned = f.rows.find((row) => row.key === "PLATFORM_ORIGIN");
+        if (!owned) {
+          throw new Error("Missing owned fixture row");
+        }
+        owned.value = "https://stale.example.test";
+      }
+      f.requests.length = 0;
+      return f;
+    };
+    const control = await prepare();
+    const result = await control.writer.bind(control.input, values);
+    expect(result.rows).toHaveLength(5);
+    const f = await prepare();
+    f.setFailedPatch(requestTarget);
+    await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
+    expect(f.requests).toEqual(control.requests.slice(0, f.requests.length));
+    expect(f.requests.at(-1)?.method).toBe("PATCH");
+    expect(f.diagnostics[0]?.hostedEnvironmentBindingFailure).toEqual({
+      stage: "update_patch",
+      reason: "provider_rejected",
+      httpStatus: 404,
+      requestTarget,
+    });
+    const serialized = JSON.stringify(f.diagnostics);
+    for (const privateValue of ["private PATCH rejection", "private-oauth", target.projectId]) {
+      expect(serialized).not.toContain(privateValue);
+    }
+  },
+);
+
+it("clears the PATCH target when the subsequent readback request fails", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input, values);
+  const owned = f.rows.find((row) => row.key === "PLATFORM_ORIGIN");
+  if (!owned) {
+    throw new Error("Missing owned fixture row");
+  }
+  owned.value = "https://stale.example.test";
+  const fetcher = f.fetcher.getMockImplementation();
+  if (!fetcher) {
+    throw new Error("Missing fixture fetcher");
+  }
+  f.fetcher.mockImplementation(async (url, init) => {
+    const response = await fetcher(url, init);
+    if (init?.method === "PATCH") {
+      f.setFailedRead();
+    }
+    return response;
+  });
+  await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
+  expect(f.diagnostics[0]?.hostedEnvironmentBindingFailure).toEqual({
+    stage: "readback",
+    reason: "provider_rejected",
+    httpStatus: 500,
   });
 });

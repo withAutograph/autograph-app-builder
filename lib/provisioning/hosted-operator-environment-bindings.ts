@@ -329,6 +329,13 @@ const createFailureReporter = (
   };
   return {
     stage: () => failure.stage,
+    requestTarget: (requestTarget: HostedEnvironmentBindingFailure["requestTarget"]) => {
+      if (requestTarget === undefined) {
+        delete failure.requestTarget;
+      } else {
+        failure.requestTarget = requestTarget;
+      }
+    },
     set: (
       stage: HostedEnvironmentBindingFailure["stage"],
       reason: HostedEnvironmentBindingFailure["reason"],
@@ -401,6 +408,13 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
       diagnosticStage?: HostedEnvironmentBindingFailure["stage"],
     ) => {
       const requestStage = providerRequestStage(method, route, diagnosticStage);
+      diagnostics.requestTarget(
+        method === "PATCH"
+          ? route.includes("/env/")
+            ? "environment_row"
+            : "project_settings"
+          : undefined,
+      );
       diagnostics.set(requestStage, "provider_request_failed");
       await guard();
       diagnostics.set("credential_read", "credential_read_failed");
