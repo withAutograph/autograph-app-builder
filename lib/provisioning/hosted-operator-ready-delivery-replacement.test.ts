@@ -1142,6 +1142,7 @@ describe("native externally managed policy recovery integration", () => {
           void appDeliveryReplacement;
           ordinaryPlan = hostedOperatorPlanSchema.parse({
             ...nextBase,
+            contextId: "accepted-revised-spec",
             delivery: { ...nextBase.delivery, gitSha: "5".repeat(40) },
             release: { ...nextBase.release, id: "notes-revised-release", sha256: "6".repeat(64) },
           });
@@ -1157,6 +1158,7 @@ describe("native externally managed policy recovery integration", () => {
           expect(revised.status).toBe("planned");
           expect(revised.plan?.delivery?.gitSha).toBe("5".repeat(40));
           expect(revised.plan?.release.id).toBe("notes-revised-release");
+          expect(revised.plan?.contextId).toBe("accepted-revised-spec");
           expect(revised.plan?.appDeliveryReplacement).toBeUndefined();
           expect(revised.planDigest).not.toBe(completedDigest);
           expect(ordinaryPlanning).toHaveBeenCalledOnce();
@@ -1202,6 +1204,7 @@ describe("explicit READY delivery replacement", () => {
     candidate.gatewayDelivery!.branch = "gateway/revised-notes";
     candidate.deploymentBoundary!.gateway.branch = candidate.gatewayDelivery!.branch;
     candidate.publicGateway!.branch = candidate.gatewayDelivery!.branch;
+    candidate.contextId = "accepted-revised-spec";
     candidate.release = { artifactRef: "new-artifact", id: "release-2", sha256: "7".repeat(64) };
     candidate.access[0].roles = ["editor", "reviewer"];
     candidate.effects = candidate.effects.map((effect) => ({
@@ -1339,7 +1342,6 @@ describe("explicit READY delivery replacement", () => {
     "database",
     "auth",
     "neon",
-    "context",
     "authority",
     "team",
     "gateway",
@@ -1368,9 +1370,6 @@ describe("explicit READY delivery replacement", () => {
     }
     if (change === "neon") {
       candidate.neon.branchId = "foreign-neon";
-    }
-    if (change === "context") {
-      candidate.contextId = "foreign-context";
     }
     if (change === "authority") {
       candidate.deploymentBoundary!.authority.ownerUserId = "foreign-owner";
