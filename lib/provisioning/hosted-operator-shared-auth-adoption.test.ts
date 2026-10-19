@@ -1062,6 +1062,7 @@ describe("native composition adoption boundary", () => {
       readActiveSharedAuth: unavailable,
       readApproval: unavailable,
       readAuthPlan: unavailable,
+      readMembershipInspectionPlan: async (): Promise<undefined> => {},
       readCapturedRealmIdentity: unavailable,
       readCapturedRealmIdentityProof: unavailable,
       readCredential: unavailable,
