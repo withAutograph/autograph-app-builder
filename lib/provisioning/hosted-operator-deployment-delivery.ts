@@ -932,7 +932,6 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
             meta: reader.expectedMeta,
             name: project.name,
             project: project.id,
-            ...((deps.target ?? "app") === "app" ? { target: "staging" as const } : {}),
             ...((deps.target ?? "app") === "app" &&
             input.plan.delivery?.projectSettings !== undefined
               ? { projectSettings: input.plan.delivery.projectSettings }
