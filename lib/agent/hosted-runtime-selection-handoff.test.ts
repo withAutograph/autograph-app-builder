@@ -162,7 +162,7 @@ const plan = hostedOperatorPlanSchema.parse({
   version: 1,
 });
 const planDigest = operatorPlanDigest(plan);
-const approvedInput: HostedRuntimeApprovalEnvelope = {
+const approvedInput = {
   appId,
   branch: selection.branch,
   environment: selection.environment,
@@ -170,7 +170,7 @@ const approvedInput: HostedRuntimeApprovalEnvelope = {
   plan,
   planDigest,
   projectId: selection.projectId,
-};
+} satisfies HostedRuntimeApprovalEnvelope;
 const output = (overrides: Record<string, unknown> = {}) => ({
   appId,
   authenticatedBehavior: "unassessed" as const,
@@ -244,20 +244,13 @@ const runPreparationStep = async (observed: boolean) =>
       request: vi.fn().mockResolvedValue(output()),
       sessionId: publicSessionId,
     };
-    // SAFETY: the production helper consumes the parsed approval fixture and Eve context; the test holds a narrowed copy.
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: approvedInput was parsed by hostedOperatorPlanSchema above.
     const result = await prepareHostedRuntimeWithOperator(
-      // SAFETY: production's schema-validated input is represented by the approval fixture above.
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: Eve's installed workflow-step type differs from the declared production type in the cached test runtime.
-      approvedInput as never,
-      // SAFETY: this fixture supplies the required step context fields and a real AbortSignal.
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: the fake context supplies every field used by the helper.
+      approvedInput,
       {
         abortSignal: new AbortController().signal,
         callId: observed ? "observed-call" : "immediate-call",
         session: { id: adapterSessionId },
-      } as never,
-      // SAFETY: operator has the three methods used by the helper; request is fixture-backed.
+      },
       operator,
       (value) => {
         preparedRuntimeSelections.update((current) => ({ ...current, [appId]: value }));
