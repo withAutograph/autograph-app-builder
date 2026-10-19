@@ -16,7 +16,7 @@ import { appDescriptionSchema } from "../repository/app-description";
 import { assertHostedSandboxCommandAuthority } from "../sandbox/deployment-execution-lease";
 import { getVercelPreviewProvider } from "../sandbox/vercel-preview-provider";
 import { sanitizeValidationDiagnosticText } from "../repository/validation-output-sanitize";
-import { preparedRuntimeSelections } from "./prepared-runtime-selection";
+import { resolveHostedRuntimePreparationSelection } from "./hosted-runtime-selection-handoff";
 import type { PreparedRuntimeSelection } from "./prepared-runtime-selection";
 import { normalActorBrowserFiles } from "./normal-actor-browser-state";
 import type { NormalActorRuntimeProjection } from "../provisioning/hosted-operator-normal-actor-program";
@@ -433,8 +433,7 @@ export const resolveProtectedRuntimeBindings = async (
 ) => {
   let selection = selectionInput;
   if (selection === undefined) {
-    const selections = preparedRuntimeSelections.get();
-    selection = Object.hasOwn(selections, input.appId) ? selections[input.appId] : null;
+    selection = await resolveHostedRuntimePreparationSelection(input);
   }
   if (selection?.operationRef === undefined) {
     return null;
@@ -477,8 +476,7 @@ export const resolvePreparedRuntimeExecution = async (
 ): Promise<PreparedRuntimeExecution | null> => {
   let selection = selectionInput;
   if (selection === undefined) {
-    const selections = preparedRuntimeSelections.get();
-    selection = Object.hasOwn(selections, input.appId) ? selections[input.appId] : null;
+    selection = await resolveHostedRuntimePreparationSelection(input);
   }
   const sourceRef =
     "githubSource" in input.state ? input.state.githubSource?.resolvedRef : undefined;

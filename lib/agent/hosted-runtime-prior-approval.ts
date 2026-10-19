@@ -1,4 +1,3 @@
-import type { WorkflowStepToolContext } from "eve/tools";
 import { z } from "zod";
 
 import type { HostedEveStore } from "../eve/hosted-store";
@@ -39,7 +38,10 @@ export const hostedRuntimePreparationInputSchema = z.strictObject({
   projectId: z.string().min(1),
 });
 
-type Context = Pick<WorkflowStepToolContext, "abortSignal" | "session">;
+interface Context {
+  abortSignal: AbortSignal;
+  session: { id: string; auth: unknown };
+}
 type Operator = Pick<
   Awaited<ReturnType<typeof hostedOperatorClientForSession>>,
   "ownerContext" | "request" | "sessionId"

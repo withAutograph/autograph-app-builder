@@ -1,5 +1,3 @@
-import type { WorkflowStepToolContext } from "eve/tools";
-
 import type { HostedEveStore } from "../eve/hosted-store";
 import { hostedSessionRecordSchema, toDurableHostedSessionRecord } from "../eve/hosted-store";
 import {
@@ -25,7 +23,10 @@ export interface HostedRuntimeResumeSnapshot {
   adapterGeneration: number;
   cancellationRevision: number;
 }
-type Context = Pick<WorkflowStepToolContext, "abortSignal" | "session">;
+interface Context {
+  abortSignal: AbortSignal;
+  session: { id: string; auth: unknown };
+}
 type Operator = Pick<
   Awaited<ReturnType<typeof hostedOperatorClientForSession>>,
   "ownerContext" | "request" | "sessionId"

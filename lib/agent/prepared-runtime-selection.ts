@@ -9,8 +9,19 @@ export interface PreparedRuntimeSelection {
   planDigest?: string;
 }
 
+export interface HostedRuntimePreparationReference {
+  appId: string;
+  operationRef: string;
+  planDigest: string;
+}
+
 /** Approval selection only. Credentials and protected files stay outside Eve state. */
 export const preparedRuntimeSelections = defineState<Record<string, PreparedRuntimeSelection>>(
   "autograph-app-builder.prepared-runtime-selections.v1",
   () => ({}),
 );
+
+/** Resolved against current approval before use; null retains a malformed result failure. */
+export const preparedRuntimeReferences = defineState<
+  Record<string, HostedRuntimePreparationReference | null>
+>("autograph-app-builder.prepared-runtime-references.v1", () => ({}));
