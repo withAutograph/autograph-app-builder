@@ -192,6 +192,17 @@ const hostedEnvironmentBindingStage = z.enum([
 const hostedEnvironmentBindingFailure = z.strictObject({
   stage: hostedEnvironmentBindingStage,
   requestTarget: z.enum(["environment_row", "project_settings"]).optional(),
+  providerCode: z
+    .enum([
+      "not_found",
+      "project_not_found",
+      "forbidden",
+      "unauthorized",
+      "integration_configuration_disabled",
+      "invalid_token",
+      "other",
+    ])
+    .optional(),
   reason: z.enum([
     "input_rejected",
     "authorization_rejected",
