@@ -13,6 +13,10 @@ import { exactForwardedSessionAuthority } from "../hosted/session-authority";
 import { createVercelWorkloadIdentity } from "../eve/vercel-workload-identity";
 import { hostedRuntimeProofSchema } from "./hosted-runtime-journal";
 import { resolveHostedOperatorOwnerContext } from "./hosted-operator-owner-context";
+import {
+  OPERATOR_EXECUTION_OBSERVATION_HEADER,
+  OPERATOR_EXECUTION_OBSERVATION_PREFERENCE,
+} from "./hosted-operator-execution-observation-protocol";
 import type { OperatorOwnerContext, OperatorRequest } from "./hosted-operator-contract";
 import {
   HostedOperatorError,
@@ -50,21 +54,57 @@ const bindingSchema = z.strictObject({
   plan: hostedOperatorPlanSchema,
   proof: hostedRuntimeProofSchema,
 });
+const operatorSuccessSchemas = {
+  plan: operatorPublicResultSchema,
+  status: operatorPublicResultSchema,
+  execute: operatorPublicResultSchema,
+  bindings: bindingSchema,
+  "auth-identity-input": operatorAuthIdentityInputSchema,
+  "neon-authorization": neonAuthorizationResultSchema,
+  "resolve-preview-target": operatorSelectionSchema,
+} satisfies Record<OperatorRequest["action"], z.ZodType>;
 const operatorResponseDiagnostic = (
-  result: ReturnType<typeof operatorPublicResultSchema.safeParse>,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Each action's closed success schema is applied before diagnostics are projected.
+  value: unknown,
+  action: OperatorRequest["action"],
 ): Pick<HostedOperatorConsentMetadata, "operatorResponse" | "operatorCode"> & {
   accessClass: NonNullable<HostedOperatorConsentMetadata["accessClass"]>;
 } => {
-  if (!result.success || result.data.status !== "blocked") {
+  const blocked = operatorPublicResultSchema.safeParse(value);
+  if (blocked.success && blocked.data.status === "blocked") {
+    return {
+      accessClass:
+        blocked.data.code === "authorization_required" ? "application_auth_denied" : "other_failed",
+      operatorResponse: "blocked",
+      ...(blocked.data.code === undefined ? {} : { operatorCode: blocked.data.code }),
+    };
+  }
+  if (operatorSuccessSchemas[action].safeParse(value).success) {
     return { accessClass: "ok" };
   }
   return {
-    accessClass:
-      result.data.code === "authorization_required" ? "application_auth_denied" : "other_failed",
-    operatorResponse: "blocked",
-    ...(result.data.code === undefined ? {} : { operatorCode: result.data.code }),
+    accessClass: "other_failed",
+    operatorResponse: "schema_invalid",
   };
 };
+
+/** Private execution transport failure; the original error is retained only as cause. */
+// oxlint-disable-next-line unicorn/custom-error-definition -- This private error name is part of the workflow guard contract.
+export class HostedOperatorTransportUnknown extends Error {
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Retain only as a non-logged cause for guarded workflow classification.
+  constructor(cause: unknown) {
+    super("Hosted operator execution transport outcome is unknown", { cause });
+    this.name = "HostedOperatorTransportUnknown";
+  }
+}
+
+export const isHostedOperatorTransportUnknown = (
+  error: unknown,
+): error is HostedOperatorTransportUnknown => error instanceof HostedOperatorTransportUnknown;
+
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Runtime classification uses only Error.name and AbortSignal state.
+const isCancellation = (error: unknown, signal?: AbortSignal) =>
+  signal?.aborted === true || (error instanceof Error && error.name === "AbortError");
 /** Server-only client. An unconfigured service never falls back to an installer Sandbox. */
 export const createHostedOperatorClient = (input: {
   endpoint: string;
@@ -88,6 +128,7 @@ export const createHostedOperatorClient = (input: {
   if (validEndpoint.includes(false)) {
     throw new HostedOperatorError("protected_operator_required");
   }
+  // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- This is the single request boundary for auth, response, and transport outcomes.
   const send = async (request: OperatorRequest, signal?: AbortSignal) => {
     const bodyInput =
       input.ownerContext === undefined || input.ownerContext === null
@@ -116,12 +157,26 @@ export const createHostedOperatorClient = (input: {
         authorization: `Bearer ${token}`,
         "content-type": "application/json",
         "x-vercel-trusted-oidc-idp-token": token,
+        ...(body.action === "status" || body.action === "execute"
+          ? { [OPERATOR_EXECUTION_OBSERVATION_HEADER]: OPERATOR_EXECUTION_OBSERVATION_PREFERENCE }
+          : {}),
       },
       method: "POST",
       redirect: "error",
       signal,
     };
-    const response = await (input.fetch ?? fetch)(new URL("/v1/runtime", url), options);
+    let response: Response;
+    try {
+      response = await (input.fetch ?? fetch)(new URL("/v1/runtime", url), options);
+    } catch (error) {
+      if (
+        (body.action === "execute" || body.action === "status") &&
+        !isCancellation(error, signal)
+      ) {
+        throw new HostedOperatorTransportUnknown(error);
+      }
+      throw error;
+    }
     const emit = (
       accessClass: NonNullable<HostedOperatorConsentMetadata["accessClass"]>,
       detail?: Pick<HostedOperatorConsentMetadata, "operatorResponse" | "operatorCode">,
@@ -184,11 +239,16 @@ export const createHostedOperatorClient = (input: {
       value = await response.json();
     } catch (error) {
       emit("other_failed", { operatorResponse: "decode_failed" });
+      if (
+        (body.action === "execute" || body.action === "status") &&
+        error instanceof TypeError &&
+        !isCancellation(error, signal)
+      ) {
+        throw new HostedOperatorTransportUnknown(error);
+      }
       throw error;
     }
-    const { accessClass, ...detail } = operatorResponseDiagnostic(
-      operatorPublicResultSchema.safeParse(value),
-    );
+    const { accessClass, ...detail } = operatorResponseDiagnostic(value, body.action);
     emit(accessClass, detail);
     return value;
   };

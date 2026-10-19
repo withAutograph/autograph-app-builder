@@ -1,4 +1,12 @@
 import {
+  OPERATOR_EXECUTION_OBSERVATION_HEADER,
+  OPERATOR_EXECUTION_OBSERVATION_PREFERENCE,
+} from "./hosted-operator-execution-observation-protocol";
+import {
+  readOperatorExecutionObservation,
+  settleOperatorExecution,
+} from "./hosted-operator-execution-observation";
+import {
   isSharedHostProtectionSuccessor,
   hasRetainedSharedHostProtectionIdentity,
   sharedHostProtectionDeliveryProvenance,
@@ -1294,6 +1302,9 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
   const now = deps.now ?? Date.now;
   return async (request: Request): Promise<Response> => {
     let appId = "unknown";
+    const executionObservationRequested =
+      request.headers.get(OPERATOR_EXECUTION_OBSERVATION_HEADER) ===
+      OPERATOR_EXECUTION_OBSERVATION_PREFERENCE;
     try {
       if (request.method !== "POST" || new URL(request.url).pathname !== "/v1/runtime") {
         return response({ code: "not_found" }, 404);
@@ -1475,7 +1486,30 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
         );
       }
       if (input.action === "status") {
-        return response(operatorPublicResultSchema.parse(publicStatus(current.record)));
+        const result = publicStatus(current.record);
+        if (!executionObservationRequested) {
+          return response(operatorPublicResultSchema.parse(result));
+        }
+        let execution = readOperatorExecutionObservation(current.record, now());
+        if (
+          execution.state === "unknown" &&
+          [
+            "prepared",
+            "auth-schema-prepared",
+            "participants-prepared",
+            "waiting_for_signup",
+            "ready",
+            "cleaned",
+          ].includes(result.status)
+        ) {
+          execution = { state: "settled", outcome: { status: result.status } };
+        }
+        return response(
+          operatorPublicResultSchema.parse({
+            ...result,
+            execution,
+          }),
+        );
       }
       assertUnexpired(plan, now());
       if (input.action === "bindings") {
@@ -1635,13 +1669,29 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
             ) {
               throw new HostedOperatorError("operation_in_progress");
             }
-            return {
+            const claimedRecord = {
               ...record,
               approvedByCallId: input.callId,
               leaseExpiresAt: new Date(now() + 60_000).toISOString(),
               leaseId,
+              ...(executionObservationRequested
+                ? {
+                    executionObservation: {
+                      state: "running" as const,
+                      attemptRef: leaseId,
+                      operationRef,
+                      planDigest,
+                      callId: input.callId,
+                      approvalId: approval.approvalId,
+                    },
+                  }
+                : {}),
               operator: { ...record.operator, approvalId: approval.approvalId },
             };
+            if (!executionObservationRequested) {
+              delete claimedRecord.executionObservation;
+            }
+            return claimedRecord;
           }),
       );
       let fenceGeneration = requireOperator(claimed.record).fenceGeneration;
@@ -1686,8 +1736,42 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           }
           return change({ ...record, leaseExpiresAt: new Date(now() + 60_000).toISOString() });
         });
+      const withExecutionObservation = async (
+        leased: Parameters<ProtectedHostedOperatorDependencies["withResourceLease"]>[0],
+        run: (assertFence: () => Promise<void>) => Promise<Response>,
+      ): Promise<Response> =>
+        await deps.withResourceLease(leased, async (assertFence) => {
+          if (!executionObservationRequested) {
+            return await run(assertFence);
+          }
+          try {
+            const executionResponse = await run(assertFence);
+            const result = operatorPublicResultSchema.parse(await executionResponse.clone().json());
+            await assertFence();
+            await ownedUpdate((record) =>
+              settleOperatorExecution(record, leaseId, {
+                status: result.status,
+                ...(result.code === undefined ? {} : { code: result.code }),
+              }),
+            );
+            return executionResponse;
+          } catch (error) {
+            try {
+              await assertFence();
+              await ownedUpdate((record) =>
+                settleOperatorExecution(record, leaseId, {
+                  status: "blocked",
+                  code: error instanceof HostedOperatorError ? error.code : "operator_unavailable",
+                }),
+              );
+            } catch {
+              // A stale/expired attempt cannot claim a terminal outcome for a newer fence.
+            }
+            throw error;
+          }
+        });
       try {
-        return await deps.withResourceLease(
+        return await withExecutionObservation(
           { ...context, operationRef, plan },
           async (assertFence) => {
             const assertCurrent = async () => {

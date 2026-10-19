@@ -642,7 +642,7 @@ const metadata = z.strictObject({
       "neon-authorization",
     ])
     .optional(),
-  operatorResponse: z.enum(["decode_failed", "blocked"]).optional(),
+  operatorResponse: z.enum(["decode_failed", "schema_invalid", "blocked"]).optional(),
   operatorCode: operatorPublicResultSchema.shape.code.unwrap().optional(),
   preparationStage: runtimePreparationStage.optional(),
   preparationFailure: runtimePreparationFailure.optional(),

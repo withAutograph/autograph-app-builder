@@ -33,6 +33,7 @@ export const waitForHostedRuntimeApprovalReceipt = async <Context extends WaitCo
     // oxlint-disable-next-line eslint/no-await-in-loop -- Subsequent ticks re-read cached approval only under the original invocation snapshot.
     state = await read(input, ctx, state.snapshot, delayMs, false);
   }
+  return state;
 };
 
 // oxlint-disable-next-line eslint/func-style -- Workflow requires a top-level async step boundary.

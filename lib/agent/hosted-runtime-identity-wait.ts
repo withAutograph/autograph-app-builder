@@ -1,3 +1,5 @@
+import { continueHostedRuntimeExecutionObservation } from "./hosted-runtime-execution-wait";
+import type { HostedRuntimeExecutionWaitPorts } from "./hosted-runtime-execution-wait";
 import type { WorkflowStepToolContext, WorkflowToolContext } from "eve/tools";
 import type {
   HostedRuntimeApprovalEnvelope,
@@ -29,6 +31,7 @@ interface IdentityHook extends PromiseLike<HostedRuntimeIdentityWake> {
   dispose: () => void;
 }
 export interface HostedRuntimeIdentityWaitPorts {
+  execution?: HostedRuntimeExecutionWaitPorts;
   createHook: () => IdentityHook;
   register: (
     input: HostedRuntimeApprovalEnvelope,
@@ -47,7 +50,7 @@ export interface HostedRuntimeIdentityWaitPorts {
  * A wake is only a notification; the same protected prepare remains authoritative.
  * @yields {object} The ordinary Auth invitation after the private event hook is registered.
  */
-// oxlint-disable-next-line eslint/func-style -- An async generator preserves partial output and its terminal return separately.
+// oxlint-disable-next-line eslint/func-style, sonarjs/cognitive-complexity -- An async generator preserves partial output and its terminal return separately.
 export async function* continueHostedRuntimeOwnerPreparation(
   input: HostedRuntimeApprovalEnvelope,
   ctx: WorkflowToolContext,
@@ -57,6 +60,17 @@ export async function* continueHostedRuntimeOwnerPreparation(
   // Workflow step proxies serialize their receiver; keep function-bearing ports out of step arguments.
   const { createHook, register, acknowledge, sleepUntil } = ports;
   let prepared = await prepare(input, ctx);
+  if ("observeExecution" in prepared && prepared.observeExecution === true) {
+    if (ports.execution === undefined) {
+      throw new Error("Execution observation is unavailable.");
+    }
+    prepared = yield* continueHostedRuntimeExecutionObservation(
+      input,
+      ctx,
+      prepared,
+      ports.execution,
+    );
+  }
   while (prepared.identityInput !== null) {
     const hook = createHook();
     try {
@@ -120,6 +134,17 @@ export async function* continueHostedRuntimeOwnerPreparation(
     // Reuse the original input and auth snapshot; neither the event nor browser reply grants authority.
     // oxlint-disable-next-line eslint/no-await-in-loop -- Canonical readback follows each callback, consumption, or expiry race.
     prepared = await prepare(input, ctx);
+    if ("observeExecution" in prepared && prepared.observeExecution === true) {
+      if (ports.execution === undefined) {
+        throw new Error("Execution observation is unavailable.");
+      }
+      prepared = yield* continueHostedRuntimeExecutionObservation(
+        input,
+        ctx,
+        prepared,
+        ports.execution,
+      );
+    }
   }
   return prepared.result;
 }
