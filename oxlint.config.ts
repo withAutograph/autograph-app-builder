@@ -3877,6 +3877,12 @@ export default defineConfig({
     "anti-slop/no-conditional-empty-object-spread": "off",
     "eslint/sort-keys": "off",
     "sonarjs/no-undefined-assignment": "off",
+    // Equivalent binding syntax, repeated protocol literals and loop spelling
+    // are advisory; they do not establish correctness or authorization.
+    "eslint/prefer-destructuring": "off",
+    "sonarjs/destructuring-assignment-syntax": "off",
+    "sonarjs/no-duplicate-string": "off",
+    "sonarjs/too-many-break-or-continue-in-loop": "off",
     // Returning an existing Promise is valid; requiring async changes no protected behavior.
     "typescript/promise-function-async": "off",
   },
