@@ -62,15 +62,16 @@ describe("closed Neon consent diagnostics", () => {
         requestTarget,
       });
     }
-    report({ ...value, hostedEnvironmentBindingFailure: { ...failure, requestTarget: secret } });
-    report({
-      ...value,
-      hostedEnvironmentBindingFailure: {
-        ...failure,
-        requestTarget: "environment_row",
-        url: secret,
-      },
-    });
+    for (const field of ["requestTarget", "url"]) {
+      report({
+        ...value,
+        hostedEnvironmentBindingFailure: {
+          ...failure,
+          requestTarget: "environment_row",
+          [field]: secret,
+        },
+      });
+    }
     expect(sink).toHaveBeenCalledTimes(2);
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   });
