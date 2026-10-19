@@ -88,6 +88,15 @@ const operatorExecutionStage = z.enum([
   "readback",
   "final_inventory_readback",
   "final_runtime_readiness",
+  "final_authority",
+  "final_verifier_entry",
+  "final_owner_authorization",
+  "final_journal_read",
+  "final_proof_parse",
+  "final_proof_publication",
+  "resource_lease",
+  "final_lease_release",
+  "execution_settlement",
   "sandbox_cleanup",
 ]);
 export type OperatorExecutionStage = z.infer<typeof operatorExecutionStage>;

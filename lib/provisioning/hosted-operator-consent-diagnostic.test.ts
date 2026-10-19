@@ -978,6 +978,33 @@ it("retains only a closed runtime readiness stage in execution diagnostics", () 
   expect(JSON.stringify(validSink.mock.calls)).not.toContain(secret);
   expect(JSON.stringify(validSink.mock.calls)).not.toContain("private-session");
 });
+it.each([
+  "final_authority",
+  "final_verifier_entry",
+  "final_owner_authorization",
+  "final_journal_read",
+  "final_proof_parse",
+  "final_proof_publication",
+  "resource_lease",
+  "final_lease_release",
+  "execution_settlement",
+] as const)("keeps the original exception at the closed %s boundary", async (stage) => {
+  const error = new TypeError(secret);
+  const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+  await expect(
+    observeOperatorExecutionStage(
+      "private-session",
+      stage,
+      () => {
+        throw error;
+      },
+      sink,
+    ),
+  ).rejects.toBe(error);
+  expect(sink.mock.calls[0]?.[0].executionFailure).toEqual({ stage, errorClass: "type_error" });
+  expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  expect(JSON.stringify(sink.mock.calls)).not.toContain("private-session");
+});
 it("does not let a diagnostic sink failure replace the original execution failure", async () => {
   const error = new HostedOperatorError("operator_unavailable");
   await expect(

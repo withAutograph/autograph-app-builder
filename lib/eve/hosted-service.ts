@@ -111,8 +111,13 @@ import {
 } from "./hosted-errors";
 import { recoveryPromptForPagedSession, recoveryPromptForSession } from "./hosted-recovery-prompt";
 import { resultFromHostedCheckpoint } from "./hosted-checkpoint-result";
-import { reportHostedSubmissionDiagnostic } from "./hosted-submission-diagnostic";
+import {
+  reportHostedSubmissionDiagnostic,
+  sendDeliveryObservationDiagnostic,
+} from "./hosted-submission-diagnostic";
 import type {
+  NativeSendReadObservation,
+  SendDeliveryObservationDiagnostic,
   HostedSubmissionDiagnosticSink,
   HostedSubmissionPhase,
   SendReadFailureCategory,
@@ -154,6 +159,7 @@ export interface HostedEveTransport {
     artifactProjectionRequiresLegacyReadback: boolean;
     installedEventCount: number;
     observationComplete?: boolean;
+    nativeTailIndex?: number;
     pendingRequests: PublicInputRequest[];
     prototype?: z.infer<typeof publicPrototypeSchema>;
     prototypeRef?: PublicPrototypeReference;
@@ -2103,6 +2109,7 @@ export function createHostedEveSessionService(input: {
       continueWork?: boolean;
     },
     explicitSendOperationId?: string,
+    onNativeRead?: (observation: NativeSendReadObservation) => void,
   ) {
     const { sessionId, cursor, limit } = inputValue;
     const session = toDurableHostedSessionRecord(await requireSession(sessionId));
@@ -2220,6 +2227,19 @@ export function createHostedEveSessionService(input: {
           sessionId,
           store: input.store,
           transport: input.transport.observe,
+        });
+        onNativeRead?.({
+          nativeStartIndex: nativeObservationState?.nextNativeIndex ?? 0,
+          ...(spool.observation.nextNativeIndex === undefined
+            ? {}
+            : { nativeNextIndex: spool.observation.nextNativeIndex }),
+          ...(spool.observation.nativeTailIndex === undefined
+            ? {}
+            : { nativeTailIndex: spool.observation.nativeTailIndex }),
+          ...(spool.observation.observationComplete === undefined
+            ? {}
+            : { observationComplete: spool.observation.observationComplete }),
+          currentTurnPresent: spool.observation.activeTurnId !== undefined,
         });
         const observedNativeState = spool.observation.nativeObservationState;
         if (
@@ -2535,6 +2555,8 @@ export function createHostedEveSessionService(input: {
   ): Promise<EveSessionResult> {
     let phase: HostedSubmissionPhase = "send_accepted_readback";
     let failureCategory: SendReadFailureCategory = "native_read_failed";
+    let nativeRead: NativeSendReadObservation | undefined;
+    let deliveryObservation: SendDeliveryObservationDiagnostic | undefined;
     try {
       const result = await readSession(
         {
@@ -2544,6 +2566,9 @@ export function createHostedEveSessionService(input: {
           sessionId,
         },
         sendDelivery === undefined ? undefined : sendDiagnostic?.operationId,
+        (observed) => {
+          nativeRead = observed;
+        },
       );
       const current = toDurableHostedSessionRecord(await requireSession(sessionId));
       if (sendDelivery !== undefined) {
@@ -2552,6 +2577,12 @@ export function createHostedEveSessionService(input: {
           current.adapterSessionId !== sendDelivery.adapterSessionId ||
           current.adapterGeneration !== sendDelivery.adapterGeneration;
         if (bindingChanged || !provesNativeDelivery(sendDelivery, proof)) {
+          deliveryObservation = sendDeliveryObservationDiagnostic({
+            delivery: sendDelivery,
+            binding: current,
+            proof,
+            nativeRead,
+          });
           phase = "send_delivery_boundary";
           failureCategory = "delivery_boundary_unobserved";
           if (bindingChanged) {
@@ -2579,6 +2610,9 @@ export function createHostedEveSessionService(input: {
           adapterSessionId: sendDelivery.adapterSessionId,
           error,
           failureCategory,
+          ...(deliveryObservation === undefined
+            ? {}
+            : { sendDeliveryObservation: deliveryObservation }),
           operationKind: "send",
           phase,
           sink: input.onSubmissionDiagnostic,
@@ -3279,6 +3313,11 @@ export function createHostedEveSessionService(input: {
                 operationId,
                 operationKind: "send",
                 phase: "send_delivery_boundary",
+                sendDeliveryObservation: sendDeliveryObservationDiagnostic({
+                  delivery: sendDelivery,
+                  binding: toDurableHostedSessionRecord(current),
+                  proof,
+                }),
                 sink: input.onSubmissionDiagnostic,
               });
             }

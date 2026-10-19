@@ -2297,8 +2297,18 @@ export const composeHostedOperatorDependencies = (
     reconcile,
     store: controlPlane.store,
     verify: async (input) => {
-      await controlPlane.assertAuthorized(input);
-      const row = await controlPlane.store.read(input);
+      await observeOperatorExecutionStage(
+        input.target.sessionId,
+        "final_owner_authorization",
+        async () => {
+          await controlPlane.assertAuthorized(input);
+        },
+      );
+      const row = await observeOperatorExecutionStage(
+        input.target.sessionId,
+        "final_journal_read",
+        async () => await controlPlane.store.read(input),
+      );
       const operator = row?.record.operator;
       const app = operator?.deliveryCandidates?.find(
         (candidate) =>

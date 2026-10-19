@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createHostedEveSessionService, HostedSubmissionUnknownError } from "./hosted-service";
 import type { HostedEngineSnapshot, HostedEveTransport } from "./hosted-service";
 import { hostedEveOperationScopes } from "./hosted-auth";
+import type { HostedPrincipal } from "./hosted-auth";
 import {
   bindSendDelivery,
   hostedOperationRecordSchema,
@@ -11,7 +12,14 @@ import {
   isProvedSendDelivery,
   mayReviveCancelledSession,
   toDurableHostedSessionRecord,
+  durableHostedSessionRecordSchema,
 } from "./hosted-store";
+import type {
+  HostedEveStore,
+  HostedSessionRecord,
+  HostedPagedCheckpointMetadata,
+} from "./hosted-store";
+import type { PublicEveEvent } from "../mcp/contracts";
 import { digest, stableId } from "./hosted-operation-identifiers";
 import { nativeDeliveryForEvents, provesNativeDelivery } from "./native-delivery-state";
 import { projectInstalledEveEvent } from "./public-events";
@@ -49,8 +57,10 @@ const operationId = (clientRequestId: string) =>
     kind: "send",
     tenant: [principal.issuer, principal.audience, principal.workspaceId, principal.ownerUserId],
   });
-const fixture = async (options: { acknowledge?: boolean; failReadback?: boolean } = {}) => {
-  const store = new InMemoryHostedEveStore();
+const fixture = async (
+  options: { acknowledge?: boolean; failReadback?: boolean; store?: InMemoryHostedEveStore } = {},
+) => {
+  const store = options.store ?? new InMemoryHostedEveStore();
   const diagnostics = vi.fn();
   let events: MessageStreamEvent[] = [waiting()];
   let failReadback = options.failReadback ?? false;
@@ -87,6 +97,7 @@ const fixture = async (options: { acknowledge?: boolean; failReadback?: boolean 
   const request = { clientRequestId: "send", message: "Continue", sessionId: started.sessionId };
   return {
     adapter,
+    getEvents: () => events,
     create,
     diagnostics,
     operation: async () =>
@@ -102,7 +113,153 @@ const fixture = async (options: { acknowledge?: boolean; failReadback?: boolean 
   };
 };
 
+class PagedSendDiagnosticStore extends InMemoryHostedEveStore {
+  private paged: HostedSessionRecord | undefined;
+  private metadata: HostedPagedCheckpointMetadata | undefined;
+  private events: PublicEveEvent[] = [];
+  private revision = 0;
+
+  override async getSession(candidate: HostedPrincipal, sessionId: string) {
+    const owned = await super.getSession(candidate, sessionId);
+    return owned === null ? null : (this.paged ?? owned);
+  }
+  observeSessionPaged: NonNullable<HostedEveStore["observeSessionPaged"]> = async (input) => {
+    const current = await this.getSession(input.principal, input.sessionId);
+    if (current?.version !== 2 || current.checkpointDigest !== input.expectedCheckpointDigest) {
+      throw new Error("Fixture checkpoint mismatch");
+    }
+    const events: PublicEveEvent[] = [];
+    for await (const event of input.events) {
+      events.push(event);
+    }
+    this.events = events;
+    this.metadata = input.metadata;
+    this.revision += 1;
+    const checkpointDigest = digest({ revision: this.revision });
+    const { checkpoint, ...withoutInline } = current;
+    void checkpoint;
+    this.paged = durableHostedSessionRecordSchema.parse({
+      ...withoutInline,
+      checkpointDigest,
+      checkpointProgressDigest: digest(events),
+      checkpointRef: {
+        id: "9b7a1463-3626-4730-bcbf-b2c226cc1c45",
+        digest: checkpointDigest,
+        eventCount: events.length,
+      },
+      lastProgressAtEpochMs: input.nowEpochMs,
+      updatedAtEpochMs: input.nowEpochMs,
+      resumability: input.resumability,
+      stage: input.stage,
+      status: input.metadata.status,
+    });
+    return this.paged;
+  };
+  readCheckpointPage: NonNullable<HostedEveStore["readCheckpointPage"]> = (input) => {
+    if (
+      this.metadata === undefined ||
+      this.paged?.version !== 2 ||
+      this.paged.checkpointRef?.digest !== input.checkpointRef.digest
+    ) {
+      return Promise.reject(new Error("Unknown fixture checkpoint"));
+    }
+    const events = this.events.slice(input.cursor, input.cursor + input.limit);
+    return Promise.resolve({
+      checkpointDigest: input.checkpointRef.digest,
+      cursor: input.cursor + events.length,
+      events,
+      metadata: this.metadata,
+      totalEvents: this.events.length,
+    });
+  };
+}
+
 describe("canonical SEND delivery acknowledgement", () => {
+  it.each([true, false])(
+    "reports the exact post-ACK paged read with stamped metadata %s and no additional native reads",
+    async (stamped) => {
+      const f = await fixture({ store: new PagedSendDiagnosticStore() });
+      f.setEvents([
+        turnEvent("turn.started", "unrelated-active-turn", stamped ? ["unrelated-delivery"] : []),
+      ]);
+      const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(
+        async (input) =>
+          await observeSameOriginEveStream({
+            config: { baseUrl: "https://builder.example.test", timeoutMs: 1000 },
+            workloadIdentity: { token: () => Promise.resolve("synthetic-oidc") },
+            fetchImplementation: (url) => {
+              const start = Number(
+                new URL(url instanceof Request ? url.url : url).searchParams.get("startIndex") ?? 0,
+              );
+              return Promise.resolve(
+                new Response(
+                  `${f
+                    .getEvents()
+                    .slice(start)
+                    .map((event) => JSON.stringify(event))
+                    .join("\n")}\n`,
+                  {
+                    headers: {
+                      "content-type": "application/x-ndjson",
+                      "x-eve-session-id": "native",
+                      "x-eve-stream-format": "ndjson",
+                      "x-eve-stream-tail-index": String(f.getEvents().length - 1),
+                      "x-eve-stream-version": "25",
+                    },
+                  },
+                ),
+              );
+            },
+            onEvent: input.onEvent,
+            onPrivateEvent: input.onPrivateEvent,
+            sessionId: input.adapterSessionId,
+            nativeObservationState: input.nativeObservationState,
+          }),
+      );
+      f.adapter.observe = observe;
+      f.adapter.sendAccepted = vi.fn<NonNullable<HostedEveTransport["sendAccepted"]>>(
+        async (input) => {
+          await input.onAccepted?.("ack");
+        },
+      );
+      await expect(f.create().send(f.request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+      expect(f.diagnostics).toHaveBeenCalledWith(
+        expect.objectContaining({
+          category: "delivery_boundary_unobserved",
+          phase: "send_delivery_boundary",
+          sendDeliveryObservation: {
+            ackObserved: true,
+            sameAdapterSession: true,
+            sameAdapterGeneration: true,
+            nativeDeliveryStatePresent: stamped,
+            nativeTurnCount: stamped ? 1 : 0,
+            deliveryTurnMatchCount: 0,
+            startedStampMatchCount: 0,
+            boundaryStampMatchCount: 0,
+            startedOrBoundaryMatch: false,
+            currentTurnPresent: true,
+            nativeReadObserved: true,
+            nativeRead: {
+              nativeStartIndex: 1,
+              nativeNextIndex: 1,
+              nativeTailIndex: 0,
+              observationComplete: true,
+              currentTurnPresent: true,
+            },
+          },
+        }),
+      );
+      expect(observe).toHaveBeenCalledTimes(2);
+      expect(f.adapter.sendAccepted).toHaveBeenCalledOnce();
+      expect(f.send).not.toHaveBeenCalled();
+      expect(await f.operation()).toMatchObject({
+        state: "submission_unknown",
+        sendDelivery: { deliveryId: "ack" },
+      });
+      expect(JSON.stringify(f.diagnostics.mock.calls)).not.toContain("unrelated-active-turn");
+      expect(JSON.stringify(f.diagnostics.mock.calls)).not.toContain("unrelated-delivery");
+    },
+  );
   const cancelledFixture = async (failReadback = false) => {
     const f = await fixture({ failReadback });
     await f.store.observeSession({
@@ -294,6 +451,19 @@ describe("canonical SEND delivery acknowledgement", () => {
         category: "delivery_boundary_unobserved",
         operationKind: "send",
         phase: "send_delivery_boundary",
+        sendDeliveryObservation: {
+          ackObserved: true,
+          sameAdapterSession: true,
+          sameAdapterGeneration: true,
+          nativeDeliveryStatePresent: true,
+          nativeTurnCount: 1,
+          deliveryTurnMatchCount: 0,
+          startedStampMatchCount: 0,
+          boundaryStampMatchCount: 0,
+          startedOrBoundaryMatch: false,
+          currentTurnPresent: false,
+          nativeReadObserved: false,
+        },
       }),
     );
   });
@@ -424,6 +594,23 @@ describe("canonical SEND delivery acknowledgement", () => {
       },
     ]);
     await expect(f.create().send(f.request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    expect(f.diagnostics).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sendDeliveryObservation: {
+          ackObserved: true,
+          sameAdapterSession: true,
+          sameAdapterGeneration: true,
+          nativeDeliveryStatePresent: true,
+          nativeTurnCount: 1,
+          deliveryTurnMatchCount: 1,
+          startedStampMatchCount: 0,
+          boundaryStampMatchCount: 0,
+          startedOrBoundaryMatch: false,
+          currentTurnPresent: true,
+          nativeReadObserved: false,
+        },
+      }),
+    );
     f.setEvents([
       turnEvent("turn.started", "ours", ["neighbor"]),
       turnEvent("turn.completed", "ours", ["ack", "neighbor"]),
