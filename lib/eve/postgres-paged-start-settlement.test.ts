@@ -42,6 +42,7 @@ it("generates a paged start checkpoint-pointer update scoped only to its session
     ownerUserId: principal.ownerUserId,
     record: operation,
     requestDigest: operation.requestDigest,
+    sendCancellationRevisionAtDispatch: null,
     sessionId: null,
     state: operation.state,
     updatedAt: new Date(1000),

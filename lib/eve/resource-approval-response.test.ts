@@ -518,6 +518,7 @@ const postgresSettlementFixture = (changedSession = session, changedMetadata = m
     ownerUserId: principal.ownerUserId,
     record: operation,
     requestDigest: operation.requestDigest,
+    sendCancellationRevisionAtDispatch: null,
     sessionId,
     state: operation.state,
     updatedAt: new Date(operation.updatedAtEpochMs),
