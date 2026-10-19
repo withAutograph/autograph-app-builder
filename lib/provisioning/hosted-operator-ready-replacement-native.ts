@@ -41,8 +41,9 @@ export const createReadyReplacementNativeReader = (ports: {
       credential.binding.scopeId !== target.scopeId ||
       credential.binding.scopeType !== "team" ||
       target.scopeType !== "team"
-    )
+    ) {
       throw new HostedOperatorError("authorization_required");
+    }
     await ports.assertCurrent();
     const url = new URL(path, "https://api.vercel.com");
     url.searchParams.set("teamId", target.scopeId);
@@ -53,13 +54,17 @@ export const createReadyReplacementNativeReader = (ports: {
       redirect: "error",
       headers: { Authorization: `Bearer ${credential.token}` },
     });
-    if (!response.ok) throw new HostedOperatorError("reconciliation_required");
+    if (!response.ok) {
+      throw new HostedOperatorError("reconciliation_required");
+    }
     await ports.assertCurrent();
-    return await response.json();
+    return z.json().parse(await response.json());
   };
   const readGatewayAlias = async (plan: HostedOperatorPlan) => {
     const gateway = plan.publicGateway;
-    if (!gateway) throw new HostedOperatorError("resource_mismatch");
+    if (!gateway) {
+      throw new HostedOperatorError("resource_mismatch");
+    }
     const alias = new URL(gateway.origin).hostname;
     const observed = z
       .object({
@@ -72,9 +77,10 @@ export const createReadyReplacementNativeReader = (ports: {
     if (
       observed.alias.toLowerCase() !== alias ||
       observed.projectId !== gateway.projectId ||
-      observed.redirect
-    )
+      (observed.redirect !== undefined && observed.redirect !== null && observed.redirect !== "")
+    ) {
       throw new HostedOperatorError("resource_mismatch");
+    }
     return observed.deploymentId;
   };
   return {
@@ -84,9 +90,13 @@ export const createReadyReplacementNativeReader = (ports: {
       selectedDeploymentId: string,
     ): Promise<"write" | "applied" | "unknown"> {
       const predecessor = plan.appDeliveryReplacement?.predecessor.gatewayDeploymentId;
-      if (!predecessor) return "unknown";
+      if (predecessor === undefined) {
+        return "unknown";
+      }
       const actual = await readGatewayAlias(plan);
-      if (actual === selectedDeploymentId) return "applied";
+      if (actual === selectedDeploymentId) {
+        return "applied";
+      }
       return actual === predecessor ? "write" : "unknown";
     },
     async verify(
@@ -97,12 +107,16 @@ export const createReadyReplacementNativeReader = (ports: {
       >,
     ) {
       const previous = predecessor.originatingOperator;
-      for (const [candidate, kind, source] of [
-        [predecessor.appCandidate, "delivery", previous.plan.delivery],
-        [predecessor.gatewayCandidate, "gateway-delivery", previous.plan.gatewayDelivery],
+      for (const [candidate, source] of [
+        [predecessor.appCandidate, previous.plan.delivery],
+        [predecessor.gatewayCandidate, previous.plan.gatewayDelivery],
       ] as const) {
-        if (!candidate) continue;
-        if (!source) throw new HostedOperatorError("resource_mismatch");
+        if (!candidate) {
+          continue;
+        }
+        if (!source) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
         const project = z
           .object({ id, accountId: id })
           .parse(await request(`/v9/projects/${encodeURIComponent(candidate.projectId)}`));
@@ -119,21 +133,23 @@ export const createReadyReplacementNativeReader = (ports: {
           !isNativePreviewDeployment(native) ||
           origin.origin !== candidate.origin ||
           origin.pathname !== "/" ||
-          origin.search ||
-          origin.hash ||
-          origin.username ||
-          origin.password ||
+          origin.search !== "" ||
+          origin.hash !== "" ||
+          origin.username !== "" ||
+          origin.password !== "" ||
           native.gitSource.ref !== source.branch ||
           String(native.gitSource.repoId) !== source.repoId ||
           (source.gitSha !== undefined && native.gitSource.sha !== source.gitSha)
-        )
+        ) {
           throw new HostedOperatorError("resource_mismatch");
+        }
       }
       if (
         predecessor.gatewayCandidate &&
         (await readGatewayAlias(plan)) !== predecessor.gatewayCandidate.deploymentId
-      )
+      ) {
         throw new HostedOperatorError("reconciliation_required");
+      }
     },
   };
 };

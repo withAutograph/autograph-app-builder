@@ -12,11 +12,14 @@ export const withExternallyManagedHostProtection = (
   plan: HostedOperatorPlan,
   policy: ExternallyManagedTrustedSources | undefined,
 ): HostedOperatorPlan => {
-  if (policy === undefined || plan.stage !== "app" || plan.action !== "prepare") return plan;
+  if (policy === undefined || plan.stage !== "app" || plan.action !== "prepare") {
+    return plan;
+  }
   const { appTrustedSources, gatewayBindings, ...base } = plan;
   void appTrustedSources;
-  if (!gatewayBindings)
+  if (!gatewayBindings) {
     throw new Error("External host configuration requires the owned Gateway bindings.");
+  }
   const { trustedSources, ...gateway } = gatewayBindings;
   void trustedSources;
   return hostedOperatorPlanSchema.parse({
@@ -39,24 +42,29 @@ export const withExternallyManagedHostProtection = (
 export const hasPendingNativePreviewRecovery = (record: HostedRuntimeJournalRecord | undefined) => {
   const current = record?.operator;
   if (
-    !record ||
-    !current ||
+    record === undefined ||
+    current === undefined ||
     !["pending", "failed"].includes(record.status) ||
     current.plan.stage !== "app" ||
     current.plan.action !== "prepare"
-  )
+  ) {
     return false;
-  if (current.plan.appDeliveryReplacement !== undefined) return true;
+  }
+  if (current.plan.appDeliveryReplacement !== undefined) {
+    return true;
+  }
   if (
     record.approvedByCallId === "operator:unapproved-plan" ||
     current.plan.hostProtection !== undefined
-  )
+  ) {
     return false;
+  }
   return [
     current,
     ...(current.retainedRenewalOperations ?? []).map((entry) => entry.operator),
-  ].some((operator) =>
-    operator.deliveryCandidates?.some((candidate) => candidate.readyState === "READY"),
+  ].some(
+    (operator) =>
+      operator.deliveryCandidates?.some((candidate) => candidate.readyState === "READY") === true,
   );
 };
 
@@ -68,7 +76,9 @@ export const createNativePreviewRecoveryPlan = (
   gatewayDeploymentId?: string,
 ): HostedOperatorPlan | undefined => {
   const current = record?.operator;
-  if (!record || !current || !hasPendingNativePreviewRecovery(record)) return undefined;
+  if (!record || !current || !hasPendingNativePreviewRecovery(record)) {
+    return undefined;
+  }
   if (
     current.plan.appDeliveryReplacement &&
     isDeepStrictEqual(current.plan.hostProtection, policy) &&
@@ -80,7 +90,9 @@ export const createNativePreviewRecoveryPlan = (
   const { appTrustedSources, gatewayBindings, appDeliveryReplacement, ...base } = previous;
   void appTrustedSources;
   void appDeliveryReplacement;
-  if (!gatewayBindings || !previous.delivery || !previous.gatewayDelivery) return undefined;
+  if (!gatewayBindings || !previous.delivery || !previous.gatewayDelivery) {
+    return undefined;
+  }
   const { trustedSources, ...bindings } = gatewayBindings;
   void trustedSources;
   for (const origin of [
@@ -94,7 +106,9 @@ export const createNativePreviewRecoveryPlan = (
     const app =
       candidates.find((value) => value.deploymentId === operator.deliveredDeploymentId) ??
       (candidates.length === 1 ? candidates[0] : undefined);
-    if (!app) continue;
+    if (!app) {
+      continue;
+    }
     const gatewayCandidates = (operator.gatewayDeliveryCandidates ?? []).filter(
       (value) => value.readyState === "READY",
     );
@@ -106,7 +120,9 @@ export const createNativePreviewRecoveryPlan = (
       (gatewayDeploymentId === undefined && gatewayCandidates.length === 1
         ? gatewayCandidates[0]
         : undefined);
-    if (gatewayDeploymentId !== undefined && !gateway) continue;
+    if (gatewayDeploymentId !== undefined && !gateway) {
+      continue;
+    }
     const intent = {
       version: 1 as const,
       predecessor: {
@@ -116,7 +132,9 @@ export const createNativePreviewRecoveryPlan = (
         ...(gateway ? { gatewayDeploymentId: gateway.deploymentId } : {}),
       },
     };
-    if (!resolveReadyDeliveryReplacementPredecessor(record, intent)) continue;
+    if (!resolveReadyDeliveryReplacementPredecessor(record, intent)) {
+      continue;
+    }
     const proposed = hostedOperatorPlanSchema.parse({
       ...base,
       hostProtection: policy,
@@ -148,8 +166,9 @@ export const createNativePreviewRecoveryPlan = (
         { ...proposed, appDeliveryReplacement: intent },
         now,
       )
-    )
+    ) {
       return proposed;
+    }
   }
   return undefined;
 };
@@ -162,18 +181,28 @@ export const readNativePreviewRecoveryPlan = async (input: {
   readGatewayAlias: (plan: HostedOperatorPlan) => Promise<string>;
 }): Promise<HostedOperatorPlan | undefined> => {
   const { record, policy, now } = input;
-  if (policy === undefined || !hasPendingNativePreviewRecovery(record)) return undefined;
+  if (policy === undefined || !hasPendingNativePreviewRecovery(record)) {
+    return undefined;
+  }
   const current = record?.operator;
-  if (!current) return undefined;
+  if (!current) {
+    return undefined;
+  }
   if (current.plan.appDeliveryReplacement !== undefined) {
     // Expired saved authority belongs to ordinary renewal/proposal planning, never fresh predecessor discovery.
-    if (Date.parse(current.plan.retention.expiresAt) <= now) return undefined;
+    if (Date.parse(current.plan.retention.expiresAt) <= now) {
+      return undefined;
+    }
     const saved = createNativePreviewRecoveryPlan(record, policy, now);
-    if (saved !== undefined) return saved;
+    if (saved !== undefined) {
+      return saved;
+    }
   }
   const alias = await input.readGatewayAlias(current.plan);
   const proposed = createNativePreviewRecoveryPlan(record, policy, now, alias);
-  if (proposed === undefined) throw new HostedOperatorError("reconciliation_required");
+  if (proposed === undefined) {
+    throw new HostedOperatorError("reconciliation_required");
+  }
   return proposed;
 };
 
@@ -183,7 +212,9 @@ export const readyReplacementHistory = (
   plan: HostedOperatorPlan,
   now = Date.now(),
 ) => {
-  if (!plan.appDeliveryReplacement) return undefined;
+  if (!plan.appDeliveryReplacement) {
+    return undefined;
+  }
   for (const archived of record.operator?.retainedReadyDeliveryOperations?.toReversed() ?? []) {
     const snapshot: HostedRuntimeJournalRecord = {
       ...record,
@@ -201,8 +232,9 @@ export const readyReplacementHistory = (
         { ...plan, appDeliveryReplacement: plan.appDeliveryReplacement },
         now,
       )
-    )
+    ) {
       return predecessor;
+    }
   }
   return undefined;
 };
@@ -213,11 +245,13 @@ export const readyReplacementPriorOperators = (
   now = Date.now(),
 ): { approvedByCallId: string; operator: HostedOperatorRecordBase }[] => {
   const predecessor = readyReplacementHistory(record, plan, now);
-  if (!predecessor) return [];
+  if (predecessor === undefined || predecessor.snapshot.operator === undefined) {
+    return [];
+  }
   return [
     {
       approvedByCallId: predecessor.snapshot.approvedByCallId,
-      operator: predecessor.snapshot.operator!,
+      operator: predecessor.snapshot.operator,
     },
     { approvedByCallId: predecessor.approvedByCallId, operator: predecessor.originatingOperator },
   ].filter(

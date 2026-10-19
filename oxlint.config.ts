@@ -3838,6 +3838,85 @@ const existingFindingOverrides: { files: string[]; rules: Record<string, "off"> 
 
 const followupFindingOverrides: { files: string[]; rules: Record<string, "off"> }[] = [
   {
+    // These closed fixtures deliberately assert seeded optional values and use async
+    // dependency stubs. Provider/public JSON is parsed before assertions; the real
+    // unsafe-access and unsafe-assignment checks remain enabled.
+    files: ["**/lib/provisioning/hosted-operator-ready-delivery-replacement.test.ts"],
+    rules: {
+      "typescript/no-non-null-assertion": "off",
+      "eslint/require-await": "off",
+      "eslint/no-plusplus": "off",
+      "unicorn/no-await-expression-member": "off",
+      "unicorn/no-useless-undefined": "off",
+      "anti-slop/no-unsafe-dictionary-type": "off",
+      "eslint/complexity": "off",
+      "sonarjs/cognitive-complexity": "off",
+      "eslint/no-nested-ternary": "off",
+      "sonarjs/no-nested-conditional": "off",
+    },
+  },
+  {
+    // Both tests construct and parse the fixture before checking its optional field.
+    files: [
+      "**/lib/provisioning/hosted-operator-source-configuration.test.ts",
+      "**/lib/provisioning/postgres-hosted-operator-resource-lease.test.ts",
+    ],
+    rules: { "typescript/no-non-null-assertion": "off" },
+  },
+  {
+    // Isolate schema parsing from the private provider factory; no live provider effect.
+    files: ["**/lib/provisioning/hosted-operator-source-configuration.test.ts"],
+    rules: { "anti-slop/no-module-mocking": "off" },
+  },
+  {
+    // Keep the complete ownership/approval predicates together. Conditional counts
+    // are advisory; their exact semantics remain covered by focused behavior tests.
+    files: [
+      "**/lib/provisioning/hosted-operator-contract.ts",
+      "**/lib/provisioning/hosted-operator-host-protection.ts",
+      "**/lib/provisioning/hosted-operator-native-preview-recovery.ts",
+      "**/lib/provisioning/hosted-operator-ready-delivery-replacement.ts",
+      "**/lib/provisioning/hosted-operator-ready-replacement-native.ts",
+      "**/lib/provisioning/hosted-operator-retention-renewal.ts",
+      "**/lib/provisioning/hosted-operator-shared-host-protection-successor.ts",
+    ],
+    rules: { "sonarjs/expression-complexity": "off" },
+  },
+  {
+    files: [
+      "**/lib/provisioning/hosted-operator-contract.ts",
+      "**/lib/provisioning/hosted-operator-native-preview-recovery.ts",
+      "**/lib/provisioning/hosted-operator-ready-delivery-replacement.ts",
+      "**/lib/provisioning/hosted-operator-ready-replacement-native.ts",
+    ],
+    rules: { "eslint/complexity": "off" },
+  },
+  {
+    // Preserve source selection order and explicit absent-result returns.
+    files: ["**/lib/provisioning/hosted-operator-native-preview-recovery.ts"],
+    rules: {
+      "sonarjs/cognitive-complexity": "off",
+      "eslint/no-nested-ternary": "off",
+      "sonarjs/no-nested-conditional": "off",
+      "unicorn/no-useless-undefined": "off",
+    },
+  },
+  {
+    // Each native read renews/asserts the same execution lease through assertCurrent;
+    // preserve that ordered fence rather than introducing concurrent lease updates.
+    files: ["**/lib/provisioning/hosted-operator-ready-replacement-native.ts"],
+    rules: { "eslint/no-await-in-loop": "off", "react-doctor/async-await-in-loop": "off" },
+  },
+  {
+    files: ["**/lib/provisioning/hosted-operator-composition.ts"],
+    rules: { "unicorn/no-useless-undefined": "off" },
+  },
+  {
+    // Approval text has an optional Gateway phrase; wording composition is advisory.
+    files: ["**/lib/agent/approval-receipt.ts"],
+    rules: { "sonarjs/no-nested-conditional": "off", "sonarjs/no-nested-template-literals": "off" },
+  },
+  {
     files: ["**/evals/support/self-reproduction-reference-runtime.ts"],
     rules: {
       "anti-slop/no-runtime-typeof": "off",
