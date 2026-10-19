@@ -153,7 +153,16 @@ legacy NULL rows remain unknown. Apply the reviewed migration before deploying
 any new reader/writer: the default full operation-row selection already requires
 the column. Old application code tolerates the additive nullable column. Review
 and approve the database upgrade before merging if merge automatically deploys.
-The normal runner (`lib/db/migrate.mts`) uses Drizzle's PostgreSQL migrator, which
+The normal runner (`lib/db/migrate.mts`) receives its task-scoped database URL
+through the existing private file descriptor and requires a direct, TLS-enabled
+Neon endpoint for migrations. Supply the already approved migration identity's
+direct connection privately; the runner does not convert a pooled runtime URL,
+choose another role, or grant database authority. Runtime and hosted admin
+readers retain their pooled-endpoint validation. The PostgreSQL protocol, TLS,
+secret-frame bounds, buffer clearing, and file descriptor closure apply to both
+readers; the URL is never passed as a command-line argument or added to the shared
+launcher environment. This connection choice does not authorize schema changes.
+The runner uses Drizzle's PostgreSQL migrator, which
 executes pending statements and their migration-journal inserts in one
 transaction. `ADD COLUMN`/`ADD CHECK` take an exclusive table lock retained until
 commit; the validated check scans existing rows. The ordinary (non-concurrent)
