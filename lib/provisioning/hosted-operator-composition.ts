@@ -1,3 +1,7 @@
+import {
+  readExistingAuthBootstrapPrerequisite,
+  configuredBootstrapGatewayBindings,
+} from "./hosted-operator-existing-auth-bootstrap";
 import { retainedOperatorAuthFromJournal } from "./hosted-runtime-journal";
 import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
 import {
@@ -1159,6 +1163,17 @@ export const composeHostedOperatorDependencies = (
     if (sharedHostPrerequisite !== undefined) {
       return sharedHostPrerequisite;
     }
+    const existingBootstrap = await readExistingAuthBootstrapPrerequisite(
+      current,
+      context,
+      configuration,
+      application.appDatabase,
+      controlPlane,
+      Date.now(),
+    );
+    if (existingBootstrap !== undefined) {
+      return existingBootstrap;
+    }
     const selected = await observe(
       "accepted_spec",
       async () => await readOwnedOperatorPlanningSelection({ context, controlPlane }),
@@ -1444,30 +1459,6 @@ export const composeHostedOperatorDependencies = (
         version: 1,
       }),
     );
-    let readonlyAttesters: NonNullable<HostedOperatorPlan["gatewayBindings"]>["readonlyAttesters"];
-    if (
-      configuration.workloadPolicy.environment === "production" &&
-      configuration.nativeNeon.configuration.operator.environment === "preview"
-    ) {
-      const { workloadPolicy: builder } = configuration;
-      const { operator } = configuration.nativeNeon.configuration;
-      readonlyAttesters = {
-        builderProduction: {
-          audience: builder.audience,
-          environment: "production",
-          issuer: builder.issuer,
-          ownerId: builder.ownerId,
-          projectId: builder.projectId,
-        },
-        operatorPreview: {
-          audience: operator.audience,
-          environment: "preview",
-          issuer: operator.issuer,
-          ownerId: operator.ownerId,
-          projectId: operator.projectId,
-        },
-      };
-    }
     const gatewayPlan = hostedOperatorPlanSchema.parse({
       ...base,
       effects: [
@@ -1485,14 +1476,7 @@ export const composeHostedOperatorDependencies = (
           kind: GATEWAY_DELIVERY,
         },
       ],
-      gatewayBindings: {
-        authBrowserOrigin: configuration.gateway.authBrowserOrigin,
-        builderCallbackOrigin: configuration.builderCallbackOrigin,
-        catalogAppIds: configuration.gateway.protectedApplicationIds,
-        operatorOrigin: configuration.operator.origin,
-        readonlyAttesters,
-        sourceWorkload: configuration.gateway.workload,
-      },
+      gatewayBindings: configuredBootstrapGatewayBindings(configuration),
       gatewayDelivery: {
         branch: configuration.gateway.branch,
         gitSha: configuration.gateway.gitSha,

@@ -9,6 +9,7 @@ import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { prepareValidationLocalData } from "./prepare-app-local-preview";
+import { resolvePreparedRuntimeExecution } from "@/lib/agent/prepared-runtime-execution";
 import { prepareCompiledSchemaPredecessorsForValidationForSession } from "@/lib/agent/compiled-schema-validation-input";
 
 import {
@@ -78,12 +79,33 @@ const validatePersistentBackend = async (
     return { status: "unassessed" as const };
   }
   if (description.validation.browser === null) {
-    return {
-      problem: "The persistent app must declare an authenticated test-e2e task before completion.",
-      status: "blocked" as const,
-    };
+    return { status: "unassessed" as const };
   }
   return await runAppBrowserTests(input);
+};
+
+const prepareBackendValidationRuntime = async (
+  description: Awaited<ReturnType<typeof describeSelectedApp>> | undefined,
+  execution: () => Parameters<typeof resolvePreparedRuntimeExecution>[0],
+  signal?: AbortSignal,
+) => {
+  if (description?.backend.kind !== GENERATED_BACKEND || description.validation.browser === null) {
+    return { runtime: null, failure: null };
+  }
+  try {
+    return { runtime: await resolvePreparedRuntimeExecution(execution()), failure: null };
+  } catch (error) {
+    signal?.throwIfAborted();
+    return {
+      runtime: null,
+      failure: {
+        problem:
+          error instanceof Error ? error.message : "Authenticated runtime preparation failed.",
+        reason: "authenticated-runtime-preparation",
+        status: "blocked" as const,
+      },
+    };
+  }
 };
 
 const backendValidationStatus = (status: string) =>
@@ -136,7 +158,7 @@ export const createAppValidationTool = (
 ) =>
   defineTool({
     description:
-      "Run the repository's normal validation commands against the current applied app. Command exit status is the technical validation result. For persistent apps, also run the declared authenticated browser task against the prepared runtime and report its result separately. Independent paid source assessment is deferred to final accept_change_set after implementation and technical checks are ready; deferred evidence is unassessed and does not require another validation run. None of these results alone proves hosted durability. This does not publish or otherwise change an external repository.",
+      "Run the repository's normal validation commands against the current applied app. Command exit status is the technical validation result. Repository-owned local setup and technical checks precede full authenticated runtime preparation. For persistent apps, run any declared authenticated browser task after that preparation succeeds and report its result separately; a runtime block preserves the technical receipt. Independent paid source assessment is deferred to final accept_change_set after implementation and technical checks are ready; deferred evidence is unassessed and does not require another validation run. None of these results alone proves hosted durability. This does not publish or otherwise change an external repository.",
     // oxlint-disable-next-line eslint/complexity -- The existing workflow phase and receipt branches remain explicit.
     async execute(input, ctx) {
       const current = appBuilderWorkflowState.get();
@@ -190,7 +212,6 @@ export const createAppValidationTool = (
       // local data task first so its server inherits the setup log file rather
       // than Turbo's captured test pipe, which would keep Turbo waiting after
       // the tests themselves have finished.
-      let runtime: Awaited<ReturnType<typeof prepareValidationLocalData>> = null;
       const schemaInput = await prepareSchemaValidationInput({
         fixture,
         parameters: {
@@ -211,17 +232,10 @@ export const createAppValidationTool = (
       if (!fixture) {
         validationPhase(ctx.callId, "preparing_declared_local_data");
         try {
-          runtime = await prepareValidationLocalData({
+          // Repository-owned local setup keeps local services off the test runner's pipe.
+          // No protected reference is resolved here; local technical data is not hosted evidence.
+          await prepareValidationLocalData({
             appId: current.appSpec.appId,
-            execution: {
-              appId: current.appSpec.appId,
-              root: current.applyReceipt.applyRoot,
-              sandboxId: getBuilderSandboxId(sandbox),
-              sessionAuth: ctx.session.auth,
-              sessionId: ctx.session.id,
-              signal: ctx.abortSignal,
-              state: current,
-            },
             root: current.applyReceipt.applyRoot,
             sandbox,
             signal: ctx.abortSignal,
@@ -252,9 +266,7 @@ export const createAppValidationTool = (
         attempt,
         dependencyLayout: current.dependencyReceipt.dependencyLayout,
         environment: schemaInput.environment,
-        executor: fixture
-          ? fixtureValidationCommandExecutor()
-          : sandboxValidationCommandExecutor({ runtime }),
+        executor: fixture ? fixtureValidationCommandExecutor() : sandboxValidationCommandExecutor(),
         logStore,
         sandbox,
         sessionId: ctx.session.id,
@@ -331,13 +343,30 @@ export const createAppValidationTool = (
         };
       }
       validationPhase(ctx.callId, "validating_persistent_backend");
-      const backendValidation = await executionPorts.validateBackend(description, {
-        appId: current.appSpec.appId,
-        root: current.applyReceipt.applyRoot,
-        runtime,
-        sandbox,
-        signal: ctx.abortSignal,
-      });
+      const preparedBackend = await prepareBackendValidationRuntime(
+        description,
+        () => ({
+          appId: current.appSpec.appId,
+          root: current.applyReceipt.applyRoot,
+          sandboxId: getBuilderSandboxId(sandbox),
+          sessionAuth: ctx.session.auth,
+          sessionId: ctx.session.id,
+          signal: ctx.abortSignal,
+          state: current,
+        }),
+        ctx.abortSignal,
+      );
+      const runtime = preparedBackend.runtime;
+      // A rejected protected reference never falls back to repository-local browser execution.
+      const backendValidation =
+        preparedBackend.failure ??
+        (await executionPorts.validateBackend(description, {
+          appId: current.appSpec.appId,
+          root: current.applyReceipt.applyRoot,
+          runtime,
+          sandbox,
+          signal: ctx.abortSignal,
+        }));
       validationPhase(
         ctx.callId,
         "persistent_backend_validation_finished",

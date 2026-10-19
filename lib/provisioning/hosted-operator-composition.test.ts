@@ -1,4 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createProtectedHostedOperatorHandler } from "./hosted-operator-service";
+import type {
+  ProtectedHostedOperatorDependencies,
+  HostedOperatorContext,
+  HostedOperatorDeploymentContext,
+  HostedOperatorEffectContext,
+  HostedOperatorWorkerEffectContext,
+} from "./hosted-operator-service";
 import nativeEntryPoint from "./hosted-operator-function";
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Focused read-only reconciliation boundary spy.
 import * as authReadiness from "./hosted-operator-auth-readiness";
@@ -37,13 +45,13 @@ import type { NormalActorAccountPreparation } from "./hosted-operator-normal-act
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Exercise real composition with only the worker transport stubbed.
 import * as membershipLauncher from "./hosted-operator-sandbox-launcher";
 
-import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
-import type {
-  HostedOperatorContext,
-  HostedOperatorDeploymentContext,
-  HostedOperatorEffectContext,
-  HostedOperatorWorkerEffectContext,
-} from "./hosted-operator-service";
+import {
+  HostedOperatorError,
+  operatorPublicResultSchema,
+  hostedOperatorPlanSchema,
+  operatorPlanDigest,
+} from "./hosted-operator-contract";
+import type { OperatorRequest } from "./hosted-operator-contract";
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy on the provider adapter boundary while exercising real composition context routing.
 import * as deploymentDelivery from "./hosted-operator-deployment-delivery";
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Inspect the environment verification context without a provider request.
@@ -1237,6 +1245,239 @@ describe("existing populated Auth workflow planning", () => {
       readResourceBindings,
     };
   };
+  it("plans retained Auth infrastructure before looking up an unvalidated accepted app revision", async () => {
+    const f = setup("current");
+    const participants = participantResolutionFixture();
+    const completed = existingAuthRecord(participants.base);
+    const retainedAuth = retainedOperatorAuthFromJournal(completed)!;
+    f.row.record = hostedRuntimeJournalRecordSchema.parse({
+      ...completed,
+      status: "participants-prepared",
+      retainedAuth,
+      accountPreparation: participants.preparation,
+      operator: {
+        ...completed.operator!,
+        operationRef: participants.preparation.accountOperationRef,
+        plan: participants.accountPlan,
+        planDigest: participants.preparation.accountPlanDigest,
+        approvalId: participants.preparation.accountApprovalId,
+        receipts: [
+          {
+            effectId: "normal-accounts",
+            observedAt: "2026-10-15T12:00:00Z",
+            resourceVersion: "actual-accounts",
+          },
+        ],
+      },
+      approvedByCallId: participants.preparation.accountApprovedByCallId,
+    });
+    f.configuration.gateway.gitSha = "e".repeat(40);
+    const selection = vi.mocked(planningAuthority.readOwnedOperatorPlanningSelection);
+    selection.mockResolvedValue({
+      currentSpec: { appSpecDigest: "new-unvalidated-spec" },
+      selection: undefined,
+    } as Awaited<ReturnType<typeof planningAuthority.readOwnedOperatorPlanningSelection>>);
+    const readApproval = vi.fn<ProtectedHostedOperatorDependencies["readApproval"]>(async () => ({
+      action: "prepare" as const,
+      approved: true,
+      approvalId: retainedAuth.approvalId,
+      callId: retainedAuth.approvedByCallId,
+      planDigest: retainedAuth.planDigest,
+    }));
+    Object.assign(f.controlPlane, { readApproval });
+    const before = structuredClone(f.row.record);
+    const plan = await f.dependencies.plan({ ...context, action: "prepare" });
+    expect(plan.stage).toBe("auth-bootstrap");
+    expect(plan.contextId).toBe(retainedAuth.plan.contextId);
+    expect(plan.release).toEqual(retainedAuth.plan.release);
+    expect(plan.access).toEqual([]);
+    expect(plan.gatewayDelivery?.gitSha).toBe(f.configuration.gateway.gitSha);
+    expect(plan.effects.map((effect) => effect.kind)).not.toEqual(
+      expect.arrayContaining([
+        "normal-accounts",
+        "auth-membership",
+        "access",
+        "delivery",
+        "bindings",
+      ]),
+    );
+    expect(selection).not.toHaveBeenCalled();
+    expect(f.controlPlane.readGeneratedRelease).not.toHaveBeenCalled();
+    expect(f.row.record).toEqual(before);
+    expect(readApproval).toHaveBeenCalled();
+    readApproval.mockResolvedValueOnce(null);
+    await expect(f.dependencies.plan({ ...context, action: "prepare" })).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(f.row.record).toEqual(before);
+    f.controlPlane.assertPlanningAuthorized.mockRejectedValueOnce(
+      new HostedOperatorError("authorization_required"),
+    );
+    await expect(f.dependencies.plan({ ...context, action: "prepare" })).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(f.row.record).toEqual(before);
+    let approved = false;
+    let fence = 1;
+    const executed: string[] = [];
+    const receipt = (input: HostedOperatorEffectContext) => ({
+      effectId: input.effect.id,
+      observedAt: new Date().toISOString(),
+      resourceVersion: "independent-fixture-readback",
+    });
+    const store: ProtectedHostedOperatorDependencies["store"] = {
+      read: async () => structuredClone(f.row),
+      reserve: async () => structuredClone(f.row),
+      compareAndSet: async (input) => {
+        if (input.expectedRevision !== f.row.revision) {
+          return undefined;
+        }
+        f.row.record = hostedRuntimeJournalRecordSchema.parse(input.record);
+        f.row.revision += 1;
+        return structuredClone(f.row);
+      },
+      reserveFenceGeneration: async (input) => {
+        if (input.expectedRevision !== f.row.revision || input.leaseId !== f.row.record.leaseId) {
+          return undefined;
+        }
+        fence += 1;
+        f.row.record.operator!.fenceGeneration = fence;
+        f.row.revision += 1;
+        return structuredClone(f.row);
+      },
+    };
+    Object.assign(f.controlPlane.store, store);
+    const approvalPort: ProtectedHostedOperatorDependencies["readApproval"] = async (input) => {
+      if (
+        input.planDigest === retainedAuth.planDigest &&
+        input.callId === retainedAuth.approvedByCallId
+      ) {
+        return {
+          action: "prepare",
+          approved: true,
+          approvalId: retainedAuth.approvalId,
+          callId: retainedAuth.approvedByCallId,
+          planDigest: retainedAuth.planDigest,
+        };
+      }
+      return approved && input.callId === "new-bootstrap-call"
+        ? {
+            action: "prepare",
+            approved: true,
+            approvalId: "new-bootstrap-approval",
+            callId: input.callId,
+            planDigest: input.planDigest,
+          }
+        : null;
+    };
+    Object.assign(f.controlPlane, { readApproval: approvalPort });
+    const deps: ProtectedHostedOperatorDependencies = {
+      ...f.dependencies,
+      store,
+      authorize: async () => context,
+      assertAuthorized: async (input) => {
+        expect(input.authority).toEqual(context.authority);
+        expect(input.plan.selection).toEqual(plan.selection);
+        await f.controlPlane.assertPlanningAuthorized();
+      },
+      readApproval: approvalPort,
+      readApprovedPlan: async () => null,
+      withResourceLease: async (_input, run) => await run(async () => {}),
+      reconcile: async (input) => {
+        await input.assertCurrent();
+        return ["resources", "install"].includes(input.effect.kind)
+          ? { status: "applied", receipt: receipt(input) }
+          : { status: "absent" };
+      },
+      executeEffect: async (input) => {
+        await input.assertCurrent();
+        executed.push(input.effect.kind);
+        if (input.effect.kind === "gateway-delivery") {
+          await input.checkpointGatewayDelivery!(
+            [
+              {
+                deploymentId: "new-gateway",
+                origin: "https://new-gateway.example",
+                readyState: "READY",
+                branch: plan.gatewayDelivery!.branch,
+                projectId: plan.gatewayDelivery!.projectId,
+                repoId: plan.gatewayDelivery!.repoId,
+                operationRef: input.operationRef,
+              },
+            ],
+            "new-gateway",
+          );
+        }
+        return receipt(input);
+      },
+      verifyAuthReadiness: async (input) => {
+        await input.assertCurrent();
+        return retainedAuth.authPreparation;
+      },
+      verify: async () => {
+        throw new Error("Auth bootstrap must not attest an app release");
+      },
+      bindings: async () => {
+        throw new Error("Auth bootstrap must not expose app bindings");
+      },
+    };
+    const handler = createProtectedHostedOperatorHandler(deps);
+    const call = async (input: OperatorRequest) => {
+      const response = await handler(
+        new Request("https://operator.example/v1/runtime", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(input),
+        }),
+      );
+      return operatorPublicResultSchema.parse(await response.json());
+    };
+    const proposal = await call({
+      action: "plan",
+      operation: "prepare",
+      selection: plan.selection,
+    });
+    expect(proposal).toMatchObject({
+      status: "planned",
+      plan: { stage: "auth-bootstrap", contextId: retainedAuth.plan.contextId },
+    });
+    expect(f.row.record.accountPreparation).toEqual(before.accountPreparation);
+    expect(f.row.record.privateState).toEqual(before.privateState);
+    expect(executed).toEqual([]);
+    if (proposal.operationRef === undefined || proposal.planDigest === undefined) {
+      throw new Error("Missing proposed operation");
+    }
+    const execute: OperatorRequest = {
+      action: "execute",
+      selection: plan.selection,
+      operationRef: proposal.operationRef,
+      planDigest: proposal.planDigest,
+      callId: "new-bootstrap-call",
+    };
+    expect(await call(execute)).toMatchObject({
+      code: "authorization_required",
+      status: "blocked",
+    });
+    expect(executed).toEqual([]);
+    approved = true;
+    const complete = await call(execute);
+    expect(complete.code).toBeUndefined();
+    expect(executed).toEqual(["gateway-bindings", "gateway-delivery"]);
+    expect(f.row.record.accountPreparation).toEqual(before.accountPreparation);
+    expect(f.row.record.privateState).toEqual(before.privateState);
+    expect(f.row.record.operator?.plan.stage).toBe("auth-bootstrap");
+    expect(f.row.record.operator?.approvalId).toBe("new-bootstrap-approval");
+    expect(f.row.record.operator?.deliveredGatewayDeploymentId).toBe("new-gateway");
+    expect(f.row.record.proof).toBeUndefined();
+    expect(selection).not.toHaveBeenCalled();
+    expect(f.controlPlane.readGeneratedRelease).not.toHaveBeenCalled();
+    // Completed infrastructure is not permission to select the old app release for this changed spec.
+    await expect(f.dependencies.plan({ ...context, action: "prepare" })).rejects.toMatchObject({
+      code: "operator_unavailable",
+    });
+    expect(selection).toHaveBeenCalled();
+  });
+
   it.each(["pending", "consumed"] as const)(
     "plans the frozen shared-host prerequisite before changed app/source inputs with a %s identity",
     async (identityState) => {

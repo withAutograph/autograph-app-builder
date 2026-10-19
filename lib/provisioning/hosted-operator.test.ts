@@ -1477,7 +1477,6 @@ describe("protected hosted operator boundary", () => {
     await f.client.request(request);
     const previous = structuredClone(f.row);
     for (const replacement of [
-      { ...plan, contextId: "other-context" },
       { ...plan, neon: { ...plan.neon, branchId: "br_other" } },
       { ...plan, appDatabase: { ...plan.appDatabase, runtimeRole: "other_runtime" } },
       { ...plan, authDatabase: { ...plan.authDatabase, resourceId: "other-auth" } },
@@ -1489,25 +1488,45 @@ describe("protected hosted operator boundary", () => {
     }
     expect(f.deps.executeEffect).toHaveBeenCalledTimes(4);
   });
-  it("retains credentials for a same-resource release edit and invalidates previous proof", async () => {
+  it("retains credentials across a current spec and release edit but requires fresh approval", async () => {
     const f = fixture();
     const request = await prepared(f);
     f.approve();
     await f.client.request(request);
     const credentials = structuredClone(f.row?.record.privateState);
+    const readApproval = f.deps.readApproval;
+    f.deps.readApproval = async (input) =>
+      input.planDigest === request.planDigest ? await readApproval(input) : null;
     f.deps.plan = async () => ({
       ...plan,
+      contextId: "accepted-next-spec",
       release: { ...plan.release, id: "release_next", sha256: "c".repeat(64) },
     });
     const next = await f.client.request({ action: "plan", operation: "prepare", selection });
     expect(next.status).toBe("planned");
     expect(next.operationRef).not.toBe(request.operationRef);
+    expect(next.planDigest).not.toBe(request.planDigest);
+    expect(f.row?.record.operator?.plan).toMatchObject({
+      contextId: "accepted-next-spec",
+      release: { id: "release_next", sha256: "c".repeat(64) },
+    });
     expect(f.row?.record.privateState).toEqual(credentials);
     expect(f.row?.record.proof).toBeUndefined();
     expect(f.row?.record.environmentBound).toBe(false);
     expect(f.row?.record.operator?.receipts).toEqual([]);
     expect(f.row?.record.operator?.approvalId).toBeUndefined();
     expect(f.row?.record.approvedByCallId).toBe("operator:unapproved-plan");
+    const unapproved = await f.client.request({
+      action: "execute",
+      callId: "next-human-decision",
+      operationRef: z.uuid().parse(next.operationRef),
+      planDigest: z.string().parse(next.planDigest),
+      selection,
+    });
+    expect(unapproved).toMatchObject({ status: "blocked", code: "authorization_required" });
+    expect(f.deps.executeEffect).toHaveBeenCalledTimes(4);
+    expect(f.row?.record.privateState).toEqual(credentials);
+    expect(f.row?.record.operator?.approvalId).toBeUndefined();
     await expect(
       f.client.bindings({
         action: "bindings",
