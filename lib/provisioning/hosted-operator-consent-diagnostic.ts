@@ -154,6 +154,33 @@ const operatorPlanningFailure = z.strictObject({
 });
 type OperatorPlanningFailure = z.infer<typeof operatorPlanningFailure>;
 
+const normalActorProofFailure = z.strictObject({
+  stage: z.enum([
+    "authorization",
+    "journal_read",
+    "owner_session",
+    "realm_binding",
+    "proof_preparation",
+    "artifact_context",
+    "proof_request",
+    "proof_response",
+    "proof_decode",
+    "proof_artifact_read",
+    "proof_verify",
+    "proof_readback_request",
+    "proof_readback_response",
+    "proof_persistence",
+    "result",
+  ]),
+  cookiePresent: z.boolean().optional(),
+  httpStatus: z.number().int().min(100).max(599).optional(),
+  contentTypeValid: z.boolean().optional(),
+  redirected: z.boolean().optional(),
+  errorClass: operatorPlanningFailure.shape.errorClass.optional(),
+  code: operatorPublicResultSchema.shape.code.unwrap().optional(),
+});
+export type OperatorNormalActorProofFailure = z.infer<typeof normalActorProofFailure>;
+
 const operatorExecutionStage = z.enum([
   "owner_authorization",
   "journal_read",
@@ -758,6 +785,7 @@ const metadata = z.strictObject({
   preparationFailure: runtimePreparationFailure.optional(),
   phase,
   planningFailure: operatorPlanningFailure.optional(),
+  normalActorProofFailure: normalActorProofFailure.optional(),
   executionFailure: operatorExecutionFailure.optional(),
   hostedEnvironmentBindingFailure: hostedEnvironmentBindingFailure.optional(),
   gatewayBindings: gatewayBindingsDiagnostic.optional(),
@@ -821,6 +849,68 @@ export const createHostedOperatorConsentDiagnostic = (
       /* Diagnostics never change authorization or pause behavior. */
     }
   };
+};
+
+/** Descriptor-only projection: exception text and arbitrary caller metadata never reach the sink. */
+export const reportOperatorNormalActorProofFailure = (
+  sessionId: string,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Advisory metadata is projected from own data descriptors without invoking accessors.
+  failure: unknown,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Only closed error classes and an existing public code may leave this boundary.
+  error: unknown,
+  sink?: HostedOperatorConsentDiagnosticSink,
+): void => {
+  try {
+    const proofStage = normalActorProofFailure.shape.stage.safeParse(
+      ownDiagnosticValue(failure, "stage"),
+    );
+    if (!proofStage.success) {
+      return;
+    }
+    const projected: OperatorNormalActorProofFailure = { stage: proofStage.data };
+    for (const key of ["cookiePresent", "contentTypeValid", "redirected"] as const) {
+      const parsed = z.boolean().safeParse(ownDiagnosticValue(failure, key));
+      if (parsed.success) {
+        projected[key] = parsed.data;
+      }
+    }
+    const httpStatus = normalActorProofFailure.shape.httpStatus.safeParse(
+      ownDiagnosticValue(failure, "httpStatus"),
+    );
+    if (httpStatus.success) {
+      projected.httpStatus = httpStatus.data;
+    }
+    projected.errorClass = "unexpected";
+    try {
+      if (error instanceof HostedOperatorError) {
+        projected.errorClass = "operator_error";
+        const code = operatorPublicResultSchema.shape.code
+          .unwrap()
+          .safeParse(ownDiagnosticValue(error, "code"));
+        if (code.success) {
+          projected.code = code.data;
+        }
+      } else if (error instanceof z.ZodError) {
+        projected.errorClass = "validation_error";
+      } else if (error instanceof TypeError) {
+        projected.errorClass = "type_error";
+      }
+    } catch {
+      /* Hostile exceptions cannot change the existing rejection. */
+    }
+    createHostedOperatorConsentDiagnostic(
+      sessionId,
+      sink,
+    )({
+      boundary: "operator",
+      phase: "inline",
+      stage: "operator_request",
+      outcome: "setup_unavailable",
+      normalActorProofFailure: projected,
+    });
+  } catch {
+    /* Reporting cannot change collection, authority or error behavior. */
+  }
 };
 
 /** Report a hosted environment-binding failure using only closed stage/reason/status values. */

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { HostedOperatorError, operatorPublicResultSchema } from "./hosted-operator-contract";
 import {
   createHostedOperatorConsentDiagnostic,
+  reportOperatorNormalActorProofFailure,
   operatorOwnerStoreImportErrorCodeSchema,
   reportOperatorPlanningMismatch,
   observeOperatorPlanStage,
@@ -1298,4 +1299,97 @@ it("does not invoke advisory field getters or inspect extra properties", () => {
   Object.defineProperty(data, "credentials", { get: getter });
   expect(projectAuthStartupDiagnostic(data)).toEqual({ stage: "schema_options" });
   expect(getter).not.toHaveBeenCalled();
+});
+
+describe("normal actor proof failure diagnostics", () => {
+  it("projects own closed response facts and discards raw metadata and exceptions", () => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    reportOperatorNormalActorProofFailure(
+      secret,
+      {
+        stage: "proof_response",
+        httpStatus: 401,
+        cookiePresent: true,
+        contentTypeValid: false,
+        redirected: false,
+        message: secret,
+        cookie: secret,
+        url: secret,
+        proof: secret,
+        actorId: secret,
+        errorClass: secret,
+      },
+      new HostedOperatorError("auth_identity_required"),
+      sink,
+    );
+    expect(sink.mock.calls[0]?.[0].normalActorProofFailure).toEqual({
+      stage: "proof_response",
+      httpStatus: 401,
+      cookiePresent: true,
+      contentTypeValid: false,
+      redirected: false,
+      errorClass: "operator_error",
+      code: "auth_identity_required",
+    });
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
+  it("omits malformed scalar values without coercion or accessor execution", () => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    const getter = vi.fn(() => {
+      throw new Error(secret);
+    });
+    const failure = Object.defineProperties(
+      { stage: "proof_response", httpStatus: 600 },
+      {
+        cookiePresent: { get: getter },
+        redirected: { value: secret },
+        contentTypeValid: { value: { toString: getter } },
+      },
+    );
+    reportOperatorNormalActorProofFailure(secret, failure, new TypeError(secret), sink);
+    expect(getter).not.toHaveBeenCalled();
+    expect(sink.mock.calls[0]?.[0].normalActorProofFailure).toEqual({
+      stage: "proof_response",
+      errorClass: "type_error",
+    });
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
+  it("contains hostile proxies, accessors, inherited stages and logger failures", () => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    const getter = vi.fn(() => {
+      throw new Error(secret);
+    });
+    const revoked = Proxy.revocable({}, {});
+    revoked.revoke();
+    for (const failure of [
+      null,
+      undefined,
+      secret,
+      revoked.proxy,
+      Object.create({ stage: "proof_request" }),
+      Object.defineProperty({}, "stage", { get: getter }),
+    ]) {
+      expect(() => {
+        reportOperatorNormalActorProofFailure(secret, failure, revoked.proxy, sink);
+      }).not.toThrow();
+    }
+    expect(getter).not.toHaveBeenCalled();
+    expect(sink).not.toHaveBeenCalled();
+    reportOperatorNormalActorProofFailure(secret, { stage: "proof_request" }, revoked.proxy, sink);
+    expect(sink.mock.calls[0]?.[0].normalActorProofFailure).toEqual({
+      stage: "proof_request",
+      errorClass: "unexpected",
+    });
+    const hostileSink = () => {
+      throw new Error(secret);
+    };
+    expect(() => {
+      reportOperatorNormalActorProofFailure(
+        secret,
+        { stage: "proof_verify" },
+        new Error(secret),
+        hostileSink,
+      );
+    }).not.toThrow();
+  });
 });
