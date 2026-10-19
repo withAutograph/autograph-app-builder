@@ -191,6 +191,7 @@ const hostedEnvironmentBindingStage = z.enum([
 ]);
 const hostedEnvironmentBindingFailure = z.strictObject({
   stage: hostedEnvironmentBindingStage,
+  requestTarget: z.enum(["environment_row", "project_settings"]).optional(),
   reason: z.enum([
     "input_rejected",
     "authorization_rejected",
