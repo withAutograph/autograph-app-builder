@@ -2358,7 +2358,7 @@ export const composeHostedOperatorDependencies = (
               await controlPlane.readCredential(authority, installationId),
           }),
       );
-      return await observeOperatorExecutionStage(
+      const readiness = await observeOperatorExecutionStage(
         input.target.sessionId,
         "final_runtime_readiness",
         async () =>
@@ -2370,6 +2370,15 @@ export const composeHostedOperatorDependencies = (
             },
           }),
       );
+      // Runtime readback metadata stays private; the journal accepts only its canonical proof contract.
+      return {
+        actors: readiness.actors,
+        artifactHash: readiness.artifactHash,
+        authenticatedBehavior: readiness.authenticatedBehavior,
+        manifestSha256: readiness.manifestSha256,
+        releaseId: readiness.releaseId,
+        tenants: readiness.tenants,
+      };
     },
     verifyAuthReadiness: async (input) => await authReadiness.verify(input),
     verifyNormalActorAccounts: async (input) => await controlPlane.verifyNormalActorAccounts(input),
