@@ -10,8 +10,12 @@ import {
   isRetentionRenewalSuccessor,
   readPendingRetentionRenewalPlan,
   retentionRenewalDeliveryProvenance,
+  retentionRenewalBindingProvenance,
 } from "./hosted-operator-retention-renewal";
-import type { RetentionRenewalDeliveryProvenance } from "./hosted-operator-retention-renewal";
+import type {
+  RetentionRenewalDeliveryProvenance,
+  RetentionRenewalBindingProvenance,
+} from "./hosted-operator-retention-renewal";
 import {
   createProjectSettingsSuccessorPlan,
   readPendingProjectSettingsSuccessorPlan,
@@ -174,6 +178,8 @@ export type HostedOperatorEffectContext = Context & {
   };
   /** Exact historical app/Gateway deployment metadata for an approved retention renewal. */
   renewalDeliveryProvenance?: readonly RetentionRenewalDeliveryProvenance[];
+  /** Original unresolved native binding attempt; omitted observations never authorize new rows. */
+  renewalBindingProvenance?: RetentionRenewalBindingProvenance;
   checkpointGatewayDelivery?: (
     candidates: readonly OperatorDeploymentCandidate[],
     selectedId?: string,
@@ -1407,6 +1413,28 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           : await readApproval();
       };
       const approval = await assertApproval(false, true);
+      // A revoked predecessor cannot authorize prerequisite work before its renewed binding.
+      for (const effect of plan.effects) {
+        const provenance = retentionRenewalBindingProvenance(current.record, effect.id);
+        if (provenance === undefined) {
+          continue;
+        }
+        const originalApproval = await deps.readApproval({
+          ...context,
+          action: "prepare",
+          callId: provenance.approvedByCallId,
+          planDigest: provenance.planDigest,
+        });
+        if (
+          originalApproval?.approved !== true ||
+          originalApproval.approvalId !== provenance.approvalId ||
+          originalApproval.callId !== provenance.approvedByCallId ||
+          originalApproval.planDigest !== provenance.planDigest ||
+          originalApproval.action !== "prepare"
+        ) {
+          throw new HostedOperatorError("authorization_required");
+        }
+      }
       const pendingEffect = operator.plan.effects.find(
         (effect) => effect.id === operator.pendingEffectId,
       );
@@ -1693,10 +1721,18 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 effect.kind === "delivery" || effect.kind === GATEWAY_DELIVERY_EFFECT
                   ? retentionRenewalDeliveryProvenance(record)
                   : [];
-              if (renewalDeliveryProvenance.length > 0) {
+              const renewalBindingProvenance =
+                effect.kind === "bindings" || effect.kind === GATEWAY_BINDINGS_EFFECT
+                  ? retentionRenewalBindingProvenance(record, effect.id)
+                  : undefined;
+              const renewalApprovals = [
+                ...renewalDeliveryProvenance,
+                ...(renewalBindingProvenance === undefined ? [] : [renewalBindingProvenance]),
+              ];
+              if (renewalApprovals.length > 0) {
                 await assertCurrent();
                 await Promise.all(
-                  renewalDeliveryProvenance.map(async (provenance) => {
+                  renewalApprovals.map(async (provenance) => {
                     const originalApproval = await deps.readApproval({
                       ...context,
                       action: "prepare",
@@ -1926,6 +1962,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                       },
                     }),
                 ...(renewalDeliveryProvenance.length === 0 ? {} : { renewalDeliveryProvenance }),
+                ...(renewalBindingProvenance === undefined ? {} : { renewalBindingProvenance }),
                 gatewayEnvironmentRows: requireOperator(record).gatewayEnvironment,
                 managedEnvironment:
                   plan.appEnvironmentCleanup === undefined

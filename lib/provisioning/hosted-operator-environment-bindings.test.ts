@@ -4,7 +4,13 @@ import { expect, it, vi } from "vitest";
 import {
   hostedOperatorPlanSchema,
   restrictedOperatorEnvironment,
+  operatorPlanDigest,
 } from "./hosted-operator-contract";
+import {
+  createRetentionRenewalPlan,
+  retentionRenewalBindingProvenance,
+} from "./hosted-operator-retention-renewal";
+import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
 import type { ManagedOperatorEnvironmentRow } from "./hosted-operator-contract";
 import type { HostedOperatorManagedEnvironmentContext } from "./hosted-operator-service";
 import { createHostedOperatorEnvironmentBindings } from "./hosted-operator-environment-bindings";
@@ -851,6 +857,166 @@ const appPolicyWrites = (f: ReturnType<typeof fixture>) =>
   f.requests.filter(
     (request) => request.method === "PATCH" && request.path === `/v9/projects/${target.projectId}`,
   );
+
+const renewExistingAppBinding = (f: ReturnType<typeof fixture>) => {
+  const prior = f.input.plan;
+  const previous = {
+    mode: "protected-operator-v1" as const,
+    operationRef: f.input.operationRef,
+    plan: prior,
+    planDigest: operatorPlanDigest(prior),
+    approvalId: "previous-approval",
+    pendingEffectId: f.input.effect.id,
+    pendingEffectAttempt: { id: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799" },
+    managedEnvironment: structuredClone(f.input.managedEnvironment ?? []),
+    receipts: prior.effects
+      .slice(
+        0,
+        prior.effects.findIndex((effect) => effect.id === f.input.effect.id),
+      )
+      .map((effect) => ({
+        effectId: effect.id,
+        observedAt: "2026-10-17T00:00:00Z",
+        resourceVersion: "previous-readback",
+      })),
+  };
+  const record: HostedRuntimeJournalRecord = {
+    approvedByCallId: "previous-call",
+    kind: "app-runtime",
+    operator: previous,
+    privateState: {
+      encryptedToken: "ciphertext",
+      keyVersion: "key",
+      tokenIv: "iv",
+      tokenTag: "tag",
+    },
+    request: target,
+    status: "pending",
+    step: "reserved",
+    version: 1,
+  };
+  const renewed = createRetentionRenewalPlan(record, Date.parse("2028-01-01T00:00:00Z"));
+  if (renewed === undefined) {
+    throw new Error("Expected binding renewal fixture");
+  }
+  f.input.plan = renewed;
+  f.input.renewalBindingProvenance = retentionRenewalBindingProvenance(
+    {
+      ...record,
+      operator: {
+        ...previous,
+        plan: renewed,
+        planDigest: operatorPlanDigest(renewed),
+        retainedRenewalOperations: [
+          { approvedByCallId: record.approvedByCallId, operator: previous },
+        ],
+      },
+    },
+    f.input.effect.id,
+  );
+};
+
+it("recovers a renewed app binding from exact existing rows and current policy without provider writes", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input, values);
+  approveAppTrustedSource(f);
+  f.project.trustedSources = { projects: { prj_gateway: {} } };
+  renewExistingAppBinding(f);
+  expect(f.input.renewalBindingProvenance).toBeDefined();
+  f.requests.length = 0;
+  expect(await f.writer.reconcile(f.input, values)).toMatchObject({ status: "applied" });
+  await f.writer.bind(f.input, values);
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+});
+
+it("retries a renewed app value mismatch using only the exact owned row PATCH", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input, values);
+  approveAppTrustedSource(f);
+  f.project.trustedSources = { projects: { prj_gateway: {} } };
+  renewExistingAppBinding(f);
+  const owned = f.rows.find((row) => row.key === "PLATFORM_ORIGIN")!;
+  owned.value = "https://stale.example.test";
+  f.requests.length = 0;
+  expect(await f.writer.reconcile(f.input, values)).toMatchObject({ status: "retryable" });
+  await f.writer.bind(f.input, values);
+  expect(f.requests.filter((request) => request.method !== "GET")).toEqual([
+    {
+      method: "PATCH",
+      path: `/v9/projects/${target.projectId}/env/${z.string().parse(owned.id)}`,
+      body: { type: "encrypted", value: values.PLATFORM_ORIGIN },
+    },
+  ]);
+  expect(await f.writer.reconcile(f.input, values)).toMatchObject({ status: "applied" });
+});
+
+it.each(["missing", "unreadable", "foreign", "duplicate", "omitted-policy"] as const)(
+  "keeps a renewed app binding %s observation unknown without provider mutation",
+  async (failure) => {
+    const f = fixture();
+    await f.writer.bind(f.input, values);
+    approveAppTrustedSource(f);
+    f.project.trustedSources = { projects: { prj_gateway: {} } };
+    renewExistingAppBinding(f);
+    const owned = f.rows.find((row) => row.key === "PLATFORM_ORIGIN")!;
+    switch (failure) {
+      case "missing": {
+        f.rows.splice(f.rows.indexOf(owned), 1);
+        break;
+      }
+      case "unreadable": {
+        f.setFailedRead();
+        break;
+      }
+      case "foreign": {
+        owned.comment = "foreign-owner";
+        break;
+      }
+      case "duplicate": {
+        f.rows.push({ ...owned, id: "duplicate" });
+        break;
+      }
+      case "omitted-policy": {
+        delete f.project.trustedSources;
+        owned.value = "https://stale.example.test";
+        break;
+      }
+      default: {
+        throw new Error("Unexpected binding fixture failure");
+      }
+    }
+    f.requests.length = 0;
+    expect(await f.writer.reconcile(f.input, values)).toEqual({ status: "unknown" });
+    await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
+    expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+  },
+);
+
+it("can reconcile an explicitly null app policy and PATCH only its approved pair after renewal", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input, values);
+  approveAppTrustedSource(f);
+  f.project.trustedSources = null;
+  renewExistingAppBinding(f);
+  f.requests.length = 0;
+  expect(await f.writer.reconcile(f.input, values)).toMatchObject({ status: "retryable" });
+  await f.writer.bind(f.input, values);
+  expect(f.requests.filter((request) => request.method !== "GET")).toEqual([
+    {
+      method: "PATCH",
+      path: `/v9/projects/${target.projectId}`,
+      body: {
+        trustedSources: {
+          projects: {
+            prj_gateway: {
+              customAllow: [{ from: { slugs: ["preview"] }, to: { slugs: ["preview"] } }],
+            },
+          },
+        },
+      },
+    },
+  ]);
+});
 
 it.each([
   ["absent", "absent", false],

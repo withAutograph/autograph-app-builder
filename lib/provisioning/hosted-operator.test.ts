@@ -2413,154 +2413,242 @@ describe("native bindings integration", () => {
 });
 
 describe("approved retention renewal planning", () => {
-  it("saves and re-exposes one unapproved successor without recomposing or inheriting execution authority", async () => {
-    const now = Date.parse("2026-10-18T00:00:00Z");
-    const f = fixture(() => now);
-    const oldPlan = hostedOperatorPlanSchema.parse({
-      ...plan,
-      delivery: {
-        branch: selection.branch,
-        gitSha: "c".repeat(40),
-        projectId: selection.projectId,
-        repoId: "repo-app",
-      },
-      effects: [
-        ...plan.effects,
-        { description: "Native app delivery", id: "delivery", kind: "delivery" },
-        { description: "Gateway bindings", id: "gateway-bindings", kind: "gateway-bindings" },
-        {
-          description: "Native Gateway delivery",
-          id: "gateway-delivery",
-          kind: "gateway-delivery",
+  it.each(["bindings", "gateway-bindings", "gateway-delivery"] as const)(
+    "saves and re-exposes pending %s without recomposing or inheriting execution authority",
+    async (pendingEffectId) => {
+      const now = Date.parse("2026-10-18T00:00:00Z");
+      const f = fixture(() => now);
+      const oldPlan = hostedOperatorPlanSchema.parse({
+        ...plan,
+        delivery: {
+          branch: selection.branch,
+          gitSha: "c".repeat(40),
+          projectId: selection.projectId,
+          repoId: "repo-app",
         },
-      ],
-      gatewayBindings: {
-        authBrowserOrigin: "https://auth-preview.example.test",
-        builderCallbackOrigin: "https://builder.example.test",
-        catalogAppIds: [selection.appId],
-        operatorOrigin: "https://operator.example.test",
-        sourceWorkload: {
-          audience: "https://vercel.com/team_fixture",
-          environment: "preview",
-          issuer: "https://oidc.vercel.com/team_fixture",
-          ownerId: "team_fixture",
+        effects: [
+          ...plan.effects,
+          { description: "Native app delivery", id: "delivery", kind: "delivery" },
+          { description: "Gateway bindings", id: "gateway-bindings", kind: "gateway-bindings" },
+          {
+            description: "Native Gateway delivery",
+            id: "gateway-delivery",
+            kind: "gateway-delivery",
+          },
+        ],
+        gatewayBindings: {
+          authBrowserOrigin: "https://auth-preview.example.test",
+          builderCallbackOrigin: "https://builder.example.test",
+          catalogAppIds: [selection.appId],
+          operatorOrigin: "https://operator.example.test",
+          sourceWorkload: {
+            audience: "https://vercel.com/team_fixture",
+            environment: "preview",
+            issuer: "https://oidc.vercel.com/team_fixture",
+            ownerId: "team_fixture",
+            projectId: "prj_gateway",
+            subject: "gateway-workload",
+          },
+        },
+        gatewayDelivery: {
+          branch: selection.branch,
+          gitSha: "d".repeat(40),
           projectId: "prj_gateway",
-          subject: "gateway-workload",
+          repoId: "repo-gateway",
         },
-      },
-      gatewayDelivery: {
-        branch: selection.branch,
-        gitSha: "d".repeat(40),
+        retention: { ...plan.retention, expiresAt: "2026-10-17T00:00:00Z" },
+        stage: "app",
+      });
+      const operationRef = "a5c2b20f-0c08-49a8-a34f-cce64c72cc8c";
+      const pendingIndex = oldPlan.effects.findIndex((effect) => effect.id === pendingEffectId);
+      const oldReceipts = oldPlan.effects.slice(0, pendingIndex).map((effect) => ({
+        effectId: effect.id,
+        observedAt: "2026-10-16T00:00:00.000Z",
+        resourceVersion: "a".repeat(64),
+      }));
+      f.row = {
+        record: hostedRuntimeJournalRecordSchema.parse({
+          approvedByCallId: "original-approved-call",
+          kind: "app-runtime",
+          operator: {
+            approvalId: "durable-human-decision",
+            mode: "protected-operator-v1",
+            operationRef,
+            plan: oldPlan,
+            planDigest: operatorPlanDigest(oldPlan),
+            receipts: oldReceipts,
+            pendingEffectId,
+            pendingEffectAttempt: {
+              id: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799",
+              contextDigest: "e".repeat(64),
+            },
+          },
+          privateState: {
+            encryptedToken: "ciphertext",
+            keyVersion: "key-v1",
+            tokenIv: "iv",
+            tokenTag: "tag",
+          },
+          request: target,
+          status: "pending",
+          step: "reserved",
+          version: 1,
+        }),
+        revision: 10,
+      };
+      f.approve();
+      f.deps.plan = vi.fn(async () => {
+        throw new Error("renewal should not recompose the approved source plan");
+      });
+
+      const first = await f.client.request({ action: "plan", operation: "prepare", selection });
+      expect(first).toMatchObject({ status: "planned", operationRef });
+      const firstPlan = first.plan;
+      if (firstPlan === undefined) {
+        throw new Error("The retention renewal response must include its frozen plan");
+      }
+      expect(Date.parse(firstPlan.retention.expiresAt)).toBe(now + 24 * 60 * 60 * 1000);
+      expect(firstPlan.appTrustedSources?.gatewayPreview).toEqual({
+        from: "preview",
         projectId: "prj_gateway",
-        repoId: "repo-gateway",
-      },
-      retention: { ...plan.retention, expiresAt: "2026-10-17T00:00:00Z" },
-      stage: "app",
-    });
-    const operationRef = "a5c2b20f-0c08-49a8-a34f-cce64c72cc8c";
-    const oldReceipts = oldPlan.effects.slice(0, -1).map((effect) => ({
-      effectId: effect.id,
-      observedAt: "2026-10-16T00:00:00.000Z",
-      resourceVersion: "a".repeat(64),
-    }));
-    f.row = {
-      record: hostedRuntimeJournalRecordSchema.parse({
+        to: "preview",
+      });
+      expect(firstPlan.gatewayBindings?.trustedSources?.appPreview).toEqual({
+        from: "preview",
+        projectId: selection.projectId,
+        to: "preview",
+      });
+      expect(f.deps.plan).not.toHaveBeenCalled();
+
+      const renewed = f.row?.record.operator;
+      expect(renewed).toMatchObject({
+        operationRef,
+        planDigest: first.planDigest,
+        receipts: oldReceipts.filter((receipt) =>
+          ["resources", "install"].includes(receipt.effectId),
+        ),
+      });
+      expect(f.row?.record.approvedByCallId).toBe("operator:unapproved-plan");
+      expect(renewed?.approvalId).toBeUndefined();
+      expect(renewed?.pendingEffectId).toBeUndefined();
+      expect(renewed?.pendingEffectAttempt).toBeUndefined();
+      expect(renewed?.fenceGeneration).toBeUndefined();
+      expect(renewed?.retainedRenewalOperations?.[0]).toMatchObject({
         approvedByCallId: "original-approved-call",
-        kind: "app-runtime",
         operator: {
           approvalId: "durable-human-decision",
-          mode: "protected-operator-v1",
-          operationRef,
-          plan: oldPlan,
+          pendingEffectId,
+          pendingEffectAttempt: {
+            id: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799",
+            contextDigest: "e".repeat(64),
+          },
           planDigest: operatorPlanDigest(oldPlan),
           receipts: oldReceipts,
-          pendingEffectId: "gateway-delivery",
         },
-        privateState: {
-          encryptedToken: "ciphertext",
-          keyVersion: "key-v1",
-          tokenIv: "iv",
-          tokenTag: "tag",
-        },
-        request: target,
-        status: "pending",
-        step: "reserved",
-        version: 1,
-      }),
-      revision: 10,
-    };
-    f.approve();
-    f.deps.plan = vi.fn(async () => {
-      throw new Error("renewal should not recompose the approved source plan");
-    });
-
-    const first = await f.client.request({ action: "plan", operation: "prepare", selection });
-    expect(first).toMatchObject({ status: "planned", operationRef });
-    const firstPlan = first.plan;
-    if (firstPlan === undefined) {
-      throw new Error("The retention renewal response must include its frozen plan");
-    }
-    expect(Date.parse(firstPlan.retention.expiresAt)).toBe(now + 24 * 60 * 60 * 1000);
-    expect(firstPlan.appTrustedSources?.gatewayPreview).toEqual({
-      from: "preview",
-      projectId: "prj_gateway",
-      to: "preview",
-    });
-    expect(firstPlan.gatewayBindings?.trustedSources?.appPreview).toEqual({
-      from: "preview",
-      projectId: selection.projectId,
-      to: "preview",
-    });
-    expect(f.deps.plan).not.toHaveBeenCalled();
-
-    const renewed = f.row?.record.operator;
-    expect(renewed).toMatchObject({
-      operationRef,
-      planDigest: first.planDigest,
-      receipts: oldReceipts.filter((receipt) =>
-        ["resources", "install"].includes(receipt.effectId),
-      ),
-    });
-    expect(f.row?.record.approvedByCallId).toBe("operator:unapproved-plan");
-    expect(renewed?.approvalId).toBeUndefined();
-    expect(renewed?.pendingEffectId).toBeUndefined();
-    expect(renewed?.pendingEffectAttempt).toBeUndefined();
-    expect(renewed?.fenceGeneration).toBeUndefined();
-    expect(renewed?.retainedRenewalOperations?.[0]).toMatchObject({
-      approvedByCallId: "original-approved-call",
-      operator: {
-        approvalId: "durable-human-decision",
-        pendingEffectId: "gateway-delivery",
-        planDigest: operatorPlanDigest(oldPlan),
-        receipts: oldReceipts,
-      },
-    });
-
-    const repeated = await f.client.request({ action: "plan", operation: "prepare", selection });
-    expect(repeated.plan).toEqual(first.plan);
-    expect(repeated.planDigest).toBe(first.planDigest);
-    expect(f.deps.plan).not.toHaveBeenCalled();
-
-    const privateError = new TypeError("private authorization detail owner-token");
-    const log = vi.spyOn(console, "info").mockImplementation(() => {});
-    try {
-      f.deps.assertAuthorized = vi.fn(async () => {
-        throw privateError;
       });
-      expect(
-        await f.client.request({ action: "plan", operation: "prepare", selection }),
-      ).toMatchObject({ status: "blocked", code: "operator_unavailable" });
-      expect(log.mock.calls).toContainEqual([
-        "[builder:hosted-neon-consent]",
-        expect.objectContaining({
-          planningFailure: { stage: "saved_plan_reexposure", errorClass: "type_error" },
-        }),
-      ]);
-      expect(JSON.stringify(log.mock.calls)).not.toContain(privateError.message);
-    } finally {
-      log.mockRestore();
-    }
-  });
+
+      const repeated = await f.client.request({ action: "plan", operation: "prepare", selection });
+      expect(repeated.plan).toEqual(first.plan);
+      expect(repeated.planDigest).toBe(first.planDigest);
+      expect(f.deps.plan).not.toHaveBeenCalled();
+
+      const privateError = new TypeError("private authorization detail owner-token");
+      const assertAuthorized = f.deps.assertAuthorized;
+      const log = vi.spyOn(console, "info").mockImplementation(() => {});
+      try {
+        f.deps.assertAuthorized = vi.fn(async () => {
+          throw privateError;
+        });
+        expect(
+          await f.client.request({ action: "plan", operation: "prepare", selection }),
+        ).toMatchObject({ status: "blocked", code: "operator_unavailable" });
+        expect(log.mock.calls).toContainEqual([
+          "[builder:hosted-neon-consent]",
+          expect.objectContaining({
+            planningFailure: { stage: "saved_plan_reexposure", errorClass: "type_error" },
+          }),
+        ]);
+        expect(JSON.stringify(log.mock.calls)).not.toContain(privateError.message);
+      } finally {
+        log.mockRestore();
+        f.deps.assertAuthorized = assertAuthorized;
+      }
+      if (pendingEffectId !== "gateway-delivery") {
+        const readApproval = f.deps.readApproval;
+        const approvalRead = vi.fn<ProtectedHostedOperatorDependencies["readApproval"]>(
+          async (input) => (input.callId === "renewed-call" ? null : await readApproval(input)),
+        );
+        f.deps.readApproval = approvalRead;
+        const execute = {
+          action: "execute" as const,
+          callId: "renewed-call",
+          operationRef,
+          planDigest: operatorPlanDigest(firstPlan),
+          selection,
+        };
+        expect(await f.client.request(execute)).toMatchObject({
+          status: "blocked",
+          code: "authorization_required",
+        });
+        expect(f.deps.executeEffect).not.toHaveBeenCalled();
+        const blockedReconcile = vi.fn<ProtectedHostedOperatorDependencies["reconcile"]>(
+          async () => ({ status: "unknown" }),
+        );
+        f.deps.reconcile = blockedReconcile;
+        approvalRead.mockImplementation(async (input) =>
+          input.callId === "original-approved-call" ? null : await readApproval(input),
+        );
+        expect(await f.client.request(execute)).toMatchObject({
+          status: "blocked",
+          code: "authorization_required",
+        });
+        expect(blockedReconcile).not.toHaveBeenCalled();
+        expect(f.deps.executeEffect).not.toHaveBeenCalled();
+        approvalRead.mockImplementation(readApproval);
+        const reconcile = vi.fn<ProtectedHostedOperatorDependencies["reconcile"]>(async (input) => {
+          if (input.effect.id === pendingEffectId) {
+            expect(input.renewalBindingProvenance).toMatchObject({
+              approvedByCallId: "original-approved-call",
+              approvalId: "durable-human-decision",
+              effectId: pendingEffectId,
+              kind: pendingEffectId,
+              operationRef,
+              pendingEffectAttempt: {
+                id: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799",
+                contextDigest: "e".repeat(64),
+              },
+              planDigest: operatorPlanDigest(oldPlan),
+            });
+            return { status: "unknown" };
+          }
+          return {
+            status: "applied",
+            receipt: {
+              effectId: input.effect.id,
+              fenceGeneration: input.fenceGeneration,
+              observedAt: new Date(now).toISOString(),
+              resourceVersion: "observed-prerequisite",
+            },
+          };
+        });
+        f.deps.reconcile = reconcile;
+        expect(await f.client.request(execute)).toMatchObject({
+          status: "blocked",
+          code: "reconciliation_required",
+        });
+        expect(reconcile.mock.calls.some(([input]) => input.effect.id === pendingEffectId)).toBe(
+          true,
+        );
+        expect(approvalRead).toHaveBeenCalledWith(
+          expect.objectContaining({
+            callId: "original-approved-call",
+            planDigest: operatorPlanDigest(oldPlan),
+          }),
+        );
+        expect(f.deps.executeEffect).not.toHaveBeenCalled();
+      }
+    },
+  );
 });
 
 describe("read-only configured Preview target resolution", () => {

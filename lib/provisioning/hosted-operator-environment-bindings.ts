@@ -5,6 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
 import type { readActiveVercelInstallationToken } from "../integrations/postgres-vercel-installation";
 import { HostedOperatorError, restrictedOperatorEnvironment } from "./hosted-operator-contract";
+import { isRetentionRenewalBindingProvenance } from "./hosted-operator-retention-renewal";
 import type {
   ProtectedAppEnvironment,
   ManagedOperatorEnvironmentRow,
@@ -414,6 +415,19 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
   ) => {
     const expected = restrictedOperatorEnvironment(input.plan, values, input.authority);
     const { target } = input;
+    const renewal = input.renewalBindingProvenance;
+    if (
+      renewal !== undefined &&
+      !isRetentionRenewalBindingProvenance(
+        renewal,
+        input.plan,
+        input.operationRef,
+        input.effect.id,
+        "bindings",
+      )
+    ) {
+      throw unavailable();
+    }
     const boundary = input.plan.deploymentBoundary;
     if (
       !boundary ||
@@ -526,6 +540,9 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
         sources.projects?.[approvedTrustedSource.projectId] !== undefined,
         covered,
       );
+      if (renewal !== undefined && project.trustedSources === undefined) {
+        throw unavailable();
+      }
       return { sources, missing: !covered };
     };
     const bindTrustedSources = async () => {
@@ -652,6 +669,32 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
       }
       return known;
     };
+    const matchesExpectedValues = async (
+      rows: ProviderRow[],
+      diagnosticStage?: HostedEnvironmentBindingFailure["stage"],
+      stopOnMismatch = false,
+    ) => {
+      let matches = true;
+      for (const row of rows) {
+        const plaintext = z
+          .object({ value: z.string() })
+          .parse(
+            await request(
+              `/v1/projects/${encodeURIComponent(target.projectId)}/env/${encodeURIComponent(row.id)}`,
+              "GET",
+              undefined,
+              diagnosticStage,
+            ),
+          );
+        if (plaintext.value !== expected[row.key]) {
+          if (stopOnMismatch) {
+            return false;
+          }
+          matches = false;
+        }
+      }
+      return matches;
+    };
     const inspect = async (
       verifyValues = true,
       diagnosticStage?: HostedEnvironmentBindingFailure["stage"],
@@ -669,20 +712,27 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
       ) {
         throw unavailable();
       }
-      for (const row of verifyValues ? rows : []) {
-        const plaintext = z
-          .object({ value: z.string() })
-          .parse(
-            await request(
-              `/v1/projects/${encodeURIComponent(target.projectId)}/env/${encodeURIComponent(row.id)}`,
-              "GET",
-              undefined,
-              diagnosticStage,
-            ),
-          );
-        if (plaintext.value !== expected[row.key]) {
-          throw unavailable();
-        }
+      if (
+        renewal !== undefined &&
+        (rows.length !== Object.keys(expected).length ||
+          renewal.rows.some(
+            (saved) =>
+              !rows.some(
+                (row) =>
+                  row.id === saved.id &&
+                  row.key === saved.key &&
+                  row.comment === saved.comment &&
+                  matchesPreviewEnvironmentGitBranch(
+                    row.gitBranch,
+                    savedPreviewEnvironmentGitBranch(saved),
+                  ),
+              ),
+          ))
+      ) {
+        throw unavailable();
+      }
+      if (verifyValues && !(await matchesExpectedValues(rows, diagnosticStage, true))) {
+        throw unavailable();
       }
       return rows;
     };
@@ -745,6 +795,7 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
       expected,
       guard,
       inspect,
+      matchesExpectedValues,
       reference,
       observeTrustedSources,
       bindTrustedSources,
@@ -762,6 +813,9 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
         }
         const io = open(input, values, diagnostics);
         let rows = await io.inspect(false);
+        if (input.renewalBindingProvenance !== undefined) {
+          await io.observeTrustedSources();
+        }
         await io.checkpoint(rows);
         for (const [key, value] of Object.entries(io.expected)) {
           const existing = rows.find((row) => row.key === key);
@@ -782,6 +836,9 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
               { type: "encrypted", value },
             );
           } else {
+            if (input.renewalBindingProvenance !== undefined) {
+              throw unavailable();
+            }
             const gitBranch = await io.previewGitBranch();
             await io.request(
               `/v10/projects/${encodeURIComponent(io.target.projectId)}/env`,
@@ -840,14 +897,16 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
           await io.checkpointCleanup(rows);
           return rows.length === 0 ? { status: "absent" } : { rows, status: "applied" };
         }
-        const rows = await io.inspect();
+        const rows = await io.inspect(input.renewalBindingProvenance === undefined);
+        const staleRenewedValue =
+          input.renewalBindingProvenance !== undefined && !(await io.matchesExpectedValues(rows));
         const protection = await io.observeTrustedSources();
-        if (protection?.missing === true) {
+        if (staleRenewedValue || protection?.missing === true) {
           await io.guard();
           return {
             status: "retryable",
             resourceVersion: createHash("sha256")
-              .update(JSON.stringify(protection.sources))
+              .update(JSON.stringify(protection?.sources ?? rows.map(io.reference)))
               .digest("hex"),
           };
         }

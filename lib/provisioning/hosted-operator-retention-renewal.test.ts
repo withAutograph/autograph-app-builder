@@ -5,6 +5,8 @@ import {
   isRetentionRenewalSuccessor,
   readPendingRetentionRenewalPlan,
   retentionRenewalDeliveryProvenance,
+  retentionRenewalBindingProvenance,
+  isRetentionRenewalBindingProvenance,
 } from "./hosted-operator-retention-renewal";
 import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
 import { hostedRuntimeJournalRecordSchema } from "./hosted-runtime-journal";
@@ -187,8 +189,14 @@ const gatewayCandidate = {
   repoId: "gateway-repository",
 };
 
-const journal = (plan = originalPlan()): HostedRuntimeJournalRecord => {
-  const effects = plan.effects.slice(0, -1);
+const journal = (
+  plan = originalPlan(),
+  pendingEffectId = "gateway-delivery",
+): HostedRuntimeJournalRecord => {
+  const effects = plan.effects.slice(
+    0,
+    plan.effects.findIndex((effect) => effect.id === pendingEffectId),
+  );
   const operator = {
     approvalId: "approval_old",
     deliveryCandidates: [appCandidate],
@@ -196,7 +204,7 @@ const journal = (plan = originalPlan()): HostedRuntimeJournalRecord => {
     mode: "protected-operator-v1" as const,
     operationRef,
     pendingEffectAttempt: { id: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799" },
-    pendingEffectId: "gateway-delivery",
+    pendingEffectId,
     plan,
     planDigest: operatorPlanDigest(plan),
     receipts: effects.map((effect) => ({
@@ -250,6 +258,145 @@ const requireFixtureValue = <T>(value: T | undefined): T => {
 };
 
 describe("approved retention renewal", () => {
+  it.each(["bindings", "gateway-bindings"] as const)(
+    "renews pending %s while retaining its exact unknown attempt and row provenance",
+    (kind) => {
+      const prior = journal(originalPlan(), kind);
+      const previous = requireFixtureValue(prior.operator);
+      const row = {
+        branch: "preview",
+        comment: `App Builder protected operator ${operationRef}`,
+        id: "existing-row",
+        key: "PLATFORM_ORIGIN",
+        operationRef,
+        projectId: "prj_app",
+      };
+      if (kind === "bindings") {
+        previous.managedEnvironment = [row];
+      } else {
+        previous.gatewayEnvironment = [
+          { ...row, key: "PLATFORM_GATEWAY_PROJECT_BINDINGS", projectId: "prj_gateway" },
+        ];
+      }
+      const renewedPlan = requireFixtureValue(createRetentionRenewalPlan(prior, now));
+      expect(isRetentionRenewalSuccessor(prior, renewedPlan, now)).toBe(true);
+      const successor = {
+        ...prior,
+        operator: {
+          ...previous,
+          plan: renewedPlan,
+          planDigest: operatorPlanDigest(renewedPlan),
+          retainedRenewalOperations: [
+            { approvedByCallId: prior.approvedByCallId, operator: previous },
+          ],
+        },
+      };
+      const provenance = requireFixtureValue(retentionRenewalBindingProvenance(successor, kind));
+      expect(provenance.pendingEffectAttempt).toEqual(previous.pendingEffectAttempt);
+      expect(provenance.rows).toEqual(
+        kind === "bindings" ? previous.managedEnvironment : previous.gatewayEnvironment,
+      );
+      expect(
+        isRetentionRenewalBindingProvenance(provenance, renewedPlan, operationRef, kind, kind),
+      ).toBe(true);
+      expect(
+        isRetentionRenewalBindingProvenance(
+          provenance,
+          renewedPlan,
+          "different-operation",
+          kind,
+          kind,
+        ),
+      ).toBe(false);
+      expect(
+        isRetentionRenewalBindingProvenance(
+          { ...provenance, planDigest: "0".repeat(64) },
+          renewedPlan,
+          operationRef,
+          kind,
+          kind,
+        ),
+      ).toBe(false);
+      expect(previous.pendingEffectId).toBe(kind);
+      expect(previous.receipts).toHaveLength(
+        previous.plan.effects.findIndex((effect) => effect.id === kind),
+      );
+      const missingReceipt = structuredClone(prior);
+      requireFixtureValue(missingReceipt.operator).receipts.pop();
+      expect(createRetentionRenewalPlan(missingReceipt, now)).toBeUndefined();
+      const activeLease = {
+        ...prior,
+        leaseId: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799",
+        leaseExpiresAt: new Date(now + 1000).toISOString(),
+      };
+      expect(createRetentionRenewalPlan(activeLease, now)).toBeUndefined();
+    },
+  );
+
+  it("keeps pending app delivery outside binding renewal support", () => {
+    expect(createRetentionRenewalPlan(journal(originalPlan(), "delivery"), now)).toBeUndefined();
+  });
+
+  it("does not classify a pending binding with no actual attempt as fresh setup", () => {
+    const record = journal(originalPlan(), "bindings");
+    delete requireFixtureValue(record.operator).pendingEffectAttempt;
+    expect(createRetentionRenewalPlan(record, now)).toBeUndefined();
+  });
+
+  it.each(["bindings", "gateway-bindings"] as const)(
+    "retains original %s uncertainty when a renewed readback expires before a new attempt",
+    (kind) => {
+      const original = journal(originalPlan(), kind);
+      const originalOperator = requireFixtureValue(original.operator);
+      const firstPlan = requireFixtureValue(createRetentionRenewalPlan(original, now));
+      const first = {
+        ...original,
+        approvedByCallId: "renewed-approved-call",
+        operator: {
+          ...originalOperator,
+          approvalId: "renewed-approval",
+          plan: firstPlan,
+          planDigest: operatorPlanDigest(firstPlan),
+          pendingEffectId: undefined,
+          pendingEffectAttempt: undefined,
+          retainedRenewalOperations: [
+            { approvedByCallId: original.approvedByCallId, operator: originalOperator },
+          ],
+        },
+      };
+      const secondPlan = requireFixtureValue(
+        createRetentionRenewalPlan(first, Date.parse(firstPlan.retention.expiresAt) + 1),
+      );
+      const { retainedRenewalOperations, ...newerPredecessor } = first.operator;
+      const second = {
+        ...first,
+        operator: {
+          ...first.operator,
+          plan: secondPlan,
+          planDigest: operatorPlanDigest(secondPlan),
+          retainedRenewalOperations: [
+            ...retainedRenewalOperations,
+            { approvedByCallId: first.approvedByCallId, operator: newerPredecessor },
+          ],
+        },
+      };
+      const provenance = requireFixtureValue(retentionRenewalBindingProvenance(second, kind));
+      expect(provenance.approvedByCallId).toBe(original.approvedByCallId);
+      expect(provenance.pendingEffectAttempt).toEqual(originalOperator.pendingEffectAttempt);
+      expect(provenance.planDigest).toBe(originalOperator.planDigest);
+      expect(
+        isRetentionRenewalBindingProvenance(provenance, secondPlan, operationRef, kind, kind),
+      ).toBe(true);
+      const noHistory = {
+        ...first,
+        operator: { ...first.operator, retainedRenewalOperations: [] },
+      };
+      expect(
+        createRetentionRenewalPlan(noHistory, Date.parse(firstPlan.retention.expiresAt) + 1),
+      ).toBeUndefined();
+    },
+  );
+
   it("does not replace an unknown worker attempt with deployment-only renewal recovery", () => {
     const record = journal();
     const { operator } = record;

@@ -2,6 +2,12 @@ import { normalActorProgramDigest } from "./hosted-operator-normal-actor-program
 /* oxlint-disable typescript/no-non-null-assertion, eslint/no-use-before-define, eslint/sort-keys, eslint/require-await, eslint/prefer-const -- Provider fixtures deliberately preserve source-shaped rows and async callbacks. */
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import {
+  createRetentionRenewalPlan,
+  retentionRenewalBindingProvenance,
+} from "./hosted-operator-retention-renewal";
+import { operatorPlanDigest } from "./hosted-operator-contract";
+import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
 import { expect, it, vi } from "vitest";
 import {
   canonicalGatewayEnvironmentRowsSchema,
@@ -423,6 +429,173 @@ const projectPatches = (f: ReturnType<typeof fixture>) =>
   f.requests.filter(
     (request) => request.method === "PATCH" && request.path === `/v9/projects/${gateway.projectId}`,
   );
+
+const renewExistingGatewayBinding = (f: ReturnType<typeof fixture>) => {
+  const prior = hostedOperatorPlanSchema.parse({
+    ...f.input.plan,
+    delivery: {
+      branch: selection.branch,
+      gitSha: "a".repeat(40),
+      projectId: selection.projectId,
+      repoId: "app-repository",
+    },
+    effects: f.input.plan.effects.flatMap((effect) => {
+      if (effect.kind === "gateway-bindings") {
+        return [
+          { id: "app-delivery", kind: "delivery", description: "Deliver approved app" },
+          effect,
+        ];
+      }
+      return [effect];
+    }),
+  });
+  const previous = {
+    mode: "protected-operator-v1" as const,
+    operationRef: f.input.operationRef,
+    plan: prior,
+    planDigest: operatorPlanDigest(prior),
+    approvalId: "previous-approval",
+    pendingEffectId: f.input.effect.id,
+    pendingEffectAttempt: { id: "0b0e9c7b-b48f-4f8d-99be-9b74c9606799" },
+    gatewayEnvironment: structuredClone(f.input.gatewayEnvironmentRows ?? []),
+    receipts: prior.effects
+      .slice(
+        0,
+        prior.effects.findIndex((effect) => effect.id === f.input.effect.id),
+      )
+      .map((effect) => ({
+        effectId: effect.id,
+        observedAt: "2026-10-17T00:00:00Z",
+        resourceVersion: "previous-readback",
+      })),
+  };
+  const record: HostedRuntimeJournalRecord = {
+    approvedByCallId: "previous-call",
+    kind: "app-runtime",
+    operator: previous,
+    privateState: {
+      encryptedToken: "ciphertext",
+      keyVersion: "key",
+      tokenIv: "iv",
+      tokenTag: "tag",
+    },
+    request: target,
+    status: "pending",
+    step: "reserved",
+    version: 1,
+  };
+  const renewed = createRetentionRenewalPlan(record, Date.parse("2028-01-01T00:00:00Z"));
+  if (renewed === undefined) {
+    throw new Error("Expected Gateway binding renewal fixture");
+  }
+  f.input.plan = renewed;
+  f.input.renewalBindingProvenance = retentionRenewalBindingProvenance(
+    {
+      ...record,
+      operator: {
+        ...previous,
+        plan: renewed,
+        planDigest: operatorPlanDigest(renewed),
+        retainedRenewalOperations: [
+          { approvedByCallId: record.approvedByCallId, operator: previous },
+        ],
+      },
+    },
+    f.input.effect.id,
+  );
+};
+
+it("recovers a renewed Gateway binding from exact existing rows and current policy without provider writes", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input);
+  approveAppSource(f);
+  f.project.trustedSources = { projects: { [selection.projectId]: {} } };
+  renewExistingGatewayBinding(f);
+  expect(f.input.renewalBindingProvenance).toBeDefined();
+  f.requests.length = 0;
+  expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "applied" });
+  await f.writer.bind(f.input);
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+});
+
+it.each(["missing", "unreadable", "foreign", "duplicate", "omitted-policy"] as const)(
+  "keeps a renewed Gateway binding %s observation unknown without provider mutation",
+  async (failure) => {
+    const f = fixture();
+    await f.writer.bind(f.input);
+    approveAppSource(f);
+    f.project.trustedSources = { projects: { [selection.projectId]: {} } };
+    renewExistingGatewayBinding(f);
+    const owned = f.rows.find((row) => row.key === "PLATFORM_GATEWAY_PROJECT_BINDINGS");
+    if (owned === undefined) {
+      throw new Error("Expected owned Gateway fixture row");
+    }
+    switch (failure) {
+      case "missing": {
+        f.rows.splice(f.rows.indexOf(owned), 1);
+        break;
+      }
+      case "unreadable": {
+        const original = f.fetcher.getMockImplementation();
+        if (original === undefined) {
+          throw new Error("Expected provider fixture");
+        }
+        f.fetcher.mockImplementation(async (url, init) => {
+          const response = await original(url, init);
+          return init?.method === "GET"
+            ? new Response("private provider failure", { status: 500 })
+            : response;
+        });
+        break;
+      }
+      case "foreign": {
+        owned.comment = "foreign-owner";
+        break;
+      }
+      case "duplicate": {
+        f.rows.push({ ...owned, id: "duplicate" });
+        break;
+      }
+      case "omitted-policy": {
+        delete f.project.trustedSources;
+        break;
+      }
+      default: {
+        throw new Error("Unexpected binding fixture failure");
+      }
+    }
+    f.requests.length = 0;
+    expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
+    await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+    expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+  },
+);
+
+it("can reconcile an explicitly null Gateway policy and PATCH only its approved pair after renewal", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input);
+  approveAppSource(f);
+  f.project.trustedSources = null;
+  renewExistingGatewayBinding(f);
+  f.requests.length = 0;
+  expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "retryable" });
+  await f.writer.bind(f.input);
+  expect(f.requests.filter((request) => request.method !== "GET")).toEqual([
+    {
+      method: "PATCH",
+      path: `/v9/projects/${gateway.projectId}`,
+      body: {
+        trustedSources: {
+          projects: {
+            [selection.projectId]: {
+              customAllow: [{ from: { slugs: ["preview"] }, to: { slugs: ["preview"] } }],
+            },
+          },
+        },
+      },
+    },
+  ]);
+});
 
 it("keeps legacy plans free of Trusted Sources writes", async () => {
   const f = fixture();
