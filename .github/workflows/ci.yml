@@ -43,6 +43,7 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
       - run: mise run dependencies:install
       - run: |
+          set -euo pipefail
           mkdir -p .artifacts/protected-operator-recovery
           mise run test:postgres-hosted-operator-recovery -- --database-url 'postgres://postgres@127.0.0.1:54328/postgres?sslmode=disable' | tee .artifacts/protected-operator-recovery/result.log
       - uses: actions/upload-artifact@v4
@@ -281,6 +282,7 @@ jobs:
   check:
     if: ${{ always() }}
     needs:
+      - protected-operator-recovery
       - repository
       - eve-general
       - eve-fresh-bootstrap
@@ -294,6 +296,7 @@ jobs:
     steps:
       - name: Require every CI lane
         run: |
+          test "${{ needs.protected-operator-recovery.result }}" = success
           test "${{ needs.repository.result }}" = success
           test "${{ needs.eve-general.result }}" = success
           test "${{ needs.eve-fresh-bootstrap.result }}" = success
