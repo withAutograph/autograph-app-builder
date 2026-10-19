@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
 import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
-import { createRetentionRenewalPlan } from "./hosted-operator-retention-renewal";
+import {
+  createRetentionRenewalPlan,
+  retentionRenewalDeliveryProvenance,
+} from "./hosted-operator-retention-renewal";
 import {
   readyDeliveryReplacementIntentSchema,
   type ReadyDeliveryReplacementIntent,
@@ -316,7 +319,7 @@ describe("native externally managed policy recovery integration", () => {
       ),
     ).toBeUndefined();
   });
-  it.each(["approved-default", "unapproved-first"] as const)(
+  it.each(["approved-default", "unapproved-first", "unapproved-expired-replacement"] as const)(
     "keeps ordinary %s app planning on the full handler",
     async (planningCase) => {
       const f = fixture();
@@ -328,7 +331,7 @@ describe("native externally managed policy recovery integration", () => {
       };
       f.record.operator!.planDigest = operatorPlanDigest(f.record.operator!.plan);
       f.record.operator!.deliveredDeploymentId = "ready-notes";
-      if (planningCase === "unapproved-first") {
+      if (planningCase !== "approved-default") {
         f.record.operator!.plan = withExternallyManagedHostProtection(
           f.record.operator!.plan,
           externalPolicy,
@@ -341,6 +344,11 @@ describe("native externally managed policy recovery integration", () => {
         delete f.record.operator!.pendingEffectAttempt;
         delete f.record.operator!.deliveredDeploymentId;
         delete f.record.operator!.deliveryCandidates;
+      }
+      if (planningCase === "unapproved-expired-replacement") {
+        f.record.operator!.plan.appDeliveryReplacement = f.intent;
+        f.record.operator!.plan.retention.expiresAt = new Date(now - 1).toISOString();
+        f.record.operator!.planDigest = operatorPlanDigest(f.record.operator!.plan);
       }
       const oldDigest = f.record.operator!.planDigest;
       let row = { record: f.record, revision: 1 };
@@ -365,7 +373,13 @@ describe("native externally managed policy recovery integration", () => {
           return structuredClone(row);
         },
       };
-      const plan = vi.fn(async () => structuredClone(f.record.operator!.plan));
+      const ordinary = structuredClone(f.record.operator!.plan);
+      if (planningCase === "unapproved-expired-replacement") {
+        delete ordinary.appDeliveryReplacement;
+        ordinary.retention.expiresAt = new Date(now + 86400000).toISOString();
+        ordinary.delivery!.gitSha = "7".repeat(40);
+      }
+      const plan = vi.fn(async () => structuredClone(ordinary));
       const readGatewayAlias = vi.fn(async () => {
         throw new Error("ordinary first proposal must not read predecessor alias");
       });
@@ -374,7 +388,7 @@ describe("native externally managed policy recovery integration", () => {
         authorize: async () => context,
         assertAuthorized: async () => {},
         plan,
-        ...(planningCase === "unapproved-first"
+        ...(planningCase !== "approved-default"
           ? {
               readReadyDeliveryReplacementPlan: async () =>
                 await readNativePreviewRecoveryPlan({
@@ -438,8 +452,8 @@ describe("native externally managed policy recovery integration", () => {
         expect(
           (await (await handler(request({ action: "plan", operation: "prepare" }))).json())
             .planDigest,
-        ).toBe(oldDigest);
-        if (planningCase === "unapproved-first") {
+        ).toBe(operatorPlanDigest(ordinary));
+        if (planningCase !== "approved-default") {
           expect(row.record.operator!.plan.hostProtection).toEqual(externalPolicy);
           expect(row.record.operator!.plan.appDeliveryReplacement).toBeUndefined();
           expect(row.record.operator!.retainedReadyDeliveryOperations).toBeUndefined();
@@ -482,6 +496,92 @@ describe("native externally managed policy recovery integration", () => {
     expect(operatorPlanDigest(f.proposed)).not.toBe(f.current.operator!.planDigest);
     expect(f.current).toEqual(original);
   });
+  it.each(["approved-attempt", "unapproved-proposal"] as const)(
+    "lets expired saved %s reach ordinary planning without native reads",
+    async (state) => {
+      const f = recoveryFixture();
+      const record = structuredClone(f.current);
+      record.operator!.plan = f.proposed;
+      record.operator!.planDigest = operatorPlanDigest(f.proposed);
+      record.operator!.retainedReadyDeliveryOperations = [
+        { approvedByCallId: f.current.approvedByCallId, operator: f.current.operator! },
+      ];
+      record.operator!.retainedRenewalOperations = [];
+      if (state === "unapproved-proposal") {
+        record.approvedByCallId = "operator:unapproved-plan";
+        delete record.operator!.approvalId;
+      }
+      const readGatewayAlias = vi.fn(async () => "ready-gateway");
+      const result = await readNativePreviewRecoveryPlan({
+        record,
+        policy: externalPolicy,
+        now: Date.parse(f.proposed.retention.expiresAt) + 1,
+        readGatewayAlias,
+      });
+      expect(result).toBeUndefined();
+      expect(readGatewayAlias).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    "reserved",
+    "reserved-bindings",
+    "reserved-gateway-bindings",
+    "reserved-gateway-delivery",
+    "missing-attempt",
+    "unapproved",
+    "no-marker",
+    "legacy",
+  ] as const)(
+    "renews app delivery only with explicit approved replacement reservation (%s)",
+    (state) => {
+      const f = recoveryFixture();
+      const record = structuredClone(f.current);
+      const operator = record.operator!;
+      operator.plan =
+        state === "legacy"
+          ? withExternallyManagedHostProtection(f.proposed, undefined)
+          : f.proposed;
+      if (state === "legacy") {
+        const { hostProtection, appDeliveryReplacement, ...legacy } = operator.plan;
+        void hostProtection;
+        void appDeliveryReplacement;
+        operator.plan = hostedOperatorPlanSchema.parse(legacy);
+      }
+      operator.planDigest = operatorPlanDigest(operator.plan);
+      const pendingKind = state.startsWith("reserved-")
+        ? state.slice("reserved-".length)
+        : "delivery";
+      const deliveryIndex = operator.plan.effects.findIndex(
+        (effect) => effect.kind === pendingKind,
+      );
+      operator.pendingEffectId = operator.plan.effects[deliveryIndex].id;
+      operator.pendingEffectAttempt = { id: attemptId };
+      operator.receipts = operator.plan.effects.slice(0, deliveryIndex).map((effect) => ({
+        effectId: effect.id,
+        observedAt: new Date(now).toISOString(),
+        resourceVersion: "reserved-owned-row",
+      }));
+      operator.retainedRenewalOperations = [];
+      if (state === "missing-attempt") delete operator.pendingEffectAttempt;
+      if (state === "unapproved") record.approvedByCallId = "operator:unapproved-plan";
+      if (state === "no-marker") {
+        delete operator.pendingEffectId;
+        delete operator.pendingEffectAttempt;
+      }
+      const renewed = createRetentionRenewalPlan(
+        record,
+        Date.parse(operator.plan.retention.expiresAt) + 1,
+      );
+      expect(renewed !== undefined).toBe(state.startsWith("reserved"));
+      if (renewed) {
+        expect(renewed.hostProtection).toEqual(operator.plan.hostProtection);
+        expect(renewed.appDeliveryReplacement).toEqual(operator.plan.appDeliveryReplacement);
+        expect(renewed.effects).toEqual(operator.plan.effects);
+        expect(renewed.appTrustedSources).toBeUndefined();
+        expect(renewed.gatewayBindings?.trustedSources).toBeUndefined();
+      }
+    },
+  );
   it.each(["team", "app", "gateway", "environment", "policy-write"])(
     "rejects inconsistent external policy %s",
     (change) => {
@@ -500,10 +600,25 @@ describe("native externally managed policy recovery integration", () => {
       expect(hostedOperatorPlanSchema.safeParse(plan).success).toBe(false);
     },
   );
-  it.each(["applied", "already-applied", "lost", "drift", "denied", "transient-hook"] as const)(
+  it.each([
+    "applied",
+    "already-applied",
+    "lost",
+    "drift",
+    "denied",
+    "transient-hook",
+    "expired-create-visible",
+    "expired-create-missing",
+    "expired-create-foreign",
+  ] as const)(
     "requires new approval and preserves old alias uncertainty when the new alias is %s",
     async (outcome) => {
       const loseAlias = outcome === "lost";
+      const loseCreate =
+        outcome === "expired-create-visible" ||
+        outcome === "expired-create-missing" ||
+        outcome === "expired-create-foreign";
+      let testNow = now;
       const f = recoveryFixture();
       let row = { record: hostedRuntimeJournalRecordSchema.parse(f.current), revision: 1 };
       const protectedBefore = structuredClone(row.record.privateState);
@@ -632,6 +747,12 @@ describe("native externally managed policy recovery integration", () => {
             meta: body!.meta,
             gitSource,
           };
+          if (app && loseCreate) {
+            if (outcome === "expired-create-missing") delete raw[id];
+            if (outcome === "expired-create-foreign")
+              raw[id].meta = { autograph_operator_plan: "9".repeat(64) };
+            throw new Error("synthetic lost app create acknowledgement");
+          }
           if (!app && outcome === "drift") aliasTarget = "unrelated-ready-gateway";
           if (!app && outcome === "already-applied") aliasTarget = id;
           return Response.json({ id });
@@ -710,11 +831,12 @@ describe("native externally managed policy recovery integration", () => {
         assertAuthorized: async () => {},
         assertCanonicalOwner: async () => {},
         plan: ordinaryPlanning,
+        now: () => testNow,
         readReadyDeliveryReplacementPlan: async () =>
           await readNativePreviewRecoveryPlan({
             record: row.record,
             policy: externalPolicy,
-            now,
+            now: testNow,
             readGatewayAlias: async (plan) => await native.readGatewayAlias(plan),
           }),
         verifyReadyDeliveryReplacement: async (_context, plan, predecessor) =>
@@ -779,7 +901,7 @@ describe("native externally managed policy recovery integration", () => {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ ...body, selection: f.proposed.selection }),
         });
-      vi.spyOn(Date, "now").mockReturnValue(now);
+      vi.spyOn(Date, "now").mockImplementation(() => testNow);
       try {
         const planned = await handler(request({ action: "plan", operation: "prepare" }));
         const proposed = await planned.json();
@@ -821,6 +943,70 @@ describe("native externally managed policy recovery integration", () => {
         expect(result.status).toBe(
           outcome === "applied" || outcome === "already-applied" ? "prepared" : "blocked",
         );
+        if (loseCreate) {
+          const uncertain = structuredClone(row.record.operator!);
+          expect(uncertain.pendingEffectId).toBe(
+            uncertain.plan.effects.find((effect) => effect.kind === "delivery")!.id,
+          );
+          expect(uncertain.pendingEffectAttempt).toBeDefined();
+          expect(uncertain.deliveryCandidates).toEqual([]);
+          const callsBeforeRenewal = calls.length;
+          testNow = Date.parse(uncertain.plan.retention.expiresAt) + 1000;
+          expect(createRetentionRenewalPlan(row.record, testNow)).toBeDefined();
+          const renewed = await (
+            await handler(request({ action: "plan", operation: "prepare" }))
+          ).json();
+          expect(renewed.status).toBe("planned");
+          expect(calls).toHaveLength(callsBeforeRenewal);
+          expect(renewed.plan.hostProtection).toEqual(uncertain.plan.hostProtection);
+          expect(renewed.plan.appDeliveryReplacement).toEqual(
+            uncertain.plan.appDeliveryReplacement,
+          );
+          expect(renewed.plan.appTrustedSources).toBeUndefined();
+          expect(renewed.plan.gatewayBindings.trustedSources).toBeUndefined();
+          expect(renewed.plan.effects).toEqual(uncertain.plan.effects);
+          expect(renewed.planDigest).not.toBe(uncertain.planDigest);
+          expect(
+            row.record.operator!.retainedReadyDeliveryOperations![0].operator
+              .retainedRenewalOperations,
+          ).toEqual(oldHistories);
+          const provenance = retentionRenewalDeliveryProvenance(row.record);
+          expect(provenance).toContainEqual(
+            expect.objectContaining({
+              planDigest: uncertain.planDigest,
+              pendingEffectAttempt: uncertain.pendingEffectAttempt,
+            }),
+          );
+          const resumed = await (
+            await handler(request({ ...execute, planDigest: renewed.planDigest }))
+          ).json();
+          expect(resumed.status).toBe(
+            outcome === "expired-create-visible" ? "prepared" : "blocked",
+          );
+          expect(
+            calls.filter(
+              (call) =>
+                call.path === "/v13/deployments" &&
+                call.method === "POST" &&
+                call.body?.project === "project-notes",
+            ),
+          ).toHaveLength(1);
+          if (outcome === "expired-create-visible") {
+            expect(row.record.operator!.deliveredDeploymentId).toBe("fresh-notes");
+            expect(row.record.operator!.deliveredGatewayDeploymentId).toBe("fresh-gateway");
+          } else {
+            expect(row.record.operator!.deliveredDeploymentId).toBeUndefined();
+            expect(calls.filter((call) => call.method === "POST")).toHaveLength(1);
+            const retried = await (
+              await handler(request({ ...execute, planDigest: renewed.planDigest }))
+            ).json();
+            expect(retried.status).toBe("blocked");
+            expect(calls.filter((call) => call.method === "POST")).toHaveLength(1);
+          }
+          expect(ordinaryPlanning).not.toHaveBeenCalled();
+          expect(row.record.privateState).toEqual(protectedBefore);
+          return;
+        }
         expect(
           row.record.operator!.deliveryCandidates?.map((candidate) => candidate.deploymentId),
         ).toEqual(["fresh-notes"]);

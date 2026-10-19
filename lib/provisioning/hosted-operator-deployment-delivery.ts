@@ -801,6 +801,20 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     input: HostedOperatorDeploymentContext,
     reader: ReturnType<typeof io>,
   ) => {
+    // Renewal preserves an uncertain replacement create for observation only. An empty
+    // listing cannot prove that its saved reserved attempt never reached Vercel.
+    if (
+      deps.target !== "gateway" &&
+      input.plan.hostProtection !== undefined &&
+      input.plan.appDeliveryReplacement !== undefined &&
+      (input.renewalDeliveryProvenance ?? []).some(
+        (prior) =>
+          isRetentionRenewalDeliveryProvenance(prior, input.plan, input.operationRef) &&
+          prior.pendingEffectId === input.effect.id &&
+          prior.pendingEffectAttempt !== undefined,
+      )
+    )
+      return false;
     const { priorAppDelivery } = input;
     if (priorAppDelivery === undefined) {
       return true;

@@ -1,9 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import {
-  HostedOperatorError,
-  hostedOperatorPlanSchema,
-  operatorPlanDigest,
-} from "./hosted-operator-contract";
+import { HostedOperatorError, hostedOperatorPlanSchema } from "./hosted-operator-contract";
 import type { HostedOperatorPlan, HostedOperatorRecordBase } from "./hosted-operator-contract";
 import type { ExternallyManagedTrustedSources } from "./hosted-operator-host-protection";
 import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
@@ -170,6 +166,8 @@ export const readNativePreviewRecoveryPlan = async (input: {
   const current = record?.operator;
   if (!current) return undefined;
   if (current.plan.appDeliveryReplacement !== undefined) {
+    // Expired saved authority belongs to ordinary renewal/proposal planning, never fresh predecessor discovery.
+    if (Date.parse(current.plan.retention.expiresAt) <= now) return undefined;
     const saved = createNativePreviewRecoveryPlan(record, policy, now);
     if (saved !== undefined) return saved;
   }

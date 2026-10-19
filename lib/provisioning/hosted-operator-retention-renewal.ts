@@ -20,6 +20,8 @@ export interface RetentionRenewalDeliveryProvenance {
   deliveryCandidates: readonly OperatorDeploymentCandidate[];
   gatewayDeliveryCandidates: readonly OperatorDeploymentCandidate[];
   operationRef: string;
+  pendingEffectId?: string;
+  pendingEffectAttempt?: HostedOperatorRecordBase["pendingEffectAttempt"];
   plan: HostedOperatorPlan;
   planDigest: string;
 }
@@ -105,21 +107,30 @@ const renewalPlanFrom = (prior: HostedOperatorPlan, expiresAt: string) => {
   }
   return hostedOperatorPlanSchema.safeParse({
     ...prior,
-    appTrustedSources: {
-      gatewayPreview: {
-        from: "preview",
-        projectId: sourceWorkload.projectId,
-        to: "preview",
-      },
-    },
+    ...(prior.hostProtection === undefined
+      ? {
+          appTrustedSources: {
+            gatewayPreview: {
+              from: "preview",
+              projectId: sourceWorkload.projectId,
+              to: "preview",
+            },
+          },
+        }
+      : {}),
     gatewayBindings: {
       ...gatewayBindings,
-      trustedSources: {
-        ...gatewayBindings.trustedSources,
-        appPreview: { projectId: prior.selection.projectId, from: "preview", to: "preview" },
-      },
+      ...(prior.hostProtection === undefined
+        ? {
+            trustedSources: {
+              ...gatewayBindings.trustedSources,
+              appPreview: { projectId: prior.selection.projectId, from: "preview", to: "preview" },
+            },
+          }
+        : {}),
     },
     effects: prior.effects.map((effect) => {
+      if (prior.hostProtection !== undefined) return effect;
       if (effect.kind === "bindings") {
         return { ...effect, description: RENEWED_BINDINGS_DESCRIPTION };
       }
@@ -275,7 +286,10 @@ export const isRetentionRenewalSuccessor = (
     operator.planDigest === operatorPlanDigest(operator.plan),
     pendingEffectId !== undefined &&
       pending !== undefined &&
-      ["bindings", "gateway-bindings", "gateway-delivery"].includes(pending.kind),
+      (["bindings", "gateway-bindings", "gateway-delivery"].includes(pending.kind) ||
+        (pending.kind === "delivery" &&
+          operator.plan.hostProtection !== undefined &&
+          operator.plan.appDeliveryReplacement !== undefined)),
     pending?.kind === "gateway-delivery" || pendingEffectAttempt !== undefined,
     receiptsPrecedePending(operator, previousEffectIds, receiptIds, pendingEffectId),
     hasNoActiveLease(record, leaseExpiry, now),
@@ -386,6 +400,10 @@ export const retentionRenewalDeliveryProvenance = (
         (candidate) => candidate.operationRef === prior.operationRef,
       ),
       operationRef: prior.operationRef,
+      ...(prior.pendingEffectId === undefined ? {} : { pendingEffectId: prior.pendingEffectId }),
+      ...(prior.pendingEffectAttempt === undefined
+        ? {}
+        : { pendingEffectAttempt: structuredClone(prior.pendingEffectAttempt) }),
       plan: prior.plan,
       planDigest: prior.planDigest,
     });
