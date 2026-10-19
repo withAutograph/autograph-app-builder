@@ -62,7 +62,7 @@ describe("closed Neon consent diagnostics", () => {
         requestTarget,
       });
     }
-    for (const field of ["requestTarget", "url"]) {
+    for (const field of ["requestTarget", "providerCode", "url"]) {
       report({
         ...value,
         hostedEnvironmentBindingFailure: {
@@ -75,6 +75,31 @@ describe("closed Neon consent diagnostics", () => {
     expect(sink).toHaveBeenCalledTimes(2);
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
   });
+
+  it.each([
+    "not_found",
+    "project_not_found",
+    "forbidden",
+    "unauthorized",
+    "integration_configuration_disabled",
+    "invalid_token",
+    "other",
+  ] as const)(
+    "retains the closed provider code %s with its request target and HTTP status",
+    (providerCode) => {
+      const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+      const report = createHostedOperatorConsentDiagnostic(secret, sink);
+      const failure = {
+        stage: "update_patch" as const,
+        reason: "provider_rejected" as const,
+        requestTarget: "project_settings" as const,
+        httpStatus: 404,
+        providerCode,
+      };
+      report({ ...value, hostedEnvironmentBindingFailure: failure });
+      expect(sink.mock.calls[0]?.[0].hostedEnvironmentBindingFailure).toEqual(failure);
+    },
+  );
 
   it("projects only closed Gateway request targets and protection observations", () => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();

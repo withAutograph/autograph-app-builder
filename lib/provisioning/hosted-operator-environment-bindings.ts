@@ -208,11 +208,31 @@ const readProviderChunk = async (
     timerAbort.abort();
   }
 };
-const readProviderFailure = async (response: Response) => {
+const closedProviderCode = (
+  code: string,
+): NonNullable<HostedEnvironmentBindingFailure["providerCode"]> => {
+  switch (code) {
+    case "not_found":
+    case "project_not_found":
+    case "forbidden":
+    case "unauthorized":
+    case "integration_configuration_disabled":
+    case "invalid_token":
+      return code;
+    default:
+      return "other";
+  }
+};
+const readProviderFailure = async (
+  response: Response,
+): Promise<{
+  gitRelated: boolean;
+  providerCode: NonNullable<HostedEnvironmentBindingFailure["providerCode"]>;
+}> => {
   let text = "";
   const { body } = response;
   if (body === null) {
-    return false;
+    return { gitRelated: false, providerCode: "other" };
   }
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   let releaseReader = true;
@@ -226,13 +246,13 @@ const readProviderFailure = async (response: Response) => {
       if (remainingMs <= 0) {
         releaseReader = false;
         void cancelProviderReader(reader);
-        return false;
+        return { gitRelated: false, providerCode: "other" };
       }
       const read = await readProviderChunk(reader, remainingMs);
       if ("timedOut" in read) {
         releaseReader = false;
         void cancelProviderReader(reader);
-        return false;
+        return { gitRelated: false, providerCode: "other" };
       }
       if (read.done) {
         text += decoder.decode();
@@ -245,7 +265,7 @@ const readProviderFailure = async (response: Response) => {
       if (part.byteLength < read.value.byteLength || size >= providerErrorLimit) {
         releaseReader = false;
         void cancelProviderReader(reader);
-        return false;
+        return { gitRelated: false, providerCode: "other" };
       }
     }
   } catch {
@@ -253,7 +273,7 @@ const readProviderFailure = async (response: Response) => {
       releaseReader = false;
       void cancelProviderReader(reader);
     }
-    return false;
+    return { gitRelated: false, providerCode: "other" };
   } finally {
     if (reader !== undefined && releaseReader) {
       reader.releaseLock();
@@ -265,14 +285,20 @@ const readProviderFailure = async (response: Response) => {
         error: z.object({ code: z.string().optional(), message: z.string().optional() }),
       })
       .safeParse(JSON.parse(text));
-    return (
-      parsed.success &&
-      ((parsed.data.error.code !== undefined && gitReferenceToken.test(parsed.data.error.code)) ||
-        (parsed.data.error.message !== undefined &&
-          gitReferenceToken.test(parsed.data.error.message)))
-    );
+    if (!parsed.success) {
+      return { gitRelated: false, providerCode: "other" };
+    }
+    const gitRelated =
+      (parsed.data.error.code !== undefined && gitReferenceToken.test(parsed.data.error.code)) ||
+      (parsed.data.error.message !== undefined &&
+        gitReferenceToken.test(parsed.data.error.message));
+    return {
+      gitRelated,
+      providerCode:
+        parsed.data.error.code === undefined ? "other" : closedProviderCode(parsed.data.error.code),
+    };
   } catch {
-    return false;
+    return { gitRelated: false, providerCode: "other" };
   }
 };
 const providerRequestStage = (
@@ -308,7 +334,7 @@ const hasCredentialBinding = (
   credential.binding.scopeId === target.scopeId &&
   credential.binding.scopeType === target.scopeType;
 const providerRejection = async (response: Response) => {
-  const gitRelated = await readProviderFailure(response);
+  const providerFailure = await readProviderFailure(response);
   const httpStatus = response.status >= 100 && response.status <= 599 ? response.status : undefined;
   const { body, bodyUsed } = response;
   if (body !== null && !body.locked && !bodyUsed) {
@@ -316,7 +342,8 @@ const providerRejection = async (response: Response) => {
   }
   return {
     httpStatus,
-    reason: gitRelated ? "git_reference_rejection" : "provider_rejected",
+    reason: providerFailure.gitRelated ? "git_reference_rejection" : "provider_rejected",
+    providerCode: providerFailure.providerCode,
   } as const;
 };
 const createFailureReporter = (
@@ -340,9 +367,15 @@ const createFailureReporter = (
       stage: HostedEnvironmentBindingFailure["stage"],
       reason: HostedEnvironmentBindingFailure["reason"],
       httpStatus?: number,
+      providerCode?: HostedEnvironmentBindingFailure["providerCode"],
     ) => {
       failure.stage = stage;
       failure.reason = reason;
+      if (providerCode === undefined) {
+        delete failure.providerCode;
+      } else {
+        failure.providerCode = providerCode;
+      }
       if (httpStatus === undefined) {
         delete failure.httpStatus;
       } else {
@@ -408,13 +441,8 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
       diagnosticStage?: HostedEnvironmentBindingFailure["stage"],
     ) => {
       const requestStage = providerRequestStage(method, route, diagnosticStage);
-      diagnostics.requestTarget(
-        method === "PATCH"
-          ? route.includes("/env/")
-            ? "environment_row"
-            : "project_settings"
-          : undefined,
-      );
+      const requestTarget = route.includes("/env/") ? "environment_row" : "project_settings";
+      diagnostics.requestTarget(method === "PATCH" ? requestTarget : undefined);
       diagnostics.set(requestStage, "provider_request_failed");
       await guard();
       diagnostics.set("credential_read", "credential_read_failed");
@@ -443,7 +471,12 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
       await guard();
       if (!response.ok) {
         const providerFailure = await providerRejection(response);
-        diagnostics.set(requestStage, providerFailure.reason, providerFailure.httpStatus);
+        diagnostics.set(
+          requestStage,
+          providerFailure.reason,
+          providerFailure.httpStatus,
+          providerFailure.providerCode,
+        );
         throw unavailable();
       }
       if (response.status === 204) {
