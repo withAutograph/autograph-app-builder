@@ -217,10 +217,12 @@ const closedProviderCode = (
     case "forbidden":
     case "unauthorized":
     case "integration_configuration_disabled":
-    case "invalid_token":
+    case "invalid_token": {
       return code;
-    default:
+    }
+    default: {
       return "other";
+    }
   }
 };
 const readProviderFailure = async (
