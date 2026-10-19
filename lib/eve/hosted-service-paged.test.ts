@@ -1561,6 +1561,133 @@ describe("paged hosted session observation", () => {
 });
 
 describe("send preflight dispatch classification", () => {
+  it.each(["none", "post", "accepted-readback", "missing-proof"] as const)(
+    "uses complete unchanged native SEND preflight while preserving %s settlement",
+    async (failure) => {
+      let acknowledged = false;
+      const seed = nativeState({
+        adapterSessionId: "adapter_1",
+        nextNativeIndex: 100_000,
+        publicEventCount: 1,
+      });
+      // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous native observation contract for an empty delta.
+      const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async () => {
+        if (acknowledged && failure === "accepted-readback") {
+          throw new HostedSessionReadTimeoutError();
+        }
+        const nextNativeIndex = seed.nextNativeIndex + (acknowledged ? 1 : 0);
+        const state = { ...seed, nextNativeIndex };
+        if (acknowledged && failure !== "missing-proof") {
+          state.nativeDeliveryState = sendProof;
+        }
+        return {
+          artifactProjectionRequiresLegacyReadback: false,
+          installedEventCount: nextNativeIndex,
+          nativeObservationState: state,
+          nextNativeIndex,
+          pendingRequests: [],
+          publicEventCount: 1,
+          status: "waiting",
+        };
+      });
+      const f = await fixture(observe);
+      const initial = await f.getSession(principal, f.sessionId);
+      if (initial?.version !== 2) {
+        throw new Error("Expected the owned durable session.");
+      }
+      const saved = await f.observeSessionPaged({
+        events: (async function* retainedEvents() {
+          yield {
+            index: 0,
+            text: "retained",
+            turnId: "turn_1",
+            type: "assistant_message" as const,
+          };
+        })(),
+        expectedCheckpointDigest: initial.checkpointDigest,
+        metadata: {
+          capturedAtEpochMs: 1000,
+          nativeObservationState: seed,
+          status: "waiting",
+          version: 1,
+        },
+        nowEpochMs: 1000,
+        principal,
+        resumability: "live",
+        sessionId: f.sessionId,
+        stage: "planning",
+      });
+      // The empty native delta retains this digest: persisted=false with a complete owner-bound seed.
+      f.observeSessionPaged.mockResolvedValueOnce(saved);
+      const owner = vi.fn(async () => {
+        await Promise.resolve();
+      });
+      const service = createHostedEveSessionService({
+        assertSendDeliveryOwner: owner,
+        now: () => 2000,
+        principal,
+        store: f.store,
+        transport: f.adapter,
+      });
+      f.adapter.sendAccepted = vi.fn<NonNullable<HostedEveTransport["sendAccepted"]>>(
+        async (input) => {
+          expect(owner).toHaveBeenCalled();
+          if (failure === "post") {
+            throw new Error("mutation response unknown");
+          }
+          await input.onAccepted?.("fixture-delivery");
+          acknowledged = true;
+        },
+      );
+      const request = {
+        clientRequestId: randomUUID(),
+        message: "Continue",
+        sessionId: f.sessionId,
+      };
+      const operationId = stableId("op", {
+        clientRequestId: request.clientRequestId,
+        kind: "send",
+        tenant: [
+          principal.issuer,
+          principal.audience,
+          principal.workspaceId,
+          principal.ownerUserId,
+        ],
+      });
+      if (failure === "none") {
+        const result = await service.send(request);
+        expect(result).toMatchObject({ cursor: 1, events: [], status: "waiting" });
+        expect(await f.base.getPrivateOperation(principal, operationId)).toMatchObject({
+          state: "succeeded",
+          sendDelivery: {
+            deliveryId: "fixture-delivery",
+            adapterSessionId: "adapter_1",
+            adapterGeneration: initial.adapterGeneration,
+          },
+        });
+        expect(await service.send(request)).toEqual(result);
+      } else {
+        await expect(service.send(request)).rejects.toMatchObject({
+          name: "HostedSubmissionUnknownError",
+        });
+        const operation = await f.base.getPrivateOperation(principal, operationId);
+        expect(operation).toMatchObject({
+          safeErrorCode: "submission_unknown",
+          state: "submission_unknown",
+        });
+        if (failure !== "post") {
+          expect(operation).toMatchObject({ sendDelivery: { deliveryId: "fixture-delivery" } });
+        }
+        await expect(service.send(request)).rejects.toMatchObject({
+          name: "HostedSubmissionUnknownError",
+        });
+      }
+      expect(f.adapter.sendAccepted).toHaveBeenCalledOnce();
+      expect(f.adapter.send).not.toHaveBeenCalled();
+      expect(f.adapter.get).not.toHaveBeenCalled();
+    },
+  );
+
   it("records a failed read-only preflight as rejected and never dispatches or replays the same request", async () => {
     const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async () => {
       await Promise.reject(new HostedSessionReadTimeoutError());
