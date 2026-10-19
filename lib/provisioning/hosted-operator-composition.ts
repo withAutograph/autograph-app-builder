@@ -2310,11 +2310,8 @@ export const composeHostedOperatorDependencies = (
           candidate.deploymentId === operator.deliveredGatewayDeploymentId &&
           candidate.readyState === "READY",
       );
-      if (
-        app === undefined ||
-        gateway === undefined ||
-        input.plan.deploymentBoundary === undefined
-      ) {
+      const deploymentBoundary = input.plan.deploymentBoundary;
+      if (app === undefined || gateway === undefined || deploymentBoundary === undefined) {
         throw new HostedOperatorError(RECONCILIATION_REQUIRED);
       }
       await observeOperatorExecutionStage(
@@ -2342,11 +2339,11 @@ export const composeHostedOperatorDependencies = (
               operator: configuration.operator,
               verification: {
                 gatewayOrigin: gateway.origin,
-                publicOrigin: input.plan.deploymentBoundary.verification.publicOrigin,
+                publicOrigin: deploymentBoundary.verification.publicOrigin,
               },
             },
             context: input,
-            approvedAppBranch: input.plan.deploymentBoundary.app.branch,
+            approvedAppBranch: deploymentBoundary.app.branch,
             readVercelCredential: async ({ authority, installationId }) =>
               await controlPlane.readCredential(authority, installationId),
           }),
