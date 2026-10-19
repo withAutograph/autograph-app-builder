@@ -6,12 +6,26 @@ import {
   hostedRuntimeJournalRecordSchema,
   retainedOperatorAuthFromJournal,
 } from "./hosted-runtime-journal";
-import { normalActorProgramSchema } from "./hosted-operator-normal-actor-program";
-import { inspectParticipantBootstrapPreparation } from "./hosted-operator-participant-bootstrap";
+import {
+  normalActorProgramDigest,
+  normalActorProgramSchema,
+} from "./hosted-operator-normal-actor-program";
+import {
+  assertCompletedParticipantBootstrapApproval,
+  inspectCompletedParticipantBootstrap,
+  inspectParticipantBootstrapPreparation,
+} from "./hosted-operator-participant-bootstrap";
 import {
   createHostedOperatorRealmLinkConfig,
   hostedOperatorRealmLinkConfigSha256,
 } from "./hosted-operator-realm-link-config";
+
+const requiredFixture = <T>(value: T | undefined): T => {
+  if (value === undefined) {
+    throw new Error("Missing fixture value");
+  }
+  return value;
+};
 
 const resource = (name: string) => ({
   database: name,
@@ -495,5 +509,97 @@ describe("Realm link configuration codec", () => {
         gatewayBindings: { ...bindings, builderCallbackOrigin: "https://builder.example/callback" },
       }),
     ).toThrow();
+  });
+});
+
+const completedEnrollmentBootstrap = () => {
+  const record = completedRecord();
+  const accountPlan = hostedOperatorPlanSchema.parse({
+    ...desiredPlan(),
+    stage: "auth-participants",
+    effects: [{ id: "normal-accounts", kind: "normal-accounts", description: "Accounts only" }],
+  });
+  record.accountPreparation = {
+    program: requiredFixture(accountPlan.normalActorProgram),
+    programDigest: normalActorProgramDigest(requiredFixture(accountPlan.normalActorProgram)),
+    accountOperationRef: "00000000-0000-4000-8000-000000000009",
+    accountPlan,
+    accountPlanDigest: operatorPlanDigest(accountPlan),
+    accountApprovalId: "original-account-approval",
+    accountApprovedByCallId: "original-account-call",
+    sealedState: {
+      encryptedToken: "original-enrollment",
+      keyVersion: "original-key",
+      tokenIv: "iv",
+      tokenTag: "tag",
+    },
+    captures: [],
+    accountsCompletedAt: observedAt,
+  };
+  return record;
+};
+
+describe("completed enrollment and Gateway bootstrap handoff", () => {
+  it("selects only the independently completed current bootstrap while preserving the original enrollment", () => {
+    const record = completedEnrollmentBootstrap();
+    const before = structuredClone(record.accountPreparation);
+    const selected = inspectCompletedParticipantBootstrap(desiredPlan(), record);
+    expect(selected?.auth.operationRef).toBe(operationRef);
+    expect(selected?.candidate.origin).toBe("https://gateway.example");
+    expect(record.accountPreparation).toEqual(before);
+  });
+  it.each([
+    "live-lease",
+    "pending-effect",
+    "missing-receipt",
+    "missing-auth",
+    "unfinished-accounts",
+    "wrong-program",
+    "wrong-resource",
+    "wrong-source",
+  ])("does not advance %s", (change) => {
+    const record = completedEnrollmentBootstrap();
+    if (change === "live-lease") {
+      record.leaseId = "00000000-0000-4000-8000-000000000008";
+    }
+    if (change === "pending-effect") {
+      requiredFixture(record.operator).pendingEffectId = "gateway-delivery";
+    }
+    if (change === "missing-receipt") {
+      requiredFixture(record.operator).receipts.pop();
+    }
+    if (change === "missing-auth") {
+      delete requiredFixture(record.operator).authPreparation;
+    }
+    if (change === "unfinished-accounts") {
+      delete requiredFixture(record.accountPreparation).accountsCompletedAt;
+    }
+    if (change === "wrong-program") {
+      requiredFixture(record.accountPreparation).programDigest = "0".repeat(64);
+    }
+    if (change === "wrong-resource") {
+      requiredFixture(record.accountPreparation).accountPlan.authDatabase.resourceId = "different";
+    }
+    const desired = desiredPlan();
+    if (change === "wrong-source") {
+      requiredFixture(desired.gatewayDelivery).gitSha = "0".repeat(40);
+    }
+    expect(inspectCompletedParticipantBootstrap(desired, record)).toBeUndefined();
+  });
+  it("rechecks the actual current bootstrap approval separately", async () => {
+    const selected = requiredFixture(
+      inspectCompletedParticipantBootstrap(desiredPlan(), completedEnrollmentBootstrap()),
+    );
+    await expect(
+      assertCompletedParticipantBootstrapApproval(context, selected, () =>
+        Promise.resolve({
+          approved: false,
+          approvalId: selected.auth.approvalId,
+          callId: selected.auth.approvedByCallId,
+          planDigest: selected.auth.planDigest,
+          action: "prepare",
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "authorization_required" });
   });
 });

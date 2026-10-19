@@ -5,7 +5,13 @@ import {
   hasRetainedSharedHostProtectionIdentity,
 } from "./hosted-operator-shared-host-protection-successor";
 import { hasFailedGatewayDelivery } from "./hosted-operator-gateway-delivery-failure";
-import { inspectParticipantBootstrapPreparation } from "./hosted-operator-participant-bootstrap";
+import {
+  assertCompletedParticipantBootstrapApproval,
+  inspectCompletedParticipantBootstrap,
+  inspectParticipantBootstrapPreparation,
+} from "./hosted-operator-participant-bootstrap";
+import type { CompletedParticipantBootstrap } from "./hosted-operator-participant-bootstrap";
+import { isDeepStrictEqual } from "node:util";
 import { createHostedOperatorConsentOwner } from "./hosted-operator-consent-owner";
 import {
   createHostedOperatorNeonAuthorization,
@@ -502,8 +508,10 @@ const assertParticipantOrganizationProposal = (
       const selected = program.organizations.find(
         (candidate) => candidate.organizationId === organization.organizationId,
       );
-      const owner = state.actors.find(
-        (actor) => actor.actorKey === selected?.ownerActorKey,
+      const owner = state.organizationSessions?.find(
+        (candidate) =>
+          candidate.actorKey === selected?.ownerActorKey &&
+          candidate.organizationId === organization.organizationId,
       )?.session;
       return [
         selected !== undefined,
@@ -518,6 +526,39 @@ const assertParticipantOrganizationProposal = (
     throw new HostedOperatorError(RESOURCE_MISMATCH);
   }
 };
+const createCompletedParticipantBootstrapHandoff = (
+  plan: HostedOperatorPlan,
+  record: HostedRuntimeJournalRecord | undefined,
+  context: HostedOperatorContext,
+  controlPlane: Pick<ControlPlane, "assertPlanningAuthorized" | "readApproval" | "store">,
+  eligible: boolean,
+) => {
+  const bootstrap = eligible ? inspectCompletedParticipantBootstrap(plan, record) : undefined;
+  return bootstrap === undefined
+    ? undefined
+    : {
+        bootstrap,
+        assertCurrent: async () => {
+          await controlPlane.assertPlanningAuthorized(context);
+          await assertCompletedParticipantBootstrapApproval(
+            context,
+            bootstrap,
+            controlPlane.readApproval,
+          );
+          const latest = await controlPlane.store.read(context);
+          if (
+            !isDeepStrictEqual(
+              inspectCompletedParticipantBootstrap(plan, latest?.record),
+              bootstrap,
+            )
+          ) {
+            throw new HostedOperatorError(OPERATION_IN_PROGRESS);
+          }
+          await controlPlane.assertPlanningAuthorized(context);
+        },
+      };
+};
+
 const resolveParticipantPlan = async (
   base: HostedOperatorPlan,
   program: NormalActorProgram,
@@ -529,6 +570,10 @@ const resolveParticipantPlan = async (
   participantsBootstrapPrepared: boolean,
   participantsCompleted: boolean,
   selectedRelease?: CompiledOperatorReleaseSelection,
+  completedBootstrap?: {
+    bootstrap: CompletedParticipantBootstrap;
+    assertCurrent: () => Promise<void>;
+  },
 ): Promise<HostedOperatorPlan> => {
   if (!participantsBootstrapPrepared) {
     return base;
@@ -540,7 +585,8 @@ const resolveParticipantPlan = async (
   const prepared = await controlPlane.readNormalActorPreparation(context);
   if (
     prepared !== undefined &&
-    (prepared.preparation.accountsCompletedAt === undefined || !participantsCompleted)
+    (prepared.preparation.accountsCompletedAt === undefined ||
+      (!participantsCompleted && completedBootstrap === undefined))
   ) {
     if (prepared.preparation.programDigest !== normalActorProgramDigest(program)) {
       throw new HostedOperatorError("resource_mismatch");
@@ -566,6 +612,7 @@ const resolveParticipantPlan = async (
   if (normalActorProgramDigest(program) !== preparation.programDigest) {
     throw new HostedOperatorError("resource_mismatch");
   }
+  await completedBootstrap?.assertCurrent();
   const state = assertNormalActorState(program, prepared.state, preparation.accountOperationRef);
   if (controlPlane.readNormalActorOrganizationProofs === undefined) {
     throw new HostedOperatorError("operator_unavailable");
@@ -580,6 +627,7 @@ const resolveParticipantPlan = async (
     preparation,
     state,
   });
+  await completedBootstrap?.assertCurrent();
   assertParticipantOrganizationProposal(program, state, organizations);
   const effects: HostedOperatorPlan["effects"] = [
     ...base.effects.filter((effect) => ![GATEWAY_BINDINGS, GATEWAY_DELIVERY].includes(effect.kind)),
@@ -681,6 +729,10 @@ export const resolveFullPlan = async (
   participantsCompleted = false,
   selectedRelease?: CompiledOperatorReleaseSelection,
   signupPolicy?: HostedOperatorAuthSignupPolicyInput,
+  completedBootstrap?: {
+    bootstrap: CompletedParticipantBootstrap;
+    assertCurrent: () => Promise<void>;
+  },
 ): Promise<HostedOperatorPlan> => {
   if (base.normalActorProgram !== undefined) {
     return await resolveParticipantPlan(
@@ -693,6 +745,7 @@ export const resolveFullPlan = async (
       participantsBootstrapPrepared,
       participantsCompleted,
       selectedRelease,
+      completedBootstrap,
     );
   }
 
@@ -1464,6 +1517,14 @@ export const composeHostedOperatorDependencies = (
       await authReadiness.verify(verification);
       participantsBootstrapPrepared = true;
     }
+    const completedBootstrap = createCompletedParticipantBootstrapHandoff(
+      gatewayPlan,
+      current?.record,
+      context,
+      controlPlane,
+      participantsBootstrapPrepared,
+    );
+    await completedBootstrap?.assertCurrent();
     const resolved = await observe(
       "identity_plan_resolution",
       async () =>
@@ -1478,6 +1539,7 @@ export const composeHostedOperatorDependencies = (
             current?.record.operator?.plan.stage === "app",
           selection,
           context.authSignupPolicy,
+          completedBootstrap,
         ),
     );
     return withExternallyManagedHostProtection(resolved, application.hostProtection);

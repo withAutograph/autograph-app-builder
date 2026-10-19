@@ -840,6 +840,17 @@ const participantResolutionFixture = () => {
     },
     storageState: { cookies: [], origins: [] },
   };
+  const ownerSession = state.actors[0].session;
+  if (ownerSession === undefined) {
+    throw new Error("Missing fixture owner session");
+  }
+  state.organizationSessions = program.memberships.map((membership) => ({
+    actorKey: membership.actorKey,
+    organizationId: membership.organizationId,
+    selection: "pending",
+    session: { ...ownerSession, realmSessionId: `normal-owner-${membership.organizationId}` },
+    storageState: { cookies: [], origins: [] },
+  }));
   const preparation: NormalActorAccountPreparation = {
     program,
     programDigest: normalActorProgramDigest(program),
@@ -866,7 +877,7 @@ const participantResolutionFixture = () => {
     bootstrapPlanDigest: "a".repeat(64),
     identityCapture: {
       capturedAt: "2026-10-14T12:00:00.000Z",
-      realmSessionId: "normal-owner-session",
+      realmSessionId: `normal-owner-${organization.organizationId}`,
     },
     identityNonceSha256: (index === 0 ? "b" : "c").repeat(64),
     identityProof: {

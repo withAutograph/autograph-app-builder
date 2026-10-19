@@ -1,9 +1,26 @@
 import { isDeepStrictEqual } from "node:util";
-import { retainedOperatorAuthSchema } from "./hosted-operator-contract";
+import { z } from "zod";
+import {
+  HostedOperatorError,
+  operatorDeploymentCandidateSchema,
+  retainedOperatorAuthSchema,
+  sameOperatorSelection,
+} from "./hosted-operator-contract";
 import type { HostedOperatorPlan, RetainedOperatorAuth } from "./hosted-operator-contract";
 import { retainedOperatorAuthFromJournal } from "./hosted-runtime-journal";
 import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
 import { hostedOperatorRealmLinkConfigSha256 } from "./hosted-operator-realm-link-config";
+import { normalActorProgramDigest } from "./hosted-operator-normal-actor-program";
+import type {
+  HostedOperatorContext,
+  ProtectedHostedOperatorDependencies,
+} from "./hosted-operator-service";
+
+export const completedParticipantBootstrapSchema = z.strictObject({
+  auth: retainedOperatorAuthSchema,
+  candidate: operatorDeploymentCandidateSchema,
+});
+export type CompletedParticipantBootstrap = z.infer<typeof completedParticipantBootstrapSchema>;
 
 const sameAuth = (desired: HostedOperatorPlan, known: RetainedOperatorAuth) =>
   [
@@ -95,4 +112,81 @@ export const inspectParticipantBootstrapPreparation = (
     ].every(Boolean);
   });
   return { auth, gatewayPrepared };
+};
+
+/** Structural handoff evidence; both original enrollment and current bootstrap approvals remain live reads. */
+export const inspectCompletedParticipantBootstrap = (
+  desired: HostedOperatorPlan,
+  record: HostedRuntimeJournalRecord | undefined,
+): CompletedParticipantBootstrap | undefined => {
+  const operator = record?.operator;
+  const preparation = record?.accountPreparation;
+  if (
+    record === undefined ||
+    operator === undefined ||
+    preparation?.accountsCompletedAt === undefined ||
+    [
+      record.leaseId !== undefined,
+      record.leaseExpiresAt !== undefined,
+      record.status !== "pending",
+      record.step !== "reserved",
+      operator.plan.stage !== "auth-bootstrap",
+    ].some(Boolean)
+  ) {
+    return undefined;
+  }
+  const auth = retainedOperatorAuthFromJournal(record);
+  const program = desired.normalActorProgram;
+  const currentProgram = operator.plan.normalActorProgram;
+  const account = preparation.accountPlan;
+  if (auth === undefined || program === undefined || currentProgram === undefined) {
+    return undefined;
+  }
+  const sameScope = [
+    normalActorProgramDigest(program) === preparation.programDigest,
+    normalActorProgramDigest(currentProgram) === preparation.programDigest,
+    sameOperatorSelection(account.selection, desired.selection),
+    sameOperatorSelection(operator.plan.selection, desired.selection),
+    isDeepStrictEqual(account.appDatabase, desired.appDatabase),
+    isDeepStrictEqual(account.authDatabase, desired.authDatabase),
+    account.neon.projectId === desired.neon.projectId,
+    account.neon.branchId === desired.neon.branchId,
+    account.neon.endpoint === desired.neon.endpoint,
+    isDeepStrictEqual(operator.plan.appDatabase, desired.appDatabase),
+
+    sameAuth(desired, auth),
+    inspectParticipantBootstrapPreparation(desired, record).gatewayPrepared,
+  ].every(Boolean);
+  const candidate = operator.gatewayDeliveryCandidates?.find(
+    (value) =>
+      value.deploymentId === operator.deliveredGatewayDeploymentId && value.readyState === "READY",
+  );
+  return sameScope && candidate !== undefined
+    ? completedParticipantBootstrapSchema.parse({ auth, candidate })
+    : undefined;
+};
+
+export const assertCompletedParticipantBootstrapApproval = async (
+  context: HostedOperatorContext,
+  bootstrap: CompletedParticipantBootstrap,
+  readApproval: ProtectedHostedOperatorDependencies["readApproval"],
+) => {
+  const { auth } = bootstrap;
+  const approval = await readApproval({
+    ...context,
+    action: "prepare",
+    callId: auth.approvedByCallId,
+    planDigest: auth.planDigest,
+  });
+  if (
+    [
+      approval?.approved !== true,
+      approval?.approvalId !== auth.approvalId,
+      approval?.callId !== auth.approvedByCallId,
+      approval?.planDigest !== auth.planDigest,
+      approval?.action !== "prepare",
+    ].some(Boolean)
+  ) {
+    throw new HostedOperatorError("authorization_required");
+  }
 };

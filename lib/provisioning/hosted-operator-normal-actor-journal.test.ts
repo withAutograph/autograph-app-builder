@@ -11,7 +11,11 @@ import {
   createNormalActorJournal,
   normalActorCaptureCookieDigest,
 } from "./hosted-operator-normal-actor-journal";
-import { hostedRuntimeJournalRecordSchema } from "./hosted-runtime-journal";
+import { hostedOperatorRealmLinkConfigSha256 } from "./hosted-operator-realm-link-config";
+import {
+  retainedOperatorAuthFromJournal,
+  hostedRuntimeJournalRecordSchema,
+} from "./hosted-runtime-journal";
 import type { HostedRuntimeJournalRow } from "./hosted-runtime-journal";
 import { createNormalActorJournalAuthority } from "./hosted-operator-normal-actor-authority";
 
@@ -238,6 +242,174 @@ const fixture = (selectedPreparation = preparationInput) => {
   };
 };
 
+const organizationProofFixture = async () => {
+  const selectedProgram = normalActorProgramSchema.parse({
+    ...program,
+    organizations: [
+      { organizationId: "org-one", ownerActorKey: "owner", name: "One", slug: "one" },
+    ],
+    memberships: [{ actorKey: "owner", organizationId: "org-one", role: "owner" }],
+  });
+  const selectedPlan = hostedOperatorPlanSchema.parse({
+    ...plan,
+    normalActorProgram: selectedProgram,
+  });
+  const selectedPreparation = {
+    ...preparationInput,
+    program: selectedProgram,
+    programDigest: normalActorProgramDigest(selectedProgram),
+    accountPlan: selectedPlan,
+    accountPlanDigest: operatorPlanDigest(selectedPlan),
+  };
+  const value = fixture(selectedPreparation);
+  await value.journal.retain(context, selectedPreparation);
+  const owner = {
+    reference: "22222222-2222-4222-8222-222222222222",
+    actorId: "actual-owner",
+    realmSessionId: "actual-org-session",
+    origin: program.origin,
+    expiresAt: "2030-01-01T00:00:00.000Z",
+  };
+  const state = initialNormalActorState(selectedProgram, accountOperationRef);
+  state.actors = [
+    {
+      actorKey: "owner",
+      signup: "complete",
+      session: owner,
+      storageState: { cookies: [], origins: [] },
+    },
+  ];
+  state.organizationSessions = [
+    {
+      actorKey: "owner",
+      organizationId: "org-one",
+      selection: "pending",
+      session: owner,
+      storageState: { cookies: [], origins: [] },
+    },
+  ];
+  await value.journal.checkpoint(context, state);
+  const binding = {
+    audience: "https://operator.example.test",
+    authResourceId: plan.authDatabase.resourceId,
+    bootstrapPlanDigest: selectedPreparation.accountPlanDigest,
+    browserOrigin: program.origin,
+    endpointOrigin: program.origin,
+    issuer: program.origin,
+    transportSource: {
+      audience: "https://operator.example.test",
+      issuer: "https://oidc.vercel.com",
+      ownerId: "team",
+      projectId: "prj_operator",
+      environment: "preview" as const,
+    },
+  };
+  const input = { organizationId: "org-one", ownerActorKey: "owner", owner, binding };
+  return { value, input, selectedPreparation };
+};
+
+const currentBootstrapFixture = async () => {
+  const prepared = await organizationProofFixture();
+  const { value, input, selectedPreparation } = prepared;
+  const old = await value.journal.prepareOrganizationProof(context, input);
+  const bootstrapPlan = hostedOperatorPlanSchema.parse({
+    ...selectedPreparation.accountPlan,
+    stage: "auth-bootstrap",
+    authSchema: {
+      artifactRef: "auth-artifact",
+      installer: { reference: "auth-worker", sha256: "d".repeat(64) },
+      planDigest: "e".repeat(64),
+      targetDigest: "f".repeat(64),
+    },
+    bootstrap: { endpointId: "ep-owned", maintenanceDatabase: "neondb", role: "neondb_owner" },
+    resourcesInstaller: { reference: "resources-worker", sha256: "c".repeat(64) },
+    gatewayBindings: {
+      authBrowserOrigin: program.origin,
+      builderCallbackOrigin: "https://builder.example.test",
+      operatorOrigin: input.binding.audience,
+      catalogAppIds: [target.appId],
+      sourceWorkload: { ...input.binding.transportSource, subject: "builder-workload" },
+    },
+    gatewayDelivery: {
+      projectId: "prj_gateway",
+      branch: target.branch,
+      repoId: "gateway-repo",
+      gitSha: "c".repeat(40),
+    },
+    effects: [
+      { id: "auth-resources", kind: "resources", description: "Auth", resourceId: "auth-resource" },
+      { id: "app-resources", kind: "resources", description: "App", resourceId: "app-resource" },
+      { id: "auth-schema", kind: "install", description: "Auth schema" },
+      { id: "gateway-bindings", kind: "gateway-bindings", description: "Gateway configuration" },
+      { id: "gateway-delivery", kind: "gateway-delivery", description: "Gateway delivery" },
+    ],
+  });
+  const operationRef = "33333333-3333-4333-8333-333333333333";
+  const observedAt = new Date().toISOString();
+  const candidate = {
+    projectId: "prj_gateway",
+    branch: target.branch,
+    repoId: "gateway-repo",
+    operationRef,
+    origin: "https://refreshed-gateway.example.test",
+    deploymentId: "refreshed-gateway",
+    readyState: "READY" as const,
+  };
+  value.row = {
+    revision: value.row.revision + 1,
+    record: hostedRuntimeJournalRecordSchema.parse({
+      ...value.row.record,
+      leaseId: undefined,
+      approvedByCallId: "bootstrap-call",
+      operator: {
+        mode: "protected-operator-v1",
+        operationRef,
+        plan: bootstrapPlan,
+        planDigest: operatorPlanDigest(bootstrapPlan),
+        approvalId: "bootstrap-approval",
+        authPreparation: {
+          assetSha256: "d".repeat(64),
+          catalogFingerprint: "e".repeat(64),
+          database: bootstrapPlan.authDatabase.database,
+          runtimeRole: bootstrapPlan.authDatabase.runtimeRole,
+          targetDigest: bootstrapPlan.authSchema?.targetDigest,
+          observedAt,
+        },
+        receipts: bootstrapPlan.effects.map((effect) => ({
+          effectId: effect.id,
+          observedAt,
+          resourceVersion: "actual-readback",
+        })),
+        gatewayEnvironment: [
+          {
+            key: "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
+            id: "owned-row",
+            projectId: "prj_gateway",
+            branch: target.branch,
+            operationRef,
+            comment: `App Builder protected operator ${operationRef}`,
+            valueSha256: hostedOperatorRealmLinkConfigSha256(bootstrapPlan),
+          },
+        ],
+        gatewayDeliveryCandidates: [candidate],
+        deliveredGatewayDeploymentId: candidate.deploymentId,
+      },
+    }),
+  };
+  const auth = retainedOperatorAuthFromJournal(value.row.record);
+  if (auth === undefined) {
+    throw new Error("fixture bootstrap incomplete");
+  }
+  const bootstrap = { auth, candidate };
+  const nextInput = {
+    ...input,
+    binding: { ...input.binding, endpointOrigin: candidate.origin },
+    bootstrap,
+    assertBootstrapCurrent: async () => {},
+  };
+  return { ...prepared, old, bootstrap, nextInput };
+};
+
 describe("retained actual normal actor journal", () => {
   it("checks the actual lease and fence without renewing or mutating the CAS snapshot", async () => {
     const value = fixture();
@@ -417,69 +589,156 @@ describe("retained actual normal actor journal", () => {
     expect(await value.journal.readPendingCapture(context, nonceSha256)).toBeUndefined();
   });
 
+  it("supersedes an old endpoint proof only with the completed approved bootstrap and preserves accounts", async () => {
+    const { value, old, nextInput } = await currentBootstrapFixture();
+    const before = structuredClone(value.row.record.accountPreparation);
+    const next = await value.journal.prepareOrganizationProof(context, nextInput);
+    expect(next.nonce).not.toBe(old.nonce);
+    expect(next.record.bootstrap).toEqual(nextInput.bootstrap);
+    expect(value.row.record.accountPreparation?.supersededOrganizationProofs).toEqual([old.record]);
+    expect(value.row.record.accountPreparation).toEqual({
+      ...before,
+      organizationProofs: [next.record],
+      supersededOrganizationProofs: [old.record],
+    });
+    const writes = value.writes;
+    expect(await value.journal.prepareOrganizationProof(context, nextInput)).toEqual(next);
+    expect(value.writes).toBe(writes);
+    const proofSha256 = "e".repeat(64);
+    await expect(
+      value.journal.completeOrganizationProof(context, {
+        organizationId: nextInput.organizationId,
+        nonceSha256: old.record.link.nonceSha256,
+        proofSha256,
+        proofRef: `_protected-operator/artifacts/realm-identity-proof/${target.appId}/${proofSha256}`,
+        actorId: nextInput.owner.actorId,
+        realmSessionId: nextInput.owner.realmSessionId,
+        capturedAt: new Date().toISOString(),
+      }),
+    ).rejects.toThrow("normal_actor_organization_proof_mismatch");
+  });
+
+  it.each([
+    "wrong-endpoint",
+    "wrong-snapshot",
+    "wrong-program",
+    "wrong-resource",
+    "wrong-tuple",
+    "missing-guard",
+    "missing-bootstrap",
+    "revoked-account-approval",
+    "revoked-owner",
+    "pending-binding",
+    "revoked-guard",
+    "pending-effect",
+    "live-lease",
+  ])("preserves the old proof when successor authority is invalid: %s", async (change) => {
+    const { value, nextInput } = await currentBootstrapFixture();
+    const operator = value.row.record.operator;
+    const gatewayRow = operator?.gatewayEnvironment?.[0];
+    const actor = nextInput.bootstrap.auth.plan.normalActorProgram?.actors[0];
+    if (operator === undefined || gatewayRow === undefined || actor === undefined) {
+      throw new Error("fixture bootstrap scope missing");
+    }
+    switch (change) {
+      case "wrong-endpoint": {
+        nextInput.binding.endpointOrigin = "https://unapproved.example.test";
+        break;
+      }
+      case "wrong-snapshot": {
+        nextInput.bootstrap.auth.approvalId = "different-approval";
+        break;
+      }
+      case "wrong-program": {
+        actor.name = "Different participant";
+        break;
+      }
+      case "wrong-resource": {
+        nextInput.binding.authResourceId = "different-auth";
+        break;
+      }
+      case "wrong-tuple": {
+        nextInput.binding.transportSource.projectId = "different-operator";
+        break;
+      }
+      case "revoked-guard": {
+        nextInput.assertBootstrapCurrent = async () => {
+          throw new Error("bootstrap_revoked");
+        };
+        break;
+      }
+      case "revoked-account-approval": {
+        value.revokeApproval();
+        break;
+      }
+      case "revoked-owner": {
+        value.revokeOwner();
+        break;
+      }
+      case "pending-binding": {
+        gatewayRow.pendingOperationRef = "33333333-3333-4333-8333-333333333333";
+        gatewayRow.pendingValueSha256 = "a".repeat(64);
+        break;
+      }
+      case "pending-effect": {
+        operator.pendingEffectId = "gateway-delivery";
+        break;
+      }
+      case "live-lease": {
+        value.row.record.leaseId = "44444444-4444-4444-8444-444444444444";
+        value.row.record.leaseExpiresAt = "2030-01-01T00:00:00.000Z";
+        break;
+      }
+      default: {
+        break;
+      }
+    }
+    const before = structuredClone(value.row);
+    const writes = value.writes;
+    let selected: Parameters<typeof value.journal.prepareOrganizationProof>[1] = nextInput;
+    if (change === "missing-guard") {
+      selected = { ...nextInput, assertBootstrapCurrent: undefined };
+    }
+    if (change === "missing-bootstrap") {
+      selected = { ...nextInput, bootstrap: undefined };
+    }
+    await expect(value.journal.prepareOrganizationProof(context, selected)).rejects.toThrow();
+    expect(value.row).toEqual(before);
+    expect(value.writes).toBe(writes);
+  });
+
+  it("renews an expired nonce for the same endpoint without creating successor history", async () => {
+    const { value, input } = await organizationProofFixture();
+    const old = await value.journal.prepareOrganizationProof(context, input);
+    const retained = value.row.record.accountPreparation?.organizationProofs?.[0];
+    if (retained === undefined) {
+      throw new Error("fixture proof missing");
+    }
+    retained.link.expiresAt = "2020-01-01T00:00:00.000Z";
+    const renewed = await value.journal.prepareOrganizationProof(context, input);
+    expect(renewed.nonce).not.toBe(old.nonce);
+    expect(value.row.record.accountPreparation?.supersededOrganizationProofs).toBeUndefined();
+  });
+
+  it("rechecks bootstrap approval after a lost CAS before replacing the old proof", async () => {
+    const { value, nextInput } = await currentBootstrapFixture();
+    const before = structuredClone(value.row.record.accountPreparation);
+    const originalRevision = value.row.revision;
+    value.conflictOnce();
+    nextInput.assertBootstrapCurrent = async () => {
+      if (value.row.revision !== originalRevision) {
+        throw new Error("bootstrap_revoked");
+      }
+    };
+    await expect(value.journal.prepareOrganizationProof(context, nextInput)).rejects.toThrow(
+      "bootstrap_revoked",
+    );
+    expect(value.row.record.accountPreparation).toEqual(before);
+  });
+
   it("binds organization proof nonce to the actual candidate and retains consumed proof metadata immutably", async () => {
-    const selectedProgram = normalActorProgramSchema.parse({
-      ...program,
-      organizations: [
-        { organizationId: "org-one", ownerActorKey: "owner", name: "One", slug: "one" },
-      ],
-      memberships: [{ actorKey: "owner", organizationId: "org-one", role: "owner" }],
-    });
-    const selectedPlan = hostedOperatorPlanSchema.parse({
-      ...plan,
-      normalActorProgram: selectedProgram,
-    });
-    const selectedPreparation = {
-      ...preparationInput,
-      program: selectedProgram,
-      programDigest: normalActorProgramDigest(selectedProgram),
-      accountPlan: selectedPlan,
-      accountPlanDigest: operatorPlanDigest(selectedPlan),
-    };
-    const value = fixture(selectedPreparation);
-    await value.journal.retain(context, selectedPreparation);
-    const owner = {
-      reference: "22222222-2222-4222-8222-222222222222",
-      actorId: "actual-owner",
-      realmSessionId: "actual-org-session",
-      origin: program.origin,
-      expiresAt: "2030-01-01T00:00:00.000Z",
-    };
-    const state = initialNormalActorState(selectedProgram, accountOperationRef);
-    state.actors = [
-      {
-        actorKey: "owner",
-        signup: "complete",
-        session: owner,
-        storageState: { cookies: [], origins: [] },
-      },
-    ];
-    state.organizationSessions = [
-      {
-        actorKey: "owner",
-        organizationId: "org-one",
-        selection: "pending",
-        session: owner,
-        storageState: { cookies: [], origins: [] },
-      },
-    ];
-    await value.journal.checkpoint(context, state);
-    const binding = {
-      audience: "https://operator.example.test",
-      authResourceId: plan.authDatabase.resourceId,
-      bootstrapPlanDigest: "d".repeat(64),
-      browserOrigin: program.origin,
-      endpointOrigin: program.origin,
-      issuer: program.origin,
-      transportSource: {
-        audience: "https://operator.example.test",
-        issuer: "https://oidc.vercel.com",
-        ownerId: "team",
-        projectId: "prj_operator",
-        environment: "preview" as const,
-      },
-    };
-    const input = { organizationId: "org-one", ownerActorKey: "owner", owner, binding };
+    const { value, input } = await organizationProofFixture();
+    const { owner, binding } = input;
     const pending = await value.journal.prepareOrganizationProof(context, input);
     expect(pending.nonce).toMatch(/^[a-f0-9]{64}$/u);
     expect(JSON.stringify(value.row.record.accountPreparation)).not.toContain(pending.nonce);
