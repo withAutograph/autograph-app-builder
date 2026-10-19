@@ -33,7 +33,6 @@ const hasApproval = (operator: HostedOperatorRecordBase, approvedByCallId: strin
 const resourceIdentity = (plan: HostedOperatorPlan) => ({
   appDatabase: plan.appDatabase,
   authDatabase: plan.authDatabase,
-  contextId: plan.contextId,
   neon: plan.neon,
 });
 
