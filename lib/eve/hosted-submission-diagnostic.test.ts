@@ -11,7 +11,10 @@ import {
 import type { HostedEveTransport } from "./hosted-service";
 import { InMemoryHostedEveStore } from "./hosted-store";
 import { SubmissionRejectedBeforeDispatchError } from "./submission-rejected-before-dispatch-error";
-import { reportHostedSubmissionDiagnostic } from "./hosted-submission-diagnostic";
+import {
+  reportHostedSubmissionDiagnostic,
+  sendDeliveryObservationDiagnostic,
+} from "./hosted-submission-diagnostic";
 import type {
   HostedSubmissionDiagnostic,
   HostedSubmissionDiagnosticSink,
@@ -46,6 +49,143 @@ const databaseError = (code: string): Error =>
   new Error(canary, { cause: Object.assign(new Error(canary), { code, query: canary }) });
 
 describe("sanitized hosted submission diagnostics", () => {
+  it("projects exact ACK matches and strips identifiers and unknown fields from nested read diagnostics", () => {
+    const sink = vi.fn<HostedSubmissionDiagnosticSink>();
+    const nativeRead = {
+      nativeStartIndex: 7,
+      nativeNextIndex: 8,
+      nativeTailIndex: 7,
+      observationComplete: true,
+      currentTurnPresent: true,
+    };
+    const observation = sendDeliveryObservationDiagnostic({
+      delivery: {
+        adapterGeneration: 1,
+        adapterSessionId: canary,
+        deliveryId: canary,
+        requestDigest: `sha256:${"a".repeat(64)}`,
+        sessionId: canary,
+      },
+      binding: { adapterGeneration: 1, adapterSessionId: canary },
+      proof: {
+        version: 1,
+        currentTurnId: canary,
+        turns: [
+          {
+            turnId: canary,
+            deliveryIds: [canary],
+            startedDeliveryIds: [],
+            boundaryDeliveryIds: [],
+          },
+        ],
+      },
+      nativeRead,
+    });
+    const untrustedObservation = {
+      ...observation,
+      privateText: canary,
+      nativeRead: { ...nativeRead, privateText: canary },
+    };
+    reportHostedSubmissionDiagnostic({
+      clientRequestId: canary,
+      operationKind: "send",
+      phase: "send_delivery_boundary",
+      failureCategory: "delivery_boundary_unobserved",
+      sendDeliveryObservation: untrustedObservation,
+      sink,
+    });
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientRequestIdHash: hash(canary),
+        sendDeliveryObservation: {
+          ackObserved: true,
+          sameAdapterSession: true,
+          sameAdapterGeneration: true,
+          nativeDeliveryStatePresent: true,
+          nativeTurnCount: 1,
+          deliveryTurnMatchCount: 1,
+          startedStampMatchCount: 0,
+          boundaryStampMatchCount: 0,
+          startedOrBoundaryMatch: false,
+          currentTurnPresent: true,
+          nativeReadObserved: true,
+          nativeRead,
+        },
+      }),
+    );
+    const serialized = JSON.stringify(sink.mock.calls);
+    expect(serialized).not.toContain(canary);
+    expect(serialized).not.toContain("privateText");
+  });
+  it.each(["started", "boundary"] as const)(
+    "counts an exact %s stamp without confusing it with membership",
+    (stamp) => {
+      const observation = sendDeliveryObservationDiagnostic({
+        delivery: {
+          adapterGeneration: 1,
+          adapterSessionId: "native",
+          deliveryId: "ack",
+          requestDigest: `sha256:${"a".repeat(64)}`,
+          sessionId: "public",
+        },
+        binding: { adapterGeneration: 2, adapterSessionId: "replacement" },
+        proof: {
+          version: 1,
+          turns: [
+            {
+              turnId: "turn",
+              deliveryIds: ["ack"],
+              ...(stamp === "started"
+                ? { startedDeliveryIds: ["ack"] }
+                : { boundary: "turn.completed", boundaryDeliveryIds: ["ack"] }),
+            },
+          ],
+        },
+        nativeRead: {
+          nativeStartIndex: 0,
+          nativeNextIndex: 1,
+          nativeTailIndex: 1,
+          observationComplete: false,
+          currentTurnPresent: false,
+        },
+      });
+      expect(observation).toMatchObject({
+        sameAdapterSession: false,
+        sameAdapterGeneration: false,
+        deliveryTurnMatchCount: 1,
+        startedStampMatchCount: stamp === "started" ? 1 : 0,
+        boundaryStampMatchCount: stamp === "boundary" ? 1 : 0,
+        startedOrBoundaryMatch: true,
+        nativeRead: { observationComplete: false },
+      });
+    },
+  );
+  it("does not let invalid optional read diagnostics suppress the original unknown event", () => {
+    const sink = vi.fn<HostedSubmissionDiagnosticSink>();
+    const observation = sendDeliveryObservationDiagnostic({
+      delivery: {
+        adapterGeneration: 1,
+        adapterSessionId: "native",
+        deliveryId: "ack",
+        requestDigest: `sha256:${"a".repeat(64)}`,
+        sessionId: "public",
+      },
+      binding: { adapterGeneration: 1, adapterSessionId: "native" },
+    });
+    reportHostedSubmissionDiagnostic({
+      operationKind: "send",
+      phase: "send_delivery_boundary",
+      failureCategory: "delivery_boundary_unobserved",
+      sendDeliveryObservation: { ...observation, nativeTurnCount: -1 },
+      sink,
+    });
+    expect(sink).toHaveBeenCalledWith({
+      category: "delivery_boundary_unobserved",
+      event: "builder.hosted_submission_uncertain",
+      operationKind: "send",
+      phase: "send_delivery_boundary",
+    });
+  });
   it("correlates a failed reservation without dispatching or leaking the nested SQL error", async () => {
     const store = new InMemoryHostedEveStore();
     const transport = adapter();

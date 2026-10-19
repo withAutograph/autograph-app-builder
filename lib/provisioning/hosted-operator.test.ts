@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { observeOperatorExecutionStage } from "./hosted-operator-consent-diagnostic";
 import type { HostedOperatorConsentDiagnosticSink } from "./hosted-operator-consent-diagnostic";
+import {
+  OPERATOR_EXECUTION_OBSERVATION_HEADER,
+  OPERATOR_EXECUTION_OBSERVATION_PREFERENCE,
+} from "./hosted-operator-execution-observation-protocol";
 import { composeHostedOperatorAuthorizationDependencies } from "./hosted-operator-composition";
 /* oxlint-disable eslint/require-await, eslint/no-await-in-loop, sonarjs/no-hardcoded-passwords, unicorn/no-await-expression-member -- Synthetic service adapters and credentials only; plan replacements run sequentially against one journal. */
 import { once } from "node:events";
@@ -19,6 +23,7 @@ import {
   hostedOperatorRecordSchema,
   hostedOperatorPlanSchema,
   operatorPlanDigest,
+  operatorPublicResultSchema,
   restrictedOperatorEnvironment,
 } from "./hosted-operator-contract";
 import type { ManagedOperatorEnvironmentRow, OperatorSelection } from "./hosted-operator-contract";
@@ -3019,6 +3024,314 @@ describe("closed prepare pre-effect diagnostics", () => {
       }),
     );
     expect(JSON.stringify(sink.mock.calls)).not.toContain(privateError.message);
+  });
+});
+
+describe("closed prepare final verification diagnostics", () => {
+  const finalFixture = async () => {
+    const f = fixture();
+    f.deps.plan = vi.fn(async () =>
+      hostedOperatorPlanSchema.parse({
+        ...plan,
+        effects: [
+          ...Array.from({ length: 6 }, (_, index) => ({
+            id: `resource-${index}`,
+            kind: "resources",
+            description: "Observe an approved resource",
+          })),
+          ...plan.effects,
+        ],
+      }),
+    );
+    const request = await prepared(f);
+    f.approve();
+    const execute = async () =>
+      operatorPublicResultSchema.parse(
+        await (
+          await f.handler(
+            new Request("https://operator.example/v1/runtime", {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                authorization: "Bearer fixture-service-identity",
+                "x-vercel-trusted-oidc-idp-token": "fixture-service-identity",
+                [OPERATOR_EXECUTION_OBSERVATION_HEADER]: OPERATOR_EXECUTION_OBSERVATION_PREFERENCE,
+              },
+              body: JSON.stringify({ ...request, ownerContext }),
+            }),
+          )
+        ).json(),
+      );
+    return { f, execute };
+  };
+
+  it("reports the original physical authority error after ten receipts before verifier entry", async () => {
+    const { f, execute } = await finalFixture();
+    const privateError = new TypeError("private-physical-lease private-token");
+    let rejected = false;
+    let captured: unknown;
+    f.deps.withResourceLease = async (_input, run) => {
+      try {
+        return await run(async () => {
+          if (f.row?.record.operator?.receipts.length === 10 && !rejected) {
+            rejected = true;
+            throw privateError;
+          }
+        });
+      } catch (error) {
+        captured = error;
+        throw error;
+      }
+    };
+    const verify = vi.spyOn(f.deps, "verify");
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      expect(await execute()).toMatchObject({ status: "blocked", code: "operator_unavailable" });
+      expect(captured).toBe(privateError);
+      expect(verify).not.toHaveBeenCalled();
+      expect(f.deps.executeEffect).toHaveBeenCalledTimes(10);
+      expect(f.row?.record.proof).toBeUndefined();
+      expect(f.row?.record.leaseId).toBeUndefined();
+      expect(f.row?.record.executionObservation).toMatchObject({
+        state: "settled",
+        outcome: { status: "blocked", code: "operator_unavailable" },
+      });
+      expect(log.mock.calls).toContainEqual([
+        "[builder:hosted-neon-consent]",
+        expect.objectContaining({
+          executionFailure: { stage: "final_authority", errorClass: "type_error" },
+        }),
+      ]);
+      expect(JSON.stringify(log.mock.calls)).not.toContain("resource_lease");
+      expect(JSON.stringify(log.mock.calls)).not.toContain(privateError.message);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("reports a raw verifier entry rejection and retains its blocked result through settlement", async () => {
+    const { f, execute } = await finalFixture();
+    const privateError = new TypeError("private-verifier-entry private-token");
+    const verify = vi.spyOn(f.deps, "verify").mockRejectedValue(privateError);
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      expect(await execute()).toMatchObject({ status: "blocked", code: "operator_unavailable" });
+      expect(verify).toHaveBeenCalledOnce();
+      expect(f.deps.executeEffect).toHaveBeenCalledTimes(10);
+      expect(f.row?.record.proof).toBeUndefined();
+      expect(f.row?.record.executionObservation).toMatchObject({
+        state: "settled",
+        outcome: { status: "blocked", code: "operator_unavailable" },
+      });
+      expect(log.mock.calls).toContainEqual([
+        "[builder:hosted-neon-consent]",
+        expect.objectContaining({
+          executionFailure: { stage: "final_verifier_entry", errorClass: "type_error" },
+        }),
+      ]);
+      const output = JSON.stringify(log.mock.calls);
+      expect(output).not.toContain("final_proof_parse");
+      expect(output).not.toContain("resource_lease");
+      expect(output).not.toContain(privateError.message);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it.each(["execution_settlement", "final_lease_release"] as const)(
+    "retains the original authority classification when %s also fails",
+    async (stage) => {
+      const { f, execute } = await finalFixture();
+      const privateError = new TypeError("private-physical-lease");
+      let rejected = false;
+      f.deps.withResourceLease = async (_input, run) =>
+        await run(async () => {
+          if (f.row?.record.operator?.receipts.length === 10 && !rejected) {
+            rejected = true;
+            throw privateError;
+          }
+        });
+      const compareAndSet = f.deps.store.compareAndSet;
+      f.deps.store.compareAndSet = async (input) => {
+        const settlementFailure =
+          stage === "execution_settlement" &&
+          input.record.executionObservation?.state === "settled";
+        const leaseReleaseFailure =
+          stage === "final_lease_release" &&
+          f.row?.record.leaseId !== undefined &&
+          input.record.leaseId === undefined;
+        if (settlementFailure || leaseReleaseFailure) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        return await compareAndSet(input);
+      };
+      const verify = vi.spyOn(f.deps, "verify");
+      const log = vi.spyOn(console, "info").mockImplementation(() => {});
+      try {
+        expect(await execute()).toMatchObject({
+          status: "blocked",
+          code: stage === "execution_settlement" ? "operator_unavailable" : "resource_mismatch",
+        });
+        expect(verify).not.toHaveBeenCalled();
+        expect(f.deps.executeEffect).toHaveBeenCalledTimes(10);
+        expect(log.mock.calls).toContainEqual([
+          "[builder:hosted-neon-consent]",
+          expect.objectContaining({
+            executionFailure: { stage: "final_authority", errorClass: "type_error" },
+          }),
+        ]);
+        expect(log.mock.calls).toContainEqual([
+          "[builder:hosted-neon-consent]",
+          expect.objectContaining({
+            executionFailure: { stage, errorClass: "operator_error", code: "resource_mismatch" },
+          }),
+        ]);
+        expect(JSON.stringify(log.mock.calls)).not.toContain("resource_lease");
+        expect(JSON.stringify(log.mock.calls)).not.toContain(privateError.message);
+      } finally {
+        log.mockRestore();
+      }
+    },
+  );
+
+  it("retains release binding validation and its original public denial", async () => {
+    const { f, execute } = await finalFixture();
+    vi.spyOn(f.deps, "verify").mockResolvedValue({ ...proof, releaseId: "different-release" });
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      expect(await execute()).toMatchObject({ status: "blocked", code: "resource_mismatch" });
+      expect(f.row?.record.proof).toBeUndefined();
+      expect(log.mock.calls).toContainEqual([
+        "[builder:hosted-neon-consent]",
+        expect.objectContaining({
+          executionFailure: {
+            stage: "final_proof_parse",
+            errorClass: "operator_error",
+            code: "resource_mismatch",
+          },
+        }),
+      ]);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("classifies final proof publication failure and retries without duplicate effects", async () => {
+    const { f, execute } = await finalFixture();
+    const compareAndSet = f.deps.store.compareAndSet;
+    const privateError = Object.assign(new Error("private-publication-query private-token"), {
+      code: "42501",
+    });
+    f.deps.store.compareAndSet = async (input) => {
+      if (input.record.proof !== undefined) {
+        throw privateError;
+      }
+      return await compareAndSet(input);
+    };
+    const verify = vi.spyOn(f.deps, "verify");
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      expect(await execute()).toMatchObject({ status: "blocked", code: "operator_unavailable" });
+      expect(f.row?.record.proof).toBeUndefined();
+      expect(f.row?.record.leaseId).toBeUndefined();
+      expect(log.mock.calls).toContainEqual([
+        "[builder:hosted-neon-consent]",
+        expect.objectContaining({
+          executionFailure: {
+            stage: "final_proof_publication",
+            errorClass: "unexpected",
+            sqlState: "42501",
+          },
+        }),
+      ]);
+      expect(JSON.stringify(log.mock.calls)).not.toContain(privateError.message);
+      f.deps.store.compareAndSet = compareAndSet;
+      expect(await execute()).toMatchObject({ status: "prepared" });
+      expect(verify).toHaveBeenCalledTimes(2);
+      expect(f.deps.executeEffect).toHaveBeenCalledTimes(10);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it.each([false, true])(
+    "classifies resource lease cleanup with journal release failure %s",
+    async (releaseFails) => {
+      const { f, execute } = await finalFixture();
+      const withResourceLease = f.deps.withResourceLease;
+      f.deps.withResourceLease = async (input, run) => {
+        await withResourceLease(input, run);
+        throw new TypeError("private-resource-lease-cleanup");
+      };
+      const compareAndSet = f.deps.store.compareAndSet;
+      f.deps.store.compareAndSet = async (input) => {
+        if (
+          releaseFails &&
+          f.row?.record.leaseId !== undefined &&
+          input.record.leaseId === undefined
+        ) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        return await compareAndSet(input);
+      };
+      const log = vi.spyOn(console, "info").mockImplementation(() => {});
+      try {
+        expect(await execute()).toMatchObject({
+          status: "blocked",
+          code: releaseFails ? "resource_mismatch" : "operator_unavailable",
+        });
+        expect(f.row?.record.proof).toEqual(proof);
+        expect(f.row?.record.leaseId !== undefined).toBe(releaseFails);
+        expect(f.deps.executeEffect).toHaveBeenCalledTimes(10);
+        expect(log.mock.calls).toContainEqual([
+          "[builder:hosted-neon-consent]",
+          expect.objectContaining({
+            executionFailure: { stage: "resource_lease", errorClass: "type_error" },
+          }),
+        ]);
+        if (releaseFails) {
+          expect(log.mock.calls).toContainEqual([
+            "[builder:hosted-neon-consent]",
+            expect.objectContaining({
+              executionFailure: {
+                stage: "final_lease_release",
+                errorClass: "operator_error",
+                code: "resource_mismatch",
+              },
+            }),
+          ]);
+        }
+      } finally {
+        log.mockRestore();
+      }
+    },
+  );
+
+  it("classifies journal lease clearing failure without repeating completed effects", async () => {
+    const { f, execute } = await finalFixture();
+    const compareAndSet = f.deps.store.compareAndSet;
+    f.deps.store.compareAndSet = async (input) => {
+      if (f.row?.record.leaseId !== undefined && input.record.leaseId === undefined) {
+        throw new TypeError("private-journal-lease-clear");
+      }
+      return await compareAndSet(input);
+    };
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      expect(await execute()).toMatchObject({ status: "blocked", code: "operator_unavailable" });
+      expect(f.row?.record.proof).toEqual(proof);
+      expect(f.row?.record.leaseId).toBeDefined();
+      expect(f.deps.executeEffect).toHaveBeenCalledTimes(10);
+      expect(log.mock.calls).toContainEqual([
+        "[builder:hosted-neon-consent]",
+        expect.objectContaining({
+          executionFailure: { stage: "final_lease_release", errorClass: "type_error" },
+        }),
+      ]);
+      expect(JSON.stringify(log.mock.calls)).not.toContain("resource_lease");
+    } finally {
+      log.mockRestore();
+    }
   });
 });
 

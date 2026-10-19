@@ -46,6 +46,7 @@ import {
   reportOperatorPlanningMismatch,
   observeOperatorPlanStage,
   observeOperatorExecutionStage,
+  reportOperatorExecutionFailure,
 } from "./hosted-operator-consent-diagnostic";
 import type { OperatorExecutionStage } from "./hosted-operator-consent-diagnostic";
 import type { HostedOperatorConsentOwner } from "./hosted-operator-consent-owner";
@@ -1302,6 +1303,8 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
   const now = deps.now ?? Date.now;
   return async (request: Request): Promise<Response> => {
     let appId = "unknown";
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The outer rejection boundary delegates arbitrary private errors to the closed diagnostic reporter.
+    let reportExecutionFailure: ((error: unknown) => void) | undefined;
     const executionObservationRequested =
       request.headers.get(OPERATOR_EXECUTION_OBSERVATION_HEADER) ===
       OPERATOR_EXECUTION_OBSERVATION_PREFERENCE;
@@ -1404,10 +1407,35 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
         throw new HostedOperatorError("resource_mismatch");
       }
       const { plan, planDigest, operationRef } = operator;
-      const observePrepare = async <T>(stage: OperatorExecutionStage, run: () => T | Promise<T>) =>
-        input.action === "execute" && plan.action === "prepare"
-          ? await observeOperatorExecutionStage(context.target.sessionId, stage, run)
-          : await run();
+      let executionStage: OperatorExecutionStage = "resource_lease";
+      const reportedExecutionFailures = new Set<unknown>();
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Preserve arbitrary private rejections while projecting only closed failure metadata.
+      const reportPrepareFailure = (error: unknown) => {
+        if (
+          input.action === "execute" &&
+          plan.action === "prepare" &&
+          !reportedExecutionFailures.has(error)
+        ) {
+          reportOperatorExecutionFailure(context.target.sessionId, executionStage, error);
+          reportedExecutionFailures.add(error);
+        }
+      };
+      reportExecutionFailure = reportPrepareFailure;
+      const observePrepare = async <T>(
+        stage: OperatorExecutionStage,
+        run: () => T | Promise<T>,
+      ) => {
+        const previousStage = executionStage;
+        executionStage = stage;
+        try {
+          return await run();
+        } catch (error) {
+          reportPrepareFailure(error);
+          throw error;
+        } finally {
+          executionStage = previousStage;
+        }
+      };
       await observePrepare("provider_authorization", async () => {
         await deps.assertAuthorized({ ...context, plan });
       });
@@ -1739,37 +1767,56 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
       const withExecutionObservation = async (
         leased: Parameters<ProtectedHostedOperatorDependencies["withResourceLease"]>[0],
         run: (assertFence: () => Promise<void>) => Promise<Response>,
-      ): Promise<Response> =>
-        await deps.withResourceLease(leased, async (assertFence) => {
-          if (!executionObservationRequested) {
-            return await run(assertFence);
-          }
-          try {
-            const executionResponse = await run(assertFence);
-            const result = operatorPublicResultSchema.parse(await executionResponse.clone().json());
-            await assertFence();
-            await ownedUpdate((record) =>
-              settleOperatorExecution(record, leaseId, {
-                status: result.status,
-                ...(result.code === undefined ? {} : { code: result.code }),
-              }),
-            );
-            return executionResponse;
-          } catch (error) {
-            try {
-              await assertFence();
-              await ownedUpdate((record) =>
-                settleOperatorExecution(record, leaseId, {
-                  status: "blocked",
-                  code: error instanceof HostedOperatorError ? error.code : "operator_unavailable",
-                }),
-              );
-            } catch {
-              // A stale/expired attempt cannot claim a terminal outcome for a newer fence.
+      ): Promise<Response> => {
+        try {
+          return await deps.withResourceLease(leased, async (assertFence) => {
+            if (!executionObservationRequested) {
+              try {
+                return await run(assertFence);
+              } catch (error) {
+                reportPrepareFailure(error);
+                throw error;
+              }
             }
-            throw error;
-          }
-        });
+            try {
+              const executionResponse = await run(assertFence);
+              await observePrepare("execution_settlement", async () => {
+                const result = operatorPublicResultSchema.parse(
+                  await executionResponse.clone().json(),
+                );
+                await assertFence();
+                await ownedUpdate((record) =>
+                  settleOperatorExecution(record, leaseId, {
+                    status: result.status,
+                    ...(result.code === undefined ? {} : { code: result.code }),
+                  }),
+                );
+              });
+              return executionResponse;
+            } catch (error) {
+              reportPrepareFailure(error);
+              try {
+                await observePrepare("execution_settlement", async () => {
+                  await assertFence();
+                  await ownedUpdate((record) =>
+                    settleOperatorExecution(record, leaseId, {
+                      status: "blocked",
+                      code:
+                        error instanceof HostedOperatorError ? error.code : "operator_unavailable",
+                    }),
+                  );
+                });
+              } catch {
+                // A stale/expired attempt cannot claim a terminal outcome for a newer fence.
+              }
+              throw error;
+            }
+          });
+        } catch (error) {
+          reportPrepareFailure(error);
+          throw error;
+        }
+      };
       try {
         return await withExecutionObservation(
           { ...context, operationRef, plan },
@@ -2390,7 +2437,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 })
               ).record;
             }
-            await assertCurrent();
+            await observePrepare("final_authority", assertCurrent);
             if (plan.stage === AUTH_PARTICIPANTS_STAGE) {
               const latest = await read();
               if (latest === undefined) {
@@ -2469,45 +2516,59 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
               );
               return response(operatorPublicResultSchema.parse(publicStatus(complete.record)));
             }
-            const proof =
+            const verifiedProof =
               plan.action === "prepare"
-                ? hostedRuntimeProofSchema.parse(
-                    await deps.verify({ ...context, plan, privateState: record.privateState }),
+                ? await observePrepare(
+                    "final_verifier_entry",
+                    async () =>
+                      await deps.verify({ ...context, plan, privateState: record.privateState }),
                   )
                 : undefined;
-            if (
-              proof &&
-              (proof.releaseId !== plan.release.id || proof.manifestSha256 !== plan.release.sha256)
-            ) {
-              throw new HostedOperatorError("resource_mismatch");
-            }
-            await assertCurrent();
-            const complete = await ownedUpdate((value) => {
-              if (plan.action === "cleanup") {
-                // Shared Auth remains live after app cleanup; retain its owned encrypted credentials.
-                delete value.proof;
-              }
-              return retainCompletedAuth({
-                ...value,
-                environmentBound: plan.action === "prepare",
-                proof,
-                status: plan.action === "prepare" ? "prepared" : "cleaned",
-                step: plan.action === "prepare" ? "bound" : "cleaned",
+            const proof =
+              plan.action === "prepare"
+                ? await observePrepare("final_proof_parse", () => {
+                    const parsed = hostedRuntimeProofSchema.parse(verifiedProof);
+                    if (
+                      parsed.releaseId !== plan.release.id ||
+                      parsed.manifestSha256 !== plan.release.sha256
+                    ) {
+                      throw new HostedOperatorError("resource_mismatch");
+                    }
+                    return parsed;
+                  })
+                : undefined;
+            await observePrepare("final_authority", assertCurrent);
+            return await observePrepare("final_proof_publication", async () => {
+              const complete = await ownedUpdate((value) => {
+                if (plan.action === "cleanup") {
+                  // Shared Auth remains live after app cleanup; retain its owned encrypted credentials.
+                  delete value.proof;
+                }
+                return retainCompletedAuth({
+                  ...value,
+                  environmentBound: plan.action === "prepare",
+                  proof,
+                  status: plan.action === "prepare" ? "prepared" : "cleaned",
+                  step: plan.action === "prepare" ? "bound" : "cleaned",
+                });
               });
+              return response(operatorPublicResultSchema.parse(publicStatus(complete.record)));
             });
-            return response(operatorPublicResultSchema.parse(publicStatus(complete.record)));
           },
         );
       } finally {
-        await update((record) => {
-          if (record.leaseId === leaseId) {
-            delete record.leaseId;
-            delete record.leaseExpiresAt;
-          }
-          return record;
+        await observePrepare("final_lease_release", async () => {
+          await update((record) => {
+            if (record.leaseId === leaseId) {
+              delete record.leaseId;
+              delete record.leaseExpiresAt;
+            }
+            return record;
+          });
         });
       }
     } catch (error) {
+      reportExecutionFailure?.(error);
       return response(
         operatorPublicResultSchema.parse({
           appId,

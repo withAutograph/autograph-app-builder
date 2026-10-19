@@ -1,3 +1,4 @@
+import type { NativeDeliveryState, SendDelivery } from "./native-delivery-state";
 import { createHash } from "node:crypto";
 
 import { z } from "zod";
@@ -104,6 +105,65 @@ const nonStorageCategorySchema = z.enum([
   "rejected_before_dispatch",
 ]);
 
+const nativeSendReadObservationSchema = z.object({
+  nativeStartIndex: z.number().int().nonnegative(),
+  nativeNextIndex: z.number().int().nonnegative().optional(),
+  nativeTailIndex: z.number().int().min(-1).optional(),
+  observationComplete: z.boolean().optional(),
+  currentTurnPresent: z.boolean(),
+});
+export type NativeSendReadObservation = z.infer<typeof nativeSendReadObservationSchema>;
+const sendDeliveryObservationSchema = z.object({
+  ackObserved: z.boolean(),
+  sameAdapterSession: z.boolean(),
+  sameAdapterGeneration: z.boolean(),
+  nativeDeliveryStatePresent: z.boolean(),
+  nativeTurnCount: z.number().int().nonnegative(),
+  deliveryTurnMatchCount: z.number().int().nonnegative(),
+  startedStampMatchCount: z.number().int().nonnegative(),
+  boundaryStampMatchCount: z.number().int().nonnegative(),
+  startedOrBoundaryMatch: z.boolean(),
+  currentTurnPresent: z.boolean(),
+  nativeReadObserved: z.boolean(),
+  nativeRead: nativeSendReadObservationSchema.optional(),
+});
+export type SendDeliveryObservationDiagnostic = z.infer<typeof sendDeliveryObservationSchema>;
+
+/** Project the already verified ACK and existing native read; no identifiers leave this function. */
+export const sendDeliveryObservationDiagnostic = (input: {
+  delivery: SendDelivery;
+  binding: { adapterSessionId: string; adapterGeneration: number };
+  proof?: NativeDeliveryState;
+  nativeRead?: NativeSendReadObservation;
+}): SendDeliveryObservationDiagnostic => {
+  const turns = input.proof?.turns ?? [];
+  const deliveryId = input.delivery.deliveryId;
+  const matches = turns.filter((turn) => turn.deliveryIds.includes(deliveryId));
+  return {
+    ackObserved: true,
+    sameAdapterSession: input.binding.adapterSessionId === input.delivery.adapterSessionId,
+    sameAdapterGeneration: input.binding.adapterGeneration === input.delivery.adapterGeneration,
+    nativeDeliveryStatePresent: input.proof !== undefined,
+    nativeTurnCount: turns.length,
+    deliveryTurnMatchCount: matches.length,
+    startedStampMatchCount: turns.filter(
+      (turn) => turn.startedDeliveryIds?.includes(deliveryId) === true,
+    ).length,
+    boundaryStampMatchCount: turns.filter(
+      (turn) => turn.boundaryDeliveryIds?.includes(deliveryId) === true,
+    ).length,
+    startedOrBoundaryMatch: matches.some(
+      (turn) =>
+        turn.startedDeliveryIds?.includes(deliveryId) === true ||
+        (turn.boundary !== undefined && turn.boundaryDeliveryIds?.includes(deliveryId) === true),
+    ),
+    currentTurnPresent:
+      input.nativeRead?.currentTurnPresent ?? input.proof?.currentTurnId !== undefined,
+    nativeReadObserved: input.nativeRead !== undefined,
+    ...(input.nativeRead === undefined ? {} : { nativeRead: input.nativeRead }),
+  };
+};
+
 export interface HostedSubmissionDiagnostic {
   event: "builder.hosted_submission_uncertain" | "builder.hosted_submission_rejected";
   phase: HostedSubmissionPhase;
@@ -114,6 +174,7 @@ export interface HostedSubmissionDiagnostic {
   savedState?: "reserved" | "submission_unknown";
   category: (typeof sqlStateCategories)[SqlState] | z.infer<typeof nonStorageCategorySchema>;
   sqlState?: SqlState;
+  sendDeliveryObservation?: SendDeliveryObservationDiagnostic;
   rejectedReason?: z.infer<typeof rejectedReasonSchema>;
 }
 
@@ -159,6 +220,7 @@ export const reportHostedSubmissionDiagnostic = (input: {
   adapterSessionId?: string;
   savedState?: HostedSubmissionDiagnostic["savedState"];
   failureCategory?: SendReadFailureCategory;
+  sendDeliveryObservation?: SendDeliveryObservationDiagnostic;
   error?: unknown;
   sink?: HostedSubmissionDiagnosticSink;
 }): void => {
@@ -180,6 +242,12 @@ export const reportHostedSubmissionDiagnostic = (input: {
       operationKind: input.operationKind,
       phase: input.phase,
     };
+    if (input.sendDeliveryObservation !== undefined) {
+      const observed = sendDeliveryObservationSchema.safeParse(input.sendDeliveryObservation);
+      if (observed.success) {
+        diagnostic.sendDeliveryObservation = observed.data;
+      }
+    }
     if (reason?.success === true) {
       diagnostic.rejectedReason = reason.data;
     }

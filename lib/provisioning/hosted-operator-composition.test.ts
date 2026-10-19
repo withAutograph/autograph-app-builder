@@ -385,6 +385,35 @@ const publicationFixture = (binding: { repoId?: string; gitSha?: string } = {}) 
   };
 };
 
+describe("final verifier entry diagnostics", () => {
+  it.each(["final_owner_authorization", "final_journal_read"] as const)(
+    "reports the original %s failure before inventory or runtime verification",
+    async (stage) => {
+      const f = publicationFixture();
+      const error = new TypeError("private-preflight-error");
+      const assertAuthorized = vi.fn(() =>
+        stage === "final_owner_authorization" ? Promise.reject(error) : Promise.resolve(),
+      );
+      const read = vi.fn(() => Promise.reject(error));
+      const controlPlane = { ...f.controlPlane, assertAuthorized, store: { read } };
+      const dependencies = composeHostedOperatorDependencies(
+        f.configuration,
+        // SAFETY: Both fail-fast scenarios reject at these two implemented entry ports, before any other control-plane capability is accessed.
+        // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- The fixture deliberately implements only the entry boundary exercised by this test.
+        controlPlane as unknown as Parameters<typeof composeHostedOperatorDependencies>[1],
+      );
+      const log = vi.spyOn(console, "info").mockImplementation(() => {});
+      await expect(dependencies.verify({ ...context, plan: bootstrapPlan() })).rejects.toBe(error);
+      expect(log.mock.calls).toContainEqual([
+        "[builder:hosted-neon-consent]",
+        expect.objectContaining({ executionFailure: { stage, errorClass: "type_error" } }),
+      ]);
+      expect(JSON.stringify(log.mock.calls)).not.toContain(error.message);
+      expect(read.mock.calls.length).toBe(stage === "final_owner_authorization" ? 0 : 1);
+    },
+  );
+});
+
 describe("app publication binding at plan renewal", () => {
   it("keeps Auth bootstrap available without app publication fields before identity capture", async () => {
     const f = publicationFixture();
