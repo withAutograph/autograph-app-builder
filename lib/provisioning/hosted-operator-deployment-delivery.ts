@@ -840,6 +840,14 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       ) {
         return { candidates, status: "unknown" as const };
       }
+      const aliasAuthority = await deps.beforeAliasWrite?.(
+        { ...input, deliveryCandidates: candidates },
+        selected,
+      );
+      if (aliasAuthority === "applied") {
+        return await reconcile({ ...input, deliveryCandidates: candidates });
+      }
+      if (aliasAuthority === "unknown") return { candidates, status: "unknown" as const };
       await fresh.assertCurrent();
     } catch {
       // No assignment was dispatched; a later corrected read may safely try again.
@@ -854,9 +862,6 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     await input.checkpointDelivery(marked);
     const markedInput = { ...input, deliveryCandidates: marked };
     try {
-      const aliasAuthority = await deps.beforeAliasWrite?.(markedInput, selected);
-      if (aliasAuthority === "applied") return await reconcile(markedInput);
-      if (aliasAuthority === "unknown") return { candidates: marked, status: "unknown" as const };
       await fresh.assertCurrent();
       await fresh.request(
         `/v2/deployments/${encodeURIComponent(selected.deploymentId)}/aliases`,

@@ -1,5 +1,9 @@
 import { isDeepStrictEqual } from "node:util";
-import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
+import {
+  HostedOperatorError,
+  hostedOperatorPlanSchema,
+  operatorPlanDigest,
+} from "./hosted-operator-contract";
 import type { HostedOperatorPlan, HostedOperatorRecordBase } from "./hosted-operator-contract";
 import type { ExternallyManagedTrustedSources } from "./hosted-operator-host-protection";
 import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
@@ -35,6 +39,31 @@ export const withExternallyManagedHostProtection = (
   });
 };
 
+/** Recovery owns a pending legacy READY transition or its saved proposal/attempt, never ordinary revisions. */
+export const hasPendingNativePreviewRecovery = (record: HostedRuntimeJournalRecord | undefined) => {
+  const current = record?.operator;
+  if (
+    !record ||
+    !current ||
+    !["pending", "failed"].includes(record.status) ||
+    current.plan.stage !== "app" ||
+    current.plan.action !== "prepare"
+  )
+    return false;
+  if (current.plan.appDeliveryReplacement !== undefined) return true;
+  if (
+    record.approvedByCallId === "operator:unapproved-plan" ||
+    current.plan.hostProtection !== undefined
+  )
+    return false;
+  return [
+    current,
+    ...(current.retainedRenewalOperations ?? []).map((entry) => entry.operator),
+  ].some((operator) =>
+    operator.deliveryCandidates?.some((candidate) => candidate.readyState === "READY"),
+  );
+};
+
 /** A fresh explicit delivery proposal uses the approved source and ownership. No old receipt becomes new success. */
 export const createNativePreviewRecoveryPlan = (
   record: HostedRuntimeJournalRecord | undefined,
@@ -43,8 +72,7 @@ export const createNativePreviewRecoveryPlan = (
   gatewayDeploymentId?: string,
 ): HostedOperatorPlan | undefined => {
   const current = record?.operator;
-  if (!record || !current || current.plan.stage !== "app" || current.plan.action !== "prepare")
-    return undefined;
+  if (!record || !current || !hasPendingNativePreviewRecovery(record)) return undefined;
   if (
     current.plan.appDeliveryReplacement &&
     isDeepStrictEqual(current.plan.hostProtection, policy) &&
@@ -128,6 +156,27 @@ export const createNativePreviewRecoveryPlan = (
       return proposed;
   }
   return undefined;
+};
+
+/** Read only the pending recovery proposal; ordinary planning keeps ownership of new work. */
+export const readNativePreviewRecoveryPlan = async (input: {
+  record: HostedRuntimeJournalRecord | undefined;
+  policy: ExternallyManagedTrustedSources | undefined;
+  now: number;
+  readGatewayAlias: (plan: HostedOperatorPlan) => Promise<string>;
+}): Promise<HostedOperatorPlan | undefined> => {
+  const { record, policy, now } = input;
+  if (policy === undefined || !hasPendingNativePreviewRecovery(record)) return undefined;
+  const current = record?.operator;
+  if (!current) return undefined;
+  if (current.plan.appDeliveryReplacement !== undefined) {
+    const saved = createNativePreviewRecoveryPlan(record, policy, now);
+    if (saved !== undefined) return saved;
+  }
+  const alias = await input.readGatewayAlias(current.plan);
+  const proposed = createNativePreviewRecoveryPlan(record, policy, now, alias);
+  if (proposed === undefined) throw new HostedOperatorError("reconciliation_required");
+  return proposed;
 };
 
 /** Resolve the exact archived transition source; old unknown markers remain evidence only. */

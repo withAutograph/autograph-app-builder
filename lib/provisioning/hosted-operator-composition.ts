@@ -83,7 +83,7 @@ import type { CompiledOperatorReleaseSelection } from "./hosted-operator-artifac
 import { createHostedOperatorEnvironmentBindings } from "./hosted-operator-environment-bindings";
 import { createHostedOperatorAppReadiness } from "./hosted-operator-app-readiness";
 import {
-  createNativePreviewRecoveryPlan,
+  readNativePreviewRecoveryPlan,
   withExternallyManagedHostProtection,
 } from "./hosted-operator-native-preview-recovery";
 import { createReadyReplacementNativeReader } from "./hosted-operator-ready-replacement-native";
@@ -2221,20 +2221,17 @@ export const composeHostedOperatorDependencies = (
       if (policy === undefined) return undefined;
       await controlPlane.assertPlanningAuthorized(context);
       const current = await controlPlane.store.read(context);
-      if (current?.record.operator?.plan.stage !== "app") return undefined;
-      if (current.record.operator.plan.appDeliveryReplacement !== undefined) {
-        const saved = createNativePreviewRecoveryPlan(current.record, policy, Date.now());
-        if (saved !== undefined) return saved;
-      }
-      const reader = createReadyReplacementNativeReader({
-        context,
-        readCredential: controlPlane.readCredential,
-        assertCurrent: async () => await controlPlane.assertPlanningAuthorized(context),
+      return await readNativePreviewRecoveryPlan({
+        record: current?.record,
+        policy,
+        now: Date.now(),
+        readGatewayAlias: async (plan) =>
+          await createReadyReplacementNativeReader({
+            context,
+            readCredential: controlPlane.readCredential,
+            assertCurrent: async () => await controlPlane.assertPlanningAuthorized(context),
+          }).readGatewayAlias(plan),
       });
-      const alias = await reader.readGatewayAlias(current.record.operator.plan);
-      const proposed = createNativePreviewRecoveryPlan(current.record, policy, Date.now(), alias);
-      if (proposed === undefined) throw new HostedOperatorError(RECONCILIATION_REQUIRED);
-      return proposed;
     },
     verifyReadyDeliveryReplacement: async (context, plan, predecessor) => {
       await createReadyReplacementNativeReader({

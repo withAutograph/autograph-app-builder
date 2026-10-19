@@ -10,7 +10,11 @@ import {
   isReadyDeliveryReplacementSuccessor,
   resolveReadyDeliveryReplacementPredecessor,
 } from "./hosted-operator-ready-delivery-replacement";
-import { createNativePreviewRecoveryPlan } from "./hosted-operator-native-preview-recovery";
+import {
+  createNativePreviewRecoveryPlan,
+  readNativePreviewRecoveryPlan,
+  withExternallyManagedHostProtection,
+} from "./hosted-operator-native-preview-recovery";
 import { createProtectedHostedOperatorHandler } from "./hosted-operator-service";
 import type { ProtectedHostedOperatorDependencies } from "./hosted-operator-service";
 import { createHostedOperatorDeploymentDelivery } from "./hosted-operator-deployment-delivery";
@@ -216,13 +220,11 @@ const recoveryFixture = () => {
   original.plan.retention.expiresAt = "2026-10-17T12:00:00Z";
   original.planDigest = operatorPlanDigest(original.plan);
   original.pendingEffectId = original.plan.effects[6].id;
-  original.receipts = original.plan.effects
-    .slice(0, 6)
-    .map((effect) => ({
-      effectId: effect.id,
-      observedAt: "2026-10-17T10:00:00Z",
-      resourceVersion: "old-owned-proof",
-    }));
+  original.receipts = original.plan.effects.slice(0, 6).map((effect) => ({
+    effectId: effect.id,
+    observedAt: "2026-10-17T10:00:00Z",
+    resourceVersion: "old-owned-proof",
+  }));
   original.gatewayDeliveryCandidates = [
     {
       deploymentId: "ready-gateway",
@@ -243,13 +245,11 @@ const recoveryFixture = () => {
     approvalId: "approval-first-renewal",
     plan: firstPlan,
     planDigest: operatorPlanDigest(firstPlan),
-    receipts: firstPlan.effects
-      .slice(0, 3)
-      .map((effect) => ({
-        effectId: effect.id,
-        observedAt: "2026-10-18T12:01:00Z",
-        resourceVersion: "retained-resource",
-      })),
+    receipts: firstPlan.effects.slice(0, 3).map((effect) => ({
+      effectId: effect.id,
+      observedAt: "2026-10-18T12:01:00Z",
+      resourceVersion: "retained-resource",
+    })),
     pendingEffectId: firstPlan.effects[3].id,
     pendingEffectAttempt: { id: "52222222-2222-4222-8222-222222222222" },
   };
@@ -316,118 +316,157 @@ describe("native externally managed policy recovery integration", () => {
       ),
     ).toBeUndefined();
   });
-  it("keeps a frozen default OIDC/Trusted Sources plan and its existing approval on the full handler", async () => {
-    const f = fixture();
-    f.record.operator!.plan.appTrustedSources = {
-      gatewayPreview: { projectId: "project-gateway", from: "preview", to: "preview" },
-    };
-    f.record.operator!.plan.gatewayBindings!.trustedSources = {
-      appPreview: { projectId: "project-notes", from: "preview", to: "preview" },
-    };
-    f.record.operator!.planDigest = operatorPlanDigest(f.record.operator!.plan);
-    f.record.operator!.deliveredDeploymentId = "ready-notes";
-    const oldDigest = f.record.operator!.planDigest;
-    let row = { record: f.record, revision: 1 };
-    const context = {
-      authority: f.record.operator!.plan.deploymentBoundary!.authority,
-      target: f.record.request,
-    };
-    const store: HostedRuntimeJournalStore = {
-      read: async () => structuredClone(row),
-      reserve: async () => structuredClone(row),
-      compareAndSet: async (input) => {
-        if (input.expectedRevision !== row.revision) return undefined;
-        row = {
-          record: hostedRuntimeJournalRecordSchema.parse(input.record),
-          revision: row.revision + 1,
-        };
-        return structuredClone(row);
-      },
-      reserveFenceGeneration: async () => {
-        row.record.operator!.fenceGeneration = 1;
-        row.revision++;
-        return structuredClone(row);
-      },
-    };
-    const plan = vi.fn(async () => structuredClone(f.record.operator!.plan));
-    const deps: ProtectedHostedOperatorDependencies = {
-      store,
-      authorize: async () => context,
-      assertAuthorized: async () => {},
-      plan,
-      readApproval: async (input) => ({ ...input, approved: true, approvalId: "approval-notes" }),
-      withResourceLease: async (_input, run) => await run(async () => {}),
-      reconcile: async () => ({ status: "absent" }),
-      executeEffect: async (input) => {
-        expect(input.plan.hostProtection).toBeUndefined();
-        expect(input.plan.appTrustedSources).toEqual(f.record.operator!.plan.appTrustedSources);
-        expect(input.plan.gatewayBindings!.trustedSources).toEqual(
-          f.record.operator!.plan.gatewayBindings!.trustedSources,
+  it.each(["approved-default", "unapproved-first"] as const)(
+    "keeps ordinary %s app planning on the full handler",
+    async (planningCase) => {
+      const f = fixture();
+      f.record.operator!.plan.appTrustedSources = {
+        gatewayPreview: { projectId: "project-gateway", from: "preview", to: "preview" },
+      };
+      f.record.operator!.plan.gatewayBindings!.trustedSources = {
+        appPreview: { projectId: "project-notes", from: "preview", to: "preview" },
+      };
+      f.record.operator!.planDigest = operatorPlanDigest(f.record.operator!.plan);
+      f.record.operator!.deliveredDeploymentId = "ready-notes";
+      if (planningCase === "unapproved-first") {
+        f.record.operator!.plan = withExternallyManagedHostProtection(
+          f.record.operator!.plan,
+          externalPolicy,
         );
-        if (input.effect.kind === "gateway-delivery")
-          await input.checkpointGatewayDelivery!(
-            [
-              {
-                deploymentId: "default-gateway",
-                operationRef,
-                projectId: "project-gateway",
-                branch: "gateway/notes",
-                repoId: "repo-gateway",
-                readyState: "READY",
-                origin: "https://default-gateway.example.test",
-              },
-            ],
-            "default-gateway",
-          );
-        return {
-          effectId: input.effect.id,
-          observedAt: new Date(now).toISOString(),
-          resourceVersion: "default-owned-readback",
-          ...(input.effect.kind === "access" ? { fenceGeneration: input.fenceGeneration } : {}),
-        };
-      },
-      verify: async () => ({
-        actors: 1,
-        tenants: 1,
-        releaseId: f.record.operator!.plan.release.id,
-        artifactHash: f.record.operator!.plan.release.sha256,
-        manifestSha256: f.record.operator!.plan.release.sha256,
-        authenticatedBehavior: "unassessed",
-      }),
-      bindings: async () => ({}),
-    };
-    const handler = createProtectedHostedOperatorHandler(deps);
-    const request = (body: Record<string, unknown>) =>
-      new Request("https://operator.example.test/v1/runtime", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...body, selection: f.record.operator!.plan.selection }),
+        f.record.operator!.planDigest = operatorPlanDigest(f.record.operator!.plan);
+        f.record.approvedByCallId = "operator:unapproved-plan";
+        f.record.operator!.receipts = [];
+        delete f.record.operator!.approvalId;
+        delete f.record.operator!.pendingEffectId;
+        delete f.record.operator!.pendingEffectAttempt;
+        delete f.record.operator!.deliveredDeploymentId;
+        delete f.record.operator!.deliveryCandidates;
+      }
+      const oldDigest = f.record.operator!.planDigest;
+      let row = { record: f.record, revision: 1 };
+      const context = {
+        authority: f.record.operator!.plan.deploymentBoundary!.authority,
+        target: f.record.request,
+      };
+      const store: HostedRuntimeJournalStore = {
+        read: async () => structuredClone(row),
+        reserve: async () => structuredClone(row),
+        compareAndSet: async (input) => {
+          if (input.expectedRevision !== row.revision) return undefined;
+          row = {
+            record: hostedRuntimeJournalRecordSchema.parse(input.record),
+            revision: row.revision + 1,
+          };
+          return structuredClone(row);
+        },
+        reserveFenceGeneration: async () => {
+          row.record.operator!.fenceGeneration = 1;
+          row.revision++;
+          return structuredClone(row);
+        },
+      };
+      const plan = vi.fn(async () => structuredClone(f.record.operator!.plan));
+      const readGatewayAlias = vi.fn(async () => {
+        throw new Error("ordinary first proposal must not read predecessor alias");
       });
-    vi.spyOn(Date, "now").mockReturnValue(now);
-    try {
-      expect(
-        (await (await handler(request({ action: "plan", operation: "prepare" }))).json())
-          .planDigest,
-      ).toBe(oldDigest);
-      const result = await (
-        await handler(
-          request({
-            action: "execute",
-            callId: "approval-call-notes",
-            operationRef,
-            planDigest: oldDigest,
-          }),
-        )
-      ).json();
-      expect(result.status).toBe("prepared");
-      expect(row.record.operator!.planDigest).toBe(oldDigest);
-      expect(row.record.operator!.retainedReadyDeliveryOperations).toBeUndefined();
-      expect(row.record.operator!.plan.appDeliveryReplacement).toBeUndefined();
-      expect(plan).toHaveBeenCalled();
-    } finally {
-      vi.restoreAllMocks();
-    }
-  });
+      const deps: ProtectedHostedOperatorDependencies = {
+        store,
+        authorize: async () => context,
+        assertAuthorized: async () => {},
+        plan,
+        ...(planningCase === "unapproved-first"
+          ? {
+              readReadyDeliveryReplacementPlan: async () =>
+                await readNativePreviewRecoveryPlan({
+                  record: row.record,
+                  policy: externalPolicy,
+                  now,
+                  readGatewayAlias,
+                }),
+            }
+          : {}),
+        readApproval: async (input) => ({ ...input, approved: true, approvalId: "approval-notes" }),
+        withResourceLease: async (_input, run) => await run(async () => {}),
+        reconcile: async () => ({ status: "absent" }),
+        executeEffect: async (input) => {
+          expect(input.plan.hostProtection).toBeUndefined();
+          expect(input.plan.appTrustedSources).toEqual(f.record.operator!.plan.appTrustedSources);
+          expect(input.plan.gatewayBindings!.trustedSources).toEqual(
+            f.record.operator!.plan.gatewayBindings!.trustedSources,
+          );
+          if (input.effect.kind === "gateway-delivery")
+            await input.checkpointGatewayDelivery!(
+              [
+                {
+                  deploymentId: "default-gateway",
+                  operationRef,
+                  projectId: "project-gateway",
+                  branch: "gateway/notes",
+                  repoId: "repo-gateway",
+                  readyState: "READY",
+                  origin: "https://default-gateway.example.test",
+                },
+              ],
+              "default-gateway",
+            );
+          return {
+            effectId: input.effect.id,
+            observedAt: new Date(now).toISOString(),
+            resourceVersion: "default-owned-readback",
+            ...(input.effect.kind === "access" ? { fenceGeneration: input.fenceGeneration } : {}),
+          };
+        },
+        verify: async () => ({
+          actors: 1,
+          tenants: 1,
+          releaseId: f.record.operator!.plan.release.id,
+          artifactHash: f.record.operator!.plan.release.sha256,
+          manifestSha256: f.record.operator!.plan.release.sha256,
+          authenticatedBehavior: "unassessed",
+        }),
+        bindings: async () => ({}),
+      };
+      const handler = createProtectedHostedOperatorHandler(deps);
+      const request = (body: Record<string, unknown>) =>
+        new Request("https://operator.example.test/v1/runtime", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ...body, selection: f.record.operator!.plan.selection }),
+        });
+      vi.spyOn(Date, "now").mockReturnValue(now);
+      try {
+        expect(
+          (await (await handler(request({ action: "plan", operation: "prepare" }))).json())
+            .planDigest,
+        ).toBe(oldDigest);
+        if (planningCase === "unapproved-first") {
+          expect(row.record.operator!.plan.hostProtection).toEqual(externalPolicy);
+          expect(row.record.operator!.plan.appDeliveryReplacement).toBeUndefined();
+          expect(row.record.operator!.retainedReadyDeliveryOperations).toBeUndefined();
+          expect(plan).toHaveBeenCalledOnce();
+          expect(readGatewayAlias).not.toHaveBeenCalled();
+          return;
+        }
+        const result = await (
+          await handler(
+            request({
+              action: "execute",
+              callId: "approval-call-notes",
+              operationRef,
+              planDigest: oldDigest,
+            }),
+          )
+        ).json();
+        expect(result.status).toBe("prepared");
+        expect(row.record.operator!.planDigest).toBe(oldDigest);
+        expect(row.record.operator!.retainedReadyDeliveryOperations).toBeUndefined();
+        expect(row.record.operator!.plan.appDeliveryReplacement).toBeUndefined();
+        expect(plan).toHaveBeenCalled();
+      } finally {
+        vi.restoreAllMocks();
+      }
+    },
+  );
   it("freezes exact administrator evidence without mutating either old approval or unknown attempt", () => {
     const f = recoveryFixture();
     const original = structuredClone(f.current);
@@ -461,7 +500,7 @@ describe("native externally managed policy recovery integration", () => {
       expect(hostedOperatorPlanSchema.safeParse(plan).success).toBe(false);
     },
   );
-  it.each(["applied", "already-applied", "lost", "drift", "denied"] as const)(
+  it.each(["applied", "already-applied", "lost", "drift", "denied", "transient-hook"] as const)(
     "requires new approval and preserves old alias uncertainty when the new alias is %s",
     async (outcome) => {
       const loseAlias = outcome === "lost";
@@ -532,6 +571,8 @@ describe("native externally managed policy recovery integration", () => {
       let appBound = false;
       let gatewayBoundOrigin: string | undefined;
       let approved = false;
+      let guardReadUnavailable = false;
+      let failNextGuardRead = outcome === "transient-hook";
       const calls: { method: string; path: string; body?: Record<string, unknown> }[] = [];
       const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = new URL(input instanceof Request ? input.url : String(input));
@@ -541,13 +582,15 @@ describe("native externally managed policy recovery integration", () => {
           ? (JSON.parse(String(init.body)) as Record<string, unknown>)
           : undefined;
         calls.push({ method, path: url.pathname, body });
-        if (url.pathname.startsWith("/v4/aliases/"))
+        if (url.pathname.startsWith("/v4/aliases/")) {
+          if (guardReadUnavailable) throw new Error("synthetic transient alias guard GET failure");
           return Response.json({
             alias: "notes.example.test",
             projectId: "project-gateway",
             deploymentId: aliasTarget,
             redirect: null,
           });
+        }
         if (url.pathname.startsWith("/v9/projects/")) {
           const projectId = url.pathname.split("/")[3];
           return Response.json({
@@ -644,20 +687,36 @@ describe("native externally managed policy recovery integration", () => {
           expect(gatewayBoundOrigin).toBe("https://fresh-notes.example.test");
         },
         beforeCreate: async (input) => await native.verify(input.plan, input.readyReplacement!),
-        beforeAliasWrite: async (input, selected) =>
-          await native.aliasWriteAuthority(input.plan, selected.deploymentId),
+        beforeAliasWrite: async (input, selected) => {
+          guardReadUnavailable = failNextGuardRead;
+          failNextGuardRead = false;
+          try {
+            return await native.aliasWriteAuthority(input.plan, selected.deploymentId);
+          } finally {
+            guardReadUnavailable = false;
+          }
+        },
       });
       const executed: string[] = [];
+      let ordinaryPlan: typeof f.proposed | undefined;
+      const ordinaryPlanning = vi.fn(async () => {
+        if (!ordinaryPlan)
+          throw new Error("fresh generic planning must not replace this pending proposal");
+        return ordinaryPlan;
+      });
       const deps: ProtectedHostedOperatorDependencies = {
         store,
         authorize: async () => context,
         assertAuthorized: async () => {},
         assertCanonicalOwner: async () => {},
-        plan: async () => {
-          throw new Error("fresh generic planning must not replace this proposal");
-        },
+        plan: ordinaryPlanning,
         readReadyDeliveryReplacementPlan: async () =>
-          row.record.operator!.plan.appDeliveryReplacement ? row.record.operator!.plan : f.proposed,
+          await readNativePreviewRecoveryPlan({
+            record: row.record,
+            policy: externalPolicy,
+            now,
+            readGatewayAlias: async (plan) => await native.readGatewayAlias(plan),
+          }),
         verifyReadyDeliveryReplacement: async (_context, plan, predecessor) =>
           await native.verify(plan, predecessor),
         readApproval: async (input) => ({
@@ -737,6 +796,18 @@ describe("native externally managed policy recovery integration", () => {
         expect(row.record.operator!.gatewayDeliveryCandidates).toEqual([]);
         const archived = row.record.operator!.retainedReadyDeliveryOperations![0].operator;
         expect(archived.retainedRenewalOperations).toEqual(oldHistories);
+        const readsAfterProposal = calls.filter((call) =>
+          call.path.startsWith("/v4/aliases/"),
+        ).length;
+        const savedProposal = await (
+          await handler(request({ action: "plan", operation: "prepare" }))
+        ).json();
+        expect(savedProposal.status).toBe("planned");
+        expect(savedProposal.planDigest).toBe(proposed.planDigest);
+        expect(savedProposal.operationRef).toBe(proposed.operationRef);
+        expect(calls.filter((call) => call.path.startsWith("/v4/aliases/"))).toHaveLength(
+          readsAfterProposal,
+        );
         const execute = {
           action: "execute",
           callId: "new-human-call",
@@ -762,16 +833,39 @@ describe("native externally managed policy recovery integration", () => {
           calls.filter((call) => call.path === "/v13/deployments" && call.method === "POST"),
         ).toHaveLength(2);
         if (loseAlias) {
+          expect(row.record.operator!.gatewayDeliveryCandidates![0].gatewayAliasAttempted).toBe(
+            true,
+          );
           await handler(request(execute));
           expect(
             calls.filter((call) => call.path.endsWith("/aliases") && call.method === "POST"),
           ).toHaveLength(1);
         }
         if (outcome === "drift") {
+          expect(
+            row.record.operator!.gatewayDeliveryCandidates![0].gatewayAliasAttempted,
+          ).toBeUndefined();
           expect(aliasTarget).toBe("unrelated-ready-gateway");
           expect(
             calls.filter((call) => call.path.endsWith("/aliases") && call.method === "POST"),
           ).toHaveLength(0);
+        }
+        if (outcome === "transient-hook") {
+          expect(
+            row.record.operator!.gatewayDeliveryCandidates![0].gatewayAliasAttempted,
+          ).toBeUndefined();
+          expect(
+            calls.filter((call) => call.path.endsWith("/aliases") && call.method === "POST"),
+          ).toHaveLength(0);
+          const resumed = await (await handler(request(execute))).json();
+          expect(resumed.status).toBe("prepared");
+          expect(aliasTarget).toBe("fresh-gateway");
+          expect(
+            calls.filter((call) => call.path.endsWith("/aliases") && call.method === "POST"),
+          ).toHaveLength(1);
+          expect(
+            calls.filter((call) => call.path === "/v13/deployments" && call.method === "POST"),
+          ).toHaveLength(2);
         }
         if (outcome === "already-applied")
           expect(
@@ -787,6 +881,31 @@ describe("native externally managed policy recovery integration", () => {
         expect(
           calls.some((call) => call.method === "PATCH" || call.path.includes("protection-bypass")),
         ).toBe(false);
+        if (outcome === "applied") {
+          const completedDigest = row.record.operator!.planDigest;
+          const { appDeliveryReplacement, ...nextBase } = row.record.operator!.plan;
+          void appDeliveryReplacement;
+          ordinaryPlan = hostedOperatorPlanSchema.parse({
+            ...nextBase,
+            delivery: { ...nextBase.delivery, gitSha: "5".repeat(40) },
+            release: { ...nextBase.release, id: "notes-revised-release", sha256: "6".repeat(64) },
+          });
+          const readsBeforeRevision = calls.filter((call) =>
+            call.path.startsWith("/v4/aliases/"),
+          ).length;
+          const revised = await (
+            await handler(request({ action: "plan", operation: "prepare" }))
+          ).json();
+          expect(calls.filter((call) => call.path.startsWith("/v4/aliases/"))).toHaveLength(
+            readsBeforeRevision,
+          );
+          expect(revised.status).toBe("planned");
+          expect(revised.plan.delivery.gitSha).toBe("5".repeat(40));
+          expect(revised.plan.release.id).toBe("notes-revised-release");
+          expect(revised.plan.appDeliveryReplacement).toBeUndefined();
+          expect(revised.planDigest).not.toBe(completedDigest);
+          expect(ordinaryPlanning).toHaveBeenCalledOnce();
+        }
       } finally {
         vi.restoreAllMocks();
       }
