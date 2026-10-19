@@ -17,6 +17,7 @@ import type {
   OperatorGatewayBindingsDiagnostic,
 } from "./hosted-operator-consent-diagnostic";
 import type { readActiveVercelInstallationToken } from "../integrations/postgres-vercel-installation";
+import { isRetentionRenewalBindingProvenance } from "./hosted-operator-retention-renewal";
 import {
   canonicalGatewayEnvironmentRowsSchema,
   HostedOperatorError,
@@ -605,6 +606,19 @@ export const createHostedOperatorGatewayBindings = (deps: {
       throw unavailable();
     }
     const { gateway, target } = input;
+    const renewal = input.renewalBindingProvenance;
+    if (
+      renewal !== undefined &&
+      !isRetentionRenewalBindingProvenance(
+        renewal,
+        input.plan,
+        input.operationRef,
+        input.effect.id,
+        "gateway-bindings",
+      )
+    ) {
+      throw unavailable();
+    }
     const { branch, projectId } = gateway;
     const comment = `App Builder protected operator ${input.operationRef}`;
     const approvedCanonical = structuredClone(input.plan.authAdoption?.gatewayEnvironment);
@@ -767,6 +781,9 @@ export const createHostedOperatorGatewayBindings = (deps: {
         trustedSourcesVisibility: visibility,
         missingApprovedPairCount: missing.length,
       });
+      if (renewal !== undefined && project.trustedSources === undefined) {
+        throw unavailable();
+      }
       // A finite override cannot preserve the future same-environment semantics of an implicit foreign grant.
       const requiresReconciliation = missing.some(
         (rule) =>
@@ -1240,6 +1257,25 @@ export const createHostedOperatorGatewayBindings = (deps: {
       await requiredEnvironment(listed);
       const expected = await expectedValues(rows);
       if (
+        renewal !== undefined &&
+        (rows.length !== Object.keys(expected).length ||
+          renewal.rows.some(
+            (saved) =>
+              !rows.some(
+                (row) =>
+                  row.id === saved.id &&
+                  row.key === saved.key &&
+                  row.comment === saved.comment &&
+                  matchesPreviewEnvironmentGitBranch(
+                    row.gitBranch,
+                    savedPreviewEnvironmentGitBranch(saved),
+                  ),
+              ),
+          ))
+      ) {
+        throw unavailable();
+      }
+      if (
         input.plan.authAdoption !== undefined &&
         rows.some(
           (row) =>
@@ -1299,6 +1335,9 @@ export const createHostedOperatorGatewayBindings = (deps: {
       ).value;
     };
     const writeRow = async (key: keyof GatewayValues, value: string, existing?: ProviderRow) => {
+      if (renewal !== undefined && existing === undefined) {
+        throw unavailable();
+      }
       const gitBranch = existing === undefined ? await newRowGitBranch() : undefined;
       return await (existing
         ? request(
@@ -1387,6 +1426,9 @@ export const createHostedOperatorGatewayBindings = (deps: {
         observation.at("authority");
         await io.fullGuard();
         let { expected, known, rows, values } = await io.inspect(false);
+        if (input.renewalBindingProvenance !== undefined) {
+          await io.observeTrustedSources();
+        }
         const creatingRows = rows.length === 0;
         await io.checkpoint(rows, known, values, expected);
         // Select work from the fresh initial observation. Each changed key keeps

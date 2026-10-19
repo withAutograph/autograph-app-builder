@@ -67,6 +67,25 @@ they should allow ordinary app and branch changes. Native Neon installer
 credential reads retain the exact selected branch and integration authority
 described in the [legacy runtime contract](hosted-app-runtime.md#provider-prerequisites).
 
+## Renewing a binding approval
+
+An expired approved app plan may renew at an unresolved app or Gateway binding
+without creating another environment row. The renewal preserves its exact
+predecessor, pending attempt and saved row identities, and requires both the
+original approval and a new approval before execution. Normal execution records
+the pending effect and attempt atomically before native writes; a pending binding
+without that attempt is not treated as unattempted setup.
+If a renewed readback expires before reserving a new attempt, subsequent renewal
+still uses the original unresolved attempt from the retained history.
+
+Recovery first checks the complete owned row inventory. Reconciliation reads
+expected values before reporting an applied or retryable binding; repair reads
+and updates existing rows by their saved IDs. Missing, unreadable, foreign or
+duplicate rows remain unknown. An omitted Trusted Sources
+field is unreadable, while an explicitly present null policy can be empty.
+Neither incomplete rows nor an omitted policy authorize a new environment POST
+or policy PATCH. This binding renewal does not expand app deployment retry scope.
+
 ## App projection
 
 Exactly these environment keys are permitted:

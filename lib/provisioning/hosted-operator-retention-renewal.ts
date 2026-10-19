@@ -2,6 +2,7 @@ import type {
   HostedOperatorPlan,
   HostedOperatorRecord,
   HostedOperatorRecordBase,
+  ManagedOperatorEnvironmentRow,
   OperatorDeploymentCandidate,
 } from "./hosted-operator-contract";
 import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
@@ -23,6 +24,19 @@ export interface RetentionRenewalDeliveryProvenance {
   planDigest: string;
 }
 
+type BindingKind = "bindings" | "gateway-bindings";
+export interface RetentionRenewalBindingProvenance {
+  approvedByCallId: string;
+  approvalId: string;
+  effectId: string;
+  kind: BindingKind;
+  operationRef: string;
+  pendingEffectAttempt: NonNullable<HostedOperatorRecordBase["pendingEffectAttempt"]>;
+  plan: HostedOperatorPlan;
+  planDigest: string;
+  rows: readonly ManagedOperatorEnvironmentRow[];
+}
+
 const UNAPPROVED_PLAN_CALL_ID = "operator:unapproved-plan";
 const isExpiredAt = (timestamp: number, now: number) =>
   Number.isFinite(timestamp) && timestamp <= now;
@@ -35,8 +49,9 @@ const receiptsPrecedePending = (
   operator: HostedOperatorRecord,
   previousEffectIds: Set<string>,
   receiptIds: Set<string>,
+  pendingEffectId: string | undefined,
 ) =>
-  !operator.receipts.some((receipt) => receipt.effectId === operator.pendingEffectId) &&
+  !operator.receipts.some((receipt) => receipt.effectId === pendingEffectId) &&
   operator.receipts.every((receipt) => previousEffectIds.has(receipt.effectId)) &&
   [...previousEffectIds].every((effectId) => receiptIds.has(effectId));
 const hasNoActiveLease = (record: HostedRuntimeJournalRecord, leaseExpiry: number, now: number) =>
@@ -135,9 +150,21 @@ export const isRetentionRenewalSuccessor = (
   if (record === undefined || operator === undefined || !isExactRenewalPlan(operator.plan, plan)) {
     return false;
   }
-  const pendingIndex = operator.plan.effects.findIndex(
-    (effect) => effect.id === operator.pendingEffectId,
-  );
+  let pendingEffectId = operator.pendingEffectId;
+  let pendingEffectAttempt = operator.pendingEffectAttempt;
+  if (pendingEffectId === undefined) {
+    const firstUnreceipted = operator.plan.effects.find(
+      (effect) => !operator.receipts.some((receipt) => receipt.effectId === effect.id),
+    );
+    if (firstUnreceipted !== undefined) {
+      const inherited = retentionRenewalBindingProvenance(record, firstUnreceipted.id);
+      if (inherited !== undefined) {
+        pendingEffectId = inherited.effectId;
+        pendingEffectAttempt = inherited.pendingEffectAttempt;
+      }
+    }
+  }
+  const pendingIndex = operator.plan.effects.findIndex((effect) => effect.id === pendingEffectId);
   const pending = operator.plan.effects[pendingIndex];
   const previousEffectIds = new Set(
     operator.plan.effects.slice(0, pendingIndex).map((effect) => effect.id),
@@ -157,8 +184,11 @@ export const isRetentionRenewalSuccessor = (
     hasText(operator.approvalId),
     isRealApprovalCall(record.approvedByCallId),
     operator.planDigest === operatorPlanDigest(operator.plan),
-    operator.pendingEffectId !== undefined && pending?.kind === "gateway-delivery",
-    receiptsPrecedePending(operator, previousEffectIds, receiptIds),
+    pendingEffectId !== undefined &&
+      pending !== undefined &&
+      ["bindings", "gateway-bindings", "gateway-delivery"].includes(pending.kind),
+    pending?.kind === "gateway-delivery" || pendingEffectAttempt !== undefined,
+    receiptsPrecedePending(operator, previousEffectIds, receiptIds, pendingEffectId),
     hasNoActiveLease(record, leaseExpiry, now),
   ].every(Boolean);
 };
@@ -194,6 +224,77 @@ const isValidRenewalProvenance = (
     prior.planDigest === operatorPlanDigest(prior.plan),
     isExactRenewalPlan(prior.plan, currentPlan),
   ].every(Boolean);
+};
+
+/** Uncertain native writes remain tied to the exact predecessor, never inferred from empty reads. */
+export const isRetentionRenewalBindingProvenance = (
+  provenance: RetentionRenewalBindingProvenance,
+  currentPlan: HostedOperatorPlan,
+  operationRef: string,
+  effectId: string,
+  kind: BindingKind,
+): boolean => {
+  const priorEffect = provenance.plan.effects.find((effect) => effect.id === effectId);
+  const target =
+    kind === "bindings"
+      ? provenance.plan.deploymentBoundary?.app
+      : provenance.plan.deploymentBoundary?.gateway;
+  return [
+    isRealApprovalCall(provenance.approvedByCallId),
+    hasText(provenance.approvalId),
+    provenance.operationRef === operationRef,
+    provenance.effectId === effectId,
+    provenance.kind === kind,
+    priorEffect?.kind === kind,
+    provenance.planDigest === operatorPlanDigest(provenance.plan),
+    isExactRenewalPlan(provenance.plan, currentPlan),
+    target !== undefined,
+    provenance.rows.every(
+      (row) =>
+        row.projectId === target?.projectId &&
+        row.branch === target?.branch &&
+        row.comment === `App Builder protected operator ${row.operationRef}`,
+    ),
+  ].every(Boolean);
+};
+
+/** Recover the most recent unresolved binding attempt without making its old approval current. */
+export const retentionRenewalBindingProvenance = (
+  record: HostedRuntimeJournalRecord | undefined,
+  effectId: string,
+): RetentionRenewalBindingProvenance | undefined => {
+  const current = record?.operator;
+  if (current === undefined) {
+    return undefined;
+  }
+  for (const retained of (current.retainedRenewalOperations ?? []).toReversed()) {
+    if (!isValidRenewalProvenance(retained, current.plan, current.operationRef)) {
+      continue;
+    }
+    const prior = retained.operator;
+    const effect = prior.plan.effects.find((candidate) => candidate.id === effectId);
+    if (
+      prior.pendingEffectId !== effectId ||
+      prior.pendingEffectAttempt === undefined ||
+      (effect?.kind !== "bindings" && effect?.kind !== "gateway-bindings")
+    ) {
+      continue;
+    }
+    return {
+      approvedByCallId: retained.approvedByCallId,
+      approvalId: prior.approvalId,
+      effectId,
+      kind: effect.kind,
+      operationRef: prior.operationRef,
+      pendingEffectAttempt: structuredClone(prior.pendingEffectAttempt),
+      plan: prior.plan,
+      planDigest: prior.planDigest,
+      rows: structuredClone(
+        (effect.kind === "bindings" ? prior.managedEnvironment : prior.gatewayEnvironment) ?? [],
+      ),
+    };
+  }
+  return undefined;
 };
 
 const isPendingSavedRenewal = (
