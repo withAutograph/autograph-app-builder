@@ -8,6 +8,8 @@ import {
   hostedOperatorOwnedOrganizationSpecSchema,
 } from "./hosted-operator-contract";
 import type { HostedOperatorOwnedOrganizationSpec } from "./hosted-operator-contract";
+import { reportOperatorNormalActorProofFailure } from "./hosted-operator-consent-diagnostic";
+import type { OperatorNormalActorProofFailure } from "./hosted-operator-consent-diagnostic";
 import { readVerifiedRealmAccess } from "./hosted-operator-auth-identity";
 import type { realmPhysicalResourceSchema } from "./hosted-operator-auth-identity";
 import { createNormalActorJournal } from "./hosted-operator-normal-actor-journal";
@@ -125,6 +127,7 @@ const readProof = async ({
   storageState,
   origin,
   assertCurrent,
+  observe,
 }: {
   record: NormalActorOrganizationProof;
   nonce?: string;
@@ -134,9 +137,11 @@ const readProof = async ({
   storageState: NormalBrowserStorageState;
   origin: string;
   assertCurrent: () => Promise<void>;
+  observe: (failure: OperatorNormalActorProofFailure) => void;
 }): Promise<string> => {
   let proof: string;
   if (record.link.consumedAt === undefined) {
+    observe({ stage: "proof_request" });
     if (nonce === undefined) {
       throw unavailable();
     }
@@ -150,6 +155,7 @@ const readProof = async ({
     });
     // Browser-session correlation would invoke the separate human capture callback; this nonce is already bound to the approved retained organization candidate.
     const cookie = cookieHeader(storageState, origin, path);
+    observe({ stage: "proof_request", cookiePresent: cookie !== "" });
     if (cookie === "") {
       throw unavailable();
     }
@@ -167,6 +173,16 @@ const readProof = async ({
       cache: "no-store",
       signal: AbortSignal.timeout(20_000),
     });
+    const responseFacts = {
+      cookiePresent: cookie !== "",
+      httpStatus: response.status,
+      redirected: response.redirected,
+      contentTypeValid:
+        response.headers
+          .get("content-type")
+          ?.startsWith("application/vnd.realm-operator-proof+json") === true,
+    };
+    observe({ stage: "proof_response", ...responseFacts });
     if (
       ![
         response.status === 200,
@@ -179,8 +195,10 @@ const readProof = async ({
     ) {
       throw unavailable();
     }
+    observe({ stage: "proof_decode", ...responseFacts });
     proof = await boundedProofResponse(response);
   } else {
+    observe({ stage: "proof_artifact_read" });
     const { proofRef, proofSha256 } = record.link;
     if (proofRef === undefined || proofSha256 === undefined) {
       throw unavailable();
@@ -290,17 +308,23 @@ export const createHostedOperatorNormalActorProofCollector = (
 ): NormalActorOperationsDependencies["collectOrganizationOwnerProof"] => {
   const journal = createNormalActorJournal(deps.journalPorts);
   return async (input) => {
+    let failure: OperatorNormalActorProofFailure = { stage: "authorization" };
+    const observe = (value: OperatorNormalActorProofFailure) => {
+      failure = value;
+    };
     try {
       const assertCurrent = async () => {
         await deps.assertPlanningAuthorized(input);
       };
       await assertCurrent();
+      observe({ stage: "journal_read" });
       const retained = await journal.read(input);
       if (retained === undefined) {
         throw unavailable();
       }
       const { preparation } = retained;
       const { organization, candidate, actor } = selectedOwner(input, retained);
+      observe({ stage: "owner_session" });
       const fetch = await deps.normalRealmFetch({
         context: input,
         origin: preparation.program.origin,
@@ -322,8 +346,10 @@ export const createHostedOperatorNormalActorProofCollector = (
       ) {
         throw unavailable();
       }
+      observe({ stage: "realm_binding" });
       const binding = await deps.resolveRealmBinding({ context: input, preparation });
       assertRealmBinding(input, preparation, binding);
+      observe({ stage: "proof_preparation" });
       const pending = await journal.prepareOrganizationProof(input, {
         organizationId: organization.organizationId,
         ownerActorKey: organization.ownerActorKey,
@@ -338,6 +364,7 @@ export const createHostedOperatorNormalActorProofCollector = (
           transportSource: binding.transportSource,
         },
       });
+      observe({ stage: "artifact_context" });
       const artifacts = await deps.ownedArtifacts(input);
       if ("kind" in artifacts.context.authority) {
         throw mismatch();
@@ -363,7 +390,9 @@ export const createHostedOperatorNormalActorProofCollector = (
         storageState: normal.exportStorageState(),
         origin: preparation.program.origin,
         assertCurrent,
+        observe,
       });
+      observe({ stage: "proof_verify" });
       const verified = await readVerifiedRealmAccess({
         assertCurrent,
         pending: pending.record.link,
@@ -371,7 +400,16 @@ export const createHostedOperatorNormalActorProofCollector = (
         proof,
         getKey: binding.getKey,
         resource: binding.resource,
-        readback: binding.readback,
+        readback: async (request) => {
+          observe({ stage: "proof_readback_request" });
+          const response = await binding.readback(request);
+          observe({
+            stage: "proof_readback_response",
+            httpStatus: response.status,
+            redirected: response.redirected,
+          });
+          return response;
+        },
       });
       if (
         verified.identity.actorId !== candidate.session.actorId ||
@@ -380,6 +418,7 @@ export const createHostedOperatorNormalActorProofCollector = (
       ) {
         throw mismatch();
       }
+      observe({ stage: "proof_persistence" });
       let captured = pending.record;
       if (captured.link.consumedAt === undefined) {
         const proofSha256 = digest(proof);
@@ -405,6 +444,7 @@ export const createHostedOperatorNormalActorProofCollector = (
         });
       }
       await assertCurrent();
+      observe({ stage: "result" });
       return hostedOperatorOwnedOrganizationSpecSchema.parse({
         kind: "create-owned-organization",
         organizationId: organization.organizationId,
@@ -426,6 +466,7 @@ export const createHostedOperatorNormalActorProofCollector = (
         },
       });
     } catch (error) {
+      reportOperatorNormalActorProofFailure(input.target.sessionId, failure, error);
       if (error instanceof HostedOperatorError) {
         throw error;
       }

@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { betterAuth } from "better-auth";
 import { organization } from "better-auth/plugins";
 import { generateKeyPair, SignJWT, jwtVerify } from "jose";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
 import {
@@ -164,6 +164,10 @@ const fixture = async () => {
   let approved = true;
   let malformedPrivateResponse = false;
   let wrongActor = false;
+  let keyError: Error | undefined;
+  let proofResponse: Response | undefined;
+  let proofRequestError: Error | undefined;
+  let proofReadbackResponse: Response | undefined;
   const requests: Request[] = [];
   const cookies = new Map<string, string>();
   const artifacts = new Map<string, string>();
@@ -216,6 +220,12 @@ const fixture = async () => {
     requests.push(request.clone());
     if (new URL(request.url).pathname !== "/api/auth/platform/operator-link") {
       return await auth.handler(request);
+    }
+    if (proofRequestError !== undefined) {
+      throw proofRequestError;
+    }
+    if (proofResponse !== undefined) {
+      return proofResponse;
     }
     expect(request.method).toBe("POST");
     expect(request.headers.get("origin")).toBe(program.origin);
@@ -314,7 +324,12 @@ const fixture = async () => {
         plan.deploymentBoundary?.verification.gatewayOrigin ?? "https://gateway.example.test",
       builderCallbackOrigin: "https://builder.example.com",
       resource,
-      getKey: async () => publicKey,
+      getKey: async () => {
+        if (keyError !== undefined) {
+          throw keyError;
+        }
+        return publicKey;
+      },
       transportSource: {
         issuer: "https://oidc.vercel.com",
         audience: "https://operator.example.com",
@@ -323,6 +338,9 @@ const fixture = async () => {
         environment: "preview",
       },
       readback: async (request) => {
+        if (proofReadbackResponse !== undefined) {
+          return proofReadbackResponse;
+        }
         expect(new URL(request.url).origin).toBe(
           plan.deploymentBoundary?.verification.gatewayOrigin,
         );
@@ -393,6 +411,18 @@ const fixture = async () => {
     malformedPrivateResponse() {
       malformedPrivateResponse = true;
     },
+    proofResponse(response: Response) {
+      proofResponse = response;
+    },
+    proofRequestError(error: Error) {
+      proofRequestError = error;
+    },
+    proofReadbackResponse(response: Response) {
+      proofReadbackResponse = response;
+    },
+    keyError(error: Error) {
+      keyError = error;
+    },
     badActor() {
       wrongActor = true;
     },
@@ -400,6 +430,106 @@ const fixture = async () => {
 };
 
 describe("normal organization owner proof collector", () => {
+  afterEach(() => vi.restoreAllMocks());
+  it.each([
+    { status: 401, contentType: "text/html", valid: false },
+    { status: 503, contentType: "application/vnd.realm-operator-proof+json", valid: true },
+  ])(
+    "reports only closed proof response facts for $status",
+    async ({ status, contentType, valid }) => {
+      const log = vi.spyOn(console, "info").mockImplementation(() => {});
+      const f = await fixture();
+      f.proofResponse(
+        new Response("private cookie JWT URL actor", {
+          status,
+          headers: { "content-type": contentType },
+        }),
+      );
+      await expect(f.collect(await f.input("org-one"))).rejects.toMatchObject({
+        code: "auth_identity_required",
+      });
+      expect(log).toHaveBeenCalledWith(
+        "[builder:hosted-neon-consent]",
+        expect.objectContaining({
+          normalActorProofFailure: {
+            stage: "proof_response",
+            cookiePresent: true,
+            httpStatus: status,
+            contentTypeValid: valid,
+            redirected: false,
+            errorClass: "operator_error",
+            code: "auth_identity_required",
+          },
+        }),
+      );
+      expect(JSON.stringify(log.mock.calls)).not.toContain("private cookie JWT URL actor");
+      expect(
+        f.row.record.accountPreparation?.organizationProofs?.[0]?.link.consumedAt,
+      ).toBeUndefined();
+      expect(f.artifacts.size).toBe(0);
+    },
+  );
+  it("distinguishes request transport exceptions without logging their message", async () => {
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    const f = await fixture();
+    f.proofRequestError(new TypeError("https://private.example/?cookie=secret"));
+    await expect(f.collect(await f.input("org-one"))).rejects.toMatchObject({
+      code: "auth_identity_required",
+    });
+    expect(log).toHaveBeenCalledWith(
+      "[builder:hosted-neon-consent]",
+      expect.objectContaining({
+        normalActorProofFailure: {
+          stage: "proof_request",
+          cookiePresent: true,
+          errorClass: "type_error",
+        },
+      }),
+    );
+    expect(JSON.stringify(log.mock.calls)).not.toContain("private.example");
+  });
+  it("distinguishes native readback rejection after a valid proof", async () => {
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    const f = await fixture();
+    f.proofReadbackResponse(new Response(null, { status: 403 }));
+    await expect(f.collect(await f.input("org-one"))).rejects.toMatchObject({
+      code: "auth_identity_required",
+    });
+    expect(log).toHaveBeenCalledWith(
+      "[builder:hosted-neon-consent]",
+      expect.objectContaining({
+        normalActorProofFailure: {
+          stage: "proof_readback_response",
+          httpStatus: 403,
+          redirected: false,
+          errorClass: "operator_error",
+          code: "auth_identity_required",
+        },
+      }),
+    );
+    expect(f.artifacts.size).toBe(0);
+  });
+  it("distinguishes proof key verification failure before readback", async () => {
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    const f = await fixture();
+    f.keyError(new Error("private key endpoint message"));
+    await expect(f.collect(await f.input("org-one"))).rejects.toMatchObject({
+      code: "auth_identity_required",
+    });
+    expect(log.mock.calls[0]?.[1]).toHaveProperty("normalActorProofFailure.stage", "proof_verify");
+    expect(JSON.stringify(log.mock.calls)).not.toContain("private key endpoint message");
+    expect(f.artifacts.size).toBe(0);
+  });
+  it("preserves the rejection when logging throws", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {
+      throw new Error("logger failure");
+    });
+    const f = await fixture();
+    f.malformedPrivateResponse();
+    await expect(f.collect(await f.input("org-one"))).rejects.toMatchObject({
+      code: "auth_identity_required",
+    });
+  });
   it("collects signed actual per-organization session proofs and reuses the same private artifacts on retry", async () => {
     const f = await fixture();
     const one = await f.collect(await f.input("org-one"));
@@ -423,22 +553,30 @@ describe("normal organization owner proof collector", () => {
     expect(f.artifacts.size).toBe(2);
   });
   it("rejects malformed private proof responses without retaining a proof", async () => {
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
     const f = await fixture();
     f.malformedPrivateResponse();
     await expect(f.collect(await f.input("org-one"))).rejects.toMatchObject({
       code: "auth_identity_required",
     });
+    expect(log.mock.calls[0]?.[1]).toHaveProperty("normalActorProofFailure.stage", "proof_decode");
     expect(f.artifacts.size).toBe(0);
     expect(
       f.row.record.accountPreparation?.organizationProofs?.[0]?.link.consumedAt,
     ).toBeUndefined();
   });
   it("rejects a signed claim that differs from the actual retained owner session", async () => {
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
     const f = await fixture();
     f.badActor();
     await expect(f.collect(await f.input("org-one"))).rejects.toMatchObject({
       code: "auth_identity_required",
     });
+    expect(log.mock.calls[0]?.[1]).toHaveProperty(
+      "normalActorProofFailure.stage",
+      "proof_readback_response",
+    );
+    expect(log.mock.calls[0]?.[1]).toHaveProperty("normalActorProofFailure.httpStatus", 200);
     expect(f.artifacts.size).toBe(0);
   });
   it("rechecks first account authority on a consumed retry before any new request", async () => {
