@@ -101,11 +101,11 @@ Report the returned current stage and confirmed effects separately from future
 `normalActorProgram` intent. The program can describe organizations, memberships
 and app roles while the current approved stage prepares accounts only.
 
-| Operator outcome | What to report |
-| --- | --- |
-| `auth-schema-prepared` | Only confirmed Auth/bootstrap facts. The status alone does not prove Gateway readiness. |
+| Operator outcome        | What to report                                                                                                                    |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `auth-schema-prepared`  | Only confirmed Auth/bootstrap facts. The status alone does not prove Gateway readiness.                                           |
 | `participants-prepared` | Accounts and private sessions only. It does not establish organization creation, memberships, app access or business test writes. |
-| `prepared` | Confirmed preparation effects. Actual signed-in behavior evidence is still required before claiming app readiness. |
+| `prepared`              | Confirmed preparation effects. Actual signed-in behavior evidence is still required before claiming app readiness.                |
 
 Preserve pending, unknown and blocked outcomes; a journal lease is not proof of
 execution. Report successful completion of the same operation under verified
