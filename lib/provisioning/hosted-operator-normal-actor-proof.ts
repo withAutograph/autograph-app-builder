@@ -1,4 +1,10 @@
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
+import {
+  completedParticipantBootstrapSchema,
+  inspectCompletedParticipantBootstrap,
+} from "./hosted-operator-participant-bootstrap";
+import type { CompletedParticipantBootstrap } from "./hosted-operator-participant-bootstrap";
 /* oxlint-disable eslint/no-await-in-loop -- Bounded response reading cancels immediately at the byte limit. */
 import { Cookie, CookieJar } from "tough-cookie";
 import type { JWTVerifyGetKey } from "jose";
@@ -38,6 +44,8 @@ export interface NormalActorRealmProofBinding extends Omit<
   getKey: JWTVerifyGetKey;
   readback: (request: Request) => Promise<Response>;
   transportSource: HostedOperatorOwnedOrganizationSpec["identityVerification"]["transportSource"];
+  bootstrap?: CompletedParticipantBootstrap;
+  assertBootstrapCurrent?: () => Promise<void>;
 }
 export interface NormalActorProofDependencies {
   journalPorts: NormalActorJournalPorts;
@@ -291,7 +299,8 @@ const assertRealmBinding = (
       binding.resource.port === 5432,
       binding.resource.schema === "public",
       binding.endpointOrigin ===
-        preparation.accountPlan.deploymentBoundary?.verification.gatewayOrigin,
+        (binding.bootstrap?.candidate.origin ??
+          preparation.accountPlan.deploymentBoundary?.verification.gatewayOrigin),
       binding.transportSource.ownerId === preparation.accountPlan.deploymentBoundary?.teamId,
       binding.transportSource.projectId ===
         preparation.accountPlan.deploymentBoundary?.operator.projectId,
@@ -313,8 +322,10 @@ export const createHostedOperatorNormalActorProofCollector = (
       failure = value;
     };
     try {
+      let assertBootstrapCurrent: (() => Promise<void>) | undefined;
       const assertCurrent = async () => {
         await deps.assertPlanningAuthorized(input);
+        await assertBootstrapCurrent?.();
       };
       await assertCurrent();
       observe({ stage: "journal_read" });
@@ -348,12 +359,33 @@ export const createHostedOperatorNormalActorProofCollector = (
       }
       observe({ stage: "realm_binding" });
       const binding = await deps.resolveRealmBinding({ context: input, preparation });
+      if (binding.bootstrap !== undefined) {
+        const bootstrap = completedParticipantBootstrapSchema.parse(binding.bootstrap);
+        assertBootstrapCurrent = binding.assertBootstrapCurrent;
+        if (assertBootstrapCurrent === undefined) {
+          throw mismatch();
+        }
+        await assertBootstrapCurrent();
+        const row = await deps.journalPorts.store.read(input);
+        if (
+          !isDeepStrictEqual(
+            inspectCompletedParticipantBootstrap(bootstrap.auth.plan, row?.record),
+            bootstrap,
+          )
+        ) {
+          throw mismatch();
+        }
+        await assertBootstrapCurrent();
+      }
       assertRealmBinding(input, preparation, binding);
       observe({ stage: "proof_preparation" });
       const pending = await journal.prepareOrganizationProof(input, {
         organizationId: organization.organizationId,
         ownerActorKey: organization.ownerActorKey,
         owner: candidate.session,
+        ...(binding.bootstrap === undefined || assertBootstrapCurrent === undefined
+          ? {}
+          : { bootstrap: binding.bootstrap, assertBootstrapCurrent }),
         binding: {
           audience: binding.audience,
           authResourceId: binding.authResourceId,
@@ -400,6 +432,7 @@ export const createHostedOperatorNormalActorProofCollector = (
         proof,
         getKey: binding.getKey,
         resource: binding.resource,
+        transportOrigin: binding.endpointOrigin,
         readback: async (request) => {
           observe({ stage: "proof_readback_request" });
           const response = await binding.readback(request);

@@ -5,19 +5,44 @@ import { organization } from "better-auth/plugins";
 import { generateKeyPair, SignJWT, jwtVerify } from "jose";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
+import {
+  hostedOperatorPlanSchema,
+  operatorPlanDigest,
+  operatorPublicResultSchema,
+} from "./hosted-operator-contract";
 import {
   normalActorProgramSchema,
   normalActorProgramDigest,
 } from "./hosted-operator-normal-actor-program";
 import { createNormalActorJournal } from "./hosted-operator-normal-actor-journal";
 import type { NormalActorJournalPorts } from "./hosted-operator-normal-actor-journal";
-import { hostedRuntimeJournalRecordSchema } from "./hosted-runtime-journal";
-import type { HostedRuntimeJournalRow } from "./hosted-runtime-journal";
+import { resolveFullPlan } from "./hosted-operator-composition";
+import {
+  completedParticipantBootstrapSchema,
+  inspectCompletedParticipantBootstrap,
+} from "./hosted-operator-participant-bootstrap";
+import type { CompletedParticipantBootstrap } from "./hosted-operator-participant-bootstrap";
+import { hostedOperatorRealmLinkConfigSha256 } from "./hosted-operator-realm-link-config";
+import {
+  hostedRuntimeJournalRecordSchema,
+  retainedOperatorAuthFromJournal,
+} from "./hosted-runtime-journal";
+import type { HostedRuntimeJournalStore, HostedRuntimeJournalRow } from "./hosted-runtime-journal";
 import { prepareNormalActorAccounts } from "./hosted-operator-normal-actors";
 import { createHostedOperatorNormalAuthClient } from "./hosted-operator-normal-auth-client";
 import { createHostedOperatorNormalActorProofCollector } from "./hosted-operator-normal-actor-proof";
+import { createProtectedHostedOperatorHandler } from "./hosted-operator-service";
+import type { OperatorRequest } from "./hosted-operator-contract";
+import type { ProtectedHostedOperatorDependencies } from "./hosted-operator-service";
+
 import type { OperatorArtifactStore } from "./hosted-operator-artifact-store";
+
+const requiredFixture = <T>(value: T | undefined): T => {
+  if (value === undefined) {
+    throw new Error("Missing fixture value");
+  }
+  return value;
+};
 
 const accountOperationRef = "11111111-1111-4111-8111-111111111111";
 const authority = {
@@ -110,6 +135,34 @@ const plan = hostedOperatorPlanSchema.parse({
   release: { artifactRef: "owned-release", id: "release", sha256: "b".repeat(64) },
   retention: { expiresAt: "2030-01-01T00:00:00.000Z", policy: "Retain Auth" },
   publicGateway: { branch: target.branch, origin: program.origin, projectId: "prj_gateway" },
+  bootstrap: { endpointId: "ep_fixture", maintenanceDatabase: "neondb", role: "neondb_owner" },
+  resourcesInstaller: { reference: "resources", sha256: "a".repeat(64) },
+  authSchema: {
+    artifactRef: "auth-plan",
+    installer: { reference: "auth", sha256: "a".repeat(64) },
+    planDigest: "e".repeat(64),
+    targetDigest: "f".repeat(64),
+  },
+  gatewayBindings: {
+    authBrowserOrigin: program.origin,
+    builderCallbackOrigin: "https://builder.example.com",
+    catalogAppIds: [target.appId],
+    operatorOrigin: "https://operator.example.com",
+    sourceWorkload: {
+      issuer: "https://oidc.vercel.com",
+      audience: "https://operator.example.com",
+      ownerId: "team",
+      projectId: "prj_gateway",
+      environment: "preview",
+      subject: "gateway",
+    },
+  },
+  gatewayDelivery: {
+    branch: target.branch,
+    gitSha: "a".repeat(40),
+    projectId: "prj_gateway",
+    repoId: "gateway-repo",
+  },
   deploymentBoundary: {
     authority,
     teamId: "team",
@@ -163,6 +216,9 @@ const fixture = async () => {
   };
   let approved = true;
   let malformedPrivateResponse = false;
+  let endpointOrigin =
+    plan.deploymentBoundary?.verification.gatewayOrigin ?? "https://gateway.example.test";
+  let bootstrapSnapshot: CompletedParticipantBootstrap | undefined;
   let wrongActor = false;
   let keyError: Error | undefined;
   let proofResponse: Response | undefined;
@@ -304,9 +360,12 @@ const fixture = async () => {
       return artifacts.get(ref);
     },
   };
+  const assertPlanningAuthorized = vi.fn(async () => {
+    await assertAuthorized();
+  });
   const collect = createHostedOperatorNormalActorProofCollector({
     journalPorts,
-    assertPlanningAuthorized: assertAuthorized,
+    assertPlanningAuthorized,
     normalRealmFetch: async (input) => {
       expect(input.origin).toBe(program.origin);
       return normalFetch;
@@ -317,11 +376,18 @@ const fixture = async () => {
     }),
     resolveRealmBinding: async () => ({
       authResourceId: plan.authDatabase.resourceId,
-      bootstrapPlanDigest: "d".repeat(64),
+      bootstrapPlanDigest: operatorPlanDigest(plan),
       issuer: program.origin,
       audience: "https://operator.example.com",
-      endpointOrigin:
-        plan.deploymentBoundary?.verification.gatewayOrigin ?? "https://gateway.example.test",
+      endpointOrigin,
+      ...(bootstrapSnapshot === undefined
+        ? {}
+        : {
+            bootstrap: bootstrapSnapshot,
+            assertBootstrapCurrent: async () => {
+              await assertAuthorized();
+            },
+          }),
       builderCallbackOrigin: "https://builder.example.com",
       resource,
       getKey: async () => {
@@ -341,9 +407,7 @@ const fixture = async () => {
         if (proofReadbackResponse !== undefined) {
           return proofReadbackResponse;
         }
-        expect(new URL(request.url).origin).toBe(
-          plan.deploymentBoundary?.verification.gatewayOrigin,
-        );
+        expect(new URL(request.url).origin).toBe(endpointOrigin);
         expect(new URL(request.url).pathname).toBe("/api/auth/platform/operator-identity/readback");
         const values = new URLSearchParams(await request.text());
         const proof = values.get("proof");
@@ -396,7 +460,230 @@ const fixture = async () => {
     }
     return { ...context, plan, ...prepared, organizationId, owner };
   };
+  const completeBootstrapRefresh = async () => {
+    const store: HostedRuntimeJournalStore = {
+      ...journalPorts.store,
+      reserve: async () => structuredClone(row),
+      reserveFenceGeneration: async () => {
+        requiredFixture(row.record.operator).fenceGeneration = 1;
+        row.revision += 1;
+        return structuredClone(row);
+      },
+    };
+    const refreshed = hostedOperatorPlanSchema.parse({
+      ...plan,
+      stage: "auth-bootstrap",
+      gatewayDelivery: { ...plan.gatewayDelivery, gitSha: "b".repeat(40) },
+      effects: [
+        {
+          id: "auth-resources",
+          kind: "resources",
+          resourceId: plan.authDatabase.resourceId,
+          description: "Auth resource",
+        },
+        {
+          id: "app-resources",
+          kind: "resources",
+          resourceId: plan.appDatabase.resourceId,
+          description: "App resource",
+        },
+        { id: "auth-schema", kind: "install", description: "Observe Auth schema" },
+        { id: "gateway-bindings", kind: "gateway-bindings", description: "Gateway binding" },
+        { id: "gateway-delivery", kind: "gateway-delivery", description: "Gateway delivery" },
+      ],
+    });
+    const deps: ProtectedHostedOperatorDependencies = {
+      store,
+      authorize: async () => ({
+        ...context,
+        ownerContext: {
+          kind: "direct",
+          sessionId: target.sessionId,
+          adapterSessionId: "adapter",
+          adapterGeneration: 1,
+          authority,
+          principal: { ...authority, scopes: ["autograph:send"] },
+        },
+      }),
+      assertAuthorized,
+      plan: async () => refreshed,
+      readApproval: async (value) => ({
+        approved: true,
+        approvalId: value.callId === "initial-call" ? "initial-approval" : "bootstrap-approval",
+        callId: value.callId,
+        planDigest: value.planDigest,
+        action: value.action,
+      }),
+      withResourceLease: async (_value, run) => await run(async () => {}),
+      ensureNormalActorCapture: async () => "ready",
+      verifyNormalActorAccounts: async () => requiredFixture(await journal.read(context)).state,
+      verifyAuthReadiness: async () => ({
+        assetSha256: "a".repeat(64),
+        database: plan.authDatabase.database,
+        runtimeRole: plan.authDatabase.runtimeRole,
+        targetDigest: requiredFixture(plan.authSchema).targetDigest,
+        catalogFingerprint: "c".repeat(64),
+        observedAt: new Date().toISOString(),
+      }),
+      bindings: async () => ({}),
+      verify: async () => {
+        throw new Error("Full app verification is not part of bootstrap");
+      },
+      reconcile: async (value) => {
+        if (value.effect.kind === "resources") {
+          await value.checkpoint({
+            encryptedToken: "ciphertext",
+            keyVersion: "v1",
+            tokenIv: "iv",
+            tokenTag: "tag",
+          });
+        }
+        if (value.effect.kind === "gateway-bindings") {
+          await value.checkpointGatewayEnvironment?.([
+            {
+              id: "env",
+              key: "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
+              branch: target.branch,
+              projectId: "prj_gateway",
+              operationRef: value.operationRef,
+              comment: `App Builder protected operator ${value.operationRef}`,
+              valueSha256: hostedOperatorRealmLinkConfigSha256(value.plan),
+            },
+          ]);
+        }
+        if (value.effect.kind === "gateway-delivery") {
+          await value.checkpointGatewayDelivery?.(
+            [
+              {
+                deploymentId: "dpl_new_gateway",
+                branch: target.branch,
+                projectId: "prj_gateway",
+                repoId: "gateway-repo",
+                operationRef: value.operationRef,
+                origin: "https://new-gateway.example.test",
+                readyState: "READY",
+              },
+            ],
+            "dpl_new_gateway",
+          );
+        }
+        return {
+          status: "applied",
+          receipt: {
+            effectId: value.effect.id,
+            observedAt: new Date().toISOString(),
+            resourceVersion: "observed",
+          },
+        };
+      },
+      executeEffect: async () => {
+        throw new Error("Completed effects must reconcile");
+      },
+    };
+    const handler = createProtectedHostedOperatorHandler(deps);
+    const request = async (value: OperatorRequest) => {
+      const response = await handler(
+        new Request("https://operator.example.com/v1/runtime", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(value),
+        }),
+      );
+      return operatorPublicResultSchema.parse(await response.json());
+    };
+    expect(
+      await request({
+        action: "execute",
+        callId: "initial-call",
+        operationRef: accountOperationRef,
+        planDigest: operatorPlanDigest(plan),
+        selection: plan.selection,
+      }),
+    ).toMatchObject({ status: "participants-prepared" });
+    const proposed = await request({
+      action: "plan",
+      operation: "prepare",
+      normalActorProgram: program,
+      selection: plan.selection,
+    });
+    expect(proposed.status).toBe("planned");
+    expect(
+      await request({
+        action: "execute",
+        callId: "bootstrap-call",
+        operationRef: requiredFixture(proposed.operationRef),
+        planDigest: requiredFixture(proposed.planDigest),
+        selection: plan.selection,
+      }),
+    ).toMatchObject({ status: "auth-schema-prepared" });
+    endpointOrigin = "https://new-gateway.example.test";
+    const candidate = requiredFixture(
+      requiredFixture(row.record.operator).gatewayDeliveryCandidates,
+    )[0];
+    bootstrapSnapshot = completedParticipantBootstrapSchema.parse({
+      auth: retainedOperatorAuthFromJournal(row.record),
+      candidate,
+    });
+  };
+  const proposeAccess = async () => {
+    if (bootstrapSnapshot === undefined) {
+      throw new Error("Missing completed bootstrap");
+    }
+    const bootstrap = inspectCompletedParticipantBootstrap(bootstrapSnapshot.auth.plan, row.record);
+    if (bootstrap === undefined) {
+      throw new Error("Bootstrap is not settled");
+    }
+    const assertCurrent = async () => {
+      await assertAuthorized();
+    };
+    // SAFETY: Only the selected app metadata and Gateway workload are read by this planning path; real Auth and proof ports remain above.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- Closed synthetic configuration supplies exactly the metadata consumed by participant plan resolution.
+    const configuration = {
+      teamId: target.scopeId,
+      applications: {
+        [target.appId]: {
+          accessRoles: ["owner", "member"],
+          appDatabase: plan.appDatabase,
+          branch: target.branch,
+          projectId: target.projectId,
+          repoId: "app-repo",
+          gitSha: "c".repeat(40),
+        },
+      },
+      gateway: { workload: { projectId: "prj_gateway" } },
+    } as unknown as Parameters<typeof resolveFullPlan>[2];
+    return await resolveFullPlan(
+      bootstrap.auth.plan,
+      context,
+      configuration,
+      {
+        assertPlanningAuthorized: assertCurrent,
+        readCapturedRealmIdentity: async () => null,
+        readCapturedRealmIdentityProof: async () => {
+          throw new Error("Participant planning cannot use legacy identity");
+        },
+        readNormalActorPreparation: async () => await journal.read(context),
+        readNormalActorOrganizationProofs: async () => {
+          const results = [];
+          for (const selectedOrganization of program.organizations) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- Each real proof preserves sequential journal CAS and nonce ownership.
+            results.push(await collect(await input(selectedOrganization.organizationId)));
+          }
+          return results;
+        },
+      },
+      {},
+      true,
+      false,
+      undefined,
+      undefined,
+      { bootstrap, assertCurrent },
+    );
+  };
   return {
+    proposeAccess,
+    assertPlanningAuthorized,
+    completeBootstrapRefresh,
     collect,
     input,
     journal,
@@ -410,6 +697,9 @@ const fixture = async () => {
     },
     malformedPrivateResponse() {
       malformedPrivateResponse = true;
+    },
+    validPrivateResponse() {
+      malformedPrivateResponse = false;
     },
     proofResponse(response: Response) {
       proofResponse = response;
@@ -430,6 +720,41 @@ const fixture = async () => {
 };
 
 describe("normal organization owner proof collector", () => {
+  it("preserves enrolled accounts and old proof provenance across an approved Gateway bootstrap endpoint refresh", async () => {
+    const f = await fixture();
+    f.malformedPrivateResponse();
+    await expect(f.collect(await f.input("org-one"))).rejects.toMatchObject({
+      code: "auth_identity_required",
+    });
+    const old = structuredClone(
+      requiredFixture(requiredFixture(f.row.record.accountPreparation).organizationProofs)[0],
+    );
+    const sealed = structuredClone(requiredFixture(f.row.record.accountPreparation).sealedState);
+    const signups = f.requests.filter(
+      (request) => new URL(request.url).pathname === "/api/auth/sign-up/email",
+    ).length;
+    await f.completeBootstrapRefresh();
+    f.validPrivateResponse();
+    f.assertPlanningAuthorized.mockClear();
+    const result = await f.collect(await f.input("org-one"));
+    // Retain the six existing provider boundaries; private bootstrap guards use canonical ownership.
+    expect(f.assertPlanningAuthorized).toHaveBeenCalledTimes(6);
+    expect(result.identityVerification.jwksUrl).toBe(
+      "https://new-gateway.example.test/_platform/jwks.json",
+    );
+    expect(result.bootstrapPlanDigest).toBe(operatorPlanDigest(plan));
+    expect(result.identityNonceSha256).not.toBe(old.link.nonceSha256);
+    const proposed = await f.proposeAccess();
+    expect(proposed.stage).toBe("app");
+    expect(proposed.normalActorPreparation?.accountOperationRef).toBe(accountOperationRef);
+    expect(proposed.gatewayDelivery?.gitSha).toBe("b".repeat(40));
+    expect(proposed.authMembership?.kind).toBe("create-owned-organizations");
+    expect(requiredFixture(f.row.record.accountPreparation).sealedState).toEqual(sealed);
+    expect(f.row.record.accountPreparation).toMatchObject({ supersededOrganizationProofs: [old] });
+    expect(
+      f.requests.filter((request) => new URL(request.url).pathname === "/api/auth/sign-up/email"),
+    ).toHaveLength(signups);
+  });
   afterEach(() => vi.restoreAllMocks());
   it.each([
     { status: 401, contentType: "text/html", valid: false },

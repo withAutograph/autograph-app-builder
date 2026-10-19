@@ -32,6 +32,11 @@ import { createHostedOperatorRealmHttpTransport } from "./hosted-operator-realm-
 import { createHostedOperatorNormalActorOperations } from "./hosted-operator-normal-actor-operations";
 import type { NormalActorOperationsDependencies } from "./hosted-operator-normal-actor-operations";
 import { createHostedOperatorNormalActorProofCollector } from "./hosted-operator-normal-actor-proof";
+import {
+  assertCompletedParticipantBootstrapApproval,
+  inspectCompletedParticipantBootstrap,
+} from "./hosted-operator-participant-bootstrap";
+import type { CompletedParticipantBootstrap } from "./hosted-operator-participant-bootstrap";
 import { createNormalActorOrganizationWorkers } from "./hosted-operator-normal-actor-worker";
 import { createNormalActorRuntimeBindings } from "./hosted-operator-normal-actor-runtime-bindings";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
@@ -2149,6 +2154,30 @@ export const createHostedOperatorControlPlane = async (input: {
       assertCurrentPlan,
       normalRealmFetch,
     };
+    const assertParticipantBootstrapCurrent = async (
+      context: HostedOperatorContext,
+      preparation: NormalActorAccountPreparation,
+      desired: HostedOperatorPlan,
+      bootstrap: CompletedParticipantBootstrap,
+    ) => {
+      await owner.assertArtifactAuthorized(context);
+      const accounts = await normalActorJournal.read(context);
+      if (
+        accounts?.preparation.accountOperationRef !== preparation.accountOperationRef ||
+        accounts.preparation.accountPlanDigest !== preparation.accountPlanDigest ||
+        accounts.preparation.programDigest !== preparation.programDigest
+      ) {
+        throw new HostedOperatorError("auth_identity_required");
+      }
+      await assertCompletedParticipantBootstrapApproval(context, bootstrap, readApproval);
+      const latest = await store.read(context);
+      if (
+        !isDeepStrictEqual(inspectCompletedParticipantBootstrap(desired, latest?.record), bootstrap)
+      ) {
+        throw new HostedOperatorError("operation_in_progress");
+      }
+      await owner.assertArtifactAuthorized(context);
+    };
     const collectOrganizationOwnerProof = createHostedOperatorNormalActorProofCollector({
       journalPorts: normalActorJournalPorts,
       assertPlanningAuthorized: owner.assertPlanningAuthorized,
@@ -2167,23 +2196,46 @@ export const createHostedOperatorControlPlane = async (input: {
         );
         const boundary = preparation.accountPlan.deploymentBoundary;
         const bindings = preparation.accountPlan.gatewayBindings;
-        const samePreparation = [
-          current !== undefined,
-          current?.preparation.accountOperationRef === preparation.accountOperationRef,
-          current?.preparation.accountPlanDigest === preparation.accountPlanDigest,
-          current?.preparation.programDigest === preparation.programDigest,
-          known.operator.operationRef === preparation.accountOperationRef,
-          known.operator.planDigest === preparation.accountPlanDigest,
-          candidate?.origin === boundary?.verification.gatewayOrigin,
-        ].every(Boolean);
+        const desired = {
+          ...known.operator.plan,
+          gatewayDelivery: {
+            branch: configuration.gateway.branch,
+            gitSha: configuration.gateway.gitSha,
+            projectId: configuration.gateway.projectId,
+            repoId: configuration.gateway.repoId,
+          },
+        };
+        const bootstrap = inspectCompletedParticipantBootstrap(desired, known.record);
         if (
-          !samePreparation ||
+          current === undefined ||
           candidate === undefined ||
           boundary === undefined ||
           bindings === undefined
         ) {
           throw new HostedOperatorError("auth_identity_required");
         }
+        const originalAccount =
+          known.operator.operationRef === preparation.accountOperationRef &&
+          known.operator.planDigest === preparation.accountPlanDigest &&
+          candidate.origin === boundary.verification.gatewayOrigin;
+        const samePreparation = [
+          current.preparation.accountOperationRef === preparation.accountOperationRef,
+          current.preparation.accountPlanDigest === preparation.accountPlanDigest,
+          current.preparation.programDigest === preparation.programDigest,
+          originalAccount || bootstrap !== undefined,
+          (bootstrap?.auth.plan.gatewayBindings?.operatorOrigin ?? bindings.operatorOrigin) ===
+            bindings.operatorOrigin,
+        ].every(Boolean);
+        if (!samePreparation) {
+          throw new HostedOperatorError("auth_identity_required");
+        }
+        const assertBootstrapCurrent =
+          bootstrap === undefined
+            ? undefined
+            : async () => {
+                await assertParticipantBootstrapCurrent(context, preparation, desired, bootstrap);
+              };
+        await assertBootstrapCurrent?.();
         const transport = createHostedOperatorRealmHttpTransport(
           configuration,
           "operator",
@@ -2194,6 +2246,9 @@ export const createHostedOperatorControlPlane = async (input: {
         );
         const resource = preparation.accountPlan.authDatabase;
         return {
+          ...(bootstrap === undefined || assertBootstrapCurrent === undefined
+            ? {}
+            : { bootstrap, assertBootstrapCurrent }),
           audience: bindings.operatorOrigin,
           authResourceId: resource.resourceId,
           bootstrapPlanDigest: preparation.accountPlanDigest,
