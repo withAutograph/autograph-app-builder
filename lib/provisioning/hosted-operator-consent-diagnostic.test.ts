@@ -10,6 +10,7 @@ import {
   observeOperatorExecutionStage,
   reportOperatorExecutionFailure,
   projectAuthStartupDiagnostic,
+  projectOperatorPlanningValidationInvariants,
   reportRuntimePreparationFailure,
 } from "./hosted-operator-consent-diagnostic";
 import type {
@@ -501,6 +502,150 @@ describe("private operator planning stage observer", () => {
       errorClass: "operator_error",
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
+
+  it.each([
+    [
+      "Realm identity link must match the owned Auth resource, exact issuer and canonical owner session.",
+      "identity_link_scope",
+    ],
+    [
+      "Gateway candidates must belong to the exact approved native project and branch.",
+      "gateway_candidate_scope",
+    ],
+    ["Only an independently READY Gateway candidate may be pinned.", "gateway_candidate_scope"],
+    ["Gateway rows must remain in the owned trusted project.", "gateway_environment_scope"],
+    [
+      "Deployment candidates must remain within their approved project and Preview branch.",
+      "app_delivery_scope",
+    ],
+    [
+      "Only an observed READY deployment of this approved delivery may be selected.",
+      "app_delivery_scope",
+    ],
+    ["Managed environment rows must belong to this approved app operation.", "app_delivery_scope"],
+    [
+      "Historical app delivery must retain its actual owned project, branch and row lineage.",
+      "app_delivery_scope",
+    ],
+  ] as const)("projects a closed label for %s", async (message, label) => {
+    const rejection = new z.ZodError([
+      { code: "custom", message, path: [secret], params: { providerPayload: secret } },
+      { code: "custom", message, path: [secret] },
+    ]);
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    const run = vi.fn(() => {
+      throw rejection;
+    });
+    await expect(observeOperatorPlanStage(secret, "plan_journal_update", run, sink)).rejects.toBe(
+      rejection,
+    );
+    expect(run).toHaveBeenCalledOnce();
+    expect(sink.mock.calls[0]?.[0].planningFailure).toEqual({
+      stage: "plan_journal_update",
+      errorClass: "validation_error",
+      validationInvariants: [label],
+    });
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(message);
+  });
+
+  it("groups arbitrary issue text and structural errors without copying private details", () => {
+    const rejection = new z.ZodError([
+      { code: "custom", message: secret, path: [secret] },
+      { code: "unrecognized_keys", keys: [secret], message: secret, path: [secret] },
+    ]);
+    expect(projectOperatorPlanningValidationInvariants(rejection)).toEqual([
+      "other_custom",
+      "schema_shape",
+    ]);
+  });
+
+  it("ignores inherited issue metadata and never invokes accessors or coercion", () => {
+    const getter = vi.fn(() => {
+      throw new Error(secret);
+    });
+    const hostile = {};
+    Object.defineProperty(hostile, "issues", { get: getter });
+    const issue = {};
+    Object.defineProperty(issue, "code", { get: getter });
+    const text = { toString: getter, [Symbol.toPrimitive]: getter };
+    expect(projectOperatorPlanningValidationInvariants(hostile)).toEqual(["unknown"]);
+    expect(projectOperatorPlanningValidationInvariants(Object.create({ issues: [] }))).toEqual([
+      "unknown",
+    ]);
+    expect(projectOperatorPlanningValidationInvariants({ issues: [issue] })).toEqual(["unknown"]);
+    expect(
+      projectOperatorPlanningValidationInvariants({ issues: [{ code: "custom", message: text }] }),
+    ).toEqual(["other_custom"]);
+    expect(getter).not.toHaveBeenCalled();
+  });
+
+  it("returns unknown for hostile or revoked proxies and bounds exception inspection", () => {
+    const hostile = new Proxy(
+      {},
+      {
+        getOwnPropertyDescriptor() {
+          throw new Error(secret);
+        },
+      },
+    );
+    const revoked = Proxy.revocable([], {});
+    revoked.revoke();
+    const invalidLength = new Proxy([], {
+      getOwnPropertyDescriptor() {
+        return { value: Number.NaN, writable: true, configurable: false };
+      },
+    });
+    for (const error of [
+      hostile,
+      { issues: hostile },
+      { issues: revoked.proxy },
+      { issues: invalidLength },
+      null,
+    ]) {
+      expect(projectOperatorPlanningValidationInvariants(error)).toEqual(["unknown"]);
+    }
+    const lateGetter = vi.fn(() => {
+      throw new Error(secret);
+    });
+    const issues = Array.from({ length: 65 }, () => ({ code: "custom", message: secret }));
+    Object.defineProperty(issues, "64", { get: lateGetter });
+    expect(projectOperatorPlanningValidationInvariants({ issues })).toEqual([
+      "other_custom",
+      "unknown",
+    ]);
+    expect(lateGetter).not.toHaveBeenCalled();
+  });
+
+  it("preserves journal validation errors when diagnostic sinks and loggers fail", async () => {
+    const rejection = new z.ZodError([{ code: "custom", message: secret, path: [secret] }]);
+    const sink = vi.fn(() => {
+      throw new Error(secret);
+    });
+    const log = vi.spyOn(console, "info").mockImplementation(() => {
+      throw new Error(secret);
+    });
+    try {
+      for (const diagnosticSink of [sink, undefined]) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Verify each logger failure preserves the original exception.
+        await expect(
+          observeOperatorPlanStage(
+            secret,
+            "plan_journal_update",
+            () => {
+              throw rejection;
+            },
+            diagnosticSink,
+          ),
+        ).rejects.toBe(rejection);
+      }
+      expect(sink).toHaveBeenCalledOnce();
+      expect(log).toHaveBeenCalledOnce();
+      expect(JSON.stringify([sink.mock.calls, log.mock.calls])).not.toContain(secret);
+    } finally {
+      log.mockRestore();
+    }
   });
 
   it("classifies validation and type errors without serializing private details", async () => {

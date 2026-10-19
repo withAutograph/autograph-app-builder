@@ -8,6 +8,7 @@ import {
 } from "./hosted-runtime-approved-reference";
 import { preparedRuntimeReferences, preparedRuntimeSelections } from "./prepared-runtime-selection";
 import type { PreparedRuntimeSelection } from "./prepared-runtime-selection";
+import { reportHostedRuntimeHandoffDiagnostic } from "./hosted-runtime-handoff-diagnostic";
 
 interface HandoffPorts {
   load: typeof loadHostedRuntimeApprovedReference;
@@ -35,6 +36,7 @@ export const retainHostedRuntimePreparationReference = (
 ): boolean => {
   const status = preparationStatus.safeParse(output);
   if (!status.success || !retainedStatuses.has(status.data.status)) {
+    reportHostedRuntimeHandoffDiagnostic({ outcome: "ineligible", stage: "reference_capture" });
     return false;
   }
   const parsed = preparationReference.safeParse(output);
@@ -46,6 +48,10 @@ export const retainHostedRuntimePreparationReference = (
     // A malformed protected preparation result must not become a legacy
     // Sandbox fallback. The ordinary consumer reports this real protocol failure.
     preparedRuntimeReferences.update((current) => ({ ...current, [status.data.appId]: null }));
+    reportHostedRuntimeHandoffDiagnostic({
+      outcome: "invalid_reference",
+      stage: "reference_capture",
+    });
     return false;
   }
   const { appId, operationRef, planDigest } = parsed.data;
@@ -53,6 +59,7 @@ export const retainHostedRuntimePreparationReference = (
     ...current,
     [appId]: { appId, operationRef, planDigest },
   }));
+  reportHostedRuntimeHandoffDiagnostic({ outcome: "retained", stage: "reference_capture" });
   return true;
 };
 
@@ -69,12 +76,25 @@ export const resolveHostedRuntimePreparationSelection = async (
   const references = preparedRuntimeReferences.get();
   const reference = Object.hasOwn(references, input.appId) ? references[input.appId] : undefined;
   if (reference === null) {
+    reportHostedRuntimeHandoffDiagnostic({
+      referenceState: "invalid",
+      stage: "owner_selection_read",
+    });
     throw new HostedOperatorError("resource_mismatch");
   }
   if (reference === undefined) {
     const selections = preparedRuntimeSelections.get();
+    reportHostedRuntimeHandoffDiagnostic({
+      referenceState: "absent",
+      selectionPresent: Object.hasOwn(selections, input.appId),
+      stage: "owner_selection_read",
+    });
     return Object.hasOwn(selections, input.appId) ? (selections[input.appId] ?? null) : null;
   }
+  reportHostedRuntimeHandoffDiagnostic({
+    referenceState: "present",
+    stage: "owner_selection_read",
+  });
   const ctx = {
     abortSignal: input.signal ?? new AbortController().signal,
     session: { id: input.sessionId, auth: input.sessionAuth },
