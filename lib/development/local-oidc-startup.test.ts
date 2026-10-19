@@ -185,6 +185,67 @@ describe("local Development OIDC startup", () => {
     },
   );
 
+  it.each(["/owner/application-data", "", undefined])(
+    "preserves supplied XDG_DATA_HOME at the real child boundary: %s",
+    (dataHome) => {
+      const repositoryRoot = fixture({ expiresAt: NOW + 60 });
+      const invocations: LocalOidcStartupInvocation[] = [];
+      const excluded = [
+        "XDG_CONFIG_HOME",
+        "XDG_CACHE_HOME",
+        "XDG_STATE_HOME",
+        "XDG_BIN_HOME",
+        "VERCEL_OIDC_TOKEN",
+        "VERCEL_TOKEN",
+        "AI_GATEWAY_API_KEY",
+        "OPENAI_API_KEY",
+      ];
+      const input = baseInput(repositoryRoot);
+      expect(
+        ensureLocalDevelopmentOidc({
+          ...input,
+          environment: {
+            ...input.environment,
+            ...(dataHome === undefined ? {} : { XDG_DATA_HOME: dataHome }),
+            XDG_CONFIG_HOME: "/owner/unneeded-config",
+            XDG_CACHE_HOME: "/owner/unneeded-cache",
+            XDG_STATE_HOME: "/owner/unneeded-state",
+            XDG_BIN_HOME: "/owner/unneeded-bin",
+            OPENAI_API_KEY: "must-not-be-forwarded",
+          },
+          runCommand: (invocation) => {
+            invocations.push(invocation);
+            runLocalOidcStartupCommand({
+              ...invocation,
+              executable: process.execPath,
+              args: [
+                "-e",
+                `const assert = require("node:assert/strict");
+                 assert.equal(process.env.XDG_DATA_HOME, JSON.parse(process.argv[1]).value);
+                 for (const name of process.argv.slice(2)) {
+                   assert.equal(Object.hasOwn(process.env, name), false);
+                 }`,
+                JSON.stringify({ value: dataHome }),
+                ...excluded,
+              ],
+            });
+            if (invocation.operation === "development-env-pull") {
+              writeFileSync(
+                path.join(repositoryRoot, ".env.local"),
+                `VERCEL_OIDC_TOKEN=${token()}\n`,
+                { mode: 0o600 },
+              );
+            }
+          },
+        }),
+      ).toEqual({ refreshed: true });
+      expect(invocations.map((invocation) => invocation.operation)).toEqual([
+        "development-env-pull",
+        "owner-bind",
+      ]);
+    },
+  );
+
   it("validates a refreshed token against the clock after the pull", () => {
     const repositoryRoot = fixture({ expiresAt: NOW + 60 });
     const clock = vi.spyOn(Date, "now").mockReturnValue(NOW * 1000);

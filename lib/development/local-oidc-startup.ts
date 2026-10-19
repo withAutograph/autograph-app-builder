@@ -48,6 +48,10 @@ function commandEnvironment(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     PATH: requiredEnvironmentValue(environment, "PATH"),
     TMPDIR: environment.TMPDIR ?? "/tmp",
     TZ: environment.TZ ?? "",
+    // Vercel CLI resolves its existing login/configuration under its XDG data directory.
+    ...(environment.XDG_DATA_HOME === undefined
+      ? {}
+      : { XDG_DATA_HOME: environment.XDG_DATA_HOME }),
   };
 }
 
