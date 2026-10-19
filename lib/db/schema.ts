@@ -699,6 +699,7 @@ export const agentOperations = pgTable(
     ownerUserId: text("owner_user_id").notNull(),
     record: jsonb("record").notNull(),
     requestDigest: text("request_digest").notNull(),
+    sendCancellationRevisionAtDispatch: integer("send_cancellation_revision_at_dispatch"),
     sessionId: text("session_id"),
     state: text("state").notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
@@ -730,6 +731,23 @@ export const agentOperations = pgTable(
       table.ownerUserId,
       table.updatedAt,
       table.state,
+    ),
+    index("agent_operation_unsettled_send_ack_idx")
+      .on(
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.sessionId,
+        table.createdAt,
+        table.operationId,
+      )
+      .where(
+        sql`${table.kind} = 'send' AND ${table.state} IN ('reserved', 'submission_unknown') AND ${table.record}->'sendDelivery' IS NOT NULL AND ${table.record}->'internalBuildContinuation' IS NULL`,
+      ),
+    check(
+      "agent_operation_send_cancellation_revision_check",
+      sql`${table.sendCancellationRevisionAtDispatch} >= 0`,
     ),
   ],
 );

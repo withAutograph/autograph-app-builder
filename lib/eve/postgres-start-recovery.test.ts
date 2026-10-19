@@ -41,7 +41,7 @@ const operation = hostedOperationRecordSchema.parse({
   updatedAtEpochMs: 1000,
   version: 1,
 });
-const operationRow = (record: HostedOperationRecord) => ({
+const operationValues = (record: HostedOperationRecord) => ({
   audience: record.principal.audience,
   clientRequestId: record.clientRequestId,
   createdAt: new Date(record.createdAtEpochMs),
@@ -55,6 +55,10 @@ const operationRow = (record: HostedOperationRecord) => ({
   state: record.state,
   updatedAt: new Date(record.updatedAtEpochMs),
   workspaceId: record.principal.workspaceId,
+});
+const operationRow = (record: HostedOperationRecord) => ({
+  ...operationValues(record),
+  sendCancellationRevisionAtDispatch: null,
 });
 const sessionRow = {
   adapterGeneration: null,
@@ -198,7 +202,7 @@ describe("PostgreSQL original start recovery queries", () => {
       [...authorityValues, "start", "canonical"],
       [...authorityValues, alias.operationId, alias.requestDigest],
     ]);
-    expect(test.set).toHaveBeenCalledExactlyOnceWith(operationRow(settled));
+    expect(test.set).toHaveBeenCalledExactlyOnceWith(operationValues(settled));
     expect(test.values).not.toHaveBeenCalled();
   });
 
@@ -220,7 +224,7 @@ describe("PostgreSQL original start recovery queries", () => {
     await expect(test.store.bindExistingStart?.(principal, operation)).resolves.toEqual(operation);
     expect(test.lock).toHaveBeenCalledExactlyOnceWith("update");
     expect(test.predicates[0]?.params).toEqual([...authorityValues, session.sessionId]);
-    expect(test.values).toHaveBeenCalledExactlyOnceWith(operationRow(operation));
+    expect(test.values).toHaveBeenCalledExactlyOnceWith(operationValues(operation));
   });
 
   it("rejects an existing-session creation proof mismatch before inserting its receipt", async () => {

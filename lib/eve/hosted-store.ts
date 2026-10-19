@@ -1,3 +1,4 @@
+import type { NativeSendReadObservation } from "./hosted-submission-diagnostic";
 import {
   resourceApprovalResponseMarkerSchema,
   resourceApprovalResponseProofSchema,
@@ -608,6 +609,21 @@ export const hostedOperationRecordSchema = z
   );
 
 export type HostedOperationRecord = z.infer<typeof hostedOperationRecordSchema>;
+export const unsettledSendAcknowledgementSchema = z.strictObject({
+  operation: hostedOperationRecordSchema,
+  cancellationRevisionAtDispatch: z.number().int().nonnegative().nullable(),
+});
+export type UnsettledSendAcknowledgement = z.infer<typeof unsettledSendAcknowledgementSchema>;
+export const sendAcknowledgementCursorSchema = z.strictObject({
+  createdAtEpochMs: z.number().int().nonnegative(),
+  operationId: z.string().min(1),
+});
+export type SendAcknowledgementCursor = z.infer<typeof sendAcknowledgementCursorSchema>;
+export const unsettledSendAcknowledgementPageSchema = z.strictObject({
+  acknowledgements: z.array(unsettledSendAcknowledgementSchema),
+  nextCursor: sendAcknowledgementCursorSchema.optional(),
+});
+
 const START_ALIAS_CANNOT_BIND = "The original start request cannot bind this canonical result.";
 
 /** Copy a proven canonical start binding; this does not dispatch or create a second session. */
@@ -807,6 +823,58 @@ export const isProvedSendDelivery = (
   );
 };
 
+export interface SendObservationBinding {
+  adapterSessionId: string;
+  adapterGeneration: number;
+  cancellationRevision: number;
+}
+/** Queued acceptance never substitutes for native delivery proof or changes cancellation authority. */
+export const canProjectQueuedSendAcknowledgement = (input: {
+  acknowledgement: UnsettledSendAcknowledgement;
+  current: HostedSessionRecord;
+  result: z.infer<typeof eveSessionResultSchema>;
+  observation: NativeSendReadObservation;
+  observedBinding: SendObservationBinding;
+  proof?: NativeDeliveryState;
+}): boolean => {
+  const { operation, cancellationRevisionAtDispatch } = input.acknowledgement;
+  const marker = operation.sendDelivery;
+  const current = toDurableHostedSessionRecord(input.current);
+  if (
+    operation.kind !== "send" ||
+    operation.internalBuildContinuation !== undefined ||
+    marker === undefined ||
+    cancellationRevisionAtDispatch === null
+  )
+    return false;
+  if (operation.state !== "reserved" && operation.state !== "submission_unknown") return false;
+  if (input.result.status !== "waiting" && input.result.status !== "working") return false;
+  if (input.result.error !== undefined || (input.result.inputRequests?.length ?? 0) > 0)
+    return false;
+  if (["cancelled", "completed", "failed", "input_required"].includes(current.status)) return false;
+  if (
+    input.observation.observationComplete !== true ||
+    input.observation.nativeNextIndex === undefined ||
+    input.observation.nativeTailIndex === undefined ||
+    input.observation.nativeNextIndex !== input.observation.nativeTailIndex + 1
+  )
+    return false;
+  if (isProvedSendDelivery(operation, current, input.proof)) return false;
+  return [
+    operation.sessionId === current.sessionId,
+    input.result.sessionId === current.sessionId,
+    marker.sessionId === current.sessionId,
+    marker.requestDigest === operation.requestDigest,
+    tenantKeyFor(operation.principal) === tenantKeyFor(current.principal),
+    current.adapterSessionId === marker.adapterSessionId,
+    current.adapterGeneration === marker.adapterGeneration,
+    (current.cancellationRevision ?? 0) === cancellationRevisionAtDispatch,
+    input.observedBinding.adapterSessionId === current.adapterSessionId,
+    input.observedBinding.adapterGeneration === current.adapterGeneration,
+    input.observedBinding.cancellationRevision === cancellationRevisionAtDispatch,
+  ].every(Boolean);
+};
+
 /** Only the exact explicit SEND may replace its prior cancellation after native delivery proof. */
 export const mayReviveCancelledSession = (
   operation: HostedOperationRecord | null,
@@ -934,8 +1002,17 @@ export interface HostedEveStore {
     principal: HostedPrincipal;
     operationId: string;
     delivery: SendDelivery;
+    cancellationRevisionAtDispatch?: number;
     nowEpochMs: number;
   }) => Promise<HostedOperationRecord>;
+  /** Owner/session-scoped durable ACK lookup; no provider observation or mutation. */
+  readUnsettledSendAcknowledgements?: (input: {
+    principal: HostedPrincipal;
+    sessionId: string;
+    operationId?: string;
+    cursor?: SendAcknowledgementCursor;
+    limit: number;
+  }) => Promise<z.infer<typeof unsettledSendAcknowledgementPageSchema>>;
   settleSucceeded: (input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
     operationId: string;
@@ -1043,6 +1120,7 @@ export interface HostedEveStore {
 /** Test/local conformance store. Hosted deployment must supply durable storage. */
 export class InMemoryHostedEveStore implements HostedEveStore {
   private readonly operations = new Map<string, HostedOperationRecord>();
+  private readonly sendCancellationRevisions = new Map<string, number>();
   private readonly sessions = new Map<string, HostedSessionRecord>();
 
   async bindExistingStart(
@@ -1186,9 +1264,97 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       ...bindSendDelivery(operation, current, input.delivery),
       updatedAtEpochMs: input.nowEpochMs,
     });
+    const atCommit = this.sessions.get(
+      InMemoryHostedEveStore.sessionKey(input.principal, input.delivery.sessionId),
+    );
+    if (this.operations.get(key) !== operation || atCommit === undefined) {
+      throw new Error("Canonical SEND changed before ACK persistence.");
+    }
+    bindSendDelivery(operation, atCommit, input.delivery);
+    const baseline = input.cancellationRevisionAtDispatch;
+    const savedBaseline = this.sendCancellationRevisions.get(key);
+    if (baseline !== undefined) {
+      z.number().int().nonnegative().parse(baseline);
+      if (
+        (toDurableHostedSessionRecord(atCommit).cancellationRevision ?? 0) !== baseline ||
+        (savedBaseline !== undefined && savedBaseline !== baseline)
+      ) {
+        throw new Error("Canonical SEND cancellation changed before ACK persistence.");
+      }
+      if (operation.sendDelivery === undefined) {
+        this.sendCancellationRevisions.set(key, baseline);
+      }
+    }
     this.operations.set(key, structuredClone(updated));
     return structuredClone(updated);
   }
+
+  readUnsettledSendAcknowledgements: HostedEveStore["readUnsettledSendAcknowledgements"] = (
+    input,
+  ) => {
+    const principal = hostedPrincipalSchema.parse(input.principal);
+    z.number().int().positive().parse(input.limit);
+    const cursor =
+      input.cursor === undefined ? undefined : sendAcknowledgementCursorSchema.parse(input.cursor);
+    const operations = [...this.operations.values()]
+      .filter((operation) => {
+        if (
+          tenantKeyFor(operation.principal) !== tenantKeyFor(principal) ||
+          operation.sessionId !== input.sessionId ||
+          operation.kind !== "send"
+        ) {
+          return false;
+        }
+        if (
+          operation.internalBuildContinuation !== undefined ||
+          operation.sendDelivery === undefined
+        ) {
+          return false;
+        }
+        if (operation.state !== "reserved" && operation.state !== "submission_unknown") {
+          return false;
+        }
+        if (input.operationId !== undefined && operation.operationId !== input.operationId) {
+          return false;
+        }
+        if (cursor === undefined) {
+          return true;
+        }
+        return (
+          operation.createdAtEpochMs > cursor.createdAtEpochMs ||
+          (operation.createdAtEpochMs === cursor.createdAtEpochMs &&
+            operation.operationId > cursor.operationId)
+        );
+      })
+      .toSorted(
+        (left, right) =>
+          left.createdAtEpochMs - right.createdAtEpochMs ||
+          (left.operationId < right.operationId
+            ? -1
+            : Number(left.operationId > right.operationId)),
+      );
+    const page = operations.slice(0, input.limit);
+    const last = page.at(-1);
+    return Promise.resolve(
+      unsettledSendAcknowledgementPageSchema.parse({
+        acknowledgements: page.map((operation) => ({
+          operation: structuredClone(operation),
+          cancellationRevisionAtDispatch:
+            this.sendCancellationRevisions.get(
+              InMemoryHostedEveStore.operationKey(principal, operation.operationId),
+            ) ?? null,
+        })),
+        ...(operations.length > page.length && last !== undefined
+          ? {
+              nextCursor: {
+                createdAtEpochMs: last.createdAtEpochMs,
+                operationId: last.operationId,
+              },
+            }
+          : {}),
+      }),
+    );
+  };
 
   async settleSucceeded(
     input: Parameters<HostedEveStore["settleSucceeded"]>[0],

@@ -197,6 +197,13 @@
       "when": 1791504000000,
       "tag": "0028_product_source_review_journal",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1792368000000,
+      "tag": "0029_send_ack_cancellation_revision",
+      "breakpoints": true
     }
   ]
 }

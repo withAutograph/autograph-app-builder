@@ -15,10 +15,12 @@ import {
   withoutHostedOperationError,
   succeededStartAlias,
   assertExistingStartSession,
+  sendAcknowledgementCursorSchema,
+  unsettledSendAcknowledgementPageSchema,
 } from "./hosted-store";
 import { HostedCheckpointObservationConflictError } from "./hosted-checkpoint-observation-conflict-error";
 import { approvedBuildDecisionSchema } from "../agent/approved-build-continuation";
-import { and, count, desc, eq, inArray, lte, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, inArray, lte, ne, or, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
@@ -71,6 +73,7 @@ const operationRowSchema = z
     ownerUserId: z.string(),
     record: z.unknown(),
     requestDigest: z.string(),
+    sendCancellationRevisionAtDispatch: z.number().int().nonnegative().nullable(),
     sessionId: z.string().nullable(),
     state: z.string(),
     updatedAt: z.date(),
@@ -203,8 +206,8 @@ function sessionValues(record: HostedSessionRecord) {
   };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function operationById(
+// eslint-disable-next-line eslint/func-style -- The locked ACK writer also needs the sidecar outside the strict operation JSON.
+async function operationRowById(
   database: Database | Transaction,
   principal: HostedPrincipal,
   operationId: string,
@@ -216,7 +219,18 @@ async function operationById(
     .where(and(tenantPredicate(principal), eq(agentOperations.operationId, operationId)))
     .limit(1);
   const rows = lock ? await query.for("update") : await query;
-  return rows[0] === undefined ? null : parseHostedOperationRow(rows[0]);
+  return rows[0] === undefined ? null : operationRowSchema.parse(rows[0]);
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+async function operationById(
+  database: Database | Transaction,
+  principal: HostedPrincipal,
+  operationId: string,
+  lock = false,
+) {
+  const row = await operationRowById(database, principal, operationId, lock);
+  return row === null ? null : parseHostedOperationRow(row);
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -717,18 +731,43 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
     async recordSendDelivery(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
       return database.transaction(async (transaction) => {
-        const operation = await operationById(transaction, principal, input.operationId, true);
-        if (operation === null) {
+        const operationRow = await operationRowById(
+          transaction,
+          principal,
+          input.operationId,
+          true,
+        );
+        if (operationRow === null) {
           throw new Error(OPERATION_CANNOT_SETTLE);
         }
+        const operation = parseHostedOperationRow(operationRow);
         const current = await sessionById(transaction, principal, input.delivery.sessionId, true);
+        const revision =
+          input.cancellationRevisionAtDispatch === undefined
+            ? undefined
+            : z.number().int().nonnegative().parse(input.cancellationRevisionAtDispatch);
+        if (
+          revision !== undefined &&
+          (current === null ||
+            revision !== (toDurableHostedSessionRecord(current).cancellationRevision ?? 0) ||
+            (operationRow.sendCancellationRevisionAtDispatch !== null &&
+              operationRow.sendCancellationRevisionAtDispatch !== revision))
+        ) {
+          throw new Error("Canonical SEND acknowledgement cancellation revision changed.");
+        }
         const updated = hostedOperationRecordSchema.parse({
           ...bindSendDelivery(operation, current, input.delivery),
           updatedAtEpochMs: input.nowEpochMs,
         });
         const rows = await transaction
           .update(agentOperations)
-          .set(operationValues(updated))
+          .set({
+            ...operationValues(updated),
+            // An old ACK has no dispatch baseline; retries must never invent one.
+            ...(operation.sendDelivery === undefined && revision !== undefined
+              ? { sendCancellationRevisionAtDispatch: revision }
+              : {}),
+          })
           .where(
             and(
               tenantPredicate(principal),
@@ -741,6 +780,67 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           throw new Error(OPERATION_CANNOT_SETTLE);
         }
         return parseHostedOperationRow(rows[0]);
+      });
+    },
+
+    async readUnsettledSendAcknowledgements(input) {
+      const principal = hostedPrincipalSchema.parse(input.principal);
+      // Leave one exactly representable slot for the pagination lookahead.
+      const limit = z
+        .number()
+        .int()
+        .positive()
+        .max(Number.MAX_SAFE_INTEGER - 1)
+        .parse(input.limit);
+      const cursor =
+        input.cursor === undefined
+          ? undefined
+          : sendAcknowledgementCursorSchema.parse(input.cursor);
+      const rows = await database
+        .select()
+        .from(agentOperations)
+        .where(
+          and(
+            tenantPredicate(principal),
+            eq(agentOperations.sessionId, input.sessionId),
+            eq(agentOperations.kind, "send"),
+            inArray(agentOperations.state, ["reserved", "submission_unknown"]),
+            sql`${agentOperations.record}->'sendDelivery' IS NOT NULL`,
+            sql`${agentOperations.record}->'internalBuildContinuation' IS NULL`,
+            input.operationId === undefined
+              ? undefined
+              : eq(agentOperations.operationId, input.operationId),
+            cursor === undefined
+              ? undefined
+              : or(
+                  gt(agentOperations.createdAt, new Date(cursor.createdAtEpochMs)),
+                  and(
+                    eq(agentOperations.createdAt, new Date(cursor.createdAtEpochMs)),
+                    gt(agentOperations.operationId, cursor.operationId),
+                  ),
+                ),
+          ),
+        )
+        .orderBy(asc(agentOperations.createdAt), asc(agentOperations.operationId))
+        .limit(limit + 1);
+      const acknowledgements = rows.slice(0, limit).map((inputRow) => {
+        const row = operationRowSchema.parse(inputRow);
+        return {
+          operation: parseHostedOperationRow(row),
+          cancellationRevisionAtDispatch: row.sendCancellationRevisionAtDispatch,
+        };
+      });
+      const last = acknowledgements.at(-1)?.operation;
+      return unsettledSendAcknowledgementPageSchema.parse({
+        acknowledgements,
+        ...(rows.length > limit && last !== undefined
+          ? {
+              nextCursor: {
+                createdAtEpochMs: last.createdAtEpochMs,
+                operationId: last.operationId,
+              },
+            }
+          : {}),
       });
     },
 

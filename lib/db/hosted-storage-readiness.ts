@@ -35,6 +35,7 @@ export const hostedStorageMigrationTags = [
   "0026_validation_log_completion",
   "0027_protected_access_fence_generation",
   "0028_product_source_review_journal",
+  "0029_send_ack_cancellation_revision",
 ] as const;
 
 const contractSourcePaths = [
@@ -88,6 +89,7 @@ export const hostedStorageExpectedColumns = [
   ["agent_operation", "owner_user_id", "text", true],
   ["agent_operation", "record", "jsonb", true],
   ["agent_operation", "request_digest", "text", true],
+  ["agent_operation", "send_cancellation_revision_at_dispatch", "integer", false],
   ["agent_operation", "session_id", "text", false],
   ["agent_operation", "state", "text", true],
   ["agent_operation", "updated_at", "timestamp with time zone", true],
@@ -542,6 +544,7 @@ export const hostedStorageExpectedIndexes = [
   ["agent_operation", "agent_operation_idempotency_idx"],
   ["agent_operation", "agent_operation_retention_idx"],
   ["agent_operation", "agent_operation_tenant_pk"],
+  ["agent_operation", "agent_operation_unsettled_send_ack_idx"],
   ["agent_session", "agent_session_adapter_id_idx"],
   ["agent_session", "agent_session_owner_idx"],
   ["agent_session", "agent_session_recent_idx"],
@@ -642,6 +645,7 @@ export const hostedStorageExpectedIndexes = [
 export const hostedStorageExpectedConstraints = [
   ["account", "account_pkey"],
   ["account", "account_user_id_fkey"],
+  ["agent_operation", "agent_operation_send_cancellation_revision_check"],
   ["agent_operation", "agent_operation_tenant_pk"],
   ["agent_session", "agent_session_adapter_generation_check"],
   ["agent_session", "agent_session_checkpoint_digest_check"],

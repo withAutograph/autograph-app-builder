@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 
-import { readPrivateDatabaseUrl } from "./private-database-url";
+import { readPrivateMigrationDatabaseUrl } from "./private-database-url";
 import { hostedTaskPostgresOptions } from "./postgres-connection-policy";
 
 if (
@@ -14,7 +14,7 @@ if (
 ) {
   throw new Error("database:migrate requires its private database URL fd.");
 }
-const databaseUrl = readPrivateDatabaseUrl(0);
+const databaseUrl = readPrivateMigrationDatabaseUrl(0);
 
 const sql = postgres(databaseUrl, hostedTaskPostgresOptions);
 try {

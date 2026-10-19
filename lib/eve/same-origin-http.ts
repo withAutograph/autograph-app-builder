@@ -865,7 +865,7 @@ export async function observeSameOriginEveStream(
         if (event.type === "session.failed") {
           boundary = "failed";
         }
-        if (event.type === "step.started") {
+        if (event.type === "step.started" || event.type === "turn.started") {
           boundary = "working";
         }
         if (event.type === "approval.settled") {

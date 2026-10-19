@@ -11,8 +11,12 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { toDurableHostedSessionRecord } from "./hosted-store";
-import type { HostedCheckpointPage, HostedSessionRecord } from "./hosted-store";
+import { hostedOperationRecordSchema, toDurableHostedSessionRecord } from "./hosted-store";
+import type {
+  HostedCheckpointPage,
+  HostedOperationRecord,
+  HostedSessionRecord,
+} from "./hosted-store";
 import { hostedEveOperationScopes } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
 import {
@@ -52,6 +56,7 @@ const operationRow = {
   ownerUserId: principal.ownerUserId,
   record: operationRecord,
   requestDigest: operationRecord.requestDigest,
+  sendCancellationRevisionAtDispatch: null,
   sessionId: null,
   state: operationRecord.state,
   updatedAt: new Date(1000),
@@ -348,9 +353,10 @@ describe("PostgreSQL hosted Eve row authority", () => {
     const journal = JSON.parse(
       await readFile(new URL("../../drizzle/meta/_journal.json", import.meta.url), "utf-8"),
     ) as unknown;
-    expect(journal).toEqual({
+    expect(journal).toMatchObject({
       dialect: "postgresql",
-      entries: [
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Vitest asymmetric matcher keeps additive migrations compatible.
+      entries: expect.arrayContaining([
         {
           breakpoints: true,
           idx: 0,
@@ -547,7 +553,7 @@ describe("PostgreSQL hosted Eve row authority", () => {
           version: "7",
           when: 1_791_504_000_000,
         },
-      ],
+      ]),
       version: "7",
     });
   });
@@ -952,4 +958,432 @@ it("throws the specific observation digest conflict and discards only its staged
   } finally {
     factory.mockRestore();
   }
+});
+
+type SendFixtureOperationRow = Omit<
+  typeof operationRow,
+  "kind" | "record" | "sessionId" | "sendCancellationRevisionAtDispatch" | "state"
+> & {
+  kind: HostedOperationRecord["kind"];
+  record: HostedOperationRecord;
+  sendCancellationRevisionAtDispatch: number | null;
+  sessionId: string | null;
+  state: HostedOperationRecord["state"];
+};
+
+const queuedSendFixture = () => {
+  const dialect = new PgDialect();
+  const session = ownedCheckpointRow();
+  const operations: SendFixtureOperationRow[] = [];
+  const locks: string[] = [];
+  const writes: { locks: string[]; values: Partial<SendFixtureOperationRow> }[] = [];
+  const columnKeys = {
+    audience: "audience",
+    created_at: "createdAt",
+    issuer: "issuer",
+    kind: "kind",
+    operation_id: "operationId",
+    owner_user_id: "ownerUserId",
+    session_id: "sessionId",
+    state: "state",
+    workspace_id: "workspaceId",
+  } satisfies Record<string, keyof SendFixtureOperationRow>;
+  const columnKey = (name: string) =>
+    Object.entries(columnKeys).find(([column]) => column === name)?.[1];
+  // Interpret only the real Drizzle predicates used by this terminal database fixture.
+  const selectedRows = (
+    table: PgTable,
+    predicate: SQL,
+  ): (SendFixtureOperationRow | typeof session)[] => {
+    if (getTableName(table) === "agent_session") return [session];
+    const { params, sql } = dialect.sqlToQuery(predicate);
+    const equalities = [...sql.matchAll(/"(?<column>[a-z_]+)" = \$(?<parameter>\d+)/gu)];
+    const afterDate = /"created_at" > \$(?<parameter>\d+)/u.exec(sql);
+    const afterId = /"operation_id" > \$(?<parameter>\d+)/u.exec(sql);
+    return operations.filter((row) => {
+      for (const match of equalities) {
+        const column = match.groups?.column ?? "";
+        if (column === "created_at") continue;
+        const key = columnKey(column);
+        if (key !== undefined && row[key] !== params[Number(match.groups?.parameter) - 1]) {
+          return false;
+        }
+      }
+      if (sql.includes('"state" in') && !["reserved", "submission_unknown"].includes(row.state)) {
+        return false;
+      }
+      if (sql.includes("->'sendDelivery' IS NOT NULL") && row.record.sendDelivery === undefined) {
+        return false;
+      }
+      if (
+        sql.includes("->'internalBuildContinuation' IS NULL") &&
+        row.record.internalBuildContinuation !== undefined
+      ) {
+        return false;
+      }
+      if (afterDate !== null) {
+        const cursorDate = new Date(
+          String(params[Number(afterDate.groups?.parameter) - 1]),
+        ).getTime();
+        const cursorId = String(params[Number(afterId?.groups?.parameter) - 1]);
+        return (
+          row.createdAt.getTime() > cursorDate ||
+          (row.createdAt.getTime() === cursorDate && row.operationId > cursorId)
+        );
+      }
+      return true;
+    });
+  };
+  const select = () => ({
+    from: (table: PgTable) => ({
+      where: (predicate: SQL) => {
+        let selected = selectedRows(table, predicate);
+        const query = {
+          // oxlint-disable-next-line sonarjs/no-nested-functions -- Terminal SELECT double mirrors Drizzle fluent ordering.
+          orderBy: (...ordering: SQL[]) => {
+            for (const order of ordering.toReversed()) {
+              const key = columnKey(
+                /"(?<column>[a-z_]+)" asc/u.exec(dialect.sqlToQuery(order).sql)?.groups?.column ??
+                  "",
+              );
+              if (key === "createdAt") {
+                selected = selected.toSorted(
+                  (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+                );
+              } else if (key === "operationId") {
+                selected = selected.toSorted((a, b) =>
+                  ("operationId" in a ? a.operationId : "").localeCompare(
+                    "operationId" in b ? b.operationId : "",
+                  ),
+                );
+              }
+            }
+            return query;
+          },
+          // oxlint-disable-next-line sonarjs/no-nested-functions -- Terminal SELECT double mirrors Drizzle fluent limit.
+          limit: (limit: number) => {
+            const rows = selected.slice(0, limit);
+            return Object.assign(Promise.resolve(rows), {
+              // oxlint-disable-next-line eslint/require-await, sonarjs/no-nested-functions -- Terminal SELECT double mirrors the asynchronous Drizzle row-lock contract.
+              for: async () => {
+                locks.push(getTableName(table));
+                return rows;
+              },
+            });
+          },
+        };
+        return query;
+      },
+    }),
+  });
+  const transaction = {
+    select,
+    update: (table: PgTable) => ({
+      set: (values: Partial<SendFixtureOperationRow>) => ({
+        where: (predicate: SQL) => ({
+          // oxlint-disable-next-line sonarjs/no-nested-functions -- Terminal UPDATE double mirrors Drizzle fluent returning.
+          returning: () => {
+            const rows = selectedRows(table, predicate);
+            writes.push({ locks: [...locks], values });
+            for (const row of rows) Object.assign(row, values);
+            return Promise.resolve(rows);
+          },
+        }),
+      }),
+    }),
+  };
+  const database = {
+    ...transaction,
+    transaction: <T>(execute: (input: typeof transaction) => Promise<T>) => execute(transaction),
+  };
+  // SAFETY: The terminal double interprets the real tenant/keyset predicates and row locks used by these source tests.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- No provider or live database is involved.
+  const db = database as unknown as Parameters<typeof createPostgresHostedEveStore>[0];
+  const store = createPostgresHostedEveStore(db);
+  const add = (overrides: Partial<HostedOperationRecord> = {}, baseline: number | null = null) => {
+    const record = hostedOperationRecordSchema.parse({
+      ...operationRecord,
+      kind: "send",
+      operationId: `send_${operations.length}`,
+      sessionId: session.sessionId,
+      ...overrides,
+    });
+    const row: SendFixtureOperationRow = {
+      ...operationRow,
+      audience: record.principal.audience,
+      clientRequestId: record.clientRequestId,
+      createdAt: new Date(record.createdAtEpochMs),
+      issuer: record.principal.issuer,
+      kind: record.kind,
+      operationId: record.operationId,
+      ownerUserId: record.principal.ownerUserId,
+      record,
+      sendCancellationRevisionAtDispatch: baseline,
+      sessionId: record.sessionId ?? null,
+      state: record.state,
+      updatedAt: new Date(record.updatedAtEpochMs),
+      workspaceId: record.principal.workspaceId,
+    };
+    operations.push(row);
+    return row;
+  };
+  const delivery = {
+    adapterGeneration: session.record.adapterGeneration,
+    adapterSessionId: session.adapterSessionId,
+    deliveryId: "durable-queued-send",
+    requestDigest: operationRecord.requestDigest,
+    sessionId: session.sessionId,
+  };
+  const acknowledge = (row: SendFixtureOperationRow, cancellationRevisionAtDispatch?: number) => {
+    if (store.recordSendDelivery === undefined) throw new Error("Expected ACK writer.");
+    return store.recordSendDelivery({
+      cancellationRevisionAtDispatch,
+      delivery,
+      nowEpochMs: 3000,
+      operationId: row.operationId,
+      principal,
+    });
+  };
+  const read = (
+    input: {
+      operationId?: string;
+      principal?: HostedPrincipal;
+      sessionId?: string;
+      cursor?: { createdAtEpochMs: number; operationId: string };
+      limit?: number;
+    } = {},
+  ) => {
+    if (store.readUnsettledSendAcknowledgements === undefined)
+      throw new Error("Expected ACK reader.");
+    return store.readUnsettledSendAcknowledgements({
+      limit: 2,
+      principal,
+      sessionId: session.sessionId,
+      ...input,
+    });
+  };
+  return { acknowledge, add, delivery, operations, read, session, store, writes };
+};
+
+describe("PostgreSQL queued SEND acknowledgement sidecar", () => {
+  it("atomically records the original dispatch revision with the ACK under both row locks", async () => {
+    const f = queuedSendFixture();
+    const row = f.add();
+    const result = await f.acknowledge(row, 0);
+    expect(result).toMatchObject({ sendDelivery: f.delivery, state: "reserved" });
+    expect(result).not.toHaveProperty("cancellationRevisionAtDispatch");
+    expect(f.writes).toHaveLength(1);
+    expect(f.writes[0]).toMatchObject({
+      locks: ["agent_operation", "agent_session"],
+      values: { record: { sendDelivery: f.delivery }, sendCancellationRevisionAtDispatch: 0 },
+    });
+    expect(await f.read({ operationId: row.operationId })).toEqual({
+      acknowledgements: [{ cancellationRevisionAtDispatch: 0, operation: result }],
+    });
+    await f.acknowledge(row, 0);
+    expect(f.writes[1]?.values).not.toHaveProperty("sendCancellationRevisionAtDispatch");
+    expect(row.sendCancellationRevisionAtDispatch).toBe(0);
+  });
+
+  it("rejects a Stop that commits before ACK and cannot rewrite the baseline on retry", async () => {
+    const f = queuedSendFixture();
+    const row = f.add();
+    f.session.record = { ...f.session.record, cancellationRevision: 1 };
+    await expect(f.acknowledge(row, 0)).rejects.toThrow("cancellation revision changed");
+    expect(row.record.sendDelivery).toBeUndefined();
+    expect(row.sendCancellationRevisionAtDispatch).toBeNull();
+    expect(f.writes).toHaveLength(0);
+    await f.acknowledge(row, 1);
+    f.session.record = { ...f.session.record, cancellationRevision: 2 };
+    await expect(f.acknowledge(row, 1)).rejects.toThrow("cancellation revision changed");
+    await expect(f.acknowledge(row, 2)).rejects.toThrow("cancellation revision changed");
+    expect(row.sendCancellationRevisionAtDispatch).toBe(1);
+    expect(f.writes).toHaveLength(1);
+  });
+
+  it("preserves NULL for a legacy ACK and does not interpret missing history as revision zero", async () => {
+    const f = queuedSendFixture();
+    const row = f.add({ sendDelivery: f.delivery });
+    await f.acknowledge(row, 0);
+    expect(row.sendCancellationRevisionAtDispatch).toBeNull();
+    expect(f.writes[0]?.values).not.toHaveProperty("sendCancellationRevisionAtDispatch");
+    expect(await f.read()).toMatchObject({
+      acknowledgements: [
+        { cancellationRevisionAtDispatch: null, operation: { sendDelivery: f.delivery } },
+      ],
+    });
+  });
+
+  it("keeps the existing ACK API nullable when no dispatch revision was supplied", async () => {
+    const f = queuedSendFixture();
+    const row = f.add();
+    await f.acknowledge(row);
+    expect(row.sendCancellationRevisionAtDispatch).toBeNull();
+    expect(row.record.sendDelivery).toEqual(f.delivery);
+  });
+
+  it("does not persist either ACK field if the adapter binding changed", async () => {
+    const f = queuedSendFixture();
+    const row = f.add();
+    f.delivery.adapterGeneration += 1;
+    await expect(f.acknowledge(row, 0)).rejects.toThrow("binding changed");
+    expect(row.record.sendDelivery).toBeUndefined();
+    expect(row.sendCancellationRevisionAtDispatch).toBeNull();
+    expect(f.writes).toHaveLength(0);
+  });
+
+  it("retains explicit resume cancellation authority separately from the dispatch sidecar", async () => {
+    const f = queuedSendFixture();
+    const row = f.add();
+    f.session.record = { ...f.session.record, cancellationRevision: 3, status: "cancelled" };
+    if (f.store.recordSendDelivery === undefined) throw new Error("Expected ACK writer.");
+    const result = await f.store.recordSendDelivery({
+      cancellationRevisionAtDispatch: 3,
+      delivery: { ...f.delivery, resumeCancellationRevision: 3 },
+      nowEpochMs: 3000,
+      operationId: row.operationId,
+      principal,
+    });
+    expect(result.sendDelivery?.resumeCancellationRevision).toBe(3);
+    expect(row.sendCancellationRevisionAtDispatch).toBe(3);
+    expect(f.session.record.status).toBe("cancelled");
+  });
+
+  it("preserves the sidecar through generic operation updates and requires native SEND proof", async () => {
+    const f = queuedSendFixture();
+    const row = f.add();
+    await f.acknowledge(row, 0);
+    await expect(
+      f.store.settleSucceeded({
+        nowEpochMs: 3500,
+        operationId: row.operationId,
+        principal,
+        requestDigest: row.requestDigest,
+        result: { cursor: 0, events: [], sessionId: f.session.sessionId, status: "working" },
+      }),
+    ).rejects.toThrow("Canonical SEND delivery is not proved");
+    expect(row.state).toBe("reserved");
+    await f.store.settleUnsuccessful({
+      nowEpochMs: 4000,
+      operationId: row.operationId,
+      principal,
+      requestDigest: row.requestDigest,
+      safeErrorCode: "submission_unknown",
+      state: "submission_unknown",
+    });
+    expect(row.sendCancellationRevisionAtDispatch).toBe(0);
+    expect(f.writes[1]?.values).not.toHaveProperty("sendCancellationRevisionAtDispatch");
+    await expect(
+      f.store.settleSucceeded({
+        nowEpochMs: 5000,
+        operationId: row.operationId,
+        principal,
+        requestDigest: row.requestDigest,
+        result: { cursor: 0, events: [], sessionId: f.session.sessionId, status: "working" },
+        sendDeliveryResolution: {
+          turns: [{ deliveryIds: [f.delivery.deliveryId], turnId: "unstamped-turn" }],
+          version: 1,
+        },
+      }),
+    ).rejects.toThrow("Canonical SEND delivery is not proved");
+    expect(row.state).toBe("submission_unknown");
+    await f.store.settleSucceeded({
+      nowEpochMs: 5000,
+      operationId: row.operationId,
+      principal,
+      requestDigest: row.requestDigest,
+      result: { cursor: 0, events: [], sessionId: f.session.sessionId, status: "working" },
+      sendDeliveryResolution: {
+        turns: [
+          {
+            deliveryIds: [f.delivery.deliveryId],
+            startedDeliveryIds: [f.delivery.deliveryId],
+            turnId: "stamped-turn",
+          },
+        ],
+        version: 1,
+      },
+    });
+    expect(row.state).toBe("succeeded");
+    expect(row.sendCancellationRevisionAtDispatch).toBe(0);
+    const settledPage = await f.read();
+    expect(settledPage.acknowledgements).toEqual([]);
+  });
+
+  it("scopes exact lookup and pages ordinary unsettled ACKs by creation time and operation ID", async () => {
+    const f = queuedSendFixture();
+    const third = f.add({ createdAtEpochMs: 2000, sendDelivery: f.delivery }, 0);
+    const first = f.add({ operationId: "send_a", sendDelivery: f.delivery }, 0);
+    const second = f.add({
+      operationId: "send_b",
+      sendDelivery: f.delivery,
+      state: "submission_unknown",
+      safeErrorCode: "submission_unknown",
+    });
+    f.add({ sendDelivery: f.delivery, state: "rejected", safeErrorCode: "rejected" });
+    f.add({
+      sendDelivery: f.delivery,
+      state: "succeeded",
+      result: { cursor: 0, events: [], sessionId: f.session.sessionId, status: "working" },
+    });
+    f.add();
+    f.add({ kind: "respond" });
+    f.add({
+      internalBuildContinuation: {
+        decision: {
+          adapterSessionId: f.delivery.adapterSessionId,
+          decision: "runnable",
+          turnId: "private-continuation",
+          turnSequence: 1,
+          version: 1,
+          workflowPhase: "applied",
+        },
+        nonce: "a".repeat(64),
+      },
+      sendDelivery: f.delivery,
+    });
+    f.add({
+      sessionId: "another_session",
+      sendDelivery: { ...f.delivery, sessionId: "another_session" },
+    });
+    const missingPages = await Promise.all(
+      (["issuer", "audience", "workspaceId", "ownerUserId"] as const).map((field) => {
+        f.add({
+          principal: { ...principal, [field]: `${principal[field]}/foreign` },
+          sendDelivery: f.delivery,
+        });
+        return f.read({ principal: { ...principal, [field]: `${principal[field]}/missing` } });
+      }),
+    );
+    for (const missingPage of missingPages) expect(missingPage.acknowledgements).toEqual([]);
+    const page = await f.read();
+    expect(page.acknowledgements.map(({ operation }) => operation.operationId)).toEqual([
+      first.operationId,
+      second.operationId,
+    ]);
+    expect(page.nextCursor).toEqual({ createdAtEpochMs: 1000, operationId: second.operationId });
+    const next = await f.read({ cursor: page.nextCursor });
+    expect(next.acknowledgements.map(({ operation }) => operation.operationId)).toEqual([
+      third.operationId,
+    ]);
+    expect(next.nextCursor).toBeUndefined();
+    const exactPage = await f.read({ operationId: second.operationId });
+    expect(exactPage.acknowledgements.map(({ operation }) => operation.operationId)).toEqual([
+      second.operationId,
+    ]);
+    const missingOperationPage = await f.read({ operationId: "missing" });
+    expect(missingOperationPage.acknowledgements).toEqual([]);
+    const missingSessionPage = await f.read({ sessionId: "missing" });
+    expect(missingSessionPage.acknowledgements).toEqual([]);
+  });
+
+  it("rejects corrupted indexed bindings and invalid sidecar values", async () => {
+    const f = queuedSendFixture();
+    const row = f.add({ sendDelivery: f.delivery });
+    row.record = { ...row.record, clientRequestId: "different-request" };
+    await expect(f.read()).rejects.toThrow("canonically bound");
+    row.record = { ...row.record, clientRequestId: row.clientRequestId };
+    row.sendCancellationRevisionAtDispatch = -1;
+    await expect(f.read()).rejects.toThrow();
+  });
 });

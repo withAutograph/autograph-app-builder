@@ -43,6 +43,8 @@ import { hostedPrincipalSchema, requireHostedOperationScope, tenantKeyFor } from
 import type { HostedPrincipal } from "./hosted-auth";
 import {
   isProvedSendDelivery,
+  canProjectQueuedSendAcknowledgement,
+  unsettledSendAcknowledgementPageSchema,
   isProvedResourceApprovalResponse,
   hostedOperationRecordSchema,
   DEFAULT_HOSTED_SESSION_TIMEOUT_POLICY,
@@ -60,6 +62,9 @@ import {
 } from "./hosted-store";
 import type {
   HostedEveStore,
+  SendObservationBinding,
+  UnsettledSendAcknowledgement,
+  SendAcknowledgementCursor,
   HostedOperationKind,
   HostedOperationRecord,
   HostedPagedCheckpointMetadata,
@@ -861,6 +866,11 @@ const guardClientRequestId = (
     batch,
     sessionId: session.sessionId,
   });
+interface SendReadEvidence {
+  observation: NativeSendReadObservation;
+  binding: SendObservationBinding;
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createHostedEveSessionService(input: {
   principal: HostedPrincipal;
@@ -1079,7 +1089,8 @@ export function createHostedEveSessionService(input: {
     ) {
       return undefined;
     }
-    // oxlint-disable-next-line eslint/no-use-before-define -- Reconciliation uses the initialized canonical observer without sending again.
+    let sendRead: SendReadEvidence | undefined;
+    // oxlint-disable-next-line eslint/no-use-before-define -- Reconciliation calls the initialized canonical observer without another SEND.
     const result = await readSession(
       {
         continueWork: false,
@@ -1089,11 +1100,21 @@ export function createHostedEveSessionService(input: {
         sessionId: operation.sessionId,
       },
       operation.operationId,
+      (observation, observedBinding) => {
+        sendRead = { observation, binding: observedBinding };
+      },
     );
     const current = await requireSession(operation.sessionId);
     const proof = await nativeDeliveriesForSession(current);
     if (!isProvedSendDelivery(operation, current, proof)) {
-      return undefined;
+      // oxlint-disable-next-line eslint/no-use-before-define -- Reconciliation runs after all service closures initialize.
+      const projected = await projectUnsettledSendAcknowledgements(
+        operation.sessionId,
+        result,
+        sendRead,
+        operation.operationId,
+      );
+      return projected?.result;
     }
     await assertSendOwner(current);
     const settled = await input.store.settleSucceeded({
@@ -1398,9 +1419,188 @@ export function createHostedEveSessionService(input: {
   };
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+  const projectUnsettledSendAcknowledgements = async (
+    sessionId: string,
+    result: EveSessionResult,
+    evidence: SendReadEvidence | undefined,
+    operationId?: string,
+    settleNativeProof = true,
+  ): Promise<{ result: EveSessionResult; queued: boolean } | undefined> => {
+    const read = input.store.readUnsettledSendAcknowledgements;
+    if (read === undefined || evidence === undefined) {
+      return undefined;
+    }
+    const readPage = async (options: Parameters<typeof read>[0]) => {
+      try {
+        return unsettledSendAcknowledgementPageSchema.parse(await read(options));
+      } catch {
+        throw new HostedSubmissionUnknownError();
+      }
+    };
+    let current = await requireSession(sessionId);
+    const proof = await nativeDeliveriesForSession(current);
+    let cursor: SendAcknowledgementCursor | undefined;
+    let queued: UnsettledSendAcknowledgement | undefined;
+    do {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Each keyset page depends on the preceding cursor; there is no total scan cap.
+      const page = await readPage({
+        principal,
+        sessionId,
+        ...(operationId === undefined ? {} : { operationId }),
+        ...(cursor === undefined ? {} : { cursor }),
+        limit: 100,
+      });
+      for (const acknowledgement of page.acknowledgements) {
+        const operation = requireOwnedOperation(acknowledgement.operation, {
+          clientRequestId: acknowledgement.operation.clientRequestId,
+          kind: "send",
+          operationId: operationId ?? acknowledgement.operation.operationId,
+          requestDigest: acknowledgement.operation.requestDigest,
+          sessionId,
+        });
+        if (
+          operation.sendDelivery === undefined ||
+          operation.internalBuildContinuation !== undefined ||
+          (operation.state !== "reserved" && operation.state !== "submission_unknown")
+        ) {
+          throw new HostedSubmissionUnknownError();
+        }
+        if (isProvedSendDelivery(operation, current, proof)) {
+          if (!settleNativeProof) {
+            continue;
+          }
+          // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Each proof settlement retains current owner authority.
+          await assertSendOwner(current);
+          const settled = requireOwnedOperation(
+            // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Settle each exact native proof before advancing its canonical ACK row.
+            await input.store.settleSucceeded({
+              principal,
+              operationId: operation.operationId,
+              requestDigest: operation.requestDigest,
+              result,
+              sendDeliveryResolution: proof,
+              nowEpochMs: now(),
+            }),
+            {
+              clientRequestId: operation.clientRequestId,
+              kind: "send",
+              operationId: operation.operationId,
+              requestDigest: operation.requestDigest,
+              sessionId,
+            },
+          );
+          if (settled.state !== "succeeded") {
+            throw new HostedSubmissionUnknownError();
+          }
+        } else if (
+          canProjectQueuedSendAcknowledgement({
+            acknowledgement,
+            current,
+            result,
+            observation: evidence.observation,
+            observedBinding: evidence.binding,
+            proof,
+          })
+        ) {
+          queued = acknowledgement;
+        }
+      }
+      if (
+        page.nextCursor !== undefined &&
+        cursor !== undefined &&
+        (page.nextCursor.createdAtEpochMs < cursor.createdAtEpochMs ||
+          (page.nextCursor.createdAtEpochMs === cursor.createdAtEpochMs &&
+            page.nextCursor.operationId <= cursor.operationId))
+      ) {
+        throw new HostedSubmissionUnknownError();
+      }
+      cursor = page.nextCursor;
+    } while (cursor !== undefined);
+    if (queued === undefined) {
+      return undefined;
+    }
+    const latest = await readPage({
+      principal,
+      sessionId,
+      operationId: queued.operation.operationId,
+      limit: 1,
+    });
+    current = await requireSession(sessionId);
+    await assertSendOwner(current);
+    const currentProof = await nativeDeliveriesForSession(current);
+    const acknowledged = latest.acknowledgements.find(
+      (candidate) => candidate.operation.operationId === queued?.operation.operationId,
+    );
+    if (acknowledged === undefined) {
+      return { result, queued: false };
+    }
+    requireOwnedOperation(acknowledged.operation, {
+      clientRequestId: queued.operation.clientRequestId,
+      kind: "send",
+      operationId: queued.operation.operationId,
+      requestDigest: queued.operation.requestDigest,
+      sessionId,
+    });
+    if (digest(acknowledged.operation.sendDelivery) !== digest(queued.operation.sendDelivery)) {
+      throw new HostedSubmissionUnknownError();
+    }
+    if (isProvedSendDelivery(acknowledged.operation, current, currentProof)) {
+      if (!settleNativeProof) {
+        return undefined;
+      }
+      const settled = requireOwnedOperation(
+        await input.store.settleSucceeded({
+          principal,
+          operationId: acknowledged.operation.operationId,
+          requestDigest: acknowledged.operation.requestDigest,
+          result,
+          sendDeliveryResolution: currentProof,
+          nowEpochMs: now(),
+        }),
+        {
+          clientRequestId: acknowledged.operation.clientRequestId,
+          kind: "send",
+          operationId: acknowledged.operation.operationId,
+          requestDigest: acknowledged.operation.requestDigest,
+          sessionId,
+        },
+      );
+      if (settled.state !== "succeeded") {
+        throw new HostedSubmissionUnknownError();
+      }
+      return { result, queued: false };
+    }
+    current = await requireSession(sessionId);
+    if (
+      canProjectQueuedSendAcknowledgement({
+        acknowledgement: acknowledged,
+        current,
+        result,
+        observation: evidence.observation,
+        observedBinding: evidence.binding,
+        proof: currentProof,
+      })
+    ) {
+      return { result: { ...result, status: "working" }, queued: true };
+    }
+    const latestStatus = toDurableHostedSessionRecord(current).status;
+    let latestResult = result;
+    if (latestStatus !== result.status) {
+      // oxlint-disable-next-line eslint/no-use-before-define -- The initialized canonical checkpoint reader preserves newer cancellation/input/terminal state.
+      latestResult = await resultFromDurableCheckpoint(
+        sessionId,
+        current,
+        result.events[0]?.index ?? result.cursor,
+        100,
+      );
+    }
+    return { result: latestResult, queued: false };
+  };
+
   const continueApprovedWork = async (
     sessionId: string,
     result: EveSessionResult,
+    sendRead?: SendReadEvidence,
   ): Promise<EveSessionResult> => {
     try {
       const controlled = await continueSessionLimitGuard(sessionId, result);
@@ -1408,6 +1608,10 @@ export function createHostedEveSessionService(input: {
       const inputs = await privateInputsForSession(current);
       if (inputs !== undefined && pendingFrameworkGuardIds(inputs).length > 0) {
         return presentSessionLimitState(controlled, inputs);
+      }
+      const queued = await projectUnsettledSendAcknowledgements(sessionId, controlled, sendRead);
+      if (queued !== undefined) {
+        return queued.result;
       }
       const stoppedTurns = inputs === undefined ? [] : sessionLimitCancelledTurns(inputs);
       if (current.privateBuildDecision !== undefined && inputs !== undefined) {
@@ -1460,6 +1664,7 @@ export function createHostedEveSessionService(input: {
     dispatch: (operationId: string) => Promise<{
       result: EveSessionResult;
       sendDeliveryResolution?: NativeDeliveryState;
+      queuedSend?: { delivery: SendDelivery; evidence: SendReadEvidence };
       newSession?: z.infer<typeof hostedSessionRecordSchema>;
       newSessionPaged?: {
         session: HostedPagedSessionBase;
@@ -1648,6 +1853,7 @@ export function createHostedEveSessionService(input: {
     let dispatched: {
       result: EveSessionResult;
       sendDeliveryResolution?: NativeDeliveryState;
+      queuedSend?: { delivery: SendDelivery; evidence: SendReadEvidence };
       newSession?: z.infer<typeof hostedSessionRecordSchema>;
       newSessionPaged?: {
         session: HostedPagedSessionBase;
@@ -1701,6 +1907,46 @@ export function createHostedEveSessionService(input: {
         throw new HostedRejectedOperationError(error.code);
       }
       throw new HostedSubmissionUnknownError();
+    }
+
+    if (dispatched.queuedSend !== undefined) {
+      if (options.kind !== "send" || options.sessionId === undefined) {
+        throw new HostedSubmissionUnknownError();
+      }
+      const saved = requireOwnedOperation(
+        await input.store.settleUnsuccessful({
+          principal,
+          operationId,
+          requestDigest,
+          state: "submission_unknown",
+          safeErrorCode: "submission_unknown",
+          nowEpochMs: now(),
+        }),
+        {
+          clientRequestId: options.request.clientRequestId,
+          kind: "send",
+          operationId,
+          requestDigest,
+          sessionId: options.sessionId,
+        },
+      );
+      if (
+        saved.state !== "submission_unknown" ||
+        digest(saved.sendDelivery) !== digest(dispatched.queuedSend.delivery)
+      ) {
+        throw new HostedSubmissionUnknownError();
+      }
+      const projected = await projectUnsettledSendAcknowledgements(
+        options.sessionId,
+        dispatched.result,
+        dispatched.queuedSend.evidence,
+        operationId,
+        false,
+      );
+      if (projected === undefined) {
+        throw new HostedSubmissionUnknownError();
+      }
+      return projected.result;
     }
 
     let settlementPhase: HostedSubmissionPhase = "settlement_verification";
@@ -2109,7 +2355,10 @@ export function createHostedEveSessionService(input: {
       continueWork?: boolean;
     },
     explicitSendOperationId?: string,
-    onNativeRead?: (observation: NativeSendReadObservation) => void,
+    onNativeRead?: (
+      observation: NativeSendReadObservation,
+      binding: SendObservationBinding,
+    ) => void,
   ) {
     const { sessionId, cursor, limit } = inputValue;
     const session = toDurableHostedSessionRecord(await requireSession(sessionId));
@@ -2228,7 +2477,7 @@ export function createHostedEveSessionService(input: {
           store: input.store,
           transport: input.transport.observe,
         });
-        onNativeRead?.({
+        const nativeReadObservation: NativeSendReadObservation = {
           nativeStartIndex: nativeObservationState?.nextNativeIndex ?? 0,
           ...(spool.observation.nextNativeIndex === undefined
             ? {}
@@ -2240,7 +2489,16 @@ export function createHostedEveSessionService(input: {
             ? {}
             : { observationComplete: spool.observation.observationComplete }),
           currentTurnPresent: spool.observation.activeTurnId !== undefined,
-        });
+        };
+        const sendRead: SendReadEvidence = {
+          observation: nativeReadObservation,
+          binding: {
+            adapterSessionId: session.adapterSessionId,
+            adapterGeneration: session.adapterGeneration,
+            cancellationRevision: session.cancellationRevision ?? 0,
+          },
+        };
+        onNativeRead?.(nativeReadObservation, sendRead.binding);
         const observedNativeState = spool.observation.nativeObservationState;
         if (
           nativeObservationState !== undefined &&
@@ -2387,7 +2645,7 @@ export function createHostedEveSessionService(input: {
           const result = await resultFromDurableCheckpoint(sessionId, stored, cursor, limit);
           return inputValue.continueWork === false
             ? result
-            : continueApprovedWork(sessionId, result);
+            : continueApprovedWork(sessionId, result, sendRead);
         }
       } catch (error) {
         if (error instanceof HostedCheckpointObservationConflictError) {
@@ -2552,10 +2810,12 @@ export function createHostedEveSessionService(input: {
     cursor: number,
     sendDelivery?: SendDelivery,
     sendDiagnostic?: { clientRequestId: string; operationId: string },
+    onQueued?: (evidence: SendReadEvidence) => void,
   ): Promise<EveSessionResult> {
     let phase: HostedSubmissionPhase = "send_accepted_readback";
     let failureCategory: SendReadFailureCategory = "native_read_failed";
     let nativeRead: NativeSendReadObservation | undefined;
+    let sendRead: SendReadEvidence | undefined;
     let deliveryObservation: SendDeliveryObservationDiagnostic | undefined;
     try {
       const result = await readSession(
@@ -2566,8 +2826,9 @@ export function createHostedEveSessionService(input: {
           sessionId,
         },
         sendDelivery === undefined ? undefined : sendDiagnostic?.operationId,
-        (observed) => {
+        (observed, binding) => {
           nativeRead = observed;
+          sendRead = { observation: observed, binding };
         },
       );
       const current = toDurableHostedSessionRecord(await requireSession(sessionId));
@@ -2577,6 +2838,19 @@ export function createHostedEveSessionService(input: {
           current.adapterSessionId !== sendDelivery.adapterSessionId ||
           current.adapterGeneration !== sendDelivery.adapterGeneration;
         if (bindingChanged || !provesNativeDelivery(sendDelivery, proof)) {
+          if (!bindingChanged && onQueued !== undefined && sendDiagnostic !== undefined) {
+            const queued = await projectUnsettledSendAcknowledgements(
+              sessionId,
+              result,
+              sendRead,
+              sendDiagnostic.operationId,
+              false,
+            );
+            if (queued?.queued === true && sendRead !== undefined) {
+              onQueued(sendRead);
+              return queued.result;
+            }
+          }
           deliveryObservation = sendDeliveryObservationDiagnostic({
             delivery: sendDelivery,
             binding: current,
@@ -3237,6 +3511,9 @@ export function createHostedEveSessionService(input: {
               };
               const recorded = await input.store.recordSendDelivery?.({
                 delivery: marker,
+                ...(input.store.readUnsettledSendAcknowledgements === undefined
+                  ? {}
+                  : { cancellationRevisionAtDispatch: binding.cancellationRevision ?? 0 }),
                 nowEpochMs: now(),
                 operationId,
                 principal,
@@ -3267,15 +3544,22 @@ export function createHostedEveSessionService(input: {
             if (sendDelivery === undefined) {
               throw new HostedSubmissionUnknownError();
             }
+            let queued: SendReadEvidence | undefined;
             const result = await readAcceptedMutation(
               request.sessionId,
               session.version === 2 ? session.checkpointDigest : undefined,
               responseCursor,
               sendDelivery,
               { clientRequestId: request.clientRequestId, operationId },
+              (evidence) => {
+                queued = evidence;
+              },
             );
             return {
               result,
+              ...(queued === undefined
+                ? {}
+                : { queuedSend: { delivery: sendDelivery, evidence: queued } }),
               sendDeliveryResolution: await nativeDeliveriesForSession(
                 await requireSession(request.sessionId),
               ),

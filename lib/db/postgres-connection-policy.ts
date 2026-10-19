@@ -28,48 +28,60 @@ export const hostedTaskPostgresOptions = {
   prepare: false,
 } as const;
 
-const databaseUrlSchema = z
-  .string()
-  .min(1)
-  .max(8192)
-  .refine((value) => !/[\0\r\n]/u.test(value), "Malformed database URL.")
-  .transform((value, context) => {
-    let url: URL;
-    try {
-      url = new URL(value);
-    } catch {
-      context.addIssue({ code: "custom", message: "Invalid database URL." });
-      return z.NEVER;
-    }
-    if (url.protocol !== "postgres:" && url.protocol !== "postgresql:") {
-      context.addIssue({
-        code: "custom",
-        message: "Hosted storage requires PostgreSQL.",
-      });
-      return z.NEVER;
-    }
-    if (url.hostname.endsWith(".neon.tech")) {
-      const endpoint = url.hostname.split(".")[0] ?? "";
-      if (!endpoint.endsWith("-pooler")) {
+const databaseUrlSchema = (endpointKind: "pooled" | "direct") =>
+  z
+    .string()
+    .min(1)
+    .max(8192)
+    .refine((value) => !/[\0\r\n]/u.test(value), "Malformed database URL.")
+    .transform((value, context) => {
+      let url: URL;
+      try {
+        url = new URL(value);
+      } catch {
+        context.addIssue({ code: "custom", message: "Invalid database URL." });
+        return z.NEVER;
+      }
+      if (url.protocol !== "postgres:" && url.protocol !== "postgresql:") {
         context.addIssue({
           code: "custom",
-          message: "Hosted Neon storage requires its pooled endpoint.",
+          message: "Hosted storage requires PostgreSQL.",
         });
         return z.NEVER;
       }
-      const sslMode = url.searchParams.get("sslmode");
-      if (sslMode !== "require" && sslMode !== "verify-full") {
-        context.addIssue({
-          code: "custom",
-          message: "Hosted Neon storage requires TLS.",
-        });
-        return z.NEVER;
+      if (url.hostname.endsWith(".neon.tech")) {
+        const endpoint = url.hostname.split(".")[0] ?? "";
+        if (endpoint.endsWith("-pooler") !== (endpointKind === "pooled")) {
+          context.addIssue({
+            code: "custom",
+            message:
+              endpointKind === "pooled"
+                ? "Hosted Neon storage requires its pooled endpoint."
+                : "Neon migrations require a direct endpoint.",
+          });
+          return z.NEVER;
+        }
+        const sslMode = url.searchParams.get("sslmode");
+        if (sslMode !== "require" && sslMode !== "verify-full") {
+          context.addIssue({
+            code: "custom",
+            message: "Hosted Neon storage requires TLS.",
+          });
+          return z.NEVER;
+        }
       }
-    }
-    return value;
-  });
+      return value;
+    });
+
+const hostedDatabaseUrlSchema = databaseUrlSchema("pooled");
+const migrationDatabaseUrlSchema = databaseUrlSchema("direct");
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseHostedDatabaseUrl(value: unknown): string {
-  return databaseUrlSchema.parse(value);
+  return hostedDatabaseUrlSchema.parse(value);
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function parseMigrationDatabaseUrl(value: unknown): string {
+  return migrationDatabaseUrlSchema.parse(value);
 }

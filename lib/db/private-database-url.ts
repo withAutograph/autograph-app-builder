@@ -1,11 +1,11 @@
 import { closeSync, readSync } from "node:fs";
 
-import { parseHostedDatabaseUrl } from "./postgres-connection-policy";
+import { parseHostedDatabaseUrl, parseMigrationDatabaseUrl } from "./postgres-connection-policy";
 
 const MAX_SECRET_BYTES = 8192;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function readPrivateDatabaseUrl(fd: number): string {
+function readPrivateDatabaseUrlSecret(fd: number): string {
   if (!Number.isInteger(fd) || fd < 0) {
     throw new Error("The database URL fd was invalid.");
   }
@@ -31,5 +31,15 @@ export function readPrivateDatabaseUrl(fd: number): string {
   if (/[\0\r\n]/u.test(databaseUrl)) {
     throw new Error("The database URL secret frame was malformed.");
   }
-  return parseHostedDatabaseUrl(databaseUrl);
+  return databaseUrl;
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function readPrivateDatabaseUrl(fd: number): string {
+  return parseHostedDatabaseUrl(readPrivateDatabaseUrlSecret(fd));
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function readPrivateMigrationDatabaseUrl(fd: number): string {
+  return parseMigrationDatabaseUrl(readPrivateDatabaseUrlSecret(fd));
 }
