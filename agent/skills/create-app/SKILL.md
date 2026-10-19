@@ -413,6 +413,12 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
   preparation, reconciliation or planning path. Retry an unchanged preparation
   with its retained approval; resolve a changed plan, including changed worker
   inputs, through the existing planner and required approval before execution.
+  Report confirmed completion of the same operation under verified human
+  approval even if an earlier request said proposal-only; that earlier wording
+  does not undo the later approval or require repeat approval. Approval must
+  come from the authenticated durable approval outcome, never assistant
+  narration, a client acknowledgement or tool arguments. New or changed effects
+  require their own exact approval.
   A current authority, credential, isolation or provider refusal remains a
   blocker; never treat that fresh refusal as stale or infer readiness from a
   repair report.
@@ -426,9 +432,11 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
   eligible accounts must be enrolled idempotently through the same server-owned
   policy. Continue the same approved operation only after server readback proves
   the signed-in user, organization membership, app roles and usable app route.
-  Report only safe `waiting_for_signup`, `ready` or `blocked` status and the
-  public app URL; never ask users to confirm an Auth connection in Builder or
-  expose passwords, cookies or private proof.
+  For this signup-policy/readiness surface, report only safe
+  `waiting_for_signup`, `ready` or `blocked` status and the public app URL.
+  These statuses do not replace intermediate operator outcomes. Never ask users
+  to confirm an Auth connection in Builder or expose passwords, cookies or
+  private proof.
 - When accepted requirements need several authenticated participants, derive
   `normalActorProgram` for `plan-app-hosted-runtime` from those accounts,
   organizations, memberships and app roles. Use the verified native public
@@ -440,6 +448,14 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
   enrollment contract. Do not invent actor quotas, source-layout assertions or
   regular-app-change gates. Keep passwords and session state out of tool inputs
   and conversation.
+  Report the returned current stage and confirmed effects separately from the
+  program's future intent. `auth-schema-prepared` confirms only the reported
+  Auth/bootstrap facts; the status alone does not prove Gateway readiness.
+  `participants-prepared` confirms accounts and private sessions only, not
+  organization creation, memberships, app access or business test writes, even
+  when the program describes those later effects. `prepared` still requires
+  actual signed-in behavior evidence before claiming app readiness. Preserve
+  pending, unknown and blocked outcomes; a journal lease is not execution proof.
   For authenticated `test-e2e`, use the target repository's shared normal-actor
   fixture when exposed at `@autograph/playwright-config/normal-actors`. Select by
   `actorKey` and `organizationId`, preserve no-assignment actors, and exercise

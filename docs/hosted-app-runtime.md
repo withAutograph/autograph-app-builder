@@ -97,16 +97,35 @@ An accepted `normalActorProgram` can describe additional named accounts,
 organizations, memberships and app roles, but is not a roster restriction on
 ordinary users when the approved product allows open signup.
 
+Report the returned current stage and confirmed effects separately from future
+`normalActorProgram` intent. The program can describe organizations, memberships
+and app roles while the current approved stage prepares accounts only.
+
+| Operator outcome        | What to report                                                                                                                    |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `auth-schema-prepared`  | Only confirmed Auth/bootstrap facts. The status alone does not prove Gateway readiness.                                           |
+| `participants-prepared` | Accounts and private sessions only. It does not establish organization creation, memberships, app access or business test writes. |
+| `prepared`              | Confirmed preparation effects. Actual signed-in behavior evidence is still required before claiming app readiness.                |
+
+Preserve pending, unknown and blocked outcomes; a journal lease is not proof of
+execution. Report successful completion of the same operation under verified
+human approval even when an earlier request said proposal-only. That earlier
+wording does not undo the later approval or require repeat approval. Verify the
+authenticated durable approval outcome described above; assistant narration,
+client acknowledgements and tool arguments are not approval evidence. New or
+changed effects require their own exact approval.
+
 The app's normal signup or sign-in establishes the user's Auth session. A
 protected server-side enrollment path idempotently applies only the approved
 organization membership and app roles, including when an eligible account
 already exists. The server verifies the live session, matching membership and
 app-specific roles before continuing the same approved operation. There is no
 return-to-Builder checkbox or user-supplied claim that Auth was connected.
-Until a real eligible user completes signup, the private status is
-`waiting_for_signup`; after verified enrollment and route readiness it is
-`ready`. Authority or provider failures remain `blocked`. Public results expose
-only safe status and app URL, never cookies or private proof. See
+The private signup-policy/readiness status stays `waiting_for_signup` until a
+real eligible user completes signup; after verified enrollment and route
+readiness it is `ready`. Authority or provider failures remain `blocked`. Public results expose
+only safe status and app URL, never cookies or private proof. These signup
+statuses do not replace the intermediate operator outcomes above. See
 [owner and normal-account authority](hosted-operator-owner-authority.md).
 
 Private capture keeps actual cookie bytes under the configured native sender
