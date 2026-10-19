@@ -23,6 +23,7 @@ import {
   resolveProtectedRuntimeBindings,
   resolvePreparedRuntimeExecution,
 } from "@/lib/agent/prepared-runtime-execution";
+import { reportHostedRuntimeHandoffDiagnostic } from "@/lib/agent/hosted-runtime-handoff-diagnostic";
 import type { DependencyAttemptResult } from "@/lib/agent/checkout-dependencies";
 import type { ValidationLogStore } from "@/lib/repository/validation-log";
 import { exactForwardedSessionAuthority } from "@/lib/hosted/session-authority";
@@ -102,6 +103,15 @@ const resolveNativePreview = async (
   current: ReturnType<typeof appBuilderWorkflowState.get>,
 ) => {
   const protectedAppId = "appSpec" in current ? current.appSpec.appId : input.appId;
+  reportHostedRuntimeHandoffDiagnostic({
+    acceptedAppIdPresent: "appSpec" in current,
+    inputAppIdPresent: input.appId !== undefined,
+    lookupAttempted: protectedAppId !== undefined,
+    ...(input.appId === undefined || protectedAppId === undefined
+      ? {}
+      : { appIdMatches: input.appId === protectedAppId }),
+    stage: "native_preview_candidate",
+  });
   if (protectedAppId !== undefined) {
     if (input.appId !== undefined && input.appId !== protectedAppId) {
       throw new Error("The requested app does not match the accepted app.");
