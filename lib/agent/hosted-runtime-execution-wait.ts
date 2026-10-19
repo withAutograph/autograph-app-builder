@@ -28,17 +28,19 @@ export async function* continueHostedRuntimeExecutionObservation(
   prepared: Preparation,
   ports: HostedRuntimeExecutionWaitPorts,
 ) {
+  // Step proxies serialize thisVal; pass only data, never the function-bearing ports receiver.
+  const { read, sleepUntil, snapshot } = ports;
   yield prepared.result;
   let delayMs = 1000;
   for (;;) {
     ctx.abortSignal.throwIfAborted();
     // oxlint-disable-next-line eslint/no-await-in-loop -- Each canonical observation follows its preceding durable wait.
-    const state = await ports.read(input, ctx, ports.snapshot, delayMs);
+    const state = await read(input, ctx, snapshot, delayMs);
     if (state.status === "done") {
       return state.preparation;
     }
     // oxlint-disable-next-line eslint/no-await-in-loop -- Workflow sleep releases compute; no provider request is dispatched.
-    await ports.sleepUntil(new Date(state.checkAfter));
+    await sleepUntil(new Date(state.checkAfter));
     delayMs = Math.min(delayMs * 2, 30_000);
   }
 }
