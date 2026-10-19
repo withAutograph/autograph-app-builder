@@ -58,11 +58,96 @@ const operatorPlanningSqlState = z.enum([
   "08001",
   "08006",
 ]);
+const operatorPlanningValidationInvariant = z.enum([
+  "identity_link_scope",
+  "gateway_candidate_scope",
+  "gateway_environment_scope",
+  "app_delivery_scope",
+  "other_custom",
+  "schema_shape",
+  "unknown",
+]);
+type OperatorPlanningValidationInvariant = z.infer<typeof operatorPlanningValidationInvariant>;
+
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Exact string matching discards untrusted issue messages without coercion.
+const planningCustomInvariant = (message: unknown): OperatorPlanningValidationInvariant => {
+  switch (message) {
+    case "Realm identity link must match the owned Auth resource, exact issuer and canonical owner session.": {
+      return "identity_link_scope";
+    }
+    case "Gateway candidates must belong to the exact approved native project and branch.":
+    case "Only an independently READY Gateway candidate may be pinned.": {
+      return "gateway_candidate_scope";
+    }
+    case "Gateway rows must remain in the owned trusted project.": {
+      return "gateway_environment_scope";
+    }
+    case "Deployment candidates must remain within their approved project and Preview branch.":
+    case "Only an observed READY deployment of this approved delivery may be selected.":
+    case "Managed environment rows must belong to this approved app operation.":
+    case "Historical app delivery must retain its actual owned project, branch and row lineage.": {
+      return "app_delivery_scope";
+    }
+    default: {
+      return "other_custom";
+    }
+  }
+};
+
+// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- The private descriptor reader leaves parsing to the closed-label projector and never invokes getters.
+const ownDiagnosticValue = (value: unknown, key: string): unknown => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Never read untrusted accessors, inherited properties or arbitrary exception values.
+  if (value === null || typeof value !== "object") {
+    return undefined;
+  }
+  return Object.getOwnPropertyDescriptor(value, key)?.value;
+};
+
+/** Project existing issues only; never parse the record again or retain issue text, paths or values. */
+export const projectOperatorPlanningValidationInvariants = (
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This pure diagnostic projector must tolerate arbitrary thrown objects.
+  error: unknown,
+): OperatorPlanningValidationInvariant[] => {
+  try {
+    const issues = ownDiagnosticValue(error, "issues");
+    const length = ownDiagnosticValue(issues, "length");
+    if (
+      !Array.isArray(issues) ||
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Array length is accepted only from an own data descriptor.
+      typeof length !== "number" ||
+      !Number.isSafeInteger(length) ||
+      length < 1
+    ) {
+      return ["unknown"];
+    }
+    const labels = new Set<OperatorPlanningValidationInvariant>();
+    // Bound inspection of untrusted exception metadata, never the planned workload.
+    const inspected = Math.min(length, 64);
+    for (let index = 0; index < inspected; index += 1) {
+      const issue = ownDiagnosticValue(issues, String(index));
+      const code = ownDiagnosticValue(issue, "code");
+      if (code === "custom") {
+        labels.add(planningCustomInvariant(ownDiagnosticValue(issue, "message")));
+      } else {
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Only the presence of a data issue code is projected, never its contents.
+        labels.add(typeof code === "string" ? "schema_shape" : "unknown");
+      }
+    }
+    if (length > inspected) {
+      labels.add("unknown");
+    }
+    return operatorPlanningValidationInvariant.options.filter((label) => labels.has(label));
+  } catch {
+    return ["unknown"];
+  }
+};
+
 const operatorPlanningFailure = z.strictObject({
   stage: operatorPlanStage,
   errorClass: z.enum(["operator_error", "validation_error", "type_error", "unexpected"]),
   code: operatorPublicResultSchema.shape.code.unwrap().optional(),
   sqlState: operatorPlanningSqlState.optional(),
+  validationInvariants: z.array(operatorPlanningValidationInvariant).optional(),
   nativeStoreFailure: z
     .enum(["connection_required", "provider_unavailable", "resource_mismatch"])
     .optional(),
@@ -817,6 +902,9 @@ export const observeOperatorPlanStage = async <T>(
         }
       } else if (error instanceof z.ZodError) {
         planningFailure.errorClass = "validation_error";
+        if (planStage === "plan_journal_update") {
+          planningFailure.validationInvariants = projectOperatorPlanningValidationInvariants(error);
+        }
       } else if (error instanceof TypeError) {
         planningFailure.errorClass = "type_error";
       }
