@@ -893,3 +893,94 @@ describe("approved hosted runtime consumers", () => {
     expect(mocks.readBinding).not.toHaveBeenCalled();
   });
 });
+
+it("reports the failed description command stage without exposing its output", async () => {
+  const fixture = transport();
+  const stdout = vi.fn().mockResolvedValue("private-output-canary token=private-token-canary");
+  fixture.provider.runCommand
+    .mockReset()
+    .mockResolvedValue({ ...fixture.command, exitCode: 23, stdout });
+  const result = restorePreparedRuntimeExecution({
+    appId: context.appId,
+    binding: binding(),
+    observeInstallation: async () =>
+      await mocks.observeInstallation({
+        ...context,
+        files: files(),
+        stateDirectory: "/private-state",
+      }),
+    provider: fixture.provider,
+    root: context.root,
+  });
+  await expect(result).rejects.toBeInstanceOf(HostedRuntimeProviderError);
+  await expect(result).rejects.toMatchObject({
+    name: "HostedRuntimeProviderError",
+    code: "resource_mismatch",
+    message: "resource_mismatch: runtime restore app-description-command (exit 23)",
+  });
+  expect(stdout).not.toHaveBeenCalled();
+});
+
+it.each([
+  {
+    stage: "app-identity",
+    description: { ...descriptor, app: { ...descriptor.app, id: "private-app-canary" } },
+  },
+  { stage: "backend-kind", description: { ...descriptor, backend: { kind: "static" } } },
+  {
+    stage: "release-identity",
+    description: {
+      ...descriptor,
+      backend: {
+        ...descriptor.backend,
+        release: { ...descriptor.backend.release, id: "private-release-canary" },
+      },
+    },
+  },
+  {
+    stage: "artifact-identity",
+    description: {
+      ...descriptor,
+      backend: {
+        ...descriptor.backend,
+        release: { ...descriptor.backend.release, artifactHash: "sha256:private-artifact-canary" },
+      },
+    },
+  },
+])("reports only the closed $stage mismatch stage", async ({ stage, description }) => {
+  const fixture = transport();
+  fixture.provider.runCommand.mockReset().mockResolvedValue({
+    ...fixture.command,
+    stdout: async () => JSON.stringify(description),
+  });
+  const result = restorePreparedRuntimeExecution({
+    appId: context.appId,
+    binding: binding(),
+    observeInstallation: async () =>
+      await mocks.observeInstallation({
+        ...context,
+        files: files(),
+        stateDirectory: "/private-state",
+      }),
+    provider: fixture.provider,
+    root: context.root,
+  });
+  await expect(result).rejects.toBeInstanceOf(HostedRuntimeProviderError);
+  await expect(result).rejects.toMatchObject({
+    name: "HostedRuntimeProviderError",
+    code: "resource_mismatch",
+    message: `resource_mismatch: runtime restore ${stage}`,
+  });
+});
+
+it("reports a selected project mismatch before restoring provider state", async () => {
+  mocks.readBinding.mockResolvedValue({ ...binding(), projectId: "private-project-canary" });
+  const result = resolvePreparedRuntimeExecution(context, selection, mocks);
+  await expect(result).rejects.toBeInstanceOf(HostedRuntimeProviderError);
+  await expect(result).rejects.toMatchObject({
+    name: "HostedRuntimeProviderError",
+    code: "resource_mismatch",
+    message: "resource_mismatch: runtime restore project-identity",
+  });
+  expect(mocks.getProvider).not.toHaveBeenCalled();
+});

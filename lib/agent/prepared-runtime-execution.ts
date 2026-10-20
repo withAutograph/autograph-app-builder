@@ -16,7 +16,10 @@ import { getVercelPreviewProvider } from "../sandbox/vercel-preview-provider";
 import { resolveHostedRuntimePreparationSelection } from "./hosted-runtime-selection-handoff";
 import type { PreparedRuntimeSelection } from "./prepared-runtime-selection";
 
-import { restorePreparedRuntimeExecution } from "./prepared-runtime-execution-core";
+import {
+  restorePreparedRuntimeExecution,
+  preparedRuntimeResourceMismatch,
+} from "./prepared-runtime-execution-core";
 import type {
   RuntimeTransport,
   PreparedRuntimeExecution,
@@ -196,7 +199,7 @@ export const resolvePreparedRuntimeExecution = async (
     return null;
   }
   if (selection && selection.projectId !== binding.projectId) {
-    throw new HostedRuntimeProviderError("resource_mismatch");
+    throw preparedRuntimeResourceMismatch("project-identity");
   }
   await dependencies.assertAuthority({ sessionId: input.sessionId });
   const provider = await dependencies.getProvider(input.sandboxId, input.signal);

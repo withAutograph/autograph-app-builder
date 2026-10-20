@@ -13,6 +13,7 @@ import type { DraftReconciliationCompletion } from "./draft-reconciliation-state
 import type { AppDescription } from "../repository/app-description";
 import type { OperatorArtifactContext } from "../provisioning/hosted-operator-artifact-store";
 import type {
+  OperatorArtifactSelections,
   PublishedAppSource,
   PublishedAppSourceLookup,
   CompiledOperatorReleaseSelection,
@@ -29,6 +30,8 @@ import { requestPrivateApplyApproval, recordApprovedPrivateApply } from "./priva
 import { GENERATED_RELEASE_MEMBERS } from "../provisioning/hosted-operator-sandbox-launcher";
 
 const mocks = vi.hoisted(() => ({
+  associate: vi.fn<NonNullable<OperatorArtifactSelections["associatePublishedSource"]>>(),
+  associationAvailable: true,
   candidate: null as Record<string, unknown> | null,
   completion: null as DraftReconciliationCompletion | null,
   readExact: vi.fn(),
@@ -94,6 +97,7 @@ vi.mock("../provisioning/hosted-operator-artifact-selection", async (importOrigi
       ? { readPublishedSource: mocks.readPublishedSource }
       : {}),
     record: mocks.record,
+    ...(mocks.associationAvailable ? { associatePublishedSource: mocks.associate } : {}),
   }),
 }));
 
@@ -164,6 +168,11 @@ describe("owned compiled artifact workflow hook", () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
     mocks.rows.clear();
     mocks.readSelection.mockReset();
+    mocks.associationAvailable = true;
+    mocks.associate.mockReset().mockImplementation(async (_context, input) => ({
+      status: "recorded",
+      selection: { ...input.approvedSelection, publishedSource: input.publishedSource },
+    }));
     mocks.readExact.mockReset();
     mocks.completion = null;
     mocks.readPublishedSource.mockReset();
@@ -312,6 +321,112 @@ describe("owned compiled artifact workflow hook", () => {
     mocks.record.mockClear();
     return completion;
   };
+
+  it("associates the verified original publication with the current equivalent capture without reading app source", async () => {
+    const completion = await captureCompletion();
+    mocks.candidate = null;
+    const input = frame();
+    input.sandbox.run.mockClear();
+    input.sandbox.readBinaryFile.mockClear();
+    await expect(
+      recordPublishedReconciliationSourceForSession({
+        completion,
+        adapterSessionId: "adapter",
+        sessionAuth: input.sessionAuth,
+        publishedSource: historicalSource,
+        recordCurrentEquivalentRelease: true,
+      }),
+    ).resolves.toMatchObject({
+      status: "recorded",
+      selection: { publishedSource: historicalSource },
+    });
+    expect(mocks.associate).toHaveBeenCalledWith(
+      completion.compilation.context,
+      expect.objectContaining({
+        approvedSelection:
+          completion.compilation.release.status === "published"
+            ? completion.compilation.release.selection
+            : {},
+        publishedSource: historicalSource,
+      }),
+    );
+    expect(mocks.record).not.toHaveBeenCalled();
+    expect(input.sandbox.run).not.toHaveBeenCalled();
+    expect(input.sandbox.readBinaryFile).not.toHaveBeenCalled();
+  });
+  it("does not fall back to an ordinary selection write when atomic association is unavailable", async () => {
+    const completion = await captureCompletion();
+    mocks.associationAvailable = false;
+    await expect(
+      recordPublishedReconciliationSourceForSession({
+        completion,
+        adapterSessionId: "adapter",
+        sessionAuth: frame().sessionAuth,
+        publishedSource: historicalSource,
+        recordCurrentEquivalentRelease: true,
+      }),
+    ).rejects.toThrow();
+    expect(mocks.record).not.toHaveBeenCalled();
+  });
+  it("checks the retained completion and current canonical owner before equivalent association", async () => {
+    const completion = await captureCompletion();
+    mocks.owner = { ...mocks.owner, sessionId: "foreign-session" };
+    await expect(
+      recordPublishedReconciliationSourceForSession({
+        completion,
+        adapterSessionId: "adapter",
+        sessionAuth: frame().sessionAuth,
+        publishedSource: historicalSource,
+        recordCurrentEquivalentRelease: true,
+      }),
+    ).rejects.toThrow();
+    expect(mocks.associate).not.toHaveBeenCalled();
+    expect(mocks.record).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { appId: "another-app", digest },
+    { appId: "spend-review", digest: "f".repeat(64) },
+  ])(
+    "does not label a different current accepted specification as associated: %j",
+    async (appSpec) => {
+      const completion = await captureCompletion();
+      mocks.state = { ...mocks.state, appSpec };
+      await expect(
+        recordPublishedReconciliationSourceForSession({
+          completion,
+          adapterSessionId: "adapter",
+          sessionAuth: frame().sessionAuth,
+          publishedSource: historicalSource,
+          recordCurrentEquivalentRelease: true,
+        }),
+      ).resolves.toMatchObject({ status: "selection-changed" });
+      expect(mocks.associate).not.toHaveBeenCalled();
+      expect(mocks.record).not.toHaveBeenCalled();
+    },
+  );
+  it("stops equivalent association when the accepted specification changes during exact release readback", async () => {
+    const completion = await captureCompletion();
+    mocks.readExact.mockImplementation(() => {
+      mocks.state = { ...mocks.state, appSpec: { appId: "spend-review", digest: "f".repeat(64) } };
+      return Promise.resolve(
+        completion.compilation.release.status === "published"
+          ? completion.compilation.release.selection
+          : undefined,
+      );
+    });
+    await expect(
+      recordPublishedReconciliationSourceForSession({
+        completion,
+        adapterSessionId: "adapter",
+        sessionAuth: frame().sessionAuth,
+        publishedSource: historicalSource,
+        recordCurrentEquivalentRelease: true,
+      }),
+    ).resolves.toMatchObject({ status: "selection-changed" });
+    expect(mocks.associate).not.toHaveBeenCalled();
+    expect(mocks.record).not.toHaveBeenCalled();
+  });
 
   it("records the original exact release after current selection and candidate move", async () => {
     const completion = await captureCompletion();

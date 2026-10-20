@@ -2,7 +2,12 @@ import { defineTool } from "eve/tools";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import { z } from "zod";
 
-import { draftReconciliationState } from "@/lib/agent/draft-reconciliation-state";
+import {
+  draftReconciliationState,
+  draftReconciliationCompletions,
+} from "@/lib/agent/draft-reconciliation-state";
+import { assertReconciliationCompletionOwnerForSession } from "@/lib/agent/compiled-operator-artifacts";
+import { approvalReceiptForExistingDraftUpdate } from "@/lib/agent/approval-receipt";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { summarizeReconciliationChanges } from "@/lib/agent/draft-reconciliation-review-summary";
 import {
@@ -12,10 +17,69 @@ import {
 
 export default defineTool({
   description:
-    "Optionally inspect a merge conflict, recorded change metadata, or exact raw diff bytes against base or the old PR head. Metadata cursors are change indexes; raw diff cursors are byte offsets and may be requested independently. A raw diff may target one repository-relative path. Inspection is not a sealing prerequisite and does not update GitHub.",
+    "Optionally inspect a merge conflict, recorded change metadata, or exact raw diff bytes against base or the old PR head. Metadata cursors are change indexes; raw diff cursors are byte offsets and may be requested independently. A raw diff may target one repository-relative path. For app_source_publication_required, kind=publication-recovery lists retained publication context for the current app and accepted specification, even if its current candidate failed. Copy a returned nextCall to request normal approval and verify the original Git result before recording the equivalent current capture; listed receipts describe approval subjects and grant no approval. Inspection is not a sealing prerequisite and does not update GitHub.",
   async execute(input, ctx) {
-    const candidate = draftReconciliationState.get();
     const state = appBuilderWorkflowState.get();
+    if (input.kind === "publication-recovery") {
+      const currentAppSpec = "appSpec" in state ? state.appSpec : undefined;
+      const completions = draftReconciliationCompletions
+        .get()
+        .filter(
+          (completion) =>
+            currentAppSpec !== undefined &&
+            completion.appId === currentAppSpec.appId &&
+            completion.appReview.appSpecDigest === currentAppSpec.digest,
+        );
+      const recoveries = [];
+      for (const completion of completions) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Revalidate owner and accepted selection before exposing each retained context.
+        await assertReconciliationCompletionOwnerForSession({
+          completion,
+          adapterSessionId: ctx.session.id,
+          sessionAuth: ctx.session.auth,
+        });
+        const current = appBuilderWorkflowState.get();
+        if (
+          !("appSpec" in current) ||
+          current.appSpec.appId !== completion.appId ||
+          current.appSpec.digest !== completion.appReview.appSpecDigest
+        ) {
+          return {
+            status: "selection-changed" as const,
+            verification: "unverified" as const,
+            recoveries: [],
+            nextAction:
+              "The accepted app specification changed while reading retained publication context. Read publication-recovery again for the current selection; no publication or association was attempted.",
+          };
+        }
+        recoveries.push({
+          proposalDigest: completion.proposal.digest,
+          repositoryId: completion.proposal.repositoryId,
+          branch: completion.proposal.branchName,
+          ...(completion.compilation.release.status === "published"
+            ? { releaseId: completion.compilation.release.selection.releaseId }
+            : {}),
+          nextCall: {
+            tool: "reconcile_github_draft_pr" as const,
+            arguments: {
+              expectedProposalDigest: completion.proposal.digest,
+              approvalReceipt: approvalReceiptForExistingDraftUpdate(completion.proposal),
+              recordCurrentEquivalentRelease: true as const,
+            },
+          },
+        });
+      }
+      return {
+        status: "publication-recovery" as const,
+        verification: "unverified" as const,
+        recoveries,
+        nextAction:
+          recoveries.length === 0
+            ? "No retained publication completion matches the current app and accepted specification. No publication, approval or source association was inferred. Continue the normal source-recording recovery in this session without republishing an already accepted Git result."
+            : "Copy a retained nextCall to the existing reconciliation tool. These are unverified recovery candidates and approval-subject metadata, not approval grants or proof of applied Git publication. Normal approval, exact provider verification and full current-release matching still apply; no Git write is authorized by this listing.",
+      };
+    }
+    const candidate = draftReconciliationState.get();
     if (
       candidate === null ||
       state.phase !== "reviewed" ||
@@ -74,6 +138,7 @@ export default defineTool({
     };
   },
   inputSchema: z.discriminatedUnion("kind", [
+    z.strictObject({ kind: z.literal("publication-recovery") }),
     z.strictObject({ kind: z.literal("conflict"), path: z.string().min(1) }),
     z.strictObject({
       against: z.enum(["base", "head"]),

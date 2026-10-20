@@ -71,6 +71,7 @@ export const recordPublishedReconciliationForSession = async (input: {
   publication: ExistingDraftObservation;
   sessionAuth: unknown;
   adapterSessionId: string;
+  recordCurrentEquivalentRelease?: true;
 }) => {
   const { completion, publication } = input;
   if (
