@@ -9,6 +9,7 @@ import { z } from "zod";
 
 import {
   HostedOperatorError,
+  hostedOperatorInstallationCustomerIds,
   operatorPlanDigest,
   selectHostedOperatorOwnedOrganizationSpec,
 } from "./hosted-operator-contract";
@@ -444,16 +445,18 @@ export const buildProtectedInstallContext = (input: {
   fenceGeneration: number;
   database: "appDatabase" | "authDatabase";
   subject?: "auth";
+  purpose?: "install" | "access";
 }): ProtectedInstallContextWire => {
   const resource = resourceSchema.parse(input.plan[input.database]);
   const auth = input.subject === "auth" ? input.plan.authSchema : undefined;
   if (input.subject === "auth" && (auth === undefined || input.database !== "authDatabase")) {
     throw resourceMismatch();
   }
-  const tenantTargets =
-    auth === undefined
-      ? [...new Set(input.plan.access.map((target) => target.organizationId))]
-      : [];
+  const appTenantTargets =
+    input.purpose === "install"
+      ? hostedOperatorInstallationCustomerIds(input.plan)
+      : [...new Set(input.plan.access.map((target) => target.organizationId))];
+  const tenantTargets = auth === undefined ? appTenantTargets : [];
   if (auth === undefined && tenantTargets.length === 0) {
     throw resourceMismatch();
   }
@@ -1016,6 +1019,8 @@ const runSandboxWorker = async (
     fenceGeneration: input.fenceGeneration,
     operationRef: input.operationRef,
     plan: input.plan,
+    purpose:
+      input.effect.kind === "install" && input.database === "appDatabase" ? "install" : "access",
   };
   if (auth) {
     contextInput.subject = "auth";
@@ -1586,29 +1591,31 @@ const runSandboxWorker = async (
         { signal },
       );
     }
-    if (access || installReadback || (resources && input.effect.kind === "retire")) {
-      if (
-        input.accessConnections === undefined ||
-        (input.accessConnections.appMigrator !== input.directDatabaseUrl &&
-          (access || installReadback))
-      ) {
-        throw resourceMismatch();
+    const needsAccessConnections =
+      access || installReadback || (resources && input.effect.kind === "retire");
+    if (worker.operationScope === GENERATED_APP_SCOPE || needsAccessConnections) {
+      const files = [
+        {
+          path: path.posix.join(startup, "approved-access-plan.json"),
+          content: Buffer.from(JSON.stringify(input.plan)),
+          mode: 0o600,
+        },
+      ];
+      if (needsAccessConnections) {
+        if (
+          input.accessConnections === undefined ||
+          (input.accessConnections.appMigrator !== input.directDatabaseUrl &&
+            (access || installReadback))
+        ) {
+          throw resourceMismatch();
+        }
+        files.push({
+          path: path.posix.join(startup, "access-connections.json"),
+          content: Buffer.from(JSON.stringify(input.accessConnections)),
+          mode: 0o600,
+        });
       }
-      await sandbox.writeFiles(
-        [
-          {
-            path: path.posix.join(startup, "approved-access-plan.json"),
-            content: Buffer.from(JSON.stringify(input.plan)),
-            mode: 0o600,
-          },
-          {
-            path: path.posix.join(startup, "access-connections.json"),
-            content: Buffer.from(JSON.stringify(input.accessConnections)),
-            mode: 0o600,
-          },
-        ],
-        { signal },
-      );
+      await sandbox.writeFiles(files, { signal });
     }
     const releaseDirectory = path.posix.join(spool, "release");
     if (generatedMetadata !== undefined) {

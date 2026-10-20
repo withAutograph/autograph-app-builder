@@ -279,6 +279,8 @@ const hostedOperatorPlanDataSchema = z.strictObject({
   ),
   action: z.enum(["prepare", "cleanup"]),
   appDatabase: databaseResource,
+  /** Schema installation scope is independent of actor and role grants. */
+  appInstallation: z.strictObject({ customerIds: z.array(id).min(1) }).optional(),
   appEnvironmentCleanup: managedOperatorEnvironmentRowsSchema.optional(),
   appTrustedSources: z
     .strictObject({
@@ -789,6 +791,16 @@ const validateGatewayAppTrustedSource = (
   }
 };
 export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine((plan, ctx) => {
+  if (plan.appInstallation !== undefined) {
+    const customers = new Set(plan.appInstallation.customerIds);
+    if (plan.access.some((grant) => !customers.has(grant.organizationId))) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["appInstallation", "customerIds"],
+        message: "Schema installation targets must include every approved app access tenant.",
+      });
+    }
+  }
   if (
     plan.hostProtection !== undefined &&
     (plan.deploymentBoundary === undefined ||
@@ -919,6 +931,12 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
   }
 });
 export type HostedOperatorPlan = z.infer<typeof hostedOperatorPlanSchema>;
+/** Legacy plans install only their grant tenants; explicit plans retain owned installation tenants. */
+export const hostedOperatorInstallationCustomerIds = (plan: HostedOperatorPlan): string[] => [
+  ...new Set(
+    plan.appInstallation?.customerIds ?? plan.access.map((target) => target.organizationId),
+  ),
+];
 export type OperatorSelection = z.infer<typeof operatorSelectionSchema>;
 export const operatorReceiptSchema = z.strictObject({
   effectId: id,
@@ -1363,13 +1381,19 @@ export const hostedOperatorRecordSchema = hostedOperatorRecordDataSchema.superRe
       operator.plan.appDatabase.resourceId,
       operator.plan.authDatabase.resourceId,
     ]);
-    const tenants = new Set(operator.plan.access.map((target) => target.organizationId));
-    const effects = new Set(operator.plan.effects.map((effect) => effect.id));
+    const accessTenants = operator.plan.access.map((target) => target.organizationId);
+    const effects = new Map(operator.plan.effects.map((effect) => [effect.id, effect]));
     for (const [index, checkpoint] of (operator.workerCheckpoints ?? []).entries()) {
       const invalidIdentity =
         checkpoint.operationRef !== operator.operationRef ||
         operator.fenceGeneration === undefined ||
         checkpoint.fenceGeneration !== operator.fenceGeneration;
+      const parent = effects.get(checkpoint.parentEffectId);
+      const tenants = new Set(
+        parent?.kind === "install" && checkpoint.resourceId === operator.plan.appDatabase.resourceId
+          ? hostedOperatorInstallationCustomerIds(operator.plan)
+          : accessTenants,
+      );
       const outsidePlan =
         !resources.has(checkpoint.resourceId) ||
         !effects.has(checkpoint.parentEffectId) ||

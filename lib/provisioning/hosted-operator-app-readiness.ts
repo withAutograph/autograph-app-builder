@@ -144,6 +144,10 @@ const actorBindingSchema = z.strictObject({
 });
 
 export interface AppRuntimeSnapshotReader {
+  /** A closed inactive/missing binding is distinct from unreadable provider metadata. */
+  readActiveOrganization?: (
+    scope: OperatorAppMetadataScope,
+  ) => Promise<z.infer<typeof observationSchema> | null>;
   readIdentity: () => Promise<z.infer<typeof identitySchema>>;
   readOrganization: (
     scope: OperatorAppMetadataScope,
@@ -165,14 +169,71 @@ export const readAppRuntimeSnapshot: ReadAppRuntimeSnapshot = async (runtimeUrl,
     return await sql.begin(
       // FOR SHARE admission is a locking read and PostgreSQL prohibits it in READ ONLY mode.
       "isolation level repeatable read",
-      async (tx) =>
-        await read({
+      async (tx) => {
+        const reader: AppRuntimeSnapshotReader = {
           readIdentity: async () => {
             const rows = await tx.unsafe(IDENTITY_SQL);
             if (rows.length !== 1) {
               throw reject();
             }
             return identitySchema.parse(rows[0]);
+          },
+          readActiveOrganization: async (scope) => {
+            const rows = await tx.unsafe(
+              "select public.kernel_read_actor_binding($1::jsonb) as binding",
+              [
+                tx.json({
+                  actor_id: scope.actorId,
+                  app_id: scope.appId,
+                  customer_id: scope.organizationId,
+                  role: scope.role,
+                }),
+              ],
+            );
+            if (rows.length !== 1) {
+              throw reject();
+            }
+            const result: unknown = rows[0]?.binding;
+            const inactiveScope = z
+              .object({
+                ok: z.literal(false),
+                error: z.object({
+                  code: z.literal("authorization_denied"),
+                  details: z.array(z.object({ code: z.literal("scope_mismatch") })).min(1),
+                }),
+              })
+              .safeParse(result);
+            if (inactiveScope.success) {
+              return null;
+            }
+            const envelope = z
+              .object({
+                ok: z.literal(true),
+                data: actorBindingSchema
+                  .extend({
+                    active: z.boolean(),
+                    fenceGeneration: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+                  })
+                  .nullable(),
+              })
+              .parse(result);
+            const binding = envelope.data;
+            if (binding === null) {
+              return null;
+            }
+            if (
+              binding.appId !== scope.appId ||
+              binding.actorId !== scope.actorId ||
+              binding.organizationId !== scope.organizationId ||
+              binding.role !== scope.role
+            ) {
+              throw reject();
+            }
+            if (!binding.active || binding.fenceGeneration === 0) {
+              return null;
+            }
+            // Reuse the existing fence-checked observability read, including its locking admission.
+            return await reader.readOrganization(scope);
           },
           readOrganization: async (scope, observeStage) => {
             observeStage?.("actor_binding");
@@ -225,7 +286,9 @@ export const readAppRuntimeSnapshot: ReadAppRuntimeSnapshot = async (runtimeUrl,
             // and locks its binding; this preliminary read cannot authorize stale metadata.
             return observationSchema.parse(rows[0]?.observation);
           },
-        }),
+        };
+        return await read(reader);
+      },
     );
   } finally {
     try {
@@ -240,6 +303,60 @@ export type AppReadinessInput = HostedOperatorContext & {
   /** Supplied by the operator holding the actual resource lease. */
   assertCurrent: () => Promise<void>;
 };
+/** Retain only currently active, actor-bound prior app scopes; this does not require the desired release. */
+export const readActiveAppInstallationCustomerIds = async (input: {
+  plan: HostedOperatorPlan;
+  runtimeUrl: string;
+  scopes: readonly OperatorAppMetadataScope[];
+  assertCurrent: () => Promise<void>;
+  readRuntimeSnapshot?: ReadAppRuntimeSnapshot;
+}): Promise<string[]> => {
+  assertRuntimeUrl(input.runtimeUrl, input.plan);
+  await input.assertCurrent();
+  const observed = await (input.readRuntimeSnapshot ?? readAppRuntimeSnapshot)(
+    input.runtimeUrl,
+    async (reader) => {
+      assertIdentity(await reader.readIdentity(), input.plan);
+      if (reader.readActiveOrganization === undefined) {
+        throw reject();
+      }
+      const observations: ObservedAppTenant[] = [];
+      for (const scope of input.scopes) {
+        // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Serialize approved tenant contexts on the same metadata transaction.
+        await input.assertCurrent();
+        if (scope.appId !== input.plan.selection.appId) {
+          throw reject();
+        }
+        // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Each current actor binding is read under its exact approved tenant scope.
+        const result = await reader.readActiveOrganization(scope);
+        if (result === null) {
+          continue;
+        }
+        const value = result.data;
+        const active = value.releases.filter(
+          (release) => release.schema_revision_id === value.active_schema_revision_id,
+        );
+        if (
+          value.app_id !== scope.appId ||
+          value.customer_id !== scope.organizationId ||
+          active.length !== 1
+        ) {
+          throw reject();
+        }
+        observations.push({
+          organizationId: scope.organizationId,
+          schemaRevisionId: value.active_schema_revision_id,
+          baseArtifactHash: active[0].artifact_hashes.base,
+          effectiveArtifactHash: value.active_effective_artifact_hash,
+        });
+      }
+      return observations;
+    },
+  );
+  await input.assertCurrent();
+  return [...new Set(observed.map((tenant) => tenant.organizationId))];
+};
+
 export interface AppReadinessDependencies {
   /** Trusted connection adapter; production uses fixed metadata queries and binding row locks. */
   readRuntimeSnapshot?: ReadAppRuntimeSnapshot;

@@ -227,6 +227,10 @@ type ControlPlane = Awaited<ReturnType<typeof createHostedOperatorControlPlane>>
     >;
   };
 export interface HostedOperatorNormalActorPlanningPorts {
+  readAppInstallationCustomerIds?: (
+    context: HostedOperatorContext,
+    plan: HostedOperatorPlan,
+  ) => Promise<string[]>;
   readNormalActorPreparation: (context: HostedOperatorContext) => Promise<
     | {
         preparation: NormalActorAccountPreparation;
@@ -674,6 +678,35 @@ const createCompletedParticipantBootstrapHandoff = (
       };
 };
 
+const withRetainedAppInstallationTargets = async (
+  appPlan: HostedOperatorPlan,
+  context: HostedOperatorContext,
+  controlPlane: Pick<ControlPlane, "assertPlanningAuthorized"> &
+    Partial<HostedOperatorNormalActorPlanningPorts>,
+): Promise<HostedOperatorPlan> => {
+  const retainedCustomers =
+    (await controlPlane.readAppInstallationCustomerIds?.(context, appPlan)) ?? [];
+  if (retainedCustomers.length === 0) {
+    return appPlan;
+  }
+  const customerIds = [
+    ...new Set([...appPlan.access.map((grant) => grant.organizationId), ...retainedCustomers]),
+  ];
+  await controlPlane.assertPlanningAuthorized(context);
+  return hostedOperatorPlanSchema.parse({
+    ...appPlan,
+    appInstallation: { customerIds },
+    effects: appPlan.effects.map((effect) =>
+      effect.id === "app-install"
+        ? {
+            ...effect,
+            description: `Install and independently observe release ${appPlan.release.id} for schema tenants ${customerIds.join(", ")}; existing actor and role grants are unchanged.`,
+          }
+        : effect,
+    ),
+  });
+};
+
 const resolveParticipantPlan = async (
   base: HostedOperatorPlan,
   program: NormalActorProgram,
@@ -791,7 +824,7 @@ const resolveParticipantPlan = async (
     ...base.effects.filter((effect) => [GATEWAY_BINDINGS, GATEWAY_DELIVERY].includes(effect.kind)),
   ];
   await controlPlane.assertPlanningAuthorized(context);
-  return hostedOperatorPlanSchema.parse({
+  const appPlan = hostedOperatorPlanSchema.parse({
     ...base,
     ...(appTrustedSources === undefined ? {} : { appTrustedSources }),
     ...(signupPolicy === undefined
@@ -828,6 +861,7 @@ const resolveParticipantPlan = async (
     ...(gatewayBindings === undefined ? {} : { gatewayBindings }),
     effects: appStageEffects(effects, gatewayBindings),
   });
+  return await withRetainedAppInstallationTargets(appPlan, context, controlPlane);
 };
 
 export const resolveFullPlan = async (
