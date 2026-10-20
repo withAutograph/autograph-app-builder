@@ -13,6 +13,7 @@ import {
 import {
   hostedOperatorPlanSchema,
   operatorPlanDigest,
+  HostedOperatorError,
 } from "../provisioning/hosted-operator-contract";
 import { HostedRuntimeProviderError } from "../provisioning/hosted-runtime-provider";
 
@@ -491,6 +492,159 @@ describe("approved hosted runtime consumers", () => {
     expect(mocks.readBinding).not.toHaveBeenCalled();
     expect(mocks.observeInstallation).not.toHaveBeenCalled();
     expect(mocks.getProvider).not.toHaveBeenCalled();
+  });
+
+  it("redacts explicit suite capabilities and captured actors across both split output streams", async () => {
+    const selector = "controlled-suite-selector-capability";
+    const lifecycle = "controlled-lifecycle-capability";
+    const fixture = transport();
+    const runtime = await restorePreparedRuntimeExecution({
+      appId: context.appId,
+      binding: binding(),
+      normalActors: capturedActors(),
+      privateValues: [selector, lifecycle, ""],
+      observeInstallation: async () => ({
+        actors: proof.actors,
+        artifactHash: proof.artifactHash,
+        authenticatedBehavior: proof.authenticatedBehavior,
+        releaseId: proof.releaseId,
+        tenants: proof.tenants,
+      }),
+      provider: fixture.provider,
+      root: context.root,
+    });
+    fixture.provider.runCommand.mockResolvedValueOnce({
+      ...fixture.command,
+      logs: () =>
+        Object.assign(
+          (async function* output() {
+            yield { stream: "stdout" as const, data: `out ${selector.slice(0, 14)}` };
+            yield { stream: "stderr" as const, data: `err ${lifecycle.slice(0, 13)}` };
+            yield {
+              stream: "stdout" as const,
+              data: `${selector.slice(14)} captured-private-session done`,
+            };
+            yield { stream: "stderr" as const, data: `${lifecycle.slice(13)} done` };
+          })(),
+          { close: fixture.close },
+        ),
+    });
+    const onChunk = vi.fn();
+    const result = await runtime.runTask({
+      task: "test-e2e",
+      onChunk,
+      environment: {
+        APP_TEST_MANAGED_SUITE_SELECTOR: selector,
+        APP_TEST_MANAGED_LIFECYCLE_CAPABILITY: lifecycle,
+      },
+    });
+    expect(result.stdout).toBe("out [REDACTED] [REDACTED] done");
+    expect(result.stderr).toBe("err [REDACTED] done");
+    const durable = JSON.stringify(onChunk.mock.calls);
+    for (const secret of [selector, lifecycle, "captured-private-session"]) {
+      expect(durable).not.toContain(secret);
+      expect(result.stdout + result.stderr).not.toContain(secret);
+    }
+    expect(fixture.provider.runCommand.mock.calls.at(-1)?.[0].env).toMatchObject({
+      APP_TEST_MANAGED_SUITE_SELECTOR: selector,
+      APP_TEST_MANAGED_LIFECYCLE_CAPABILITY: lifecycle,
+    });
+  });
+
+  it.each(["dispatch", "resume", "logs", "iteration", "wait", "kill", "close"] as const)(
+    "redacts explicit capabilities from %s SDK errors even without captured actors",
+    async (failure) => {
+      const selector = "controlled-suite-selector-capability";
+      const lifecycle = "controlled-lifecycle-capability";
+      const privateError = new Error(`SDK failure ${selector} and ${lifecycle}`);
+      const fixture = transport();
+      const runtime = await restorePreparedRuntimeExecution({
+        appId: context.appId,
+        binding: binding(),
+        privateValues: [selector, lifecycle],
+        observeInstallation: async () => ({
+          actors: proof.actors,
+          artifactHash: proof.artifactHash,
+          authenticatedBehavior: proof.authenticatedBehavior,
+          releaseId: proof.releaseId,
+          tenants: proof.tenants,
+        }),
+        provider: fixture.provider,
+        resumeCommand: async () => {
+          throw privateError;
+        },
+        root: context.root,
+      });
+      const command = { ...fixture.command };
+      if (failure === "dispatch") {
+        fixture.provider.runCommand.mockRejectedValueOnce(privateError);
+      }
+      if (failure === "logs") {
+        command.logs = () => {
+          throw privateError;
+        };
+      }
+      if (failure === "iteration" || failure === "kill") {
+        command.logs = () =>
+          Object.assign(
+            (async function* failedOutput() {
+              yield { stream: "stdout" as const, data: "before SDK failure" };
+              throw failure === "kill" ? new Error("controlled iteration failure") : privateError;
+            })(),
+            { close: fixture.close },
+          );
+      }
+      if (failure === "wait") {
+        command.wait = async () => {
+          throw privateError;
+        };
+      }
+      if (failure === "kill") {
+        fixture.command.kill.mockRejectedValueOnce(privateError);
+      }
+      if (failure === "close") {
+        fixture.close.mockImplementationOnce(() => {
+          throw privateError;
+        });
+      }
+      if (failure !== "dispatch") {
+        fixture.provider.runCommand.mockResolvedValueOnce(command);
+      }
+      await expect(
+        runtime.runTask({
+          task: "test-e2e",
+          ...(failure === "resume" ? { commandId: "retained-command", allowDispatch: false } : {}),
+        }),
+      ).rejects.toThrow("SDK failure [REDACTED] and [REDACTED]");
+      if (failure === "resume") {
+        expect(fixture.provider.runCommand).toHaveBeenCalledTimes(1);
+      }
+    },
+  );
+
+  it("preserves an already-safe typed reconciliation error with explicit private values", async () => {
+    const fixture = transport();
+    const closedError = new HostedOperatorError("reconciliation_required");
+    const runtime = await restorePreparedRuntimeExecution({
+      appId: context.appId,
+      binding: binding(),
+      privateValues: ["controlled-suite-selector-capability"],
+      observeInstallation: async () => ({
+        actors: proof.actors,
+        artifactHash: proof.artifactHash,
+        authenticatedBehavior: proof.authenticatedBehavior,
+        releaseId: proof.releaseId,
+        tenants: proof.tenants,
+      }),
+      provider: fixture.provider,
+      resumeCommand: async () => {
+        throw closedError;
+      },
+      root: context.root,
+    });
+    await expect(
+      runtime.runTask({ task: "test-e2e", commandId: "retained", allowDispatch: false }),
+    ).rejects.toBe(closedError);
   });
 
   it("redacts a session token split across provider log chunks before durable output", async () => {

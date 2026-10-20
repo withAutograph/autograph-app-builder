@@ -21,7 +21,8 @@ import type { PreparedRuntimeSelection } from "./prepared-runtime-selection";
 import { normalActorBrowserFiles } from "./normal-actor-browser-state";
 import type { NormalActorRuntimeProjection } from "../provisioning/hosted-operator-normal-actor-program";
 
-interface RuntimeCommand {
+export interface RuntimeCommand {
+  cmdId?: string;
   exitCode: number | null;
   stdout: (options?: { signal?: AbortSignal }) => Promise<string>;
   logs: (options?: {
@@ -70,6 +71,9 @@ export interface PreparedRuntimeExecution {
   prepareAuthenticatedOrigin: (origin: string) => Promise<void>;
   runTask: (input: {
     task: "test-e2e" | "repository-check" | "repository-test";
+    commandId?: string;
+    commandCheckpoint?: (commandId: string) => Promise<void>;
+    allowDispatch?: boolean;
     shard?: string;
     environment?: Readonly<Record<string, string | undefined>>;
     onChunk?: (channel: "stdout" | "stderr", content: string) => Promise<void>;
@@ -124,9 +128,12 @@ export const restorePreparedRuntimeExecution = async (input: {
   browserTestBaseUrl?: string;
   root: string;
   normalActors?: NormalActorRuntimeProjection;
+  /** Additional server-owned values that must never enter diagnostics or streamed output. */
+  privateValues?: readonly string[];
   binding: NonNullable<Awaited<ReturnType<typeof readHostedRuntimeExecutionBinding>>>;
   provider: RuntimeTransport;
   observeInstallation: (files: PrivateRuntimeFiles) => Promise<HostedRuntimeProof>;
+  resumeCommand?: (commandId: string) => Promise<RuntimeCommand>;
   signal?: AbortSignal;
 }): Promise<PreparedRuntimeExecution> => {
   const environmentPath = `${input.binding.stateDirectory}/environment.json`;
@@ -144,17 +151,21 @@ export const restorePreparedRuntimeExecution = async (input: {
           input.binding.stateDirectory,
           input.browserTestBaseUrl ?? input.normalActors.origin,
         );
+  const privateValues = new Set(
+    [...(input.privateValues ?? []), ...(normalActors?.privateValues ?? [])].filter(
+      (value) => value !== "",
+    ),
+  );
   const safePrivateError = (error: Error) => {
-    if (!normalActors) {
+    if (privateValues.size === 0) {
       return error;
     }
     let detail = error.message;
-    for (const value of [...normalActors.privateValues].toSorted(
-      (left, right) => right.length - left.length,
-    )) {
+    for (const value of [...privateValues].toSorted((left, right) => right.length - left.length)) {
       detail = detail.replaceAll(value, "[REDACTED]");
     }
-    return new Error(sanitizeValidationDiagnosticText(detail));
+    detail = sanitizeValidationDiagnosticText(detail);
+    return detail === error.message ? error : new Error(detail);
   };
   const runCommand = async (commandInput: Parameters<RuntimeTransport["runCommand"]>[0]) => {
     try {
@@ -227,7 +238,7 @@ export const restorePreparedRuntimeExecution = async (input: {
   ) {
     throw new HostedRuntimeProviderError("resource_mismatch");
   }
-  const secretValues = new Set<string>(normalActors?.privateValues);
+  const secretValues = new Set(privateValues);
   const jsonSchema = z.json();
   const collect = (value: z.infer<typeof jsonSchema>, key = "") => {
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- The recursive value is already parsed by z.json at its protected file boundary.
@@ -268,6 +279,45 @@ export const restorePreparedRuntimeExecution = async (input: {
     }
     return safe;
   };
+  const resolveTaskCommand = async (
+    continuation: Pick<
+      Parameters<PreparedRuntimeExecution["runTask"]>[0],
+      "commandId" | "commandCheckpoint" | "allowDispatch"
+    >,
+    commandInput: Parameters<RuntimeTransport["runCommand"]>[0],
+  ) => {
+    const { commandId, commandCheckpoint, allowDispatch } = continuation;
+    if (commandId === undefined && allowDispatch === false) {
+      throw new HostedOperatorError("reconciliation_required");
+    }
+    let command: RuntimeCommand;
+    if (commandId === undefined) {
+      command = await runCommand(commandInput);
+    } else {
+      if (input.resumeCommand === undefined) {
+        throw new HostedOperatorError("reconciliation_required");
+      }
+      command = await input.resumeCommand(commandId);
+    }
+    if (commandCheckpoint !== undefined && commandId === undefined) {
+      if (command.cmdId === undefined) {
+        throw new HostedOperatorError("reconciliation_required");
+      }
+      await commandCheckpoint(command.cmdId);
+    }
+    return command;
+  };
+  const withPrivateTaskErrors =
+    (operation: PreparedRuntimeExecution["runTask"]): PreparedRuntimeExecution["runTask"] =>
+    async (taskInput) => {
+      try {
+        return await operation(taskInput);
+      } catch (error) {
+        throw safePrivateError(
+          error instanceof Error ? error : new Error("normal_actor_runtime_failed"),
+        );
+      }
+    };
   return {
     ...((input.browserTestBaseUrl ?? input.normalActors?.origin) === undefined
       ? {}
@@ -291,81 +341,95 @@ export const restorePreparedRuntimeExecution = async (input: {
       await input.binding.persistFiles(files);
       await restore();
     },
-    async runTask({ task, shard, environment, onChunk, signal }) {
-      const command = await runCommand({
-        args: [
-          "run",
-          "app:runtime",
-          "run",
-          input.appId,
-          task,
-          ...(shard !== undefined && shard !== "" ? [shard] : []),
-        ],
-        cmd: "mise",
-        cwd: input.root,
-        detached: true,
-        env: {
-          ...Object.fromEntries(
-            Object.entries(environment ?? {}).filter(
-              (entry): entry is [string, string] => entry[1] !== undefined,
-            ),
-          ),
-          APP_RUNTIME_STATE_DIR: input.binding.stateDirectory,
-          ...(task === "test-e2e" && normalActors
-            ? {
-                APP_TEST_BASE_URL: normalActors.origin,
-                APP_TEST_IDENTITIES_FILE: normalActors.identitiesPath,
+    runTask: withPrivateTaskErrors(
+      async ({
+        task,
+        shard,
+        environment,
+        onChunk,
+        signal,
+        commandId,
+        commandCheckpoint,
+        allowDispatch,
+      }) => {
+        const command = await resolveTaskCommand(
+          { commandId, commandCheckpoint, allowDispatch },
+          {
+            args: [
+              "run",
+              "app:runtime",
+              "run",
+              input.appId,
+              task,
+              ...(shard !== undefined && shard !== "" ? [shard] : []),
+            ],
+            cmd: "mise",
+            cwd: input.root,
+            detached: true,
+            env: {
+              ...Object.fromEntries(
+                Object.entries(environment ?? {}).filter(
+                  (entry): entry is [string, string] => entry[1] !== undefined,
+                ),
+              ),
+              APP_RUNTIME_STATE_DIR: input.binding.stateDirectory,
+              ...(task === "test-e2e" && normalActors
+                ? {
+                    APP_TEST_BASE_URL: normalActors.origin,
+                    APP_TEST_IDENTITIES_FILE: normalActors.identitiesPath,
+                  }
+                : {}),
+            },
+            signal: signal ?? input.signal,
+          },
+        );
+        let stdout = "";
+        let stderr = "";
+        const pending = { stderr: "", stdout: "" };
+        const emit = async (channel: "stdout" | "stderr", raw: string) => {
+          const content = redact(raw);
+          if (channel === "stdout") {
+            stdout = (stdout + content).slice(-8000);
+          } else {
+            stderr = (stderr + content).slice(-8000);
+          }
+          await onChunk?.(channel, content);
+        };
+        const logs = command.logs({ signal: signal ?? input.signal });
+        try {
+          for await (const chunk of logs) {
+            const raw = pending[chunk.stream] + chunk.data;
+            let boundary = Math.max(0, raw.length - carrySize);
+            for (const value of secretValues) {
+              const start = raw.lastIndexOf(value, boundary);
+              if (start !== -1 && start < boundary && start + value.length > boundary) {
+                boundary = start;
               }
-            : {}),
-        },
-        signal: signal ?? input.signal,
-      });
-      let stdout = "";
-      let stderr = "";
-      const pending = { stderr: "", stdout: "" };
-      const emit = async (channel: "stdout" | "stderr", raw: string) => {
-        const content = redact(raw);
-        if (channel === "stdout") {
-          stdout = (stdout + content).slice(-8000);
-        } else {
-          stderr = (stderr + content).slice(-8000);
-        }
-        await onChunk?.(channel, content);
-      };
-      const logs = command.logs({ signal: signal ?? input.signal });
-      try {
-        for await (const chunk of logs) {
-          const raw = pending[chunk.stream] + chunk.data;
-          let boundary = Math.max(0, raw.length - carrySize);
-          for (const value of secretValues) {
-            const start = raw.lastIndexOf(value, boundary);
-            if (start !== -1 && start < boundary && start + value.length > boundary) {
-              boundary = start;
+            }
+            pending[chunk.stream] = raw.slice(boundary);
+            // oxlint-disable-next-line eslint/no-await-in-loop -- Await durable writes to apply log backpressure.
+            if (boundary > 0) {
+              await emit(chunk.stream, raw.slice(0, boundary));
             }
           }
-          pending[chunk.stream] = raw.slice(boundary);
-          // oxlint-disable-next-line eslint/no-await-in-loop -- Await durable writes to apply log backpressure.
-          if (boundary > 0) {
-            await emit(chunk.stream, raw.slice(0, boundary));
+          if (pending.stdout !== "") {
+            await emit("stdout", pending.stdout);
           }
+          if (pending.stderr !== "") {
+            await emit("stderr", pending.stderr);
+          }
+          const result = await command.wait({ signal: signal ?? input.signal });
+          return { exitCode: result.exitCode, stderr, stdout };
+        } catch (error) {
+          await command.kill("SIGTERM", { abortSignal: AbortSignal.timeout(20_000) });
+          throw safePrivateError(
+            error instanceof Error ? error : new Error("normal_actor_runtime_failed"),
+          );
+        } finally {
+          logs.close();
         }
-        if (pending.stdout !== "") {
-          await emit("stdout", pending.stdout);
-        }
-        if (pending.stderr !== "") {
-          await emit("stderr", pending.stderr);
-        }
-        const result = await command.wait({ signal: signal ?? input.signal });
-        return { exitCode: result.exitCode, stderr, stdout };
-      } catch (error) {
-        await command.kill("SIGTERM", { abortSignal: AbortSignal.timeout(20_000) });
-        throw safePrivateError(
-          error instanceof Error ? error : new Error("normal_actor_runtime_failed"),
-        );
-      } finally {
-        logs.close();
-      }
-    },
+      },
+    ),
     stateDirectory: input.binding.stateDirectory,
   };
 };

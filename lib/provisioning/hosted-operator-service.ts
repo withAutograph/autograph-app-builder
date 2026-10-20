@@ -1,3 +1,5 @@
+import { continuityTransportRequestSchema } from "./hosted-operator-continuity-transport";
+import type { ContinuityTransportRequest } from "./hosted-operator-continuity-transport";
 import { tenantExportTransportRequestSchema } from "./hosted-operator-export-transport";
 import type { TenantExportTransportRequest } from "./hosted-operator-export-transport";
 import {
@@ -229,6 +231,8 @@ export type HostedOperatorWorkerEffectContext = HostedOperatorEffectContext & {
   bindWorkerContext: (binding: WorkerContextBinding) => Promise<RecordWorkerCheckpoint>;
 };
 export interface ProtectedHostedOperatorDependencies {
+  /** Separate approved continuity dispatcher; the original verified request owns workload custody. */
+  continuityRequest?: (request: Request, input: ContinuityTransportRequest) => Promise<Response>;
   /** Explicit separate export dispatcher; never enters preparation/cleanup state. */
   exportRequest?: (request: Request, input: TenantExportTransportRequest) => Promise<Response>;
   store: HostedRuntimeJournalStore;
@@ -1315,6 +1319,22 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
         return response({ code: "not_found" }, 404);
       }
       const body: unknown = await request.json();
+      const continuityAction = z
+        .object({
+          action: z.enum([
+            "continuity-plan",
+            "continuity-status",
+            "continuity-approval",
+            "continuity",
+          ]),
+        })
+        .safeParse(body);
+      if (continuityAction.success) {
+        if (deps.continuityRequest === undefined) {
+          throw new HostedOperatorError("protected_operator_required");
+        }
+        return await deps.continuityRequest(request, continuityTransportRequestSchema.parse(body));
+      }
       const exportAction = z
         .object({ action: z.enum(["export-plan", "export-status", "export-approval", "export"]) })
         .safeParse(body);

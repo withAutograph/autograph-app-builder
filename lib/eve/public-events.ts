@@ -69,6 +69,7 @@ const visibleOperations = new Map([
   ["prepare-app-hosted-runtime", "Preparing the app's hosted database"],
   ["cleanup-app-hosted-runtime", "Removing the app's Preview database"],
   ["export-app-hosted-data", "Exporting approved app data privately"],
+  ["run-app-continuity-tests", "Running the approved app continuity suite"],
   ["run-app-browser-tests", "Running the app's browser tests"],
   ["start_app_preview", "Starting the app preview"],
   ["validate_app_creation", "Validating the app changes"],
@@ -1152,6 +1153,7 @@ const inputRequest = (request: {
     "cleanup-app-hosted-runtime": "Remove this app's Preview database?",
     "prepare-app-hosted-runtime": "Prepare this app's Preview database?",
     "export-app-hosted-data": "Export this customer’s app data privately?",
+    "run-app-continuity-tests": "Run this app continuity suite?",
     "publish-github-draft-pr": "Publish the reviewed changes?",
   } as const;
   const toolName = request.action?.toolName;

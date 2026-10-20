@@ -1,8 +1,26 @@
+import { createManagedRuntimeWorkerAsset } from "../agent/managed-runtime-worker-asset";
+import { Sandbox } from "@vercel/sandbox";
+import {
+  createManagedRuntimeExecution,
+  observeManagedRuntimePorts,
+} from "../agent/managed-runtime-execution";
+import { createHostedContinuityOperations } from "./hosted-operator-continuity";
+import { createPostgresContinuityJournalStore } from "./postgres-hosted-operator-continuity-journal";
+import { createContinuityCapabilityCustody } from "./hosted-operator-continuity-custody";
+import { createContinuityDispatcher } from "./hosted-operator-continuity-transport";
+import { createPrivateContinuityApprovalCapture } from "../eve/private-continuity-approval";
+import { createHostedManagedRuntimeProjection } from "./hosted-operator-managed-runtime-projection";
+import { parseSandboxExecutionLeaseRow } from "../sandbox/postgres-execution-lease-store";
+import type {
+  HostedContinuityPlan,
+  ContinuityRuntimeSelection,
+} from "./hosted-operator-continuity-contract";
 import { readPrivateHostedApproval } from "../eve/private-hosted-approval";
 import {
   operatorOwnerContextSchema,
   HostedOperatorError,
   operatorPlanDigest,
+  restrictedOperatorEnvironment,
   operatorRealmIdentityLinkSchema,
   projectPendingRealmIdentityLink,
   selectHostedOperatorOwnedOrganizationSpec,
@@ -2432,7 +2450,16 @@ export const createHostedOperatorControlPlane = async (input: {
           onclose: onConnectionClosed,
         }),
     });
-    const preparedForExport = async (context: HostedOperatorContext, catchUpApproval = false) => {
+    const preparedForExport = async (
+      context: HostedOperatorContext,
+      catchUpApproval = false,
+      retainedApproval?: {
+        operationRef: string;
+        planDigest: string;
+        approvalId: string;
+        approvedByCallId: string;
+      },
+    ) => {
       await owner.assertArtifactAuthorized(context);
       const current = await store.read(context);
       const operator = current?.record.operator;
@@ -2449,6 +2476,17 @@ export const createHostedOperatorControlPlane = async (input: {
         plan: operator.plan,
         privateState: current.record.privateState,
       });
+      if (
+        retainedApproval !== undefined &&
+        isDeepStrictEqual(retainedApproval, {
+          operationRef: operator.operationRef,
+          planDigest: operator.planDigest,
+          approvalId: operator.approvalId,
+          approvedByCallId: current.record.approvedByCallId,
+        })
+      ) {
+        return { current, operator };
+      }
       const ownerContext = operatorOwnerContextSchema.parse(context.ownerContext);
       let approvedId: string | undefined;
       if (catchUpApproval) {
@@ -2720,10 +2758,279 @@ export const createHostedOperatorControlPlane = async (input: {
       authorize: owner.authorize,
       authorizeRead: owner.authorizeArtifactRead,
     });
+    // This request-private association contains only the exact carrier already verified by
+    // the dispatcher. No token enters the journal, model, worker files or app environment.
+    const continuityWorkloads = new WeakMap<
+      HostedOperatorContext,
+      { token: () => string; signal: AbortSignal }
+    >();
+    const continuityStore = createPostgresContinuityJournalStore(database);
+    const continuitySetupApprovals = new WeakMap<
+      HostedOperatorContext,
+      { operationRef: string; planDigest: string; approvalId: string; approvedByCallId: string }
+    >();
+    const preparedForContinuity = async (context: HostedOperatorContext, catchUp = false) => {
+      const prepared = await preparedForExport(
+        context,
+        catchUp,
+        continuitySetupApprovals.get(context),
+      );
+      if (prepared.operator.approvalId === undefined) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      continuitySetupApprovals.set(context, {
+        operationRef: prepared.operator.operationRef,
+        planDigest: prepared.operator.planDigest,
+        approvalId: prepared.operator.approvalId,
+        approvedByCallId: prepared.current.record.approvedByCallId,
+      });
+      return prepared;
+    };
+    const normalRuntime = createNormalActorRuntimeBindings(sharedNormalActorDependencies);
+    const assertSelectedSandbox = async (
+      context: HostedOperatorContext,
+      selection: ContinuityRuntimeSelection,
+    ) => {
+      await owner.assertArtifactAuthorized(context);
+      const canonical = operatorOwnerContextSchema.parse(context.ownerContext);
+      const rows = await database
+        .select()
+        .from(sandboxExecutionLeases)
+        .where(
+          and(
+            eq(sandboxExecutionLeases.issuer, canonical.principal.issuer),
+            eq(sandboxExecutionLeases.audience, canonical.principal.audience),
+            eq(sandboxExecutionLeases.workspaceId, canonical.principal.workspaceId),
+            eq(sandboxExecutionLeases.ownerUserId, canonical.principal.ownerUserId),
+            eq(sandboxExecutionLeases.adapterSessionId, canonical.adapterSessionId),
+          ),
+        )
+        .limit(1);
+      if (rows[0] === undefined) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      const lease = parseSandboxExecutionLeaseRow(rows[0]);
+      // A human approval normally releases compute. Resume that same owned logical
+      // Sandbox; its physical session is observed and frozen only after approval.
+      if (lease.providerSandboxId !== selection.sandboxId || lease.state === "orphaned") {
+        throw new HostedOperatorError("authorization_required");
+      }
+    };
+    const continuitySetup = async (context: HostedOperatorContext, plan: HostedContinuityPlan) => {
+      const { current, operator } = await preparedForContinuity(context);
+      if (
+        !isDeepStrictEqual(
+          {
+            operationRef: operator.operationRef,
+            planDigest: operator.planDigest,
+            approvalId: operator.approvalId,
+            approvedByCallId: current.record.approvedByCallId,
+          },
+          plan.originalSetup,
+        ) ||
+        !isDeepStrictEqual(operator.plan, {
+          ...plan.preparedPlan,
+          gatewayDelivery: operator.plan.gatewayDelivery,
+        }) ||
+        plan.runtime.projectId !== configuration.workloadPolicy.projectId ||
+        plan.runtime.ownerId !== configuration.workloadPolicy.ownerId
+      ) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+    };
+    const getContinuitySandbox = async (
+      context: HostedOperatorContext,
+      selected: ContinuityRuntimeSelection,
+    ) => {
+      const workload = continuityWorkloads.get(context);
+      if (workload === undefined) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      return await Sandbox.get({
+        name: selected.sandboxId,
+        resume: true,
+        token: workload.token(),
+        projectId: configuration.workloadPolicy.projectId,
+        teamId: configuration.workloadPolicy.ownerId,
+        signal: workload.signal,
+      });
+    };
+    const continuityWorkerAsset = createManagedRuntimeWorkerAsset({
+      configuration: configuration.sandbox,
+    });
+    const continuityRuntime = createManagedRuntimeExecution({
+      installWorkerAsset: async (assetInput) => {
+        await continuityWorkerAsset.install(assetInput);
+      },
+      disposeWorkerAsset: async (assetInput) => {
+        await continuityWorkerAsset.dispose(assetInput);
+      },
+      worker: configuration.sandbox.managedRuntimeWorker,
+      assertSelectedSandbox,
+      getSandbox: getContinuitySandbox,
+      signal: (context) => continuityWorkloads.get(context)?.signal,
+      async readExecution(context, plan, includeActors) {
+        await continuitySetup(context, plan);
+        const { current, operator } = await preparedForContinuity(context);
+        const boundary = operator.plan.deploymentBoundary;
+        const proof = current.record.proof;
+        if (boundary === undefined || proof === undefined) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        const bindings = await controlPlane.readResourceBindings({
+          ...context,
+          plan: operator.plan,
+          privateState: current.record.privateState,
+        });
+        const runtimeEnvironment = restrictedOperatorEnvironment(
+          operator.plan,
+          {
+            [`${context.target.appId.toUpperCase().replaceAll("-", "_")}_DATABASE_URL`]:
+              bindings.appDatabase.runtimeUrl,
+            PLATFORM_JWKS_URL: boundary.verification.jwksUrl,
+            PLATFORM_ORIGIN: boundary.verification.gatewayOrigin,
+            PLATFORM_PUBLIC_ORIGIN: boundary.verification.publicOrigin,
+          },
+          context.authority,
+        );
+        return {
+          environment: runtimeEnvironment,
+          proof,
+          ...(includeActors === true
+            ? {
+                normalActors: await normalRuntime({
+                  ...context,
+                  plan: operator.plan,
+                  operationRef: operator.operationRef,
+                }),
+              }
+            : {}),
+        };
+      },
+      async readPublicJwks(context, url) {
+        const transport = await normalRealmFetch({ context, origin: new URL(url).origin });
+        const response = await transport(url, { method: "GET", redirect: "error" });
+        if (!response.ok) {
+          throw new HostedOperatorError("operator_unavailable");
+        }
+        const value: unknown = await response.json();
+        return value;
+      },
+    });
+    const continuities = createHostedContinuityOperations({
+      store: continuityStore,
+      assertOwner: owner.assertArtifactAuthorized,
+      assertSetup: continuitySetup,
+      async resolvePlan(context, runtime) {
+        if (configuration.sandbox.managedRuntimeWorker === undefined) {
+          throw new HostedOperatorError("protected_operator_required");
+        }
+        const [{ current, operator }] = await Promise.all([
+          preparedForContinuity(context, true),
+          assertSelectedSandbox(context, runtime),
+        ]);
+        // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Verify canonical VM ownership and completed setup before resuming it for planning.
+        const selectedSandbox = await getContinuitySandbox(context, runtime);
+        const observedPorts = await observeManagedRuntimePorts(selectedSandbox);
+        if (operator.approvalId === undefined) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        const preparedPlan = structuredClone(operator.plan);
+        preparedPlan.gatewayDelivery = {
+          projectId: configuration.gateway.projectId,
+          branch: configuration.gateway.branch,
+          gitSha: configuration.gateway.gitSha,
+          repoId: configuration.gateway.repoId,
+        };
+        return {
+          version: 1,
+          kind: "app-continuity-plan",
+          authority: context.authority,
+          target: context.target,
+          originalSetup: {
+            operationRef: operator.operationRef,
+            planDigest: operator.planDigest,
+            approvalId: operator.approvalId,
+            approvedByCallId: current.record.approvedByCallId,
+          },
+          preparedPlan,
+          runtime: {
+            ...runtime,
+            projectId: configuration.workloadPolicy.projectId,
+            ownerId: configuration.workloadPolicy.ownerId,
+            ...observedPorts,
+          },
+          gateway: {
+            projectId: configuration.gateway.projectId,
+            ownerId: configuration.teamId,
+            environment: "preview",
+            publicOrigin: configuration.gateway.publicOrigin,
+          },
+          actors: operator.plan.access.map(({ actorId, organizationId }) => ({
+            actorId,
+            organizationId,
+          })),
+        };
+      },
+      async readApproval(context, request, callId) {
+        await owner.assertArtifactAuthorized(context);
+        const saved = await continuityStore.read({
+          authority: context.authority,
+          intentId: z.uuid().parse(request.planRef.split("/").at(-1)),
+        });
+        if (saved === undefined) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        const canonical = operatorOwnerContextSchema.parse(context.ownerContext);
+        const capture = createPrivateContinuityApprovalCapture({
+          plan: saved.plan,
+          request,
+          principal: canonical.principal,
+          ...(callId === undefined ? {} : { callId }),
+        });
+        let count = 0;
+        const observed = await observeExportApproval({
+          adapterSessionId: canonical.adapterSessionId,
+          sessionId: canonical.sessionId,
+          principal: canonical.principal,
+          readDeadline: true,
+          onEvent: () => {
+            count += 1;
+          },
+          onPrivateEvent: (event) => {
+            capture.observe(event);
+          },
+        });
+        if (observed.publicEventCount !== count) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        await owner.assertArtifactAuthorized(context);
+        return capture.read();
+      },
+      ...createContinuityCapabilityCustody(tokenKeyring),
+      withResourceLease: exportLease,
+      runtime: continuityRuntime,
+      projection: createHostedManagedRuntimeProjection({
+        assertOwner: owner.assertArtifactAuthorized,
+        readCredential: controlPlane.readCredential,
+        fetch: input.fetch,
+      }),
+    });
+    const continuityRequest = createContinuityDispatcher({
+      store: continuityStore,
+      operations: continuities,
+      verifyWorkload: owner.verifyWorkload,
+      authorize: owner.authorize,
+      authorizeRead: owner.authorizeArtifactRead,
+      bindWorkload: (context, token, signal) => {
+        continuityWorkloads.set(context, { token, signal });
+      },
+    });
     return {
       ...controlPlane,
       ...normalActors,
       exportRequest,
+      continuityRequest,
       readNormalActorRuntimeBindings: createNormalActorRuntimeBindings(
         sharedNormalActorDependencies,
       ),

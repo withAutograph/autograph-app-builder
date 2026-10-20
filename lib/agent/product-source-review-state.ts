@@ -28,6 +28,7 @@ const authorizationOnlyTools = new Set([
   "prepare-app-hosted-runtime",
   "cleanup-app-hosted-runtime",
   "export-app-hosted-data",
+  "run-app-continuity-tests",
   "publish_github_draft_pr",
   "publish-github-draft-pr",
   "update_github_draft_pr",

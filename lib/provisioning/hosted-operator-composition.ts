@@ -2290,6 +2290,7 @@ export const composeHostedOperatorDependencies = (
   };
   return {
     exportRequest: controlPlane.exportRequest,
+    continuityRequest: controlPlane.continuityRequest,
     assertAuthorized: controlPlane.assertAuthorized,
     readReadyDeliveryReplacementPlan: async (context) => {
       const policy = selectedApplication(configuration, context).hostProtection;
