@@ -15,15 +15,59 @@ const hooks = vi.hoisted(() => {
     changeSetDigest: "b".repeat(64),
     baseChanges: [],
   };
-  const proposal = {
+  const proposal: DraftReconciliationCompletion["proposal"] = {
     digest,
     repositoryId: "repository",
     reviewDigest: digest,
     resolvedTree: "tree",
+    version: 1,
+    intendedOutcome: "reconcile-existing-draft-pull-request",
+    installationIdentityDigest: "d".repeat(64),
+    owner: "fixture-owner",
+    name: "fixture-repository",
+    pullRequestNumber: 42,
+    pullRequestId: "fixture-pr-42",
+    branchName: "app-builder/fixture",
+    baseBranch: "main",
+    expectedHeadSha: "1".repeat(40),
+    expectedHeadTree: "2".repeat(40),
+    expectedBaseSha: "3".repeat(40),
+    expectedBaseTree: "4".repeat(40),
+    approvedPaths: [],
+    baseChangesDigest: "e".repeat(64),
+    headChangesDigest: "f".repeat(64),
+    originMarker: "fixture-builder-origin",
+    priorPublicationDigest: "b".repeat(64),
+    idempotencyKey: "c".repeat(64),
+  };
+  const reconciliationReview: DraftReconciliationCompletion["review"] = {
+    version: 1,
+    appId: "spend-review",
+    digest,
+    resolvedTree: proposal.resolvedTree,
+    baseChanges: [],
+    headChanges: [],
+    approvedPaths: [],
+    baseSha: proposal.expectedBaseSha,
+    baseTree: proposal.expectedBaseTree,
+    headSha: proposal.expectedHeadSha,
+    headTree: proposal.expectedHeadTree,
+  };
+  const compilation: DraftReconciliationCompletion["compilation"] = {
+    context: {
+      authority: {
+        issuer: "https://fixture-builder.example/api/auth",
+        audience: "https://fixture-builder.example/mcp",
+        workspaceId: "fixture-workspace",
+        ownerUserId: "fixture-owner",
+      },
+      target: { appId: "spend-review", sessionId: "original-owner-session" },
+    },
+    release: { status: "not-required" },
   };
   return {
     assertApproval: vi.fn(),
-    assertOwner: vi.fn(),
+    assertOwner: vi.fn<() => Promise<void>>(),
     applied: vi.fn(),
     // SAFETY: The closed test fixture supplies only trusted completion metadata consumed by this tool.
     completions: [] as DraftReconciliationCompletion[],
@@ -47,16 +91,10 @@ const hooks = vi.hoisted(() => {
     candidate: {
       appId: "spend-review",
       proposal,
-      review: { appId: "spend-review", digest, resolvedTree: "tree", baseChanges: [] },
+      review: reconciliationReview,
       validation: {
         resolvedTree: "tree",
-        compilation: {
-          context: {
-            authority: {},
-            target: { appId: "spend-review", sessionId: "original-owner-session" },
-          },
-          release: { status: "not-required" },
-        },
+        compilation,
       },
       githubSourceDigest: digest,
       originalReviewDigest: digest,
@@ -153,7 +191,7 @@ const ctx = {
 
 const originalCandidate = structuredClone(hooks.candidate);
 const originalState = structuredClone(hooks.state);
-const completionFixture = () => ({
+const completionFixture = (): DraftReconciliationCompletion => ({
   preparation: "sealed-before-approval",
   proposal: hooks.candidate.proposal,
   review: hooks.candidate.review,
@@ -163,19 +201,18 @@ const completionFixture = () => ({
   root: hooks.candidate.root,
   compilation: hooks.candidate.validation.compilation,
 });
-// SAFETY: This fixture mocks publication ports; repository tests separately validate full cryptographic proposal/review fields.
-const sealedCompletion = () => completionFixture() as DraftReconciliationCompletion;
 
 describe("publication records actual source for its compiled app release", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hooks.record.mockReset().mockResolvedValue({ status: "recorded" });
     hooks.assertApproval.mockReset();
-    hooks.assertOwner.mockReset().mockResolvedValue();
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Vitest requires an explicit resolved value for its Promise<void> mock.
+    hooks.assertOwner.mockReset().mockResolvedValue(undefined);
     hooks.applied.mockReset().mockResolvedValue({ applied: false });
     hooks.candidate = structuredClone(originalCandidate);
     hooks.state = structuredClone(originalState);
-    hooks.completions = [sealedCompletion()];
+    hooks.completions = [completionFixture()];
     hooks.inspect.mockResolvedValue({ unresolvedConflicts: [], resolvedTree: "tree" });
     hooks.candidate.publishedReconciliation = undefined;
   });
