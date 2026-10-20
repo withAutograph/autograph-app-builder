@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   publishedAppSourceFromResult,
   recordPublishedAppSourceForSession,
+  recordPublishedReconciliationForSession,
 } from "./published-app-source";
+import type { DraftReconciliationCompletion } from "./draft-reconciliation-state";
 import type { DraftPullRequestSuccessReceipt } from "../repository/github-publication";
 import type { ExistingDraftObservation } from "../repository/github-draft-update";
 import type { CompiledOperatorReleaseSelection } from "../provisioning/hosted-operator-artifact-selection";
@@ -153,5 +155,45 @@ describe("actual published app source recording", () => {
         },
       }),
     );
+  });
+  it("uses the original sealed app review and reconciliation review for completion", async () => {
+    const record = vi
+      .spyOn(compiledArtifacts, "recordPublishedReconciliationSourceForSession")
+      .mockResolvedValue({ selection: selected, status: "recorded" });
+    // SAFETY: This source-mapping fixture consumes only the sealed proposal's verified source tuple and review digest.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The trusted mapping port consumes only the proposal source tuple and review metadata.
+    const completion = {
+      proposal: {
+        repositoryId: updated.repositoryId,
+        branchName: updated.headBranch,
+        resolvedTree: updated.headTree,
+      },
+      appReview: review,
+      review: { digest: "d".repeat(64) },
+    } as DraftReconciliationCompletion;
+    await recordPublishedReconciliationForSession({
+      completion,
+      publication: updated,
+      adapterSessionId: session.adapterSessionId,
+      sessionAuth: session.sessionAuth,
+    });
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        completion,
+        publishedSource: {
+          ...publishedAppSourceFromResult(review, updated),
+          reviewDigest: completion.review.digest,
+        },
+      }),
+    );
+    await expect(
+      recordPublishedReconciliationForSession({
+        completion,
+        publication: { ...updated, headTree: "f".repeat(40) },
+        adapterSessionId: session.adapterSessionId,
+        sessionAuth: session.sessionAuth,
+      }),
+    ).rejects.toThrow("artifact is unavailable");
+    expect(record).toHaveBeenCalledTimes(1);
   });
 });

@@ -13,50 +13,129 @@ import {
 import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
 import {
   draftReconciliationState,
+  draftReconciliationCompletions,
+  retainDraftReconciliationCompletion,
   updateExactDraftReconciliation,
 } from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
-import { recordPublishedAppSourceForSession } from "@/lib/agent/published-app-source";
+import { recordPublishedReconciliationForSession } from "@/lib/agent/published-app-source";
+import { assertReconciliationCompletionOwnerForSession } from "@/lib/agent/compiled-operator-artifacts";
 import { inspectDraftReconciliation } from "@/lib/repository/sandbox-draft-reconciliation";
+
+const missingCompletion = () => ({
+  status: "completion_context_missing" as const,
+  recoveryRequired: true,
+  nextAction:
+    "The original approved proposal, reviews and exact compiled release association are unavailable. No GitHub write was attempted. Preserve this published head and resolve its source-recording context; do not republish it.",
+});
 
 export default defineTool({
   approval: always(),
   description:
-    "After separate exact proposal approval, update the same open draft PR with the reviewed merge commit. Reject a moved base/head, changed resolved bytes, repository mismatch, or a PR that is no longer an open draft. This never force pushes or deploys.",
+    "After separate exact proposal approval, update the same open draft PR with the reviewed merge commit, or verify that this exact approved merge already succeeded and finish its original release recording. Recovery reads no current candidate bytes and never writes Git. Fresh publication still requires the exact validated checkout. This never force pushes or deploys.",
+  // oxlint-disable-next-line eslint/complexity -- Completion recovery and fresh publication have distinct approval, ownership and candidate preconditions.
   async execute(input, ctx) {
     const candidate = draftReconciliationState.get();
     const state = appBuilderWorkflowState.get();
-    // oxlint-disable-next-line sonarjs/expression-complexity -- publication requires all sealed candidate preconditions.
-    if (
-      // oxlint-disable-next-line sonarjs/expression-complexity -- one exact candidate precondition.
-      candidate === null ||
-      candidate.proposal === undefined ||
-      candidate.review === undefined ||
-      candidate.validation === undefined ||
-      state.phase !== "reviewed" ||
-      state.githubSource?.digest !== candidate.githubSourceDigest ||
-      state.reviewReceipt.digest !== candidate.originalReviewDigest
-    ) {
-      throw new Error(
-        "The approved draft reconciliation is unavailable or no longer matches the selected app. Review and seal its current merge before requesting approval.",
-      );
+    let completion = draftReconciliationCompletions
+      .get()
+      .find((entry) => entry.proposal.digest === input.expectedProposalDigest);
+    const sealedBeforeApproval = completion?.preparation === "sealed-before-approval";
+    if (completion === undefined) {
+      // Legacy recovery uses only canonical retained metadata, never "latest" or a Git-derived approval.
+      if (
+        // oxlint-disable-next-line sonarjs/expression-complexity -- Every retained legacy source, review and capture must name the same approved result.
+        candidate?.proposal?.digest !== input.expectedProposalDigest ||
+        candidate.review === undefined ||
+        candidate.validation?.compilation === undefined ||
+        state.phase !== "reviewed" ||
+        state.githubSource?.digest !== candidate.githubSourceDigest ||
+        state.reviewReceipt.digest !== candidate.originalReviewDigest ||
+        state.appSpec.appId !== candidate.appId ||
+        state.reviewReceipt.appSpecDigest !== state.appSpec.digest ||
+        candidate.validation.resolvedTree !== candidate.proposal.resolvedTree ||
+        candidate.review.resolvedTree !== candidate.proposal.resolvedTree
+      ) {
+        return missingCompletion();
+      }
+      completion = {
+        preparation: "legacy-recording-only",
+        proposal: candidate.proposal,
+        review: candidate.review,
+        appId: state.appSpec.appId,
+        appReview: {
+          appSpecDigest: state.reviewReceipt.appSpecDigest,
+          changeSetDigest: state.reviewReceipt.changeSetDigest,
+          digest: state.reviewReceipt.digest,
+        },
+        root: candidate.root,
+        githubSourceDigest: candidate.githubSourceDigest,
+        compilation: candidate.validation.compilation,
+      };
     }
-    const { proposal, review } = candidate;
-    if (
-      input.expectedProposalDigest !== proposal.digest ||
-      proposal.repositoryId !== state.githubSource.repository.repositoryId ||
-      proposal.reviewDigest !== review.digest
-    ) {
-      throw new Error(
-        "The repository or sealed draft reconciliation changed. Review both current diffs and request approval for a new proposal.",
-      );
-    }
+    const { proposal, review } = completion;
     assertApprovalReceipt({
       actual: input.approvalReceipt,
       phase: "draft_update",
       subjectDigest: proposal.digest,
       target: approvalTargetFromExistingDraftReconciliation(proposal),
     });
+    if (!sealedBeforeApproval) {
+      // This legacy branch is read-only in Git, even if the current checkout is still valid.
+      retainDraftReconciliationCompletion(completion);
+    }
+    const session = { completion, adapterSessionId: ctx.session.id, sessionAuth: ctx.session.auth };
+    await assertReconciliationCompletionOwnerForSession(session);
+    const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
+    const inspected = await runtime.inspectAppliedExistingDraftReconciliation({ proposal, review });
+    const finish = async (
+      publication: Parameters<typeof recordPublishedReconciliationForSession>[0]["publication"],
+    ) => {
+      try {
+        const recording = await recordPublishedReconciliationForSession({
+          ...session,
+          publication,
+        });
+        return { ...publication, appSourceRecording: { status: recording.status } };
+      } catch {
+        return {
+          ...publication,
+          appSourceRecording: {
+            status: "unavailable" as const,
+            recoveryRequired: true,
+            nextAction:
+              "Resume this approved draft reconciliation to record its original release for Preview; the GitHub update already succeeded. No further GitHub write is needed.",
+          },
+        };
+      }
+    };
+    if (inspected.applied) {
+      return await finish(inspected.observation);
+    }
+    if (!sealedBeforeApproval) {
+      return missingCompletion();
+    }
+    // Fresh publication retains every mutable candidate/review check after the read-only recovery decision.
+    if (
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Fresh writes retain the complete sealed candidate and current workflow authority binding.
+      candidate === null ||
+      candidate.proposal?.digest !== proposal.digest ||
+      candidate.review?.digest !== review.digest ||
+      candidate.validation === undefined ||
+      state.phase !== "reviewed" ||
+      state.githubSource?.digest !== candidate.githubSourceDigest ||
+      state.reviewReceipt.digest !== candidate.originalReviewDigest ||
+      state.appSpec.appId !== completion.appId ||
+      state.appSpec.digest !== completion.appReview.appSpecDigest ||
+      state.githubSource.repository.repositoryId !== proposal.repositoryId ||
+      candidate.githubSourceDigest !== completion.githubSourceDigest ||
+      candidate.root !== completion.root ||
+      state.reviewReceipt.digest !== completion.appReview.digest
+    ) {
+      throw new Error(
+        "The approved draft reconciliation is unavailable or no longer matches the selected app. Review and seal its current merge before requesting approval.",
+      );
+    }
     const sandbox = await getSourceBoundSandbox(ctx);
     const observed = await inspectDraftReconciliation({ prepared: candidate, sandbox });
     if (
@@ -92,7 +171,7 @@ export default defineTool({
         throw new Error("A fresh repository tree is unavailable for draft reconciliation.");
       },
     };
-    const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
+    await assertReconciliationCompletionOwnerForSession(session);
     const publication = await runtime.reconcileExistingDraft({ contentSource, proposal, review });
     updateExactDraftReconciliation({
       expected: candidate,
@@ -100,31 +179,7 @@ export default defineTool({
       transition: (current) =>
         current === null ? null : { ...current, publishedReconciliation: proposal },
     });
-    try {
-      const recording = await recordPublishedAppSourceForSession({
-        appId: state.appSpec.appId,
-        appSpecDigest: state.appSpec.digest,
-        backendKind: state.appBackendKind,
-        root: candidate.root,
-        adapterSessionId: ctx.session.id,
-        sessionAuth: ctx.session.auth,
-        callId: ctx.callId,
-        review: state.reviewReceipt,
-        reconciliationReview: review,
-        publication,
-      });
-      return { ...publication, appSourceRecording: { status: recording.status } };
-    } catch {
-      return {
-        ...publication,
-        appSourceRecording: {
-          status: "unavailable" as const,
-          recoveryRequired: true,
-          nextAction:
-            "Resume this approved draft reconciliation to record its source for Preview; the GitHub update already succeeded. Preview source preparation remains unavailable until recording succeeds.",
-        },
-      };
-    }
+    return await finish(publication);
   },
   inputSchema: z.strictObject({
     approvalReceipt: approvalReceiptSchema,

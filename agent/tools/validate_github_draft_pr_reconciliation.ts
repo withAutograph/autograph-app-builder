@@ -23,6 +23,7 @@ import {
 import type {
   CandidateValidationAttempt,
   DraftReconciliationCandidate,
+  ReconciliationCompilation,
 } from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { supportedValidationCommands } from "@/lib/repository/supported-template";
@@ -384,12 +385,14 @@ const runIncrementalValidation = async (
     );
   }
   let result: ValidationStepResult;
+  let compilation = run.compilation;
   try {
     if (step.kind === "schema") {
       const schema = await compileAppSchemaRelease({
         appId: candidate.appId,
         onCompiled: async () => {
-          await publishCandidateArtifacts(ctx, candidate, sandbox);
+          const captured = await publishCandidateArtifacts(ctx, candidate, sandbox);
+          compilation = captured.compilation;
         },
         root: candidate.root,
         sandbox,
@@ -490,7 +493,7 @@ const runIncrementalValidation = async (
   const latest = draftReconciliationState.get();
   const nextIndex = run.nextIndex + 1;
   if (nextIndex < run.steps.length) {
-    const nextRun = { ...run, commands, nextIndex, resolvedTree: after.resolvedTree };
+    const nextRun = { ...run, commands, nextIndex, resolvedTree: after.resolvedTree, compilation };
     updateExactDraftReconciliation({
       expected: latest,
       operation: `recording ${step.command} validation progress`,
@@ -511,7 +514,12 @@ const runIncrementalValidation = async (
     transition: () => {
       const next = {
         ...candidate,
-        validation: { commands, resolvedTree: after.resolvedTree, validatedByCallId: ctx.callId },
+        validation: {
+          commands,
+          resolvedTree: after.resolvedTree,
+          validatedByCallId: ctx.callId,
+          compilation,
+        },
       };
       delete next.validationRun;
       return next;
@@ -588,10 +596,12 @@ export default defineTool({
         status: "needs_repair" as const,
       };
     }
+    let compilation: ReconciliationCompilation | undefined;
     const schema = await compileAppSchemaRelease({
       appId: candidate.appId,
       onCompiled: async () => {
-        await publishCandidateArtifacts(ctx, candidate, sandbox);
+        const captured = await publishCandidateArtifacts(ctx, candidate, sandbox);
+        compilation = captured.compilation;
       },
       root: candidate.root,
       sandbox,
@@ -678,6 +688,7 @@ export default defineTool({
           commands,
           resolvedTree: after.resolvedTree,
           validatedByCallId: ctx.callId,
+          compilation,
         },
       }),
     });

@@ -10,6 +10,7 @@ import { approvalReceiptForExistingDraftUpdate } from "@/lib/agent/approval-rece
 import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
 import {
   draftReconciliationState,
+  retainDraftReconciliationCompletion,
   updateExactDraftReconciliation,
 } from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
@@ -59,6 +60,12 @@ export default defineTool({
         "The resolved files changed after review. Rerun candidate checks, review both diffs, and seal a new proposal.",
       );
     }
+    const { compilation } = candidate.validation;
+    if (compilation === undefined) {
+      throw new Error(
+        "completion_context_missing: Revalidate this candidate to retain its actual compiled release before sealing publication.",
+      );
+    }
     const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
     const priorPublishedProposalDigest =
       state.publishedGitHubDraftProposalDigest ?? state.githubDraftProposal?.proposal.digest;
@@ -80,6 +87,22 @@ export default defineTool({
       expected: candidate,
       operation: "sealing the resolved draft proposal",
       transition: () => ({ ...candidate, proposal }),
+    });
+    // This metadata becomes durable at the ensuing always()-approval checkpoint, before any Git write.
+    // It records no approval grant; reconcile still validates its actual approved call and exact receipt.
+    retainDraftReconciliationCompletion({
+      preparation: "sealed-before-approval",
+      proposal,
+      review: candidate.review,
+      appReview: {
+        appSpecDigest: state.reviewReceipt.appSpecDigest,
+        changeSetDigest: state.reviewReceipt.changeSetDigest,
+        digest: state.reviewReceipt.digest,
+      },
+      appId: state.appSpec.appId,
+      githubSourceDigest: candidate.githubSourceDigest,
+      root: candidate.root,
+      compilation,
     });
     return { ...proposal, approvalReceipt: approvalReceiptForExistingDraftUpdate(proposal) };
   },

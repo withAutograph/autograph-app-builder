@@ -1,10 +1,70 @@
 import { defineState } from "eve/context";
+import { isDeepStrictEqual } from "node:util";
+import type { OperatorArtifactContext } from "../provisioning/hosted-operator-artifact-store";
+import type { CompiledOperatorReleaseSelection } from "../provisioning/hosted-operator-artifact-selection";
+import type { PrivateApplyScope } from "./private-apply-authority";
+import type { PublishedAppSourceReview } from "./published-app-source";
 import type { ValidationLogReference } from "../repository/validation-log";
 
 import type {
   ExistingDraftReconciliationProposal,
   ReconciliationReviewReceipt,
 } from "../repository/github-draft-reconciliation";
+
+/** Only metadata from an acknowledged, owner-bound artifact capture; never source or SQL bytes. */
+export interface ReconciliationCompilation {
+  context: OperatorArtifactContext;
+  privateApplyScope?: PrivateApplyScope;
+  release:
+    | { status: "not-required" }
+    | { status: "published"; selection: Omit<CompiledOperatorReleaseSelection, "publishedSource"> };
+}
+
+/** Sealing precedes the publication approval checkpoint. Edits never replace this context. */
+export interface DraftReconciliationCompletion {
+  preparation: "sealed-before-approval" | "legacy-recording-only";
+  proposal: ExistingDraftReconciliationProposal;
+  review: ReconciliationReviewReceipt;
+  appReview: PublishedAppSourceReview;
+  appId: string;
+  githubSourceDigest: string;
+  root: string;
+  compilation: ReconciliationCompilation;
+}
+
+export const draftReconciliationCompletions = defineState<DraftReconciliationCompletion[]>(
+  "autograph-app-builder.draft-reconciliation-completions.v1",
+  () => [],
+);
+
+export const retainDraftReconciliationCompletion = (
+  completion: DraftReconciliationCompletion,
+): void => {
+  draftReconciliationCompletions.update((current) => {
+    const prior = current.find((entry) => entry.proposal.digest === completion.proposal.digest);
+    if (prior !== undefined) {
+      if (!isDeepStrictEqual({ ...prior, preparation: completion.preparation }, completion)) {
+        throw new Error(
+          "The retained publication completion belongs to different approved context.",
+        );
+      }
+      return completion.preparation === "sealed-before-approval"
+        ? current.map((entry) => (entry === prior ? completion : entry))
+        : current;
+    }
+    return [...current, completion];
+  });
+};
+
+export const assertRetainedDraftReconciliationCompletion = (
+  completion: DraftReconciliationCompletion,
+): void => {
+  if (!draftReconciliationCompletions.get().some((entry) => isDeepStrictEqual(entry, completion))) {
+    throw new Error(
+      "completion_context_missing: The original approved publication context is unavailable.",
+    );
+  }
+};
 
 export interface DraftReconciliationCandidate {
   version: 1;
@@ -24,6 +84,7 @@ export interface DraftReconciliationCandidate {
     resolvedTree: string;
     commands: readonly { command: string; exitCode: number }[];
     validatedByCallId: string;
+    compilation?: ReconciliationCompilation;
   };
   validationRun?: {
     steps: readonly {
@@ -32,6 +93,7 @@ export interface DraftReconciliationCandidate {
       command: string;
     }[];
     nextIndex: number;
+    compilation?: ReconciliationCompilation;
     commands: readonly { command: string; exitCode: number }[];
     resolvedTree: string;
   };

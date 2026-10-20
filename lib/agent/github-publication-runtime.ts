@@ -32,6 +32,7 @@ import type {
 } from "../repository/github-draft-update";
 import {
   reconcileExistingDraft,
+  inspectAppliedExistingDraftReconciliation,
   sealExistingDraftReconciliation,
 } from "../repository/github-draft-reconciliation";
 import type {
@@ -355,6 +356,10 @@ export interface GitHubPublicationRuntime {
     selectedCheckoutHeadSha: string;
     selectedCheckoutHeadTree: string;
   }) => Promise<ExistingDraftReconciliationProposal>;
+  inspectAppliedExistingDraftReconciliation: (input: {
+    proposal: ExistingDraftReconciliationProposal;
+    review: ReconciliationReviewReceipt;
+  }) => ReturnType<typeof inspectAppliedExistingDraftReconciliation>;
   reconcileExistingDraft: (input: {
     proposal: ExistingDraftReconciliationProposal;
     review: ReconciliationReviewReceipt;
@@ -432,6 +437,10 @@ function disabledRuntime(): GitHubPublicationRuntime {
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async resolveImmutableSource() {
+      return unavailable();
+    },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    async inspectAppliedExistingDraftReconciliation() {
       return unavailable();
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
@@ -1037,6 +1046,13 @@ export function composeGitHubPublicationRuntime(input: {
           prior === undefined
             ? request.githubSource.resolvedRef
             : `refs/heads/${observed.headBranch}`,
+      });
+    },
+    async inspectAppliedExistingDraftReconciliation(request) {
+      return await inspectAppliedExistingDraftReconciliation({
+        adapter: draftReconciliationAdapter,
+        proposal: request.proposal,
+        review: request.review,
       });
     },
     async reconcileExistingDraft(request) {

@@ -1,14 +1,19 @@
-/* oxlint-disable anti-slop/no-module-mocking -- Eve tool context and sandbox are isolated to verify the actual publication gate. */
+/* oxlint-disable anti-slop/no-module-mocking, anti-slop/no-unknown-parameters -- Eve tool context and sandbox are isolated to verify the actual publication gate. */
 /* oxlint-disable anti-slop/require-safety-comment-for-type-assertion, anti-slop/no-unsafe-dictionary-type, anti-slop/no-unknown-returns, typescript/no-unsafe-type-assertion -- Deliberately minimal Eve state and tool context stubs for this publication gate test. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import editCandidate from "../../agent/tools/edit_github_draft_pr_candidate";
 import sealReconciliation from "../../agent/tools/seal_github_draft_pr_reconciliation";
+import {
+  draftReconciliationCompletions,
+  retainDraftReconciliationCompletion,
+} from "./draft-reconciliation-state";
 
 const digest = "a".repeat(64);
 const sha = "b".repeat(40);
 const mocks = vi.hoisted(() => ({
   candidate: null as Record<string, unknown> | null,
+  states: new Map<string, unknown>(),
   inspect: vi.fn(),
   read: vi.fn(),
   replace: vi.fn(),
@@ -21,11 +26,20 @@ vi.mock("eve/tools", () => ({ defineTool: <T>(value: T): T => value }));
 vi.mock("./deployment-github-publication-runtime", () => ({
   githubPublicationRuntimeForSession: () => ({ sealExistingDraftReconciliation: mocks.seal }),
 }));
-vi.mock("./draft-reconciliation-state", () => ({
-  draftReconciliationState: { get: () => mocks.candidate },
-  updateExactDraftReconciliation: ({ transition }: { transition: () => unknown }) => {
-    mocks.candidate = transition() as Record<string, unknown>;
-  },
+vi.mock("eve/context", () => ({
+  defineState: (name: string, initial: () => unknown) => ({
+    get: () =>
+      name === "autograph-app-builder.draft-reconciliation.v1"
+        ? mocks.candidate
+        : (mocks.states.get(name) ?? initial()),
+    update: (transition: (current: unknown) => unknown) => {
+      if (name === "autograph-app-builder.draft-reconciliation.v1") {
+        mocks.candidate = transition(mocks.candidate) as Record<string, unknown> | null;
+      } else {
+        mocks.states.set(name, transition(mocks.states.get(name) ?? initial()));
+      }
+    },
+  }),
 }));
 vi.mock("./workflow-state", () => ({
   appBuilderWorkflowState: { get: () => mocks.workflow },
@@ -53,7 +67,9 @@ const context = {
 describe("draft reconciliation publication review", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.states.clear();
     mocks.candidate = {
+      appId: "spend-review",
       baseSha: sha,
       baseTree: sha,
       githubSourceDigest: digest,
@@ -63,12 +79,22 @@ describe("draft reconciliation publication review", () => {
       pullRequestNumber: 1500,
       review: { digest, resolvedTree: sha },
       root: "/workspace/.app-builder/draft-reconcile/candidate",
-      validation: { resolvedTree: sha },
+      validation: {
+        resolvedTree: sha,
+        compilation: {
+          context: {
+            authority: { ownerUserId: "owner" },
+            target: { appId: "spend-review", sessionId: "session" },
+          },
+          release: { status: "not-required" },
+        },
+      },
     };
     mocks.workflow = {
+      appSpec: { appId: "spend-review", digest },
       githubSource: { digest, repository: { repositoryId: "1" } },
       phase: "reviewed",
-      reviewReceipt: { digest },
+      reviewReceipt: { digest, appSpecDigest: digest, changeSetDigest: "d".repeat(64) },
     };
     mocks.inspect.mockResolvedValue({ resolvedTree: sha, unresolvedConflicts: [] });
     mocks.restore.mockResolvedValue({ digest, mode: "755" });
@@ -206,8 +232,39 @@ describe("draft reconciliation publication review", () => {
       });
       expect(mocks.seal).toHaveBeenCalledOnce();
       expect(mocks.candidate).toHaveProperty("proposal.digest", "c".repeat(64));
+      expect(draftReconciliationCompletions.get()).toMatchObject([
+        {
+          preparation: "sealed-before-approval",
+          proposal: { digest: "c".repeat(64) },
+          appReview: { appSpecDigest: digest, changeSetDigest: "d".repeat(64), digest },
+          compilation: { release: { status: "not-required" } },
+        },
+      ]);
     },
   );
+
+  it("keeps sealed completion context across edits and replacement candidates", async () => {
+    await sealReconciliation.execute({ expectedReviewDigest: digest }, context);
+    const sealed = structuredClone(draftReconciliationCompletions.get());
+    await editCandidate.execute({ kind: "restore", path: "apps/spend-review/issued.bin" }, context);
+    expect(draftReconciliationCompletions.get()).toEqual(sealed);
+    mocks.candidate = null;
+    expect(draftReconciliationCompletions.get()).toEqual(sealed);
+    retainDraftReconciliationCompletion(sealed[0]);
+    expect(draftReconciliationCompletions.get()).toEqual(sealed);
+    expect(() => {
+      retainDraftReconciliationCompletion({ ...sealed[0], root: "/workspace/unrelated" });
+    }).toThrow("different approved context");
+  });
+
+  it("requires actual capture metadata before staging a publication context", async () => {
+    mocks.candidate = { ...mocks.candidate, validation: { resolvedTree: sha } };
+    await expect(
+      sealReconciliation.execute({ expectedReviewDigest: digest }, context),
+    ).rejects.toThrow("completion_context_missing");
+    expect(mocks.seal).not.toHaveBeenCalled();
+    expect(draftReconciliationCompletions.get()).toEqual([]);
+  });
 
   it.each([
     { field: "validation", reason: "candidate_validation_missing" },
