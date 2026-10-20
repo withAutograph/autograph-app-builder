@@ -1,4 +1,17 @@
 import {
+  continuityTransportRequestSchema,
+  continuityPlannedSchema,
+} from "./hosted-operator-continuity-transport";
+import {
+  hostedContinuityRequestSchema,
+  continuityStatusSchema,
+  parseContinuityRequestForPlan,
+} from "./hosted-operator-continuity-contract";
+import type {
+  HostedContinuityRequest,
+  ContinuityRuntimeSelection,
+} from "./hosted-operator-continuity-contract";
+import {
   tenantExportTransportRequestSchema,
   tenantExportPlannedSchema,
 } from "./hosted-operator-export-transport";
@@ -306,6 +319,65 @@ export const createHostedOperatorClient = (input: {
     }
     return value;
   };
+  const sendContinuity = async <T>(
+    request: z.input<typeof continuityTransportRequestSchema>,
+    resultSchema: z.ZodType<T>,
+    signal?: AbortSignal,
+  ): Promise<T> => {
+    const body = continuityTransportRequestSchema.parse(request);
+    const token = await input.token();
+    const options: RequestInit & { dispatcher: Agent } = {
+      dispatcher: operatorDispatcher,
+      method: "POST",
+      body: JSON.stringify(body),
+      redirect: "error",
+      signal,
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+        "x-vercel-trusted-oidc-idp-token": token,
+      },
+    };
+    let result: Response;
+    try {
+      result = await (input.fetch ?? fetch)(new URL("/v1/runtime", url), options);
+    } catch (error) {
+      if (body.action === "continuity" && !isCancellation(error, signal)) {
+        throw new HostedOperatorTransportUnknown(error);
+      }
+      throw error;
+    }
+    if (!result.ok) {
+      if (result.status === 401 || result.status === 403) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      if (body.action === "continuity") {
+        throw new HostedOperatorTransportUnknown(new HostedOperatorError("operator_unavailable"));
+      }
+      throw new HostedOperatorError("operator_unavailable");
+    }
+    let value: unknown;
+    try {
+      value = await result.json();
+    } catch (error) {
+      if (body.action === "continuity" && !isCancellation(error, signal)) {
+        throw new HostedOperatorTransportUnknown(error);
+      }
+      throw error;
+    }
+    const blocked = operatorPublicResultSchema.safeParse(value);
+    if (blocked.success) {
+      throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable");
+    }
+    try {
+      return resultSchema.parse(value);
+    } catch (error) {
+      if (body.action === "continuity" && !isCancellation(error, signal)) {
+        throw new HostedOperatorTransportUnknown(error);
+      }
+      throw error;
+    }
+  };
   const exportOwner = () => {
     if (input.ownerContext === undefined || input.ownerContext === null) {
       throw new HostedOperatorError("authorization_required");
@@ -313,6 +385,76 @@ export const createHostedOperatorClient = (input: {
     return input.ownerContext;
   };
   return {
+    async planContinuity(
+      selection: z.infer<typeof operatorSelectionSchema>,
+      runtime: ContinuityRuntimeSelection,
+      idempotencyKey: string,
+      signal?: AbortSignal,
+    ) {
+      const result = await sendContinuity(
+        {
+          action: "continuity-plan",
+          selection,
+          runtime,
+          idempotencyKey,
+          ownerContext: exportOwner(),
+        },
+        continuityPlannedSchema,
+        signal,
+      );
+      parseContinuityRequestForPlan(result.request, result.plan);
+      // Bind the returned approval to the requested owned runtime, without pinning source content.
+      const matchesRequestedRuntime = [
+        sameOperatorSelection(selection, result.plan.preparedPlan.selection),
+        result.plan.runtime.sandboxId === runtime.sandboxId,
+        result.plan.runtime.root === runtime.root,
+        result.status.intentId === result.plan.intentId,
+        result.status.planRef === result.plan.planRef,
+      ].every(Boolean);
+      if (!matchesRequestedRuntime) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+      return result;
+    },
+    async continuityStatus(intentId: string, signal?: AbortSignal) {
+      const result = await sendContinuity(
+        { action: "continuity-status", intentId, ownerContext: exportOwner() },
+        continuityStatusSchema,
+        signal,
+      );
+      if (
+        result.intentId !== intentId ||
+        result.planRef !== `_protected-operator/continuity-plans/${intentId}`
+      ) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+      return result;
+    },
+    async continuityApproval(request: HostedContinuityRequest, signal?: AbortSignal) {
+      return await sendContinuity(
+        {
+          ...hostedContinuityRequestSchema.parse(request),
+          action: "continuity-approval",
+          ownerContext: exportOwner(),
+        },
+        z.strictObject({ approved: z.boolean() }),
+        signal,
+      );
+    },
+    async runContinuity(request: HostedContinuityRequest, callId: string, signal?: AbortSignal) {
+      const result = await sendContinuity(
+        { ...hostedContinuityRequestSchema.parse(request), callId, ownerContext: exportOwner() },
+        continuityStatusSchema,
+        signal,
+      );
+      if (
+        result.planRef !== request.planRef ||
+        result.intentId !== request.planRef.split("/").at(-1)
+      ) {
+        throw new HostedOperatorTransportUnknown(new HostedOperatorError("resource_mismatch"));
+      }
+      return result;
+    },
     async planTenantExport(
       selection: z.infer<typeof operatorSelectionSchema>,
       customerId: string,

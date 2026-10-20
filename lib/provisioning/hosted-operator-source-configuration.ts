@@ -1,3 +1,4 @@
+import { managedRuntimeWorkerDescriptorSchema } from "./hosted-operator-continuity-contract";
 import { tenantExportWorkerDescriptorSchema } from "./hosted-operator-export-contract";
 import { z } from "zod";
 import { configurationSchema, scopeSchema } from "./hosted-operator-native-preview-neon";
@@ -59,6 +60,7 @@ const workload = z.strictObject({
 });
 const sandboxConfigurationFields = {
   exportWorker: tenantExportWorkerDescriptorSchema.optional(),
+  managedRuntimeWorker: managedRuntimeWorkerDescriptorSchema.optional(),
   accessWorker: worker,
   authProposal: z.strictObject({ executablePath: id, id, sha256: digest }),
   authWorker: worker,

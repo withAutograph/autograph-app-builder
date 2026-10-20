@@ -43,6 +43,11 @@ export const runAppBrowserTests = async (input: {
   signal?: AbortSignal;
   execution?: PreparedRuntimeExecutionContext;
   runtime?: PreparedRuntimeExecution | null;
+  continuation?: {
+    commandId?: string;
+    commandCheckpoint: (commandId: string) => Promise<void>;
+    allowDispatch: boolean;
+  };
 }) => {
   const command = appBrowserTestCommand(input.appId);
   try {
@@ -54,6 +59,7 @@ export const runAppBrowserTests = async (input: {
         return await runtime.runTask({
           signal: input.signal,
           task: "test-e2e",
+          ...input.continuation,
           ...(runtime.browserTestBaseUrl === undefined
             ? {}
             : { environment: { APP_TEST_BASE_URL: runtime.browserTestBaseUrl } }),
