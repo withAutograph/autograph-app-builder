@@ -94,6 +94,7 @@ const expectedCommands = {
 export const supportedValidationCommands = function supportedValidationCommands(
   appId: string,
   testShards: readonly string[] = SUPPORTED_VALIDATION_TEST_SHARDS,
+  options?: { alreadyCompiled?: true },
 ) {
   if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u.test(appId)) {
     throw new Error("The validation application id is invalid.");
@@ -104,13 +105,15 @@ export const supportedValidationCommands = function supportedValidationCommands(
   ) {
     throw new Error("The validation test shard set is invalid.");
   }
+  const compileDependency = options?.alreadyCompiled === true ? "--skip-deps " : "";
   return [
     {
-      command: `mise run --no-deps --skip-tools app:check ${appId}` as const,
+      command: `mise run --no-deps ${compileDependency}--skip-tools app:check ${appId}` as const,
       name: "check-build" as const,
     },
     ...testShards.map((shard) => ({
-      command: `mise run --no-deps --skip-tools app:test ${appId} ${shard}` as const,
+      command:
+        `mise run --no-deps ${compileDependency}--skip-tools app:test ${appId} ${shard}` as const,
       name: "test" as const,
     })),
   ];
@@ -1028,10 +1031,10 @@ export const readPreparedSandboxSourceManifest = async function readPreparedSand
   return files;
 };
 
-const verifyPreparedSandboxWorkspace = async function verifyPreparedSandboxWorkspace(
+const readVerifiedPreparedSandboxBaseline = async function readVerifiedPreparedSandboxBaseline(
   sandbox: SandboxSession,
   record: PreparedSandboxWorkspace,
-): Promise<void> {
+): Promise<PreparedSourceFile[]> {
   const files = await readPreparedSandboxSourceManifest(sandbox, record);
   const checksums = await sandbox.readTextFile({
     path: sandboxSourceChecksumsPath,
@@ -1039,6 +1042,14 @@ const verifyPreparedSandboxWorkspace = async function verifyPreparedSandboxWorks
   if (checksums !== preparedSourceChecksums(files)) {
     throw new Error("The prepared workspace checksum receipt drifted.");
   }
+  return files;
+};
+
+const verifyPreparedSandboxWorkspace = async function verifyPreparedSandboxWorkspace(
+  sandbox: SandboxSession,
+  record: PreparedSandboxWorkspace,
+): Promise<void> {
+  const files = await readVerifiedPreparedSandboxBaseline(sandbox, record);
   if (fixtureSandboxEnabled()) {
     for (const file of files) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -1081,15 +1092,16 @@ const developmentWorkspaceInspectionReceipt = {
   workspaceRoot: "/workspace",
 } as const;
 
-const verifyDevelopmentSandboxWorkspace = async function verifyDevelopmentSandboxWorkspace(
+const verifySandboxWorkspaceBoundary = async function verifySandboxWorkspaceBoundary(
   sandbox: SandboxSession,
   record: PreparedSandboxWorkspace,
+  kind: "development" | "legacy" = "development",
 ): Promise<void> {
   if (
     record.workspaceId !== getBuilderSandboxId(sandbox) ||
     record.workspacePath !== "/workspace/repository"
   ) {
-    throw new Error("The prepared development workspace does not belong to this session.");
+    throw new Error(`The prepared ${kind} workspace does not belong to this session.`);
   }
   const node = fixtureSandboxEnabled() ? JSON.stringify(process.execPath) : "node";
   const inspection = await sandbox.run({
@@ -1099,13 +1111,13 @@ const verifyDevelopmentSandboxWorkspace = async function verifyDevelopmentSandbo
     .replaceAll(new RegExp(`${String.fromCodePoint(27)}\\[[0-?]*[ -/]*[@-~]`, "gu"), "")
     .trim();
   if (inspection.exitCode !== 0) {
-    throw new Error("The prepared development workspace inspection command failed.");
+    throw new Error(`The prepared ${kind} workspace inspection command failed.`);
   }
   let observed: unknown;
   try {
     observed = JSON.parse(normalizedStdout) as unknown;
   } catch {
-    throw new Error("The prepared development workspace escaped its sandbox boundary.");
+    throw new Error(`The prepared ${kind} workspace escaped its sandbox boundary.`);
   }
   if (
     typeof observed !== "object" ||
@@ -1119,8 +1131,33 @@ const verifyDevelopmentSandboxWorkspace = async function verifyDevelopmentSandbo
       ([key, expected]) => (observed as Record<string, unknown>)[key] !== expected,
     )
   ) {
-    throw new Error("The prepared development workspace escaped its sandbox boundary.");
+    throw new Error(`The prepared ${kind} workspace escaped its sandbox boundary.`);
   }
+};
+
+/** Compare selected source and baseline provenance, excluding eligibility diagnostics. */
+export const samePreparedWorkspaceSourceContext = function samePreparedWorkspaceSourceContext(
+  observed: PreparedSandboxWorkspace,
+  expected: PreparedSandboxWorkspace,
+): boolean {
+  return (
+    observed.workspaceId === expected.workspaceId &&
+    observed.workspacePath === expected.workspacePath &&
+    observed.sourcePath === expected.sourcePath &&
+    observed.sourceSha === expected.sourceSha &&
+    observed.sourceTree === expected.sourceTree &&
+    observed.workspaceDigest === expected.workspaceDigest &&
+    observed.adapter === expected.adapter
+  );
+};
+
+const verifyLegacyLiveSandboxWorkspace = async function verifyLegacyLiveSandboxWorkspace(
+  sandbox: SandboxSession,
+  record: PreparedSandboxWorkspace,
+): Promise<void> {
+  await verifySandboxWorkspaceBoundary(sandbox, record, "legacy");
+  // The manifest describes the selected base, not the current writable app.
+  await readVerifiedPreparedSandboxBaseline(sandbox, record);
 };
 
 export type PreparedSandboxWorkspaceStatus =
@@ -1129,15 +1166,19 @@ export type PreparedSandboxWorkspaceStatus =
 
 export const inspectPreparedSandboxWorkspace = async function inspectPreparedSandboxWorkspace(
   sandbox: SandboxSession,
-  mode: "exact" | "development-live" = "exact",
+  mode: "exact" | "development-live" | "legacy-live" = "exact",
 ): Promise<PreparedSandboxWorkspaceStatus> {
   const record = await readPreparedSandboxWorkspaceRecord(sandbox);
   if (record === undefined) {
     return { state: "absent" };
   }
-  await (mode === "development-live"
-    ? verifyDevelopmentSandboxWorkspace(sandbox, record)
-    : verifyPreparedSandboxWorkspace(sandbox, record));
+  if (mode === "legacy-live") {
+    await verifyLegacyLiveSandboxWorkspace(sandbox, record);
+  } else {
+    await (mode === "development-live"
+      ? verifySandboxWorkspaceBoundary(sandbox, record)
+      : verifyPreparedSandboxWorkspace(sandbox, record));
+  }
   return { state: "prepared", workspace: record };
 };
 
@@ -1164,7 +1205,7 @@ export const inspectPreparedSandboxReleasePolicy =
     sourceTree: string;
     workspaceDigest: string;
   }): Promise<RepositoryReleasePolicyObservation> {
-    const prepared = await inspectPreparedSandboxWorkspace(input.sandbox);
+    const prepared = await inspectPreparedSandboxWorkspace(input.sandbox, "legacy-live");
     if (
       prepared.state !== "prepared" ||
       prepared.workspace.sourceSha !== input.sourceSha ||
@@ -1173,7 +1214,7 @@ export const inspectPreparedSandboxReleasePolicy =
     ) {
       throw new Error("The hosted release policy is not bound to the reviewed Git snapshot.");
     }
-    const files = await inspectPreparedSandboxSourceFiles(input.sandbox);
+    const files = await readPreparedSandboxSourceManifest(input.sandbox, prepared.workspace);
     const entry = files.find(({ path }) => path === repositoryReleasePolicyPath);
     if (entry === undefined) {
       return releasePolicyObservation({
@@ -1288,19 +1329,13 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
   sandbox: SandboxSession,
   callId: string,
   builderOwned = false,
-  compatibility: "full" | "planning" = "full",
+  _compatibility: "full" | "planning" = "full",
 ): Promise<PreparedSandboxWorkspace> {
   const eligibility = builderOwned
     ? await inspectBuilderOwnedSupportedRepository(sourcePathInput)
     : await inspectSupportedRepository(sourcePathInput);
-  const eligible =
-    compatibility === "planning" ? eligibility.planningEligible : eligibility.eligible;
-  const failures =
-    compatibility === "planning" ? eligibility.planningFailures : eligibility.failures;
-  if (!eligible || eligibility.sourceSha === undefined) {
-    throw new Error(
-      `Repository is not ${compatibility === "planning" ? "planning-compatible" : "eligible"}: ${failures.join("; ")}`,
-    );
+  if (eligibility.sourceSha === undefined) {
+    throw new Error("The selected repository is not a readable Git worktree.");
   }
   if (eligibility.sourceSha !== expectedSha) {
     throw new Error("Source SHA changed after eligibility review.");
@@ -1316,11 +1351,11 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
       existing.sourcePath !== eligibility.sourcePath ||
       existing.sourceSha !== expectedSha ||
       existing.sourceTree !== sourceTree ||
-      existing.eligibilityDigest !== expectedEligibilityDigest
+      existing.workspaceId !== getBuilderSandboxId(sandbox)
     ) {
       throw new Error("This app build already owns a different workspace.");
     }
-    await verifyPreparedSandboxWorkspace(sandbox, existing);
+    await verifyLegacyLiveSandboxWorkspace(sandbox, existing);
     return existing;
   }
 
@@ -1478,11 +1513,13 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
     workspaceId: getBuilderSandboxId(sandbox),
     workspacePath: "/workspace/repository",
   };
+  // Only a newly transferred source has its current bytes verified here.
+  // Later planning reads retain this baseline while allowing ordinary edits.
+  await verifyPreparedSandboxWorkspace(sandbox, record);
   await sandbox.writeTextFile({
     content: `${JSON.stringify(record, null, 2)}\n`,
     path: sandboxRecordPath,
   });
-  await verifyPreparedSandboxWorkspace(sandbox, record);
   return record;
 };
 

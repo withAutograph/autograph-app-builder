@@ -17,6 +17,7 @@ import {
   inspectPreparedSandboxWorkspace,
   readPreparedSandboxWorkspaceRecord,
   recordPreparedSandboxWorkspace,
+  samePreparedWorkspaceSourceContext,
 } from "./supported-template";
 import type { PreparedSandboxWorkspace } from "./supported-template";
 import { deploymentArrustedTemplateReader } from "./arrusted-template-reader";
@@ -197,11 +198,22 @@ export async function inspectSourceBoundSandboxWorkspace(input: {
       sandbox: input.sandbox,
     });
   } else {
-    const status = await inspectPreparedSandboxWorkspace(input.sandbox);
+    const status = await inspectPreparedSandboxWorkspace(input.sandbox, "legacy-live");
     if (status.state !== "prepared") {
       throw new Error("The prepared source workspace is missing.");
     }
     observed = status.workspace;
+    if (
+      observed.workspaceId !== getBuilderSandboxId(input.sandbox) ||
+      observed.sourcePath !== receipt.sourcePath ||
+      observed.sourceSha !== receipt.sourceSha ||
+      observed.sourceTree !== receipt.sourceTree ||
+      (input.expectedWorkspace !== undefined &&
+        !samePreparedWorkspaceSourceContext(observed, input.expectedWorkspace))
+    ) {
+      throw new Error("The prepared workspace no longer matches its durable source receipt.");
+    }
+    return observed;
   }
   if (
     observed.workspaceId !== getBuilderSandboxId(input.sandbox) ||

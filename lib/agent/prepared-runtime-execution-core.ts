@@ -76,11 +76,19 @@ export interface PreparedRuntimeExecution {
     commandCheckpoint?: (commandId: string) => Promise<void>;
     allowDispatch?: boolean;
     shard?: string;
+    /** Only after the selected compile task succeeded in this validation pass. */
+    alreadyCompiled?: true;
     environment?: Readonly<Record<string, string | undefined>>;
     onChunk?: (channel: "stdout" | "stderr", content: string) => Promise<void>;
     signal?: AbortSignal;
   }) => Promise<{ exitCode: number; stdout: string; stderr: string }>;
 }
+
+const completedCompilationEnvironment = (
+  task: string,
+  alreadyCompiled?: true,
+): Record<string, string> =>
+  alreadyCompiled === true && task !== "test-e2e" ? { APP_RUNTIME_ALREADY_COMPILED: "1" } : {};
 
 /** Changes browser origin only; database credentials, session tokens and release stay intact. */
 export const runtimeFilesForOrigin = (files: PrivateRuntimeFiles, origin: string) => {
@@ -347,6 +355,7 @@ export const restorePreparedRuntimeExecution = async (input: {
       async ({
         task,
         shard,
+        alreadyCompiled,
         environment,
         onChunk,
         signal,
@@ -372,10 +381,12 @@ export const restorePreparedRuntimeExecution = async (input: {
             env: {
               ...Object.fromEntries(
                 Object.entries(environment ?? {}).filter(
-                  (entry): entry is [string, string] => entry[1] !== undefined,
+                  (entry): entry is [string, string] =>
+                    entry[1] !== undefined && entry[0] !== "APP_RUNTIME_ALREADY_COMPILED",
                 ),
               ),
               APP_RUNTIME_STATE_DIR: input.binding.stateDirectory,
+              ...completedCompilationEnvironment(task, alreadyCompiled),
               ...(task === "test-e2e" && normalActors
                 ? {
                     APP_TEST_BASE_URL: normalActors.origin,

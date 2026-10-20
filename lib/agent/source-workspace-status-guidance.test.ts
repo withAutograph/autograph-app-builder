@@ -1,4 +1,8 @@
 import { createHash } from "node:crypto";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Vitest spies retain the production module binding.
+import * as testCapabilities from "../testing/test-capability";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy on the actual Sandbox acquisition seam.
+import * as sourceBoundSandbox from "./source-bound-sandbox";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ToolContext } from "eve/tools";
@@ -338,4 +342,54 @@ describe("source and workspace status guidance", () => {
       expect(updateWorkflowState).not.toHaveBeenCalled();
     },
   );
+
+  it("reports a legacy workspace with changed eligibility diagnostics through the actual status tool", async () => {
+    const baselineFiles = [
+      { mode: "100644", objectId: "a".repeat(40), path: "app.txt", sha256: sha256("original") },
+    ];
+    const selected = { ...workflowState("app_spec_accepted"), githubSource: undefined };
+    selected.workspace = {
+      ...workspace,
+      eligibilityDigest: "e".repeat(64),
+      workspaceDigest: sha256(JSON.stringify(baselineFiles)),
+    };
+    const observed = { ...selected.workspace, eligibilityDigest: "f".repeat(64) };
+    const files = new Map([
+      [".app-builder/prepared-workspace.json", JSON.stringify(observed)],
+      [".app-builder/source-files.json", JSON.stringify(baselineFiles)],
+      [".app-builder/source-checksums.sha256", `${baselineFiles[0]?.sha256}  repository/app.txt\n`],
+    ]);
+    const sandbox = {
+      id: observed.workspaceId,
+      readTextFile: ({ path }: { path: string }) => Promise.resolve(files.get(path) ?? null),
+      run: () =>
+        Promise.resolve({
+          exitCode: 0,
+          stderr: "",
+          stdout: JSON.stringify({
+            repositoryInput: "/workspace/repository",
+            realRepository: "/workspace/repository",
+            realWorkspace: "/workspace",
+            workspaceRoot: "/workspace",
+          }),
+        }),
+    };
+    getWorkflowState.mockReturnValue(selected);
+    const capability = vi.spyOn(testCapabilities, "hasTestCapability").mockReturnValue(false);
+    // SAFETY: The controlled Sandbox supplies the exact boundary read methods exercised by this status call.
+    const openSandbox = vi
+      .spyOn(sourceBoundSandbox, "getSourceBoundSandbox")
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Controlled partial Sandbox fixture; no provider operation is exposed.
+      .mockResolvedValue(sandbox as never);
+    try {
+      await expect(workspaceStatus.execute({}, context)).resolves.toMatchObject({
+        phase: "app_spec_accepted",
+        workspace: observed,
+      });
+      expect(updateWorkflowState).not.toHaveBeenCalled();
+    } finally {
+      capability.mockRestore();
+      openSandbox.mockRestore();
+    }
+  });
 });

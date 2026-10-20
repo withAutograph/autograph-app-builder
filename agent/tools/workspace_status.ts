@@ -4,7 +4,11 @@ import { z } from "zod";
 
 import { prototypeArtifactReceipt } from "@/lib/agent/prototype-artifacts";
 import { appBuilderWorkflowState, workflowWorkspace } from "@/lib/agent/workflow-state";
-import { inspectPreparedSandboxWorkspace } from "@/lib/repository/supported-template";
+import {
+  inspectPreparedSandboxWorkspace,
+  samePreparedWorkspaceSourceContext,
+} from "@/lib/repository/supported-template";
+import { SOURCE_RECEIPT_VERSION } from "@/lib/repository/source-receipt";
 import { inspectSourceBoundSandboxWorkspace } from "@/lib/repository/arrusted-template";
 import { canAutoSelectDevelopmentSource } from "@/lib/repository/development-source";
 import { hasTestCapability } from "@/lib/testing/test-capability";
@@ -185,7 +189,9 @@ export default defineTool({
     if (
       !canAutoSelectDevelopmentSource() &&
       durable.githubSource === undefined &&
-      JSON.stringify(workflowWorkspace(durable)) !== JSON.stringify(observed)
+      (durable.sourceReceipt.version === SOURCE_RECEIPT_VERSION
+        ? JSON.stringify(workflowWorkspace(durable)) !== JSON.stringify(observed)
+        : !samePreparedWorkspaceSourceContext(observed, durable.workspace))
     ) {
       throw new Error("The durable workflow receipt does not match the sandbox workspace.");
     }
