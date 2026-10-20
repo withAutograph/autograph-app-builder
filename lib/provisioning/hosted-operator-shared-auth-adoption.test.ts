@@ -1007,6 +1007,7 @@ describe("native composition adoption boundary", () => {
         }),
     );
     const controlPlane: Awaited<ReturnType<typeof createHostedOperatorControlPlane>> = {
+      exportRequest: unavailable,
       readApprovedPlan: unavailable,
       registerOwnerRealmIdentityWait: unavailable,
       acknowledgeOwnerRealmIdentityWait: unavailable,

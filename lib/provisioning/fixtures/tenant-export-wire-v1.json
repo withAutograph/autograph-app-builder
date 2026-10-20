@@ -1,0 +1,114 @@
+{
+  "descriptor": {
+    "id": "generated-app-data-export-v1",
+    "operationScope": "generated-app-data-export-v1",
+    "executablePath": "/opt/autograph/protected-generated-app-export",
+    "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "subcommand": "protected-generated-app-export"
+  },
+  "worker": {
+    "version": 1,
+    "kind": "tenant-export-worker",
+    "exportId": "10000000-0000-4000-8000-000000000001",
+    "attemptId": "20000000-0000-4000-8000-000000000002",
+    "snapshotId": "30000000-0000-4000-8000-000000000003",
+    "planDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "scope": {
+      "appId": "orchard",
+      "customerId": "customer-fixture"
+    },
+    "resource": {
+      "projectId": "project-fixture",
+      "branchId": "branch-fixture",
+      "resourceId": "app-resource-fixture",
+      "environment": "preview",
+      "hostname": "ep-fixture.example.invalid",
+      "port": 5432,
+      "database": "orchard_data",
+      "schema": "public",
+      "migratorRole": "orchard_migrator",
+      "runtimeRole": "orchard_runtime"
+    },
+    "release": {
+      "id": "ordinary-release",
+      "artifactHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "manifestRef": "_protected-operator/artifacts/generated-release/orchard/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "manifestSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "selection": "public-app-customer-tables-v1",
+    "format": "ndjson"
+  },
+  "manifest": {
+    "version": 1,
+    "kind": "tenant-export",
+    "exportId": "10000000-0000-4000-8000-000000000001",
+    "attemptId": "20000000-0000-4000-8000-000000000002",
+    "snapshotId": "30000000-0000-4000-8000-000000000003",
+    "planDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "scope": {
+      "appId": "orchard",
+      "customerId": "customer-fixture"
+    },
+    "resource": {
+      "projectId": "project-fixture",
+      "branchId": "branch-fixture",
+      "resourceId": "app-resource-fixture",
+      "environment": "preview",
+      "hostname": "ep-fixture.example.invalid",
+      "port": 5432,
+      "database": "orchard_data",
+      "schema": "public",
+      "migratorRole": "orchard_migrator",
+      "runtimeRole": "orchard_runtime"
+    },
+    "release": {
+      "id": "ordinary-release",
+      "artifactHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "manifestRef": "_protected-operator/artifacts/generated-release/orchard/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "manifestSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "format": "ndjson",
+    "files": [
+      {
+        "kind": "data",
+        "name": "table-000001.ndjson",
+        "table": {
+          "schema": "public",
+          "name": "notes"
+        },
+        "rowCount": "1",
+        "byteLength": "33",
+        "sha256": "85b78351d9dd2ef1413527d37bd59fff51c63384c3db265f30111f2d290d7968",
+        "chunks": [
+          {
+            "index": 0,
+            "byteLength": "33",
+            "sha256": "85b78351d9dd2ef1413527d37bd59fff51c63384c3db265f30111f2d290d7968",
+            "artifactRef": "_protected-operator/artifacts/tenant-export/10000000-0000-4000-8000-000000000001/20000000-0000-4000-8000-000000000002/data/85b78351d9dd2ef1413527d37bd59fff51c63384c3db265f30111f2d290d7968"
+          }
+        ]
+      },
+      {
+        "kind": "data",
+        "name": "table-000002.ndjson",
+        "table": {
+          "schema": "public",
+          "name": "empty_records"
+        },
+        "rowCount": "0",
+        "byteLength": "0",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "chunks": []
+      }
+    ],
+    "rowCount": "1",
+    "byteLength": "33"
+  },
+  "manifestMember": {
+    "kind": "manifest",
+    "name": "manifest.json",
+    "byteLength": "1756",
+    "sha256": "5c7dc936c90f902890147c86090ddb7077d2a8ea9246ae5bd7ddf621b0218c89",
+    "artifactRef": "_protected-operator/artifacts/tenant-export/10000000-0000-4000-8000-000000000001/20000000-0000-4000-8000-000000000002/manifest/5c7dc936c90f902890147c86090ddb7077d2a8ea9246ae5bd7ddf621b0218c89"
+  }
+}

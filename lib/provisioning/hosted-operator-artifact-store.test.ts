@@ -151,3 +151,44 @@ describe("private identity stage artifacts", () => {
     ).rejects.toThrow("Prototype artifact path is not allowed.");
   });
 });
+
+describe("private tenant export namespace", () => {
+  const exportRef = `_protected-operator/artifacts/tenant-export/10000000-0000-4000-8000-000000000001/20000000-0000-4000-8000-000000000002/data/${"b".repeat(64)}`;
+  it("binds binary pages to exact app, session and current owner while keeping public reads denied", async () => {
+    const f = fixture();
+    await f.store.put(context, { artifactRef: exportRef, chunkIndex: 1, content: "AP+A" });
+    expect(await f.store.read(context, exportRef, 1)).toBe("AP+A");
+    expect(
+      await f.store.read(
+        { ...context, target: { ...context.target, appId: "different-app" } },
+        exportRef,
+        1,
+      ),
+    ).toBeUndefined();
+    expect(
+      await f.store.read(
+        { ...context, target: { ...context.target, sessionId: "different-session" } },
+        exportRef,
+        1,
+      ),
+    ).toBeUndefined();
+    expect(
+      await f.store.read(
+        { ...context, authority: { ...context.authority, ownerUserId: "different-owner" } },
+        exportRef,
+        1,
+      ),
+    ).toBeUndefined();
+    await expect(
+      getPrototypeChunk(f.db, {
+        principal: { ...context.authority, scopes: ["autograph:get"] },
+        sessionId: context.target.sessionId,
+        path: exportRef,
+        transferDigest: "b".repeat(64),
+        chunkIndex: 1,
+      }),
+    ).rejects.toThrow("Prototype artifact path is not allowed.");
+    f.revoke();
+    await expect(f.store.read(context, exportRef, 1)).rejects.toThrow();
+  });
+});

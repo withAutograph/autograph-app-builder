@@ -1,3 +1,25 @@
+import { readPrivateHostedApproval } from "../eve/private-hosted-approval";
+import {
+  operatorOwnerContextSchema,
+  HostedOperatorError,
+  operatorPlanDigest,
+  operatorRealmIdentityLinkSchema,
+  projectPendingRealmIdentityLink,
+  selectHostedOperatorOwnedOrganizationSpec,
+  retainedOperatorAuthSchema,
+  hostedOperatorOwnedOrganizationSpecSchema,
+} from "./hosted-operator-contract";
+import {
+  createHostedTenantExportOperations,
+  assertTenantExportCustomer,
+} from "./hosted-operator-export";
+import type { HostedTenantExportPlan } from "./hosted-operator-export-contract";
+import { createPostgresTenantExportJournalStore } from "./postgres-hosted-operator-export-journal";
+import { createPostgresPhysicalResourceLease } from "./postgres-physical-resource-lease";
+import { createTenantExportSandbox } from "./hosted-operator-export-sandbox";
+import { createTenantExportArtifacts } from "./hosted-operator-export-artifacts";
+import { createTenantExportDispatcher } from "./hosted-operator-export-transport";
+import { createPrivateTenantExportApprovalCapture } from "../eve/private-export-approval";
 import { requireFinalResourceBindingPhase } from "./hosted-operator-resource-binding-phase";
 import { readApprovedRetainedMembershipInspection } from "./hosted-operator-membership-inspection";
 import { nativeObservationStateSchema } from "../eve/native-observation-state";
@@ -126,15 +148,6 @@ import {
 import { createHostedOperatorOwnerContextResolver } from "./hosted-operator-owner-context";
 import type { HostedOperatorContext, HostedOperatorEffectContext } from "./hosted-operator-service";
 import type { HostedOperatorPlan } from "./hosted-operator-contract";
-import {
-  HostedOperatorError,
-  operatorPlanDigest,
-  operatorRealmIdentityLinkSchema,
-  projectPendingRealmIdentityLink,
-  selectHostedOperatorOwnedOrganizationSpec,
-  retainedOperatorAuthSchema,
-  hostedOperatorOwnedOrganizationSpecSchema,
-} from "./hosted-operator-contract";
 import {
   assertResourceCredentialCheckpoint,
   prepareHostedOperatorResourceCredentials,
@@ -2407,9 +2420,310 @@ export const createHostedOperatorControlPlane = async (input: {
       collectOrganizationOwnerProof,
       ...organizationWorkers,
     });
+    const exportStore = createPostgresTenantExportJournalStore(database);
+    const exportSandbox = createTenantExportSandbox(configuration.sandbox);
+    const exportLease = createPostgresPhysicalResourceLease({
+      openLockClient: (onConnectionClosed) =>
+        postgres(parseProtectedResourceLockDatabaseUrl(config.databaseUrl), {
+          ...hostedRuntimePostgresOptions,
+          idle_timeout: 0,
+          max: 1,
+          max_lifetime: 0,
+          onclose: onConnectionClosed,
+        }),
+    });
+    const preparedForExport = async (context: HostedOperatorContext, catchUpApproval = false) => {
+      await owner.assertArtifactAuthorized(context);
+      const current = await store.read(context);
+      const operator = current?.record.operator;
+      if (operator === undefined || current === undefined || current.record.status !== "prepared") {
+        throw new HostedOperatorError("operation_in_progress");
+      }
+      if (
+        operator.plan.action !== "prepare" ||
+        (operator.plan.stage !== undefined && operator.plan.stage !== "app")
+      ) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      requireFinalResourceBindingPhase(current, {
+        plan: operator.plan,
+        privateState: current.record.privateState,
+      });
+      const ownerContext = operatorOwnerContextSchema.parse(context.ownerContext);
+      let approvedId: string | undefined;
+      if (catchUpApproval) {
+        const approval = await readApproval({
+          ...context,
+          action: "prepare",
+          callId: current.record.approvedByCallId,
+          planDigest: operator.planDigest,
+        });
+        if (approval?.approved) {
+          approvedId = approval.approvalId;
+        }
+      } else {
+        const receipt = await readPrivateHostedApproval({
+          store: eve,
+          principal: ownerContext.principal,
+          sessionId: ownerContext.sessionId,
+          action: "prepare",
+          callId: current.record.approvedByCallId,
+          planDigest: operator.planDigest,
+          selection: operator.plan.selection,
+          requestId: operator.approvalId,
+        });
+        if (
+          receipt?.outcome === "approved" &&
+          receipt.responderPrincipalId === ownerContext.principal.ownerUserId &&
+          receipt.toolInput.operationRef === operator.operationRef
+        ) {
+          approvedId = receipt.requestId;
+        }
+      }
+      if (approvedId === undefined || approvedId !== operator.approvalId) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      return { current, operator };
+    };
+    const resolveExportPlan = async (
+      context: HostedOperatorContext,
+      customerId: string,
+      verifyRelease = false,
+    ) => {
+      if (configuration.sandbox.exportWorker === undefined) {
+        throw new HostedOperatorError("protected_operator_required");
+      }
+      const { current, operator } = await preparedForExport(context, true);
+      const plan = operator.plan;
+      assertTenantExportCustomer(plan, customerId);
+      const ownedRelease = ownedArtifacts(context);
+      if (plan.release.artifactRef === undefined) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+      const selected = await ownedRelease.selections.readExact?.(ownedRelease.context, {
+        appSpecDigest: plan.contextId,
+        artifactRef: plan.release.artifactRef,
+      });
+      if (
+        selected === undefined ||
+        selected.releaseId !== plan.release.id ||
+        selected.manifestSha256 !== plan.release.sha256 ||
+        selected.artifactRef !== plan.release.artifactRef
+      ) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+      if (verifyRelease) {
+        await controlPlane.readGeneratedRelease(context, selected);
+      }
+      if (operator.approvalId === undefined) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      return {
+        version: 1 as const,
+        kind: "tenant-export-plan" as const,
+        authority: context.authority,
+        target: {
+          sessionId: context.target.sessionId,
+          appId: context.target.appId,
+          projectId: context.target.projectId,
+          branch: context.target.branch,
+        },
+        originalSetup: {
+          operationRef: operator.operationRef,
+          planDigest: operator.planDigest,
+          approvalId: operator.approvalId,
+          approvedByCallId: current.record.approvedByCallId,
+        },
+        scope: { appId: plan.selection.appId, customerId },
+        resource: {
+          projectId: plan.neon.projectId,
+          branchId: plan.neon.branchId,
+          resourceId: plan.appDatabase.resourceId,
+          environment: plan.selection.environment,
+          hostname: plan.neon.endpoint,
+          port: 5432,
+          database: plan.appDatabase.database,
+          schema: "public" as const,
+          migratorRole: plan.appDatabase.migratorRole,
+          runtimeRole: plan.appDatabase.runtimeRole,
+        },
+        release: {
+          id: selected.releaseId,
+          artifactHash: selected.schemaSha256,
+          manifestRef: selected.artifactRef,
+          manifestSha256: selected.manifestSha256,
+        },
+        selection: "public-app-customer-tables-v1" as const,
+        format: "ndjson" as const,
+      };
+    };
+    const assertExportSetup = async (
+      context: HostedOperatorContext,
+      plan: HostedTenantExportPlan,
+    ) => {
+      const { current, operator } = await preparedForExport(context);
+      const prepared = operator.plan;
+      assertTenantExportCustomer(prepared, plan.scope.customerId);
+      const observedSetup = {
+        operationRef: operator.operationRef,
+        planDigest: operator.planDigest,
+        approvalId: operator.approvalId,
+        approvedByCallId: current.record.approvedByCallId,
+      };
+      const observedResource = {
+        projectId: prepared.neon.projectId,
+        branchId: prepared.neon.branchId,
+        resourceId: prepared.appDatabase.resourceId,
+        environment: prepared.selection.environment,
+        hostname: prepared.neon.endpoint,
+        port: 5432,
+        database: prepared.appDatabase.database,
+        schema: "public",
+        migratorRole: prepared.appDatabase.migratorRole,
+        runtimeRole: prepared.appDatabase.runtimeRole,
+      };
+      const same = [
+        isDeepStrictEqual(observedSetup, plan.originalSetup),
+        isDeepStrictEqual(observedResource, plan.resource),
+        prepared.release.id === plan.release.id,
+        prepared.release.sha256 === plan.release.manifestSha256,
+        prepared.release.artifactRef === plan.release.manifestRef,
+        prepared.selection.appId === plan.scope.appId,
+      ].every(Boolean);
+      if (!same) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+    };
+    const exportArtifacts = (context: HostedOperatorContext) => {
+      const owned = ownedArtifacts(context);
+      return {
+        context: owned.context,
+        artifacts: createTenantExportArtifacts({
+          store: owned.store,
+          assertCurrentOwner: async (requested) => {
+            if (!isDeepStrictEqual(requested, owned.context)) {
+              throw new HostedOperatorError("authorization_required");
+            }
+            await owner.assertArtifactAuthorized(context);
+          },
+        }),
+      };
+    };
+    const observeExportApproval = eveObserver.observe;
+    if (observeExportApproval === undefined) {
+      throw new HostedOperatorError("operator_unavailable");
+    }
+    const exports = createHostedTenantExportOperations({
+      store: exportStore,
+      assertOwner: owner.assertArtifactAuthorized,
+      resolvePlan: async (context, customerId) =>
+        await resolveExportPlan(context, customerId, true),
+      assertSetup: assertExportSetup,
+      async readApproval(context, request, callId) {
+        await owner.assertArtifactAuthorized(context);
+        const recorded = await exportStore.read({
+          authority: context.authority,
+          exportId: z.uuid().parse(request.planRef.split("/").at(-1)),
+        });
+        if (recorded === undefined) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        const ownerContext = operatorOwnerContextSchema.parse(context.ownerContext);
+        const capture = createPrivateTenantExportApprovalCapture({
+          plan: recorded.journal.plan,
+          request,
+          principal: ownerContext.principal,
+          ...(callId === undefined ? {} : { callId }),
+        });
+        let publicCount = 0;
+        const observed = await observeExportApproval({
+          adapterSessionId: ownerContext.adapterSessionId,
+          sessionId: ownerContext.sessionId,
+          principal: ownerContext.principal,
+          readDeadline: true,
+          onEvent: () => {
+            publicCount += 1;
+          },
+          onPrivateEvent: (event) => {
+            capture.observe(event);
+          },
+        });
+        if (observed.publicEventCount !== publicCount) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        await owner.assertArtifactAuthorized(context);
+        return capture.read();
+      },
+      withResourceLease: exportLease,
+      disposeWorker: async (locator) => {
+        await exportSandbox.dispose(locator);
+      },
+      async inspect(context, worker, locator, assertCurrent) {
+        const owned = exportArtifacts(context);
+        const artifact = await owned.artifacts.inspect({ context: owned.context, worker });
+        if (artifact.status !== "incomplete") {
+          return artifact;
+        }
+        const observed = await exportSandbox.inspect(worker, locator);
+        if (observed.status !== "terminal") {
+          return { status: "unknown" };
+        }
+        if (observed.source === undefined) {
+          return { status: "incomplete", workerTerminal: true };
+        }
+        try {
+          const completion = await owned.artifacts.publish({
+            context: owned.context,
+            worker,
+            source: observed.source,
+            assertCurrent,
+          });
+          return { status: "complete", completion };
+        } catch {
+          return { status: "unknown" };
+        }
+      },
+      async prepareWorker(_context, worker, assertCurrent) {
+        return await exportSandbox.prepare(worker, assertCurrent);
+      },
+      async runWorker(context, worker, locator, assertCurrent, checkpoint) {
+        await assertCurrent();
+        const { current, operator } = await preparedForExport(context);
+        const bindings = await controlPlane.readResourceBindings({
+          ...context,
+          plan: operator.plan,
+          privateState: current.record.privateState,
+        });
+        await assertCurrent();
+        return await exportSandbox.run(
+          worker,
+          locator,
+          bindings.appDatabase.migrationUrl,
+          assertCurrent,
+          checkpoint,
+        );
+      },
+      async publish(context, worker, source, assertCurrent) {
+        const owned = exportArtifacts(context);
+        return await owned.artifacts.publish({
+          context: owned.context,
+          worker,
+          source,
+          assertCurrent,
+        });
+      },
+    });
+    const exportRequest = createTenantExportDispatcher({
+      store: exportStore,
+      operations: exports,
+      verifyWorkload: owner.verifyWorkload,
+      authorize: owner.authorize,
+      authorizeRead: owner.authorizeArtifactRead,
+    });
     return {
       ...controlPlane,
       ...normalActors,
+      exportRequest,
       readNormalActorRuntimeBindings: createNormalActorRuntimeBindings(
         sharedNormalActorDependencies,
       ),

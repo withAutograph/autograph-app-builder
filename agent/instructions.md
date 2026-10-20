@@ -367,3 +367,15 @@ For a native Arrusted Next App Router zone, load
 `arrusted-next-app-like-experience` before implementation. Its vendored Vercel
 workflows guide cache, prefetch, mutation, and transition choices, but never
 authorize raw shell, browser, or package-management steps in the Builder.
+
+## Manual private tenant export
+
+When the owner explicitly requests an export, use `plan-app-hosted-runtime` with
+`operation: "export"`, the selected app and explicitly requested `customerId`.
+The server selects the prepared resource, actual approved release and private
+Builder destination. Pass its exact returned request and plan to
+`export-app-hosted-data` for separate human data-export approval. Preparation
+approval alone does not authorize extraction. Only status/counts and the private
+download link may enter chat; never read or summarize row bytes in model context.
+Resume the same export intent after uncertainty; do not invent another snapshot
+or call SQL manually. Export is optional manual retention, never a Preview gate.

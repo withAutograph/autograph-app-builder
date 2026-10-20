@@ -520,6 +520,16 @@ export const createHostedOperatorOwnerAuthority = (deps: HostedOperatorOwnerDepe
       await readHandoffOwnerIdentity(deps, owner, principal, input.target, session, sessionVersion);
     }
   };
+  /** Workload plus canonical artifact ownership, without borrowing provider mutation authority. */
+  const authorizeArtifactRead = async (
+    request: Request,
+    context: HostedOperatorContext,
+  ): Promise<HostedOperatorContext> => {
+    await verifyWorkload(request);
+    await assertArtifactAuthorized(context);
+    const { owner } = ownerContextFromHint(context.ownerContext);
+    return { ...context, authority: owner.authority, ownerContext: owner };
+  };
   const assertPlanningAuthorized = async (input: HostedOperatorContext): Promise<void> => {
     await readCurrentPlanningOwner(input);
   };
@@ -543,7 +553,9 @@ export const createHostedOperatorOwnerAuthority = (deps: HostedOperatorOwnerDepe
     }
   };
   return {
+    verifyWorkload,
     assertArtifactAuthorized,
+    authorizeArtifactRead,
     assertAuthorized,
     assertPlanningAuthorized,
     authorize: resolve,

@@ -1,3 +1,4 @@
+import { tenantExportApprovalInputSchema } from "../eve/private-export-approval";
 import { z } from "zod";
 import {
   hostedOperatorPlanSchema,
@@ -241,6 +242,12 @@ export function publicApprovalDescription(input: unknown, toolName?: string): st
     return undefined;
   }
   const record = input as Record<string, unknown>;
+  if (toolName === "export-app-hosted-data") {
+    const parsed = tenantExportApprovalInputSchema.safeParse(record);
+    if (!parsed.success) return undefined;
+    const plan = parsed.data.plan;
+    return `Export app ${plan.scope.appId}, customer ${plan.scope.customerId}, from ${plan.resource.database} (${plan.resource.projectId}/${plan.resource.branchId}/${plan.resource.resourceId}), selected release ${plan.release.id} (${plan.release.artifactHash}). Read all public tables carrying app_id and customer_id within this exact app/customer scope using one read-only snapshot. Retain NDJSON files and manifest privately on Builder for this owner and session. No external recipient or database write is authorized. Export ${plan.exportId}, scope digest ${parsed.data.planDigest}.`;
+  }
   if (toolName === "prepare-app-hosted-runtime" || toolName === "cleanup-app-hosted-runtime") {
     return operatorApprovalDescription(record, toolName);
   }
