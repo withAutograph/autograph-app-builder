@@ -406,6 +406,115 @@ describe("normal Auth native transport", () => {
     ).rejects.toThrow("resource_mismatch");
     expect(calls.fetch).toHaveBeenCalledTimes(1);
   });
+  it("keeps the private proof credential available when ingress consumes the reserved header", async () => {
+    const calls = io();
+    const tokens = ["synthetic-private-proof-one", "synthetic-private-proof-two"];
+    calls.getOidc.mockResolvedValueOnce(tokens[0]).mockResolvedValueOnce(tokens[1]);
+    let received = 0;
+    calls.fetch.mockImplementation(async (input, init) => {
+      const request = new Request(input, init);
+      const expectedToken = tokens[received];
+      received += 1;
+      expect(request.headers.get("x-vercel-trusted-oidc-idp-token")).toBe(expectedToken);
+      // Simulate native ingress consuming its reserved carrier before the private receiver.
+      const receiverHeaders = new Headers(request.headers);
+      receiverHeaders.delete("x-vercel-trusted-oidc-idp-token");
+      expect(receiverHeaders.get("authorization")).toBe(`Bearer ${expectedToken}`);
+      expect(receiverHeaders.get("cookie")).toBe(requestHeaders.cookie);
+      expect(receiverHeaders.get("origin")).toBe(origin);
+      expect(receiverHeaders.get("accept")).toBe("application/vnd.realm-operator-proof+json");
+      expect(await request.text()).toBe("nonce=synthetic-proof-nonce");
+      return Response.json({ privateProofAccepted: true });
+    });
+    const transport = await createHostedOperatorNormalAuthTransport(dependencies(), calls);
+    const privateRequest = () =>
+      new Request(`${origin}/api/auth/platform/operator-link`, {
+        method: "POST",
+        headers: {
+          ...requestHeaders,
+          accept: "application/vnd.realm-operator-proof+json",
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({ nonce: "synthetic-proof-nonce" }),
+      });
+    const first = await transport(privateRequest());
+    await expect(first.json()).resolves.toEqual({ privateProofAccepted: true });
+    const second = await transport(privateRequest());
+    await expect(second.json()).resolves.toEqual({ privateProofAccepted: true });
+    expect(calls.getOidc).toHaveBeenCalledTimes(2);
+    for (const token of tokens) {
+      expect(calls.verifyOidc).toHaveBeenCalledWith(
+        token,
+        configuration.nativeNeon.configuration.operator,
+      );
+    }
+  });
+
+  it.each([
+    ["POST", "/api/auth/sign-up/email", "application/json"],
+    ["POST", "/api/auth/sign-in/email", "application/json"],
+    ["POST", "/api/auth/platform/operator-link", "application/json"],
+    [
+      "GET",
+      "/api/auth/get-session?disableRefresh=true&disableCookieCache=true",
+      "application/vnd.realm-operator-proof+json",
+    ],
+    ["POST", "/api/auth/sign-in/email", "application/vnd.realm-operator-proof+json"],
+    [
+      "POST",
+      "/api/auth/platform/operator-link",
+      "application/vnd.realm-operator-proof+json, application/json",
+    ],
+  ])(
+    "preserves ordinary session transport without bearer authority (%s %s, %s)",
+    async (method, route, accept) => {
+      const calls = io();
+      const transport = await createHostedOperatorNormalAuthTransport(dependencies(), calls);
+      await transport(`${origin}${route}`, { method, headers: { ...requestHeaders, accept } });
+      const sent = new Headers(calls.fetch.mock.calls[0]?.[1]?.headers);
+      expect(sent.has("authorization")).toBe(false);
+      expect(sent.get("cookie")).toBe(requestHeaders.cookie);
+      expect(sent.get("x-vercel-trusted-oidc-idp-token")).toBe("private-native-token");
+    },
+  );
+
+  it.each([
+    { name: "authorization", value: "Bearer unapproved-caller-token" },
+    { name: "x-vercel-trusted-oidc-idp-token", value: "unapproved-caller-token" },
+    { name: "origin", value: "https://other.example.com" },
+  ])(
+    "rejects caller authority or origin on the private proof request before acquiring credentials",
+    async ({ name, value }) => {
+      const calls = io();
+      const transport = await createHostedOperatorNormalAuthTransport(dependencies(), calls);
+      await expect(
+        transport(`${origin}/api/auth/platform/operator-link`, {
+          method: "POST",
+          headers: {
+            ...requestHeaders,
+            accept: "application/vnd.realm-operator-proof+json",
+            [name]: value,
+          },
+        }),
+      ).rejects.toThrow("resource_mismatch");
+      expect(calls.getOidc).not.toHaveBeenCalled();
+      expect(calls.fetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not send the private proof request when native token verification fails", async () => {
+    const calls = io();
+    calls.verifyOidc.mockRejectedValueOnce(new Error("native_source_mismatch"));
+    const transport = await createHostedOperatorNormalAuthTransport(dependencies(), calls);
+    await expect(
+      transport(`${origin}/api/auth/platform/operator-link`, {
+        method: "POST",
+        headers: { ...requestHeaders, accept: "application/vnd.realm-operator-proof+json" },
+      }),
+    ).rejects.toThrow("native_source_mismatch");
+    expect(calls.fetch).not.toHaveBeenCalled();
+  });
+
   it("keeps the actual POST body and fixed method for Request inputs", async () => {
     const calls = io();
     const transport = await createHostedOperatorNormalAuthTransport(dependencies(), calls);
