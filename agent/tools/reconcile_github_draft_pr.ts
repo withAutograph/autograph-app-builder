@@ -32,7 +32,7 @@ const missingCompletion = () => ({
 export default defineTool({
   approval: always(),
   description:
-    "After separate exact proposal approval, update the same open draft PR with the reviewed merge commit, or verify that this exact approved merge already succeeded and finish its original release recording. Recovery reads no current candidate bytes and never writes Git. Fresh publication still requires the exact validated checkout. This never force pushes or deploys.",
+    "After separate exact proposal approval, update the same open draft PR with the reviewed merge commit, or verify that this exact approved merge already succeeded and finish its original release recording. Recovery reads no current candidate bytes and never writes Git. Optional recordCurrentEquivalentRelease associates this verified publication only with the exact equivalent current compiled capture, without modifying Git or selecting another release. Fresh publication still requires the exact validated checkout. This never force pushes or deploys.",
   // oxlint-disable-next-line eslint/complexity -- Completion recovery and fresh publication have distinct approval, ownership and candidate preconditions.
   async execute(input, ctx) {
     const candidate = draftReconciliationState.get();
@@ -95,7 +95,21 @@ export default defineTool({
         const recording = await recordPublishedReconciliationForSession({
           ...session,
           publication,
+          ...(input.recordCurrentEquivalentRelease === true
+            ? { recordCurrentEquivalentRelease: true as const }
+            : {}),
         });
+        if (recording.status === "selection-changed") {
+          return {
+            ...publication,
+            appSourceRecording: {
+              status: "selection-changed" as const,
+              recoveryRequired: true,
+              nextAction:
+                "The verified historical publication is unchanged, but its association was not recorded for the current selected release. Continue ordinary planning with the current accepted specification and selected capture; no GitHub write was attempted.",
+            },
+          };
+        }
         return { ...publication, appSourceRecording: { status: recording.status } };
       } catch {
         return {
@@ -111,6 +125,14 @@ export default defineTool({
     };
     if (inspected.applied) {
       return await finish(inspected.observation);
+    }
+    if (input.recordCurrentEquivalentRelease === true) {
+      return {
+        status: "publication_not_verified" as const,
+        recoveryRequired: true,
+        nextAction:
+          "This approved publication was not verified as already applied. No GitHub write or current-release association was attempted. Preserve its existing reconciliation context.",
+      };
     }
     if (!sealedBeforeApproval) {
       return missingCompletion();
@@ -184,6 +206,7 @@ export default defineTool({
   inputSchema: z.strictObject({
     approvalReceipt: approvalReceiptSchema,
     expectedProposalDigest: z.string().regex(/^[0-9a-f]{64}$/u),
+    recordCurrentEquivalentRelease: z.literal(true).optional(),
   }),
 });
 // oxlint-disable github/filenames-match-regex -- Eve tool discovery requires the public snake_case tool name.

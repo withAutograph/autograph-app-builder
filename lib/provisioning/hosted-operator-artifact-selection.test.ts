@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   compiledOperatorReleaseSelectionSchema,
+  isEquivalentCompiledOperatorRelease,
   selectExactCompiledOperatorRelease,
   selectExactPublishedAppSource,
 } from "./hosted-operator-artifact-selection";
@@ -167,5 +168,43 @@ describe("exact recorded published source across accepted specifications", () =>
         publishedSource,
       ),
     ).toThrow();
+  });
+});
+
+describe("complete immutable release equivalence for publication association", () => {
+  const source = {
+    repositoryId: "fixture-repository",
+    branch: "app-builder/fixture",
+    gitSha: "d".repeat(40),
+    gitTree: "e".repeat(40),
+    changeSetDigest: "f".repeat(64),
+    reviewDigest: "a".repeat(64),
+  };
+  it("ignores only the existing publication association", () => {
+    const approved = release("a");
+    expect(
+      isEquivalentCompiledOperatorRelease(approved, { ...approved, publishedSource: source }),
+    ).toBe(true);
+    expect(
+      isEquivalentCompiledOperatorRelease(
+        { ...approved, publishedSource: source },
+        { ...approved, publishedSource: { ...source, gitSha: "f".repeat(40) } },
+      ),
+    ).toBe(true);
+  });
+  it.each([
+    "appId",
+    "appSpecDigest",
+    "artifactRef",
+    "manifestSha256",
+    "releaseId",
+    "schemaSha256",
+  ] as const)("does not associate a different immutable %s", (field) => {
+    const approved = release("a");
+    const changed = {
+      ...approved,
+      [field]: field === "appId" ? "another-app" : release("b")[field],
+    };
+    expect(isEquivalentCompiledOperatorRelease(approved, changed)).toBe(false);
   });
 });

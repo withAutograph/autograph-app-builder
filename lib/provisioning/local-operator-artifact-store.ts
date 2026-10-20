@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { link, lstat, mkdir, open, realpath, opendir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import {
   operatorArtifactReferenceSchema,
@@ -19,6 +20,8 @@ import {
   selectExactCompiledOperatorRelease,
   selectExactPublishedAppSource,
   publishedAppSourceLookupSchema,
+  publishedAppSourceSchema,
+  isEquivalentCompiledOperatorRelease,
 } from "./hosted-operator-artifact-selection";
 import type {
   CompiledOperatorReleaseSelection,
@@ -306,6 +309,42 @@ export const createLocalOperatorArtifactStorage = async (input: {
       const lookup = publishedAppSourceLookupSchema.parse(lookupInput);
       const candidates = await readRetainedSelections(context);
       return selectExactPublishedAppSource(candidates, lookup);
+    },
+    async associatePublishedSource(context, association) {
+      const approved = compiledOperatorReleaseSelectionSchema.parse(association.approvedSelection);
+      const source = publishedAppSourceSchema.parse(association.publishedSource);
+      const operationId = z.string().min(1).parse(association.operationId);
+      if (approved.appId !== context.target.appId) {
+        throw operatorArtifactUnavailable();
+      }
+      const owned = await selectionDirectory(context, approved.appSpecDigest);
+      for (;;) {
+        await input.assertCurrentOwner(context);
+        const { latest } = await scanSelections(owned);
+        if (
+          latest === undefined ||
+          !isEquivalentCompiledOperatorRelease(latest.selection, approved)
+        ) {
+          return { status: "selection-changed" };
+        }
+        if (latest.selection.publishedSource !== undefined) {
+          await input.assertCurrentOwner(context);
+          return isDeepStrictEqual(latest.selection.publishedSource, source)
+            ? { status: "recorded", selection: latest.selection }
+            : { status: "selection-changed" };
+        }
+        const selection = { ...latest.selection, publishedSource: source };
+        const callDigest = hash(`source-association:${operationId}:${latest.callDigest}`);
+        // oxlint-disable-next-line unicorn/prefer-bigint-literals -- The repository TypeScript target cannot emit bigint literals.
+        const sequence = (BigInt(latest.sequence) + BigInt(1)).toString();
+        const content = JSON.stringify({ callDigest, selection, sequence, version: 1 });
+        // The same exclusive ordinal used by ordinary capture writers is the comparison-and-append boundary.
+        if (await writeOnce(path.join(owned, `sequence-${sequence}.json`), content)) {
+          await input.assertCurrentOwner(context);
+          return { status: "recorded", selection };
+        }
+        // A capture won the ordinal. Compare its actual selection before attempting any association.
+      }
     },
     async record(context, callId, selectionInput) {
       const selection = compiledOperatorReleaseSelectionSchema.parse(selectionInput);

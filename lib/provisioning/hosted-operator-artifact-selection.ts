@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
@@ -138,6 +139,26 @@ export const selectExactPublishedAppSource = (
     );
 };
 
+/** Publication metadata does not change the identity of an already captured release. */
+export const isEquivalentCompiledOperatorRelease = (
+  left: CompiledOperatorReleaseSelection,
+  right: CompiledOperatorReleaseSelection,
+): boolean => {
+  const first = { ...compiledOperatorReleaseSelectionSchema.parse(left) };
+  const second = { ...compiledOperatorReleaseSelectionSchema.parse(right) };
+  delete first.publishedSource;
+  delete second.publishedSource;
+  return isDeepStrictEqual(first, second);
+};
+export interface PublishedSourceAssociation {
+  approvedSelection: Omit<CompiledOperatorReleaseSelection, "publishedSource">;
+  publishedSource: PublishedAppSource;
+  operationId: string;
+}
+export type PublishedSourceAssociationResult =
+  | { status: "recorded"; selection: CompiledOperatorReleaseSelection }
+  | { status: "selection-changed" };
+
 export interface OperatorArtifactSelections {
   read: (
     context: OperatorArtifactContext,
@@ -152,6 +173,11 @@ export interface OperatorArtifactSelections {
     context: OperatorArtifactContext,
     lookup: PublishedAppSourceLookup,
   ) => Promise<PublishedAppSource | undefined>;
+  /** Append only to the exact current equivalent capture; legacy stores cannot perform this recovery. */
+  associatePublishedSource?: (
+    context: OperatorArtifactContext,
+    input: PublishedSourceAssociation,
+  ) => Promise<PublishedSourceAssociationResult>;
   record: (
     context: OperatorArtifactContext,
     callId: string,
@@ -179,185 +205,278 @@ const predicate = (scope: ReturnType<typeof scoped>) =>
 export const createPostgresOperatorArtifactSelections = (input: {
   database: PostgresJsDatabase<typeof databaseSchema>;
   assertCurrentOwner: (context: OperatorArtifactContext) => Promise<void>;
-}): OperatorArtifactSelections => ({
-  async read(
+}): OperatorArtifactSelections => {
+  // Every selection writer shares this lock, so recovery cannot hide a concurrent capture.
+  const writeSelection = async <T>(
     context: OperatorArtifactContext,
-    appSpecDigest: string,
-  ): Promise<CompiledOperatorReleaseSelection | undefined> {
-    const scope = scoped(context, appSpecDigest);
+    scope: ReturnType<typeof scoped>,
+    write: (
+      database: Pick<PostgresJsDatabase<typeof databaseSchema>, "select" | "insert">,
+    ) => Promise<T>,
+  ): Promise<T> => {
     await input.assertCurrentOwner(context);
-    const rows = await input.database
-      .select({
-        chunkDigest: prototypeArtifactChunks.chunkDigest,
-        content: prototypeArtifactChunks.content,
-      })
-      .from(prototypeArtifactChunks)
-      .where(predicate(scope))
-      .orderBy(
-        desc(prototypeArtifactChunks.createdAt),
-        desc(prototypeArtifactChunks.transferDigest),
-      )
-      .limit(1);
-    await input.assertCurrentOwner(context);
-    const row = rows.at(0);
-    if (row === undefined) {
-      return undefined;
-    }
-    if (row.chunkDigest !== hash(row.content)) {
-      throw operatorArtifactUnavailable();
-    }
-    const selection = compiledOperatorReleaseSelectionSchema.parse(JSON.parse(row.content));
-    if (selection.appId !== context.target.appId || selection.appSpecDigest !== appSpecDigest) {
-      throw operatorArtifactUnavailable();
-    }
-    return selection;
-  },
-  async readExact(context, lookupInput) {
-    const lookup = exactCompiledOperatorReleaseLookupSchema.parse(lookupInput);
-    const authority = hostedTenantAuthoritySchema.parse(context.authority);
-    const selectedApp = appId.parse(context.target.appId);
-    const sessionId = z.string().min(1).parse(context.target.sessionId);
-    const pathPrefix = `_protected-operator/selections/generated-release/${selectedApp}/`;
-    if (
-      "artifactRef" in lookup &&
-      (lookup.artifactRef.split("/")[2] !== "generated-release" ||
-        lookup.artifactRef.split("/")[3] !== selectedApp)
-    ) {
-      throw operatorArtifactUnavailable();
-    }
-    await input.assertCurrentOwner(context);
-    const identity =
-      "artifactRef" in lookup
-        ? sql`${prototypeArtifactChunks.content}::jsonb ->> 'artifactRef' = ${lookup.artifactRef}`
-        : and(
-            sql`${prototypeArtifactChunks.content}::jsonb ->> 'releaseId' = ${lookup.releaseId}`,
-            sql`${prototypeArtifactChunks.content}::jsonb ->> 'schemaSha256' = ${lookup.schemaSha256}`,
-          );
-    const rows = await input.database
-      .select({
-        chunkDigest: prototypeArtifactChunks.chunkDigest,
-        content: prototypeArtifactChunks.content,
-        path: prototypeArtifactChunks.path,
-      })
-      .from(prototypeArtifactChunks)
-      .where(
-        and(
-          eq(prototypeArtifactChunks.issuer, authority.issuer),
-          eq(prototypeArtifactChunks.audience, authority.audience),
-          eq(prototypeArtifactChunks.workspaceId, authority.workspaceId),
-          eq(prototypeArtifactChunks.ownerUserId, authority.ownerUserId),
-          eq(prototypeArtifactChunks.sessionId, sessionId),
-          eq(prototypeArtifactChunks.chunkIndex, 0),
-          sql`left(${prototypeArtifactChunks.path}, ${pathPrefix.length}) = ${pathPrefix}`,
-          identity,
-        ),
+    return await input.database.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${hash(JSON.stringify(scope))}, 0))`,
       );
-    await input.assertCurrentOwner(context);
-    const selections = rows.map((row) => {
+      await input.assertCurrentOwner(context);
+      const result = await write(transaction);
+      await input.assertCurrentOwner(context);
+      return result;
+    });
+  };
+  const nextCreatedAt = (scope: ReturnType<typeof scoped>) =>
+    sql`greatest(clock_timestamp(), (select max(${prototypeArtifactChunks.createdAt}) + interval '1 microsecond' from ${prototypeArtifactChunks} where ${predicate(scope)}))`;
+  return {
+    async read(
+      context: OperatorArtifactContext,
+      appSpecDigest: string,
+    ): Promise<CompiledOperatorReleaseSelection | undefined> {
+      const scope = scoped(context, appSpecDigest);
+      await input.assertCurrentOwner(context);
+      const rows = await input.database
+        .select({
+          chunkDigest: prototypeArtifactChunks.chunkDigest,
+          content: prototypeArtifactChunks.content,
+        })
+        .from(prototypeArtifactChunks)
+        .where(predicate(scope))
+        .orderBy(
+          desc(prototypeArtifactChunks.createdAt),
+          desc(prototypeArtifactChunks.transferDigest),
+        )
+        .limit(1);
+      await input.assertCurrentOwner(context);
+      const row = rows.at(0);
+      if (row === undefined) {
+        return undefined;
+      }
       if (row.chunkDigest !== hash(row.content)) {
         throw operatorArtifactUnavailable();
       }
       const selection = compiledOperatorReleaseSelectionSchema.parse(JSON.parse(row.content));
-      if (
-        selection.appId !== selectedApp ||
-        row.path !== `${pathPrefix}${selection.appSpecDigest}`
-      ) {
+      if (selection.appId !== context.target.appId || selection.appSpecDigest !== appSpecDigest) {
         throw operatorArtifactUnavailable();
       }
       return selection;
-    });
-    return selectExactCompiledOperatorRelease(selections, lookup);
-  },
-  async readPublishedSource(context, lookupInput) {
-    const lookup = publishedAppSourceLookupSchema.parse(lookupInput);
-    const authority = hostedTenantAuthoritySchema.parse(context.authority);
-    const selectedApp = appId.parse(context.target.appId);
-    const sessionId = z.string().min(1).parse(context.target.sessionId);
-    const pathPrefix = `_protected-operator/selections/generated-release/${selectedApp}/`;
-    // SQL may reorder AND terms; unrelated prototype rows can contain HTML.
-    const publishedSource = sql`case when left(${prototypeArtifactChunks.path}, ${pathPrefix.length}) = ${pathPrefix} then ${prototypeArtifactChunks.content}::jsonb -> 'publishedSource' end`;
-    await input.assertCurrentOwner(context);
-    const rows = await input.database
-      .select({
-        chunkDigest: prototypeArtifactChunks.chunkDigest,
-        content: prototypeArtifactChunks.content,
-        path: prototypeArtifactChunks.path,
-      })
-      .from(prototypeArtifactChunks)
-      .where(
-        and(
-          eq(prototypeArtifactChunks.issuer, authority.issuer),
-          eq(prototypeArtifactChunks.audience, authority.audience),
-          eq(prototypeArtifactChunks.workspaceId, authority.workspaceId),
-          eq(prototypeArtifactChunks.ownerUserId, authority.ownerUserId),
-          eq(prototypeArtifactChunks.sessionId, sessionId),
-          eq(prototypeArtifactChunks.chunkIndex, 0),
-          sql`left(${prototypeArtifactChunks.path}, ${pathPrefix.length}) = ${pathPrefix}`,
-          sql`(${publishedSource}) ->> 'repositoryId' = ${lookup.repositoryId}`,
-          sql`(${publishedSource}) ->> 'branch' = ${lookup.branch}`,
-          sql`(${publishedSource}) ->> 'gitSha' = ${lookup.gitSha}`,
-          sql`(${publishedSource}) ->> 'gitTree' = ${lookup.gitTree}`,
-        ),
-      );
-    await input.assertCurrentOwner(context);
-    const selections = rows.map((row) => {
-      if (row.chunkDigest !== hash(row.content)) {
-        throw operatorArtifactUnavailable();
-      }
-      const selection = compiledOperatorReleaseSelectionSchema.parse(JSON.parse(row.content));
+    },
+    async readExact(context, lookupInput) {
+      const lookup = exactCompiledOperatorReleaseLookupSchema.parse(lookupInput);
+      const authority = hostedTenantAuthoritySchema.parse(context.authority);
+      const selectedApp = appId.parse(context.target.appId);
+      const sessionId = z.string().min(1).parse(context.target.sessionId);
+      const pathPrefix = `_protected-operator/selections/generated-release/${selectedApp}/`;
       if (
-        selection.appId !== selectedApp ||
-        row.path !== `${pathPrefix}${selection.appSpecDigest}`
+        "artifactRef" in lookup &&
+        (lookup.artifactRef.split("/")[2] !== "generated-release" ||
+          lookup.artifactRef.split("/")[3] !== selectedApp)
       ) {
         throw operatorArtifactUnavailable();
       }
-      return selection;
-    });
-    return selectExactPublishedAppSource(selections, lookup);
-  },
-  async record(
-    context: OperatorArtifactContext,
-    callId: string,
-    selectionInput: CompiledOperatorReleaseSelection,
-  ) {
-    const selection = compiledOperatorReleaseSelectionSchema.parse(selectionInput);
-    const scope = scoped(context, selection.appSpecDigest);
-    if (
-      selection.appId !== context.target.appId ||
-      selection.artifactRef.split("/")[2] !== "generated-release" ||
-      selection.artifactRef.split("/")[3] !== selection.appId
+      await input.assertCurrentOwner(context);
+      const identity =
+        "artifactRef" in lookup
+          ? sql`${prototypeArtifactChunks.content}::jsonb ->> 'artifactRef' = ${lookup.artifactRef}`
+          : and(
+              sql`${prototypeArtifactChunks.content}::jsonb ->> 'releaseId' = ${lookup.releaseId}`,
+              sql`${prototypeArtifactChunks.content}::jsonb ->> 'schemaSha256' = ${lookup.schemaSha256}`,
+            );
+      const rows = await input.database
+        .select({
+          chunkDigest: prototypeArtifactChunks.chunkDigest,
+          content: prototypeArtifactChunks.content,
+          path: prototypeArtifactChunks.path,
+        })
+        .from(prototypeArtifactChunks)
+        .where(
+          and(
+            eq(prototypeArtifactChunks.issuer, authority.issuer),
+            eq(prototypeArtifactChunks.audience, authority.audience),
+            eq(prototypeArtifactChunks.workspaceId, authority.workspaceId),
+            eq(prototypeArtifactChunks.ownerUserId, authority.ownerUserId),
+            eq(prototypeArtifactChunks.sessionId, sessionId),
+            eq(prototypeArtifactChunks.chunkIndex, 0),
+            sql`left(${prototypeArtifactChunks.path}, ${pathPrefix.length}) = ${pathPrefix}`,
+            identity,
+          ),
+        );
+      await input.assertCurrentOwner(context);
+      const selections = rows.map((row) => {
+        if (row.chunkDigest !== hash(row.content)) {
+          throw operatorArtifactUnavailable();
+        }
+        const selection = compiledOperatorReleaseSelectionSchema.parse(JSON.parse(row.content));
+        if (
+          selection.appId !== selectedApp ||
+          row.path !== `${pathPrefix}${selection.appSpecDigest}`
+        ) {
+          throw operatorArtifactUnavailable();
+        }
+        return selection;
+      });
+      return selectExactCompiledOperatorRelease(selections, lookup);
+    },
+    async readPublishedSource(context, lookupInput) {
+      const lookup = publishedAppSourceLookupSchema.parse(lookupInput);
+      const authority = hostedTenantAuthoritySchema.parse(context.authority);
+      const selectedApp = appId.parse(context.target.appId);
+      const sessionId = z.string().min(1).parse(context.target.sessionId);
+      const pathPrefix = `_protected-operator/selections/generated-release/${selectedApp}/`;
+      // SQL may reorder AND terms; unrelated prototype rows can contain HTML.
+      const publishedSource = sql`case when left(${prototypeArtifactChunks.path}, ${pathPrefix.length}) = ${pathPrefix} then ${prototypeArtifactChunks.content}::jsonb -> 'publishedSource' end`;
+      await input.assertCurrentOwner(context);
+      const rows = await input.database
+        .select({
+          chunkDigest: prototypeArtifactChunks.chunkDigest,
+          content: prototypeArtifactChunks.content,
+          path: prototypeArtifactChunks.path,
+        })
+        .from(prototypeArtifactChunks)
+        .where(
+          and(
+            eq(prototypeArtifactChunks.issuer, authority.issuer),
+            eq(prototypeArtifactChunks.audience, authority.audience),
+            eq(prototypeArtifactChunks.workspaceId, authority.workspaceId),
+            eq(prototypeArtifactChunks.ownerUserId, authority.ownerUserId),
+            eq(prototypeArtifactChunks.sessionId, sessionId),
+            eq(prototypeArtifactChunks.chunkIndex, 0),
+            sql`left(${prototypeArtifactChunks.path}, ${pathPrefix.length}) = ${pathPrefix}`,
+            sql`(${publishedSource}) ->> 'repositoryId' = ${lookup.repositoryId}`,
+            sql`(${publishedSource}) ->> 'branch' = ${lookup.branch}`,
+            sql`(${publishedSource}) ->> 'gitSha' = ${lookup.gitSha}`,
+            sql`(${publishedSource}) ->> 'gitTree' = ${lookup.gitTree}`,
+          ),
+        );
+      await input.assertCurrentOwner(context);
+      const selections = rows.map((row) => {
+        if (row.chunkDigest !== hash(row.content)) {
+          throw operatorArtifactUnavailable();
+        }
+        const selection = compiledOperatorReleaseSelectionSchema.parse(JSON.parse(row.content));
+        if (
+          selection.appId !== selectedApp ||
+          row.path !== `${pathPrefix}${selection.appSpecDigest}`
+        ) {
+          throw operatorArtifactUnavailable();
+        }
+        return selection;
+      });
+      return selectExactPublishedAppSource(selections, lookup);
+    },
+    async record(
+      context: OperatorArtifactContext,
+      callId: string,
+      selectionInput: CompiledOperatorReleaseSelection,
     ) {
-      throw operatorArtifactUnavailable();
-    }
-    const content = JSON.stringify(selection);
-    const transferDigest = hash(z.string().min(1).parse(callId));
-    await input.assertCurrentOwner(context);
-    await input.database
-      .insert(prototypeArtifactChunks)
-      .values({
-        ...scope,
-        chunkDigest: hash(content),
-        chunkIndex: 0,
-        content,
-        createdAt: sql`clock_timestamp()`,
-        transferDigest,
-      })
-      .onConflictDoNothing();
-    const rows = await input.database
-      .select({
-        chunkDigest: prototypeArtifactChunks.chunkDigest,
-        content: prototypeArtifactChunks.content,
-      })
-      .from(prototypeArtifactChunks)
-      .where(and(predicate(scope), eq(prototypeArtifactChunks.transferDigest, transferDigest)));
-    await input.assertCurrentOwner(context);
-    const row = rows.at(0);
-    if (row?.content !== content || row.chunkDigest !== hash(content)) {
-      throw operatorArtifactUnavailable();
-    }
-    return selection;
-  },
-});
+      const selection = compiledOperatorReleaseSelectionSchema.parse(selectionInput);
+      const scope = scoped(context, selection.appSpecDigest);
+      if (
+        selection.appId !== context.target.appId ||
+        selection.artifactRef.split("/")[2] !== "generated-release" ||
+        selection.artifactRef.split("/")[3] !== selection.appId
+      ) {
+        throw operatorArtifactUnavailable();
+      }
+      const content = JSON.stringify(selection);
+      const transferDigest = hash(z.string().min(1).parse(callId));
+      return await writeSelection(context, scope, async (database) => {
+        await database
+          .insert(prototypeArtifactChunks)
+          .values({
+            ...scope,
+            chunkDigest: hash(content),
+            chunkIndex: 0,
+            content,
+            createdAt: nextCreatedAt(scope),
+            transferDigest,
+          })
+          .onConflictDoNothing();
+        const rows = await database
+          .select({
+            chunkDigest: prototypeArtifactChunks.chunkDigest,
+            content: prototypeArtifactChunks.content,
+          })
+          .from(prototypeArtifactChunks)
+          .where(and(predicate(scope), eq(prototypeArtifactChunks.transferDigest, transferDigest)));
+        const row = rows.at(0);
+        if (row?.content !== content || row.chunkDigest !== hash(content)) {
+          throw operatorArtifactUnavailable();
+        }
+        return selection;
+      });
+    },
+    async associatePublishedSource(context, association) {
+      const approved = compiledOperatorReleaseSelectionSchema.parse(association.approvedSelection);
+      const source = publishedAppSourceSchema.parse(association.publishedSource);
+      const operationId = z.string().min(1).parse(association.operationId);
+      if (approved.appId !== context.target.appId) {
+        throw operatorArtifactUnavailable();
+      }
+      const scope = scoped(context, approved.appSpecDigest);
+      return await writeSelection(
+        context,
+        scope,
+        async (database): Promise<PublishedSourceAssociationResult> => {
+          const [latest] = await database
+            .select({
+              content: prototypeArtifactChunks.content,
+              chunkDigest: prototypeArtifactChunks.chunkDigest,
+              transferDigest: prototypeArtifactChunks.transferDigest,
+            })
+            .from(prototypeArtifactChunks)
+            .where(predicate(scope))
+            .orderBy(
+              desc(prototypeArtifactChunks.createdAt),
+              desc(prototypeArtifactChunks.transferDigest),
+            )
+            .limit(1);
+          if (latest === undefined) {
+            return { status: "selection-changed" };
+          }
+          if (latest.chunkDigest !== hash(latest.content)) {
+            throw operatorArtifactUnavailable();
+          }
+          const current = compiledOperatorReleaseSelectionSchema.parse(JSON.parse(latest.content));
+          if (!isEquivalentCompiledOperatorRelease(current, approved)) {
+            return { status: "selection-changed" };
+          }
+          if (current.publishedSource !== undefined) {
+            return isDeepStrictEqual(current.publishedSource, source)
+              ? { status: "recorded", selection: current }
+              : { status: "selection-changed" };
+          }
+          const selection = { ...current, publishedSource: source };
+          const content = JSON.stringify(selection);
+          const transferDigest = hash(`source-association:${operationId}:${latest.transferDigest}`);
+          await database
+            .insert(prototypeArtifactChunks)
+            .values({
+              ...scope,
+              chunkIndex: 0,
+              content,
+              chunkDigest: hash(content),
+              createdAt: nextCreatedAt(scope),
+              transferDigest,
+            })
+            .onConflictDoNothing();
+          const [recorded] = await database
+            .select({
+              content: prototypeArtifactChunks.content,
+              chunkDigest: prototypeArtifactChunks.chunkDigest,
+            })
+            .from(prototypeArtifactChunks)
+            .where(
+              and(predicate(scope), eq(prototypeArtifactChunks.transferDigest, transferDigest)),
+            );
+          if (recorded?.content !== content || recorded.chunkDigest !== hash(content)) {
+            throw operatorArtifactUnavailable();
+          }
+          return { status: "recorded", selection };
+        },
+      );
+    },
+  };
+};
 
 /** The caller supplies a freshly authorized capture-session context, including any trusted durable lineage resolution. */
 export const readExactCompiledOperatorRelease = async (input: {

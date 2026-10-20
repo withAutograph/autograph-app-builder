@@ -13,6 +13,25 @@ import { sanitizeValidationDiagnosticText } from "../repository/validation-outpu
 import { normalActorBrowserFiles } from "./normal-actor-browser-state";
 import type { NormalActorRuntimeProjection } from "../provisioning/hosted-operator-normal-actor-program";
 
+type PreparedRuntimeMismatchStage =
+  | "app-description-command"
+  | "app-identity"
+  | "backend-kind"
+  | "release-identity"
+  | "artifact-identity"
+  | "project-identity";
+
+/** Closed diagnostic metadata only; preserve the existing provider error class and code. */
+export const preparedRuntimeResourceMismatch = (
+  stage: PreparedRuntimeMismatchStage,
+  exitCode?: number | null,
+): HostedRuntimeProviderError => {
+  const error = new HostedRuntimeProviderError("resource_mismatch");
+  const exit = Number.isSafeInteger(exitCode) ? ` (exit ${exitCode})` : "";
+  error.message = `resource_mismatch: runtime restore ${stage}${exit}`;
+  return error;
+};
+
 export interface PreparedRuntimeExecutionBinding {
   branch: string;
   environment: Record<string, string>;
@@ -235,18 +254,22 @@ export const restorePreparedRuntimeExecution = async (input: {
     signal: input.signal,
   });
   if (described.exitCode !== 0) {
-    throw new HostedRuntimeProviderError("resource_mismatch");
+    throw preparedRuntimeResourceMismatch("app-description-command", described.exitCode);
   }
   const description = appDescriptionSchema.parse(
     JSON.parse(await described.stdout({ signal: input.signal })),
   );
-  if (
-    description.app.id !== input.appId ||
-    description.backend.kind !== "generated-postgres" ||
-    description.backend.release.id !== proof.releaseId ||
-    description.backend.release.artifactHash.replace(/^sha256:/u, "") !== proof.artifactHash
-  ) {
-    throw new HostedRuntimeProviderError("resource_mismatch");
+  if (description.app.id !== input.appId) {
+    throw preparedRuntimeResourceMismatch("app-identity");
+  }
+  if (description.backend.kind !== "generated-postgres") {
+    throw preparedRuntimeResourceMismatch("backend-kind");
+  }
+  if (description.backend.release.id !== proof.releaseId) {
+    throw preparedRuntimeResourceMismatch("release-identity");
+  }
+  if (description.backend.release.artifactHash.replace(/^sha256:/u, "") !== proof.artifactHash) {
+    throw preparedRuntimeResourceMismatch("artifact-identity");
   }
   const secretValues = new Set(privateValues);
   const jsonSchema = z.json();

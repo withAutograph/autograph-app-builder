@@ -288,15 +288,20 @@ export const assertReconciliationCompletionOwnerForSession = async (input: {
   );
 };
 
+class CurrentReleaseSelectionChangedError extends Error {
+  override name = "CurrentReleaseSelectionChangedError";
+}
+
 /** Complete only a retained sealed publication, using its original release instead of current selection. */
 export const recordPublishedReconciliationSourceForSession = async (input: {
   completion: DraftReconciliationCompletion;
   adapterSessionId: string;
   sessionAuth: unknown;
   publishedSource: PublishedAppSource;
+  recordCurrentEquivalentRelease?: true;
 }) => {
   const { completion } = input;
-  const binding = await resolveCompiledArtifactSession(
+  const resolvedBinding = await resolveCompiledArtifactSession(
     {
       ...input,
       appId: completion.appId,
@@ -306,40 +311,75 @@ export const recordPublishedReconciliationSourceForSession = async (input: {
     },
     completion,
   );
-  const { release } = completion.compilation;
-  if (release.status === "not-required") {
-    return { status: "not-required" as const };
+  const binding =
+    input.recordCurrentEquivalentRelease === true
+      ? {
+          ...resolvedBinding,
+          assertCurrentOwner: async (context: OperatorArtifactContext) => {
+            await resolvedBinding.assertCurrentOwner(context);
+            const current = appBuilderWorkflowState.get();
+            if (
+              !("appSpec" in current) ||
+              current.appSpec.appId !== completion.appId ||
+              current.appSpec.digest !== completion.appReview.appSpecDigest
+            ) {
+              throw new CurrentReleaseSelectionChangedError();
+            }
+          },
+        }
+      : resolvedBinding;
+  try {
+    await binding.assertCurrentOwner(binding.context);
+    const { release } = completion.compilation;
+    if (release.status === "not-required") {
+      return { status: "not-required" as const };
+    }
+    const storage = await openCompiledArtifactStorage(binding);
+    const retained = await readExactCompiledOperatorRelease({
+      assertCurrentOwner: binding.assertCurrentOwner,
+      context: binding.context,
+      lookup: {
+        artifactRef: release.selection.artifactRef,
+        appSpecDigest: release.selection.appSpecDigest,
+      },
+      selections: storage.selections,
+      store: storage.store,
+    });
+    if (retained === undefined) {
+      throw operatorArtifactUnavailable();
+    }
+    // readExact's reference lookup alone does not compare the complete sealed release identity.
+    const identity = { ...retained.selection };
+    delete identity.publishedSource;
+    if (!isDeepStrictEqual(identity, release.selection)) {
+      throw operatorArtifactUnavailable();
+    }
+    await binding.assertCurrentOwner(binding.context);
+    if (input.recordCurrentEquivalentRelease === true) {
+      if (storage.selections.associatePublishedSource === undefined) {
+        throw operatorArtifactUnavailable();
+      }
+      return await storage.selections.associatePublishedSource(binding.context, {
+        approvedSelection: release.selection,
+        publishedSource: input.publishedSource,
+        operationId: `draft-reconciliation:${completion.proposal.digest}`,
+      });
+    }
+    const selection = await storage.selections.record(
+      binding.context,
+      `draft-reconciliation:${completion.proposal.digest}`,
+      {
+        ...release.selection,
+        publishedSource: input.publishedSource,
+      },
+    );
+    return { selection, status: "recorded" as const };
+  } catch (error) {
+    if (error instanceof CurrentReleaseSelectionChangedError) {
+      return { status: "selection-changed" as const };
+    }
+    throw error;
   }
-  const storage = await openCompiledArtifactStorage(binding);
-  const retained = await readExactCompiledOperatorRelease({
-    assertCurrentOwner: binding.assertCurrentOwner,
-    context: binding.context,
-    lookup: {
-      artifactRef: release.selection.artifactRef,
-      appSpecDigest: release.selection.appSpecDigest,
-    },
-    selections: storage.selections,
-    store: storage.store,
-  });
-  if (retained === undefined) {
-    throw operatorArtifactUnavailable();
-  }
-  // readExact's reference lookup alone does not compare the complete sealed release identity.
-  const identity = { ...retained.selection };
-  delete identity.publishedSource;
-  if (!isDeepStrictEqual(identity, release.selection)) {
-    throw operatorArtifactUnavailable();
-  }
-  await binding.assertCurrentOwner(binding.context);
-  const selection = await storage.selections.record(
-    binding.context,
-    `draft-reconciliation:${completion.proposal.digest}`,
-    {
-      ...release.selection,
-      publishedSource: input.publishedSource,
-    },
-  );
-  return { selection, status: "recorded" as const };
 };
 
 /** Recover only a verified historical publication under this current app and original owner session. */

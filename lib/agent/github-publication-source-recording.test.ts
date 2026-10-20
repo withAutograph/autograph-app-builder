@@ -5,6 +5,7 @@ import type { approvalReceiptSchema as ActualApprovalReceiptSchema } from "./app
 
 import publishTool from "../../agent/tools/publish_github_draft_pr";
 import updateTool from "../../agent/tools/update_github_draft_pr";
+import inspectReconciliation from "../../agent/tools/inspect_github_draft_pr_reconciliation";
 import reconcileTool from "../../agent/tools/reconcile_github_draft_pr";
 
 const hooks = vi.hoisted(() => {
@@ -66,6 +67,7 @@ const hooks = vi.hoisted(() => {
     release: { status: "not-required" },
   };
   return {
+    sandbox: vi.fn(),
     assertApproval: vi.fn(),
     assertOwner: vi.fn<() => Promise<void>>(),
     applied: vi.fn(),
@@ -152,7 +154,7 @@ vi.mock("./draft-reconciliation-state", () => ({
   },
 }));
 vi.mock("./source-bound-sandbox", () => ({
-  getSourceBoundSandbox: async () => await Promise.resolve({}),
+  getSourceBoundSandbox: hooks.sandbox,
 }));
 vi.mock("../repository/sandbox-draft-reconciliation", () => ({
   inspectDraftReconciliation: hooks.inspect,
@@ -202,9 +204,20 @@ const completionFixture = (): DraftReconciliationCompletion => ({
   compilation: hooks.candidate.validation.compilation,
 });
 
+const recoveryCompletionFixture = (): DraftReconciliationCompletion => {
+  const completion = hooks.completions[0];
+  if (completion === undefined) {
+    throw new Error("Expected original retained completion");
+  }
+  const recovery = { ...completion, proposal: { ...completion.proposal, repositoryId: "123" } };
+  hooks.completions = [recovery];
+  return recovery;
+};
+
 describe("publication records actual source for its compiled app release", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    hooks.sandbox.mockResolvedValue({});
     hooks.record.mockReset().mockResolvedValue({ status: "recorded" });
     hooks.assertApproval.mockReset();
     // oxlint-disable-next-line unicorn/no-useless-undefined -- Vitest requires an explicit resolved value for its Promise<void> mock.
@@ -299,6 +312,216 @@ describe("publication records actual source for its compiled app release", () =>
       expect(hooks.record).not.toHaveBeenCalled();
     });
   }
+  it.each(["missing", "irrelevant"])(
+    "discovers and consumes the exact normal recovery call when the candidate is %s",
+    async (candidateState) => {
+      const completion = recoveryCompletionFixture();
+      // SAFETY: A missing candidate is deliberate; its independent trusted completion remains retained.
+      hooks.candidate =
+        candidateState === "missing"
+          ? (null as never)
+          : {
+              ...hooks.candidate,
+              appId: "another-app",
+              root: "/workspace/irrelevant-failed-candidate",
+            };
+      hooks.state.phase = "applied";
+      // SAFETY: The new read-only branch consumes only the same minimal session metadata as the existing publication fixtures.
+      const found = await inspectReconciliation.execute(
+        { kind: "publication-recovery" },
+        ctx as never,
+      );
+      expect(found).toMatchObject({ status: "publication-recovery", verification: "unverified" });
+      if (!("status" in found) || found.status !== "publication-recovery") {
+        throw new Error("Expected retained recovery discovery");
+      }
+      const recovery = found.recoveries[0];
+      if (recovery === undefined) {
+        throw new Error("Expected original retained completion");
+      }
+      expect(recovery.proposalDigest).toBe(completion?.proposal.digest);
+      expect(recovery.nextCall.tool).toBe("reconcile_github_draft_pr");
+      expect(recovery.nextCall.arguments.approvalReceipt.subjectDigest).toBe(
+        completion?.proposal.digest,
+      );
+      expect(hooks.assertOwner).toHaveBeenCalled();
+      expect(hooks.applied).not.toHaveBeenCalled();
+      expect(hooks.assertApproval).not.toHaveBeenCalled();
+      expect(hooks.record).not.toHaveBeenCalled();
+      expect(hooks.sandbox).not.toHaveBeenCalled();
+      hooks.applied.mockResolvedValue({
+        applied: true,
+        observation: { headSha: "verified-existing-head" },
+      });
+      // SAFETY: Consume the actual discovery result through the real reconciliation tool with controlled owner/Git ports.
+      await expect(
+        reconcileTool.execute(recovery.nextCall.arguments, ctx as never),
+      ).resolves.toMatchObject({ appSourceRecording: { status: "recorded" } });
+      expect(hooks.assertApproval).toHaveBeenCalledWith(
+        expect.objectContaining({ actual: recovery.nextCall.arguments.approvalReceipt }),
+      );
+      expect(hooks.record).toHaveBeenCalledWith(
+        expect.objectContaining({ completion, recordCurrentEquivalentRelease: true }),
+      );
+      expect(hooks.reconcile).not.toHaveBeenCalled();
+      expect(hooks.sandbox).not.toHaveBeenCalled();
+    },
+  );
+  it("lists an approval subject without granting approval to execute its returned call", async () => {
+    recoveryCompletionFixture();
+    // SAFETY: Controlled owner and publication ports isolate the read-only discovery branch.
+    const found = await inspectReconciliation.execute(
+      { kind: "publication-recovery" },
+      ctx as never,
+    );
+    if (
+      !("status" in found) ||
+      found.status !== "publication-recovery" ||
+      found.recoveries[0] === undefined
+    ) {
+      throw new Error("Expected retained recovery");
+    }
+    hooks.assertApproval.mockImplementation(() => {
+      throw new Error("Human approval required");
+    });
+    // SAFETY: Generated receipt metadata is passed to the normal tool; the existing approval port rejects it.
+    await expect(
+      reconcileTool.execute(found.recoveries[0].nextCall.arguments, ctx as never),
+    ).rejects.toThrow("Human approval required");
+    expect(hooks.applied).not.toHaveBeenCalled();
+    expect(hooks.record).not.toHaveBeenCalled();
+    expect(hooks.reconcile).not.toHaveBeenCalled();
+  });
+  it.each(["empty", "another-app", "another-spec"])(
+    "reports no matching recovery for %s without inventing a context or checking Git",
+    async (condition) => {
+      if (condition === "empty") {
+        hooks.completions = [];
+      }
+      if (condition === "another-app") {
+        hooks.state.appSpec.appId = "another-app";
+      }
+      if (condition === "another-spec") {
+        hooks.state.appSpec.digest = "f".repeat(64);
+      }
+      // SAFETY: This intentionally contains no matching completion and can only return owner-private metadata.
+      const found = await inspectReconciliation.execute(
+        { kind: "publication-recovery" },
+        ctx as never,
+      );
+      expect(found).toMatchObject({
+        status: "publication-recovery",
+        verification: "unverified",
+        recoveries: [],
+      });
+      expect(hooks.applied).not.toHaveBeenCalled();
+      expect(hooks.record).not.toHaveBeenCalled();
+      expect(hooks.reconcile).not.toHaveBeenCalled();
+      expect(hooks.sandbox).not.toHaveBeenCalled();
+    },
+  );
+  it("refuses to expose recovery calls after owner revocation", async () => {
+    hooks.assertOwner.mockRejectedValue(new Error("owner revoked"));
+    // SAFETY: The canonical owner check is controlled to reject before any metadata is returned.
+    await expect(
+      inspectReconciliation.execute({ kind: "publication-recovery" }, ctx as never),
+    ).rejects.toThrow("owner revoked");
+    expect(hooks.applied).not.toHaveBeenCalled();
+    expect(hooks.record).not.toHaveBeenCalled();
+    expect(hooks.sandbox).not.toHaveBeenCalled();
+  });
+  it("returns selection-changed if the accepted specification moves during discovery", async () => {
+    hooks.assertOwner.mockImplementation(() => {
+      hooks.state.appSpec.digest = "f".repeat(64);
+      return Promise.resolve();
+    });
+    // SAFETY: A controlled in-flight state change simulates the existing current-owner asynchronous boundary.
+    await expect(
+      inspectReconciliation.execute({ kind: "publication-recovery" }, ctx as never),
+    ).resolves.toMatchObject({
+      status: "selection-changed",
+      verification: "unverified",
+      recoveries: [],
+    });
+    expect(hooks.applied).not.toHaveBeenCalled();
+    expect(hooks.record).not.toHaveBeenCalled();
+    expect(hooks.sandbox).not.toHaveBeenCalled();
+  });
+
+  it("uses normal approved read-only reconciliation to associate a current equivalent capture without Git writes", async () => {
+    const completion = hooks.completions[0];
+    hooks.applied.mockResolvedValue({
+      applied: true,
+      observation: { repositoryId: "repository", headSha: "verified-existing-head" },
+    });
+    hooks.inspect.mockRejectedValue(
+      new Error("Current candidate must not be read in this recovery"),
+    );
+    // SAFETY: Controlled owner and publication ports consume the same minimal session context used by the existing tool fixtures.
+    await expect(
+      reconcileTool.execute({ ...input, recordCurrentEquivalentRelease: true }, ctx as never),
+    ).resolves.toMatchObject({
+      headSha: "verified-existing-head",
+      appSourceRecording: { status: "recorded" },
+    });
+    expect(hooks.record).toHaveBeenCalledWith(
+      expect.objectContaining({ completion, recordCurrentEquivalentRelease: true }),
+    );
+    expect(hooks.assertApproval).toHaveBeenCalled();
+    expect(hooks.assertOwner).toHaveBeenCalled();
+    expect(hooks.reconcile).not.toHaveBeenCalled();
+    expect(hooks.inspect).not.toHaveBeenCalled();
+  });
+  it("reports a changed current capture as recovery required rather than a recorded current release", async () => {
+    hooks.applied.mockResolvedValue({
+      applied: true,
+      observation: { headSha: "verified-existing-head" },
+    });
+    hooks.record.mockResolvedValue({ status: "selection-changed" });
+    // SAFETY: Trusted publication and owner ports are controlled; the minimal session context cannot access a provider.
+    await expect(
+      reconcileTool.execute({ ...input, recordCurrentEquivalentRelease: true }, ctx as never),
+    ).resolves.toMatchObject({
+      appSourceRecording: { status: "selection-changed", recoveryRequired: true },
+    });
+    expect(hooks.reconcile).not.toHaveBeenCalled();
+    expect(hooks.inspect).not.toHaveBeenCalled();
+  });
+
+  it("never turns record-current-equivalent mode into a fresh Git publication when applied proof is absent", async () => {
+    // SAFETY: Controlled ports consume only the supplied session and call ID; no real provider work is possible.
+    await reconcileTool.execute({ ...input, recordCurrentEquivalentRelease: true }, ctx as never);
+    expect(hooks.applied).toHaveBeenCalled();
+    expect(hooks.reconcile).not.toHaveBeenCalled();
+    expect(hooks.record).not.toHaveBeenCalled();
+    expect(hooks.inspect).not.toHaveBeenCalled();
+  });
+  it("keeps original approval and owner checks in record-current-equivalent mode", async () => {
+    hooks.applied.mockResolvedValue({ applied: true, observation: { headSha: "verified-head" } });
+    hooks.assertApproval.mockImplementation(() => {
+      throw new Error("approval mismatch");
+    });
+    // SAFETY: Controlled owner and publication ports consume the same minimal session context used by the existing tool fixtures.
+    await expect(
+      reconcileTool.execute({ ...input, recordCurrentEquivalentRelease: true }, ctx as never),
+    ).rejects.toThrow("approval mismatch");
+    expect(hooks.applied).not.toHaveBeenCalled();
+    expect(hooks.record).not.toHaveBeenCalled();
+    expect(hooks.reconcile).not.toHaveBeenCalled();
+  });
+  it("does not infer an original completion for record-current-equivalent mode", async () => {
+    hooks.completions = [];
+    // SAFETY: Simulate a missing retained candidate to exercise the existing completion recovery boundary.
+    hooks.candidate = null as never;
+    // SAFETY: Controlled owner and publication ports consume the same minimal session context used by the existing tool fixtures.
+    await expect(
+      reconcileTool.execute({ ...input, recordCurrentEquivalentRelease: true }, ctx as never),
+    ).resolves.toMatchObject({ status: "completion_context_missing" });
+    expect(hooks.applied).not.toHaveBeenCalled();
+    expect(hooks.record).not.toHaveBeenCalled();
+    expect(hooks.reconcile).not.toHaveBeenCalled();
+  });
+
   it("recovers an accepted write/readback failure after the candidate is lost, with zero further Git writes", async () => {
     const completion = hooks.completions[0];
     hooks.reconcile.mockRejectedValueOnce(

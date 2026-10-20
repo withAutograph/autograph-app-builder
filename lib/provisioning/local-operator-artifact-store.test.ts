@@ -98,6 +98,121 @@ const selection = (letter: string): CompiledOperatorReleaseSelection => ({
 });
 
 describe("published source selection persistence", () => {
+  const source = {
+    repositoryId: "fixture-repository",
+    branch: "app-builder/fixture",
+    gitSha: "c".repeat(40),
+    gitTree: "d".repeat(40),
+    changeSetDigest: "e".repeat(64),
+    reviewDigest: "f".repeat(64),
+  };
+  it("associates an equivalent recapture idempotently without promoting an older selection", async () => {
+    const f = await fixture();
+    await contextStorage.run(f.container, async () => {
+      const storage = await createLocalOperatorArtifactStorage(f);
+      const approved = selection("a");
+      await storage.selections.record(f.context, "original-approved-publication", {
+        ...approved,
+        publishedSource: source,
+      });
+      await storage.selections.record(f.context, "ordinary-equivalent-capture", approved);
+      const associate = storage.selections.associatePublishedSource;
+      if (associate === undefined) {
+        throw new Error("Association port unavailable");
+      }
+      const input = {
+        approvedSelection: approved,
+        publishedSource: source,
+        operationId: "original-proposal",
+      };
+      expect(await associate(f.context, input)).toEqual({
+        status: "recorded",
+        selection: { ...approved, publishedSource: source },
+      });
+      const [owned] = await readdir(path.join(f.stateRoot, "operator-artifacts"));
+      if (owned === undefined) {
+        throw new Error("Owned artifact directory missing");
+      }
+      const frames = path.join(
+        f.stateRoot,
+        "operator-artifacts",
+        owned,
+        `selection-${approved.appSpecDigest}`,
+      );
+      const beforeRetry = await readdir(frames);
+      expect(await associate(f.context, input)).toEqual({
+        status: "recorded",
+        selection: { ...approved, publishedSource: source },
+      });
+      expect(new Set(await readdir(frames))).toEqual(new Set(beforeRetry));
+      expect(await storage.selections.read(f.context, approved.appSpecDigest)).toEqual({
+        ...approved,
+        publishedSource: source,
+      });
+      const different = selection("b");
+      await storage.selections.record(f.context, "newer-different-capture", different);
+      expect(await associate(f.context, input)).toEqual({ status: "selection-changed" });
+      expect(await storage.selections.read(f.context, approved.appSpecDigest)).toEqual(different);
+    });
+  });
+  it("keeps a concurrent ordinary capture selected under the same atomic association boundary", async () => {
+    const f = await fixture();
+    await contextStorage.run(f.container, async () => {
+      const storage = await createLocalOperatorArtifactStorage(f);
+      const approved = selection("a");
+      const newer = selection("b");
+      await storage.selections.record(f.context, "current-equivalent-capture", approved);
+      const associate = storage.selections.associatePublishedSource;
+      if (associate === undefined) {
+        throw new Error("Association port unavailable");
+      }
+      await Promise.all([
+        associate(f.context, {
+          approvedSelection: approved,
+          publishedSource: source,
+          operationId: "original-proposal",
+        }),
+        storage.selections.record(f.context, "concurrent-new-capture", newer),
+      ]);
+      expect(await storage.selections.read(f.context, approved.appSpecDigest)).toEqual(newer);
+    });
+  });
+  it("rejects a different publication or owner without changing the current selection", async () => {
+    const f = await fixture();
+    await contextStorage.run(f.container, async () => {
+      const storage = await createLocalOperatorArtifactStorage(f);
+      const approved = selection("a");
+      const current = { ...approved, publishedSource: source };
+      await storage.selections.record(f.context, "current-published-capture", current);
+      const associate = storage.selections.associatePublishedSource;
+      if (associate === undefined) {
+        throw new Error("Association port unavailable");
+      }
+      const input = {
+        approvedSelection: approved,
+        publishedSource: source,
+        operationId: "original-proposal",
+      };
+      expect(
+        await associate(f.context, {
+          ...input,
+          publishedSource: { ...source, gitSha: "b".repeat(40) },
+        }),
+      ).toEqual({ status: "selection-changed" });
+      await expect(
+        associate(
+          { ...f.context, target: { ...f.context.target, sessionId: "foreign-session" } },
+          input,
+        ),
+      ).rejects.toThrow();
+      expect(await storage.selections.read(f.context, approved.appSpecDigest)).toEqual(current);
+      const changed = { ...f.approval, appId: "other-app" };
+      requestPrivateApplyApproval(changed, "revoke-old-scope");
+      recordApprovedPrivateApply(changed, "revoke-old-scope");
+      await expect(associate(f.context, input)).rejects.toThrow();
+    });
+  });
+
   it("reads an exact historical publication across specs with owner/app/session isolation", async () => {
     const f = await fixture();
     await contextStorage.run(f.container, async () => {
