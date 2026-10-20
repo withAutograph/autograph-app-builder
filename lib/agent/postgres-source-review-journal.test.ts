@@ -39,11 +39,11 @@ const auth = (owner = "owner") => {
 };
 const fixture = () => {
   let authorized = true;
-  const assertCurrentOwner = async () => {
+  const assertCurrentOwner = vi.fn(async () => {
     if (!authorized) {
       throw new Error("ownership revoked");
     }
-  };
+  });
   const records = new Map<string, string>();
   const dialect = new PgDialect();
   const where = vi.fn(async (predicate: SQL) => {
@@ -86,6 +86,7 @@ const fixture = () => {
     });
   const journal = create();
   return {
+    assertCurrentOwner,
     create,
     journal,
     revoke: () => {
@@ -96,6 +97,19 @@ const fixture = () => {
   };
 };
 describe("authenticated PostgreSQL source review journal", () => {
+  it("checks live evidence authority without loading a completed assessment", async () => {
+    const { journal, assertCurrentOwner, where, revoke } = fixture();
+    await journal.read("e".repeat(64));
+    const lookups = where.mock.calls.length;
+    assertCurrentOwner.mockClear();
+    await journal.assertCurrentOwner();
+    await journal.assertCurrentOwner();
+    expect(assertCurrentOwner).toHaveBeenCalledTimes(2);
+    expect(where).toHaveBeenCalledTimes(lookups);
+    revoke();
+    await expect(journal.assertCurrentOwner()).rejects.toThrow("ownership revoked");
+    expect(where).toHaveBeenCalledTimes(lookups);
+  });
   it("isolates completed application evidence and preserves the legacy winner without relabelling it", async () => {
     const { journal, create } = fixture();
     const key = "e".repeat(64);

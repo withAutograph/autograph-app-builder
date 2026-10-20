@@ -251,7 +251,7 @@ it("authorizes application journal reuse before returning completed evidence wit
     reviewInput,
     normalizedChanges: [],
     evidence: sourceEvidence({}),
-    journal: { read, put },
+    journal: { assertCurrentOwner: async () => {}, read, put },
     currentDigest: async () => reviewInput.sourceDigest,
   };
   const result = await reviewApplicationWithJournal(input, assess);
@@ -290,7 +290,7 @@ it("does not treat legacy fragment records as completed app review and strips fr
       reviewInput,
       normalizedChanges: [],
       evidence: sourceEvidence({}),
-      journal: { read, put },
+      journal: { assertCurrentOwner: async () => {}, read, put },
       currentDigest: async () => reviewInput.sourceDigest,
     },
     assess,
@@ -302,6 +302,30 @@ it("does not treat legacy fragment records as completed app review and strips fr
   });
   expect(result.invocation?.freshUsage.totalTokens).toBe(12);
 });
+it("keeps repeated evidence authorization separate from the one completed-assessment lookup", async () => {
+  const read = vi.fn(async (): Promise<undefined> => undefined);
+  const assertCurrentOwner = vi.fn(async () => {});
+  const put = vi.fn(async (_key: string, record: SourceReviewJournalRecord) => record);
+  const result = await reviewApplicationWithJournal(
+    {
+      reviewInput,
+      normalizedChanges: [],
+      evidence: sourceEvidence({}),
+      journal: { assertCurrentOwner, read, put },
+      currentDigest: async () => reviewInput.sourceDigest,
+    },
+    async (_input, _evidence, options) => {
+      await options?.assertCurrentOwner?.();
+      await options?.assertCurrentOwner?.();
+      await options?.assertCurrentOwner?.();
+      return completedApplication();
+    },
+  );
+  expect(result.reviewCompleted).toBe(true);
+  expect(read).toHaveBeenCalledOnce();
+  expect(assertCurrentOwner).toHaveBeenCalledTimes(3);
+  expect(put).toHaveBeenCalledOnce();
+});
 it("does not publish completed application evidence after source changes or Stop", async () => {
   const controller = new AbortController();
   const put = vi.fn(async (_key: string, record: SourceReviewJournalRecord) => record);
@@ -310,6 +334,7 @@ it("does not publish completed application evidence after source changes or Stop
     normalizedChanges: [],
     evidence: sourceEvidence({}),
     journal: {
+      assertCurrentOwner: async () => {},
       read: async (): Promise<undefined> => {
         /* No completed record exists in this fixture. */
       },
@@ -414,9 +439,10 @@ it("distinguishes correctable evidence selection from actual observed source fai
   await expect(actualFailure).rejects.not.toBeInstanceOf(ApplicationReviewSelectionError);
 });
 
-it("binds mid-review authority checks to the same canonical journal key and blocks completion after revocation", async () => {
+it("rechecks fresh ownership without rereading completed evidence and blocks completion after revocation", async () => {
   let ownerAllowed = true;
-  const read = vi.fn(async (_key: string): Promise<undefined> => {
+  const read = vi.fn(async (_key: string): Promise<undefined> => undefined);
+  const assertCurrentOwner = vi.fn(async () => {
     if (!ownerAllowed) {
       throw new Error("owner revoked during review");
     }
@@ -438,12 +464,13 @@ it("binds mid-review authority checks to the same canonical journal key and bloc
         reviewInput,
         normalizedChanges: [],
         evidence: sourceEvidence({}),
-        journal: { read, put },
+        journal: { assertCurrentOwner, read, put },
         currentDigest: async () => reviewInput.sourceDigest,
       },
       assess,
     ),
   ).rejects.toThrow("owner revoked during review");
-  expect(read.mock.calls.every(([key]) => key === read.mock.calls[0]?.[0])).toBe(true);
+  expect(read).toHaveBeenCalledOnce();
+  expect(assertCurrentOwner).toHaveBeenCalledTimes(2);
   expect(put).not.toHaveBeenCalled();
 });

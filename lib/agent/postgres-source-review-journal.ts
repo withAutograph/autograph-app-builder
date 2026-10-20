@@ -9,7 +9,7 @@ import {
   sourceReviewJournalRecordSchema,
   sourceReviewPairKeySchema,
 } from "./product-source-review-journal";
-import type { SourceReviewJournal } from "./product-source-review-journal";
+import type { OwnerAuthorizedSourceReviewJournal } from "./product-source-review-journal";
 
 export const createPostgresSourceReviewJournal = (input: {
   db: PostgresJsDatabase<typeof databaseSchema>;
@@ -17,7 +17,7 @@ export const createPostgresSourceReviewJournal = (input: {
   sessionAuth: unknown;
   sessionId: string;
   assertCurrentOwner: () => Promise<void>;
-}): SourceReviewJournal => {
+}): OwnerAuthorizedSourceReviewJournal => {
   const { authority } = exactForwardedSessionAuthority(input.sessionAuth);
   if (!input.sessionId) {
     throw new Error("Source review session is unavailable.");
@@ -49,6 +49,7 @@ export const createPostgresSourceReviewJournal = (input: {
     return row?.record;
   };
   return {
+    assertCurrentOwner: assertOwner,
     async put(key, record) {
       await assertOwner();
       const pairKey = sourceReviewPairKeySchema.parse(key);

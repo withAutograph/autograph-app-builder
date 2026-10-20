@@ -100,6 +100,8 @@ export interface ApplicationSourceReviewOptions {
   onRequestStart?: (request: ApplicationSourceReviewRequestStart) => void;
   onInvocation?: (invocation: SourceReviewInvocation) => void;
   sessionId?: string;
+  /** Server-derived routing metadata; never accepted from a public tool. */
+  cacheSessionId?: string;
   assertCurrentOwner?: () => Promise<void>;
   mockModel?: boolean;
   /** Internal SDK fixture; never accepted from a public tool. */
@@ -125,6 +127,14 @@ export const applicationSourceReviewKey = (
       normalizedChanges,
     ]),
   );
+
+export const applicationSourceReviewCacheSessionId = (
+  sessionId: string | undefined,
+  reviewKey: string,
+): string | undefined =>
+  sessionId === undefined || sessionId === ""
+    ? undefined
+    : hash(JSON.stringify(["source-review-cache-affinity-v1", sessionId, reviewKey]));
 
 const evidenceSubmissionSchema = sourceJudgmentSchema.extend({
   findings: z.array(
@@ -571,7 +581,12 @@ export const assessApplicationSource = async (
       tools,
       toolChoice: "required",
       maxRetries: 0,
-      providerOptions: { gateway: { only: ["openai"] } },
+      providerOptions: {
+        gateway: {
+          only: ["openai"],
+          ...(options.cacheSessionId === undefined ? {} : { sessionId: options.cacheSessionId }),
+        },
+      },
       stopWhen: () =>
         state.evidenceFailed ||
         state.outputRejected ||

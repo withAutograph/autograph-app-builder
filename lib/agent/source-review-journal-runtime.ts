@@ -7,14 +7,14 @@ import { exactForwardedSessionAuthority } from "../hosted/session-authority";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import { createLocalSourceReviewJournal } from "./local-source-review-journal";
 import { createPostgresSourceReviewJournal } from "./postgres-source-review-journal";
-import type { SourceReviewJournal } from "./product-source-review-journal";
+import type { OwnerAuthorizedSourceReviewJournal } from "./product-source-review-journal";
 
 /** The runtime selects storage; tool arguments cannot select roots, owners, or profiles. */
 export const sourceReviewJournalForSession = async (input: {
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The exact forwarded session authentication envelope is validated here.
   sessionAuth: unknown;
   sessionId: string;
-}): Promise<SourceReviewJournal> => {
+}): Promise<OwnerAuthorizedSourceReviewJournal> => {
   if (!input.sessionId) {
     throw new Error("Source review session is unavailable.");
   }

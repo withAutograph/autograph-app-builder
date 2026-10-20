@@ -4,6 +4,7 @@ import { MockLanguageModelV4 } from "ai/test";
 import {
   assessApplicationSource,
   applicationSourceReviewKey,
+  applicationSourceReviewCacheSessionId,
   ApplicationReviewSelectionError,
 } from "./application-source-review";
 import type {
@@ -23,6 +24,11 @@ import {
 } from "./product-source-review";
 import type { ProductSourceReviewInput } from "./product-source-review";
 import type { SourceReviewRequest } from "./product-source-review-batches";
+import type {
+  OwnerAuthorizedSourceReviewJournal,
+  SourceReviewJournalRecord,
+} from "./product-source-review-journal";
+import { reviewApplicationWithJournal } from "./review-applied-product-source";
 
 const input: ProductSourceReviewInput = {
   appSpec: "Build a draft screen.",
@@ -272,7 +278,135 @@ const completeApplication: ApplicationToolCall[] = [
   { toolName: "completeReview", input: { remainingRuntimeChecks: [] } },
 ];
 
+const applicationJournalFixture = () => {
+  const records = new Map<string, SourceReviewJournalRecord>();
+  let revoked = false;
+  const assertCurrentOwner = vi.fn(() =>
+    revoked ? Promise.reject(new Error("owner revoked")) : Promise.resolve(),
+  );
+  const journal: OwnerAuthorizedSourceReviewJournal = {
+    assertCurrentOwner,
+    async read(key) {
+      await assertCurrentOwner();
+      const record = records.get(key);
+      await assertCurrentOwner();
+      return record;
+    },
+    async put(key, record) {
+      await assertCurrentOwner();
+      if (!records.has(key)) {
+        records.set(key, record);
+      }
+      const stored = records.get(key);
+      if (stored === undefined) {
+        throw new Error("Completed review was not retained");
+      }
+      await assertCurrentOwner();
+      return stored;
+    },
+  };
+  return {
+    journal,
+    revoke: () => {
+      revoked = true;
+    },
+  };
+};
+
 describe("independent application source review", () => {
+  it("keeps opaque Gateway affinity through actual steps and capacity recovery with authorized journal reuse", async () => {
+    const sessionId = "private-owner-session-affinity-sentinel";
+    const changes = [{ kind: "modified" as const, path: "apps/example/actions.ts" }];
+    const key = applicationSourceReviewKey(input, changes);
+    const expected = applicationSourceReviewCacheSessionId(sessionId, key);
+    const model = applicationModel([
+      inspectApplication,
+      new Error("maximum context length exceeded"),
+      completeApplication,
+    ]);
+    const { journal, revoke } = applicationJournalFixture();
+    const request = {
+      reviewInput: input,
+      normalizedChanges: changes,
+      evidence: applicationEvidence(),
+      currentDigest: () => Promise.resolve(input.sourceDigest),
+      journal,
+      options: { sessionId, cacheSessionId: "caller-metadata-is-not-authority", testModel: model },
+    };
+    const result = await reviewApplicationWithJournal(request);
+    expect(result.reviewCompleted).toBe(true);
+    expect(result.invocation?.splits).toBeGreaterThan(0);
+    expect(expected).toMatch(/^[a-f0-9]{64}$/u);
+    for (const call of model.doGenerateCalls) {
+      expect(call.providerOptions?.gateway).toEqual({ only: ["openai"], sessionId: expected });
+      expect(call.providerOptions?.openai).toBeUndefined();
+      const metadata = JSON.stringify(call.providerOptions);
+      for (const privateValue of [sessionId, key, input.originalRequest, changes[0].path]) {
+        expect(metadata).not.toContain(privateValue);
+      }
+    }
+    const previousDispatches = model.doGenerateCalls.length;
+    const reused = await reviewApplicationWithJournal(request);
+    expect(reused.invocation?.journalReuses).toBe(1);
+    expect(model.doGenerateCalls).toHaveLength(previousDispatches);
+    revoke();
+    await expect(reviewApplicationWithJournal(request)).rejects.toThrow("owner revoked");
+    expect(model.doGenerateCalls).toHaveLength(previousDispatches);
+  });
+
+  it("separates Gateway affinity by original session and current bound review", async () => {
+    const scopes = [
+      { sessionId: "owner-session-a", reviewInput: input, normalizedChanges: [] },
+      { sessionId: "owner-session-b", reviewInput: input, normalizedChanges: [] },
+      {
+        sessionId: "owner-session-a",
+        reviewInput: { ...input, sourceDigest: "changed-source" },
+        normalizedChanges: [],
+      },
+      {
+        sessionId: "owner-session-a",
+        reviewInput: input,
+        normalizedChanges: [{ kind: "added" as const, path: "apps/example/added.ts" }],
+      },
+    ];
+    const observed = await Promise.all(
+      scopes.map(async (scope) => {
+        const model = applicationModel([completeApplication]);
+        const { journal } = applicationJournalFixture();
+        const result = await reviewApplicationWithJournal({
+          ...scope,
+          evidence: applicationEvidence(),
+          currentDigest: () => Promise.resolve(scope.reviewInput.sourceDigest),
+          journal,
+          options: { sessionId: scope.sessionId, testModel: model },
+        });
+        expect(result.reviewCompleted).toBe(true);
+        const session = model.doGenerateCalls[0].providerOptions?.gateway?.sessionId;
+        expect(session).toMatch(/^[a-f0-9]{64}$/u);
+        return session;
+      }),
+    );
+    expect(new Set(observed).size).toBe(observed.length);
+  });
+
+  it.each([undefined, ""])(
+    "omits optional Gateway affinity without blocking review when session is %s",
+    async (sessionId) => {
+      const model = applicationModel([completeApplication]);
+      const { journal } = applicationJournalFixture();
+      const result = await reviewApplicationWithJournal({
+        reviewInput: input,
+        normalizedChanges: [],
+        evidence: applicationEvidence(),
+        currentDigest: () => Promise.resolve(input.sourceDigest),
+        journal,
+        options: { sessionId, testModel: model },
+      });
+      expect(result.reviewCompleted).toBe(true);
+      expect(model.doGenerateCalls[0].providerOptions?.gateway).toEqual({ only: ["openai"] });
+    },
+  );
+
   it("measures projected request groups without logging evidence and joins actual model calls", async () => {
     const evidence = applicationEvidence();
     const secret = "private-message-shape-sentinel";
