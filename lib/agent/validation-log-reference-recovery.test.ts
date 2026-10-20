@@ -235,13 +235,21 @@ it("discovers retained candidate failure references after repair and reads every
   const manifests = new Map<string, ValidationLogReference>();
   const chunks = new Map<string, { content: string; digest: string }>();
   const store: ValidationLogStore = {
-    async getChunk(key, index) { return await Promise.resolve(chunks.get(`${keyFor(key)}:${index}`)); },
-    async getReference(key) { return await Promise.resolve(manifests.get(keyFor(key))); },
-    async publish(key, reference) { await Promise.resolve(manifests.set(keyFor(key), reference)); },
+    async getChunk(key, index) {
+      return await Promise.resolve(chunks.get(`${keyFor(key)}:${index}`));
+    },
+    async getReference(key) {
+      return await Promise.resolve(manifests.get(keyFor(key)));
+    },
+    async publish(key, reference) {
+      await Promise.resolve(manifests.set(keyFor(key), reference));
+    },
     async putChunk(key, index, content, digest) {
       await Promise.resolve(chunks.set(`${keyFor(key)}:${index}`, { content, digest }));
     },
-    async removeStaged(key) { await Promise.resolve(manifests.delete(keyFor(key))); },
+    async removeStaged(key) {
+      await Promise.resolve(manifests.delete(keyFor(key)));
+    },
   };
   vi.spyOn(logStoreBoundary, "validationLogStoreForSession").mockResolvedValue(store);
   const writer = new ValidationLogWriter(store, {
@@ -272,20 +280,30 @@ it("discovers retained candidate failure references after repair and reads every
     repositoryId: "repo",
     resolvedTree: "tree",
   });
-  const discovery = await getValidationLog.execute(
-    { operation: "validation-attempts" }, context(),
-  );
-  expect(discovery).toMatchObject({ attempts: [{
-    commands: [{ logs: { stderr: { readInput: {
-      attemptDigest: candidateAttemptDigest,
-      channel: "stderr",
-      command: "check-build",
-      digest: reference?.digest,
-      logId: reference?.logId,
-    } } } }],
-    identity: { appId: "spend-review", headSha: "head" },
-    status: "failed",
-  }] });
+  const discovery = await getValidationLog.execute({ operation: "validation-attempts" }, context());
+  expect(discovery).toMatchObject({
+    attempts: [
+      {
+        commands: [
+          {
+            logs: {
+              stderr: {
+                readInput: {
+                  attemptDigest: candidateAttemptDigest,
+                  channel: "stderr",
+                  command: "check-build",
+                  digest: reference?.digest,
+                  logId: reference?.logId,
+                },
+              },
+            },
+          },
+        ],
+        identity: { appId: "spend-review", headSha: "head" },
+        status: "failed",
+      },
+    ],
+  });
   // A simulated ordinary repair/reset does not mutate this separately retained history.
   // SAFETY: Discovery was just asserted to contain the candidate failure's complete stderr reference.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Narrow the tool's test context result to the asserted discovery shape.
@@ -358,10 +376,12 @@ it("keeps command success separate from unavailable log durability in historical
   await expect(
     getValidationLog.execute({ operation: "validation-attempts" }, context()),
   ).resolves.toMatchObject({
-    attempts: [{
-      commands: [{ completion: "complete", durability: "unavailable", exitCode: 0 }],
-      status: "passed",
-    }],
+    attempts: [
+      {
+        commands: [{ completion: "complete", durability: "unavailable", exitCode: 0 }],
+        status: "passed",
+      },
+    ],
   });
 });
 

@@ -1,6 +1,10 @@
 /* oxlint-disable anti-slop/no-module-mocking, anti-slop/require-safety-comment-for-type-assertion, anti-slop/no-unsafe-dictionary-type, anti-slop/no-unknown-returns, typescript/no-unsafe-type-assertion, eslint/require-await -- Isolated Eve state and sandbox stubs exercise the real validation tool. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ValidationLogKey, ValidationLogReference, ValidationLogStore } from "../repository/validation-log";
+import type {
+  ValidationLogKey,
+  ValidationLogReference,
+  ValidationLogStore,
+} from "../repository/validation-log";
 
 import validateReconciliation from "../../agent/tools/validate_github_draft_pr_reconciliation";
 
@@ -29,7 +33,8 @@ vi.mock("./source-bound-sandbox", () => ({
 vi.mock("./draft-reconciliation-state", () => ({
   candidateValidationAttemptHistory: { get: () => mocks.attempts },
   draftReconciliationState: { get: () => mocks.candidate },
-  retainCandidateValidationAttempt: (attempt: Record<string, unknown>) => mocks.attempts.push(attempt),
+  retainCandidateValidationAttempt: (attempt: Record<string, unknown>) =>
+    mocks.attempts.push(attempt),
   updateExactDraftReconciliation: ({ transition }: { transition: () => unknown }) => {
     mocks.candidate = transition() as Record<string, unknown>;
   },
@@ -196,7 +201,9 @@ describe("draft reconciliation command progress", () => {
     } catch (error: unknown) {
       expect(error).toBeInstanceOf(Error);
       const actual = error instanceof Error ? error : new Error(String(error));
-      expect(actual.message).toContain(`Builder could not run ${check} during draft PR candidate validation`);
+      expect(actual.message).toContain(
+        `Builder could not run ${check} during draft PR candidate validation`,
+      );
       expect(actual.cause).toMatchObject({ message: "sandbox expired" });
     }
     expect(mocks.candidate?.validation).toBeUndefined();
@@ -325,13 +332,23 @@ describe("draft reconciliation command progress", () => {
     const keyFor = (key: ValidationLogKey) =>
       JSON.stringify([key.sessionId, key.attemptDigest, key.command, key.channel, key.logId]);
     const store: ValidationLogStore = {
-      async getChunk(key, index) { return await Promise.resolve(chunks.get(`${keyFor(key)}:${index}`)); },
-      async getReference(key) { return await Promise.resolve(manifests.get(keyFor(key))); },
-      async publish(key, reference) { await Promise.resolve(manifests.set(keyFor(key), reference)); },
-      async putChunk(key, index, content, chunkDigest) {
-        await Promise.resolve(chunks.set(`${keyFor(key)}:${index}`, { content, digest: chunkDigest }));
+      async getChunk(key, index) {
+        return await Promise.resolve(chunks.get(`${keyFor(key)}:${index}`));
       },
-      async removeStaged(key) { await Promise.resolve(manifests.delete(keyFor(key))); },
+      async getReference(key) {
+        return await Promise.resolve(manifests.get(keyFor(key)));
+      },
+      async publish(key, reference) {
+        await Promise.resolve(manifests.set(keyFor(key), reference));
+      },
+      async putChunk(key, index, content, chunkDigest) {
+        await Promise.resolve(
+          chunks.set(`${keyFor(key)}:${index}`, { content, digest: chunkDigest }),
+        );
+      },
+      async removeStaged(key) {
+        await Promise.resolve(manifests.delete(keyFor(key)));
+      },
     };
     mocks.logStore.mockResolvedValue(store);
     await incremental(installCommand);
@@ -348,11 +365,13 @@ describe("draft reconciliation command progress", () => {
       status: "needs_repair",
     });
     expect(mocks.check).toHaveBeenCalledTimes(1);
-    expect(mocks.check).toHaveBeenCalledWith(expect.objectContaining({
-      appId: "spend-review",
-      command: check,
-      validationRoot: "/workspace/candidate",
-    }));
+    expect(mocks.check).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appId: "spend-review",
+        command: check,
+        validationRoot: "/workspace/candidate",
+      }),
+    );
     expect(mocks.check.mock.calls[0]?.[0]).not.toHaveProperty("onChunk");
     expect(mocks.attempts).toHaveLength(1);
     expect(mocks.attempts[0]).toMatchObject({
@@ -363,7 +382,10 @@ describe("draft reconciliation command progress", () => {
       exitCode: 2,
       logs: { stderr: { completion: "complete", channel: "stderr" } },
     });
-    const attempt = mocks.attempts[0] as { attemptDigest: string; logs: { stderr: ValidationLogReference } };
+    const attempt = mocks.attempts[0] as {
+      attemptDigest: string;
+      logs: { stderr: ValidationLogReference };
+    };
     const key = {
       attemptDigest: attempt.attemptDigest,
       channel: "stderr" as const,

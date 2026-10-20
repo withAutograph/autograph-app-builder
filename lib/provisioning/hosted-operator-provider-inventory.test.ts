@@ -204,9 +204,9 @@ describe("private read-only operator provider inventory", () => {
       }
       return await original(url, options);
     });
-    await expect(readHostedOperatorProviderInventory({ ...f.input, diagnosticSink: sink })).rejects.toThrow(
-      "operator_unavailable",
-    );
+    await expect(
+      readHostedOperatorProviderInventory({ ...f.input, diagnosticSink: sink }),
+    ).rejects.toThrow("operator_unavailable");
     expect(sink.mock.calls.map(([event]) => event.inventoryReadFailure)).toContainEqual(
       expect.objectContaining({
         target: "app",
@@ -217,30 +217,38 @@ describe("private read-only operator provider inventory", () => {
           : {}),
       }),
     );
-    expect(sink.mock.calls.filter(([event]) => event.inventoryReadFailure !== undefined)).toHaveLength(1);
-    expect(JSON.stringify(sink.mock.calls)).not.toMatch(/private\.example|do-not-log|private provider response/u);
+    expect(
+      sink.mock.calls.filter(([event]) => event.inventoryReadFailure !== undefined),
+    ).toHaveLength(1);
+    expect(JSON.stringify(sink.mock.calls)).not.toMatch(
+      /private\.example|do-not-log|private provider response/u,
+    );
   });
 
   it("attributes owner and credential failures and does not alert for the expected bootstrap alias 404", async () => {
     const owner = fixture();
     const ownerSink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     owner.input.assertCurrentOwner.mockRejectedValue(new Error("owner-secret"));
-    await expect(readHostedOperatorProviderInventory({ ...owner.input, diagnosticSink: ownerSink })).rejects.toThrow(
-      "operator_unavailable",
-    );
+    await expect(
+      readHostedOperatorProviderInventory({ ...owner.input, diagnosticSink: ownerSink }),
+    ).rejects.toThrow("operator_unavailable");
     expect(ownerSink.mock.calls[0]?.[0].inventoryReadFailure).toMatchObject({
-      target: "inventory", operation: "owner", phase: "owner",
+      target: "inventory",
+      operation: "owner",
+      phase: "owner",
     });
     expect(owner.fetcher).not.toHaveBeenCalled();
 
     const credential = fixture();
     const credentialSink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     credential.readVercelCredential.mockRejectedValue(new Error("credential-secret"));
-    await expect(readHostedOperatorProviderInventory({ ...credential.input, diagnosticSink: credentialSink })).rejects.toThrow(
-      "operator_unavailable",
-    );
+    await expect(
+      readHostedOperatorProviderInventory({ ...credential.input, diagnosticSink: credentialSink }),
+    ).rejects.toThrow("operator_unavailable");
     expect(credentialSink.mock.calls[0]?.[0].inventoryReadFailure).toMatchObject({
-      target: "inventory", operation: "credential", phase: "credential",
+      target: "inventory",
+      operation: "credential",
+      phase: "credential",
     });
     expect(credential.fetcher).not.toHaveBeenCalled();
 
@@ -261,10 +269,14 @@ describe("private read-only operator provider inventory", () => {
       }
       return await original(url, options);
     });
-    await expect(readHostedOperatorProviderInventory({
-      ...alias.input, phase: "bootstrap-planning", resolveGatewayByPublicOrigin: true,
-      diagnosticSink: aliasSink,
-    })).resolves.toBeDefined();
+    await expect(
+      readHostedOperatorProviderInventory({
+        ...alias.input,
+        phase: "bootstrap-planning",
+        resolveGatewayByPublicOrigin: true,
+        diagnosticSink: aliasSink,
+      }),
+    ).resolves.toBeDefined();
     expect(aliasSink.mock.calls.some(([event]) => event.inventoryReadFailure)).toBe(false);
   });
 
@@ -273,7 +285,10 @@ describe("private read-only operator provider inventory", () => {
     const observed: unknown[] = [];
     f.fetcher.mockImplementation(async (url, options) => {
       const parsed = new URL(url instanceof Request ? url.url : url.toString());
-      if (parsed.pathname === "/v9/projects/prj_app" || parsed.pathname === "/v9/projects/prj_gateway") {
+      if (
+        parsed.pathname === "/v9/projects/prj_app" ||
+        parsed.pathname === "/v9/projects/prj_gateway"
+      ) {
         observed.push(parsed.pathname);
         await Promise.resolve();
         return Response.json({ malformed: true });
@@ -285,9 +300,12 @@ describe("private read-only operator provider inventory", () => {
       return await original(url, options);
     });
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
-    await expect(readHostedOperatorProviderInventory({
-      ...f.input, diagnosticSink: sink,
-    })).rejects.toThrow("operator_unavailable");
+    await expect(
+      readHostedOperatorProviderInventory({
+        ...f.input,
+        diagnosticSink: sink,
+      }),
+    ).rejects.toThrow("operator_unavailable");
     expect(observed).toHaveLength(2);
     expect(sink.mock.calls.map(([event]) => event.inventoryReadFailure)).toEqual(
       expect.arrayContaining([
@@ -306,8 +324,9 @@ describe("private read-only operator provider inventory", () => {
         throw new Error("sink-private");
       },
     });
-    await expect(readHostedOperatorProviderInventory({ ...f.input, diagnosticSink: hostile }))
-      .rejects.toThrow("operator_unavailable");
+    await expect(
+      readHostedOperatorProviderInventory({ ...f.input, diagnosticSink: hostile }),
+    ).rejects.toThrow("operator_unavailable");
   });
 
   it("reports malformed final inventory before preserving its sanitized public error", async () => {
