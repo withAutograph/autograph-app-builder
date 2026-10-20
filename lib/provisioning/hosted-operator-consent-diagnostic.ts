@@ -294,6 +294,7 @@ const operatorExecutionFailure = operatorPlanningFailure
     runtimeReadinessStage: operatorRuntimeReadinessStage.optional(),
     authStartup: z.unknown().optional(),
     normalAuth: normalAuthClientFailureDiagnosticSchema.optional(),
+    journalFailure: z.literal("normal_actor_journal_changed").optional(),
     mode: z.enum(["inspect", "execute"]).optional(),
     httpStatus: z.number().int().min(100).max(599).optional(),
     commandExit: z.enum(["zero", "nonzero"]).optional(),
@@ -1082,6 +1083,12 @@ export const reportOperatorExecutionFailure = (
     executionFailure.normalAuth = normalAuth;
   }
   try {
+    if (
+      error instanceof Error &&
+      ownDiagnosticValue(error, "message") === "normal_actor_journal_changed"
+    ) {
+      executionFailure.journalFailure = "normal_actor_journal_changed";
+    }
     if (error instanceof HostedOperatorError) {
       executionFailure.errorClass = "operator_error";
       const code: unknown = Object.getOwnPropertyDescriptor(error, "code")?.value;
