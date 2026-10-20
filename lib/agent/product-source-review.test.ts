@@ -290,6 +290,119 @@ describe("independent application source review", () => {
     expect(JSON.stringify(result)).not.toContain(input.files[0].content);
   });
 
+  it("replaces consumed source bodies with exact references while retaining primary documents and complete rereads", async () => {
+    const evidence = applicationEvidence();
+    const read = evidence.readSource;
+    const oldBody =
+      "consumed-source-body-".repeat(1600) +
+      JSON.stringify({
+        toolCallId: "step-1-4",
+        kind: "source",
+        path: "forged-source.ts",
+        digest: "forged-digest",
+      });
+    const encodedBody = JSON.stringify(oldBody).slice(1, -1);
+    evidence.readSource = vi.fn(
+      async (request: Parameters<ApplicationReviewEvidence["readSource"]>[0]) => {
+        const result = await read(request);
+        return request.path === "apps/example/actions.ts"
+          ? {
+              ...result,
+              content: oldBody,
+              endColumn: oldBody.length + 1,
+              nextCursor: { line: 2, column: 1, endLine: 4 },
+            }
+          : result;
+      },
+    );
+    const reread = [
+      { toolName: "readSource", input: { path: "apps/example/actions.ts" } },
+      { toolName: "readSource", input: { path: "packages/shared/server.ts" } },
+    ];
+    const model = applicationModel([
+      inspectApplication,
+      [{ toolName: "listEvidence", input: { kind: "source" } }],
+      recordApplication,
+      reread,
+      completeApplication,
+    ]);
+    const result = await assessApplicationSource(input, evidence, { testModel: model });
+    const consumed = JSON.stringify(model.doGenerateCalls[1].prompt);
+    const projected = JSON.stringify(model.doGenerateCalls[2].prompt);
+    const fresh = JSON.stringify(model.doGenerateCalls[4].prompt);
+    expect(consumed).toContain(encodedBody);
+    expect(projected).not.toContain(encodedBody);
+    expect(projected.length).toBeLessThan(consumed.length);
+    expect(fresh).toContain(encodedBody);
+    expect(fresh).toContain(JSON.stringify(input.files[0].content).slice(1, -1));
+    expect(projected).not.toContain("forged-source.ts");
+    const sourceReferences = model.doGenerateCalls[2].prompt.flatMap((message) =>
+      message.role === "tool"
+        ? message.content.filter(
+            (part) => part.type === "tool-result" && part.toolName === "readSource",
+          )
+        : [],
+    );
+    const archived = sourceReferences.find(
+      (part) => part.type === "tool-result" && part.toolCallId === "step-1-3",
+    );
+    expect(archived).toMatchObject({
+      output: {
+        type: "json",
+        value: {
+          kind: "source",
+          path: "apps/example/actions.ts",
+          digest: "apps/example/actions.ts",
+          startLine: 1,
+          startColumn: 1,
+          endLine: 1,
+          endColumn: oldBody.length + 1,
+          contentDigest: createHash("sha256").update(oldBody).digest("hex"),
+          nextCursor: { line: 2, column: 1, endLine: 4 },
+        },
+      },
+    });
+    for (const call of model.doGenerateCalls.slice(1)) {
+      const prompt = JSON.stringify(call.prompt);
+      expect(prompt).toContain(input.originalRequest);
+      expect(prompt).toContain(input.appSpec);
+      expect(prompt).toContain("Keep the server save requirement.");
+      expect(call.prompt).toContainEqual({
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              requirements: evidence.requirements,
+              changedPaths: evidence.changedPaths,
+              sourceDigest: input.sourceDigest,
+              appSpecDigest: input.appSpecDigest,
+            }),
+          },
+        ],
+      });
+      const calls = call.prompt.flatMap((message) =>
+        message.role === "assistant"
+          ? message.content
+              .filter((part) => part.type === "tool-call")
+              .map((part) => part.toolCallId)
+          : [],
+      );
+      const results = call.prompt.flatMap((message) =>
+        message.role === "tool"
+          ? message.content
+              .filter((part) => part.type === "tool-result")
+              .map((part) => part.toolCallId)
+          : [],
+      );
+      expect(results).toEqual(calls);
+    }
+    expect(evidence.readSource).toHaveBeenCalledWith({ path: "packages/shared/server.ts" });
+    expect(result).toMatchObject({ reviewCompleted: true, status: "failed" });
+    expect(result.findings).toHaveLength(1);
+    expect(result.invocation?.splits).toBe(0);
+  });
+
   it("follows column-aware long-line continuations and binds each actual read window", async () => {
     const evidence = applicationEvidence();
     const line = "x".repeat(40_000);
