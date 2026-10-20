@@ -36,7 +36,7 @@ vi.mock("./source-bound-sandbox", () => ({
 }));
 vi.mock("../repository/sandbox-draft-reconciliation", () => ({
   inspectDraftReconciliation: mocks.inspect,
-  readDraftReconciliationCandidateFile: mocks.read,
+  readDraftReconciliationCandidateFilePage: mocks.read,
   replaceDraftReconciliationCandidateText: mocks.replace,
   restoreDraftReconciliationCandidateFile: mocks.restore,
 }));
@@ -80,6 +80,37 @@ describe("draft reconciliation publication review", () => {
       owner: "withAutograph",
       repositoryId: "1",
     });
+  });
+
+  it("returns bounded candidate pages with continuation without invalidating review", async () => {
+    const retained = mocks.candidate;
+    mocks.read.mockImplementation((input: { cursor?: number; expectedDigest?: string }) =>
+      Promise.resolve({
+        content: "bounded text",
+        cursor: input.cursor ?? 0,
+        digest: input.expectedDigest ?? digest,
+        nextCursor: (input.cursor ?? 0) + 12,
+        totalBytes: 100_000,
+      }),
+    );
+    const expectedDigest = "c".repeat(64);
+    const result = await editCandidate.execute(
+      { cursor: 32_768, expectedDigest, kind: "read", path: "apps/demo/large.sql" },
+      context,
+    );
+    expect(result).toEqual({
+      content: "bounded text",
+      cursor: 32_768,
+      digest: expectedDigest,
+      nextCursor: 32_780,
+      path: "apps/demo/large.sql",
+      status: "current_file",
+      totalBytes: 100_000,
+    });
+    expect(mocks.candidate).toBe(retained);
+    await expect(
+      editCandidate.execute({ kind: "read", path: "apps/demo/file.txt" }, context),
+    ).resolves.toMatchObject({ cursor: 0, digest, nextCursor: 12 });
   });
 
   it("restores from the retained candidate and invalidates saved validation and publication review", async () => {

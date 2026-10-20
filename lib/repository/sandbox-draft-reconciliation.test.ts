@@ -22,6 +22,7 @@ import {
   inspectDraftReconciliation,
   prepareDraftReconciliation,
   readDraftReconciliationCandidateFile,
+  readDraftReconciliationCandidateFilePage,
   readDraftReconciliationConflict,
   readDraftReconciliationDiff,
   replaceDraftReconciliationCandidateText,
@@ -131,6 +132,190 @@ const fixture = (platformConflict = false) => {
 };
 
 describe("isolated draft reconciliation", () => {
+  it("pages a large long-line candidate completely without transferring its full text through the sandbox API", async () => {
+    const f = fixture();
+    const prepared = await prepareDraftReconciliation({
+      appId: "demo",
+      baseBranch: "main",
+      baseSha: f.baseSha,
+      headBranch: "draft",
+      headSha: f.headSha,
+      repository: { name: "arrusted-development", owner: "withAutograph" },
+      sandbox: f.sandbox,
+      workspaceRoot: f.root,
+    });
+    const selected = "apps/demo/tests/large.txt";
+    const content = `${"x".repeat(32_767)}🙂é${"z".repeat(1_400_000)}`;
+    writeFileSync(path.join(prepared.root, selected), content);
+    let largestOutput = 0;
+    const sandbox = {
+      ...f.sandbox,
+      readTextFile() {
+        return Promise.reject(
+          new Error("This source reader has no whole-file text transfer capability."),
+        );
+      },
+      async run(input: Parameters<SandboxSession["run"]>[0]) {
+        const result = await f.sandbox.run(input);
+        largestOutput = Math.max(largestOutput, Buffer.byteLength(result.stdout));
+        return result;
+      },
+    };
+    const pages: string[] = [];
+    let nextCursor: number | null = 0;
+    do {
+      const cursor = nextCursor;
+      const page: Awaited<ReturnType<typeof readDraftReconciliationCandidateFilePage>> =
+        // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- each page continues its predecessor's returned UTF-8 cursor.
+        await readDraftReconciliationCandidateFilePage({
+          cursor,
+          expectedDigest: digest(content),
+          path: selected,
+          prepared,
+          sandbox,
+        });
+      expect(page.cursor).toBe(cursor);
+      expect(page.digest).toBe(digest(content));
+      expect(page.totalBytes).toBe(Buffer.byteLength(content));
+      expect(Buffer.byteLength(page.content)).toBeLessThanOrEqual(32_768);
+      expect(page).not.toHaveProperty("sourceChanged");
+      pages.push(page.content);
+      if (page.nextCursor !== null) {
+        expect(page.nextCursor).toBe(cursor + Buffer.byteLength(page.content));
+        expect(page.nextCursor).toBeGreaterThan(cursor);
+      }
+      nextCursor = page.nextCursor;
+    } while (nextCursor !== null);
+    expect(pages.join("")).toBe(content);
+    expect(largestOutput).toBeLessThanOrEqual(6 * 32_768 + 512);
+    await expect(
+      replaceDraftReconciliationCandidateText({
+        expectedDigest: digest(content),
+        newText: "edited",
+        oldText: "🙂é",
+        path: selected,
+        prepared,
+        sandbox: f.sandbox,
+      }),
+    ).resolves.toEqual({ digest: digest(content.replace("🙂é", "edited")) });
+  }, 30_000);
+
+  it("returns empty files and exact EOF, and resets a shortened changed file to its fresh first page", async () => {
+    const f = fixture();
+    const prepared = await prepareDraftReconciliation({
+      appId: "demo",
+      baseBranch: "main",
+      baseSha: f.baseSha,
+      headBranch: "draft",
+      headSha: f.headSha,
+      repository: { name: "arrusted-development", owner: "withAutograph" },
+      sandbox: f.sandbox,
+      workspaceRoot: f.root,
+    });
+    const selected = "apps/demo/tests/changing.txt";
+    const file = path.join(prepared.root, selected);
+    writeFileSync(file, "");
+    const input = { path: selected, prepared, sandbox: f.sandbox };
+    await expect(readDraftReconciliationCandidateFilePage(input)).resolves.toEqual({
+      content: "",
+      cursor: 0,
+      digest: digest(""),
+      nextCursor: null,
+      totalBytes: 0,
+    });
+    writeFileSync(file, "a".repeat(100_000));
+    const first = await readDraftReconciliationCandidateFilePage(input);
+    expect(first.nextCursor).toBe(32_768);
+    const changed = "short🙂";
+    writeFileSync(file, changed);
+    await expect(
+      readDraftReconciliationCandidateFilePage({
+        ...input,
+        cursor: first.nextCursor ?? 0,
+        expectedDigest: first.digest,
+      }),
+    ).resolves.toEqual({
+      content: changed,
+      cursor: 0,
+      digest: digest(changed),
+      nextCursor: null,
+      sourceChanged: true,
+      totalBytes: Buffer.byteLength(changed),
+    });
+    await expect(
+      readDraftReconciliationCandidateFilePage({ ...input, cursor: Buffer.byteLength(changed) }),
+    ).resolves.toMatchObject({ content: "", nextCursor: null });
+    await expect(
+      readDraftReconciliationCandidateFilePage({
+        ...input,
+        cursor: Buffer.byteLength(changed) + 1,
+      }),
+    ).rejects.toThrow("past the end");
+  });
+
+  it("preserves UTF-8 boundaries and the SDK's text digest semantics, including BOM and escaped output", async () => {
+    const f = fixture();
+    const prepared = await prepareDraftReconciliation({
+      appId: "demo",
+      baseBranch: "main",
+      baseSha: f.baseSha,
+      headBranch: "draft",
+      headSha: f.headSha,
+      repository: { name: "arrusted-development", owner: "withAutograph" },
+      sandbox: f.sandbox,
+      workspaceRoot: f.root,
+    });
+    const selected = "apps/demo/tests/unicode.txt";
+    const normalized = `${"\u0001".repeat(32_767)}🙂\uFEFFtail`;
+    writeFileSync(path.join(prepared.root, selected), `\uFEFF${normalized}`);
+    const input = { path: selected, prepared, sandbox: f.sandbox };
+    const first = await readDraftReconciliationCandidateFilePage(input);
+    expect(first.content).toBe("\u0001".repeat(32_767));
+    expect(first.digest).toBe(digest(normalized));
+    expect(first.totalBytes).toBe(Buffer.byteLength(normalized));
+    const tail = await readDraftReconciliationCandidateFilePage({
+      ...input,
+      cursor: first.nextCursor ?? 0,
+      expectedDigest: first.digest,
+    });
+    expect(tail.content).toBe("🙂\uFEFFtail");
+    expect(tail.nextCursor).toBeNull();
+    expect(first.content + tail.content).toBe(normalized);
+    expect(Buffer.byteLength(JSON.stringify(first))).toBeLessThanOrEqual(6 * 32_768 + 512);
+    writeFileSync(path.join(prepared.root, selected), Buffer.from([0xc3, 0x28]));
+    await expect(readDraftReconciliationCandidateFilePage(input)).rejects.toThrow("encoded data");
+  });
+
+  it("preserves candidate ownership and symlink isolation for paged reads", async () => {
+    const f = fixture();
+    const prepared = await prepareDraftReconciliation({
+      appId: "demo",
+      baseBranch: "main",
+      baseSha: f.baseSha,
+      headBranch: "draft",
+      headSha: f.headSha,
+      repository: { name: "arrusted-development", owner: "withAutograph" },
+      sandbox: f.sandbox,
+      workspaceRoot: f.root,
+    });
+    const input = { prepared, sandbox: f.sandbox };
+    await expect(
+      readDraftReconciliationCandidateFilePage({ ...input, path: "docs/platform.md" }),
+    ).rejects.toThrow("outside apps/demo/");
+    await expect(
+      readDraftReconciliationCandidateFilePage({
+        ...input,
+        path: "apps/demo/../../docs/platform.md",
+      }),
+    ).rejects.toThrow("outside apps/demo/");
+    const outside = path.join(f.root, "private.txt");
+    writeFileSync(outside, "private fixture content");
+    symlinkSync(outside, path.join(prepared.root, "apps/demo/link.txt"));
+    await expect(
+      readDraftReconciliationCandidateFilePage({ ...input, path: "apps/demo/link.txt" }),
+    ).rejects.toThrow("symlink in app path");
+  });
+
   it.each([0o644, 0o755])(
     "restores only the selected retained binary blob and mode %s without checkout filters",
     async (mode) => {
