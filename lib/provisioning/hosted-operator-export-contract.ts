@@ -1,3 +1,4 @@
+/* oxlint-disable unicorn/prefer-bigint-literals -- The configured ES2018 TypeScript target requires BigInt constructors. */
 import { createHash } from "node:crypto";
 import { z } from "zod";
 

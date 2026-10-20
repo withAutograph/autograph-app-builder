@@ -1,3 +1,4 @@
+/* oxlint-disable unicorn/prefer-bigint-literals -- The configured ES2018 TypeScript target requires BigInt constructors. */
 /* oxlint-disable eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Private streams use sequential backpressure and fresh authority checks; parallel reads would buffer the full workload. */
 import { createHash } from "node:crypto";
 import {
