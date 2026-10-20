@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
+import { hostedOperatorRealmLinkConfigSha256 } from "./hosted-operator-realm-link-config";
 import { createProtectedHostedOperatorHandler } from "./hosted-operator-service";
 import type {
   ProtectedHostedOperatorDependencies,
@@ -1309,6 +1311,212 @@ describe("existing populated Auth workflow planning", () => {
       readResourceBindings,
     };
   };
+  const retainedAuthReadinessFixture = async () => {
+    const sql = "select 'controlled-readiness-fixture'";
+    const assetSha256 = createHash("sha256").update(sql).digest("hex");
+    const snapshot = {
+      database: "auth",
+      role: "auth_runtime",
+      login: "auth_runtime",
+      readiness: {
+        algorithm: "pg-jsonb-catalog-sha256-v1",
+        assetSha256,
+        database: "auth",
+        observedFingerprint: "e".repeat(64),
+        publishedFingerprint: "e".repeat(64),
+        status: "verified",
+        targetDigest: "f".repeat(64),
+        version: 1,
+      },
+    };
+    const readSnapshot = vi.fn(async () => snapshot);
+    const assertAuthorized = vi.fn(async () => {});
+    const createReadiness = authReadiness.createHostedOperatorAuthReadiness;
+    vi.spyOn(authReadiness, "createHostedOperatorAuthReadiness").mockImplementation((ports) =>
+      createReadiness({ ...ports, assertAuthorized, readSnapshot }),
+    );
+    const f = setup("current");
+    const participant = participantResolutionFixture();
+    const prior = participant.base;
+    const completed = existingAuthRecord(prior);
+    const operator = completed.operator!;
+    operator.authPreparation!.assetSha256 = assetSha256;
+    operator.gatewayEnvironment = [
+      {
+        branch: prior.gatewayDelivery!.branch,
+        comment: `App Builder protected operator ${operator.operationRef}`,
+        id: "retained-gateway-binding",
+        key: "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
+        operationRef: operator.operationRef,
+        projectId: prior.gatewayDelivery!.projectId,
+        valueSha256: hostedOperatorRealmLinkConfigSha256(prior),
+      },
+    ];
+    operator.deliveredGatewayDeploymentId = "retained-gateway";
+    operator.gatewayDeliveryCandidates = [
+      {
+        branch: prior.gatewayDelivery!.branch,
+        projectId: prior.gatewayDelivery!.projectId,
+        repoId: prior.gatewayDelivery!.repoId,
+        deploymentId: "retained-gateway",
+        operationRef: operator.operationRef,
+        origin: "https://gateway.example",
+        readyState: "READY",
+      },
+    ];
+    const retained = retainedOperatorAuthFromJournal(completed)!;
+    const app = await resolveFullPlan(
+      prior,
+      context,
+      participant.configuration,
+      participant.ports,
+      {},
+      true,
+      true,
+    );
+    const appPlan = hostedOperatorPlanSchema.parse({
+      ...app,
+      contextId: "new-spec",
+      gatewayBindings: prior.gatewayBindings,
+      gatewayDelivery: prior.gatewayDelivery,
+      publicGateway: prior.publicGateway,
+      installer: { reference: "worker", sha256: "a".repeat(64) },
+    });
+    f.row.record = hostedRuntimeJournalRecordSchema.parse({
+      ...completed,
+      approvedByCallId: "current-app-call",
+      retainedAuth: retained,
+      operator: {
+        ...operator,
+        approvalId: "current-app-approval",
+        operationRef: "00000000-0000-4000-8000-000000000002",
+        plan: appPlan,
+        planDigest: operatorPlanDigest(appPlan),
+        receipts: operator.receipts.filter((receipt) =>
+          ["auth-resources", "app-resources", "auth-schema"].includes(receipt.effectId),
+        ),
+      },
+    });
+    f.propose.mockResolvedValue({
+      content: Buffer.from("controlled original Auth proposal"),
+      planDigest: prior.authSchema!.planDigest,
+      targetDigest: prior.authSchema!.targetDigest,
+    });
+    f.controlPlane.publishAuthPlan.mockResolvedValue(prior.authSchema!.artifactRef);
+    const readApproval = vi.fn(async () => ({
+      approved: true,
+      approvalId: retained.approvalId,
+      callId: retained.approvedByCallId,
+      planDigest: retained.planDigest,
+      action: "prepare",
+    }));
+    Object.assign(f.controlPlane, {
+      assertAuthorized,
+      readApproval,
+      readNormalActorPreparation: vi.fn(async () => undefined),
+      readAuthPlan: vi.fn(async () => ({
+        content: Buffer.from(
+          JSON.stringify({
+            schemaPlan: {
+              planDigest: prior.authSchema!.planDigest,
+              targetDigest: prior.authSchema!.targetDigest,
+              effects: [{ owner: "readiness", sha256: assetSha256, sql }],
+            },
+          }),
+        ),
+      })),
+    });
+    f.readResourceBindings.mockImplementation(async (input) => {
+      const row = requireFinalResourceBindingPhase(
+        selectAuthPlanningResourceBindingRow(f.row, input.plan),
+        input,
+      );
+      const approval = await readApproval();
+      if (
+        !approval.approved ||
+        approval.approvalId !== row.record.operator!.approvalId ||
+        approval.callId !== row.record.approvedByCallId ||
+        approval.planDigest !== row.record.operator!.planDigest
+      ) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      return {
+        authDatabase: {
+          migrationUrl: f.migrationUrl,
+          runtimeUrl:
+            "postgresql://auth_runtime:synthetic-password@ep-fixture.neon.tech/auth?sslmode=verify-full",
+        },
+        appDatabase: { migrationUrl: "private-app", runtimeUrl: "private-app-runtime" },
+      };
+    });
+    return { ...f, retained, snapshot, readSnapshot, readApproval, assertAuthorized };
+  };
+
+  it("uses completed retained Auth readiness while the app has only its three prerequisite receipts", async () => {
+    const f = await retainedAuthReadinessFixture();
+    const before = structuredClone(f.row);
+    expect(() =>
+      requireFinalResourceBindingPhase(f.row, {
+        plan: f.row.record.operator!.plan,
+        privateState: f.row.record.privateState,
+      }),
+    ).toThrow();
+    const plan = await f.dependencies.plan({ ...context, action: "prepare" });
+    expect(plan.stage).toBe("auth-participants");
+    expect(f.readSnapshot).toHaveBeenCalled();
+    expect(f.assertAuthorized).toHaveBeenCalled();
+    expect(f.readApproval).toHaveBeenCalled();
+    expect(
+      f.readResourceBindings.mock.calls.every(
+        ([input]) => operatorPlanDigest(input.plan) === f.retained.planDigest,
+      ),
+    ).toBe(true);
+    expect(f.row).toEqual(before);
+  });
+
+  it.each(["auth-resources", "auth-schema", "unknown-effect"])(
+    "retained Auth readiness rejects a pending %s mutation",
+    async (effectId) => {
+      const f = await retainedAuthReadinessFixture();
+      f.row.record.operator!.pendingEffectId = effectId;
+      f.row.record.operator!.pendingEffectAttempt = { id: "00000000-0000-4000-8000-000000000003" };
+      await expect(f.dependencies.plan({ ...context, action: "prepare" })).rejects.toMatchObject({
+        code: "operation_in_progress",
+      });
+      expect(f.readSnapshot).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["targetDigest", "assetSha256", "publishedFingerprint"] as const)(
+    "retained Auth readiness rejects a changed %s publication",
+    async (field) => {
+      const f = await retainedAuthReadinessFixture();
+      f.readSnapshot.mockResolvedValue({
+        ...f.snapshot,
+        readiness: { ...f.snapshot.readiness, [field]: "0".repeat(64) },
+      });
+      await expect(f.dependencies.plan({ ...context, action: "prepare" })).rejects.toMatchObject({
+        code: "operator_unavailable",
+      });
+      expect(f.readSnapshot).toHaveBeenCalled();
+    },
+  );
+
+  it("retained Auth readiness rejects changed original approval", async () => {
+    const f = await retainedAuthReadinessFixture();
+    f.readApproval.mockResolvedValue({
+      approved: false,
+      approvalId: f.retained.approvalId,
+      callId: f.retained.approvedByCallId,
+      planDigest: f.retained.planDigest,
+      action: "prepare",
+    });
+    await expect(f.dependencies.plan({ ...context, action: "prepare" })).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(f.readSnapshot).not.toHaveBeenCalled();
+  });
+
   it("plans retained Auth infrastructure before looking up an unvalidated accepted app revision", async () => {
     const f = setup("current");
     const participants = participantResolutionFixture();
