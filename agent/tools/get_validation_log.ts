@@ -43,23 +43,31 @@ export default defineTool({
       }
       const candidateAttempts = candidateValidationAttemptHistory.get().map((attempt) => ({
         attemptDigest: attempt.attemptDigest,
-        commands: [{
-          category: attempt.category,
-          command: attempt.command,
-          completion: attempt.completion,
-          durability: attempt.durability,
-          exitCode: attempt.exitCode,
-          logs: Object.fromEntries(
-            Object.entries(attempt.logs).map(([channel, reference]) => [
-              channel,
-              reference === undefined ? undefined : {
-                ...reference,
-                readInput: validationLogReadInput(attempt.attemptDigest, attempt.category, reference),
-              },
-            ]),
-          ),
-          name: attempt.category,
-        }],
+        commands: [
+          {
+            category: attempt.category,
+            command: attempt.command,
+            completion: attempt.completion,
+            durability: attempt.durability,
+            exitCode: attempt.exitCode,
+            logs: Object.fromEntries(
+              Object.entries(attempt.logs).map(([channel, reference]) => [
+                channel,
+                reference === undefined
+                  ? undefined
+                  : {
+                      ...reference,
+                      readInput: validationLogReadInput(
+                        attempt.attemptDigest,
+                        attempt.category,
+                        reference,
+                      ),
+                    },
+              ]),
+            ),
+            name: attempt.category,
+          },
+        ],
         identity: {
           appId: attempt.appId,
           baseSha: attempt.baseSha,
@@ -74,10 +82,14 @@ export default defineTool({
         status: attempt.completion === "complete" && attempt.exitCode === 0 ? "passed" : "failed",
       }));
       if (state.phase === "validation_failed") {
-        return { attempts: [...candidateAttempts, validationAttemptLogReadInputs(state.validationFailure)] };
+        return {
+          attempts: [...candidateAttempts, validationAttemptLogReadInputs(state.validationFailure)],
+        };
       }
       if ("validationReceipt" in state) {
-        return { attempts: [...candidateAttempts, validationAttemptLogReadInputs(state.validationReceipt)] };
+        return {
+          attempts: [...candidateAttempts, validationAttemptLogReadInputs(state.validationReceipt)],
+        };
       }
       return { attempts: candidateAttempts };
     }

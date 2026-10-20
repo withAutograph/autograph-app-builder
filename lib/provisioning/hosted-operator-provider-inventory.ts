@@ -255,20 +255,42 @@ export const readHostedOperatorProviderInventory = async (input: {
       );
       throw new HostedOperatorError("resource_mismatch");
     }
-    await readWithDiagnostic(target.sessionId, {
-      target: "inventory", operation: "owner", phase: "owner",
-    }, input.diagnosticSink, () => input.assertCurrentOwner());
-    const credential = await readWithDiagnostic(target.sessionId, {
-      target: "inventory", operation: "credential", phase: "credential",
-    }, input.diagnosticSink, () => input.readVercelCredential({
-        authority,
-        installationId: target.installationId,
-      }));
+    await readWithDiagnostic(
+      target.sessionId,
+      {
+        target: "inventory",
+        operation: "owner",
+        phase: "owner",
+      },
+      input.diagnosticSink,
+      () => input.assertCurrentOwner(),
+    );
+    const credential = await readWithDiagnostic(
+      target.sessionId,
+      {
+        target: "inventory",
+        operation: "credential",
+        phase: "credential",
+      },
+      input.diagnosticSink,
+      () =>
+        input.readVercelCredential({
+          authority,
+          installationId: target.installationId,
+        }),
+    );
     if (credential === undefined) {
       const error = new HostedOperatorError("authorization_required");
-      reportOperatorInventoryReadFailure(target.sessionId, {
-        target: "inventory", operation: "credential", phase: "credential",
-      }, error, input.diagnosticSink);
+      reportOperatorInventoryReadFailure(
+        target.sessionId,
+        {
+          target: "inventory",
+          operation: "credential",
+          phase: "credential",
+        },
+        error,
+        input.diagnosticSink,
+      );
       throw error;
     }
     const invalidCredential = [
@@ -289,9 +311,16 @@ export const readHostedOperatorProviderInventory = async (input: {
       try {
         return parse();
       } catch (error) {
-        reportOperatorInventoryReadFailure(target.sessionId, {
-          target: targetName, operation, phase: "schema",
-        }, error, input.diagnosticSink);
+        reportOperatorInventoryReadFailure(
+          target.sessionId,
+          {
+            target: targetName,
+            operation,
+            phase: "schema",
+          },
+          error,
+          input.diagnosticSink,
+        );
         throw error;
       }
     };
@@ -302,9 +331,16 @@ export const readHostedOperatorProviderInventory = async (input: {
       operation: InventoryReadOperation = "project",
       readTarget: InventoryReadTarget = "inventory",
     ): Promise<MarketplaceJsonValue> => {
-      await readWithDiagnostic(target.sessionId, {
-        target: readTarget, operation: "owner", phase: "owner",
-      }, input.diagnosticSink, () => input.assertCurrentOwner());
+      await readWithDiagnostic(
+        target.sessionId,
+        {
+          target: readTarget,
+          operation: "owner",
+          phase: "owner",
+        },
+        input.diagnosticSink,
+        () => input.assertCurrentOwner(),
+      );
       const url = new URL(path, "https://api.vercel.com");
       if (target.scopeType === "team") {
         url.searchParams.set("teamId", target.scopeId);
@@ -321,9 +357,16 @@ export const readHostedOperatorProviderInventory = async (input: {
       if (input.signal !== undefined) {
         options.signal = input.signal;
       }
-      const response = await readWithDiagnostic(target.sessionId, {
-        target: readTarget, operation, phase: "fetch",
-      }, input.diagnosticSink, () => fetcher(url, options));
+      const response = await readWithDiagnostic(
+        target.sessionId,
+        {
+          target: readTarget,
+          operation,
+          phase: "fetch",
+        },
+        input.diagnosticSink,
+        () => fetcher(url, options),
+      );
       if (!response.ok) {
         if (allowMissing && response.status === 404) {
           await response.body?.cancel();
@@ -334,21 +377,45 @@ export const readHostedOperatorProviderInventory = async (input: {
             ? "authorization_required"
             : "operator_unavailable",
         );
-        reportOperatorInventoryReadFailure(target.sessionId, {
-          target: readTarget, operation, phase: "http_response", httpStatus: response.status,
-        }, error, input.diagnosticSink);
+        reportOperatorInventoryReadFailure(
+          target.sessionId,
+          {
+            target: readTarget,
+            operation,
+            phase: "http_response",
+            httpStatus: response.status,
+          },
+          error,
+          input.diagnosticSink,
+        );
         await response.body?.cancel();
         throw error;
       }
-      const body = await readWithDiagnostic(target.sessionId, {
-        target: readTarget, operation, phase: "json_decode", httpStatus: response.status,
-      }, input.diagnosticSink, async () => z.unknown().parse(await response.json()));
+      const body = await readWithDiagnostic(
+        target.sessionId,
+        {
+          target: readTarget,
+          operation,
+          phase: "json_decode",
+          httpStatus: response.status,
+        },
+        input.diagnosticSink,
+        async () => z.unknown().parse(await response.json()),
+      );
       try {
         return json.parse(body);
       } catch (error) {
-        reportOperatorInventoryReadFailure(target.sessionId, {
-          target: readTarget, operation, phase: "schema", httpStatus: response.status,
-        }, error, input.diagnosticSink);
+        reportOperatorInventoryReadFailure(
+          target.sessionId,
+          {
+            target: readTarget,
+            operation,
+            phase: "schema",
+            httpStatus: response.status,
+          },
+          error,
+          input.diagnosticSink,
+        );
         throw error;
       }
     };
@@ -360,7 +427,11 @@ export const readHostedOperatorProviderInventory = async (input: {
       planningAlias?: string,
     ) => {
       const projectPayload = await request(
-        `/v9/projects/${encodeURIComponent(reference.projectId)}`, {}, false, "project", targetName,
+        `/v9/projects/${encodeURIComponent(reference.projectId)}`,
+        {},
+        false,
+        "project",
+        targetName,
       );
       const project = parseRead(targetName, "project", () => projectSchema.parse(projectPayload));
       const invalidProject = {
@@ -376,12 +447,12 @@ export const readHostedOperatorProviderInventory = async (input: {
       if (deploymentReference !== undefined) {
         try {
           const deploymentPayload = await request(
-              `/v13/deployments/${encodeURIComponent(deploymentReference)}`,
-              { withGitRepoInfo: "true" },
-              planningAlias !== undefined && allowUndelivered && bootstrapPlanning,
-              planningAlias === undefined ? "deployment" : "public_alias",
-              targetName,
-            );
+            `/v13/deployments/${encodeURIComponent(deploymentReference)}`,
+            { withGitRepoInfo: "true" },
+            planningAlias !== undefined && allowUndelivered && bootstrapPlanning,
+            planningAlias === undefined ? "deployment" : "public_alias",
+            targetName,
+          );
           deployment = parseRead(
             targetName,
             planningAlias === undefined ? "deployment" : "public_alias",
@@ -417,9 +488,15 @@ export const readHostedOperatorProviderInventory = async (input: {
         throw new HostedOperatorError("resource_mismatch");
       }
       const variablesPayload = await request(
-        `/v10/projects/${encodeURIComponent(project.id)}/env`, {}, false, "environment", targetName,
+        `/v10/projects/${encodeURIComponent(project.id)}/env`,
+        {},
+        false,
+        "environment",
+        targetName,
       );
-      const variables = parseRead(targetName, "environment", () => variablesSchema.parse(variablesPayload));
+      const variables = parseRead(targetName, "environment", () =>
+        variablesSchema.parse(variablesPayload),
+      );
       const projected = variables.envs.filter((variable) => {
         if (!variable.target.includes(reference.environment)) {
           return false;
@@ -469,7 +546,10 @@ export const readHostedOperatorProviderInventory = async (input: {
     if (gateway.deployment !== undefined) {
       const aliasesPayload = await request(
         `/v2/deployments/${encodeURIComponent(gateway.deployment.id)}/aliases`,
-        {}, false, "aliases", "gateway",
+        {},
+        false,
+        "aliases",
+        "gateway",
       );
       const aliases = parseRead("gateway", "aliases", () => aliasSchema.parse(aliasesPayload));
       const ownedOrigins = new Set([
@@ -482,14 +562,16 @@ export const readHostedOperatorProviderInventory = async (input: {
         // A browser alias can advance while the approved immutable transport remains valid.
         // Resolve only the trusted configured hostname through the owner-scoped provider API.
         const publicDeploymentPayload = await request(
-          `/v13/deployments/${encodeURIComponent(new URL(publicOrigin).hostname)}`, {
+          `/v13/deployments/${encodeURIComponent(new URL(publicOrigin).hostname)}`,
+          {
             withGitRepoInfo: "true",
-          }, false, "public_alias", "gateway",
-        );
-        const publicDeployment = parseRead(
-          "gateway",
+          },
+          false,
           "public_alias",
-          () => deploymentSchema.parse(publicDeploymentPayload),
+          "gateway",
+        );
+        const publicDeployment = parseRead("gateway", "public_alias", () =>
+          deploymentSchema.parse(publicDeploymentPayload),
         );
         const invalidPublicDeployment = invalidDeploymentObservation({
           deployment: publicDeployment,
@@ -540,11 +622,14 @@ export const readHostedOperatorProviderInventory = async (input: {
           return new HostedOperatorError("resource_mismatch");
         },
         projectId: config.operator.projectId,
-        request: (path) => request(
-          path, {}, false,
-          path === "/v1/storage/stores" ? "store_list" : "store_detail",
-          "operator",
-        ),
+        request: (path) =>
+          request(
+            path,
+            {},
+            false,
+            path === "/v1/storage/stores" ? "store_list" : "store_detail",
+            "operator",
+          ),
         scopeId: target.scopeId,
       });
     }
