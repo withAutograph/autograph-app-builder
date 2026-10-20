@@ -331,10 +331,19 @@ const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
         );
         return workerCommand;
       }
-      if (input.cmd === "mise" && input.args[1] === "app:describe") {
+      if (
+        input.cmd === "/usr/bin/env" &&
+        input.args[0] === "mise" &&
+        input.args[1] === "run" &&
+        input.args[2] === "app:describe"
+      ) {
         return makeCommand("describe-command", JSON.stringify(description));
       }
-      if (input.cmd === "mise" && input.args.includes("test-e2e")) {
+      if (
+        input.cmd === "/usr/bin/env" &&
+        input.args[0] === "mise" &&
+        input.args.includes("test-e2e")
+      ) {
         return suiteCommand;
       }
       throw new Error("Unsupported controlled SDK command");
@@ -597,8 +606,8 @@ describe("managed runtime execution through supported SDK ports", () => {
     if (suite === undefined) {
       throw new Error("Suite was not dispatched");
     }
-    expect(suite.cmd).toBe("mise");
-    expect(suite.args).toEqual(["run", "app:runtime", "run", "orchard", "test-e2e"]);
+    expect(suite.cmd).toBe("/usr/bin/env");
+    expect(suite.args).toEqual(["mise", "run", "app:runtime", "run", "orchard", "test-e2e"]);
     expect(suite.env?.APP_TEST_BASE_URL).toBe(selection.gateway.publicOrigin);
     const identitiesPath = suite.env?.APP_TEST_IDENTITIES_FILE;
     const identities = identitiesPath === undefined ? undefined : f.files.get(identitiesPath);
