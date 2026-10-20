@@ -34,6 +34,7 @@ import { mkdtemp, open, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import nodePath from "node:path";
 import { createInterface } from "node:readline";
+import { isDeepStrictEqual } from "node:util";
 
 import type { z } from "zod";
 
@@ -269,6 +270,13 @@ function stageForResult(result: EveSessionResult): z.infer<typeof publicSessionS
   }
   return "planning";
 }
+
+/** Capture time changes on a poll; every authored/private observation field remains significant. */
+const checkpointObservationContent = (metadata: HostedPagedCheckpointMetadata) => {
+  const { capturedAtEpochMs, ...content } = metadata;
+  void capturedAtEpochMs;
+  return content;
+};
 
 interface CheckpointInputProfile {
   titleBytes: number;
@@ -2628,6 +2636,42 @@ export function createHostedEveSessionService(input: {
               ? {}
               : { workingPreview: metadata.workingPreview }),
           });
+          const resumability = ["completed", "failed", "cancelled"].includes(summary.status)
+            ? "terminal"
+            : "live";
+          const stage = stageForResult(summary);
+          const unchangedObservation =
+            inputValue.continueWork !== false &&
+            explicitSendOperationId === undefined &&
+            coldReadProgress === undefined &&
+            checkpointMetadata !== null &&
+            session.checkpointRef !== undefined &&
+            nativeObservationState !== undefined &&
+            observedNativeState !== undefined &&
+            spool.observation.observationComplete === true &&
+            spool.eventCount === 0 &&
+            observedNativeState.nextNativeIndex === nativeObservationState.nextNativeIndex &&
+            (spool.observation.nativeTailIndex === undefined ||
+              observedNativeState.nextNativeIndex === spool.observation.nativeTailIndex + 1) &&
+            session.status === summary.status &&
+            session.resumability === resumability &&
+            session.stage === stage &&
+            (summary.uiPreview?.appId === undefined || session.appId === summary.uiPreview.appId) &&
+            isDeepStrictEqual(
+              checkpointObservationContent(checkpointMetadata),
+              checkpointObservationContent(metadata),
+            );
+          if (unchangedObservation) {
+            // Recheck the canonical owner record before retaining its immutable checkpoint.
+            // A concurrent cancellation, adapter replacement or publication uses the same
+            // winner-read path as the existing compare-and-set publication boundary.
+            const current = toDurableHostedSessionRecord(await requireSession(sessionId));
+            if (!isDeepStrictEqual(session, current)) {
+              throw new HostedCheckpointObservationConflictError();
+            }
+            const result = await resultFromDurableCheckpoint(sessionId, current, cursor, limit);
+            return continueApprovedWork(sessionId, result, sendRead);
+          }
           const stored = await input.store.observeSessionPaged({
             ...(explicitSendOperationId === undefined ? {} : { explicitSendOperationId }),
             ...(summary.uiPreview?.appId === undefined ? {} : { appId: summary.uiPreview.appId }),
@@ -2636,11 +2680,9 @@ export function createHostedEveSessionService(input: {
             metadata,
             nowEpochMs: capturedAtEpochMs,
             principal,
-            resumability: ["completed", "failed", "cancelled"].includes(summary.status)
-              ? "terminal"
-              : "live",
+            resumability,
             sessionId,
-            stage: stageForResult(summary),
+            stage,
           });
           const result = await resultFromDurableCheckpoint(sessionId, stored, cursor, limit);
           return inputValue.continueWork === false
