@@ -277,6 +277,238 @@ const seedColdCheckpoint = async (f: Awaited<ReturnType<typeof fixture>>) => {
   return priorEvents;
 };
 
+const unchangedPollFixture = async () => {
+  const seed = nativeObservationStateSchema.parse({
+    ...nativeState({ adapterSessionId: "adapter_1", nextNativeIndex: 10, publicEventCount: 3 }),
+    boundary: "working",
+    currentTurnId: "turn_1",
+    privateInputState: { pending: [], resolved: [], version: 1 },
+  });
+  const observation: Awaited<ReturnType<NonNullable<HostedEveTransport["observe"]>>> = {
+    activeTurnId: "turn_1",
+    artifactProjectionRequiresLegacyReadback: false,
+    installedEventCount: 10,
+    nativeObservationState: structuredClone(seed),
+    nativeTailIndex: 9,
+    nextNativeIndex: 10,
+    observationComplete: true,
+    pendingRequests: [],
+    publicEventCount: 3,
+    status: "working",
+  };
+  const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async () => {
+    await Promise.resolve();
+    return structuredClone(observation);
+  });
+  const f = await fixture(observe);
+  const initial = await f.getSession(principal, f.sessionId);
+  if (initial?.version !== 2) {
+    throw new Error("Expected the owned durable session.");
+  }
+  const events: PublicEveEvent[] = [0, 1, 2].map((index) => ({
+    index,
+    text: `retained ${index}`,
+    turnId: "turn_1",
+    type: "assistant_message",
+  }));
+  const metadata: HostedPagedCheckpointMetadata = {
+    activeTurnId: "turn_1",
+    capturedAtEpochMs: 1000,
+    nativeObservationState: seed,
+    privateApprovalCaptureState: {
+      pendingRequests: [],
+      receipts: [],
+      sessionId: f.sessionId,
+      version: 1,
+    },
+    status: "working",
+    version: 1,
+  };
+  const saved = await f.observeSessionPaged({
+    events: (async function* retainedEvents() {
+      yield* events;
+    })(),
+    expectedCheckpointDigest: initial.checkpointDigest,
+    metadata,
+    nowEpochMs: 1000,
+    principal,
+    resumability: "live",
+    sessionId: f.sessionId,
+    stage: "designing",
+  });
+  if (saved.version !== 2) {
+    throw new Error("Expected the seeded durable checkpoint.");
+  }
+  return { ...f, events, metadata, observation, observe, saved };
+};
+
+describe("unchanged paged observation reuse", () => {
+  it("serves the requested retained page without rewriting or traversing the history prefix", async () => {
+    const f = await unchangedPollFixture();
+    const result = await f.service.get({ cursor: 1, limit: 1, sessionId: f.sessionId });
+    expect(result).toMatchObject({ cursor: 2, events: [f.events[1]], status: "working" });
+    // The initial checkpoint is the only publication.
+    expect(f.observeSessionPaged).toHaveBeenCalledOnce();
+    expect(f.readCheckpointPage.mock.calls.some(([call]) => call.limit > 1)).toBe(false);
+    const current = await f.getSession(principal, f.sessionId);
+    expect(current?.version === 2 && current.checkpointRef?.id).toBe(
+      f.saved.version === 2 ? f.saved.checkpointRef?.id : undefined,
+    );
+    expect(f.adapter.send).not.toHaveBeenCalled();
+    expect(f.adapter.respond).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "native-cursor",
+    "native-tail",
+    "private-input",
+    "delivery-proof",
+    "artifact-reducer",
+    "boundary",
+  ] as const)("publishes changed %s evidence even without a public event", async (change) => {
+    const f = await unchangedPollFixture();
+    const state = f.observation.nativeObservationState;
+    if (state === undefined) {
+      throw new Error("Expected a retained native reducer.");
+    }
+    switch (change) {
+      case "native-cursor": {
+        state.nextNativeIndex += 1;
+        f.observation.nextNativeIndex = state.nextNativeIndex;
+        f.observation.nativeTailIndex = state.nextNativeIndex - 1;
+        break;
+      }
+      case "native-tail": {
+        f.observation.nativeTailIndex = state.nextNativeIndex;
+        break;
+      }
+      case "private-input": {
+        state.privateInputState = {
+          pending: [],
+          resolved: [],
+          version: 1,
+          frameworkSessionLimitIds: ["observed-framework-input"],
+        };
+        break;
+      }
+      case "delivery-proof": {
+        state.nativeDeliveryState = sendProof;
+        break;
+      }
+      case "artifact-reducer": {
+        state.artifactReadback.legacy = true;
+        break;
+      }
+      case "boundary": {
+        state.boundary = "waiting";
+        delete state.currentTurnId;
+        delete f.observation.activeTurnId;
+        f.observation.status = "waiting";
+        break;
+      }
+      default: {
+        throw new Error("Unknown observation change.");
+      }
+    }
+    await f.service.get({ cursor: 1, limit: 1, sessionId: f.sessionId });
+    expect(f.observeSessionPaged).toHaveBeenCalledTimes(2);
+    const latest = await f.getSession(principal, f.sessionId);
+    if (latest?.version !== 2 || latest.checkpointRef === undefined) {
+      throw new Error("Expected published changed evidence.");
+    }
+    const page = await f.readCheckpointPage({
+      checkpointRef: latest.checkpointRef,
+      cursor: 0,
+      limit: 1,
+      principal,
+      sessionId: f.sessionId,
+    });
+    expect(page.metadata.nativeObservationState?.nextNativeIndex).toBe(state.nextNativeIndex);
+    if (change === "private-input") {
+      expect(
+        page.metadata.nativeObservationState?.privateInputState?.frameworkSessionLimitIds,
+      ).toContain("observed-framework-input");
+    }
+    if (change === "delivery-proof") {
+      expect(page.metadata.nativeObservationState?.nativeDeliveryState?.turns[0]?.turnId).toBe(
+        "turn_1",
+      );
+    }
+    if (change === "boundary") {
+      expect(page.metadata.status).toBe("waiting");
+    }
+  });
+
+  it("publishes newly captured private approval metadata without requiring a public event", async () => {
+    const f = await unchangedPollFixture();
+    // An older checkpoint did not yet retain the recorder's complete private state.
+    delete f.metadata.privateApprovalCaptureState;
+    await f.service.get({ cursor: 0, limit: 1, sessionId: f.sessionId });
+    expect(f.observeSessionPaged).toHaveBeenCalledTimes(2);
+    expect(
+      f.observeSessionPaged.mock.calls[1]?.[0].metadata.privateApprovalCaptureState?.sessionId,
+    ).toBe(f.sessionId);
+  });
+
+  it.each(["stage", "resumability"] as const)(
+    "preserves a required %s summary update",
+    async (change) => {
+      const f = await unchangedPollFixture();
+      const changed = durableHostedSessionRecordSchema.parse({
+        ...f.saved,
+        ...(change === "stage" ? { stage: "planning" } : { resumability: "checkpoint" }),
+      });
+      f.getSession.mockResolvedValueOnce(changed);
+      await f.service.get({ cursor: 0, limit: 1, sessionId: f.sessionId });
+      expect(f.observeSessionPaged).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each(["checkpoint", "cancellation", "adapter"] as const)(
+    "returns the concurrent %s winner without publishing the unchanged observation",
+    async (change) => {
+      const f = await unchangedPollFixture();
+      const normalRead = f.getSession.getMockImplementation();
+      if (normalRead === undefined) {
+        throw new Error("Expected the owner-scoped reader.");
+      }
+      let winner: HostedSessionRecord | undefined;
+      f.observe.mockImplementationOnce(async () => {
+        if (change === "checkpoint") {
+          winner = await f.observeSessionPaged({
+            events: (async function* retainedEvents() {
+              yield* f.events;
+            })(),
+            expectedCheckpointDigest: f.saved.checkpointDigest,
+            metadata: { ...f.metadata, capturedAtEpochMs: 2001 },
+            nowEpochMs: 2001,
+            principal,
+            resumability: "live",
+            sessionId: f.sessionId,
+            stage: "designing",
+          });
+        } else {
+          winner = durableHostedSessionRecordSchema.parse({
+            ...f.saved,
+            ...(change === "cancellation"
+              ? { cancellationRevision: 1, status: "cancelled", stage: "needs_attention" }
+              : { adapterGeneration: 2, adapterSessionId: "adapter_replacement" }),
+          });
+          f.getSession.mockImplementation(
+            async () => winner ?? (await normalRead(principal, f.sessionId)),
+          );
+        }
+        return structuredClone(f.observation);
+      });
+      const result = await f.service.get({ cursor: 1, limit: 1, sessionId: f.sessionId });
+      expect(result.cursor).toBe(2);
+      expect(result.events).toEqual([f.events[1]]);
+      expect(f.observeSessionPaged).toHaveBeenCalledTimes(change === "checkpoint" ? 2 : 1);
+      expect(await f.getSession(principal, f.sessionId)).toBe(winner);
+    },
+  );
+});
+
 describe("paged hosted session observation", () => {
   it.each(["generation", "new-request"] as const)(
     "rejects stale authorization cleanup after concurrent %s checkpoint replacement",
