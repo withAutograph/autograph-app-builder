@@ -179,6 +179,14 @@ export const createHostedOperatorNormalAuthTransport = async (
     });
     await dependencies.assertCurrentOwner(context);
     headers.set("x-vercel-trusted-oidc-idp-token", token);
+    if (
+      method === "POST" &&
+      url.pathname === "/api/auth/platform/operator-link" &&
+      headers.get("accept") === "application/vnd.realm-operator-proof+json"
+    ) {
+      // Native ingress can consume the reserved header before the private proof receiver sees it.
+      headers.set("authorization", `Bearer ${token}`);
+    }
     const body = await requestBody(original, init, method);
     const requestSignal = init?.signal ?? original?.signal;
     const response = await (io.fetch ?? fetch)(url, {
