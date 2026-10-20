@@ -18,6 +18,7 @@ import { createNormalActorJournal } from "./hosted-operator-normal-actor-journal
 import type { NormalActorJournalPorts } from "./hosted-operator-normal-actor-journal";
 import { resolveFullPlan } from "./hosted-operator-composition";
 import {
+  assertCompletedParticipantBootstrapApproval,
   completedParticipantBootstrapSchema,
   inspectCompletedParticipantBootstrap,
 } from "./hosted-operator-participant-bootstrap";
@@ -215,6 +216,8 @@ const fixture = async () => {
     }),
   };
   let approved = true;
+  let accountApproved = true;
+  let bootstrapApproved = true;
   let malformedPrivateResponse = false;
   let endpointOrigin =
     plan.deploymentBoundary?.verification.gatewayOrigin ?? "https://gateway.example.test";
@@ -249,6 +252,9 @@ const fixture = async () => {
     assertAuthorized,
     assertAccountApproval: async (_input, preparation) => {
       await assertAuthorized();
+      if (!accountApproved) {
+        throw new Error("fixture_account_approval_revoked");
+      }
       expect(preparation.accountOperationRef).toBe(accountOperationRef);
       expect(preparation.accountApprovalId).toBe("initial-approval");
     },
@@ -386,6 +392,18 @@ const fixture = async () => {
             bootstrap: bootstrapSnapshot,
             assertBootstrapCurrent: async () => {
               await assertAuthorized();
+              await journal.read(context);
+              await assertCompletedParticipantBootstrapApproval(
+                context,
+                requiredFixture(bootstrapSnapshot),
+                async (value) => ({
+                  approved: bootstrapApproved,
+                  approvalId: "bootstrap-approval",
+                  callId: value.callId,
+                  planDigest: value.planDigest,
+                  action: value.action,
+                }),
+              );
             },
           }),
       builderCallbackOrigin: "https://builder.example.com",
@@ -680,10 +698,37 @@ const fixture = async () => {
       { bootstrap, assertCurrent },
     );
   };
+  const beginAppPlanning = async () => {
+    await completeBootstrapRefresh();
+    const enrolled = structuredClone(requiredFixture(row.record.accountPreparation));
+    const appPlan = await proposeAccess();
+    const operator = requiredFixture(row.record.operator);
+    row = {
+      revision: row.revision + 1,
+      record: hostedRuntimeJournalRecordSchema.parse({
+        ...row.record,
+        approvedByCallId: "app-call",
+        accountPreparation: enrolled,
+        retainedAuth: requiredFixture(bootstrapSnapshot).auth,
+        operator: {
+          ...operator,
+          approvalId: "app-approval",
+          operationRef: "33333333-3333-4333-8333-333333333333",
+          plan: appPlan,
+          planDigest: operatorPlanDigest(appPlan),
+          receipts: operator.receipts.filter((receipt) =>
+            ["auth-resources", "app-resources", "auth-schema"].includes(receipt.effectId),
+          ),
+        },
+      }),
+    };
+    return appPlan;
+  };
   return {
     proposeAccess,
     assertPlanningAuthorized,
     completeBootstrapRefresh,
+    beginAppPlanning,
     collect,
     input,
     journal,
@@ -694,6 +739,12 @@ const fixture = async () => {
     },
     revoke() {
       approved = false;
+    },
+    revokeAccountApproval() {
+      accountApproved = false;
+    },
+    revokeBootstrapApproval() {
+      bootstrapApproved = false;
     },
     malformedPrivateResponse() {
       malformedPrivateResponse = true;
@@ -755,6 +806,59 @@ describe("normal organization owner proof collector", () => {
       f.requests.filter((request) => new URL(request.url).pathname === "/api/auth/sign-up/email"),
     ).toHaveLength(signups);
   });
+  it("plans through the real collector and journal from incomplete app receipts and retained Auth/accounts", async () => {
+    const f = await fixture();
+    await f.beginAppPlanning();
+    const before = structuredClone(f.row.record);
+    const revision = f.row.revision;
+    expect(before.accountPreparation?.organizationProofs).toBeUndefined();
+    const signups = f.requests.filter(
+      (request) => new URL(request.url).pathname === "/api/auth/sign-up/email",
+    ).length;
+    expect(before.operator?.receipts.map((receipt) => receipt.effectId)).toEqual([
+      "auth-resources",
+      "app-resources",
+      "auth-schema",
+    ]);
+    const proposed = await f.proposeAccess();
+    expect(proposed.stage).toBe("app");
+    expect(proposed.normalActorPreparation?.accountOperationRef).toBe(accountOperationRef);
+    expect(proposed.authMembership?.kind).toBe("create-owned-organizations");
+    expect(f.row.revision).toBeGreaterThan(revision);
+    expect(
+      f.row.record.accountPreparation?.organizationProofs?.every(
+        (proof) => proof.link.consumedAt !== undefined,
+      ),
+    ).toBe(true);
+    expect(f.row.record.accountPreparation?.sealedState).toEqual(
+      before.accountPreparation?.sealedState,
+    );
+    expect(f.row.record.operator).toEqual(before.operator);
+    expect(f.row.record.retainedAuth).toEqual(before.retainedAuth);
+    expect(
+      f.requests.filter((request) => new URL(request.url).pathname === "/api/auth/sign-up/email"),
+    ).toHaveLength(signups);
+  });
+
+  it.each(["original-auth", "original-account", "current-owner"])(
+    "rejects revoked %s authority while replanning an incomplete app",
+    async (change) => {
+      const f = await fixture();
+      await f.beginAppPlanning();
+      if (change === "original-auth") {
+        f.revokeBootstrapApproval();
+      } else if (change === "original-account") {
+        f.revokeAccountApproval();
+      } else {
+        f.revoke();
+      }
+      const before = structuredClone(f.row);
+      const artifacts = [...f.artifacts];
+      await expect(f.proposeAccess()).rejects.toThrow();
+      expect(f.row).toEqual(before);
+      expect([...f.artifacts]).toEqual(artifacts);
+    },
+  );
   afterEach(() => vi.restoreAllMocks());
   it.each([
     { status: 401, contentType: "text/html", valid: false },
