@@ -57,6 +57,10 @@ export interface SourceReviewJournal {
   read: (key: string) => Promise<SourceReviewJournalRecord | undefined>;
   put: (key: string, record: SourceReviewJournalRecord) => Promise<SourceReviewJournalRecord>;
 }
+/** Fresh evidence authorization does not require reading a completed assessment. */
+export interface OwnerAuthorizedSourceReviewJournal extends SourceReviewJournal {
+  assertCurrentOwner: () => Promise<void>;
+}
 /** Closed records contain validated sanitized conclusions and digest references only. */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Durable records are validated by the closed schema before serialization.
 export const serializeSourceReviewRecord = (record: unknown): string =>

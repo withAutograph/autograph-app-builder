@@ -6,7 +6,11 @@ import {
   reviewCurrentProductSource,
   retainCurrentProductSourceAssessment,
 } from "@/lib/agent/product-source-review-state";
-import { assessApplicationSource, applicationSourceReviewKey } from "./application-source-review";
+import {
+  assessApplicationSource,
+  applicationSourceReviewKey,
+  applicationSourceReviewCacheSessionId,
+} from "./application-source-review";
 import type {
   ApplicationReviewEvidence,
   ApplicationSourceReviewOptions,
@@ -15,7 +19,7 @@ import {
   applicationReviewVisibility,
   createApplicationReviewEvidence,
 } from "./application-review-evidence";
-import type { SourceReviewJournal } from "./product-source-review-journal";
+import type { OwnerAuthorizedSourceReviewJournal } from "./product-source-review-journal";
 import { appBaselineState } from "./app-baseline-state";
 import { readAppBaselineMarker } from "../repository/app-baseline";
 import { inspectApplyOverlay } from "@/lib/repository/target-apply";
@@ -131,7 +135,7 @@ export const reviewApplicationWithJournal = async (
     reviewInput: ProductSourceReviewInput;
     normalizedChanges: readonly OverlayChange[];
     evidence: ApplicationReviewEvidence;
-    journal: SourceReviewJournal;
+    journal: OwnerAuthorizedSourceReviewJournal;
     currentDigest: () => Promise<string>;
     options?: ApplicationSourceReviewOptions;
   },
@@ -147,9 +151,10 @@ export const reviewApplicationWithJournal = async (
     retained.assessment.bindingDigest === sourceReviewBindingDigest(input.reviewInput);
   const options: ApplicationSourceReviewOptions = {
     ...input.options,
+    cacheSessionId: applicationSourceReviewCacheSessionId(input.options?.sessionId, key),
     async assertCurrentOwner() {
       signal?.throwIfAborted();
-      await input.journal.read(key);
+      await input.journal.assertCurrentOwner();
       signal?.throwIfAborted();
     },
   };

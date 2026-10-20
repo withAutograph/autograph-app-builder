@@ -194,13 +194,18 @@ honest distinctions between verified behavior and behavior still unassessed.
 A deferred or unassessed source assessment from validation is expected; do not
 rerun validation merely to obtain independent review. When implementation and
 required behavioral checks are ready, inspect `change_set_status` and call
-`accept_change_set`. That operation assesses current source against the original
-request and accepted plan, or reuses a matching completed assessment. Complete
-this final review before declaring the private preview finished or publishing
-its changes. Repair concrete review findings through supported validation tools,
-then accept the corrected change set again. If final review is interrupted or
-blocked, resume its matching journal work rather than repeat technical checks
-without a new technical failure. Review does not replace executed product QA.
+`accept_change_set`. This required final independent review assesses current
+source against the original request and accepted plan, or reuses a matching
+completed assessment. Repair concrete review findings through supported
+validation tools, then accept the corrected change set again. Distinguish
+`reviewCompleted` from `status: "unassessed"`: a completed source assessment can
+still leave runtime behavior unassessed. Never claim a completed review when
+`reviewCompleted` is false. Report unavailable or interrupted assessments
+truthfully; they do not create a publication admission gate or require another
+technical validation without a new technical failure. Preserve matching journal
+work for resumption when review can continue. Publication still requires the
+exact reviewed source and separate outward-effect approval. Source review does
+not replace executed product QA.
 Read the selected Arrusted checkout's `docs/guides/building-apps-with-app-builder.md`
 and the selected app's README/AGENTS through `inspect_repository`; use the linked
 compiler and data-operation contracts for backend features. These repository

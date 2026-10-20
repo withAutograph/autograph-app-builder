@@ -8,7 +8,7 @@ import {
   sourceReviewJournalRecordSchema,
   sourceReviewPairKeySchema,
 } from "./product-source-review-journal";
-import type { SourceReviewJournal } from "./product-source-review-journal";
+import type { OwnerAuthorizedSourceReviewJournal } from "./product-source-review-journal";
 
 const hash = (content: string) => createHash("sha256").update(content).digest("hex");
 const unavailable = () =>
@@ -85,7 +85,7 @@ export const createLocalSourceReviewJournal = async (input: {
   ownerScope: string;
   sessionId: string;
   assertCurrentOwner: () => Promise<void>;
-}): Promise<SourceReviewJournal> => {
+}): Promise<OwnerAuthorizedSourceReviewJournal> => {
   if (!input.sessionId || !input.ownerScope) {
     throw unavailable();
   }
@@ -95,15 +95,19 @@ export const createLocalSourceReviewJournal = async (input: {
   await directory(root, true);
   const owned = path.join(root, hash(JSON.stringify([input.ownerScope, input.sessionId])));
   await directory(owned, true);
-  const file = async (key: string) => {
-    sourceReviewPairKeySchema.parse(key);
+  const assertCurrentOwner = async () => {
     await input.assertCurrentOwner();
     await directory(input.stateRoot);
     await directory(root);
     await directory(owned);
+  };
+  const file = async (key: string) => {
+    sourceReviewPairKeySchema.parse(key);
+    await assertCurrentOwner();
     return path.join(owned, `${key}.json`);
   };
   return {
+    assertCurrentOwner,
     async put(key, record) {
       const stored = await writeOnce(await file(key), serializeSourceReviewRecord(record));
       await input.assertCurrentOwner();

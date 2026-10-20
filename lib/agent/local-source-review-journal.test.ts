@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, readdir, realpath, rm, symlink } from "node:fs/promises";
+import { chmod, mkdtemp, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -51,6 +51,21 @@ afterEach(async () => {
   );
 });
 describe("private durable source review journal", () => {
+  it("authorizes evidence without reading completed bytes and still checks owner and directory privacy", async () => {
+    const { store, stateRoot, revoke } = await fixture();
+    const key = "a".repeat(64);
+    await store.put(key, { kind: "split-source" });
+    const root = path.join(stateRoot, "source-review-journal");
+    const [scope] = await readdir(root);
+    await writeFile(path.join(root, scope, `${key}.json`), "incomplete record");
+    await expect(store.assertCurrentOwner()).resolves.toBeUndefined();
+    await expect(store.read(key)).rejects.toThrow();
+    await chmod(stateRoot, 0o755);
+    await expect(store.assertCurrentOwner()).rejects.toThrow("unavailable");
+    await chmod(stateRoot, 0o700);
+    revoke();
+    await expect(store.assertCurrentOwner()).rejects.toThrow("ownership revoked");
+  });
   it("retains a completed application assessment separately from immutable fragment provenance", async () => {
     const { store } = await fixture();
     const fragment = { assessment: completedAssessment, kind: "completed" as const };
