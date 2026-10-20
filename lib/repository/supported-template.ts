@@ -94,6 +94,7 @@ const expectedCommands = {
 export const supportedValidationCommands = function supportedValidationCommands(
   appId: string,
   testShards: readonly string[] = SUPPORTED_VALIDATION_TEST_SHARDS,
+  options?: { alreadyCompiled?: true },
 ) {
   if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u.test(appId)) {
     throw new Error("The validation application id is invalid.");
@@ -104,13 +105,15 @@ export const supportedValidationCommands = function supportedValidationCommands(
   ) {
     throw new Error("The validation test shard set is invalid.");
   }
+  const compileDependency = options?.alreadyCompiled === true ? "--skip-deps " : "";
   return [
     {
-      command: `mise run --no-deps --skip-tools app:check ${appId}` as const,
+      command: `mise run --no-deps ${compileDependency}--skip-tools app:check ${appId}` as const,
       name: "check-build" as const,
     },
     ...testShards.map((shard) => ({
-      command: `mise run --no-deps --skip-tools app:test ${appId} ${shard}` as const,
+      command:
+        `mise run --no-deps ${compileDependency}--skip-tools app:test ${appId} ${shard}` as const,
       name: "test" as const,
     })),
   ];

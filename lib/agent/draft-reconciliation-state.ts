@@ -89,10 +89,14 @@ export interface DraftReconciliationCandidate {
   validationRun?: {
     steps: readonly {
       // oxlint-disable-next-line sonarjs/max-union-size -- Each command category has distinct execution handling.
-      kind: "install" | "schema" | "local" | "check" | "browser" | "additional";
+      kind: "install" | "schema" | "local" | "check" | "browser" | "additional" | "capture";
+      /** A fixed setup action selected by an actual failed repository command. */
+      recoveryFor?: string;
       command: string;
     }[];
     nextIndex: number;
+    /** Acknowledged successful selected-app compile in this coherent validation pass. */
+    schemaTaskCompleted?: true;
     compilation?: ReconciliationCompilation;
     commands: readonly { command: string; exitCode: number }[];
     resolvedTree: string;

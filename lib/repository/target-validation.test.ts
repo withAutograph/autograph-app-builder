@@ -295,11 +295,23 @@ describe("target validation", () => {
   });
 
   it.each([
-    ["mise run --no-deps --skip-tools app:check example", "repository-check", undefined],
-    ["mise run --no-deps --skip-tools app:test example 1/1", "repository-test", "1/1"],
+    ["mise run --no-deps --skip-tools app:check example", "repository-check", undefined, undefined],
+    ["mise run --no-deps --skip-tools app:test example 1/1", "repository-test", "1/1", undefined],
+    [
+      "mise run --no-deps --skip-deps --skip-tools app:check example",
+      "repository-check",
+      undefined,
+      true,
+    ],
+    [
+      "mise run --no-deps --skip-deps --skip-tools app:test example 1/1",
+      "repository-test",
+      "1/1",
+      true,
+    ],
   ] as const)(
     "forwards compiler inputs to owned hosted execution: %s",
-    async (command, task, shard) => {
+    async (command, task, shard, alreadyCompiled) => {
       const { sandbox } = sandboxFixture();
       const runTask = vi
         .fn<PreparedRuntimeExecution["runTask"]>()
@@ -322,7 +334,7 @@ describe("target validation", () => {
         runTask,
         stateDirectory: "/private-state",
       };
-      const executor = sandboxValidationCommandExecutor({ runtime });
+      const executor = sandboxValidationCommandExecutor({ runtime, alreadyCompiled });
       const onChunk = vi.fn();
       const environment = { APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]' };
       const result = await executor({
@@ -335,7 +347,13 @@ describe("target validation", () => {
       });
       expect(result).toMatchObject({ exitCode: 0, stdout: "checks passed" });
       expect(runTask).toHaveBeenCalledWith(
-        expect.objectContaining({ environment, onChunk, task, ...(shard ? { shard } : {}) }),
+        expect.objectContaining({
+          environment,
+          onChunk,
+          task,
+          ...(shard ? { shard } : {}),
+          ...(alreadyCompiled ? { alreadyCompiled: true } : {}),
+        }),
       );
     },
   );
@@ -778,37 +796,48 @@ describe("target validation", () => {
   });
 
   it.each([
-    "mise run --no-deps --skip-tools app:check example",
-    "mise run --no-deps --skip-tools app:test example 1/1",
-  ] as const)("runs the repository-owned validation task once: %s", async (command) => {
-    // oxlint-disable-next-line eslint/require-await -- model the sandbox's async command API
-    const run = vi.fn(async () => ({ exitCode: 1, stderr: "Formatting issues found", stdout: "" }));
-    const sandbox = { run } as unknown as SandboxSession;
+    ["mise run --no-deps --skip-tools app:check example", undefined],
+    ["mise run --no-deps --skip-tools app:test example 1/1", undefined],
+    ["mise run --no-deps --skip-deps --skip-tools app:check example", true],
+    ["mise run --no-deps --skip-deps --skip-tools app:test example 1/1", true],
+  ] as const)(
+    "runs the repository-owned validation task once: %s",
+    async (command, alreadyCompiled) => {
+      // oxlint-disable-next-line eslint/require-await -- model the sandbox's async command API
+      const run = vi.fn(async () => ({
+        exitCode: 1,
+        stderr: "Formatting issues found",
+        stdout: "",
+      }));
+      const sandbox = { run } as unknown as SandboxSession;
 
-    const result = await sandboxValidationCommandExecutor()({
-      appId: "example",
-      command,
-      sandbox,
-      validationRoot: "/workspace/repository",
-    });
+      const result = await sandboxValidationCommandExecutor({ alreadyCompiled })({
+        appId: "example",
+        environment: { APP_RUNTIME_ALREADY_COMPILED: "untrusted" },
+        command,
+        sandbox,
+        validationRoot: "/workspace/repository",
+      });
 
-    expect(result.exitCode).toBe(1);
-    expect(run).toHaveBeenCalledExactlyOnceWith({
-      command: `set +e
+      expect(result.exitCode).toBe(1);
+      expect(run).toHaveBeenCalledExactlyOnceWith({
+        command: `set +e
 log=$(mktemp /tmp/app-builder-validation.XXXXXX) || exit $?
 if [ -f '/tmp/autograph-app-runtime/b7a886d0cdd17479/example/environment.json' ]; then mise run --no-deps app:runtime run example ${command.includes(" app:check ") ? "repository-check" : "repository-test 1/1"}; else ${command}; fi > "$log" 2>&1
 status=$?
 cat "$log"
 rm -f "$log"
 exit "$status"`,
-      env: {
-        APP_RUNTIME_STATE_DIR: path.posix.dirname(
-          localRuntimeEnvironmentPath("/workspace/repository", "example"),
-        ),
-      },
-      workingDirectory: "/workspace/repository",
-    });
-  });
+        env: {
+          ...(alreadyCompiled ? { APP_RUNTIME_ALREADY_COMPILED: "1" } : {}),
+          APP_RUNTIME_STATE_DIR: path.posix.dirname(
+            localRuntimeEnvironmentPath("/workspace/repository", "example"),
+          ),
+        },
+        workingDirectory: "/workspace/repository",
+      });
+    },
+  );
 
   it.each([
     [false, "mise run --no-deps --skip-tools app:check example", "repository-check"],

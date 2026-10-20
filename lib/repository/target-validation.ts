@@ -24,8 +24,8 @@ import { sanitizeValidationDiagnosticText } from "./validation-output-sanitize";
 export { sanitizeValidationDiagnosticText } from "./validation-output-sanitize";
 
 export type TargetValidationCommand =
-  | `mise run --no-deps --skip-tools app:check ${string}`
-  | `mise run --no-deps --skip-tools app:test ${string} ${string}`;
+  | `mise run --no-deps ${"" | "--skip-deps "}--skip-tools app:check ${string}`
+  | `mise run --no-deps ${"" | "--skip-deps "}--skip-tools app:test ${string} ${string}`;
 export type TargetValidationCommandName = "check-build" | "test";
 
 export type ValidationCommandExecutor = (input: {
@@ -425,9 +425,16 @@ const attemptBinding = (attempt: TargetValidationAttemptReceipt): TargetValidati
 });
 
 export const sandboxValidationCommandExecutor =
-  (options?: { runtime?: PreparedRuntimeExecution | null }): ValidationCommandExecutor =>
+  (options?: {
+    runtime?: PreparedRuntimeExecution | null;
+    alreadyCompiled?: true;
+  }): ValidationCommandExecutor =>
   async ({ sandbox, appId, command, validationRoot, environment, onChunk, abortSignal }) => {
-    if (!supportedValidationCommands(appId).some((planned) => planned.command === command)) {
+    if (
+      !supportedValidationCommands(appId, undefined, options).some(
+        (planned) => planned.command === command,
+      )
+    ) {
       throw new Error("The repository validation command is not supported.");
     }
     // Repository tasks may start local services. Keep those services' output on
@@ -438,6 +445,7 @@ export const sandboxValidationCommandExecutor =
     if (options?.runtime) {
       return await options.runtime.runTask({
         task: runtimeTask,
+        ...(options?.alreadyCompiled === true ? { alreadyCompiled: true } : {}),
         environment,
         ...(shard ? { shard: shard.trim() } : {}),
         onChunk,
@@ -448,10 +456,12 @@ export const sandboxValidationCommandExecutor =
     const env = {
       ...Object.fromEntries(
         Object.entries(environment ?? {}).filter(
-          (entry): entry is [string, string] => entry[1] !== undefined,
+          (entry): entry is [string, string] =>
+            entry[1] !== undefined && entry[0] !== "APP_RUNTIME_ALREADY_COMPILED",
         ),
       ),
       APP_RUNTIME_STATE_DIR: nodePath.posix.dirname(environmentPath),
+      ...(options?.alreadyCompiled === true ? { APP_RUNTIME_ALREADY_COMPILED: "1" } : {}),
     };
     const executionCommand = `if [ -f '${environmentPath}' ]; then mise run --no-deps app:runtime run ${appId} ${runtimeTask}${shard}; else ${command}; fi`;
     const detachedCommand = `set +e

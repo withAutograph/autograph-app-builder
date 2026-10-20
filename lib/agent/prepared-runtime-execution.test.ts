@@ -281,52 +281,71 @@ beforeEach(() => {
 
 describe("approved hosted runtime consumers", () => {
   it.each([
-    ["repository-check", undefined],
-    ["repository-test", "1/1"],
-  ] as const)("forwards compiler operation inputs to the provider for %s", async (task, shard) => {
-    const fixture = transport();
-    const runtime = await restorePreparedRuntimeExecution({
-      appId: context.appId,
-      binding: binding(),
-      observeInstallation: async () =>
-        await mocks.observeInstallation({
-          ...context,
-          files: files(),
-          stateDirectory: "/private-state",
-        }),
-      provider: fixture.provider,
-      root: context.root,
-    });
-    expect(fixture.provider.runCommand).toHaveBeenNthCalledWith(1, {
-      args: ["mise", "run", "app:describe", context.appId],
-      cmd: "/usr/bin/env",
-      cwd: context.root,
-      signal: undefined,
-    });
-    await runtime.runTask({
-      task,
-      shard,
-      environment: {
-        APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
-        PATH: "/sandbox/custom/bin:/usr/bin",
-        APP_RUNTIME_STATE_DIR: "/untrusted-state-directory",
-        OPTIONAL_INPUT: undefined,
-      },
-    });
-    expect(fixture.provider.runCommand).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        args: ["mise", "run", "app:runtime", "run", context.appId, task, ...(shard ? [shard] : [])],
+    ["repository-check", undefined, undefined],
+    ["repository-test", "1/1", undefined],
+    ["repository-check", undefined, true],
+    ["repository-test", "1/1", true],
+    ["test-e2e", undefined, true],
+  ] as const)(
+    "forwards compiler operation inputs to the provider for %s",
+    async (task, shard, alreadyCompiled) => {
+      const fixture = transport();
+      const runtime = await restorePreparedRuntimeExecution({
+        appId: context.appId,
+        binding: binding(),
+        observeInstallation: async () =>
+          await mocks.observeInstallation({
+            ...context,
+            files: files(),
+            stateDirectory: "/private-state",
+          }),
+        provider: fixture.provider,
+        root: context.root,
+      });
+      expect(fixture.provider.runCommand).toHaveBeenNthCalledWith(1, {
+        args: ["mise", "run", "app:describe", context.appId],
         cmd: "/usr/bin/env",
         cwd: context.root,
-        detached: true,
-        env: {
+        signal: undefined,
+      });
+      await runtime.runTask({
+        task,
+        shard,
+        alreadyCompiled,
+        environment: {
           APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
           PATH: "/sandbox/custom/bin:/usr/bin",
-          APP_RUNTIME_STATE_DIR: "/private-state",
+          APP_RUNTIME_STATE_DIR: "/untrusted-state-directory",
+          OPTIONAL_INPUT: undefined,
+          APP_RUNTIME_ALREADY_COMPILED: "untrusted",
         },
-      }),
-    );
-  });
+      });
+      expect(fixture.provider.runCommand).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          args: [
+            "mise",
+            "run",
+            "app:runtime",
+            "run",
+            context.appId,
+            task,
+            ...(shard ? [shard] : []),
+          ],
+          cmd: "/usr/bin/env",
+          cwd: context.root,
+          detached: true,
+          env: {
+            APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
+            PATH: "/sandbox/custom/bin:/usr/bin",
+            APP_RUNTIME_STATE_DIR: "/private-state",
+            ...(alreadyCompiled && task !== "test-e2e"
+              ? { APP_RUNTIME_ALREADY_COMPILED: "1" }
+              : {}),
+          },
+        }),
+      );
+    },
+  );
   it.each([undefined, "https://apps-preview.example.test"])(
     "preserves the verified native browser origin %s without adding runtime bindings",
     async (publicOrigin) => {

@@ -12,7 +12,6 @@ import {
   appDeclaresLocalSetup,
   localPreviewExecutionCommand,
   prepareAppLocalPreview,
-  prepareValidationLocalData,
 } from "./prepare-app-local-preview";
 import { appBrowserTestCommand, runAppBrowserTests } from "./run-app-browser-tests";
 import {
@@ -23,7 +22,6 @@ import {
 import type {
   CandidateValidationAttempt,
   DraftReconciliationCandidate,
-  ReconciliationCompilation,
 } from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { supportedValidationCommands } from "@/lib/repository/supported-template";
@@ -57,45 +55,125 @@ const publishCandidateArtifacts = async (
   });
 };
 
-const runAdditionalChecks = async (input: {
-  sandbox: SandboxSession;
-  root: string;
-  tasks: readonly string[];
-}) => {
-  const commands: { command: string; exitCode: number }[] = [];
-  for (const task of input.tasks) {
-    const command = `mise run --no-deps --skip-tools ${task}`;
-    let result: Awaited<ReturnType<SandboxSession["run"]>>;
-    try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- repository checks must run sequentially against the same candidate.
-      result = await input.sandbox.run({ command, workingDirectory: input.root });
-    } catch (error) {
-      throw new Error(
-        `Builder could not run ${command} in the reconciled checkout. Check the sandbox command runner and the repository task, then retry. Cause: ${error instanceof Error ? error.message : String(error)}`,
-        { cause: error },
-      );
-    }
-    commands.push({ command, exitCode: result.exitCode });
-    if (result.exitCode !== 0) {
-      return {
-        commands,
-        failure: {
-          command,
-          exitCode: result.exitCode,
-          output: validationOutputExcerpt(result.stdout, result.stderr),
-          problem: `The reconciled checkout failed ${command}. Repair the reported repository configuration or check, then rerun candidate validation before review.`,
-          status: "needs_repair" as const,
-        },
-      };
-    }
-  }
-  return { commands };
-};
-
 const installCommand = "mise exec --no-deps -- bun install --frozen-lockfile";
 const additionalCheckCommand = (task: string) => `mise run --no-deps --skip-tools ${task}`;
 
 type ValidationStep = NonNullable<DraftReconciliationCandidate["validationRun"]>["steps"][number];
+const captureCommand = "Capture selected checked app release";
+
+const validationSteps = (input: {
+  appId: string;
+  root: string;
+  sandbox: SandboxSession;
+  additionalCheckTasks: string[];
+  runBrowserTests: boolean;
+  schemaTaskCompleted?: true;
+}): ValidationStep[] => {
+  const checks: ValidationStep[] = supportedValidationCommands(input.appId, undefined, {
+    alreadyCompiled: input.schemaTaskCompleted,
+  }).map(({ command }) => ({
+    command,
+    kind: "check",
+  }));
+  return [
+    ...(input.schemaTaskCompleted === true
+      ? []
+      : [{ command: appSchemaReleaseCommand(input.appId), kind: "schema" as const }]),
+    ...checks,
+    ...(input.runBrowserTests
+      ? [{ command: appBrowserTestCommand(input.appId), kind: "browser" as const }]
+      : []),
+    ...input.additionalCheckTasks.map((task) => ({
+      command: additionalCheckCommand(task),
+      kind: "additional" as const,
+    })),
+    { command: captureCommand, kind: "capture" },
+  ];
+};
+
+const declaredMissingPackage = async (input: {
+  appId: string;
+  root: string;
+  sandbox: Pick<SandboxSession, "readTextFile">;
+  output: string;
+  signal?: AbortSignal;
+}): Promise<boolean> => {
+  const packageSpecifier =
+    /^\s*(?:error: )?Cannot find package ['"](?<name>[^'"]+)['"] (?:from|imported from) /imu.exec(
+      input.output,
+    )?.groups?.name;
+  const specifier = packageSpecifier;
+  if (specifier === undefined || specifier.startsWith(".") || specifier.startsWith("/")) {
+    return false;
+  }
+  const name = specifier
+    .split("/")
+    .slice(0, specifier.startsWith("@") ? 2 : 1)
+    .join("/");
+  if (name !== specifier) {
+    return false;
+  }
+  const manifestSchema = z.looseObject({
+    dependencies: z.record(z.string(), z.string()).optional(),
+    devDependencies: z.record(z.string(), z.string()).optional(),
+    optionalDependencies: z.record(z.string(), z.string()).optional(),
+  });
+  for (const path of [
+    `${input.root}/package.json`,
+    `${input.root}/apps/${input.appId}/package.json`,
+  ]) {
+    try {
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Stop after a positive declaration in the actual repository or selected app manifest.
+      const text = await input.sandbox.readTextFile({ path, abortSignal: input.signal });
+      if (text === null) {
+        continue;
+      }
+      const manifest = manifestSchema.safeParse(JSON.parse(text));
+      if (
+        manifest.success &&
+        [
+          manifest.data.dependencies,
+          manifest.data.devDependencies,
+          manifest.data.optionalDependencies,
+        ].some((entries) => entries !== undefined && Object.hasOwn(entries, name))
+      ) {
+        return true;
+      }
+    } catch {
+      input.signal?.throwIfAborted();
+      // Unreadable dependency evidence leaves the original task failure actionable.
+    }
+  }
+  return false;
+};
+
+/** Route positive task diagnostics to closed setup actions, never arbitrary output commands. */
+const recoveryStep = async (input: {
+  appId: string;
+  root: string;
+  command: string;
+  output: string;
+  sandbox: Pick<SandboxSession, "readTextFile">;
+  signal?: AbortSignal;
+}): Promise<ValidationStep | undefined> => {
+  if (
+    [
+      `${input.appId} must have exactly one checked release matching its CUE source`,
+      `apps/${input.appId}/schema/index.ts is required for its checked release`,
+      `apps/${input.appId}/schema/index.ts is stale for its checked release`,
+    ].some((diagnostic) => input.output.includes(diagnostic))
+  ) {
+    return {
+      kind: "schema",
+      command: appSchemaReleaseCommand(input.appId),
+      recoveryFor: input.command,
+    };
+  }
+  if (await declaredMissingPackage(input)) {
+    return { kind: "install", command: installCommand, recoveryFor: input.command };
+  }
+  return undefined;
+};
 
 const executeCandidateCheck = async (input: {
   planned: ReturnType<typeof supportedValidationCommands>[number];
@@ -106,6 +184,7 @@ const executeCandidateCheck = async (input: {
   resolvedTree: string;
   sandbox: SandboxSession;
   signal?: AbortSignal;
+  alreadyCompiled?: true;
 }): Promise<Awaited<ReturnType<ReturnType<typeof sandboxValidationCommandExecutor>>>> => {
   const binding = {
     appId: input.candidate.appId,
@@ -222,7 +301,9 @@ const executeCandidateCheck = async (input: {
   };
   try {
     // The executor uses onChunk to switch to spawn; retain its detached run lifecycle and capture its returned output.
-    const result = await sandboxValidationCommandExecutor()({
+    const result = await sandboxValidationCommandExecutor({
+      alreadyCompiled: input.alreadyCompiled,
+    })({
       appId: input.candidate.appId,
       command: input.planned.command,
       sandbox: input.sandbox,
@@ -250,7 +331,11 @@ const executeCandidateCheck = async (input: {
 };
 
 /** Keep completed receipts; update only recognized pending repository command forms. */
-const currentValidationStep = (step: ValidationStep, appId: string): ValidationStep => {
+const currentValidationStep = (
+  step: ValidationStep,
+  appId: string,
+  alreadyCompiled?: true,
+): ValidationStep => {
   switch (step.kind) {
     case "install": {
       return step.command === installCommand ||
@@ -268,13 +353,17 @@ const currentValidationStep = (step: ValidationStep, appId: string): ValidationS
       return { ...step, command: appBrowserTestCommand(appId) };
     }
     case "check": {
-      const planned = supportedValidationCommands(appId).find((candidate) => {
-        const legacy =
-          candidate.name === "check-build"
-            ? `mise run --skip-tools app:check ${appId}`
-            : `mise run --skip-tools app:test ${appId} ${candidate.command.split(" ").at(-1)}`;
-        return step.command === candidate.command || step.command === legacy;
-      });
+      const planned = supportedValidationCommands(appId, undefined, { alreadyCompiled }).find(
+        (candidate) => {
+          const legacy =
+            candidate.name === "check-build"
+              ? `mise run --skip-tools app:check ${appId}`
+              : `mise run --skip-tools app:test ${appId} ${candidate.command.split(" ").at(-1)}`;
+          const standalone = candidate.command.replace("--skip-deps ", "");
+          const precompiled = standalone.replace("--skip-tools", "--skip-deps --skip-tools");
+          return [candidate.command, standalone, precompiled, legacy].includes(step.command);
+        },
+      );
       return planned === undefined ? step : { ...step, command: planned.command };
     }
     case "additional": {
@@ -282,6 +371,9 @@ const currentValidationStep = (step: ValidationStep, appId: string): ValidationS
         step.command,
       )?.groups?.task;
       return task === undefined ? step : { ...step, command: additionalCheckCommand(task) };
+    }
+    case "capture": {
+      return { ...step, command: captureCommand };
     }
     default: {
       return step;
@@ -323,29 +415,12 @@ const runIncrementalValidation = async (
     run = null;
   }
   if (run === null) {
-    const local = await appDeclaresLocalSetup({
+    const steps = validationSteps({
+      ...input,
       appId: candidate.appId,
       root: candidate.root,
       sandbox,
     });
-    const steps: ValidationStep[] = [
-      { command: installCommand, kind: "install" },
-      { command: appSchemaReleaseCommand(candidate.appId), kind: "schema" },
-      ...(local
-        ? [{ command: localPreviewExecutionCommand(candidate.appId), kind: "local" as const }]
-        : []),
-      ...supportedValidationCommands(candidate.appId).map(({ command }) => ({
-        command,
-        kind: "check" as const,
-      })),
-      ...(input.runBrowserTests
-        ? [{ command: appBrowserTestCommand(candidate.appId), kind: "browser" as const }]
-        : []),
-      ...input.additionalCheckTasks.map((task) => ({
-        command: additionalCheckCommand(task),
-        kind: "additional" as const,
-      })),
-    ];
     run = { commands: [], nextIndex: 0, resolvedTree: before.resolvedTree, steps };
     const initialRun = run;
     updateExactDraftReconciliation({
@@ -363,12 +438,18 @@ const runIncrementalValidation = async (
   }
   const originalStepCommand = run.steps[run.nextIndex]?.command;
   const nextIndexToRun = run.nextIndex;
+  const schemaTaskCompleted = run.schemaTaskCompleted;
   run = {
     ...run,
     steps: run.steps.map((step, index) =>
-      index < nextIndexToRun ? step : currentValidationStep(step, candidate.appId),
+      index < nextIndexToRun
+        ? step
+        : currentValidationStep(step, candidate.appId, schemaTaskCompleted),
     ),
   };
+  if (!run.steps.some((entry) => entry.kind === "capture")) {
+    run = { ...run, steps: [...run.steps, { kind: "capture", command: captureCommand }] };
+  }
   const step = run.steps[run.nextIndex];
   if (step === undefined) {
     throw new Error(
@@ -385,19 +466,50 @@ const runIncrementalValidation = async (
     );
   }
   let result: ValidationStepResult;
+  let recovery: ValidationStep | undefined;
   let compilation = run.compilation;
   try {
-    if (step.kind === "schema") {
+    if (step.kind === "capture") {
+      try {
+        const captured = await publishCandidateArtifacts(ctx, candidate, sandbox);
+        compilation = captured.compilation;
+      } catch {
+        ctx.abortSignal?.throwIfAborted();
+        return {
+          command: captureCommand,
+          exitCode: null,
+          problem:
+            "The repository checks passed, but Builder could not capture the actual selected checked release under current owner/session authority. Restore artifact storage or session authority and retry this pending capture; no extra schema compilation is required.",
+          status: "needs_repair" as const,
+        };
+      }
+      result = { command: captureCommand, exitCode: null, status: "passed" };
+    } else if (step.kind === "schema") {
       const schema = await compileAppSchemaRelease({
         appId: candidate.appId,
-        onCompiled: async () => {
-          const captured = await publishCandidateArtifacts(ctx, candidate, sandbox);
-          compilation = captured.compilation;
-        },
         root: candidate.root,
         sandbox,
         signal: ctx.abortSignal,
       });
+      if (schema.status === "compiled") {
+        run = {
+          ...run,
+          schemaTaskCompleted: true,
+          steps: run.steps.map((entry, index) =>
+            index > nextIndexToRun ? currentValidationStep(entry, candidate.appId, true) : entry,
+          ),
+        };
+      } else {
+        const required = await recoveryStep({
+          appId: candidate.appId,
+          root: candidate.root,
+          sandbox,
+          signal: ctx.abortSignal,
+          command: step.command,
+          output: `${schema.stderr}\n${schema.stdout}`,
+        });
+        recovery = required?.kind === "install" ? required : undefined;
+      }
       result = {
         command: schema.command,
         exitCode: schema.exitCode,
@@ -434,9 +546,9 @@ const runIncrementalValidation = async (
         status: browser.status === "passed" ? "passed" : "failed",
       };
     } else {
-      const planned = supportedValidationCommands(candidate.appId).find(
-        ({ command }) => command === step.command,
-      );
+      const planned = supportedValidationCommands(candidate.appId, undefined, {
+        alreadyCompiled: run.schemaTaskCompleted,
+      }).find(({ command }) => command === step.command);
       if (step.kind === "check" && planned === undefined) {
         throw new Error(`The selected repository check ${step.command} is no longer supported.`);
       }
@@ -451,12 +563,39 @@ const runIncrementalValidation = async (
               sessionAuth: ctx.session.auth,
               sessionId: ctx.session.id,
               signal: ctx.abortSignal,
+              alreadyCompiled: run.schemaTaskCompleted,
             })
           : await sandbox.run({
               abortSignal: ctx.abortSignal,
               command: step.command,
               workingDirectory: candidate.root,
             });
+      const checkedBuild =
+        step.kind === "check" && planned?.name === "check-build" && execution.exitCode === 0;
+      if (
+        checkedBuild &&
+        run.steps[run.nextIndex + 1]?.kind !== "local" &&
+        (await appDeclaresLocalSetup({ appId: candidate.appId, root: candidate.root, sandbox }))
+      ) {
+        run = {
+          ...run,
+          steps: [
+            ...run.steps.slice(0, run.nextIndex + 1),
+            { kind: "local", command: localPreviewExecutionCommand(candidate.appId) },
+            ...run.steps.slice(run.nextIndex + 1),
+          ],
+        };
+      }
+      if (step.kind === "check" && execution.exitCode !== 0) {
+        recovery = await recoveryStep({
+          appId: candidate.appId,
+          root: candidate.root,
+          sandbox,
+          signal: ctx.abortSignal,
+          command: step.command,
+          output: `${execution.stderr}\n${execution.stdout}`,
+        });
+      }
       result = {
         command: step.command,
         exitCode: execution.exitCode,
@@ -471,6 +610,62 @@ const runIncrementalValidation = async (
     );
   }
   if (result.status === "failed") {
+    const completedRecovery = run.steps
+      .slice(0, run.nextIndex)
+      .filter((entry) => entry.recoveryFor !== undefined);
+    if (
+      recovery !== undefined &&
+      !completedRecovery.some(
+        (entry) => entry.kind === recovery?.kind && entry.recoveryFor === recovery.recoveryFor,
+      )
+    ) {
+      const steps = [
+        ...completedRecovery,
+        recovery,
+        ...validationSteps({
+          ...input,
+          appId: candidate.appId,
+          root: candidate.root,
+          sandbox,
+          schemaTaskCompleted: recovery.kind === "schema" ? true : run.schemaTaskCompleted,
+        }),
+      ];
+      const changed = await inspectDraftReconciliation({ prepared: candidate, sandbox });
+      if (changed.unresolvedConflicts.length > 0) {
+        return {
+          conflicts: changed.unresolvedConflicts,
+          problem: "Resolve the listed app-owned conflicts before setup recovery.",
+          status: "needs_resolution" as const,
+        };
+      }
+      const recoveryRun = {
+        ...run,
+        resolvedTree: changed.resolvedTree,
+        steps,
+        nextIndex: completedRecovery.length,
+        compilation: undefined,
+        schemaTaskCompleted: recovery.kind === "schema" ? undefined : run.schemaTaskCompleted,
+      };
+      const latest = draftReconciliationState.get();
+      if (latest === null) {
+        throw new Error("The candidate is unavailable while recording setup recovery.");
+      }
+      updateExactDraftReconciliation({
+        expected: latest,
+        operation: "recording setup required by a failed repository command",
+        transition: () => ({ ...latest, validationRun: recoveryRun }),
+      });
+      return {
+        command: result.command,
+        exitCode: result.exitCode,
+        output: result.output,
+        nextCommand: recovery.command,
+        passedCommands: run.commands.length,
+        remainingCommands: steps.length - completedRecovery.length,
+        problem: `The repository command failed and reported a concrete setup repair. Run the returned fixed nextCommand, then rerun the repository checks.`,
+        status: "in_progress" as const,
+      };
+    }
     return {
       command: result.command,
       exitCode: result.exitCode,
@@ -489,15 +684,21 @@ const runIncrementalValidation = async (
       status: "needs_resolution" as const,
     };
   }
-  const commands = [...run.commands, { command: step.command, exitCode: 0 }];
+  const commands =
+    step.kind === "capture"
+      ? run.commands
+      : [...run.commands, { command: step.command, exitCode: 0 }];
   const latest = draftReconciliationState.get();
+  if (latest === null) {
+    throw new Error("The candidate is unavailable while recording validation progress.");
+  }
   const nextIndex = run.nextIndex + 1;
   if (nextIndex < run.steps.length) {
     const nextRun = { ...run, commands, nextIndex, resolvedTree: after.resolvedTree, compilation };
     updateExactDraftReconciliation({
       expected: latest,
       operation: `recording ${step.command} validation progress`,
-      transition: () => ({ ...candidate, validationRun: nextRun }),
+      transition: () => ({ ...latest, validationRun: nextRun }),
     });
     return {
       command: step.command,
@@ -513,7 +714,7 @@ const runIncrementalValidation = async (
     operation: "recording validated merge content",
     transition: () => {
       const next = {
-        ...candidate,
+        ...latest,
         validation: {
           commands,
           resolvedTree: after.resolvedTree,
@@ -535,7 +736,7 @@ const runIncrementalValidation = async (
 
 export default defineTool({
   description:
-    "Install the candidate's own locked dependencies, compile its selected app schema, run repository app:check and app:test, and optionally run the app's browser task and repository check: tasks. All commands run in the isolated reconciled checkout; failures identify the command and cause. This does not update GitHub.",
+    "Compile the selected app once for this coherent candidate validation, then run repository app:check and app:test without repeating their compile dependency, optional local/browser and check: tasks, and capture its actual checked release. Reuse installed dependencies; only concrete missing-dependency diagnostics schedule locked installation. Failures identify the command and cause. This does not update GitHub.",
   // oxlint-disable-next-line eslint/complexity -- ordered candidate checks need one exit for each named failure.
   async execute(input, ctx) {
     const candidate = draftReconciliationState.get();
@@ -551,152 +752,26 @@ export default defineTool({
       );
     }
     const sandbox = withCandidateCommandEnvironment(await getSourceBoundSandbox(ctx));
-    if (input.incremental) {
-      return await runIncrementalValidation(input, ctx, candidate, sandbox);
-    }
-    const before = await inspectDraftReconciliation({ prepared: candidate, sandbox });
-    if (before.unresolvedConflicts.length > 0) {
-      return {
-        conflicts: before.unresolvedConflicts,
-        problem: "Resolve every listed app-owned conflict before running candidate checks.",
-        status: "needs_resolution" as const,
-      };
-    }
-    updateExactDraftReconciliation({
-      expected: candidate,
-      operation: "starting candidate validation",
-      transition: () => {
-        const next = { ...candidate };
-        delete next.proposal;
-        delete next.review;
-        delete next.reviewReadProgress;
-        delete next.validation;
-        delete next.validationRun;
-        return next;
-      },
-    });
-    const commands: { command: string; exitCode: number }[] = [];
-    let install: Awaited<ReturnType<typeof sandbox.run>>;
-    try {
-      install = await sandbox.run({ command: installCommand, workingDirectory: candidate.root });
-    } catch (error) {
-      throw new Error(
-        `Builder could not install dependencies in the reconciled checkout with ${installCommand}. Check sandbox package access and the repository lockfile, then retry. Cause: ${error instanceof Error ? error.message : String(error)}`,
-        { cause: error },
-      );
-    }
-    commands.push({ command: installCommand, exitCode: install.exitCode });
-    if (install.exitCode !== 0) {
-      return {
-        command: installCommand,
-        exitCode: install.exitCode,
-        output: validationOutputExcerpt(install.stdout, install.stderr),
-        problem:
-          "The reconciled checkout's locked dependency install failed. Fix the reported package or lockfile issue, then rerun candidate validation.",
-        status: "needs_repair" as const,
-      };
-    }
-    let compilation: ReconciliationCompilation | undefined;
-    const schema = await compileAppSchemaRelease({
-      appId: candidate.appId,
-      onCompiled: async () => {
-        const captured = await publishCandidateArtifacts(ctx, candidate, sandbox);
-        compilation = captured.compilation;
-      },
-      root: candidate.root,
-      sandbox,
-      signal: ctx.abortSignal,
-    });
-    commands.push({ command: schema.command, exitCode: schema.exitCode ?? -1 });
-    if (schema.status !== "compiled") {
-      return { ...schema, status: "needs_repair" as const };
-    }
-    await prepareValidationLocalData({
-      appId: candidate.appId,
-      root: candidate.root,
-      sandbox,
-      signal: ctx.abortSignal,
-    });
-    for (const planned of supportedValidationCommands(candidate.appId)) {
-      let result: Awaited<ReturnType<ReturnType<typeof sandboxValidationCommandExecutor>>>;
-      try {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- checks must run against the same candidate in repository order.
-        result = await executeCandidateCheck({
-          candidate,
-          callId: ctx.callId,
-          planned,
-          resolvedTree: before.resolvedTree,
-          sandbox,
-          sessionAuth: ctx.session.auth,
-          sessionId: ctx.session.id,
-          signal: ctx.abortSignal,
-        });
-      } catch (error) {
-        throw new Error(
-          `Builder could not run ${planned.command} in the reconciled checkout. Check the sandbox command runner and repository task, then retry. Cause: ${error instanceof Error ? error.message : String(error)}`,
-          { cause: error },
-        );
-      }
-      commands.push({ command: planned.command, exitCode: result.exitCode });
-      if (result.exitCode !== 0) {
-        return {
-          command: planned.command,
-          exitCode: result.exitCode,
-          output: validationOutputExcerpt(result.stdout, result.stderr),
-          problem: `The reconciled app failed ${planned.command}. Repair the named file or test assertion, then rerun validation before review.`,
-          status: "needs_repair" as const,
-        };
-      }
-    }
-    if (input.runBrowserTests) {
-      const browser = await runAppBrowserTests({
-        appId: candidate.appId,
-        root: candidate.root,
+    let current = candidate;
+    let expectedCommand = input.expectedCommand;
+    for (;;) {
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Single-call mode uses the same durable ordered steps as incremental mode.
+      const result = await runIncrementalValidation(
+        { ...input, expectedCommand },
+        ctx,
+        current,
         sandbox,
-        signal: ctx.abortSignal,
-      });
-      commands.push({ command: browser.command, exitCode: browser.exitCode ?? -1 });
-      if (browser.status !== "passed") {
-        return { ...browser, status: "needs_repair" as const };
+      );
+      if (input.incremental || result.status !== "in_progress") {
+        return result;
       }
+      const latest = draftReconciliationState.get();
+      if (latest === null) {
+        throw new Error("The candidate is unavailable after its validation command.");
+      }
+      current = latest;
+      expectedCommand = result.nextCommand;
     }
-    const additional = await runAdditionalChecks({
-      root: candidate.root,
-      sandbox,
-      tasks: input.additionalCheckTasks,
-    });
-    commands.push(...additional.commands);
-    if (additional.failure !== undefined) {
-      return additional.failure;
-    }
-    const after = await inspectDraftReconciliation({ prepared: candidate, sandbox });
-    if (after.unresolvedConflicts.length > 0) {
-      return {
-        conflicts: after.unresolvedConflicts,
-        problem:
-          "Repository checks left unresolved conflicts. Resolve them and rerun candidate validation.",
-        status: "needs_resolution" as const,
-      };
-    }
-    const latest = draftReconciliationState.get();
-    updateExactDraftReconciliation({
-      expected: latest,
-      operation: "recording validated merge content",
-      transition: () => ({
-        ...candidate,
-        validation: {
-          commands,
-          resolvedTree: after.resolvedTree,
-          validatedByCallId: ctx.callId,
-          compilation,
-        },
-      }),
-    });
-    return {
-      commands,
-      resolvedTree: after.resolvedTree,
-      status: "validated" as const,
-    };
   },
   inputSchema: z.strictObject({
     additionalCheckTasks: z.array(z.string().regex(/^check:[A-Za-z0-9:_-]+$/u)).default([]),
