@@ -2,6 +2,7 @@
 /* oxlint-disable anti-slop/require-safety-comment-for-type-assertion, anti-slop/no-unsafe-dictionary-type, anti-slop/no-unknown-returns, typescript/no-unsafe-type-assertion -- Deliberately minimal Eve state and tool context stubs for this publication gate test. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import editCandidate from "../../agent/tools/edit_github_draft_pr_candidate";
 import sealReconciliation from "../../agent/tools/seal_github_draft_pr_reconciliation";
 
 const digest = "a".repeat(64);
@@ -9,6 +10,9 @@ const sha = "b".repeat(40);
 const mocks = vi.hoisted(() => ({
   candidate: null as Record<string, unknown> | null,
   inspect: vi.fn(),
+  read: vi.fn(),
+  replace: vi.fn(),
+  restore: vi.fn(),
   seal: vi.fn(),
   workflow: null as Record<string, unknown> | null,
 }));
@@ -32,6 +36,9 @@ vi.mock("./source-bound-sandbox", () => ({
 }));
 vi.mock("../repository/sandbox-draft-reconciliation", () => ({
   inspectDraftReconciliation: mocks.inspect,
+  readDraftReconciliationCandidateFile: mocks.read,
+  replaceDraftReconciliationCandidateText: mocks.replace,
+  restoreDraftReconciliationCandidateFile: mocks.restore,
 }));
 
 const context = {
@@ -64,6 +71,7 @@ describe("draft reconciliation publication review", () => {
       reviewReceipt: { digest },
     };
     mocks.inspect.mockResolvedValue({ resolvedTree: sha, unresolvedConflicts: [] });
+    mocks.restore.mockResolvedValue({ digest, mode: "755" });
     mocks.seal.mockResolvedValue({
       branchName: "app-builder/spend-review",
       digest: "c".repeat(64),
@@ -72,6 +80,65 @@ describe("draft reconciliation publication review", () => {
       owner: "withAutograph",
       repositoryId: "1",
     });
+  });
+
+  it("restores from the retained candidate and invalidates saved validation and publication review", async () => {
+    const publishedReconciliation = { digest: "published" };
+    mocks.candidate = {
+      ...mocks.candidate,
+      proposal: { digest: "proposal" },
+      publishedReconciliation,
+      reviewReadProgress: { baseComplete: true, headComplete: true, reviewDigest: digest },
+      validationRun: {
+        commands: [{ command: "compile", exitCode: 0 }],
+        nextIndex: 1,
+        resolvedTree: sha,
+      },
+    };
+    const retained = mocks.candidate;
+    await expect(
+      editCandidate.execute({ kind: "restore", path: "apps/demo/issued.bin" }, context),
+    ).resolves.toMatchObject({
+      digest,
+      mode: "755",
+      path: "apps/demo/issued.bin",
+      status: "candidate_edited",
+    });
+    expect(mocks.restore).toHaveBeenCalledWith({
+      path: "apps/demo/issued.bin",
+      prepared: retained,
+      sandbox: {},
+    });
+    for (const field of [
+      "proposal",
+      "review",
+      "reviewReadProgress",
+      "validation",
+      "validationRun",
+    ]) {
+      expect(mocks.candidate).not.toHaveProperty(field);
+    }
+    expect(mocks.candidate).toMatchObject({ headSha: sha, publishedReconciliation });
+  });
+
+  it.each(["githubSource", "reviewReceipt"])(
+    "rejects a restore after %s authority changes",
+    async (field) => {
+      mocks.workflow = { ...mocks.workflow, [field]: { digest: "changed" } };
+      await expect(
+        editCandidate.execute({ kind: "restore", path: "apps/demo/issued.bin" }, context),
+      ).rejects.toThrow("no longer matches the selected app and source review");
+      expect(mocks.restore).not.toHaveBeenCalled();
+    },
+  );
+
+  it("preserves existing validation and review when a restore is rejected", async () => {
+    const retained = mocks.candidate;
+    mocks.restore.mockRejectedValue(new Error("absent from the retained draft head"));
+    await expect(
+      editCandidate.execute({ kind: "restore", path: "apps/demo/absent.bin" }, context),
+    ).rejects.toThrow("absent from the retained draft head");
+    expect(mocks.candidate).toBe(retained);
   });
 
   it.each([
