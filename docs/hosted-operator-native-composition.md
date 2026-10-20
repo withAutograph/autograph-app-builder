@@ -266,11 +266,15 @@ candidate ID, pins one independently READY candidate matching the approved
 project/environment/repository/commit/configuration, and does not rewrite the
 old frozen inventory.
 
-App-only REST delivery must explicitly send `target: "staging"`, Vercel's native
-Preview target. A first deployment can otherwise default to Production when the
-target is omitted, despite the API documentation describing Preview as the
-default. Confirm the actual native deployment target and its OIDC environment
-through provider readback before using it as the app Preview. A successful POST
+App-only REST delivery omits `target` to request Preview, following the
+[deployment API's documented default](https://vercel.com/docs/rest-api/deployments/create-a-new-deployment).
+The API documents a response `target: null` as Preview; explicit
+`target: "staging"` additionally assigns a staging alias. Reported first-deployment
+misclassification is not the documented default;
+[Vercel issue #17069](https://github.com/vercel/vercel/issues/17069) includes
+failures with both omitted and explicit staging targets, so staging is not an
+established repair. Confirm the actual native deployment target and its OIDC
+environment through provider readback before using it as the app Preview. A successful POST
 or a source fixture does not establish that environment. Retain any rejected
 non-Preview attempt in the operation audit; never promote it into the Preview
 candidate inventory. Keep the existing Production deny policy unchanged. The
