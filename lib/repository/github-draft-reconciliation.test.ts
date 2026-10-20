@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import type { ExistingDraftObservation } from "./github-draft-update";
 import {
   createReconciliationReviewReceipt,
+  inspectAppliedExistingDraftReconciliation,
   reconcileExistingDraft,
   sealExistingDraftReconciliation,
 } from "./github-draft-reconciliation";
@@ -213,6 +214,31 @@ describe("existing draft reconciliation", () => {
       }),
     ).rejects.toThrow("GitHub accepted the merge commit for draft PR #1500");
     expect(mock.updates).toBe(1);
+    mock.moveBase();
+    await expect(
+      inspectAppliedExistingDraftReconciliation({ adapter, proposal, review }),
+    ).resolves.toMatchObject({
+      applied: true,
+      observation: { headSha: sha("6"), headTree: review.resolvedTree },
+    });
+    expect(mock.updates).toBe(1);
+  });
+
+  it("exposes a read-only unapplied decision without a content or mutation port", async () => {
+    const mock = mockAdapter();
+    const proposal = await seal(mock.adapter);
+    await expect(
+      inspectAppliedExistingDraftReconciliation({
+        adapter: {
+          inspectExistingDraft: mock.adapter.inspectExistingDraft,
+          inspectInstallation: mock.adapter.inspectInstallation,
+          inspectAppliedDraftReconciliation: mock.adapter.inspectAppliedDraftReconciliation,
+        },
+        proposal,
+        review,
+      }),
+    ).resolves.toMatchObject({ applied: false, observation: initial });
+    expect(mock.updates).toBe(0);
   });
 
   it("rejects a moved base or PR head before writing", async () => {

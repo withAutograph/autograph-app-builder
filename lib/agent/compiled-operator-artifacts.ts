@@ -1,4 +1,5 @@
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import type { SandboxSession } from "eve/sandbox";
 import { appBuilderWorkflowState } from "./workflow-state";
 import { assertApprovedPrivateApplySession } from "./private-apply-authority";
@@ -6,7 +7,15 @@ import {
   createLocalOperatorArtifactStorage,
   readLocalOperatorArtifactAuthority,
 } from "../provisioning/local-operator-artifact-store";
-import { draftReconciliationState } from "./draft-reconciliation-state";
+import {
+  draftReconciliationState,
+  assertRetainedDraftReconciliationCompletion,
+} from "./draft-reconciliation-state";
+import type {
+  DraftReconciliationCompletion,
+  ReconciliationCompilation,
+} from "./draft-reconciliation-state";
+import type { PrivateApplyScope } from "./private-apply-authority";
 import { exactForwardedSessionAuthority } from "../hosted/session-authority";
 import { resolveHostedOperatorOwnerContext } from "../provisioning/hosted-operator-owner-context";
 import {
@@ -94,10 +103,27 @@ export interface CompiledOperatorArtifactSessionInput {
   signal?: AbortSignal;
 }
 
-const resolveCompiledArtifactSession = async (input: CompiledOperatorArtifactSessionInput) => {
-  assertApprovedCompilation(input);
+const resolveCompiledArtifactSession = async (
+  input: CompiledOperatorArtifactSessionInput,
+  completion?: DraftReconciliationCompletion,
+) => {
+  const assertCompilation = () => {
+    if (completion === undefined) {
+      assertApprovedCompilation(input);
+    } else {
+      assertRetainedDraftReconciliationCompletion(completion);
+      if (
+        input.appId !== completion.appId ||
+        input.appSpecDigest !== completion.appReview.appSpecDigest
+      ) {
+        throw operatorArtifactUnavailable();
+      }
+    }
+  };
+  assertCompilation();
   const localAuthority = await readLocalOperatorArtifactAuthority();
   let context: OperatorArtifactContext;
+  let privateApplyScope: PrivateApplyScope | undefined;
   let assertCurrentOwner: (current: OperatorArtifactContext) => Promise<void>;
   if (localAuthority === undefined) {
     const { authority, principal } = exactForwardedSessionAuthority(input.sessionAuth);
@@ -115,7 +141,7 @@ const resolveCompiledArtifactSession = async (input: CompiledOperatorArtifactSes
       target: { appId: input.appId, sessionId: owner.sessionId },
     };
     assertCurrentOwner = async (current) => {
-      assertApprovedCompilation(input);
+      assertCompilation();
       if (
         JSON.stringify(current) !== JSON.stringify(context) ||
         JSON.stringify(await resolve()) !== JSON.stringify(owner)
@@ -128,19 +154,45 @@ const resolveCompiledArtifactSession = async (input: CompiledOperatorArtifactSes
       authority: localAuthority,
       target: { appId: input.appId, sessionId: input.adapterSessionId },
     };
-    assertCurrentOwner = async (current) => {
-      assertApprovedCompilation(input);
+    if (completion === undefined) {
       const state = appBuilderWorkflowState.get();
       if (!("applyReceipt" in state)) {
         throw operatorArtifactUnavailable();
       }
-      assertApprovedPrivateApplySession({
+      privateApplyScope = {
         appId: input.appId,
         appSpecDigest: input.appSpecDigest,
         proposalDigest: state.proposal.digest,
         sessionId: input.adapterSessionId,
         workspaceId: state.workspace.workspaceId,
-      });
+      };
+    } else {
+      privateApplyScope = completion.compilation.privateApplyScope;
+    }
+    assertCurrentOwner = async (current) => {
+      assertCompilation();
+      if (privateApplyScope === undefined) {
+        throw operatorArtifactUnavailable();
+      }
+      if (completion === undefined) {
+        const currentState = appBuilderWorkflowState.get();
+        if (!("applyReceipt" in currentState)) {
+          throw operatorArtifactUnavailable();
+        }
+        const currentScope: PrivateApplyScope = {
+          appId: input.appId,
+          appSpecDigest: input.appSpecDigest,
+          proposalDigest: currentState.proposal.digest,
+          sessionId: input.adapterSessionId,
+          workspaceId: currentState.workspace.workspaceId,
+        };
+        assertApprovedPrivateApplySession(currentScope);
+        if (!isDeepStrictEqual(currentScope, privateApplyScope)) {
+          throw operatorArtifactUnavailable();
+        }
+      } else {
+        assertApprovedPrivateApplySession(privateApplyScope);
+      }
       if (
         JSON.stringify(current) !== JSON.stringify(context) ||
         JSON.stringify(await readLocalOperatorArtifactAuthority()) !==
@@ -150,8 +202,15 @@ const resolveCompiledArtifactSession = async (input: CompiledOperatorArtifactSes
       }
     };
   }
+  if (completion !== undefined && !isDeepStrictEqual(context, completion.compilation.context)) {
+    throw operatorArtifactUnavailable();
+  }
   await assertCurrentOwner(context);
-  return { assertCurrentOwner, context, localAuthority };
+  const captureAuthority = {
+    context,
+    ...(privateApplyScope === undefined ? {} : { privateApplyScope }),
+  };
+  return { assertCurrentOwner, context, localAuthority, captureAuthority };
 };
 
 const openCompiledArtifactStorage = async (
@@ -209,6 +268,78 @@ export const recordPublishedOperatorSourceForSession = async (
     publishedSource: input.publishedSource,
   });
   return { selection, status: "recorded" };
+};
+
+/** A sealed context records no grant: every completion re-resolves the current authenticated owner. */
+export const assertReconciliationCompletionOwnerForSession = async (input: {
+  completion: DraftReconciliationCompletion;
+  adapterSessionId: string;
+  sessionAuth: unknown;
+}) => {
+  await resolveCompiledArtifactSession(
+    {
+      ...input,
+      appId: input.completion.appId,
+      appSpecDigest: input.completion.appReview.appSpecDigest,
+      root: input.completion.root,
+      callId: input.completion.proposal.digest,
+    },
+    input.completion,
+  );
+};
+
+/** Complete only a retained sealed publication, using its original release instead of current selection. */
+export const recordPublishedReconciliationSourceForSession = async (input: {
+  completion: DraftReconciliationCompletion;
+  adapterSessionId: string;
+  sessionAuth: unknown;
+  publishedSource: PublishedAppSource;
+}) => {
+  const { completion } = input;
+  const binding = await resolveCompiledArtifactSession(
+    {
+      ...input,
+      appId: completion.appId,
+      appSpecDigest: completion.appReview.appSpecDigest,
+      root: completion.root,
+      callId: completion.proposal.digest,
+    },
+    completion,
+  );
+  const { release } = completion.compilation;
+  if (release.status === "not-required") {
+    return { status: "not-required" as const };
+  }
+  const storage = await openCompiledArtifactStorage(binding);
+  const retained = await readExactCompiledOperatorRelease({
+    assertCurrentOwner: binding.assertCurrentOwner,
+    context: binding.context,
+    lookup: {
+      artifactRef: release.selection.artifactRef,
+      appSpecDigest: release.selection.appSpecDigest,
+    },
+    selections: storage.selections,
+    store: storage.store,
+  });
+  if (retained === undefined) {
+    throw operatorArtifactUnavailable();
+  }
+  // readExact's reference lookup alone does not compare the complete sealed release identity.
+  const identity = { ...retained.selection };
+  delete identity.publishedSource;
+  if (!isDeepStrictEqual(identity, release.selection)) {
+    throw operatorArtifactUnavailable();
+  }
+  await binding.assertCurrentOwner(binding.context);
+  const selection = await storage.selections.record(
+    binding.context,
+    `draft-reconciliation:${completion.proposal.digest}`,
+    {
+      ...release.selection,
+      publishedSource: input.publishedSource,
+    },
+  );
+  return { selection, status: "recorded" as const };
 };
 
 /** Recover only a verified historical publication under this current app and original owner session. */
@@ -308,7 +439,13 @@ export const publishCompiledOperatorArtifactsForSession = async (
     checkStopped();
     observe({ outcome: "completed", stage: "description" });
     if (description.backend.kind === "static") {
-      return { status: "not-required" as const };
+      return {
+        status: "not-required" as const,
+        compilation: {
+          ...binding.captureAuthority,
+          release: { status: "not-required" as const },
+        } satisfies ReconciliationCompilation,
+      };
     }
     observe({ outcome: "started", stage: "storage" });
     const storage = await openCompiledArtifactStorage(binding);
@@ -355,7 +492,14 @@ export const publishCompiledOperatorArtifactsForSession = async (
     });
     checkStopped();
     observe({ outcome: "completed", stage: "selection" });
-    return { selection, status: "published" as const };
+    return {
+      selection,
+      status: "published" as const,
+      compilation: {
+        ...binding.captureAuthority,
+        release: { status: "published" as const, selection },
+      } satisfies ReconciliationCompilation,
+    };
   } catch (error) {
     observe({ outcome: input.signal?.aborted === true ? "cancelled" : "failed", stage });
     throw error;

@@ -7,7 +7,9 @@ import {
   publishCompiledOperatorArtifactsForSession,
   recordPublishedOperatorSourceForSession,
   readPublishedOperatorSourceForSession,
+  recordPublishedReconciliationSourceForSession,
 } from "./compiled-operator-artifacts";
+import type { DraftReconciliationCompletion } from "./draft-reconciliation-state";
 import type { AppDescription } from "../repository/app-description";
 import type { OperatorArtifactContext } from "../provisioning/hosted-operator-artifact-store";
 import type {
@@ -28,6 +30,8 @@ import { GENERATED_RELEASE_MEMBERS } from "../provisioning/hosted-operator-sandb
 
 const mocks = vi.hoisted(() => ({
   candidate: null as Record<string, unknown> | null,
+  completion: null as DraftReconciliationCompletion | null,
+  readExact: vi.fn(),
   onRead: vi.fn<(index: number) => void | Promise<void>>(),
   owner: null as Record<string, unknown> | null,
   record: vi.fn(),
@@ -47,6 +51,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock("./workflow-state", () => ({ appBuilderWorkflowState: { get: () => mocks.state } }));
 vi.mock("./draft-reconciliation-state", () => ({
   draftReconciliationState: { get: () => mocks.candidate },
+  assertRetainedDraftReconciliationCompletion: (completion: DraftReconciliationCompletion) => {
+    if (completion !== mocks.completion) {
+      throw new Error("completion_context_missing");
+    }
+  },
 }));
 vi.mock("../provisioning/hosted-operator-owner-context", () => ({
   resolveHostedOperatorOwnerContext: mocks.resolve,
@@ -80,6 +89,7 @@ vi.mock("../provisioning/hosted-operator-artifact-selection", async (importOrigi
   ...(await importOriginal<Record<string, unknown>>()),
   createPostgresOperatorArtifactSelections: () => ({
     read: mocks.readSelection,
+    readExact: mocks.readExact,
     ...(mocks.publishedSourceLookupAvailable
       ? { readPublishedSource: mocks.readPublishedSource }
       : {}),
@@ -154,6 +164,8 @@ describe("owned compiled artifact workflow hook", () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
     mocks.rows.clear();
     mocks.readSelection.mockReset();
+    mocks.readExact.mockReset();
+    mocks.completion = null;
     mocks.readPublishedSource.mockReset();
     mocks.publishedSourceLookupAvailable = true;
     mocks.state = {
@@ -279,6 +291,119 @@ describe("owned compiled artifact workflow hook", () => {
     expect(input.sandbox.run).not.toHaveBeenCalled();
     expect(input.sandbox.readBinaryFile).not.toHaveBeenCalled();
   });
+  const captureCompletion = async () => {
+    const captured = await publishCompiledOperatorArtifactsForSession(frame());
+    if (captured.status !== "published") {
+      throw new Error("Expected actual fixture release capture.");
+    }
+    // SAFETY: This closed compiled-storage test consumes only digest/app binding from the proposal; repository tests validate its full seal.
+    const completion = {
+      preparation: "sealed-before-approval",
+      proposal: { digest },
+      review: { digest },
+      appReview: { appSpecDigest: digest, changeSetDigest: digest, digest },
+      appId: "spend-review",
+      root: "/workspace/repository",
+      githubSourceDigest: digest,
+      compilation: captured.compilation,
+    } as DraftReconciliationCompletion;
+    mocks.completion = completion;
+    mocks.readExact.mockResolvedValue(captured.selection);
+    mocks.record.mockClear();
+    return completion;
+  };
+
+  it("records the original exact release after current selection and candidate move", async () => {
+    const completion = await captureCompletion();
+    mocks.state = null;
+    mocks.candidate = null;
+    mocks.readSelection.mockRejectedValue(new Error("latest must never be consulted"));
+    const result = await recordPublishedReconciliationSourceForSession({
+      completion,
+      adapterSessionId: "adapter",
+      sessionAuth: frame().sessionAuth,
+      publishedSource: historicalSource,
+    });
+    expect(result).toMatchObject({ status: "recorded" });
+    expect(mocks.readSelection).not.toHaveBeenCalled();
+    expect(mocks.readExact).toHaveBeenCalledWith(completion.compilation.context, {
+      appSpecDigest: digest,
+      artifactRef:
+        completion.compilation.release.status === "published"
+          ? completion.compilation.release.selection.artifactRef
+          : "",
+    });
+    expect(mocks.record).toHaveBeenCalledWith(
+      completion.compilation.context,
+      `draft-reconciliation:${digest}`,
+      {
+        ...(completion.compilation.release.status === "published"
+          ? completion.compilation.release.selection
+          : {}),
+        publishedSource: historicalSource,
+      },
+    );
+  });
+
+  it.each(["releaseId", "manifestSha256", "schemaSha256", "appSpecDigest"] as const)(
+    "refuses a historical reader substituting the pinned %s",
+    async (field) => {
+      const completion = await captureCompletion();
+      if (completion.compilation.release.status !== "published") {
+        throw new Error("Expected pinned release.");
+      }
+      mocks.readExact.mockResolvedValue({
+        ...completion.compilation.release.selection,
+        [field]: "f".repeat(64),
+      });
+      await expect(
+        recordPublishedReconciliationSourceForSession({
+          completion,
+          adapterSessionId: "adapter",
+          sessionAuth: frame().sessionAuth,
+          publishedSource: historicalSource,
+        }),
+      ).rejects.toThrow();
+      expect(mocks.record).not.toHaveBeenCalled();
+    },
+  );
+
+  it("refuses original release recording after owner changes during historical read", async () => {
+    const completion = await captureCompletion();
+    mocks.readExact.mockImplementation(() => {
+      mocks.owner = { ...mocks.owner, adapterGeneration: 2 };
+      return Promise.resolve(
+        completion.compilation.release.status === "published"
+          ? completion.compilation.release.selection
+          : undefined,
+      );
+    });
+    await expect(
+      recordPublishedReconciliationSourceForSession({
+        completion,
+        adapterSessionId: "adapter",
+        sessionAuth: frame().sessionAuth,
+        publishedSource: historicalSource,
+      }),
+    ).rejects.toThrow();
+    expect(mocks.record).not.toHaveBeenCalled();
+  });
+
+  it("refuses a different current canonical owner even with a retained sealed context", async () => {
+    const completion = await captureCompletion();
+    mocks.owner = { ...mocks.owner, sessionId: "another-owner-session" };
+    await expect(
+      recordPublishedReconciliationSourceForSession({
+        completion,
+        adapterSessionId: "adapter",
+        sessionAuth: frame().sessionAuth,
+        publishedSource: historicalSource,
+      }),
+    ).rejects.toThrow();
+    expect(mocks.readExact).not.toHaveBeenCalled();
+    expect(mocks.record).not.toHaveBeenCalled();
+  });
+
   it("returns the static no-op without compiled workflow markers or hosted storage", async () => {
     const input = frame();
     mocks.state = null;

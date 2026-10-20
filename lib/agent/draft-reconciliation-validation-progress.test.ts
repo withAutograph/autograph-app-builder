@@ -85,6 +85,27 @@ const incremental = async (expectedCommand: string) =>
 describe("draft reconciliation command progress", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.publish.mockResolvedValue({
+      status: "published",
+      compilation: {
+        context: {
+          authority: { ownerUserId: "owner" },
+          target: { appId: "spend-review", sessionId: "canonical-session" },
+        },
+        release: {
+          status: "published",
+          selection: {
+            appId: "spend-review",
+            appSpecDigest: digest,
+            artifactRef: `_protected-operator/artifacts/generated-release/spend-review/${digest}`,
+            releaseId: "captured-release",
+            manifestSha256: digest,
+            schemaSha256: digest,
+            version: 1,
+          },
+        },
+      },
+    });
     mocks.logStore.mockRejectedValue(new Error("log storage unavailable"));
     mocks.candidate = {
       appId: "spend-review",
@@ -124,7 +145,12 @@ describe("draft reconciliation command progress", () => {
       status: "in_progress",
     });
     expect(mocks.run).toHaveBeenCalledOnce();
-    expect(mocks.candidate?.validationRun).toMatchObject({ nextIndex: 2 });
+    expect(mocks.candidate?.validationRun).toMatchObject({
+      nextIndex: 2,
+      compilation: {
+        release: { selection: { releaseId: "captured-release" } },
+      },
+    });
     expect(mocks.publish).toHaveBeenCalledWith(
       expect.objectContaining({
         adapterSessionId: "adapter",
@@ -145,6 +171,7 @@ describe("draft reconciliation command progress", () => {
     expect(mocks.run).toHaveBeenCalledOnce();
     expect(mocks.check).toHaveBeenCalledTimes(2);
     expect(mocks.candidate?.validation).toMatchObject({
+      compilation: { release: { selection: { releaseId: "captured-release" } } },
       commands: [
         { command: installCommand, exitCode: 0 },
         { command: schemaCommand, exitCode: 0 },
@@ -186,6 +213,11 @@ describe("draft reconciliation command progress", () => {
     ]);
     expect(mocks.candidate?.validation).toMatchObject({
       commands: completed.map((command) => ({ command, exitCode: 0 })),
+    });
+    expect(mocks.candidate?.validation).toMatchObject({
+      compilation: {
+        release: { selection: { releaseId: "captured-release" } },
+      },
     });
     expect(mocks.candidate?.validationRun).toBeUndefined();
   });

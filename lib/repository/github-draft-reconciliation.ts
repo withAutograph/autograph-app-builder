@@ -373,13 +373,15 @@ const inspectDraftAfterWrite = async (input: {
   }
 };
 
-// oxlint-disable-next-line eslint/complexity -- sealed review, live refs, uncertain-result recovery, and readback are one publication operation
-export const reconcileExistingDraft = async (input: {
-  adapter: ExistingDraftReconciliationAdapter;
+/** Read-only proof of an exact approved result. This port cannot write Git or read candidate bytes. */
+export const inspectAppliedExistingDraftReconciliation = async (input: {
+  adapter: Pick<
+    ExistingDraftReconciliationAdapter,
+    "inspectInstallation" | "inspectExistingDraft" | "inspectAppliedDraftReconciliation"
+  >;
   proposal: ExistingDraftReconciliationProposal;
   review: ReconciliationReviewReceipt;
-  contentSource: GitHubDraftPullRequestContentSource;
-}): Promise<ExistingDraftObservation> => {
+}) => {
   const { proposal, review } = input;
   assertReview(review);
   const { digest: claimed, ...unsigned } = proposal;
@@ -424,11 +426,26 @@ export const reconcileExistingDraft = async (input: {
     current.headTree !== proposal.expectedHeadTree
   ) {
     if (await input.adapter.inspectAppliedDraftReconciliation(proposal, current)) {
-      return current;
+      return { applied: true as const, observation: current };
     }
     throw new Error(
       "The draft PR branch moved after review. Reconcile its current head and request approval again.",
     );
+  }
+  return { applied: false as const, observation: current };
+};
+
+// oxlint-disable-next-line eslint/complexity -- sealed review, live refs, uncertain-result recovery, and readback are one publication operation
+export const reconcileExistingDraft = async (input: {
+  adapter: ExistingDraftReconciliationAdapter;
+  proposal: ExistingDraftReconciliationProposal;
+  review: ReconciliationReviewReceipt;
+  contentSource: GitHubDraftPullRequestContentSource;
+}): Promise<ExistingDraftObservation> => {
+  const { proposal, review } = input;
+  const inspected = await inspectAppliedExistingDraftReconciliation(input);
+  if (inspected.applied) {
+    return inspected.observation;
   }
   const base = await input.adapter.inspectRepository({
     operation: draftPublicationOperation,

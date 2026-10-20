@@ -1,3 +1,4 @@
+import type { DraftReconciliationCompletion } from "./draft-reconciliation-state";
 import type { AppDescription } from "../repository/app-description";
 import type { ReconciliationReviewReceipt } from "../repository/github-draft-reconciliation";
 import type { ExistingDraftObservation } from "../repository/github-draft-update";
@@ -5,7 +6,10 @@ import type { DraftPullRequestSuccessReceipt } from "../repository/github-public
 import type { ReviewedChangeSetReceipt } from "../repository/reviewed-change-set";
 import { publishedAppSourceSchema } from "../provisioning/hosted-operator-artifact-selection";
 import { operatorArtifactUnavailable } from "../provisioning/hosted-operator-artifact-store";
-import { recordPublishedOperatorSourceForSession } from "./compiled-operator-artifacts";
+import {
+  recordPublishedOperatorSourceForSession,
+  recordPublishedReconciliationSourceForSession,
+} from "./compiled-operator-artifacts";
 import type { CompiledOperatorArtifactSessionInput } from "./compiled-operator-artifacts";
 
 export type PublishedAppSourceResult = DraftPullRequestSuccessReceipt | ExistingDraftObservation;
@@ -58,5 +62,29 @@ export const recordPublishedAppSourceForSession = async (
       input.reconciliationReview === undefined
         ? publishedSource
         : { ...publishedSource, reviewDigest: input.reconciliationReview.digest },
+  });
+};
+
+/** Recovery consumes only the sealed metadata and a provider-verified result, never current candidate bytes. */
+export const recordPublishedReconciliationForSession = async (input: {
+  completion: DraftReconciliationCompletion;
+  publication: ExistingDraftObservation;
+  sessionAuth: unknown;
+  adapterSessionId: string;
+}) => {
+  const { completion, publication } = input;
+  if (
+    publication.repositoryId !== completion.proposal.repositoryId ||
+    publication.headBranch !== completion.proposal.branchName ||
+    publication.headTree !== completion.proposal.resolvedTree
+  ) {
+    throw operatorArtifactUnavailable();
+  }
+  return await recordPublishedReconciliationSourceForSession({
+    ...input,
+    publishedSource: {
+      ...publishedAppSourceFromResult(completion.appReview, publication),
+      reviewDigest: completion.review.digest,
+    },
   });
 };

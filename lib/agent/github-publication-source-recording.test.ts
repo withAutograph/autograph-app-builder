@@ -1,5 +1,6 @@
-/* oxlint-disable anti-slop/no-module-mocking -- Isolate Eve state and trusted publication/recording ports while exercising the production tool execute boundaries. */
+/* oxlint-disable anti-slop/no-module-mocking, typescript/no-unsafe-type-assertion -- Isolate Eve state and trusted publication/recording ports while exercising the production tool execute boundaries. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { DraftReconciliationCompletion } from "./draft-reconciliation-state";
 import type { approvalReceiptSchema as ActualApprovalReceiptSchema } from "./approval-receipt";
 
 import publishTool from "../../agent/tools/publish_github_draft_pr";
@@ -8,7 +9,12 @@ import reconcileTool from "../../agent/tools/reconcile_github_draft_pr";
 
 const hooks = vi.hoisted(() => {
   const digest = "a".repeat(64);
-  const review = { digest, changeSetDigest: "b".repeat(64), baseChanges: [] };
+  const review = {
+    digest,
+    appSpecDigest: "c".repeat(64),
+    changeSetDigest: "b".repeat(64),
+    baseChanges: [],
+  };
   const proposal = {
     digest,
     repositoryId: "repository",
@@ -17,6 +23,10 @@ const hooks = vi.hoisted(() => {
   };
   return {
     assertApproval: vi.fn(),
+    assertOwner: vi.fn(),
+    applied: vi.fn(),
+    // SAFETY: The closed test fixture supplies only trusted completion metadata consumed by this tool.
+    completions: [] as DraftReconciliationCompletion[],
     content: vi.fn(),
     inspect: vi.fn(),
     record: vi.fn(),
@@ -35,9 +45,19 @@ const hooks = vi.hoisted(() => {
       reviewReceipt: review,
     },
     candidate: {
+      appId: "spend-review",
       proposal,
-      review: { appId: "spend-review", digest, baseChanges: [] },
-      validation: { resolvedTree: "tree" },
+      review: { appId: "spend-review", digest, resolvedTree: "tree", baseChanges: [] },
+      validation: {
+        resolvedTree: "tree",
+        compilation: {
+          context: {
+            authority: {},
+            target: { appId: "spend-review", sessionId: "original-owner-session" },
+          },
+          release: { status: "not-required" },
+        },
+      },
       githubSourceDigest: digest,
       originalReviewDigest: digest,
       root: "/workspace/resolved",
@@ -61,6 +81,7 @@ vi.mock("./deployment-github-publication-runtime", () => ({
       publishDraftPullRequest: hooks.publish,
       updateExistingDraft: hooks.update,
       reconcileExistingDraft: hooks.reconcile,
+      inspectAppliedExistingDraftReconciliation: hooks.applied,
     }),
 }));
 vi.mock("./github-publication-content-source", () => ({
@@ -71,6 +92,10 @@ vi.mock("./app-baseline-state", () => ({ appBaselineState: { get: () => null } }
 vi.mock("../repository/reviewed-change-set", () => ({ assertExistingAppReviewScope: () => {} }));
 vi.mock("./draft-reconciliation-state", () => ({
   draftReconciliationState: { get: () => hooks.candidate },
+  draftReconciliationCompletions: { get: () => hooks.completions },
+  retainDraftReconciliationCompletion: (completion: DraftReconciliationCompletion) => {
+    hooks.completions.push(completion);
+  },
   updateExactDraftReconciliation: ({
     expected,
     operation,
@@ -94,7 +119,13 @@ vi.mock("./source-bound-sandbox", () => ({
 vi.mock("../repository/sandbox-draft-reconciliation", () => ({
   inspectDraftReconciliation: hooks.inspect,
 }));
-vi.mock("./published-app-source", () => ({ recordPublishedAppSourceForSession: hooks.record }));
+vi.mock("./published-app-source", () => ({
+  recordPublishedAppSourceForSession: hooks.record,
+  recordPublishedReconciliationForSession: hooks.record,
+}));
+vi.mock("./compiled-operator-artifacts", () => ({
+  assertReconciliationCompletionOwnerForSession: hooks.assertOwner,
+}));
 
 const tools = [
   { name: "initial publication", tool: publishTool, publish: hooks.publish },
@@ -120,11 +151,31 @@ const ctx = {
   getSandbox: async () => await Promise.resolve({}),
 };
 
+const originalCandidate = structuredClone(hooks.candidate);
+const originalState = structuredClone(hooks.state);
+const completionFixture = () => ({
+  preparation: "sealed-before-approval",
+  proposal: hooks.candidate.proposal,
+  review: hooks.candidate.review,
+  appId: hooks.state.appSpec.appId,
+  appReview: hooks.state.reviewReceipt,
+  githubSourceDigest: hooks.candidate.githubSourceDigest,
+  root: hooks.candidate.root,
+  compilation: hooks.candidate.validation.compilation,
+});
+// SAFETY: This fixture mocks publication ports; repository tests separately validate full cryptographic proposal/review fields.
+const sealedCompletion = () => completionFixture() as DraftReconciliationCompletion;
+
 describe("publication records actual source for its compiled app release", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hooks.record.mockReset().mockResolvedValue({ status: "recorded" });
     hooks.assertApproval.mockReset();
+    hooks.assertOwner.mockReset().mockResolvedValue();
+    hooks.applied.mockReset().mockResolvedValue({ applied: false });
+    hooks.candidate = structuredClone(originalCandidate);
+    hooks.state = structuredClone(originalState);
+    hooks.completions = [sealedCompletion()];
     hooks.inspect.mockResolvedValue({ unresolvedConflicts: [], resolvedTree: "tree" });
     hooks.candidate.publishedReconciliation = undefined;
   });
@@ -146,22 +197,18 @@ describe("publication records actual source for its compiled app release", () =>
         expect(result).toMatchObject({ ...publication, appSourceRecording: { status } });
         expect(hooks.record).toHaveBeenCalledWith(
           expect.objectContaining({
-            appId: hooks.state.appSpec.appId,
-            appSpecDigest: hooks.state.appSpec.digest,
-            backendKind: hooks.state.appBackendKind,
-            root:
-              entry.tool === reconcileTool
-                ? hooks.candidate.root
-                : hooks.state.applyReceipt.applyRoot,
+            ...(entry.tool === reconcileTool
+              ? { completion: hooks.completions[0] }
+              : {
+                  appId: hooks.state.appSpec.appId,
+                  appSpecDigest: hooks.state.appSpec.digest,
+                  backendKind: hooks.state.appBackendKind,
+                  root: hooks.state.applyReceipt.applyRoot,
+                  callId: ctx.callId,
+                  review: hooks.state.reviewReceipt,
+                }),
             adapterSessionId: ctx.session.id,
             sessionAuth: ctx.session.auth,
-            callId: ctx.callId,
-            review: hooks.state.reviewReceipt,
-            ...(entry.tool === reconcileTool
-              ? {
-                  reconciliationReview: hooks.candidate.review,
-                }
-              : {}),
             publication,
           }),
         );
@@ -215,4 +262,117 @@ describe("publication records actual source for its compiled app release", () =>
       expect(hooks.record).not.toHaveBeenCalled();
     });
   }
+  it("recovers an accepted write/readback failure after the candidate is lost, with zero further Git writes", async () => {
+    const completion = hooks.completions[0];
+    hooks.reconcile.mockRejectedValueOnce(
+      new Error("GitHub accepted update; readback unavailable"),
+    );
+    // SAFETY: Minimal context supplies the exact fields used by the real tool.
+    await expect(reconcileTool.execute(input, ctx as never)).rejects.toThrow(
+      "readback unavailable",
+    );
+    expect(hooks.record).not.toHaveBeenCalled();
+    expect(hooks.completions[0]).toBe(completion);
+    // SAFETY: Simulate a lost/replaced candidate without changing its independent sealed context.
+    hooks.candidate = null as never;
+    const publication = { repositoryId: "repository", headSha: "verified-applied-head" };
+    hooks.applied.mockResolvedValue({ applied: true, observation: publication });
+    hooks.inspect.mockRejectedValue(new Error("candidate sandbox is gone"));
+    // SAFETY: Same approved session context is reused for completion only.
+    await expect(reconcileTool.execute(input, ctx as never)).resolves.toMatchObject({
+      ...publication,
+      appSourceRecording: { status: "recorded" },
+    });
+    expect(hooks.reconcile).toHaveBeenCalledTimes(1);
+    expect(hooks.record).toHaveBeenCalledWith(expect.objectContaining({ completion }));
+  });
+
+  it("recovers an original publication after a new candidate changes without inspecting it", async () => {
+    const original = hooks.completions[0];
+    hooks.candidate = {
+      ...hooks.candidate,
+      root: "/workspace/new-candidate",
+      proposal: { ...hooks.candidate.proposal, digest: "new-proposal" },
+    };
+    hooks.state.appSpec.digest = "changed-current-app-spec";
+    hooks.state.reviewReceipt.digest = "changed-current-app-review";
+    hooks.applied.mockResolvedValue({ applied: true, observation: { headSha: "approved-head" } });
+    // SAFETY: Minimal production tool context with trusted ports mocked.
+    await reconcileTool.execute(input, ctx as never);
+    expect(hooks.inspect).not.toHaveBeenCalled();
+    expect(hooks.reconcile).not.toHaveBeenCalled();
+    expect(hooks.record).toHaveBeenCalledWith(expect.objectContaining({ completion: original }));
+  });
+
+  it("keeps fresh publication checkout checks and never writes a changed tree", async () => {
+    hooks.inspect.mockResolvedValue({ unresolvedConflicts: [], resolvedTree: "changed-tree" });
+    // SAFETY: Minimal production tool context with trusted ports mocked.
+    await expect(reconcileTool.execute(input, ctx as never)).rejects.toThrow("checkout changed");
+    expect(hooks.reconcile).not.toHaveBeenCalled();
+    expect(hooks.record).not.toHaveBeenCalled();
+  });
+
+  it.each(["missing-capture", "new-validation-tree"])(
+    "reports missing canonical legacy context for %s without effects",
+    async (condition) => {
+      hooks.completions = [];
+      if (condition === "new-validation-tree") {
+        hooks.candidate.validation.resolvedTree = "new-validated-capture-tree";
+      } else {
+        Reflect.deleteProperty(hooks.candidate.validation, "compilation");
+      }
+      // SAFETY: The legacy fixture deliberately omits required captured metadata or its original tree binding.
+      await expect(reconcileTool.execute(input, ctx as never)).resolves.toMatchObject({
+        status: "completion_context_missing",
+      });
+      expect(hooks.applied).not.toHaveBeenCalled();
+      expect(hooks.reconcile).not.toHaveBeenCalled();
+      expect(hooks.record).not.toHaveBeenCalled();
+    },
+  );
+
+  it("can record canonical legacy context only after exact applied proof, never perform its fresh write", async () => {
+    hooks.completions = [];
+    // SAFETY: Canonical old context is retained but no preapproval seal checkpoint exists.
+    await expect(reconcileTool.execute(input, ctx as never)).resolves.toMatchObject({
+      status: "completion_context_missing",
+    });
+    expect(hooks.reconcile).not.toHaveBeenCalled();
+    expect(hooks.record).not.toHaveBeenCalled();
+    // A later call cannot promote this in-tool legacy state into fresh-write eligibility.
+    // SAFETY: Same minimal fixture exercises a second ordinary invocation.
+    await expect(reconcileTool.execute(input, ctx as never)).resolves.toMatchObject({
+      status: "completion_context_missing",
+    });
+    expect(hooks.reconcile).not.toHaveBeenCalled();
+    hooks.applied.mockResolvedValue({
+      applied: true,
+      observation: { headSha: "canonical-applied" },
+    });
+    // SAFETY: Current approval still checked; only the proof result changes.
+    await expect(reconcileTool.execute(input, ctx as never)).resolves.toMatchObject({
+      appSourceRecording: { status: "recorded" },
+    });
+    expect(hooks.reconcile).not.toHaveBeenCalled();
+  });
+
+  it("rejects current owner mismatch before provider or recording work", async () => {
+    hooks.assertOwner.mockRejectedValue(new Error("owner changed"));
+    // SAFETY: Minimal production tool context with owner port refusing authorization.
+    await expect(reconcileTool.execute(input, ctx as never)).rejects.toThrow("owner changed");
+    expect(hooks.applied).not.toHaveBeenCalled();
+    expect(hooks.reconcile).not.toHaveBeenCalled();
+    expect(hooks.record).not.toHaveBeenCalled();
+  });
+
+  it("does not turn unavailable applied proof into a fresh publication", async () => {
+    hooks.applied.mockRejectedValue(new Error("provider read unavailable"));
+    // SAFETY: Minimal production tool context with read-only proof unavailable.
+    await expect(reconcileTool.execute(input, ctx as never)).rejects.toThrow(
+      "provider read unavailable",
+    );
+    expect(hooks.inspect).not.toHaveBeenCalled();
+    expect(hooks.reconcile).not.toHaveBeenCalled();
+    expect(hooks.record).not.toHaveBeenCalled();
+  });
 });
