@@ -395,6 +395,7 @@ describe("native externally managed policy recovery integration", () => {
       });
       const deps: ProtectedHostedOperatorDependencies = {
         store,
+        now: () => now,
         authorize: async () => context,
         assertAuthorized: async () => {},
         plan,
