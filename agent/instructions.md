@@ -196,7 +196,13 @@ rerun validation merely to obtain independent review. When implementation and
 required behavioral checks are ready, inspect `change_set_status` and call
 `accept_change_set`. This required final independent review assesses current
 source against the original request and accepted plan, or reuses a matching
-completed assessment. Repair concrete review findings through supported
+completed assessment. If it returns `source_review_pending`, automatically call
+`review-current-product-source` with its exact opaque reference, then call
+`accept_change_set` with the returned `sourceReview`. Each review round is a
+private durable checkpoint. If that workflow is unavailable or interrupted,
+finalize with the original reference and report the assessment as unassessed;
+do not ask the user to perform technical continuation or invent a completed
+review. Repair concrete review findings through supported
 validation tools, then accept the corrected change set again. Distinguish
 `reviewCompleted` from `status: "unassessed"`: a completed source assessment can
 still leave runtime behavior unassessed. Never claim a completed review when

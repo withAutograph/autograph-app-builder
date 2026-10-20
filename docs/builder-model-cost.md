@@ -25,12 +25,16 @@ It returns deferred/unassessed source evidence without starting paid independent
 review. This is not a technical failure and should not cause another validation
 attempt merely to obtain an assessment.
 
-When implementation and required product QA are ready, `accept_change_set`
-observes current source and performs the independent assessment. This final
-review is required for private preview completion as well as publication.
-Matching completed application assessments are reused. An interrupted incomplete
-application review may rerun its model work; it has no durable per-tool checkpoint. Concrete review findings are repaired through the supported
-implementation/validation path before another final acceptance. Technical checks
+When implementation and required product QA are ready, ordinary
+`accept_change_set` prepares the independent review. Builder follows its opaque
+reference through blocking `review-current-product-source`, then ordinary
+`accept_change_set` finalizes the result. The final independent review attempt
+is required; an unavailable/interrupted assessment remains truthfully unassessed
+and does not gate private preview/publication or require another technical
+validation. Concrete findings use the normal repair path and existing approvals.
+Matching completed assessments are reused. The same native workflow resumes
+committed provider/tool rounds; an in-flight uncommitted round can repeat, and a
+separate new workflow call has no prior-continuation guarantee. Technical checks
 are not cached or skipped by this scheduling change.
 
 ## Source review optimization
@@ -51,14 +55,18 @@ original requirements.
 
 Only a completed application assessment is stored in the existing immutable
 owner/session journal. Matching complete evidence reuses without fresh
-generation after current authorization. Interrupted incomplete application work
-may rerun. Legacy fragment records retain their provenance and cannot establish
+generation after current authorization. Native per-round continuation is
+separate from this sanitized completed journal; it does not guarantee exactly-once
+billing. Legacy fragment records retain their provenance and cannot establish
 application-level completion. Normal source or requirements changes create
 ordinary cache misses under the exact source/diff/input binding.
 
-Actual provider context/output rejection uses compact immutable evidence
-references or smaller evidence submissions while preserving access to complete
-originals and validated findings. Transport paging is not a workload ceiling.
+The current context retains first full distinct evidence and the newest parallel
+read group; older exact duplicates can reference a still-visible full result.
+Unique pages can still grow context. Actual provider context/output rejection
+uses immutable evidence references or smaller evidence submissions while
+preserving access to complete originals and validated findings. Transport paging
+is not a workload ceiling.
 No savings multiplier is assumed before an equivalent run is measured.
 
 Implementation pointers:
@@ -74,7 +82,9 @@ Implementation pointers:
   retention.
 - `agent/tools/validate_app_creation.ts`: technical validation and deferred source
   evidence.
-- `agent/tools/accept_change_set.ts`: final independent assessment and receipt.
+- `agent/tools/accept_change_set.ts`: parent preparation and final receipt.
+- `agent/tools/review-current-product-source.ts` and
+  `lib/agent/application-review-workflow.ts`: blocking per-round continuation.
 
 ## Accounting and evidence
 

@@ -1,4 +1,8 @@
-import { reviewAppliedProductSource } from "@/lib/agent/review-applied-product-source";
+import {
+  reviewAppliedProductSource,
+  prepareAppliedProductSourceReview,
+  finalizeAppliedProductSourceReview,
+} from "@/lib/agent/review-applied-product-source";
 import { currentProductBehaviorEvidence } from "@/lib/agent/product-behavior-state";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { defineTool } from "eve/tools";
@@ -17,10 +21,14 @@ import { checkedNativeToolResult } from "@/lib/eve/payload-envelope";
 export interface ChangeSetAcceptanceRuntime {
   observeChangeSet: typeof observeNormalizedChangeSet;
   reviewSource: typeof reviewAppliedProductSource;
+  prepareSourceReview?: typeof prepareAppliedProductSourceReview;
+  finalizeSourceReview?: typeof finalizeAppliedProductSourceReview;
 }
 const changeSetAcceptanceRuntime: ChangeSetAcceptanceRuntime = {
   observeChangeSet: observeNormalizedChangeSet,
   reviewSource: reviewAppliedProductSource,
+  prepareSourceReview: prepareAppliedProductSourceReview,
+  finalizeSourceReview: finalizeAppliedProductSourceReview,
 };
 /** Internal ports preserve mandatory final source review without public injection. */
 export const createChangeSetAcceptanceTool = (
@@ -29,7 +37,7 @@ export const createChangeSetAcceptanceTool = (
   defineTool({
     description:
       "Perform the final independent paid source assessment against the original product request and current implementation after repository validation succeeds. Reuse only completed source evidence whose current source and requirements still match. Record the reviewed change summary and return a compact receipt with current-session references; the full receipt stays authoritative in this session. Read its complete product/source evidence through change_set_status view=acceptance. This is internal and never publishes or changes an external repository.",
-    async execute(_input, ctx) {
+    async execute(input, ctx) {
       const state = appBuilderWorkflowState.get();
       if (state.phase !== "validated" && state.phase !== "reviewed") {
         throw new Error("Run the repository validation before reviewing its changes.");
@@ -38,7 +46,7 @@ export const createChangeSetAcceptanceTool = (
         sandbox: await ctx.getSandbox(),
         state,
       });
-      const sourceAssessment = await runtime.reviewSource({
+      const reviewInput = {
         abortSignal: ctx.abortSignal,
         appSpec: state.appSpec,
         applyReceipt: state.applyReceipt,
@@ -49,7 +57,32 @@ export const createChangeSetAcceptanceTool = (
         getSandbox: async () => await ctx.getSandbox(),
         sessionAuth: ctx.session.auth,
         sessionId: ctx.session.id,
-      });
+      };
+      const prepared =
+        input.sourceReview === undefined && runtime.prepareSourceReview !== undefined
+          ? await runtime.prepareSourceReview(reviewInput)
+          : undefined;
+      if (prepared !== undefined && "reference" in prepared) {
+        return checkedNativeToolResult(
+          {
+            status: "source_review_pending",
+            sourceReview: prepared.reference,
+            nextAction: { tool: "review-current-product-source", input: prepared.reference },
+          },
+          { callId: ctx.callId, toolName: "accept_change_set", turnId: ctx.session.turn.id },
+        );
+      }
+      let sourceAssessment;
+      if (prepared !== undefined && "assessment" in prepared) {
+        sourceAssessment = prepared.assessment;
+      } else if (input.sourceReview !== undefined && runtime.finalizeSourceReview !== undefined) {
+        sourceAssessment = await runtime.finalizeSourceReview({
+          ...reviewInput,
+          reference: input.sourceReview,
+        });
+      } else {
+        sourceAssessment = await runtime.reviewSource(reviewInput);
+      }
       ctx.abortSignal?.throwIfAborted();
       const productAcceptance = productAcceptanceObligations(
         state.appSpec,
@@ -121,7 +154,15 @@ export const createChangeSetAcceptanceTool = (
         metadata,
       );
     },
-    inputSchema: z.strictObject({}),
+    inputSchema: z.strictObject({
+      sourceReview: z
+        .strictObject({
+          appId: z.string().min(1),
+          contextRef: z.string().min(1),
+          outcomeRef: z.string().min(1).optional(),
+        })
+        .optional(),
+    }),
   });
 
 export default createChangeSetAcceptanceTool();

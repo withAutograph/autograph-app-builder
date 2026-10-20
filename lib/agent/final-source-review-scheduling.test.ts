@@ -4,7 +4,11 @@ import {
   ContextContainer,
   contextStorage,
 } from "../../node_modules/eve/dist/src/context/container.js";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
+import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { sourceReviewContextStoreForSession } from "./source-review-journal-runtime";
 import { generateText, Output } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { z } from "zod";
@@ -25,6 +29,8 @@ import {
 } from "./product-source-review-state";
 import { assessProductSource, unavailableSourceAssessment } from "./product-source-review";
 import {
+  prepareAppliedProductSourceReview,
+  finalizeAppliedProductSourceReview,
   currentScopedProductSourceAssessment,
   retainScopedProductSourceAssessment,
   sourceReviewScopeBindingDigest,
@@ -455,4 +461,167 @@ it("retains canonical acceptance evidence while requiring matching private revie
     ).toBeUndefined();
     expect(currentProductSourceAssessment(input)).toBe(assessment);
   });
+});
+
+it("prepared review resumes in the original acceptance context without a second paid direct loop", async () => {
+  await contextStorage.run(new ContextContainer(), async () => {
+    initial();
+    const attempt = createTargetValidationAttempt(apply, "validation");
+    const validation = {
+      ...validationBinding(apply),
+      attemptDigest: attempt.digest,
+      commands: [],
+      digest: "validation",
+      status: "passed" as const,
+      validatedByCallId: "validation",
+      version: 3 as const,
+    };
+    const before = appBuilderWorkflowState.get();
+    if (before.phase !== "applied") {
+      throw new Error("Expected applied fixture");
+    }
+    appBuilderWorkflowState.update(() => ({
+      ...before,
+      phase: "validated",
+      validationReceipt: validation,
+    }));
+    const reference = { appId: "example", contextRef: "opaque-context" };
+    let directCalls = 0;
+    let preparedCalls = 0;
+    let finalizedCalls = 0;
+    const tool = createChangeSetAcceptanceTool({
+      async observeChangeSet() {
+        return await Promise.resolve({
+          changeSet: deriveNormalizedChangeSet(apply, validation, "contract"),
+          observed: { files: apply.postTree, treeDigest: apply.postTreeDigest },
+        });
+      },
+      async reviewSource() {
+        directCalls += 1;
+        await Promise.resolve();
+        throw new Error("Direct paid loop must not run");
+      },
+      async prepareSourceReview(input) {
+        preparedCalls += 1;
+        expect(input.sessionId).toBe("local-session");
+        return await Promise.resolve({ reference });
+      },
+      async finalizeSourceReview(input) {
+        finalizedCalls += 1;
+        expect(input.reference).toEqual(reference);
+        expect(input.sessionId).toBe("local-session");
+        return await Promise.resolve(
+          unavailableSourceAssessment(
+            {
+              appSpecDigest: input.appSpec.digest,
+              clarifications: [],
+              originalRequest: "Save records",
+              sourceDigest: input.observed.treeDigest,
+              appSpec: "Save records",
+              files: [],
+              omissions: [],
+            },
+            "Review workflow was interrupted; source remains unassessed.",
+            "blocked",
+          ),
+        );
+      },
+    });
+    const pending = await tool.execute({}, context("prepare-review"));
+    expect(pending).toMatchObject({ status: "source_review_pending", sourceReview: reference });
+    expect(appBuilderWorkflowState.get().phase).toBe("validated");
+    const accepted = await tool.execute({ sourceReview: reference }, context("finish-review"));
+    expect(accepted).toMatchObject({
+      sourceAssessment: { reviewCompleted: false, status: "blocked" },
+    });
+    expect(appBuilderWorkflowState.get().phase).toBe("reviewed");
+    expect({ directCalls, preparedCalls, finalizedCalls }).toEqual({
+      directCalls: 0,
+      preparedCalls: 1,
+      finalizedCalls: 1,
+    });
+  });
+});
+
+it("captures parent evidence and finalizes a private durable outcome without rerunning assessment", async () => {
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), "review-prepare-finalize-")));
+  try {
+    await mkdir(path.join(root, "runs"), { mode: 0o700 });
+    // Exercise real private persistence without invoking a model or any provider.
+    vi.stubEnv("APP_BUILDER_TEST_MODEL", "0");
+    for (const [key, value] of Object.entries({
+      APP_BUILDER_DEV_RUNS_ROOT: path.join(root, "runs"),
+      APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+      APP_BUILDER_EXECUTION_MODE: "development",
+      APP_BUILDER_LOCAL_ADAPTER: "1",
+      APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+      EVE_HOSTED_ADAPTER: "0",
+    })) {
+      vi.stubEnv(key, value);
+    }
+    await contextStorage.run(new ContextContainer(), async () => {
+      initial();
+      const observed = { files: [], treeDigest: sha256("[]") };
+      const input = {
+        appSpec,
+        applyReceipt: apply,
+        normalizedChanges: [],
+        observed,
+        // SAFETY: This controlled fixture provides the only consumed provider id and structured snapshot command; no Sandbox network methods are invoked.
+        getSandbox: async () =>
+          await Promise.resolve({
+            id: "server-captured-sandbox",
+            run: async () => await Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }),
+          } as unknown as Awaited<
+            ReturnType<Parameters<typeof prepareAppliedProductSourceReview>[0]["getSandbox"]>
+          >),
+        sessionAuth: {},
+        sessionId: "native-parent",
+      };
+      const prepared = await prepareAppliedProductSourceReview(input);
+      if (!("reference" in prepared)) {
+        throw new Error("Expected private review reference");
+      }
+      const store = await sourceReviewContextStoreForSession({
+        appId: "example",
+        sessionAuth: {},
+        sessionId: "native-parent",
+      });
+      const descriptor = await store.readContext(prepared.reference.contextRef);
+      expect(descriptor.parentSessionId).toBe("native-parent");
+      expect(descriptor.sandboxName).toBe("server-captured-sandbox");
+      expect(descriptor.reviewInput.originalRequest).toBe("Save records");
+      const unassessed = unavailableSourceAssessment(
+        { ...descriptor.reviewInput, files: [] },
+        "Evidence unavailable",
+        "blocked",
+      );
+      const outcomeRef = await store.publishOutcome(prepared.reference.contextRef, unassessed);
+      const result = await finalizeAppliedProductSourceReview({
+        ...input,
+        reference: { ...prepared.reference, outcomeRef },
+      });
+      expect(result).toMatchObject({ reviewCompleted: false, status: "blocked" });
+      const completed = { ...unassessed, reviewCompleted: true, status: "unassessed" as const };
+      const completedRef = await store.publishOutcome(prepared.reference.contextRef, completed);
+      expect(
+        await finalizeAppliedProductSourceReview({
+          ...input,
+          reference: { ...prepared.reference, outcomeRef: completedRef },
+        }),
+      ).toMatchObject({ reviewCompleted: true });
+      expect(await prepareAppliedProductSourceReview(input)).toMatchObject({
+        assessment: { reviewCompleted: true, invocation: { journalReuses: 1 } },
+      });
+      expect(
+        await finalizeAppliedProductSourceReview({
+          ...input,
+          reference: { ...prepared.reference, appId: "foreign" },
+        }),
+      ).toMatchObject({ reviewCompleted: false });
+    });
+  } finally {
+    vi.unstubAllEnvs();
+    await rm(root, { recursive: true, force: true });
+  }
 });

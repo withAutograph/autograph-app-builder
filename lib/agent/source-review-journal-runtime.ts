@@ -1,13 +1,23 @@
+import { isDeepStrictEqual } from "node:util";
 import { and, eq } from "drizzle-orm";
 import { agentSessions } from "../db/schema";
 import { createPostgresWorkspaceMembership } from "../eve/postgres-workspace-membership";
 import { z } from "zod";
-import { readLocalOperatorArtifactAuthority } from "../provisioning/local-operator-artifact-store";
+import {
+  readLocalOperatorArtifactAuthority,
+  createLocalOperatorArtifactStorage,
+} from "../provisioning/local-operator-artifact-store";
 import { exactForwardedSessionAuthority } from "../hosted/session-authority";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import { createLocalSourceReviewJournal } from "./local-source-review-journal";
 import { createPostgresSourceReviewJournal } from "./postgres-source-review-journal";
 import type { OwnerAuthorizedSourceReviewJournal } from "./product-source-review-journal";
+import { createApplicationReviewContextStore } from "./application-review-context-store";
+import {
+  createPostgresOperatorArtifactStore,
+  operatorArtifactUnavailable,
+} from "../provisioning/hosted-operator-artifact-store";
+import type { OperatorArtifactContext } from "../provisioning/hosted-operator-artifact-store";
 
 /** The runtime selects storage; tool arguments cannot select roots, owners, or profiles. */
 export const sourceReviewJournalForSession = async (input: {
@@ -80,5 +90,58 @@ export const sourceReviewJournalForSession = async (input: {
     ownerScope: JSON.stringify({ ownerUid: authority.ownerUid, principal }),
     sessionId: input.sessionId,
     stateRoot: authority.stateRoot,
+  });
+};
+
+/** The reference is private to the same parent session; no operator approval or provider grant is involved. */
+export const sourceReviewContextStoreForSession = async (input: {
+  appId: string;
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The forwarded authentication envelope is checked by the existing canonical session journal.
+  sessionAuth: unknown;
+  sessionId: string;
+  abortSignal?: AbortSignal;
+}) => {
+  const [journal, localAuthority] = await Promise.all([
+    sourceReviewJournalForSession(input),
+    readLocalOperatorArtifactAuthority(),
+  ]);
+  const authority = localAuthority ?? exactForwardedSessionAuthority(input.sessionAuth).authority;
+  const context: OperatorArtifactContext = {
+    authority,
+    target: { appId: input.appId, sessionId: input.sessionId },
+  };
+  const assertCurrentOwner = async () => {
+    input.abortSignal?.throwIfAborted();
+    await journal.assertCurrentOwner();
+    input.abortSignal?.throwIfAborted();
+  };
+  const assertArtifactOwner = async (candidate: OperatorArtifactContext) => {
+    if (
+      !isDeepStrictEqual(candidate.authority, authority) ||
+      candidate.target.appId !== input.appId ||
+      candidate.target.sessionId !== input.sessionId
+    ) {
+      throw operatorArtifactUnavailable();
+    }
+    await assertCurrentOwner();
+  };
+  let store;
+  if (localAuthority === undefined) {
+    store = createPostgresOperatorArtifactStore({
+      database: openHostedPostgresDatabase(process.env.DATABASE_URL ?? ""),
+      assertCurrentOwner: assertArtifactOwner,
+    });
+  } else {
+    const local = await createLocalOperatorArtifactStorage({
+      authority: localAuthority,
+      assertCurrentOwner: assertArtifactOwner,
+    });
+    store = local.store;
+  }
+  return createApplicationReviewContextStore({
+    store,
+    context,
+    assertCurrentOwner,
+    abortSignal: input.abortSignal,
   });
 };
