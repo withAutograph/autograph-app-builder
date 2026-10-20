@@ -10,7 +10,9 @@ describe("protected hosted runtime Sandbox transport", () => {
   it("allocates a private checkpoint with prepare's checkpoint-only flag before installation", async () => {
     const stdout = vi.fn();
     const runCommand = vi.fn().mockResolvedValue({ exitCode: 0, stdout });
+    const signal = new AbortController().signal;
     const executor = createHostedRuntimeSandboxExecutor({
+      signal,
       appId: "spend-review",
       provider: {
         fs: { mkdir: vi.fn(), readFile: vi.fn(), readdir: vi.fn() },
@@ -36,8 +38,12 @@ describe("protected hosted runtime Sandbox transport", () => {
         env: z.record(z.string(), z.string()),
       })
       .parse(runCommand.mock.calls[0]?.[0]);
-    expect(call.cmd).toBe("mise");
+    expect(runCommand).toHaveBeenCalledWith(
+      expect.objectContaining({ cwd: "/workspace/repository", signal }),
+    );
+    expect(call.cmd).toBe("/usr/bin/env");
     expect(call.args).toEqual([
+      "mise",
       "run",
       "app:runtime",
       "prepare",
@@ -88,8 +94,8 @@ describe("protected hosted runtime Sandbox transport", () => {
     const call = z
       .object({ args: z.array(z.string()), cmd: z.string(), env: z.record(z.string(), z.string()) })
       .parse(runCommand.mock.calls[0]?.[0]);
-    expect(call.args).toEqual(["run", "app:runtime", "verify", "spend-review", "preview"]);
-    expect(call.cmd).toBe("mise");
+    expect(call.args).toEqual(["mise", "run", "app:runtime", "verify", "spend-review", "preview"]);
+    expect(call.cmd).toBe("/usr/bin/env");
     expect(call.env.APP_RUNTIME_CLUSTER_DATABASE_URL).toBe("synthetic-secret-endpoint");
     expect(call.env.APP_RUNTIME_ROLES).toBe("requester,reviewer");
     expect(call.env.APP_RUNTIME_STATE_DIR).toBe("/private-runtime");

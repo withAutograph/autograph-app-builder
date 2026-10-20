@@ -219,9 +219,10 @@ export const restorePreparedRuntimeExecution = async (input: {
     appId: input.appId,
     environment: "preview" as const,
   };
+  // Resolve mise inside the Sandbox environment, not the SDK launcher's PATH.
   const described = await runCommand({
-    args: ["run", "app:describe", input.appId],
-    cmd: "mise",
+    args: ["mise", "run", "app:describe", input.appId],
+    cmd: "/usr/bin/env",
     cwd: input.root,
     signal: input.signal,
   });
@@ -357,6 +358,7 @@ export const restorePreparedRuntimeExecution = async (input: {
           { commandId, commandCheckpoint, allowDispatch },
           {
             args: [
+              "mise",
               "run",
               "app:runtime",
               "run",
@@ -364,7 +366,7 @@ export const restorePreparedRuntimeExecution = async (input: {
               task,
               ...(shard !== undefined && shard !== "" ? [shard] : []),
             ],
-            cmd: "mise",
+            cmd: "/usr/bin/env",
             cwd: input.root,
             detached: true,
             env: {

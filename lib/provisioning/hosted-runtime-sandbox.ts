@@ -57,9 +57,10 @@ export const createHostedRuntimeSandboxExecutor = (input: {
       operation === "checkpoint"
         ? ["run", "app:runtime", "prepare", input.appId, "preview", "--", "--checkpoint-only"]
         : ["run", "app:runtime", operation, input.appId, "preview"];
+    // Resolve mise inside the Sandbox environment, not the SDK launcher's PATH.
     const command = await input.provider.runCommand({
-      args,
-      cmd: "mise",
+      args: ["mise", ...args],
+      cmd: "/usr/bin/env",
       cwd: input.root,
       env,
       signal: signal ?? input.signal,
