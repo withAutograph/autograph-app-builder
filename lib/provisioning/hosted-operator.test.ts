@@ -42,6 +42,8 @@ import {
 } from "./hosted-runtime-journal";
 import type { HostedRuntimeJournalRow, HostedRuntimeJournalStore } from "./hosted-runtime-journal";
 import { publicApprovalDescription } from "../agent/approval-receipt";
+import { createInstallerSourceSuccessorPlan } from "./hosted-operator-installer-source-successor";
+import { normalActorProgramDigest } from "./hosted-operator-normal-actor-program";
 
 const authority = {
   audience: "https://builder.example/mcp",
@@ -2441,6 +2443,248 @@ describe("native bindings integration", () => {
       selection,
     });
     expect(refreshed.nativePreview?.gateway).toEqual(replacement);
+  });
+});
+
+describe("idle installer source successor planning", () => {
+  it("retains custody and prior approval while requiring new approval and reconciling the refreshed worker first", async () => {
+    const now = Date.parse("2026-10-20T12:00:00Z");
+    const f = fixture(() => now);
+    const requireRow = () => {
+      const row = f.row;
+      if (row === undefined) {
+        throw new Error("Missing source successor fixture journal");
+      }
+      return row;
+    };
+    const program = {
+      version: 1 as const,
+      appId: selection.appId,
+      origin: "https://apps-preview.example.test",
+      actors: [
+        {
+          actorKey: "owner",
+          account: "capture-existing" as const,
+          email: "owner@example.test",
+          name: "Owner",
+        },
+      ],
+      organizations: [],
+      memberships: [],
+      appAccess: [],
+    };
+    const preparation = {
+      accountOperationRef: "facfd14d-e963-4228-8219-dba37c95b0b8",
+      accountPlanDigest: operatorPlanDigest(plan),
+      accountApprovalId: "original-account-approval",
+      accountApprovedByCallId: "original-account-call",
+      programDigest: normalActorProgramDigest(program),
+    };
+    const oldPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      stage: "app",
+      access: [],
+      normalActorProgram: program,
+      normalActorPreparation: preparation,
+      effects: [
+        {
+          id: "auth-resources",
+          kind: "resources",
+          description: "Observe Auth",
+        },
+        {
+          id: "app-resources",
+          kind: "resources",
+          description: "Observe app",
+        },
+        {
+          id: "auth-schema",
+          kind: "install",
+          description: "Observe Auth schema",
+        },
+        ...plan.effects.slice(1),
+      ],
+    });
+    f.deps.plan = async () => oldPlan;
+    const originalRequest = await prepared(f);
+    const current = requireRow();
+    const privateState = {
+      encryptedToken: "ciphertext",
+      keyVersion: "key-v1",
+      tokenIv: "iv",
+      tokenTag: "tag",
+    };
+    const accountPreparation = {
+      ...preparation,
+      program,
+      accountPlan: plan,
+      sealedState: {
+        encryptedToken: "sealed-account-state",
+        keyVersion: "v1",
+        tokenIv: "iv",
+        tokenTag: "tag",
+      },
+      captures: [],
+    };
+    f.row = {
+      ...current,
+      record: hostedRuntimeJournalRecordSchema.parse({
+        ...current.record,
+        privateState,
+        accountPreparation,
+      }),
+    };
+    f.approve();
+    let originalApproved = true;
+    let newApproved = false;
+    const readApproval = f.deps.readApproval;
+    f.deps.readApproval = vi.fn<ProtectedHostedOperatorDependencies["readApproval"]>(
+      async (input) => {
+        if (
+          (input.callId === originalRequest.callId && !originalApproved) ||
+          (input.callId === "new-source-call" && !newApproved)
+        ) {
+          return null;
+        }
+        return await readApproval(input);
+      },
+    );
+    const observedReceipt = (effectId: string, fenceGeneration: number) => ({
+      effectId,
+      fenceGeneration,
+      observedAt: new Date(now).toISOString(),
+      resourceVersion: "observed-prerequisite",
+    });
+    f.deps.reconcile = vi.fn<ProtectedHostedOperatorDependencies["reconcile"]>(async (input) => {
+      if (input.effect.id === "install") {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+      return {
+        status: "applied" as const,
+        receipt: observedReceipt(input.effect.id, input.fenceGeneration),
+      };
+    });
+    expect(await f.client.request(originalRequest)).toMatchObject({
+      status: "blocked",
+      code: "resource_mismatch",
+    });
+    const failed = structuredClone(requireRow());
+    expect(failed.record).toMatchObject({
+      privateState,
+      accountPreparation,
+      executionObservation: {
+        state: "settled",
+        operationRef: originalRequest.operationRef,
+        planDigest: originalRequest.planDigest,
+        callId: originalRequest.callId,
+        approvalId: "durable-human-decision",
+        outcome: { status: "blocked", code: "resource_mismatch" },
+      },
+    });
+    expect(failed.record.leaseId).toBeUndefined();
+    expect(failed.record.leaseExpiresAt).toBeUndefined();
+    expect(failed.record.operator?.pendingEffectId).toBeUndefined();
+    expect(failed.record.operator?.pendingEffectAttempt).toBeUndefined();
+    expect(failed.record.operator?.receipts.map((receipt) => receipt.effectId)).toEqual([
+      "auth-resources",
+      "app-resources",
+      "auth-schema",
+    ]);
+    expect(f.deps.executeEffect).not.toHaveBeenCalled();
+    f.deps.plan = async () => {
+      const successor = createInstallerSourceSuccessorPlan(
+        requireRow().record,
+        { id: oldPlan.installer.reference, sha256: "e".repeat(64) },
+        now,
+      );
+      if (successor === undefined) {
+        throw new Error("Expected eligible idle source successor");
+      }
+      return successor;
+    };
+    originalApproved = false;
+    expect(
+      await f.client.request({ action: "plan", operation: "prepare", selection }),
+    ).toMatchObject({ status: "blocked", code: "authorization_required" });
+    expect(f.row).toEqual(failed);
+    originalApproved = true;
+    const proposed = await f.client.request({ action: "plan", operation: "prepare", selection });
+    expect(proposed).toMatchObject({
+      status: "planned",
+      operationRef: originalRequest.operationRef,
+    });
+    const proposedPlan = hostedOperatorPlanSchema.parse(proposed.plan);
+    expect(proposedPlan).toEqual({
+      ...oldPlan,
+      installer: { ...oldPlan.installer, sha256: "e".repeat(64) },
+    });
+    expect(requireRow().record).toMatchObject({
+      privateState,
+      accountPreparation,
+      approvedByCallId: "operator:unapproved-plan",
+    });
+    expect(requireRow().record.operator?.approvalId).toBeUndefined();
+    expect(requireRow().record.operator?.fenceGeneration).toBe(
+      failed.record.operator?.fenceGeneration,
+    );
+    expect(requireRow().record.operator?.receipts).toEqual(failed.record.operator?.receipts);
+    expect(requireRow().record.operator?.retainedInstallerOperations).toEqual([
+      { approvedByCallId: originalRequest.callId, operator: failed.record.operator },
+    ]);
+    expect(f.deps.executeEffect).not.toHaveBeenCalled();
+    const request = {
+      ...originalRequest,
+      callId: "new-source-call",
+      planDigest: z.string().parse(proposed.planDigest),
+    };
+    const reconcile = vi.fn<ProtectedHostedOperatorDependencies["reconcile"]>(async () => ({
+      status: "unknown",
+    }));
+    f.deps.reconcile = reconcile;
+    expect(await f.client.request(request)).toMatchObject({
+      status: "blocked",
+      code: "authorization_required",
+    });
+    expect(reconcile).not.toHaveBeenCalled();
+    newApproved = true;
+    expect(await f.client.request(request)).toMatchObject({
+      status: "blocked",
+      code: "reconciliation_required",
+    });
+    expect(reconcile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        effect: proposedPlan.effects.find((effect) => effect.id === "install"),
+        plan: proposedPlan,
+        privateState,
+      }),
+    );
+    expect(f.deps.executeEffect).not.toHaveBeenCalled();
+    expect(requireRow().record.accountPreparation).toEqual(accountPreparation);
+    f.deps.reconcile = vi.fn<ProtectedHostedOperatorDependencies["reconcile"]>(async (input) =>
+      input.effect.id === "install"
+        ? { status: "absent" as const }
+        : { status: "unknown" as const },
+    );
+    expect(await f.client.request(request)).toMatchObject({
+      status: "blocked",
+      code: "reconciliation_required",
+    });
+    expect(f.deps.executeEffect).toHaveBeenCalledTimes(1);
+    expect(f.deps.executeEffect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        effect: proposedPlan.effects.find((effect) => effect.id === "install"),
+        plan: proposedPlan,
+        privateState,
+      }),
+    );
+    expect(requireRow().record.privateState).toEqual(privateState);
+    expect(requireRow().record.accountPreparation).toEqual(accountPreparation);
+    expect(requireRow().record.operator?.receipts.map((receipt) => receipt.effectId)).toEqual([
+      "auth-resources",
+      "app-resources",
+      "auth-schema",
+      "install",
+    ]);
   });
 });
 
