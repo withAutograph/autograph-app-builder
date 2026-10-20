@@ -1,4 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { durableHostedSessionRecordSchema } from "../eve/hosted-store";
+import {
+  privateHostedApprovalReceiptSchema,
+  readPrivateHostedApproval,
+} from "../eve/private-hosted-approval";
+import type { PrivateHostedApprovalReceipt } from "../eve/private-hosted-approval";
+import { publicApprovalDescription } from "../agent/approval-receipt";
 import { createHash } from "node:crypto";
 import { hostedOperatorRealmLinkConfigSha256 } from "./hosted-operator-realm-link-config";
 import { createProtectedHostedOperatorHandler } from "./hosted-operator-service";
@@ -27,6 +34,7 @@ import {
   retainedOperatorAuthFromJournal,
 } from "./hosted-runtime-journal";
 import {
+  createRetainedAppInstallationCustomerReader,
   matchesApprovedMembershipJwks,
   selectAuthPlanningResourceBindingRow,
 } from "./hosted-operator-deployment";
@@ -49,6 +57,7 @@ import * as membershipLauncher from "./hosted-operator-sandbox-launcher";
 
 import {
   HostedOperatorError,
+  operatorOwnerContextSchema,
   operatorPublicResultSchema,
   hostedOperatorPlanSchema,
   operatorPlanDigest,
@@ -3072,5 +3081,280 @@ describe("approved historical organization inspection", () => {
     f.assertMembershipCapture.mockRejectedValue(new Error("current capture revoked"));
     await expect(f.dependencies.reconcile(f.input)).rejects.toThrow("current capture revoked");
     expect(f.execute).not.toHaveBeenCalled();
+  });
+});
+
+describe("retained active schema installation scope", () => {
+  const fixture = () => {
+    const desired = hostedOperatorPlanSchema.parse({
+      ...bootstrapPlan(),
+      stage: undefined,
+      effects: [
+        ...bootstrapPlan().effects,
+        { id: "app-access", kind: "access", description: "Approved grants" },
+        { id: "app-bindings", kind: "bindings", description: "Approved bindings" },
+      ],
+      access: [{ actorId: "qa-actor", organizationId: "qa-org", roles: ["member"] }],
+    });
+    const prior = hostedOperatorPlanSchema.parse({
+      ...desired,
+      release: { ...desired.release, id: "previous-release", sha256: "1".repeat(64) },
+      access: [{ actorId: "original-owner", organizationId: "original-org", roles: ["member"] }],
+    });
+    const receipt = (sequence: number): PrivateHostedApprovalReceipt =>
+      privateHostedApprovalReceiptSchema.parse({
+        callId: `approved-call-${sequence}`,
+        requestId: `approved-request-${sequence}`,
+        format: "autograph-hosted-approval-v1",
+        outcome: "approved",
+        responderPrincipalId: authority.ownerUserId,
+        sequence,
+        turnId: "",
+        toolName: "prepare-app-hosted-runtime",
+        toolInput: {
+          appId: prior.selection.appId,
+          branch: prior.selection.branch,
+          environment: "preview",
+          projectId: prior.selection.projectId,
+          operationRef: `00000000-0000-4000-8000-${String(sequence).padStart(12, "0")}`,
+          plan: prior,
+          planDigest: operatorPlanDigest(prior),
+        },
+      });
+    const owner = operatorOwnerContextSchema.parse(context.ownerContext);
+    const session = durableHostedSessionRecordSchema.parse({
+      version: 2,
+      sessionId: context.target.sessionId,
+      appId: context.target.appId,
+      principal: owner.principal,
+      adapterGeneration: 1,
+      adapterSessionId: "adapter",
+      originAdapterSessionId: "adapter",
+      createdAtEpochMs: 100,
+      updatedAtEpochMs: 100,
+      lastProgressAtEpochMs: 100,
+      resumability: "live",
+      stage: "ready",
+      status: "waiting",
+      title: "Controlled retained owner",
+      privateApprovalReceipts: [receipt(1)],
+    });
+    const getSession = vi.fn(async () => await Promise.resolve(session));
+    const readOwner = vi.fn(async () => await Promise.resolve({ session }));
+    const readApproval = vi.fn(
+      async (_context: HostedOperatorContext, selected: PrivateHostedApprovalReceipt) =>
+        await readPrivateHostedApproval({
+          store: { getSession },
+          principal: owner.principal,
+          sessionId: context.target.sessionId,
+          callId: selected.callId,
+          action: "prepare",
+          planDigest: selected.toolInput.planDigest,
+          selection: selected.toolInput.plan.selection,
+          requestId: selected.requestId,
+        }),
+    );
+    const readActiveCustomers = vi.fn(async () => await Promise.resolve(["original-org"]));
+    const read = createRetainedAppInstallationCustomerReader({
+      readOwner,
+      readApproval,
+      readActiveCustomers,
+    });
+    return { desired, prior, receipt, session, readOwner, readApproval, readActiveCustomers, read };
+  };
+
+  it("canonically checks only the latest duplicate scope and preserves the prior release tenant", async () => {
+    const f = fixture();
+    f.session.privateApprovalReceipts = Array.from({ length: 8 }, (_, index) =>
+      f.receipt(index + 1),
+    );
+    await expect(f.read(context, f.desired)).resolves.toEqual(["original-org"]);
+    expect(f.readApproval).toHaveBeenCalledTimes(1);
+    expect(f.readApproval).toHaveBeenCalledWith(context, f.receipt(8));
+    expect(f.readActiveCustomers).toHaveBeenCalledWith(context, f.desired, [
+      {
+        appId: context.target.appId,
+        actorId: "original-owner",
+        organizationId: "original-org",
+        role: "member",
+      },
+    ]);
+    expect(f.desired.access).toEqual([
+      { actorId: "qa-actor", organizationId: "qa-org", roles: ["member"] },
+    ]);
+  });
+
+  it("does not revive a latest canceled approval", async () => {
+    const f = fixture();
+    f.session.privateApprovalReceipts = [
+      f.receipt(1),
+      { ...f.receipt(1), sequence: 2, outcome: "cancelled" },
+    ];
+    await expect(f.read(context, f.desired)).resolves.toEqual([]);
+    expect(f.readApproval).not.toHaveBeenCalled();
+    expect(f.readActiveCustomers).not.toHaveBeenCalled();
+  });
+
+  it.each(["owner", "session", "database", "app", "responder"] as const)(
+    "does not acquire retained scope from a foreign %s",
+    async (kind) => {
+      const f = fixture();
+      const original = f.receipt(1);
+      if (kind === "owner") {
+        f.session.principal.ownerUserId = "other-owner";
+      }
+      if (kind === "session") {
+        f.session.sessionId = "other-session";
+      }
+      const plan = hostedOperatorPlanSchema.parse({
+        ...f.prior,
+        ...(kind === "database"
+          ? { appDatabase: { ...f.prior.appDatabase, database: "other_database" } }
+          : {}),
+        ...(kind === "app" ? { selection: { ...f.prior.selection, appId: "other-app" } } : {}),
+      });
+      f.session.privateApprovalReceipts = [
+        {
+          ...original,
+          responderPrincipalId:
+            kind === "responder" ? "other-owner" : original.responderPrincipalId,
+          toolInput: {
+            ...original.toolInput,
+            appId: plan.selection.appId,
+            plan,
+            planDigest: operatorPlanDigest(plan),
+          },
+        },
+      ];
+      await (kind === "owner" || kind === "session"
+        ? expect(f.read(context, f.desired)).rejects.toThrow("authorization_required")
+        : expect(f.read(context, f.desired)).resolves.toEqual([]));
+      expect(f.readActiveCustomers).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects malformed plan approval digests before any metadata read", async () => {
+    const f = fixture();
+    const prior = f.receipt(1);
+    f.session.privateApprovalReceipts = [
+      { ...prior, toolInput: { ...prior.toolInput, planDigest: "0".repeat(64) } },
+    ];
+    await expect(f.read(context, f.desired)).rejects.toThrow();
+    expect(f.readActiveCustomers).not.toHaveBeenCalled();
+  });
+
+  it("requires the exact owner-scoped canonical receipt", async () => {
+    const f = fixture();
+    f.readApproval.mockResolvedValue(null);
+    await expect(f.read(context, f.desired)).rejects.toThrow("authorization_required");
+    expect(f.readActiveCustomers).not.toHaveBeenCalled();
+  });
+
+  it("propagates unknown active scope instead of omitting the original owner", async () => {
+    const f = fixture();
+    f.readActiveCustomers.mockRejectedValue(new Error("metadata unavailable"));
+    await expect(f.read(context, f.desired)).rejects.toThrow("metadata unavailable");
+  });
+
+  it("excludes observed inactive scope", async () => {
+    const f = fixture();
+    f.readActiveCustomers.mockResolvedValue([]);
+    await expect(f.read(context, f.desired)).resolves.toEqual([]);
+  });
+
+  it("rechecks latest settlement after active scope observation", async () => {
+    const f = fixture();
+    f.readActiveCustomers.mockImplementation(async () => {
+      f.session.privateApprovalReceipts = [{ ...f.receipt(1), sequence: 2, outcome: "cancelled" }];
+      return await Promise.resolve(["original-org"]);
+    });
+    await expect(f.read(context, f.desired)).rejects.toThrow("authorization_required");
+  });
+
+  it("rejects an active result outside the canonically approved actor scope", async () => {
+    const f = fixture();
+    f.readActiveCustomers.mockResolvedValue(["foreign-org"]);
+    await expect(f.read(context, f.desired)).rejects.toThrow("resource_mismatch");
+  });
+
+  it("preserves the fresh owner check after metadata observation", async () => {
+    const f = fixture();
+    f.readOwner
+      .mockResolvedValueOnce({ session: f.session })
+      .mockRejectedValue(new Error("owner revoked"));
+    await expect(f.read(context, f.desired)).rejects.toThrow("owner revoked");
+  });
+});
+
+describe("normal actor plan with retained installation scope", () => {
+  it("reviews the exact schema target union while preserving QA actors, access and membership program", async () => {
+    const f = participantResolutionFixture();
+    const original = await resolveFullPlan(
+      f.base,
+      context,
+      f.configuration,
+      f.ports,
+      {},
+      true,
+      true,
+    );
+    const readAppInstallationCustomerIds = vi.fn(
+      async () => await Promise.resolve(["retained-owner-org"]),
+    );
+    const proposed = await resolveFullPlan(
+      f.base,
+      context,
+      f.configuration,
+      { ...f.ports, readAppInstallationCustomerIds },
+      {},
+      true,
+      true,
+    );
+    expect(proposed.appInstallation?.customerIds).toEqual([
+      "first-org",
+      "second-org",
+      "retained-owner-org",
+    ]);
+    expect(proposed.access).toEqual(original.access);
+    expect(proposed.normalActorProgram).toEqual(original.normalActorProgram);
+    expect(proposed.normalActorPreparation).toEqual(original.normalActorPreparation);
+    expect(proposed.authMembership).toEqual(original.authMembership);
+    expect(proposed.effects.map((effect) => [effect.id, effect.kind])).toEqual(
+      original.effects.map((effect) => [effect.id, effect.kind]),
+    );
+    expect(operatorPlanDigest(proposed)).not.toBe(operatorPlanDigest(original));
+    const description = publicApprovalDescription(
+      {
+        appId: proposed.selection.appId,
+        branch: proposed.selection.branch,
+        projectId: proposed.selection.projectId,
+        environment: "preview",
+        operationRef: "00000000-0000-4000-8000-000000000099",
+        plan: proposed,
+        planDigest: operatorPlanDigest(proposed),
+      },
+      "prepare-app-hosted-runtime",
+    );
+    expect(description).toContain("retained-owner-org");
+    expect(description).toContain(proposed.release.id);
+  });
+
+  it("does not silently omit an unknown retained installation scope", async () => {
+    const f = participantResolutionFixture();
+    await expect(
+      resolveFullPlan(
+        f.base,
+        context,
+        f.configuration,
+        {
+          ...f.ports,
+          readAppInstallationCustomerIds: async () =>
+            await Promise.reject(new Error("retained scope unknown")),
+        },
+        {},
+        true,
+        true,
+      ),
+    ).rejects.toThrow("retained scope unknown");
   });
 });

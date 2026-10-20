@@ -3,7 +3,10 @@ import { createHash } from "node:crypto";
 import { expect, it, vi } from "vitest";
 import { hostedOperatorPlanSchema } from "./hosted-operator-contract";
 import type { OperatorSelection } from "./hosted-operator-contract";
-import { createHostedOperatorAppReadiness } from "./hosted-operator-app-readiness";
+import {
+  createHostedOperatorAppReadiness,
+  readActiveAppInstallationCustomerIds,
+} from "./hosted-operator-app-readiness";
 import type {
   AppRuntimeSnapshotReader,
   ReadAppRuntimeSnapshot,
@@ -365,3 +368,101 @@ it("chooses only an approved actor and role for every observed organization", as
     },
   ]);
 });
+
+const activeInstallationFixture = () => {
+  const f = fixture();
+  const scope: OperatorAppMetadataScope = {
+    actorId: "existing-owner",
+    appId: plan.selection.appId,
+    organizationId: "synthetic-org",
+    role: "existing-role",
+  };
+  const readActiveOrganization = vi.fn(async (_scope: OperatorAppMetadataScope) => f.observation);
+  f.reader.readActiveOrganization = readActiveOrganization;
+  const input = {
+    plan,
+    runtimeUrl:
+      "postgresql://spend_runtime:private-secret@ep-fixture.us-east-1.aws.neon.tech/spend?sslmode=verify-full",
+    scopes: [scope],
+    assertCurrent: vi.fn(async () => {}),
+    readRuntimeSnapshot: f.deps.readRuntimeSnapshot,
+  };
+  return { ...f, input, scope, readActiveOrganization };
+};
+
+it("retains an active actor-bound organization on a previous release without requiring the desired release", async () => {
+  const f = activeInstallationFixture();
+  f.observation.data.active_base_revision = "previous-release";
+  for (const release of f.observation.data.releases) {
+    release.base_revision = "previous-release";
+    release.release_id = "previous-release";
+  }
+  f.input.scopes = [f.scope, { ...f.scope, actorId: "other-existing-owner" }];
+  await expect(readActiveAppInstallationCustomerIds(f.input)).resolves.toEqual(["synthetic-org"]);
+  expect(f.readActiveOrganization.mock.calls.map(([scope]) => scope)).toEqual(f.input.scopes);
+});
+
+it("excludes only observed inactive or missing actor-bound organizations", async () => {
+  const f = activeInstallationFixture();
+  f.reader.readActiveOrganization = vi.fn(async () => null);
+  await expect(readActiveAppInstallationCustomerIds(f.input)).resolves.toEqual([]);
+});
+
+it.each(["unavailable-reader", "read-failed", "missing-active-revision"] as const)(
+  "preserves uncertainty instead of dropping a prior installation: %s",
+  async (failure) => {
+    const f = activeInstallationFixture();
+    if (failure === "unavailable-reader") {
+      delete f.reader.readActiveOrganization;
+    } else if (failure === "read-failed") {
+      f.readActiveOrganization.mockRejectedValueOnce(new Error("closed read failure"));
+    } else {
+      f.observation.data.active_schema_revision_id = 999;
+    }
+    await expect(readActiveAppInstallationCustomerIds(f.input)).rejects.toThrow();
+  },
+);
+
+it.each(["database", "scope-app", "observed-app", "observed-organization"] as const)(
+  "rejects a foreign installation metadata scope: %s",
+  async (foreign) => {
+    const f = activeInstallationFixture();
+    if (foreign === "database") {
+      f.identity.database = "other-database";
+    }
+    if (foreign === "scope-app") {
+      f.scope.appId = "other-app";
+    }
+    if (foreign === "observed-app") {
+      f.observation.data.app_id = "other-app";
+    }
+    if (foreign === "observed-organization") {
+      f.observation.data.customer_id = "other-org";
+    }
+    await expect(readActiveAppInstallationCustomerIds(f.input)).rejects.toThrow(
+      "hosted_app_runtime_readiness_unconfirmed",
+    );
+  },
+);
+
+it.each(["before", "after"] as const)(
+  "does not return retained installation scope when owner authority is lost %s the snapshot",
+  async (when) => {
+    const f = activeInstallationFixture();
+    if (when === "before") {
+      f.input.assertCurrent.mockRejectedValueOnce(new Error("owner no longer authorized"));
+    } else {
+      f.deps.readRuntimeSnapshot.mockImplementationOnce(async (_url, read) => {
+        const result = await read(f.reader);
+        f.input.assertCurrent.mockRejectedValueOnce(new Error("owner no longer authorized"));
+        return result;
+      });
+    }
+    await expect(readActiveAppInstallationCustomerIds(f.input)).rejects.toThrow(
+      "owner no longer authorized",
+    );
+    if (when === "before") {
+      expect(f.deps.readRuntimeSnapshot).not.toHaveBeenCalled();
+    }
+  },
+);

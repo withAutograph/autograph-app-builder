@@ -1223,6 +1223,58 @@ describe("protected hosted operator boundary", () => {
     await f.client.request(request);
     expect(f.deps.executeEffect).toHaveBeenCalledTimes(4);
   });
+  it("persists explicitly approved schema tenants without adding access grants", async () => {
+    const f = fixture();
+    const selectedPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      appInstallation: { customerIds: ["synthetic-org", "retained-owner-org"] },
+    });
+    f.deps.plan = async () => selectedPlan;
+    const request = await prepared(f);
+    f.approve();
+    const execute = f.deps.executeEffect;
+    f.deps.executeEffect = async (input) => {
+      if (input.effect.kind === "install" || input.effect.kind === "access") {
+        const contextDigest = (input.effect.kind === "install" ? "c" : "d").repeat(64);
+        const recordCheckpoint = await input.bindWorkerContext({ contextDigest });
+        const frame = {
+          contextDigest,
+          effectId: "schema-install",
+          fenceGeneration: input.fenceGeneration,
+          operationId: input.operationRef,
+          receipt: { readbackSha256: "e".repeat(64), state: "applied" as const },
+          resourceId: selectedPlan.appDatabase.resourceId,
+          sequence: 1,
+          tenantId: "retained-owner-org",
+        };
+        if (input.effect.kind === "install") {
+          await expect(
+            recordCheckpoint({ ...frame, resourceId: selectedPlan.authDatabase.resourceId }),
+          ).rejects.toMatchObject({ code: "resource_mismatch" });
+          await expect(
+            recordCheckpoint({ ...frame, tenantId: "foreign-org" }),
+          ).rejects.toMatchObject({ code: "resource_mismatch" });
+          await recordCheckpoint(frame);
+        } else {
+          await expect(recordCheckpoint(frame)).rejects.toMatchObject({
+            code: "resource_mismatch",
+          });
+          await recordCheckpoint({ ...frame, tenantId: "synthetic-org" });
+        }
+      }
+      return await execute(input);
+    };
+    expect((await f.client.request(request)).status).toBe("prepared");
+    expect(f.row?.record.operator?.plan.appInstallation).toEqual(selectedPlan.appInstallation);
+    expect(f.row?.record.operator?.plan.access).toEqual(plan.access);
+    expect(f.row?.record.operator?.workerCheckpoints).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ parentEffectId: "install", tenantId: "retained-owner-org" }),
+        expect.objectContaining({ parentEffectId: "access", tenantId: "synthetic-org" }),
+      ]),
+    );
+  });
+
   it("binds nested worker checkpoints to the active parent effect and acknowledges only after CAS", async () => {
     const f = fixture();
     const request = await prepared(f);

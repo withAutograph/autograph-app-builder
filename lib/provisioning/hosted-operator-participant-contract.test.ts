@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   hostedOperatorPlanSchema,
+  hostedOperatorInstallationCustomerIds,
   operatorPlanDigest,
   operatorPublicResultSchema,
   operatorRequestSchema,
@@ -467,4 +468,42 @@ describe("independently approved App and Gateway Preview branches", () => {
       }).success,
     ).toBe(false);
   });
+});
+
+describe("independent schema installation targets", () => {
+  it("retains legacy access-derived targets when no schema scope is specified", () => {
+    const plan = hostedOperatorPlanSchema.parse({
+      ...base,
+      access: [{ actorId: "actor-a", organizationId: "org-a", roles: ["reviewer"] }],
+    });
+    expect(hostedOperatorInstallationCustomerIds(plan)).toEqual(["org-a"]);
+    expect(plan.appInstallation).toBeUndefined();
+  });
+
+  it("binds explicit owned schema targets to approval without changing actor grants", () => {
+    const original = hostedOperatorPlanSchema.parse({
+      ...base,
+      access: [{ actorId: "actor-a", organizationId: "org-a", roles: ["reviewer"] }],
+    });
+    const proposed = hostedOperatorPlanSchema.parse({
+      ...original,
+      appInstallation: { customerIds: ["org-a", "retained-owner-org"] },
+    });
+    expect(hostedOperatorInstallationCustomerIds(proposed)).toEqual([
+      "org-a",
+      "retained-owner-org",
+    ]);
+    expect(proposed.access).toEqual(original.access);
+    expect(operatorPlanDigest(proposed)).not.toBe(operatorPlanDigest(original));
+  });
+});
+
+it("rejects explicit schema scope omitting an approved access tenant", () => {
+  expect(
+    hostedOperatorPlanSchema.safeParse({
+      ...base,
+      access: [{ actorId: "actor-a", organizationId: "org-a", roles: ["reviewer"] }],
+      appInstallation: { customerIds: ["retained-owner-org"] },
+    }).success,
+  ).toBe(false);
 });

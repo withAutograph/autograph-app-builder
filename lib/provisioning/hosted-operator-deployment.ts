@@ -15,7 +15,14 @@ import type {
   HostedContinuityPlan,
   ContinuityRuntimeSelection,
 } from "./hosted-operator-continuity-contract";
-import { readPrivateHostedApproval } from "../eve/private-hosted-approval";
+import {
+  readPrivateHostedApproval,
+  privateHostedApprovalReceiptSchema,
+} from "../eve/private-hosted-approval";
+import type { PrivateHostedApprovalReceipt } from "../eve/private-hosted-approval";
+import { readActiveAppInstallationCustomerIds } from "./hosted-operator-app-readiness";
+import type { OperatorAppMetadataScope } from "./hosted-operator-app-readiness";
+import type { HostedSessionRecord } from "../eve/hosted-store";
 import {
   operatorOwnerContextSchema,
   HostedOperatorError,
@@ -515,6 +522,146 @@ const membershipSpecForEffect = (input: HostedOperatorEffectContext) => {
   );
   return selectHostedOperatorOwnedOrganizationSpec(input.plan.authMembership, membershipTarget);
 };
+
+interface AppInstallationPlanningPort {
+  readAppInstallationCustomerIds?: (
+    context: HostedOperatorContext,
+    plan: HostedOperatorPlan,
+  ) => Promise<string[]>;
+}
+
+const unselectedInstallationScopes = (
+  prior: HostedOperatorPlan,
+  appId: string,
+  currentTenants: ReadonlySet<string>,
+  scopes: ReadonlyMap<string, OperatorAppMetadataScope>,
+): OperatorAppMetadataScope[] => {
+  const selected: OperatorAppMetadataScope[] = [];
+  for (const grant of prior.access) {
+    if (currentTenants.has(grant.organizationId)) {
+      continue;
+    }
+    for (const role of grant.roles) {
+      const scope = {
+        appId,
+        actorId: grant.actorId,
+        organizationId: grant.organizationId,
+        role,
+      };
+      if (!scopes.has(JSON.stringify(scope))) {
+        selected.push(scope);
+      }
+    }
+  }
+  return selected;
+};
+
+/** Prior approvals identify retained scope; only live actor-bound metadata makes it a schema target. */
+export const createRetainedAppInstallationCustomerReader =
+  (deps: {
+    readOwner: (context: HostedOperatorContext) => Promise<{ session: HostedSessionRecord }>;
+    readApproval: (
+      context: HostedOperatorContext,
+      receipt: PrivateHostedApprovalReceipt,
+    ) => Promise<PrivateHostedApprovalReceipt | null>;
+    readActiveCustomers: (
+      context: HostedOperatorContext,
+      plan: HostedOperatorPlan,
+      scopes: readonly OperatorAppMetadataScope[],
+    ) => Promise<string[]>;
+  }) =>
+  async (context: HostedOperatorContext, plan: HostedOperatorPlan): Promise<string[]> => {
+    const candidates = (canonicalSession: HostedSessionRecord) => {
+      const currentOwner = operatorOwnerContextSchema.parse(context.ownerContext);
+      if (
+        canonicalSession.sessionId !== context.target.sessionId ||
+        !samePrincipal(canonicalSession.principal, currentOwner.principal)
+      ) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      const settled = new Map<string, PrivateHostedApprovalReceipt>();
+      for (const raw of canonicalSession.version === 2
+        ? (canonicalSession.privateApprovalReceipts ?? [])
+        : []) {
+        const receipt = privateHostedApprovalReceiptSchema.parse(raw);
+        const prior = receipt.toolInput.plan;
+        const sameOwnedResource = [
+          isDeepStrictEqual(prior.appDatabase, plan.appDatabase),
+          prior.neon.projectId === plan.neon.projectId,
+          prior.neon.branchId === plan.neon.branchId,
+          prior.neon.endpoint === plan.neon.endpoint,
+        ].every(Boolean);
+        const sameOwnerScope = [
+          prior.selection.appId === context.target.appId,
+          prior.selection.sessionId === context.target.sessionId,
+          prior.selection.projectId === context.target.projectId,
+          prior.selection.environment === context.target.environment,
+        ].every(Boolean);
+        if (
+          [
+            receipt.toolName !== "prepare-app-hosted-runtime",
+            prior.action !== "prepare",
+            ![undefined, "app"].includes(prior.stage),
+            !sameOwnedResource,
+            !sameOwnerScope,
+          ].some(Boolean)
+        ) {
+          continue;
+        }
+        const key = JSON.stringify([receipt.toolInput.operationRef, receipt.toolInput.planDigest]);
+        const previous = settled.get(key);
+        if (previous === undefined || previous.sequence < receipt.sequence) {
+          settled.set(key, receipt);
+        }
+      }
+      return [...settled.values()].filter(
+        (receipt) =>
+          receipt.outcome === "approved" &&
+          receipt.responderPrincipalId === currentOwner.principal.ownerUserId,
+      );
+    };
+    const initial = await deps.readOwner(context);
+    const receipts = candidates(initial.session).toSorted(
+      (left, right) => right.sequence - left.sequence,
+    );
+    const currentTenants = new Set(plan.access.map((grant) => grant.organizationId));
+    const scopes = new Map<string, OperatorAppMetadataScope>();
+    const retained: PrivateHostedApprovalReceipt[] = [];
+    for (const receipt of receipts) {
+      const selected = unselectedInstallationScopes(
+        receipt.toolInput.plan,
+        plan.selection.appId,
+        currentTenants,
+        scopes,
+      );
+      if (selected.length === 0) {
+        continue;
+      }
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Canonically re-read only the latest approval adding each retained actor-bound scope.
+      const canonical = await deps.readApproval(context, receipt);
+      if (canonical === null || !isDeepStrictEqual(canonical, receipt)) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      retained.push(receipt);
+      for (const scope of selected) {
+        scopes.set(JSON.stringify(scope), scope);
+      }
+    }
+    const active =
+      scopes.size === 0 ? [] : await deps.readActiveCustomers(context, plan, [...scopes.values()]);
+    const freshOwner = await deps.readOwner(context);
+    const latest = candidates(freshOwner.session);
+    if (
+      retained.some((receipt) => !latest.some((current) => isDeepStrictEqual(current, receipt)))
+    ) {
+      throw new HostedOperatorError("authorization_required");
+    }
+    const allowed = new Set([...scopes.values()].map((scope) => scope.organizationId));
+    if (active.some((customerId) => !allowed.has(customerId))) {
+      throw new HostedOperatorError("resource_mismatch");
+    }
+    return [...new Set(active)];
+  };
 
 export const createHostedOperatorControlPlane = async (input: {
   environment?: Readonly<Record<string, string | undefined>>;
@@ -1194,7 +1341,56 @@ export const createHostedOperatorControlPlane = async (input: {
       observe: observeOwnerRealmContinuation,
     });
 
+    const installationPlanning: AppInstallationPlanningPort = {
+      readAppInstallationCustomerIds: createRetainedAppInstallationCustomerReader({
+        readOwner: owner.readCurrentPlanningOwner,
+        readApproval: async (context, receipt) =>
+          await readPrivateHostedApproval({
+            store: eve,
+            principal: operatorOwnerContextSchema.parse(context.ownerContext).principal,
+            sessionId: context.target.sessionId,
+            callId: receipt.callId,
+            action: "prepare",
+            planDigest: receipt.toolInput.planDigest,
+            selection: receipt.toolInput.plan.selection,
+            requestId: receipt.requestId,
+          }),
+        readActiveCustomers: async (context, desired, scopes) => {
+          await owner.assertPlanningAuthorized(context);
+          const row = await store.read(context);
+          const plan = row?.record.operator?.plan;
+          if (row === undefined || plan === undefined) {
+            throw new HostedOperatorError("resource_mismatch");
+          }
+          const sameResources = [
+            isDeepStrictEqual(plan.appDatabase, desired.appDatabase),
+            plan.neon.projectId === desired.neon.projectId,
+            plan.neon.branchId === desired.neon.branchId,
+            plan.neon.endpoint === desired.neon.endpoint,
+          ].every(Boolean);
+          if (!sameResources) {
+            throw new HostedOperatorError("resource_mismatch");
+          }
+          requireFinalResourceBindingPhase(row, { ...context, plan });
+          const bindings = readHostedOperatorResourceBindings({
+            ...context,
+            config: tokenKeyring,
+            record: row.record,
+            plan,
+          });
+          return await readActiveAppInstallationCustomerIds({
+            plan: desired,
+            scopes,
+            runtimeUrl: bindings.appDatabase.runtimeUrl,
+            assertCurrent: async () => {
+              await owner.assertPlanningAuthorized(context);
+            },
+          });
+        },
+      }),
+    };
     const controlPlane = {
+      ...installationPlanning,
       readApprovedPlan,
       registerOwnerRealmIdentityWait: (...args: Parameters<typeof realmIdentityWait.register>) =>
         realmIdentityWait.register(...args),

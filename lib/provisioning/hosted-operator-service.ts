@@ -94,6 +94,7 @@ import {
   operatorAuthSchemaPreparationSchema,
   operatorDeploymentCandidatesSchema,
   hostedOperatorPlanSchema,
+  hostedOperatorInstallationCustomerIds,
   operatorPlanDigest,
   operatorPublicResultSchema,
   operatorReceiptSchema,
@@ -2512,7 +2513,12 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                         plan.appDatabase.resourceId,
                         plan.authDatabase.resourceId,
                       ]);
-                      const tenantIds = new Set(plan.access.map((target) => target.organizationId));
+                      const tenantIds = new Set(
+                        effect.kind === "install" &&
+                          checkpoint.resourceId === plan.appDatabase.resourceId
+                          ? hostedOperatorInstallationCustomerIds(plan)
+                          : plan.access.map((target) => target.organizationId),
+                      );
                       if (
                         !resourceIds.has(checkpoint.resourceId) ||
                         (effect.kind === "resources" &&

@@ -130,6 +130,7 @@ const makeFixture = (
     startupFailure?: { code: string; metadata?: unknown };
     startupAdvisory?: unknown;
     snapshotId?: string;
+    installationCustomers?: string[];
   } = {},
 ) => {
   const generatedFiles = Object.fromEntries(
@@ -263,10 +264,17 @@ const makeFixture = (
       ],
     });
   }
+  if (options.installationCustomers) {
+    selectedPlan = hostedOperatorPlanSchema.parse({
+      ...selectedPlan,
+      appInstallation: { customerIds: options.installationCustomers },
+    });
+  }
   const customWorker =
     options.generated === true || options.auth === true || options.signupPolicy === true;
   const baseSelectedContext = buildProtectedInstallContext({
     plan: selectedPlan,
+    purpose: options.access ? "access" : "install",
     database: options.auth || options.signupPolicy ? "authDatabase" : "appDatabase",
     ...(options.auth || options.signupPolicy ? { subject: "auth" as const } : {}),
     fenceGeneration: 3,
@@ -332,7 +340,7 @@ const makeFixture = (
     readFileToBuffer: vi.fn(
       async ({ path: filePath }: { path: string }) => files.get(filePath) ?? null,
     ),
-    writeFiles: vi.fn(async (entries: { path: string; content: Buffer }[]) => {
+    writeFiles: vi.fn(async (entries: { path: string; content: Buffer; mode?: number }[]) => {
       for (const entry of entries) {
         files.set(entry.path, entry.content);
         written.push(entry.path);
@@ -567,7 +575,7 @@ const makeFixture = (
     bindWorkerContext,
     signal: new AbortController().signal,
     database: options.auth || options.signupPolicy ? "authDatabase" : "appDatabase",
-    ...(options.access
+    ...(options.access || (options.generated && options.readbackStatus !== undefined)
       ? {
           accessConnections: {
             appMigrator:
@@ -654,6 +662,66 @@ const makeFixture = (
 /* oxlint-enable eslint/complexity, sonarjs/cognitive-complexity */
 
 describe("hosted protected installer Sandbox launcher", () => {
+  it("limits schema-only tenants to install contexts and preserves access contexts", () => {
+    const selectedPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      appInstallation: { customerIds: ["tenant-a", "existing-owner"] },
+    });
+    const input = {
+      plan: selectedPlan,
+      database: "appDatabase" as const,
+      fenceGeneration: 3,
+      operationRef: runId,
+    };
+    expect(buildProtectedInstallContext({ ...input, purpose: "install" }).tenant_targets).toEqual([
+      "tenant-a",
+      "existing-owner",
+    ]);
+    expect(buildProtectedInstallContext({ ...input, purpose: "access" }).tenant_targets).toEqual([
+      "tenant-a",
+    ]);
+    expect(buildProtectedInstallContext(input).tenant_targets).toEqual(["tenant-a"]);
+    expect(selectedPlan.access).toEqual(plan.access);
+  });
+
+  it("dispatches and inspects schema installation with the separately approved tenant set", async () => {
+    const fixture = makeFixture({
+      generated: true,
+      installationCustomers: ["tenant-a", "existing-owner"],
+    });
+    await fixture.launcher.execute(fixture.input);
+    expect(fixture.records).toHaveLength(1);
+    const files = fixture.sandbox.writeFiles.mock.calls.flatMap(([entries]) => entries);
+    const approvedPlan = files.find((entry) => entry.path.endsWith("approved-access-plan.json"));
+    expect(approvedPlan?.mode).toBe(0o600);
+    expect(JSON.parse(approvedPlan!.content.toString())).toEqual(fixture.input.plan);
+    expect(files.some((entry) => entry.path.endsWith("access-connections.json"))).toBe(false);
+    const inspector = makeFixture({
+      generated: true,
+      fenceOnly: true,
+      installationCustomers: ["tenant-a", "existing-owner"],
+      readbackStatus: "incomplete",
+    });
+    await expect(
+      inspector.launcher.inspect({ ...inspector.input, readbackOnly: true }),
+    ).resolves.toMatchObject({ status: "incomplete" });
+    expect(inspector.records).toHaveLength(0);
+  });
+
+  it("keeps access inspection limited to access targets when installation includes an existing owner", async () => {
+    const fixture = makeFixture({
+      generated: true,
+      access: true,
+      fenceOnly: true,
+      installationCustomers: ["tenant-a", "existing-owner"],
+      readbackStatus: "incomplete",
+    });
+    await expect(
+      fixture.launcher.inspect({ ...fixture.input, readbackOnly: true }),
+    ).resolves.toMatchObject({ status: "incomplete" });
+    expect(fixture.records).toHaveLength(0);
+  });
+
   it("runs the pinned worker from the configured snapshot without an image or source clone", async () => {
     const fixture = makeFixture({ snapshotId: "snap_owned_workers" });
     await fixture.launcher.execute(fixture.input);
