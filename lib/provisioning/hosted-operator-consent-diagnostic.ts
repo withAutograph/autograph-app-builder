@@ -1140,7 +1140,10 @@ export const reportOperatorInventoryReadFailure = (
     } catch {
       /* Hostile error objects cannot change provider read behavior. */
     }
-    createHostedOperatorConsentDiagnostic(sessionId, sink)({
+    createHostedOperatorConsentDiagnostic(
+      sessionId,
+      sink,
+    )({
       boundary: "operator",
       phase: "inline",
       stage: "operator_request",

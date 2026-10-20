@@ -32,9 +32,7 @@ import {
   validationOutputExcerpt,
 } from "@/lib/repository/target-validation";
 import { ValidationLogWriter } from "@/lib/repository/validation-log";
-import type {
-  ValidationLogStore,
-} from "@/lib/repository/validation-log";
+import type { ValidationLogStore } from "@/lib/repository/validation-log";
 import { validationLogStoreForSession } from "@/lib/agent/validation-log-store-for-session";
 
 const publishCandidateArtifacts = async (
@@ -145,18 +143,26 @@ const executeCandidateCheck = async (input: {
       });
       if (store !== undefined) {
         writers = {
-          stderr: new ValidationLogWriter(store, {
-            attemptDigest,
-            channel: "stderr",
-            command: input.planned.name,
-            sessionId: input.sessionId,
-          }, { bestEffort: true }),
-          stdout: new ValidationLogWriter(store, {
-            attemptDigest,
-            channel: "stdout",
-            command: input.planned.name,
-            sessionId: input.sessionId,
-          }, { bestEffort: true }),
+          stderr: new ValidationLogWriter(
+            store,
+            {
+              attemptDigest,
+              channel: "stderr",
+              command: input.planned.name,
+              sessionId: input.sessionId,
+            },
+            { bestEffort: true },
+          ),
+          stdout: new ValidationLogWriter(
+            store,
+            {
+              attemptDigest,
+              channel: "stdout",
+              command: input.planned.name,
+              sessionId: input.sessionId,
+            },
+            { bestEffort: true },
+          ),
         };
       }
     }
@@ -173,9 +179,10 @@ const executeCandidateCheck = async (input: {
           writers.stdout.finishCapture(completion),
           writers.stderr.finishCapture(completion),
         ]);
-        durability = stdout.durability === "available" && stderr.durability === "available"
-          ? "available"
-          : "unavailable";
+        durability =
+          stdout.durability === "available" && stderr.durability === "available"
+            ? "available"
+            : "unavailable";
         if (stdout.reference !== undefined) {
           logs.stdout = stdout.reference;
         }
