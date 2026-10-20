@@ -81,7 +81,7 @@ import type { NormalActorOperationsDependencies } from "./hosted-operator-normal
 import { createHostedOperatorNormalActorProofCollector } from "./hosted-operator-normal-actor-proof";
 import {
   assertCompletedParticipantBootstrapApproval,
-  inspectCompletedParticipantBootstrap,
+  inspectPlanningParticipantBootstrap,
 } from "./hosted-operator-participant-bootstrap";
 import type { CompletedParticipantBootstrap } from "./hosted-operator-participant-bootstrap";
 import { createNormalActorOrganizationWorkers } from "./hosted-operator-normal-actor-worker";
@@ -2393,7 +2393,7 @@ export const createHostedOperatorControlPlane = async (input: {
       if (current === undefined || operator?.plan.stage !== "app") {
         return await readKnownAuthBootstrap(context);
       }
-      const bootstrap = inspectCompletedParticipantBootstrap(
+      const bootstrap = inspectPlanningParticipantBootstrap(
         {
           ...operator.plan,
           gatewayDelivery: {
@@ -2434,7 +2434,7 @@ export const createHostedOperatorControlPlane = async (input: {
       await assertCompletedParticipantBootstrapApproval(context, bootstrap, readApproval);
       const latest = await store.read(context);
       if (
-        !isDeepStrictEqual(inspectCompletedParticipantBootstrap(desired, latest?.record), bootstrap)
+        !isDeepStrictEqual(inspectPlanningParticipantBootstrap(desired, latest?.record), bootstrap)
       ) {
         throw new HostedOperatorError("operation_in_progress");
       }
@@ -2468,7 +2468,7 @@ export const createHostedOperatorControlPlane = async (input: {
             repoId: configuration.gateway.repoId,
           },
         };
-        const bootstrap = inspectCompletedParticipantBootstrap(desired, known.record);
+        const bootstrap = inspectPlanningParticipantBootstrap(desired, known.record);
         if (
           current === undefined ||
           candidate === undefined ||

@@ -1,7 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { normalActorOrganizationProofSchema } from "./hosted-operator-normal-actor-journal";
 import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
 import type { HostedOperatorPlan } from "./hosted-operator-contract";
-import type { HostedOperatorContext } from "./hosted-operator-service";
+import type {
+  HostedOperatorContext,
+  ProtectedHostedOperatorDependencies,
+} from "./hosted-operator-service";
 import {
   hostedRuntimeJournalRecordSchema,
   retainedOperatorAuthFromJournal,
@@ -13,6 +17,8 @@ import {
 import {
   assertCompletedParticipantBootstrapApproval,
   inspectCompletedParticipantBootstrap,
+  inspectPlanningParticipantBootstrap,
+  retainCompletedParticipantGateway,
   inspectParticipantBootstrapPreparation,
 } from "./hosted-operator-participant-bootstrap";
 import {
@@ -791,5 +797,270 @@ describe("completed enrollment and Gateway bootstrap handoff", () => {
         }),
       ),
     ).rejects.toMatchObject({ code: "authorization_required" });
+  });
+});
+
+const settledAppBootstrap = () => {
+  const record = incompleteAppRecord();
+  const operator = requiredFixture(record.operator);
+  const currentPlan = structuredClone(operator.plan);
+  requiredFixture(currentPlan.gatewayDelivery).gitSha = "d".repeat(40);
+  operator.plan = currentPlan;
+  operator.planDigest = operatorPlanDigest(currentPlan);
+  operator.receipts = currentPlan.effects.map((effect) => ({
+    effectId: effect.id,
+    observedAt,
+    resourceVersion: "completed-app-readback",
+  }));
+  const candidate = requiredFixture(requiredFixture(operator.gatewayDeliveryCandidates)[0]);
+  candidate.operationRef = operator.operationRef;
+  candidate.deploymentId = "completed-app-gateway";
+  operator.deliveredGatewayDeploymentId = candidate.deploymentId;
+  requiredFixture(operator.gatewayEnvironment)[0].valueSha256 =
+    hostedOperatorRealmLinkConfigSha256(currentPlan);
+  record.status = "prepared";
+  record.step = "bound";
+  record.environmentBound = true;
+  record.proof = {
+    actors: 1,
+    tenants: 1,
+    authenticatedBehavior: "unassessed",
+    artifactHash: "a".repeat(64),
+    manifestSha256: currentPlan.release.sha256,
+    releaseId: currentPlan.release.id,
+  };
+  return record;
+};
+
+describe("settled app bootstrap planning handoff", () => {
+  it("keeps original Auth authority while selecting the independently completed current app Gateway", () => {
+    const record = settledAppBootstrap();
+    const operator = requiredFixture(record.operator);
+    const originalAuth = requiredFixture(record.retainedAuth);
+    const before = structuredClone(record);
+    expect(originalAuth.plan.gatewayDelivery?.gitSha).not.toBe(
+      operator.plan.gatewayDelivery?.gitSha,
+    );
+    const selected = requiredFixture(inspectPlanningParticipantBootstrap(operator.plan, record));
+    expect(selected.auth).toEqual(originalAuth);
+    expect(selected.gateway?.operationRef).toBe(operator.operationRef);
+    expect(selected.gateway?.approvalId).toBe(operator.approvalId);
+    expect(selected.gateway?.plan.gatewayDelivery?.gitSha).toBe(
+      operator.plan.gatewayDelivery?.gitSha,
+    );
+    expect(selected.candidate.deploymentId).toBe(operator.deliveredGatewayDeploymentId);
+    expect(inspectCompletedParticipantBootstrap(operator.plan, record)).toBeUndefined();
+    expect(record).toEqual(before);
+  });
+
+  it("round-trips both independent approvals through the private organization proof bootstrap codec", () => {
+    const record = settledAppBootstrap();
+    const selected = requiredFixture(
+      inspectPlanningParticipantBootstrap(requiredFixture(record.operator).plan, record),
+    );
+    const serialized = JSON.stringify(selected);
+    const restored = normalActorOrganizationProofSchema.shape.bootstrap.parse(
+      JSON.parse(serialized),
+    );
+    expect(restored?.auth.approvalId).toBe(record.retainedAuth?.approvalId);
+    expect(restored?.gateway?.approvalId).toBe(record.operator?.approvalId);
+    expect(restored?.candidate.deploymentId).toBe(record.operator?.deliveredGatewayDeploymentId);
+  });
+
+  it("retains both exact snapshots across a new reservation and serialization/replay", () => {
+    let record = settledAppBootstrap();
+    const current = requiredFixture(record.operator);
+    const desired = structuredClone(current.plan);
+    const first = requiredFixture(inspectPlanningParticipantBootstrap(desired, record));
+    record = retainCompletedParticipantGateway(record);
+    record.status = "pending";
+    record.step = "reserved";
+    record.environmentBound = false;
+    delete record.proof;
+    current.operationRef = "00000000-0000-4000-8000-000000000014";
+    current.plan = { ...desired, contextId: "next-reviewed-spec" };
+    current.planDigest = operatorPlanDigest(current.plan);
+    current.receipts = [];
+    delete current.approvalId;
+    const serialized = JSON.stringify(record);
+    const replay = hostedRuntimeJournalRecordSchema.parse(JSON.parse(serialized));
+    expect(inspectPlanningParticipantBootstrap(desired, replay)).toEqual(first);
+    expect(replay.retainedAuth?.operationRef).toBe(first.auth.operationRef);
+    expect(replay.retainedParticipantGateway?.completion.operationRef).toBe(
+      first.gateway?.operationRef,
+    );
+  });
+
+  it.each([
+    "unbound",
+    "proof-release",
+    "proof-manifest",
+    "pending-effect",
+    "pending-attempt",
+  ] as const)(
+    "does not mask an invalid current prepared %s using valid retained Gateway evidence",
+    (changed) => {
+      let record = settledAppBootstrap();
+      record = retainCompletedParticipantGateway(record);
+      expect(record.retainedParticipantGateway).toBeDefined();
+      const operator = requiredFixture(record.operator);
+      const desired = structuredClone(operator.plan);
+      if (changed === "unbound") {
+        record.environmentBound = false;
+      }
+      if (changed === "proof-release") {
+        requiredFixture(record.proof).releaseId = "another-release";
+      }
+      if (changed === "proof-manifest") {
+        requiredFixture(record.proof).manifestSha256 = "0".repeat(64);
+      }
+      if (changed === "pending-effect") {
+        operator.pendingEffectId = "gateway-delivery";
+      }
+      if (changed === "pending-attempt") {
+        operator.pendingEffectAttempt = { id: "00000000-0000-4000-8000-000000000015" };
+      }
+      expect(inspectPlanningParticipantBootstrap(desired, record)).toBeUndefined();
+    },
+  );
+
+  it.each(["original-auth", "completed-app"])(
+    "requires the separate %s approval",
+    async (rejected) => {
+      const record = settledAppBootstrap();
+      const selected = requiredFixture(
+        inspectPlanningParticipantBootstrap(requiredFixture(record.operator).plan, record),
+      );
+      const gateway = requiredFixture(selected.gateway);
+      const readApproval = vi.fn<ProtectedHostedOperatorDependencies["readApproval"]>(
+        async (input) => {
+          await Promise.resolve();
+          const completionAuthority =
+            input.planDigest === selected.auth.planDigest ? selected.auth : gateway;
+          return {
+            approved: !(rejected === "original-auth"
+              ? completionAuthority === selected.auth
+              : completionAuthority === gateway),
+            approvalId: completionAuthority.approvalId,
+            callId: input.callId,
+            planDigest: input.planDigest,
+            action: "prepare",
+          };
+        },
+      );
+      await expect(
+        assertCompletedParticipantBootstrapApproval(context, selected, readApproval),
+      ).rejects.toMatchObject({ code: "authorization_required" });
+    },
+  );
+
+  it("checks both approvals under their original call and plan bindings", async () => {
+    const record = settledAppBootstrap();
+    const selected = requiredFixture(
+      inspectPlanningParticipantBootstrap(requiredFixture(record.operator).plan, record),
+    );
+    const gateway = requiredFixture(selected.gateway);
+    const readApproval = vi.fn<ProtectedHostedOperatorDependencies["readApproval"]>(
+      async (input) => {
+        await Promise.resolve();
+        const completionAuthority =
+          input.planDigest === selected.auth.planDigest ? selected.auth : gateway;
+        return {
+          approved: true,
+          approvalId: completionAuthority.approvalId,
+          callId: input.callId,
+          planDigest: input.planDigest,
+          action: "prepare",
+        };
+      },
+    );
+    await assertCompletedParticipantBootstrapApproval(context, selected, readApproval);
+    for (const completionAuthority of [selected.auth, gateway]) {
+      expect(readApproval).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callId: completionAuthority.approvedByCallId,
+          planDigest: completionAuthority.planDigest,
+          authority: context.authority,
+        }),
+      );
+    }
+  });
+
+  it.each([
+    "desired-source",
+    "desired-realm",
+    "unbound",
+    "proof-release",
+    "proof-manifest",
+    "missing-receipt",
+    "candidate-operation",
+    "candidate-project",
+    "candidate-repository",
+    "candidate-branch",
+    "candidate-unready",
+    "pending-binding",
+    "pending-effect",
+    "lease",
+    "private-state",
+    "account-authority",
+  ] as const)("rejects settled handoff with %s", (changed) => {
+    const record = settledAppBootstrap();
+    const operator = requiredFixture(record.operator);
+    const desired = structuredClone(operator.plan);
+    const candidate = requiredFixture(requiredFixture(operator.gatewayDeliveryCandidates)[0]);
+    const mutations = {
+      "desired-source": () => {
+        requiredFixture(desired.gatewayDelivery).gitSha = "0".repeat(40);
+      },
+      "desired-realm": () => {
+        requiredFixture(desired.gatewayBindings).operatorOrigin =
+          "https://another-operator.example";
+      },
+      unbound: () => {
+        record.environmentBound = false;
+      },
+      "proof-release": () => {
+        requiredFixture(record.proof).releaseId = "another-release";
+      },
+      "proof-manifest": () => {
+        requiredFixture(record.proof).manifestSha256 = "0".repeat(64);
+      },
+      "missing-receipt": () => {
+        operator.receipts.pop();
+      },
+      "candidate-operation": () => {
+        candidate.operationRef = operationRef;
+      },
+      "candidate-project": () => {
+        candidate.projectId = "other-project";
+      },
+      "candidate-repository": () => {
+        candidate.repoId = "other-repository";
+      },
+      "candidate-branch": () => {
+        candidate.branch = "other-branch";
+      },
+      "candidate-unready": () => {
+        candidate.readyState = "BUILDING";
+      },
+      "pending-binding": () => {
+        requiredFixture(operator.gatewayEnvironment)[0].pendingOperationRef = operationRef;
+      },
+      "pending-effect": () => {
+        operator.pendingEffectId = "gateway-delivery";
+      },
+      lease: () => {
+        record.leaseId = "00000000-0000-4000-8000-000000000013";
+      },
+      "private-state": () => {
+        delete record.privateState;
+      },
+      "account-authority": () => {
+        requiredFixture(operator.plan.normalActorPreparation).accountApprovalId =
+          "foreign-approval";
+      },
+    };
+    mutations[changed]();
+    expect(inspectPlanningParticipantBootstrap(desired, record)).toBeUndefined();
   });
 });

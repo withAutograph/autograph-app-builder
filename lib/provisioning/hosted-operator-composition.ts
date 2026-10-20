@@ -16,8 +16,8 @@ import {
 import { hasFailedGatewayDelivery } from "./hosted-operator-gateway-delivery-failure";
 import {
   assertCompletedParticipantBootstrapApproval,
-  inspectCompletedParticipantBootstrap,
-  inspectParticipantBootstrapPreparation,
+  inspectPlanningParticipantBootstrap,
+  inspectPlanningParticipantBootstrapPreparation,
 } from "./hosted-operator-participant-bootstrap";
 import type { CompletedParticipantBootstrap } from "./hosted-operator-participant-bootstrap";
 import { isDeepStrictEqual } from "node:util";
@@ -652,7 +652,7 @@ const createCompletedParticipantBootstrapHandoff = (
   controlPlane: Pick<ControlPlane, "assertCanonicalOwner" | "readApproval" | "store">,
   eligible: boolean,
 ) => {
-  const bootstrap = eligible ? inspectCompletedParticipantBootstrap(plan, record) : undefined;
+  const bootstrap = eligible ? inspectPlanningParticipantBootstrap(plan, record) : undefined;
   return bootstrap === undefined
     ? undefined
     : {
@@ -666,10 +666,7 @@ const createCompletedParticipantBootstrapHandoff = (
           );
           const latest = await controlPlane.store.read(context);
           if (
-            !isDeepStrictEqual(
-              inspectCompletedParticipantBootstrap(plan, latest?.record),
-              bootstrap,
-            )
+            !isDeepStrictEqual(inspectPlanningParticipantBootstrap(plan, latest?.record), bootstrap)
           ) {
             throw new HostedOperatorError(OPERATION_IN_PROGRESS);
           }
@@ -1645,7 +1642,7 @@ export const composeHostedOperatorDependencies = (
     const bootstrapPreparation =
       gatewayPlan.normalActorProgram === undefined
         ? undefined
-        : inspectParticipantBootstrapPreparation(gatewayPlan, current?.record);
+        : inspectPlanningParticipantBootstrapPreparation(gatewayPlan, current?.record);
     if (
       bootstrapPreparation?.gatewayPrepared === true &&
       bootstrapPreparation.auth !== undefined &&
