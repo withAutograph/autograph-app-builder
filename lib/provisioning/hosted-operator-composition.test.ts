@@ -394,6 +394,70 @@ const publicationFixture = (binding: { repoId?: string; gitSha?: string } = {}) 
 };
 
 describe("final verifier entry diagnostics", () => {
+  it("verifies the frozen operator deployment even after Config changes", async () => {
+    const f = publicationFixture();
+    f.configuration.operator.deploymentId = "stale-config-deployment";
+    const plan = bootstrapWithGatewayOrigin("https://gateway.example");
+    if (plan.deploymentBoundary === undefined) {
+      throw new Error("Expected the approved deployment boundary.");
+    }
+    plan.deploymentBoundary.operator.deploymentId = "frozen-operator-deployment";
+    const controlPlane = {
+      ...f.controlPlane,
+      assertAuthorized: vi.fn(async () => {
+        await Promise.resolve();
+      }),
+      store: {
+        read: vi.fn(async () => {
+          await Promise.resolve();
+          return {
+            record: {
+              operator: {
+                deliveredDeploymentId: "app-delivered",
+                deliveredGatewayDeploymentId: "gateway-delivered",
+                deliveryCandidates: [
+                  {
+                    deploymentId: "app-delivered",
+                    readyState: "READY",
+                    branch: context.target.branch,
+                    projectId: context.target.projectId,
+                  },
+                ],
+                gatewayDeliveryCandidates: [
+                  {
+                    deploymentId: "gateway-delivered",
+                    readyState: "READY",
+                    branch: "gateway-actual",
+                    projectId: "gateway",
+                    origin: "https://gateway.example",
+                  },
+                ],
+              },
+            },
+          };
+        }),
+      },
+    };
+    const stop = new Error("reached frozen inventory read");
+    const read = vi
+      .spyOn(providerInventory, "readHostedOperatorProviderInventory")
+      .mockRejectedValue(stop);
+    const dependencies = composeHostedOperatorDependencies(
+      f.configuration,
+      // SAFETY: This fixture stops at inventory; only the preceding ownership and journal ports execute.
+      // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- The scoped fixture implements the reached verifier ports.
+      controlPlane as unknown as Parameters<typeof composeHostedOperatorDependencies>[1],
+    );
+    await expect(dependencies.verify({ ...context, plan })).rejects.toBe(stop);
+    expect(
+      read.mock.calls.some(
+        ([inventoryRead]) =>
+          inventoryRead.configuration.operator.deploymentId === "frozen-operator-deployment" &&
+          inventoryRead.resolveOperatorByConfiguredOrigin === undefined,
+      ),
+    ).toBe(true);
+  });
+
   it.each(["final_owner_authorization", "final_journal_read"] as const)(
     "reports the original %s failure before inventory or runtime verification",
     async (stage) => {
@@ -1855,6 +1919,23 @@ describe("existing populated Auth workflow planning", () => {
     );
     expect(plan.authAdoption).toBeDefined();
   });
+  it("opts only a new plan into configured operator origin resolution and freezes the observed ID", async () => {
+    const f = setup("empty");
+    f.configuration.operator.deploymentId = "deleted-config-deployment";
+    const plan = await f.dependencies.plan({ ...context, action: "prepare" });
+    expect(
+      vi
+        .mocked(providerInventory.readHostedOperatorProviderInventory)
+        .mock.calls.some(
+          ([inventoryRead]) =>
+            inventoryRead.phase === "bootstrap-planning" &&
+            inventoryRead.resolveOperatorByConfiguredOrigin === true &&
+            inventoryRead.configuration.operator.origin === f.configuration.operator.origin,
+        ),
+    ).toBe(true);
+    expect(plan.deploymentBoundary?.operator.deploymentId).toBe("operator-deployment");
+  });
+
   it("keeps initial empty-target planning credential free", async () => {
     const f = setup("empty");
     await f.dependencies.plan({ ...context, action: "prepare" });
@@ -2003,6 +2084,10 @@ describe("existing populated Auth workflow planning", () => {
           .calls;
         expect(observed?.[0].phase).toBe("bootstrap-planning");
         expect(observed?.[0].resolveGatewayByPublicOrigin).toBeUndefined();
+        expect(observed?.[0].resolveOperatorByConfiguredOrigin).toBeUndefined();
+        expect(observed?.[0].configuration.operator.deploymentId).toBe(
+          operator.plan.deploymentBoundary?.operator.deploymentId,
+        );
         expect(observed?.[0].configuration.gateway.deploymentId).toBe("gateway-deployment");
         expect(observed?.[0].configuration.verification.gatewayOrigin).toBe(
           "https://gateway.example",

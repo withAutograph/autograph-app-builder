@@ -1223,6 +1223,7 @@ export const composeHostedOperatorDependencies = (
           context,
           phase: "bootstrap-planning",
           resolveGatewayByPublicOrigin: true,
+          resolveOperatorByConfiguredOrigin: true,
           readVercelCredential: async ({ authority, installationId }) =>
             await controlPlane.readCredential(authority, installationId),
         }),
@@ -2392,7 +2393,7 @@ export const composeHostedOperatorDependencies = (
                 environment: "preview",
                 projectId: gateway.projectId,
               },
-              operator: configuration.operator,
+              operator: deploymentBoundary.operator,
               verification: {
                 gatewayOrigin: gateway.origin,
                 publicOrigin: deploymentBoundary.verification.publicOrigin,

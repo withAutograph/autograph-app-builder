@@ -173,7 +173,137 @@ const fixture = () => {
   return { fetcher, input, payloads, readVercelCredential };
 };
 
+const operatorOriginFixture = () => {
+  const f = fixture();
+  const origin = "https://operator-current.example.test";
+  const deployment = {
+    env: [],
+    id: "dpl_operator_current",
+    ownerId: context.target.scopeId,
+    projectId: configuration.operator.projectId,
+    readyState: "READY",
+    target: null,
+    url: "operator-immutable.example.test",
+  };
+  f.input.configuration = {
+    ...configuration,
+    operator: { ...configuration.operator, environment: "preview", origin },
+  };
+  f.payloads.delete(`/v13/deployments/${configuration.operator.deploymentId}`);
+  f.payloads.set("/v13/deployments/operator-current.example.test", deployment);
+  return { ...f, deployment };
+};
+
 describe("private read-only operator provider inventory", () => {
+  it("resolves only the trusted configured operator origin for a new plan and freezes its actual deployment", async () => {
+    const f = operatorOriginFixture();
+    const inventory = await readHostedOperatorProviderInventory({
+      ...f.input,
+      phase: "bootstrap-planning",
+      resolveOperatorByConfiguredOrigin: true,
+    });
+    expect(inventory.operator.deploymentId).toBe("dpl_operator_current");
+    const deploymentReads = f.fetcher.mock.calls
+      .map(([url]) => new URL(requestUrl(url)).pathname)
+      .filter((path) => path.startsWith("/v13/deployments/") && path.includes("operator"));
+    expect(deploymentReads).toEqual(["/v13/deployments/operator-current.example.test"]);
+  });
+
+  it.each(["project", "project-owner", "owner", "environment", "readiness"] as const)(
+    "rejects a trusted-origin deployment with a foreign or invalid %s",
+    async (mismatch) => {
+      const f = operatorOriginFixture();
+      if (mismatch === "project-owner") {
+        f.payloads.set(`/v9/projects/${configuration.operator.projectId}`, {
+          accountId: "foreign-team",
+          id: configuration.operator.projectId,
+        });
+      } else {
+        f.payloads.set("/v13/deployments/operator-current.example.test", {
+          ...f.deployment,
+          ...(mismatch === "project" ? { projectId: "foreign-project" } : {}),
+          ...(mismatch === "owner" ? { ownerId: "foreign-team" } : {}),
+          ...(mismatch === "environment" ? { target: "production" } : {}),
+          ...(mismatch === "readiness" ? { readyState: "BUILDING" } : {}),
+        });
+      }
+      await expect(
+        readHostedOperatorProviderInventory({
+          ...f.input,
+          phase: "bootstrap-planning",
+          resolveOperatorByConfiguredOrigin: true,
+        }),
+      ).rejects.toMatchObject({ code: "resource_mismatch" });
+    },
+  );
+
+  it("does not fall back to a saved deployment when the configured planning alias is missing", async () => {
+    const f = operatorOriginFixture();
+    f.payloads.delete("/v13/deployments/operator-current.example.test");
+    f.payloads.set(`/v13/deployments/${configuration.operator.deploymentId}`, {
+      ...f.deployment,
+      id: configuration.operator.deploymentId,
+    });
+    await expect(
+      readHostedOperatorProviderInventory({
+        ...f.input,
+        phase: "bootstrap-planning",
+        resolveOperatorByConfiguredOrigin: true,
+      }),
+    ).rejects.toMatchObject({ code: "operator_unavailable" });
+    expect(
+      f.fetcher.mock.calls.some(
+        ([url]) =>
+          new URL(requestUrl(url)).pathname ===
+          `/v13/deployments/${configuration.operator.deploymentId}`,
+      ),
+    ).toBe(false);
+  });
+
+  it("does not fall back when new-plan operator origin configuration is missing", async () => {
+    const f = operatorOriginFixture();
+    delete f.input.configuration.operator.origin;
+    await expect(
+      readHostedOperatorProviderInventory({
+        ...f.input,
+        phase: "bootstrap-planning",
+        resolveOperatorByConfiguredOrigin: true,
+      }),
+    ).rejects.toMatchObject({ code: "operator_unavailable" });
+    expect(
+      f.fetcher.mock.calls.some(
+        ([url]) =>
+          new URL(requestUrl(url)).pathname ===
+          `/v13/deployments/${configuration.operator.deploymentId}`,
+      ),
+    ).toBe(false);
+  });
+
+  it.each(["execution", "capture", "opt-in-without-planning"] as const)(
+    "keeps the exact frozen deployment for %s",
+    async (mode) => {
+      const f = operatorOriginFixture();
+      f.payloads.set(`/v13/deployments/${configuration.operator.deploymentId}`, {
+        ...f.deployment,
+        id: configuration.operator.deploymentId,
+      });
+      const inventory = await readHostedOperatorProviderInventory({
+        ...f.input,
+        ...(mode === "capture" ? { phase: "bootstrap-planning" as const } : {}),
+        ...(mode === "opt-in-without-planning"
+          ? { resolveOperatorByConfiguredOrigin: true as const }
+          : {}),
+      });
+      expect(inventory.operator.deploymentId).toBe(configuration.operator.deploymentId);
+      expect(
+        f.fetcher.mock.calls.some(
+          ([url]) =>
+            new URL(requestUrl(url)).pathname === "/v13/deployments/operator-current.example.test",
+        ),
+      ).toBe(false);
+    },
+  );
+
   it.each([
     ["non-OK response", "http_response", 503],
     ["malformed JSON", "json_decode", undefined],
