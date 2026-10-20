@@ -1,4 +1,5 @@
 import { defineTool } from "eve/tools";
+import { createHash, randomUUID } from "node:crypto";
 import { publishCompiledOperatorArtifactsForSession } from "@/lib/agent/compiled-operator-artifacts";
 import type { ToolContext } from "eve/tools";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
@@ -16,9 +17,13 @@ import {
 import { appBrowserTestCommand, runAppBrowserTests } from "./run-app-browser-tests";
 import {
   draftReconciliationState,
+  retainCandidateValidationAttempt,
   updateExactDraftReconciliation,
 } from "@/lib/agent/draft-reconciliation-state";
-import type { DraftReconciliationCandidate } from "@/lib/agent/draft-reconciliation-state";
+import type {
+  CandidateValidationAttempt,
+  DraftReconciliationCandidate,
+} from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { supportedValidationCommands } from "@/lib/repository/supported-template";
 import { inspectDraftReconciliation } from "@/lib/repository/sandbox-draft-reconciliation";
@@ -26,6 +31,11 @@ import {
   sandboxValidationCommandExecutor,
   validationOutputExcerpt,
 } from "@/lib/repository/target-validation";
+import { ValidationLogWriter } from "@/lib/repository/validation-log";
+import type {
+  ValidationLogStore,
+} from "@/lib/repository/validation-log";
+import { validationLogStoreForSession } from "@/lib/agent/validation-log-store-for-session";
 
 const publishCandidateArtifacts = async (
   ctx: ToolContext,
@@ -87,6 +97,149 @@ const installCommand = "mise exec --no-deps -- bun install --frozen-lockfile";
 const additionalCheckCommand = (task: string) => `mise run --no-deps --skip-tools ${task}`;
 
 type ValidationStep = NonNullable<DraftReconciliationCandidate["validationRun"]>["steps"][number];
+
+const executeCandidateCheck = async (input: {
+  planned: ReturnType<typeof supportedValidationCommands>[number];
+  candidate: DraftReconciliationCandidate;
+  callId: string;
+  sessionId: string;
+  sessionAuth: unknown;
+  resolvedTree: string;
+  sandbox: SandboxSession;
+  signal?: AbortSignal;
+}): Promise<Awaited<ReturnType<ReturnType<typeof sandboxValidationCommandExecutor>>>> => {
+  const binding = {
+    appId: input.candidate.appId,
+    baseSha: input.candidate.baseSha,
+    callId: input.callId,
+    category: input.planned.name,
+    command: input.planned.command,
+    githubSourceDigest: input.candidate.githubSourceDigest,
+    headSha: input.candidate.headSha,
+    originalReviewDigest: input.candidate.originalReviewDigest,
+    pullRequestNumber: input.candidate.pullRequestNumber,
+    repositoryId: input.candidate.repositoryId,
+    resolvedTree: input.resolvedTree,
+    sessionId: input.sessionId,
+    unique: randomUUID(),
+  };
+  let attemptDigest: string | undefined;
+  let store: ValidationLogStore | undefined;
+  let writers:
+    | {
+        stderr: ValidationLogWriter;
+        stdout: ValidationLogWriter;
+      }
+    | undefined;
+  try {
+    const digest = createHash("sha256").update(JSON.stringify(binding)).digest("hex");
+    attemptDigest = digest;
+  } catch {
+    // Capture identity creation is best effort and cannot prevent the command from running.
+  }
+  try {
+    if (attemptDigest !== undefined) {
+      store = await validationLogStoreForSession({
+        sessionAuth: input.sessionAuth,
+        sessionId: input.sessionId,
+      });
+      if (store !== undefined) {
+        writers = {
+          stderr: new ValidationLogWriter(store, {
+            attemptDigest,
+            channel: "stderr",
+            command: input.planned.name,
+            sessionId: input.sessionId,
+          }, { bestEffort: true }),
+          stdout: new ValidationLogWriter(store, {
+            attemptDigest,
+            channel: "stdout",
+            command: input.planned.name,
+            sessionId: input.sessionId,
+          }, { bestEffort: true }),
+        };
+      }
+    }
+  } catch {
+    store = undefined;
+    writers = undefined;
+  }
+  const logs: CandidateValidationAttempt["logs"] = {};
+  const finish = async (completion: "complete" | "interrupted", exitCode: number | null) => {
+    let durability: CandidateValidationAttempt["durability"] = "unavailable";
+    if (writers !== undefined) {
+      try {
+        const [stdout, stderr] = await Promise.all([
+          writers.stdout.finishCapture(completion),
+          writers.stderr.finishCapture(completion),
+        ]);
+        durability = stdout.durability === "available" && stderr.durability === "available"
+          ? "available"
+          : "unavailable";
+        if (stdout.reference !== undefined) {
+          logs.stdout = stdout.reference;
+        }
+        if (stderr.reference !== undefined) {
+          logs.stderr = stderr.reference;
+        }
+      } catch {
+        durability = "unavailable";
+      }
+    }
+    try {
+      if (attemptDigest === undefined) {
+        return;
+      }
+      retainCandidateValidationAttempt({
+        attemptDigest,
+        appId: binding.appId,
+        baseSha: binding.baseSha,
+        callId: binding.callId,
+        category: binding.category,
+        command: binding.command,
+        completion,
+        durability,
+        exitCode,
+        githubSourceDigest: binding.githubSourceDigest,
+        headSha: binding.headSha,
+        logs,
+        originalReviewDigest: binding.originalReviewDigest,
+        pullRequestNumber: binding.pullRequestNumber,
+        repositoryId: binding.repositoryId,
+        resolvedTree: binding.resolvedTree,
+      });
+    } catch {
+      // Historical evidence is best effort and never changes the command result.
+    }
+  };
+  try {
+    // The executor uses onChunk to switch to spawn; retain its detached run lifecycle and capture its returned output.
+    const result = await sandboxValidationCommandExecutor()({
+      appId: input.candidate.appId,
+      command: input.planned.command,
+      sandbox: input.sandbox,
+      validationRoot: input.candidate.root,
+      abortSignal: input.signal,
+    });
+    if (writers !== undefined) {
+      try {
+        if (result.stdout) {
+          await writers.stdout.append(result.stdout);
+        }
+        if (result.stderr) {
+          await writers.stderr.append(result.stderr);
+        }
+      } catch {
+        // Best-effort capture must not affect the command outcome.
+      }
+    }
+    await finish("complete", result.exitCode);
+    return result;
+  } catch (error) {
+    await finish("interrupted", null);
+    throw error;
+  }
+};
 
 /** Keep completed receipts; update only recognized pending repository command forms. */
 const currentValidationStep = (step: ValidationStep, appId: string): ValidationStep => {
@@ -279,11 +432,15 @@ const runIncrementalValidation = async (
       }
       const execution =
         step.kind === "check" && planned !== undefined
-          ? await sandboxValidationCommandExecutor()({
-              appId: candidate.appId,
-              command: planned.command,
+          ? await executeCandidateCheck({
+              candidate,
+              callId: ctx.callId,
+              planned,
+              resolvedTree: before.resolvedTree,
               sandbox,
-              validationRoot: candidate.root,
+              sessionAuth: ctx.session.auth,
+              sessionId: ctx.session.id,
+              signal: ctx.abortSignal,
             })
           : await sandbox.run({
               abortSignal: ctx.abortSignal,
@@ -443,16 +600,19 @@ export default defineTool({
       sandbox,
       signal: ctx.abortSignal,
     });
-    const execute = sandboxValidationCommandExecutor();
     for (const planned of supportedValidationCommands(candidate.appId)) {
-      let result: Awaited<ReturnType<typeof execute>>;
+      let result: Awaited<ReturnType<ReturnType<typeof sandboxValidationCommandExecutor>>>;
       try {
         // oxlint-disable-next-line eslint/no-await-in-loop -- checks must run against the same candidate in repository order.
-        result = await execute({
-          appId: candidate.appId,
-          command: planned.command,
+        result = await executeCandidateCheck({
+          candidate,
+          callId: ctx.callId,
+          planned,
+          resolvedTree: before.resolvedTree,
           sandbox,
-          validationRoot: candidate.root,
+          sessionAuth: ctx.session.auth,
+          sessionId: ctx.session.id,
+          signal: ctx.abortSignal,
         });
       } catch (error) {
         throw new Error(

@@ -5,6 +5,7 @@ import { HostedOperatorError, operatorPublicResultSchema } from "./hosted-operat
 import {
   createHostedOperatorConsentDiagnostic,
   reportOperatorNormalActorProofFailure,
+  reportOperatorInventoryReadFailure,
   operatorOwnerStoreImportErrorCodeSchema,
   reportOperatorPlanningMismatch,
   observeOperatorPlanStage,
@@ -272,6 +273,51 @@ describe("closed Neon consent diagnostics", () => {
     report(withExtra);
     expect(sink).toHaveBeenCalledOnce();
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
+
+  it("accepts only closed private inventory failure descriptors", () => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    const report = createHostedOperatorConsentDiagnostic(secret, sink);
+    const inventoryReadFailure = {
+      target: "gateway" as const,
+      operation: "public_alias" as const,
+      phase: "http_response" as const,
+      httpStatus: 404,
+      errorClass: "operator_error" as const,
+      publicCode: "operator_unavailable" as const,
+    };
+    report({ ...value, inventoryReadFailure });
+    expect(sink.mock.calls[0]?.[0].inventoryReadFailure).toEqual(inventoryReadFailure);
+    for (const unsafe of [
+      { ...inventoryReadFailure, target: "https://private.example/private-path" },
+      { ...inventoryReadFailure, url: secret },
+      { ...inventoryReadFailure, httpStatus: 99 },
+      { ...inventoryReadFailure, errorClass: "Bearer private-token" },
+    ]) {
+      const invalidMetadata: HostedOperatorConsentMetadata = { ...value };
+      Reflect.set(invalidMetadata, "inventoryReadFailure", unsafe);
+      report(invalidMetadata);
+    }
+    expect(sink).toHaveBeenCalledOnce();
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
+
+  it("ignores hostile inventory descriptors without replacing the caller failure", () => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    const descriptor: Parameters<typeof reportOperatorInventoryReadFailure>[1] = {
+      target: "inventory",
+      operation: "project",
+      phase: "fetch",
+    };
+    const hostileDescriptor = new Proxy(descriptor, {
+      ownKeys() {
+        throw new Error("descriptor-secret");
+      },
+    });
+    expect(() => {
+      reportOperatorInventoryReadFailure(secret, hostileDescriptor, new Error(secret), sink);
+    }).not.toThrow();
+    expect(sink).not.toHaveBeenCalled();
   });
   it("rejects hostile metadata getters and arbitrary runtime strings without throwing", () => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
