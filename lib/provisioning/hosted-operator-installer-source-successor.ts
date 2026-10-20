@@ -54,6 +54,32 @@ const hasObservedInstallPrerequisites = (
   );
 };
 
+/** Idle inspection failures retain no dispatch marker; reconciliation still precedes execution. */
+const isSettledIdleInstall = (
+  record: HostedRuntimeJournalRecord,
+  prior: NonNullable<HostedRuntimeJournalRecord["operator"]>,
+  installEffectId: string,
+): boolean => {
+  const observation = record.executionObservation;
+  if (observation?.state !== "settled") {
+    return false;
+  }
+  return [
+    prior.pendingEffectId === undefined,
+    prior.pendingEffectAttempt === undefined,
+    record.leaseId === undefined,
+    record.leaseExpiresAt === undefined,
+    observation.outcome.status === "blocked",
+    observation.operationRef === prior.operationRef,
+    observation.planDigest === prior.planDigest,
+    observation.callId === record.approvedByCallId,
+    observation.approvalId === prior.approvalId,
+    !(prior.workerCheckpoints ?? []).some(
+      (checkpoint) => checkpoint.parentEffectId === installEffectId,
+    ),
+  ].every(Boolean);
+};
+
 /** Structural eligibility only. The caller must recheck canonical ownership and old approval. */
 export const isInstallerSourceSuccessor = (
   record: HostedRuntimeJournalRecord,
@@ -65,7 +91,12 @@ export const isInstallerSourceSuccessor = (
     return false;
   }
 
-  const install = prior.plan.effects.find((effect) => effect.id === prior.pendingEffectId);
+  const receiptIds = new Set(prior.receipts.map((receipt) => receipt.effectId));
+  const install = prior.plan.effects.find((effect) =>
+    prior.pendingEffectId === undefined
+      ? !receiptIds.has(effect.id)
+      : effect.id === prior.pendingEffectId,
+  );
   if (install === undefined || install.kind !== "install") {
     return false;
   }
@@ -96,7 +127,7 @@ export const isInstallerSourceSuccessor = (
     record.approvedByCallId.length > 0 && record.approvedByCallId !== UNAPPROVED_PLAN,
     record.leaseId === undefined || (Number.isFinite(leaseExpiry) && leaseExpiry <= now),
     prior.planDigest === operatorPlanDigest(prior.plan),
-    prior.pendingEffectId === install.id,
+    prior.pendingEffectId === install.id || isSettledIdleInstall(record, prior, install.id),
     hasObservedInstallPrerequisites(prior, install.id),
   ].every(Boolean);
 };

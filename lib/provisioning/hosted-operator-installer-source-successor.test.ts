@@ -149,7 +149,167 @@ const requireOperator = (record: HostedRuntimeJournalRecord) => {
   return operator;
 };
 
+const makeIdleRecord = (sourcePlan: HostedOperatorPlan = plan): HostedRuntimeJournalRecord => {
+  const record = makeRecord(sourcePlan);
+  const operator = requireOperator(record);
+  delete operator.pendingEffectId;
+  delete operator.pendingEffectAttempt;
+  delete operator.workerCheckpoints;
+  record.executionObservation = {
+    state: "settled",
+    attemptRef: "5b61f372-3afb-46e8-a7e1-06be519b72ab",
+    operationRef: operator.operationRef,
+    planDigest: operator.planDigest,
+    callId: record.approvedByCallId,
+    approvalId: requireDefined(operator.approvalId),
+    outcome: { status: "blocked", code: "resource_mismatch" },
+  };
+  return record;
+};
+
 describe("hosted operator installer source successor", () => {
+  it("proposes only an installer digest replacement for a settled idle app-install inspection", () => {
+    const record = makeIdleRecord();
+    const original = structuredClone(record);
+    const candidate = createInstallerSourceSuccessorPlan(
+      record,
+      { id: plan.installer.reference, sha256: "e".repeat(64) },
+      now,
+    );
+    expect(candidate).toEqual({
+      ...plan,
+      installer: { ...plan.installer, sha256: "e".repeat(64) },
+    });
+    expect(record).toEqual(original);
+  });
+
+  it.each([
+    "missing observation",
+    "running observation",
+    "nonblocked observation",
+    "operation mismatch",
+    "plan mismatch",
+    "call mismatch",
+    "approval mismatch",
+    "pending attempt",
+    "lease id",
+    "lease expiry",
+    "install checkpoint",
+    "missing prerequisite",
+    "later receipt",
+    "unapproved",
+    "missing private state",
+  ])("rejects idle recovery with %s", (failure) => {
+    const record = makeIdleRecord();
+    const operator = requireOperator(record);
+    const observation = requireDefined(record.executionObservation);
+    switch (failure) {
+      case "missing observation": {
+        delete record.executionObservation;
+        break;
+      }
+      case "running observation": {
+        record.executionObservation = {
+          state: "running",
+          attemptRef: observation.attemptRef,
+          operationRef: observation.operationRef,
+          planDigest: observation.planDigest,
+          callId: observation.callId,
+          approvalId: observation.approvalId,
+        };
+        break;
+      }
+      case "nonblocked observation": {
+        record.executionObservation = {
+          ...observation,
+          state: "settled",
+          outcome: { status: "prepared" },
+        };
+        break;
+      }
+      case "operation mismatch": {
+        observation.operationRef = "bcff62cf-8b7e-49b2-8c69-eef3063e11ca";
+        break;
+      }
+      case "plan mismatch": {
+        observation.planDigest = "f".repeat(64);
+        break;
+      }
+      case "call mismatch": {
+        observation.callId = "other-call";
+        break;
+      }
+      case "approval mismatch": {
+        observation.approvalId = "other-approval";
+        break;
+      }
+      case "pending attempt": {
+        operator.pendingEffectAttempt = requireOperator(makeRecord()).pendingEffectAttempt;
+        break;
+      }
+      case "lease id": {
+        record.leaseId = "bcff62cf-8b7e-49b2-8c69-eef3063e11ca";
+        break;
+      }
+      case "lease expiry": {
+        record.leaseExpiresAt = "2027-01-01T00:00:00.000Z";
+        break;
+      }
+      case "install checkpoint": {
+        operator.workerCheckpoints = requireOperator(makeRecord()).workerCheckpoints;
+        break;
+      }
+      case "missing prerequisite": {
+        operator.receipts = [];
+        break;
+      }
+      case "later receipt": {
+        operator.receipts.push({
+          effectId: "access",
+          observedAt: "2027-01-01T00:00:00.000Z",
+          resourceVersion: "fixture",
+        });
+        break;
+      }
+      case "unapproved": {
+        record.approvedByCallId = "operator:unapproved-plan";
+        break;
+      }
+      case "missing private state": {
+        delete record.privateState;
+        break;
+      }
+      default: {
+        throw new Error("Unknown idle recovery fixture mutation");
+      }
+    }
+    expect(
+      createInstallerSourceSuccessorPlan(
+        record,
+        { id: plan.installer.reference, sha256: "e".repeat(64) },
+        now,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("does not select a later app install past an unreceipted Auth install", () => {
+    const authFirst = hostedOperatorPlanSchema.parse({
+      ...plan,
+      effects: [
+        plan.effects[0],
+        { id: "auth-schema", kind: "install", description: "Prepare Auth" },
+        ...plan.effects.slice(1),
+      ],
+    });
+    expect(
+      createInstallerSourceSuccessorPlan(
+        makeIdleRecord(authFirst),
+        { id: plan.installer.reference, sha256: "e".repeat(64) },
+        now,
+      ),
+    ).toBeUndefined();
+  });
+
   it("recovers the pending app install after its separate Auth install prerequisite", () => {
     const fullPlan = hostedOperatorPlanSchema.parse({
       ...plan,
@@ -187,6 +347,20 @@ describe("hosted operator installer source successor", () => {
     expect(isInstallerSourceSuccessor(missingAuthReceipt, requireDefined(candidate), now)).toBe(
       false,
     );
+  });
+
+  it("preserves marked uncertain install recovery with expired lease and retained worker checkpoints", () => {
+    const record = makeRecord();
+    record.leaseId = "bcff62cf-8b7e-49b2-8c69-eef3063e11ca";
+    record.leaseExpiresAt = "2027-01-01T00:00:00.000Z";
+    expect(record.executionObservation).toBeUndefined();
+    expect(
+      createInstallerSourceSuccessorPlan(
+        record,
+        { id: plan.installer.reference, sha256: "e".repeat(64) },
+        now,
+      ),
+    ).toBeDefined();
   });
 
   it("changes only the pinned installer digest and preserves approved plan expiry", () => {
