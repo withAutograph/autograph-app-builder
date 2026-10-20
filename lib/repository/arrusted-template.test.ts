@@ -1,4 +1,7 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
+import type { PreparedSandboxWorkspace } from "./supported-template";
+import { samePreparedWorkspaceSourceContext } from "./supported-template";
 
 import {
   acquireCanonicalArrustedTemplate,
@@ -155,5 +158,100 @@ describe("connected GitHub workspace inspection", () => {
         sandbox: { id: "sandbox", run } as never,
       }),
     ).rejects.toThrow("does not match the selected GitHub source");
+  });
+});
+
+const legacySourceFixture = () => {
+  const receipt = inspectExistingRepositorySnapshotReceipt({
+    contents: {},
+    contract: [],
+    dirtyPaths: [],
+    sourcePath: "/selected/source",
+    sourceSha: "a".repeat(40),
+    sourceTree: "b".repeat(40),
+  });
+  const digest = (value: string) => createHash("sha256").update(value).digest("hex");
+  const manifest = [
+    { mode: "100644", objectId: "c".repeat(40), path: "app.txt", sha256: digest("original app") },
+  ];
+  const observed: PreparedSandboxWorkspace = {
+    adapter: "arrusted-development-v0",
+    eligibilityDigest: "d".repeat(64),
+    sourcePath: receipt.sourcePath,
+    sourceSha: receipt.sourceSha,
+    sourceTree: receipt.sourceTree,
+    workspaceId: "sandbox",
+    workspacePath: "/workspace/repository",
+    workspaceDigest: digest(JSON.stringify(manifest)),
+  };
+  const files = new Map([
+    [".app-builder/prepared-workspace.json", JSON.stringify(observed)],
+    [".app-builder/source-files.json", JSON.stringify(manifest)],
+    [".app-builder/source-checksums.sha256", `${manifest[0]?.sha256}  repository/app.txt\n`],
+    ["repository/app.txt", "edited app"],
+    ["repository/new.txt", "new file"],
+  ]);
+  const sandbox = {
+    id: "sandbox",
+    readTextFile: vi.fn(
+      async ({ path }: { path: string }) => await Promise.resolve(files.get(path) ?? null),
+    ),
+    readBinaryFile: vi.fn(),
+    run: vi.fn(
+      async () =>
+        await Promise.resolve({
+          exitCode: 0,
+          stderr: "",
+          stdout: JSON.stringify({
+            repositoryInput: "/workspace/repository",
+            realRepository: "/workspace/repository",
+            realWorkspace: "/workspace",
+            workspaceRoot: "/workspace",
+          }),
+        }),
+    ),
+  };
+  return { files, observed, receipt, sandbox };
+};
+
+describe("legacy source-bound writable workspace", () => {
+  it("accepts edits and diagnostic metadata changes without treating the base manifest as current content", async () => {
+    const { observed, receipt, sandbox } = legacySourceFixture();
+    const expectedWorkspace = { ...observed, eligibilityDigest: "e".repeat(64) };
+    expect(samePreparedWorkspaceSourceContext(observed, expectedWorkspace)).toBe(true);
+    await expect(
+      inspectSourceBoundSandboxWorkspace({ receipt, expectedWorkspace, sandbox: sandbox as never }),
+    ).resolves.toEqual(observed);
+    expect(sandbox.readBinaryFile).not.toHaveBeenCalled();
+  });
+
+  it.each(["sourcePath", "sourceSha", "sourceTree", "workspaceId", "workspaceDigest"] as const)(
+    "rejects a different retained %s",
+    async (field) => {
+      const { observed, receipt, sandbox } = legacySourceFixture();
+      const changedValue = field === "workspaceDigest" ? "f".repeat(64) : "f".repeat(40);
+      const expectedWorkspace = {
+        ...observed,
+        [field]: field === "sourcePath" ? "/other/source" : changedValue,
+      };
+      await expect(
+        inspectSourceBoundSandboxWorkspace({
+          receipt,
+          expectedWorkspace,
+          sandbox: sandbox as never,
+        }),
+      ).rejects.toThrow("no longer matches its durable source receipt");
+    },
+  );
+
+  it("rejects a foreign Sandbox even with retained source metadata", async () => {
+    const { observed, receipt, sandbox } = legacySourceFixture();
+    await expect(
+      inspectSourceBoundSandboxWorkspace({
+        receipt,
+        expectedWorkspace: observed,
+        sandbox: { ...sandbox, id: "other" } as never,
+      }),
+    ).rejects.toThrow("does not belong to this session");
   });
 });
