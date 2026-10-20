@@ -789,7 +789,98 @@ export const readDraftReconciliationConflict = async (input: {
   }
 };
 
-/** Read a current app-owned text file in the isolated candidate for a precise follow-up edit. */
+const candidateFilePageProgram = String.raw`
+const { createHash } = require("node:crypto");
+const { closeSync, fstatSync, openSync, readSync } = require("node:fs");
+const { join } = require("node:path");
+const [root, path, cursorText, expectedDigest] = process.argv.slice(1);
+const requestedCursor = Number(cursorText);
+if (!Number.isSafeInteger(requestedCursor) || requestedCursor < 0) throw Error("Invalid file cursor");
+const pageBytes = 32768;
+const first = Buffer.alloc(pageBytes);
+const requested = Buffer.alloc(pageBytes);
+const block = Buffer.alloc(65536);
+const hash = createHash("sha256");
+// Match SandboxSession.readTextFile: reject invalid UTF-8 and consume an initial BOM.
+const decoder = new TextDecoder("utf-8", { fatal: true });
+let totalBytes = 0;
+const retain = (text) => {
+  hash.update(text);
+  const bytes = Buffer.from(text, "utf8");
+  if (totalBytes < pageBytes) bytes.copy(first, totalBytes, 0, Math.min(bytes.length, pageBytes - totalBytes));
+  const start = Math.max(totalBytes, requestedCursor);
+  const end = Math.min(totalBytes + bytes.length, requestedCursor + pageBytes);
+  if (start < end) bytes.copy(requested, start - requestedCursor, start - totalBytes, end - totalBytes);
+  totalBytes += bytes.length;
+};
+const descriptor = openSync(join(root, path), "r");
+try {
+  if (!fstatSync(descriptor).isFile()) throw Error("Candidate file is not a regular text file");
+  let length;
+  while ((length = readSync(descriptor, block, 0, block.length, null)) > 0) {
+    retain(decoder.decode(block.subarray(0, length), { stream: true }));
+  }
+  retain(decoder.decode());
+} finally {
+  closeSync(descriptor);
+}
+const digest = hash.digest("hex");
+const sourceChanged = expectedDigest !== "" && expectedDigest !== digest;
+const cursor = sourceChanged ? 0 : requestedCursor;
+if (cursor > totalBytes) throw Error("File cursor is past the end of the current content");
+const length = Math.min(pageBytes, totalBytes - cursor);
+// Streaming decode withholds only an incomplete final code point. Long lines need no special case.
+const content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(
+  (cursor === 0 ? first : requested).subarray(0, length),
+  { stream: cursor + length < totalBytes },
+);
+const next = cursor + Buffer.byteLength(content, "utf8");
+console.log(JSON.stringify({ content, cursor, digest, nextCursor: next < totalBytes ? next : null, totalBytes, ...(sourceChanged ? { sourceChanged: true } : {}) }));
+`;
+
+/** Model-facing pages use UTF-8 content offsets and never transfer the entire file through the SDK. */
+export const readDraftReconciliationCandidateFilePage = async (input: {
+  sandbox: SandboxSession;
+  prepared: PreparedDraftReconciliation;
+  path: string;
+  cursor?: number;
+  expectedDigest?: string;
+}): Promise<{
+  content: string;
+  cursor: number;
+  digest: string;
+  nextCursor: number | null;
+  totalBytes: number;
+  sourceChanged?: true;
+}> => {
+  const { prepared, path } = input;
+  if (!appPath(prepared.appId, path)) {
+    throw new Error(`Builder cannot read ${path}: it is outside apps/${prepared.appId}/.`);
+  }
+  await assertDraftReconciliationCandidateAvailable(input);
+  await checked(
+    input.sandbox,
+    `verify the candidate file path ${path}`,
+    `node -e ${quote(safeResolutionProgram)} ${quote(prepared.root)} ${quote(path)}`,
+  );
+  const raw = await checked(
+    input.sandbox,
+    `read a page of the current candidate file ${path}`,
+    `node -e ${quote(candidateFilePageProgram)} ${quote(prepared.root)} ${quote(path)} ${quote(String(input.cursor ?? 0))} ${quote(input.expectedDigest ?? "")}`,
+  );
+  return z
+    .strictObject({
+      content: z.string(),
+      cursor: z.number().int().nonnegative(),
+      digest: z.string().regex(/^[0-9a-f]{64}$/u),
+      nextCursor: z.number().int().nonnegative().nullable(),
+      sourceChanged: z.literal(true).optional(),
+      totalBytes: z.number().int().nonnegative(),
+    })
+    .parse(JSON.parse(raw));
+};
+
+/** Internal full text for exact preimage comparison and replacement; not a model-facing read. */
 export const readDraftReconciliationCandidateFile = async (input: {
   sandbox: SandboxSession;
   prepared: PreparedDraftReconciliation;

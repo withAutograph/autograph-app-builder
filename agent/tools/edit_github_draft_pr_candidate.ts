@@ -8,14 +8,14 @@ import {
 } from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import {
-  readDraftReconciliationCandidateFile,
+  readDraftReconciliationCandidateFilePage,
   replaceDraftReconciliationCandidateText,
   restoreDraftReconciliationCandidateFile,
 } from "@/lib/repository/sandbox-draft-reconciliation";
 
 export default defineTool({
   description:
-    "Read a current app-owned text file in Builder's isolated draft merge candidate, replace one unique exact passage using the observed content digest, or restore one app-owned file's exact bytes and mode from the retained draft head. Restore accepts only a path and preserves other repairs. This changes no GitHub branch. Revalidate and review both diffs after an edit.",
+    "Read a current app-owned text file in bounded UTF-8 pages in Builder's isolated draft merge candidate. Continue with nextCursor and the whole-file digest as expectedDigest; an ordinary file change returns its fresh first page with sourceChanged. Replace one unique exact passage using the whole-file digest, or restore one app-owned file's exact bytes and mode from the retained draft head. Restore accepts only a path and preserves other repairs. This changes no GitHub branch. Revalidate and review both diffs after an edit.",
   async execute(input, ctx) {
     const candidate = draftReconciliationState.get();
     const state = appBuilderWorkflowState.get();
@@ -32,7 +32,9 @@ export default defineTool({
     const sandbox = await getSourceBoundSandbox(ctx);
     if (input.kind === "read") {
       return {
-        ...(await readDraftReconciliationCandidateFile({
+        ...(await readDraftReconciliationCandidateFilePage({
+          cursor: input.cursor,
+          expectedDigest: input.expectedDigest,
           path: input.path,
           prepared: candidate,
           sandbox,
@@ -77,7 +79,15 @@ export default defineTool({
     };
   },
   inputSchema: z.discriminatedUnion("kind", [
-    z.strictObject({ kind: z.literal("read"), path: z.string().min(1) }),
+    z.strictObject({
+      cursor: z.number().int().nonnegative().optional(),
+      expectedDigest: z
+        .string()
+        .regex(/^[0-9a-f]{64}$/u)
+        .optional(),
+      kind: z.literal("read"),
+      path: z.string().min(1),
+    }),
     z.strictObject({ kind: z.literal("restore"), path: z.string().min(1) }),
     z.strictObject({
       expectedDigest: z.string().regex(/^[0-9a-f]{64}$/u),
