@@ -1,6 +1,7 @@
 import { defineTool } from "eve/tools";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import { withCandidateCommandEnvironment } from "@/lib/agent/candidate-command-environment";
+import { attachCheckoutDependencyView } from "@/lib/repository/dependency-cache";
 import { z } from "zod";
 
 import {
@@ -33,6 +34,12 @@ export default defineTool({
       );
     }
     const sandbox = withCandidateCommandEnvironment(await getSourceBoundSandbox(ctx));
+    await attachCheckoutDependencyView({
+      sandbox,
+      checkoutRoot: `${candidate.workspaceRoot}/repository`,
+      candidateRoot: candidate.root,
+      workspaceRoot: candidate.workspaceRoot,
+    });
     const before = await inspectDraftReconciliation({ prepared: candidate, sandbox });
     if (before.unresolvedConflicts.length > 0) {
       return {

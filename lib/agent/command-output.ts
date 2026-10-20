@@ -110,10 +110,32 @@ const removeStructuredPayloads = (value: string): string => {
   return safeLines.join("\n");
 };
 
+const terminalStyle = new RegExp(`${String.fromCodePoint(27)}\\[[0-?]*[ -/]*[@-~]`, "gu");
+
+/** Only the compiler's server-selected task decorator is metadata, not payload. */
+const compilerTaskOutput = (value: string): string =>
+  value
+    .replaceAll(terminalStyle, "")
+    .split("\n")
+    .map((line) => {
+      const trimmed = line.trimStart();
+      const prefix = "[app:compile]";
+      if (!trimmed.startsWith(prefix)) {
+        return line;
+      }
+      const body = trimmed.slice(prefix.length);
+      return body === "" || /^[ \t]/u.test(body) ? body.slice(1) : line;
+    })
+    .join("\n");
+
 /** Keep command diagnostics useful while excluding URLs, credentials, tokens, and structured payloads. */
-export const safeCommandOutput = (value: string): string => {
+export const safeCommandOutput = (
+  value: string,
+  options?: { taskLabel: "app:compile" },
+): string => {
+  const diagnostic = options?.taskLabel === "app:compile" ? compilerTaskOutput(value) : value;
   const cleaned = removeStructuredPayloads(
-    value.replaceAll(controlCharacters, (character) =>
+    diagnostic.replaceAll(controlCharacters, (character) =>
       character === "\n" || character === "\t" ? character : "",
     ),
   )

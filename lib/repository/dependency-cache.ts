@@ -510,6 +510,29 @@ export const executionDependencyLayoutDigest = function executionDependencyLayou
   return sha256(JSON.stringify(executionDependencyLayoutSchema.parse(layout)));
 };
 
+const dependencyViewPopulationScript = String.raw`
+const populate = (cacheDirectory, viewDirectory, relativeDirectory) => {
+  fs.mkdirSync(viewDirectory, { recursive: true, mode: 0o755 });
+  for (const entry of fs.readdirSync(cacheDirectory, { withFileTypes: true })) {
+    const relative = relativeDirectory ? relativeDirectory + "/" + entry.name : entry.name;
+    const cached = path.join(cacheDirectory, entry.name);
+    const viewed = path.join(viewDirectory, entry.name);
+    const workspace = workspaceLinks.get(relative);
+    if (workspace) {
+      fs.symlinkSync(workspace.overlayTarget, viewed);
+      continue;
+    }
+    const hasWorkspaceDescendant = [...workspaceLinks.keys()].some((candidate) => candidate.startsWith(relative + "/"));
+    if (hasWorkspaceDescendant) {
+      if (!entry.isDirectory() || entry.isSymbolicLink()) process.exit(1);
+      populate(cached, viewed, relative);
+      continue;
+    }
+    fs.symlinkSync(cached, viewed);
+  }
+};
+`;
+
 export const executionDependencyViewScript = String.raw`
 const fs = require("node:fs");
 const path = require("node:path");
@@ -567,26 +590,7 @@ for (const link of layout.workspaceLinks) {
 
 fs.rmSync(viewRoot, { recursive: true, force: true });
 fs.mkdirSync(viewRoot, { recursive: true, mode: 0o755 });
-const populate = (cacheDirectory, viewDirectory, relativeDirectory) => {
-  fs.mkdirSync(viewDirectory, { recursive: true, mode: 0o755 });
-  for (const entry of fs.readdirSync(cacheDirectory, { withFileTypes: true })) {
-    const relative = relativeDirectory ? relativeDirectory + "/" + entry.name : entry.name;
-    const cached = path.join(cacheDirectory, entry.name);
-    const viewed = path.join(viewDirectory, entry.name);
-    const workspace = workspaceLinks.get(relative);
-    if (workspace) {
-      fs.symlinkSync(workspace.overlayTarget, viewed);
-      continue;
-    }
-    const hasWorkspaceDescendant = [...workspaceLinks.keys()].some((candidate) => candidate.startsWith(relative + "/"));
-    if (hasWorkspaceDescendant) {
-      if (!entry.isDirectory() || entry.isSymbolicLink()) process.exit(1);
-      populate(cached, viewed, relative);
-      continue;
-    }
-    fs.symlinkSync(cached, viewed);
-  }
-};
+${dependencyViewPopulationScript}
 for (const root of layout.roots) {
   const viewDependencyRoot = path.resolve(viewRoot, root.path);
   if (!contains(viewRoot, viewDependencyRoot)) process.exit(1);
@@ -635,6 +639,148 @@ export const materializeExecutionDependencyView =
       throw new Error("The dependency execution view could not be materialized.");
     }
   };
+
+export const checkoutDependencyViewScript = String.raw`
+const fs = require("node:fs");
+const path = require("node:path");
+const [sourceInput, overlayInput, viewInput, workspaceInput] = process.argv.slice(1);
+const sourceRoot = fs.realpathSync(sourceInput);
+const overlayRoot = fs.realpathSync(overlayInput);
+const workspaceRoot = fs.realpathSync(workspaceInput);
+const viewRoot = path.resolve(workspaceRoot, path.relative(path.resolve(workspaceInput), path.resolve(viewInput)));
+const contains = (root, candidate) => {
+  const relative = path.relative(root, candidate);
+  return relative === "" || (!path.isAbsolute(relative) && relative !== ".." && !relative.startsWith(".." + path.sep));
+};
+if (sourceRoot === overlayRoot || !contains(workspaceRoot, sourceRoot) || !contains(workspaceRoot, overlayRoot) || !contains(path.join(workspaceRoot, ".app-builder/dependency-views"), viewRoot)) throw Error("Dependency view is outside its owned workspace");
+const roots = [];
+const discover = (directory) => {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    if (entry.name === ".git") continue;
+    const absolute = path.join(directory, entry.name);
+    if (entry.name === "node_modules") {
+      try {
+        if (fs.statSync(absolute).isDirectory()) roots.push({ path: path.relative(sourceRoot, absolute), cachePath: absolute });
+      } catch (error) { if (error.code !== "ENOENT") throw error; }
+    } else if (entry.isDirectory()) discover(absolute);
+  }
+};
+discover(sourceRoot);
+const attached = [];
+for (const root of roots) {
+  const destination = path.join(overlayRoot, root.path);
+  const current = fs.lstatSync(destination, { throwIfNoEntry: false });
+  // Leave dependencies installed by the candidate's own repository commands intact.
+  if (current && (!current.isSymbolicLink() || !contains(viewRoot, path.resolve(path.dirname(destination), fs.readlinkSync(destination))))) continue;
+  let parent = overlayRoot;
+  for (const part of root.path.split(path.sep).slice(0, -1)) {
+    parent = path.join(parent, part);
+    const stat = fs.lstatSync(parent, { throwIfNoEntry: false });
+    if (stat?.isSymbolicLink() || (stat && !stat.isDirectory())) throw Error("Candidate dependency parent is not an owned directory");
+    if (!stat) fs.mkdirSync(parent);
+  }
+  attached.push(root);
+}
+const readManifest = (directory) => {
+  try { return JSON.parse(fs.readFileSync(path.join(directory, "package.json"), "utf8")); }
+  catch (error) { if (error.code === "ENOENT" || error instanceof SyntaxError) return undefined; throw error; }
+};
+const declaredWorkspaces = (root) => {
+  const manifest = readManifest(root);
+  const declared = Array.isArray(manifest?.workspaces) ? manifest.workspaces : manifest?.workspaces?.packages;
+  const patterns = Array.isArray(declared) ? declared.filter(value => typeof value === "string") : [];
+  const entries = [];
+  const visit = (directory) => {
+    const relative = path.relative(root, directory);
+    if (!relative || (patterns.some(pattern => !pattern.startsWith("!") && path.matchesGlob(relative, pattern)) && !patterns.some(pattern => pattern.startsWith("!") && path.matchesGlob(relative, pattern.slice(1))))) {
+      const name = readManifest(directory)?.name;
+      entries.push({ directory, relative, name: typeof name === "string" ? name : undefined });
+    }
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (entry.isDirectory() && entry.name !== ".git" && entry.name !== "node_modules") visit(path.join(directory, entry.name));
+    }
+  };
+  visit(root);
+  return entries.toSorted((left, right) => right.directory.length - left.directory.length);
+};
+const sourceWorkspaces = declaredWorkspaces(sourceRoot);
+const candidateWorkspaces = declaredWorkspaces(overlayRoot);
+const workspaceLinks = new Map();
+for (const root of attached) {
+  const actualRoot = fs.realpathSync(root.cachePath);
+  let installedSource = actualRoot;
+  for (const part of root.path.split(path.sep)) installedSource = path.dirname(installedSource);
+  const inspect = (directory, relativeDirectory) => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const cached = path.join(directory, entry.name);
+      const relative = path.join(relativeDirectory, entry.name);
+      if (entry.isDirectory()) inspect(cached, relative);
+      else if (entry.isSymbolicLink()) {
+        let resolved;
+        try { resolved = fs.realpathSync(cached); }
+        catch (error) {
+          if (error.code !== "ENOENT") throw error;
+          resolved = path.resolve(fs.realpathSync(directory), fs.readlinkSync(cached));
+        }
+        if (path.relative(sourceRoot, resolved).split(path.sep).includes("node_modules")) continue;
+        let owner = sourceWorkspaces.find(workspace => contains(workspace.directory, resolved));
+        let ownerRoot = owner?.directory;
+        if (!owner) {
+          owner = sourceWorkspaces.find(workspace => {
+            const cachedWorkspace = path.join(installedSource, workspace.relative);
+            return workspace.relative && contains(cachedWorkspace, resolved) && !path.relative(cachedWorkspace, resolved).split(path.sep).includes("node_modules");
+          });
+          if (owner) ownerRoot = path.join(installedSource, owner.relative);
+        }
+        if (owner && ownerRoot) {
+          const candidates = owner.name === undefined ? [] : candidateWorkspaces.filter(workspace => workspace.name === owner.name);
+          const target = candidates.length === 1 ? candidates[0].directory : path.join(overlayRoot, owner.relative);
+          workspaceLinks.set(relative, { overlayTarget: path.join(target, path.relative(ownerRoot, resolved)) });
+        }
+      }
+    }
+  };
+  inspect(root.cachePath, root.path);
+}
+let viewParent = workspaceRoot;
+for (const part of path.relative(workspaceRoot, path.dirname(viewRoot)).split(path.sep)) {
+  viewParent = path.join(viewParent, part);
+  const stat = fs.lstatSync(viewParent, { throwIfNoEntry: false });
+  if (stat?.isSymbolicLink() || (stat && !stat.isDirectory())) throw Error("Dependency view parent is not an owned directory");
+  if (!stat) fs.mkdirSync(viewParent);
+}
+fs.rmSync(viewRoot, { recursive: true, force: true });
+fs.mkdirSync(viewRoot, { recursive: true, mode: 0o755 });
+${dependencyViewPopulationScript}
+for (const root of attached) {
+  const viewed = path.join(viewRoot, root.path);
+  populate(root.cachePath, viewed, root.path);
+  const destination = path.join(overlayRoot, root.path);
+  fs.rmSync(destination, { force: true });
+  fs.symlinkSync(viewed, destination);
+}
+`;
+
+/** Reuse installed checkout dependencies without resolving workspace packages to old source. */
+export const attachCheckoutDependencyView = async (input: {
+  sandbox: Pick<SandboxSession, "run">;
+  checkoutRoot: string;
+  candidateRoot: string;
+  workspaceRoot: string;
+}): Promise<void> => {
+  const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
+  const viewKey = sha256(input.candidateRoot);
+  const viewRoot = `${input.workspaceRoot}/.app-builder/dependency-views/checkout/${viewKey}`;
+  const result = await input.sandbox.run({
+    command: `node -e ${quote(checkoutDependencyViewScript)} ${[input.checkoutRoot, input.candidateRoot, viewRoot, input.workspaceRoot].map(quote).join(" ")}`,
+    workingDirectory: input.workspaceRoot,
+  });
+  if (result.exitCode !== 0) {
+    throw new Error(
+      "Builder could not attach the existing checkout dependencies to its private candidate. Check the owned dependency paths and sandbox file access, then retry.",
+    );
+  }
+};
 
 const dependencyCachePaths = function dependencyCachePaths(
   environment: Readonly<Record<string, string | undefined>>,
