@@ -1,3 +1,4 @@
+import { readAppGatewaySourcePredecessor } from "./hosted-operator-app-gateway-source-successor";
 import { sharedHostProtectionDeliveryProvenance } from "./hosted-operator-shared-host-protection-successor";
 import {
   readSealedRealmContinuationAuthority,
@@ -670,6 +671,24 @@ const membershipInspectionApprovalCheckpoint = (
   return retained === undefined ? null : { current: retained.operator, retainedPrepare: true };
 };
 
+const appGatewaySourceApprovalCheckpoint = (
+  record: HostedRuntimeJournalRecord | undefined,
+  context: { action: "prepare" | "cleanup"; callId: string; planDigest: string },
+) => {
+  const retained =
+    context.action === "prepare" && record !== undefined
+      ? readAppGatewaySourcePredecessor(record)
+      : undefined;
+  if (
+    retained === undefined ||
+    retained.operator.planDigest !== context.planDigest ||
+    retained.approvedByCallId !== context.callId
+  ) {
+    return null;
+  }
+  return { current: retained.operator, retainedPrepare: true };
+};
+
 const approvalCheckpoint = (
   record: HostedRuntimeJournalRecord | undefined,
   context: { action: "prepare" | "cleanup"; callId: string; planDigest: string },
@@ -677,6 +696,10 @@ const approvalCheckpoint = (
   const account = accountApprovalCheckpoint(record, context);
   if (account !== null) {
     return account;
+  }
+  const appGatewayOriginal = appGatewaySourceApprovalCheckpoint(record, context);
+  if (appGatewayOriginal !== null) {
+    return appGatewayOriginal;
   }
   const gatewayOriginal =
     context.action === "prepare" && record !== undefined

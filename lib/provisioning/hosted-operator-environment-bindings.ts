@@ -673,6 +673,7 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
       rows: ProviderRow[],
       diagnosticStage?: HostedEnvironmentBindingFailure["stage"],
       stopOnMismatch = false,
+      requireManagedMismatch = false,
     ) => {
       let matches = true;
       for (const row of rows) {
@@ -687,6 +688,14 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
             ),
           );
         if (plaintext.value !== expected[row.key]) {
+          if (
+            requireManagedMismatch &&
+            !(input.managedEnvironment ?? []).some(
+              (saved) => saved.id === row.id && saved.key === row.key,
+            )
+          ) {
+            throw unavailable();
+          }
           if (stopOnMismatch) {
             return false;
           }
@@ -897,11 +906,18 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
           await io.checkpointCleanup(rows);
           return rows.length === 0 ? { status: "absent" } : { rows, status: "applied" };
         }
-        const rows = await io.inspect(input.renewalBindingProvenance === undefined);
-        const staleRenewedValue =
-          input.renewalBindingProvenance !== undefined && !(await io.matchesExpectedValues(rows));
+        const rows = await io.inspect(false);
+        // Ownership is established before values are read. A successfully read stale value
+        // is repairable by the approved binding effect; unreadable values still throw.
+        const staleOwnedValue = !(await io.matchesExpectedValues(rows, undefined, false, true));
+        if (
+          staleOwnedValue &&
+          (input.plan.action !== "prepare" || input.effect.kind !== "bindings")
+        ) {
+          throw unavailable();
+        }
         const protection = await io.observeTrustedSources();
-        if (staleRenewedValue || protection?.missing === true) {
+        if (staleOwnedValue || protection?.missing === true) {
           await io.guard();
           return {
             status: "retryable",

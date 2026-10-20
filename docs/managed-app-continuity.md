@@ -66,6 +66,22 @@ worker input or app environment. The app receives its existing restricted app
 database binding and public Gateway verification configuration; private suite
 capabilities and normal QA session material remain in their dedicated custody.
 
+The owned app receives `PLATFORM_MANAGED_GATEWAY_PUBLIC_PROFILE`, serialized from
+the owner-validated public profile (`version`, `appId`, `publicOrigin`, `jwksUrl`,
+and public Ed25519 `keys`). It is written to the private runtime environment file
+and reused unchanged on process replacement. Apps must explicitly select
+Arrusted's `@autograph/platform-microfrontends/managed-gateway-verification`
+consumer for this managed environment: parse with
+`managedGatewayVerificationProfileSchema`, then call
+`createManagedGatewayVerification({ profile, appId, publicOrigin, jwksUrl })`
+using the app's expected identity and Gateway endpoint. Its returned
+`audience`, `publicOrigin`, `jwksUrl`, and `loadJwks` options support the existing
+Next ingress/data-context verification. A supplied invalid or mismatched profile
+fails closed; absence retains the app's native verification path. This does not
+relabel the runtime as local, fetch OIDC, or copy a signer. The similarly named
+`APP_TEST_MANAGED_PUBLIC_PROFILE` belongs to the suite; private suite selectors
+and lifecycle capabilities are never app environment variables.
+
 ## Managed execution and routing
 
 Ports are server-derived by one fixed structured Node command holding two
