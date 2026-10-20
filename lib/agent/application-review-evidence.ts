@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { z } from "zod";
 import type { SandboxSession } from "eve/sandbox";
 import type { OverlaySnapshot } from "../repository/target-apply";
 import { safeSourcePath } from "../repository/source-path";
@@ -130,6 +131,59 @@ interface SourceReadWindow {
   startOffset: number;
   endOffset: number;
 }
+const restoredSourceReadSchema = z.object({
+  kind: z.literal("source"),
+  path: z.string(),
+  digest: z.string(),
+  startLine: z.number().int().positive(),
+  endLine: z.number().int().positive(),
+  startColumn: z.number().int().positive(),
+  endColumn: z.number().int().positive(),
+  contentDigest: z.string(),
+});
+type RestoredSourceRead = z.infer<typeof restoredSourceReadSchema>;
+
+/** Rebuild a previously observed window only from matching, freshly verified source bytes. */
+const restoredReadWindow = (
+  text: string,
+  starts: readonly number[],
+  reference: RestoredSourceRead,
+): SourceReadWindow | undefined => {
+  if (reference.endLine < reference.startLine || reference.endLine > starts.length) {
+    return undefined;
+  }
+  let startOffset: number;
+  try {
+    startOffset = sourceCursorOffset(text, starts, {
+      line: reference.startLine,
+      column: reference.startColumn,
+    });
+  } catch (error) {
+    if (error instanceof ApplicationReviewSelectionError) {
+      return undefined;
+    }
+    throw error;
+  }
+  const endOffset = starts[reference.endLine - 1] + reference.endColumn - 1;
+  const lineEnd = starts[reference.endLine] ?? text.length;
+  if (
+    endOffset < startOffset ||
+    endOffset > lineEnd ||
+    (/[\uDC00-\uDFFF]/u.test(text[endOffset] ?? "") &&
+      /[\uD800-\uDBFF]/u.test(text[endOffset - 1] ?? ""))
+  ) {
+    return undefined;
+  }
+  const last = endOffset === startOffset ? undefined : sourcePosition(starts, endOffset - 1);
+  if (
+    last !== undefined &&
+    (last.line !== reference.endLine || last.column + 1 !== reference.endColumn)
+  ) {
+    return undefined;
+  }
+  const digest = createHash("sha256").update(text.slice(startOffset, endOffset)).digest("hex");
+  return digest === reference.contentDigest ? { startOffset, endOffset } : undefined;
+};
 const mergeReadWindow = (
   windows: readonly SourceReadWindow[],
   added: SourceReadWindow,
@@ -225,6 +279,8 @@ export const createApplicationReviewEvidence = (input: {
   sandbox: Pick<SandboxSession, "readFile">;
   appSpecParts?: () => AsyncIterable<string>;
   abortSignal?: AbortSignal;
+  /** Server-created source references from the same review's private durable continuation. */
+  restoredSourceReads?: readonly unknown[];
 }): ApplicationReviewEvidence => {
   const visible = new Set(input.visiblePaths);
   const files = input.observed.files.filter(
@@ -234,6 +290,41 @@ export const createApplicationReviewEvidence = (input: {
   const sourceText = new Map<string, Promise<string>>();
   const lineStarts = new Map<string, number[]>();
   const readWindows = new Map<string, SourceReadWindow[]>();
+  const restoredReads = new Map<string, Map<string, RestoredSourceRead>>();
+  for (const candidate of input.restoredSourceReads ?? []) {
+    const parsed = restoredSourceReadSchema.safeParse(candidate);
+    if (!parsed.success) {
+      continue;
+    }
+    const { path, digest } = parsed.data;
+    if (fileByPath.get(path)?.digest === digest) {
+      const entries = restoredReads.get(path) ?? new Map<string, RestoredSourceRead>();
+      entries.set(JSON.stringify(parsed.data), parsed.data);
+      restoredReads.set(path, entries);
+    }
+  }
+  const loadVerifiedSource = async (path: string, digest: string): Promise<string> => {
+    const text = await verifiedSourceText({
+      sandbox: input.sandbox,
+      path: `${input.applyRoot.replace(/^\/workspace\//u, "")}/${path}`,
+      digest,
+      abortSignal: input.abortSignal,
+    });
+    const references = restoredReads.get(path);
+    if (references !== undefined) {
+      const starts = sourceLineStarts(text);
+      lineStarts.set(path, starts);
+      let windows: SourceReadWindow[] = [];
+      for (const reference of references.values()) {
+        const window = restoredReadWindow(text, starts, reference);
+        if (window !== undefined) {
+          windows = mergeReadWindow(windows, window);
+        }
+      }
+      readWindows.set(path, windows);
+    }
+    return text;
+  };
   const loadSource = (path: string): Promise<string> => {
     const file = fileByPath.get(path);
     if (file === undefined) {
@@ -241,12 +332,7 @@ export const createApplicationReviewEvidence = (input: {
     }
     let pending = sourceText.get(path);
     if (pending === undefined) {
-      pending = verifiedSourceText({
-        sandbox: input.sandbox,
-        path: `${input.applyRoot.replace(/^\/workspace\//u, "")}/${path}`,
-        digest: file.digest,
-        abortSignal: input.abortSignal,
-      });
+      pending = loadVerifiedSource(path, file.digest);
       sourceText.set(path, pending);
     }
     return pending;

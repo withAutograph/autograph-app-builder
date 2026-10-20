@@ -3,12 +3,15 @@ import { describe, expect, it, vi } from "vitest";
 import { MockLanguageModelV4 } from "ai/test";
 import {
   assessApplicationSource,
+  assessApplicationSourceRound,
   applicationSourceReviewKey,
   applicationSourceReviewCacheSessionId,
   ApplicationReviewSelectionError,
 } from "./application-source-review";
 import type {
   ApplicationReviewEvidence,
+  ApplicationReviewContinuation,
+  ApplicationReviewRoundResult,
   ApplicationSourceReadCursor,
   ApplicationSourceReviewRequestStart,
 } from "./application-source-review";
@@ -314,6 +317,198 @@ const applicationJournalFixture = () => {
 };
 
 describe("independent application source review", () => {
+  it("checkpoints one complete parallel round and restores findings and usage before the next", async () => {
+    const model = applicationModel([inspectApplication, recordApplication, completeApplication]);
+    const starts: ApplicationSourceReviewRequestStart[] = [];
+    const options = {
+      testModel: model,
+      onRequestStart: (request: ApplicationSourceReviewRequestStart) => {
+        starts.push(request);
+      },
+    };
+    const first = await assessApplicationSourceRound(input, applicationEvidence(), options);
+    expect(model.doGenerateCalls).toHaveLength(1);
+    expect(first.assessment).toBeUndefined();
+    expect(first.continuation.messages.some((message) => message.role === "tool")).toBe(true);
+    for (const entries of [
+      first.continuation.findings,
+      first.continuation.references,
+      first.continuation.reusableReads,
+    ]) {
+      expect(Array.isArray(entries)).toBe(true);
+    }
+    const frozenFirst = structuredClone(first.continuation);
+    const second = await assessApplicationSourceRound(
+      input,
+      applicationEvidence(),
+      options,
+      structuredClone(first.continuation),
+    );
+    expect(model.doGenerateCalls).toHaveLength(2);
+    expect(second.assessment).toBeUndefined();
+    expect(second.continuation.findings).toHaveLength(1);
+    expect(first.continuation).toEqual(frozenFirst);
+    const final = await assessApplicationSourceRound(
+      input,
+      applicationEvidence(),
+      options,
+      structuredClone(second.continuation),
+    );
+    expect(model.doGenerateCalls).toHaveLength(3);
+    expect(final.assessment).toMatchObject({
+      reviewCompleted: true,
+      status: "failed",
+      findings: [{ citations: [{ path: "packages/shared/server.ts", startLine: 1, endLine: 1 }] }],
+    });
+    expect(final.continuation.findings[0][1].requirementQuote).toBe(
+      applicationFinding.requirementQuote,
+    );
+    expect(final.continuation.findings[0][1].citations).toEqual(applicationFinding.citations);
+    expect(final.continuation.invocation.requestAttempts).toBe(3);
+    expect(final.continuation.invocation.successfulRequests).toBe(3);
+    expect(final.continuation.invocation.freshUsage).toEqual({
+      inputTokens: 30,
+      outputTokens: 15,
+      totalTokens: 45,
+    });
+    expect(starts.map(({ requestOrdinal, stepNumber }) => [requestOrdinal, stepNumber])).toEqual([
+      [1, 0],
+      [2, 1],
+      [3, 2],
+    ]);
+  });
+
+  it("restores exact first-full anchors after a process boundary without replaying earlier tool reads", async () => {
+    const text = "Primary evidence preserved across a durable round. ".repeat(100);
+    const evidenceForRound = () => {
+      const evidence = applicationEvidence();
+      evidence.readRequirements = vi.fn(() => Promise.resolve({ text }));
+      return evidence;
+    };
+    const reads: ApplicationToolCall[] = [
+      { toolName: "readRequirements", input: { id: "original" } },
+      { toolName: "readSource", input: { path: "apps/example/actions.ts" } },
+    ];
+    const model = applicationModel([
+      reads,
+      reads,
+      [{ toolName: "readRequirements", input: { id: "clarification" } }],
+      completeApplication,
+    ]);
+    let continuation: ApplicationReviewContinuation | undefined;
+    let result: ApplicationReviewRoundResult | undefined;
+    for (let round = 0; round < 4; round += 1) {
+      const evidence = evidenceForRound();
+      // oxlint-disable-next-line eslint/no-await-in-loop -- The next round consumes this round's restored checkpoint.
+      result = await assessApplicationSourceRound(
+        input,
+        evidence,
+        { testModel: model },
+        continuation,
+      );
+      continuation = structuredClone(result.continuation);
+      expect(model.doGenerateCalls).toHaveLength(round + 1);
+      if (round > 1) {
+        expect(evidence.readSource).not.toHaveBeenCalled();
+      }
+    }
+    expect(result?.assessment?.reviewCompleted).toBe(true);
+    const projected = model.doGenerateCalls[3].prompt.flatMap((message) =>
+      message.role === "tool" ? message.content : [],
+    );
+    expect(
+      projected.find((part) => part.type === "tool-result" && part.toolCallId === "step-1-0"),
+    ).toMatchObject({
+      output: { type: "json", value: { text } },
+    });
+    expect(
+      projected.find((part) => part.type === "tool-result" && part.toolCallId === "step-2-0"),
+    ).toMatchObject({
+      output: {
+        type: "json",
+        value: { kind: "retained-evidence-result", firstToolCallId: "step-1-0" },
+      },
+    });
+  });
+
+  it("checkpoints actual capacity recovery without losing validated findings or resetting request ordinals", async () => {
+    const model = applicationModel([
+      inspectApplication,
+      recordApplication,
+      new Error("maximum context length exceeded"),
+      inspectApplication,
+      completeApplication,
+    ]);
+    const starts: ApplicationSourceReviewRequestStart[] = [];
+    let continuation: ApplicationReviewContinuation | undefined;
+    let result: ApplicationReviewRoundResult | undefined;
+    for (let round = 0; round < 5; round += 1) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- The next round consumes this round's restored checkpoint.
+      result = await assessApplicationSourceRound(
+        input,
+        applicationEvidence(),
+        {
+          testModel: model,
+          onRequestStart: (request) => {
+            starts.push(request);
+          },
+        },
+        continuation,
+      );
+      continuation = structuredClone(result.continuation);
+      if (round === 2) {
+        expect(result.assessment).toBeUndefined();
+        expect(continuation.invocation.splits).toBe(1);
+        expect(continuation.messages).toHaveLength(1);
+        expect(continuation.messages[0].role).toBe("user");
+        expect(continuation.findings).toHaveLength(1);
+      }
+    }
+    expect(result?.assessment).toMatchObject({ reviewCompleted: true, status: "failed" });
+    expect(result?.assessment?.findings).toHaveLength(1);
+    expect(continuation?.invocation).toMatchObject({
+      requestAttempts: 5,
+      successfulRequests: 4,
+      requestsWithIncompleteUsage: 1,
+    });
+    expect(starts.map(({ requestOrdinal, stepNumber }) => [requestOrdinal, stepNumber])).toEqual([
+      [1, 0],
+      [2, 1],
+      [3, 2],
+      [4, 3],
+      [5, 4],
+    ]);
+  });
+
+  it("rechecks owner authority before a restored round and preserves an incomplete natural stop", async () => {
+    const model = applicationModel([inspectApplication, completeApplication]);
+    let revoked = false;
+    const assertCurrentOwner = vi.fn(() =>
+      revoked ? Promise.reject(new Error("private revoked owner")) : Promise.resolve(),
+    );
+    const first = await assessApplicationSourceRound(input, applicationEvidence(), {
+      testModel: model,
+      assertCurrentOwner,
+    });
+    revoked = true;
+    const restoredEvidence = applicationEvidence();
+    const second = await assessApplicationSourceRound(
+      input,
+      restoredEvidence,
+      { testModel: model, assertCurrentOwner },
+      structuredClone(first.continuation),
+    );
+    expect(second.assessment).toMatchObject({ reviewCompleted: false, status: "blocked" });
+    expect(model.doGenerateCalls).toHaveLength(1);
+    expect(restoredEvidence.readSource).not.toHaveBeenCalled();
+    expect(JSON.stringify(second.assessment)).not.toContain("private revoked owner");
+    const stopped = await assessApplicationSourceRound(input, applicationEvidence(), {
+      testModel: applicationModel([[]]),
+    });
+    expect(stopped.assessment).toMatchObject({ reviewCompleted: false, status: "blocked" });
+    expect(stopped.continuation.requestOrdinal).toBe(1);
+  });
+
   it("keeps opaque Gateway affinity through actual steps and capacity recovery with authorized journal reuse", async () => {
     const sessionId = "private-owner-session-affinity-sentinel";
     const changes = [{ kind: "modified" as const, path: "apps/example/actions.ts" }];

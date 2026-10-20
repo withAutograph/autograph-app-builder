@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { createGateway, tool, ToolLoopAgent } from "ai";
-import type { LanguageModel, ModelMessage, LanguageModelCallStartEvent } from "ai";
+import { createGateway, isStepCount, tool, ToolLoopAgent } from "ai";
+import type { LanguageModel, ModelMessage, LanguageModelCallStartEvent, StepResult } from "ai";
 import { getVercelOidcToken } from "@vercel/oidc";
 import { z } from "zod";
 import { builderValidationModelId } from "../integrations/active-model";
@@ -333,10 +333,50 @@ const measureSourceReviewMessages = (
   }
 };
 
+export type ApplicationReviewEvidenceReference =
+  | ReturnType<typeof sourceReadReference>
+  | (Parameters<ApplicationReviewEvidence["readRequirements"]>[0] & {
+      kind: "requirement";
+      digest: string;
+      nextCursor?: number;
+    })
+  | { kind: "verified-requirement"; documentId: string; quoteDigest: string }
+  | {
+      kind: "verified-source";
+      path: string;
+      startLine: number;
+      endLine: number;
+      excerptDigest: string;
+    };
+
+/** Private Workflow step state, never a public review or sanitized journal record. */
+export interface ApplicationReviewContinuation {
+  version: 1;
+  messages: ModelMessage[];
+  findings: [string, SourceJudgment["findings"][number]][];
+  runtimeChecks: string[];
+  references: [string, ApplicationReviewEvidenceReference][];
+  reusableReads: [string, ReusableEvidenceRead][];
+  completionRequested: boolean;
+  invalidEvidence: boolean;
+  evidenceFailed: boolean;
+  outputRejected: boolean;
+  invocation: SourceReviewInvocation;
+  requestOrdinal: number;
+  stepNumber: number;
+  lastRecovery?: string;
+}
+
+export interface ApplicationReviewRoundResult {
+  continuation: ApplicationReviewContinuation;
+  /** Present for every terminal outcome, including an unavailable or blocked review. */
+  assessment?: ProductSourceAssessment;
+}
+
 interface ReviewState {
   findings: Map<string, SourceJudgment["findings"][number]>;
   runtimeChecks: Set<string>;
-  references: Map<string, object>;
+  references: Map<string, ApplicationReviewEvidenceReference>;
   reusableReads: Map<string, ReusableEvidenceRead>;
   completionRequested: boolean;
   invalidEvidence: boolean;
@@ -441,7 +481,7 @@ const reviewTools = (
           return { error: "selection_unavailable", message: result.message };
         }
         const reference = {
-          kind: "requirement",
+          kind: "requirement" as const,
           ...request,
           digest: hash(result.text),
           nextCursor: result.nextCursor,
@@ -515,14 +555,14 @@ const reviewTools = (
             finding,
           );
           const requirement = {
-            kind: "verified-requirement",
+            kind: "verified-requirement" as const,
             documentId: requirementDocumentId,
             quoteDigest: hash(finding.requirementQuote),
           };
           state.references.set(JSON.stringify(requirement), requirement);
           for (const citation of finding.citations) {
             const reference = {
-              kind: "verified-source",
+              kind: "verified-source" as const,
               path: citation.path,
               startLine: citation.startLine,
               endLine: citation.endLine,
@@ -589,17 +629,167 @@ const reviewCapacityFailure = (error: Error) => ({
   ),
 });
 
-/** One independent read-only application review; interrupted incomplete work may rerun. */
-export const assessApplicationSource = async (
+interface RestoredReviewRound {
+  invocation: SourceReviewInvocation;
+  state: ReviewState;
+  messages: ModelMessage[];
+  requestOrdinal: number;
+  stepNumber: number;
+  lastRecovery?: string;
+}
+
+const restoreReviewRound = (
+  input: ProductSourceReviewInput,
+  evidence: ApplicationReviewEvidence,
+  continuation?: ApplicationReviewContinuation,
+): RestoredReviewRound => {
+  const invocation: SourceReviewInvocation =
+    continuation === undefined
+      ? emptySourceReviewInvocation()
+      : { ...continuation.invocation, freshUsage: { ...continuation.invocation.freshUsage } };
+  const state: ReviewState = {
+    findings: new Map(continuation?.findings),
+    runtimeChecks: new Set(continuation?.runtimeChecks),
+    references: new Map(continuation?.references),
+    reusableReads: new Map(continuation?.reusableReads),
+    completionRequested: continuation?.completionRequested === true,
+    invalidEvidence: continuation?.invalidEvidence === true,
+    evidenceFailed: continuation?.evidenceFailed === true,
+    outputRejected: continuation?.outputRejected === true,
+  };
+  const initial = {
+    requirements: evidence.requirements,
+    changedPaths: evidence.changedPaths,
+    sourceDigest: input.sourceDigest,
+    appSpecDigest: input.appSpecDigest,
+  };
+  const messages: ModelMessage[] = continuation?.messages ?? [
+    { role: "user", content: JSON.stringify(initial) },
+  ];
+  return {
+    invocation,
+    state,
+    messages,
+    requestOrdinal: continuation?.requestOrdinal ?? 0,
+    stepNumber: continuation?.stepNumber ?? 0,
+    lastRecovery: continuation?.lastRecovery,
+  };
+};
+
+type ReviewRoundStep = Pick<StepResult<ReturnType<typeof reviewTools>>, "toolCalls" | "content">;
+const canContinueReviewRound = (step?: ReviewRoundStep): boolean => {
+  const calls = step?.toolCalls.filter((call) => call.providerExecuted !== true) ?? [];
+  const returned = new Set(
+    step?.content.flatMap((part) =>
+      part.type === "tool-result" || part.type === "tool-error" ? [part.toolCallId] : [],
+    ),
+  );
+  return calls.length > 0 && calls.every((call) => returned.has(call.toolCallId));
+};
+
+interface IncompleteReviewRound {
+  input: ProductSourceReviewInput;
+  state: ReviewState;
+  contextRejected: boolean;
+  canContinue: boolean;
+  currentMessages: ModelMessage[];
+  lastRecovery?: string;
+  readRedactions: () => Promise<readonly string[] | undefined>;
+  finish: () => ApplicationReviewRoundResult;
+  blocked: (reason: string) => ApplicationReviewRoundResult;
+  recover: (message: string) => void;
+}
+
+const settleIncompleteReviewRound = async (
+  round: IncompleteReviewRound,
+): Promise<ApplicationReviewRoundResult> => {
+  const {
+    input,
+    state,
+    contextRejected,
+    currentMessages,
+    lastRecovery,
+    readRedactions,
+    finish,
+    blocked,
+  } = round;
+  if (!contextRejected && !state.outputRejected) {
+    return round.canContinue
+      ? finish()
+      : blocked("The independent reviewer stopped before completing the application review.");
+  }
+  const texts = await readRedactions();
+  if (texts === undefined) {
+    return blocked("Primary review document redaction is unavailable.");
+  }
+  const recovery = JSON.stringify({
+    sourceDigest: input.sourceDigest,
+    appSpecDigest: input.appSpecDigest,
+    evidence:
+      "Exact original documents, the complete accepted specification, changed-file manifest and unchanged source remain accessible through the read tools and listEvidence. Reinspect as needed; references are not replacement requirements.",
+    readReferences: [...state.references.values()],
+    validated: sanitizeSourceJudgment(
+      input,
+      {
+        findings: [...state.findings.values()],
+        remainingRuntimeChecks: [...state.runtimeChecks],
+      },
+      texts,
+    ),
+    instruction: state.outputRejected
+      ? "The provider exhausted output capacity. Submit one finding or runtime check at a time through recordReviewEvidence, then call completeReview. All previously accepted findings are retained."
+      : "The provider rejected accumulated context. Continue the holistic review using exact evidence documents and source reads; all validated findings are retained.",
+  });
+  if (recovery === lastRecovery) {
+    return blocked(
+      "The provider could not complete application review after capacity recovery. Saved completed assessments remain available; this incomplete review is not complete evidence.",
+    );
+  }
+  if (
+    contextRejected &&
+    JSON.stringify(currentMessages) === JSON.stringify([{ role: "user", content: recovery }])
+  ) {
+    return blocked("The provider rejected the compact application review context.");
+  }
+  round.recover(recovery);
+  return finish();
+};
+
+/** One provider/tool round; the caller checkpoints its private continuation before proceeding. */
+export const assessApplicationSourceRound = async (
   input: ProductSourceReviewInput,
   evidence: ApplicationReviewEvidence,
   options: ApplicationSourceReviewOptions = {},
-): Promise<ProductSourceAssessment> => {
-  const invocation = emptySourceReviewInvocation();
-  const blocked = (reason: string) => ({
-    ...unavailableSourceAssessment(input, reason, "blocked"),
-    invocation,
+  continuation?: ApplicationReviewContinuation,
+): Promise<ApplicationReviewRoundResult> => {
+  const restored = restoreReviewRound(input, evidence, continuation);
+  const { invocation, state } = restored;
+  let { messages, requestOrdinal, stepNumber, lastRecovery } = restored;
+  let currentMessages = messages;
+  const finish = (assessment?: ProductSourceAssessment): ApplicationReviewRoundResult => ({
+    continuation: {
+      version: 1,
+      messages,
+      findings: [...state.findings],
+      runtimeChecks: [...state.runtimeChecks],
+      references: [...state.references],
+      reusableReads: [...state.reusableReads],
+      completionRequested: state.completionRequested,
+      invalidEvidence: state.invalidEvidence,
+      evidenceFailed: state.evidenceFailed,
+      outputRejected: state.outputRejected,
+      invocation: { ...invocation, freshUsage: { ...invocation.freshUsage } },
+      requestOrdinal,
+      stepNumber,
+      ...(lastRecovery === undefined ? {} : { lastRecovery }),
+    },
+    ...(assessment === undefined ? {} : { assessment }),
   });
+  const blocked = (reason: string) =>
+    finish({
+      ...unavailableSourceAssessment(input, reason, "blocked"),
+      invocation,
+    });
   try {
     options.abortSignal?.throwIfAborted();
     if (
@@ -607,24 +797,14 @@ export const assessApplicationSource = async (
       input.originalRequest === null ||
       input.originalRequest.trim() === ""
     ) {
-      return {
+      return finish({
         ...unavailableSourceAssessment(
           input,
           "Original requirements and an independent model are required for application source review.",
         ),
         invocation,
-      };
+      });
     }
-    const state: ReviewState = {
-      findings: new Map(),
-      runtimeChecks: new Set(),
-      references: new Map(),
-      reusableReads: new Map(),
-      completionRequested: false,
-      invalidEvidence: false,
-      evidenceFailed: false,
-      outputRejected: false,
-    };
     const guard = async () => {
       options.abortSignal?.throwIfAborted();
       await options.assertCurrentOwner?.();
@@ -647,18 +827,8 @@ export const assessApplicationSource = async (
     const model =
       options.testModel ??
       createGateway({ apiKey: await getVercelOidcToken() })(builderValidationModelId);
-    const initial = {
-      requirements: evidence.requirements,
-      changedPaths: evidence.changedPaths,
-      sourceDigest: input.sourceDigest,
-      appSpecDigest: input.appSpecDigest,
-    };
-    let messages: ModelMessage[] = [{ role: "user", content: JSON.stringify(initial) }];
-    let currentMessages = messages;
     let preparedMessageMeasurements: ApplicationSourceReviewMessageMeasurements | undefined;
-    let preparedStepNumber = 0;
-    let requestOrdinal = 0;
-    let lastRecovery: string | undefined;
+    let preparedStepNumber = stepNumber;
     const agent = new ToolLoopAgent({
       model,
       instructions: applicationReviewRubric,
@@ -671,13 +841,12 @@ export const assessApplicationSource = async (
           ...(options.cacheSessionId === undefined ? {} : { sessionId: options.cacheSessionId }),
         },
       },
-      stopWhen: () =>
-        state.evidenceFailed ||
-        state.outputRejected ||
-        (state.completionRequested && !state.invalidEvidence),
-      prepareStep: async ({ messages: nextMessages, stepNumber }) => {
+      // This is a durable execution unit, never a limit on the complete review.
+      stopWhen: isStepCount(1),
+      prepareStep: async ({ messages: nextMessages }) => {
         await guard();
         currentMessages = projectSourceReviewMessages(nextMessages, state.reusableReads);
+        messages = currentMessages;
         preparedStepNumber = stepNumber;
         if (options.onRequestStart !== undefined) {
           preparedMessageMeasurements = measureSourceReviewMessages(currentMessages);
@@ -691,6 +860,7 @@ export const assessApplicationSource = async (
         invocation.requestAttempts += 1;
         invocation.requestsWithIncompleteUsage += 1;
         requestOrdinal += 1;
+        stepNumber += 1;
         if (options.onRequestStart !== undefined) {
           let messageMeasurements = emptyMessageMeasurements();
           try {
@@ -726,83 +896,87 @@ export const assessApplicationSource = async (
         }
       },
     });
-    const runReview = async (): Promise<ProductSourceAssessment> => {
+    let contextRejected = false;
+    let result: Awaited<ReturnType<typeof agent.generate>> | undefined;
+    try {
+      result = await agent.generate({ messages, abortSignal: options.abortSignal });
+      // The supported SDK supplies the complete assistant/tool exchange, including errors.
+      messages = [...currentMessages, ...result.finalStep.response.messages];
+    } catch (error) {
       options.abortSignal?.throwIfAborted();
-      let contextRejected = false;
-      try {
-        // The SDK owns the tool loop. Only actual provider capacity failures restart it.
-        await agent.generate({ messages, abortSignal: options.abortSignal });
-      } catch (error) {
-        options.abortSignal?.throwIfAborted();
-        const { contextRejected: rejectedContext, outputRejected } =
-          error instanceof Error
-            ? reviewCapacityFailure(error)
-            : { contextRejected: false, outputRejected: false };
-        contextRejected = rejectedContext;
-        state.outputRejected ||= outputRejected;
-        if (!contextRejected && !state.outputRejected) {
-          return blocked(
-            "Independent application source review was unavailable. No provider details or runtime verdict were inferred.",
-          );
-        }
-      }
-      options.abortSignal?.throwIfAborted();
-      if (state.evidenceFailed) {
-        return blocked("Application source evidence became unavailable during review.");
-      }
-      if (hasCompletedReview(state)) {
-        const texts = await readRedactions();
-        return texts === undefined
-          ? blocked("Primary review document redaction is unavailable.")
-          : assessmentFor(input, state, invocation, texts);
-      }
+      const { contextRejected: rejectedContext, outputRejected } =
+        error instanceof Error
+          ? reviewCapacityFailure(error)
+          : { contextRejected: false, outputRejected: false };
+      contextRejected = rejectedContext;
+      state.outputRejected ||= outputRejected;
       if (!contextRejected && !state.outputRejected) {
         return blocked(
-          "The independent reviewer stopped before completing the application review.",
+          "Independent application source review was unavailable. No provider details or runtime verdict were inferred.",
         );
       }
+    }
+    options.abortSignal?.throwIfAborted();
+    if (state.evidenceFailed) {
+      return blocked("Application source evidence became unavailable during review.");
+    }
+    if (hasCompletedReview(state)) {
       const texts = await readRedactions();
-      if (texts === undefined) {
-        return blocked("Primary review document redaction is unavailable.");
+      return texts === undefined
+        ? blocked("Primary review document redaction is unavailable.")
+        : finish(assessmentFor(input, state, invocation, texts));
+    }
+    return await settleIncompleteReviewRound({
+      input,
+      state,
+      contextRejected,
+      canContinue: canContinueReviewRound(result?.finalStep),
+      currentMessages,
+      lastRecovery,
+      readRedactions,
+      finish,
+      blocked,
+      recover: (recovery) => {
+        lastRecovery = recovery;
+        state.outputRejected = false;
+        state.completionRequested = false;
+        messages = [{ role: "user", content: recovery }];
+        invocation.splits += 1;
+      },
+    });
+  } finally {
+    options.onInvocation?.(invocation);
+  }
+};
+
+/** Compatibility driver; hosted Workflow callers checkpoint each round separately. */
+export const assessApplicationSource = async (
+  input: ProductSourceReviewInput,
+  evidence: ApplicationReviewEvidence,
+  options: ApplicationSourceReviewOptions = {},
+): Promise<ProductSourceAssessment> => {
+  let continuation: ApplicationReviewContinuation | undefined;
+  let invocation = emptySourceReviewInvocation();
+  const roundOptions = {
+    ...options,
+    onInvocation: (updated: SourceReviewInvocation) => {
+      invocation = updated;
+    },
+  };
+  try {
+    for (;;) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- A round requires the previous round's completed checkpoint.
+      const result = await assessApplicationSourceRound(
+        input,
+        evidence,
+        roundOptions,
+        continuation,
+      );
+      continuation = result.continuation;
+      if (result.assessment !== undefined) {
+        return result.assessment;
       }
-      const recovery = JSON.stringify({
-        sourceDigest: input.sourceDigest,
-        appSpecDigest: input.appSpecDigest,
-        evidence:
-          "Exact original documents, the complete accepted specification, changed-file manifest and unchanged source remain accessible through the read tools and listEvidence. Reinspect as needed; references are not replacement requirements.",
-        readReferences: [...state.references.values()],
-        validated: sanitizeSourceJudgment(
-          input,
-          {
-            findings: [...state.findings.values()],
-            remainingRuntimeChecks: [...state.runtimeChecks],
-          },
-          texts,
-        ),
-        instruction: state.outputRejected
-          ? "The provider exhausted output capacity. Submit one finding or runtime check at a time through recordReviewEvidence, then call completeReview. All previously accepted findings are retained."
-          : "The provider rejected accumulated context. Continue the holistic review using exact evidence documents and source reads; all validated findings are retained.",
-      });
-      if (recovery === lastRecovery) {
-        return blocked(
-          "The provider could not complete application review after capacity recovery. Saved completed assessments remain available; this incomplete review is not complete evidence.",
-        );
-      }
-      // Capacity recovery still replaces the whole transcript only after actual rejection.
-      if (
-        contextRejected &&
-        JSON.stringify(currentMessages) === JSON.stringify([{ role: "user", content: recovery }])
-      ) {
-        return blocked("The provider rejected the compact application review context.");
-      }
-      lastRecovery = recovery;
-      state.outputRejected = false;
-      state.completionRequested = false;
-      messages = [{ role: "user", content: recovery }];
-      invocation.splits += 1;
-      return await runReview();
-    };
-    return await runReview();
+    }
   } finally {
     options.onInvocation?.(invocation);
   }
