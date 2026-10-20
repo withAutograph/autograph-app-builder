@@ -2034,8 +2034,8 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 deps.readGatewayDeliverySource !== undefined
               ) {
                 const desiredSource = await deps.readGatewayDeliverySource(context);
-                await assertCurrent();
                 if (hasAppGatewaySourceUpdate(record, desiredSource)) {
+                  await assertCurrent();
                   // Keep the original operator/approval until settlement and lease release.
                   // The next ordinary planning call proposes the separately approved delivery.
                   return response({

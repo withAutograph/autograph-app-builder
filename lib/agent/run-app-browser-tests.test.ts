@@ -9,6 +9,7 @@ import { localRuntimeEnvironmentPath } from "../repository/runtime-environment";
 import { appBrowserTestCommand, runAppBrowserTests } from "../../agent/tools/run-app-browser-tests";
 
 import type { PreparedRuntimeExecution } from "./prepared-runtime-execution";
+import { runAppBrowserTests as runResolvedAppBrowserTests } from "./app-browser-test-runner";
 
 type SandboxRunOptions = Parameters<SandboxSession["run"]>[0];
 
@@ -235,6 +236,75 @@ describe("private app browser tests", () => {
     expect(result).toMatchObject({ status: "passed", stdout: "4 passed" });
   });
 
+  it("keeps runtime resolution failure inside the shared runner's private error projection", async () => {
+    const run = vi.fn<SandboxSession["run"]>();
+    const resolveRuntime = vi
+      .fn<() => Promise<PreparedRuntimeExecution | null>>()
+      .mockRejectedValue(
+        new Error(
+          "Binding failed at postgres://user:private-value@database.example/app token=private-token",
+        ),
+      );
+    const result = await runResolvedAppBrowserTests({
+      appId: "reports",
+      root: "/workspace/repository",
+      sandbox: { run },
+      resolveRuntime,
+    });
+    expect(result).toMatchObject({ exitCode: null, status: "failed" });
+    expect(result.problem).toContain("Binding failed");
+    expect(JSON.stringify(result)).not.toContain("private-value");
+    expect(JSON.stringify(result)).not.toContain("private-token");
+    expect(run).not.toHaveBeenCalled();
+    expect(resolveRuntime).toHaveBeenCalledOnce();
+  });
+  it("runs an already resolved task through the shared path with retained command continuation", async () => {
+    const runTask = vi
+      .fn<PreparedRuntimeExecution["runTask"]>()
+      .mockResolvedValue({ exitCode: 0, stdout: "scenario passed", stderr: "" });
+    const resolveRuntime = vi.fn<() => Promise<PreparedRuntimeExecution | null>>();
+    const checkpoint = vi.fn<(commandId: string) => Promise<void>>();
+    const runtime: PreparedRuntimeExecution = {
+      environmentPath: "/private-state/environment.json",
+      stateDirectory: "/private-state",
+      installationProof: {
+        actors: 1,
+        appId: "reports",
+        artifactHash: "a".repeat(64),
+        authenticatedBehavior: "unassessed",
+        branch: "review",
+        environment: "preview",
+        observation: "database-verification",
+        observedAt: "2026-10-20T00:00:00Z",
+        releaseId: "release",
+        tenants: 1,
+      },
+      prepareAuthenticatedOrigin: vi.fn(),
+      runTask,
+    };
+    const result = await runResolvedAppBrowserTests({
+      appId: "reports",
+      root: "/workspace/repository",
+      sandbox: { run: vi.fn<SandboxSession["run"]>() },
+      runtime,
+      resolveRuntime,
+      continuation: {
+        commandId: "retained-command",
+        commandCheckpoint: checkpoint,
+        allowDispatch: false,
+      },
+    });
+    expect(result).toMatchObject({ status: "passed", stdout: "scenario passed" });
+    expect(runTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        task: "test-e2e",
+        commandId: "retained-command",
+        commandCheckpoint: checkpoint,
+        allowDispatch: false,
+      }),
+    );
+    expect(resolveRuntime).not.toHaveBeenCalled();
+  });
   it("names sandbox command failures", async () => {
     const result = await runAppBrowserTests({
       appId: "spend-review",
