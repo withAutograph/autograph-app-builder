@@ -1,4 +1,9 @@
 import {
+  createAppGatewaySourceSuccessorPlan,
+  readAppGatewaySourceContinuationPlan,
+  isAppGatewaySourceSuccessor,
+} from "./hosted-operator-app-gateway-source-successor";
+import {
   createSharedHostProtectionSuccessorPlan,
   hasRetainedSharedHostProtectionIdentity,
   sharedHostProtectionDeliveryProvenance,
@@ -18,6 +23,7 @@ import {
   HostedOperatorError,
   hostedOperatorPlanSchema,
   operatorPlanDigest,
+  operatorPublicResultSchema,
 } from "./hosted-operator-contract";
 import type { OperatorSelection } from "./hosted-operator-contract";
 import { hostedRuntimeJournalRecordSchema } from "./hosted-runtime-journal";
@@ -1651,4 +1657,317 @@ describe("pending native app project settings repair", () => {
       expect(f.row?.record.operator?.planDigest).toBe(original.planDigest);
     },
   );
+});
+
+describe("APP Gateway source continuation", () => {
+  const originalPlan = hostedOperatorPlanSchema.parse({
+    ...plan,
+    stage: "app",
+    authMembership: {
+      actorId: "fixture-owner",
+      bootstrapPlanDigest: "c".repeat(64),
+      identityCapture: { capturedAt: "2026-01-01T00:00:00Z", realmSessionId: "realm-session" },
+      identityNonceSha256: "d".repeat(64),
+      identityProof: { reference: "fixture-proof", sha256: "e".repeat(64) },
+      identityVerification: {
+        audience: "https://operator.example",
+        issuer: "https://gateway-preview.example.test",
+        jwksUrl: "https://gateway-preview.example.test/_platform/jwks.json",
+        transportSource: {
+          audience: "https://vercel.com",
+          environment: "preview",
+          issuer: "https://oidc.vercel.com/team_fixture",
+          ownerId: "team_fixture",
+          projectId: "prj_gateway",
+        },
+      },
+      kind: "create-owned-organization",
+      name: "Fixture organization",
+      organizationId: "synthetic-org",
+      slug: "fixture-org",
+    },
+    gatewayDelivery: {
+      branch: selection.branch,
+      gitSha: "1".repeat(40),
+      projectId: "prj_gateway",
+      repoId: "gateway-repo",
+    },
+    effects: [
+      ...plan.effects.filter((effect) => ["resources", "install"].includes(effect.kind)),
+      {
+        description: "Prepare approved organization",
+        kind: "auth-membership",
+        id: "auth-membership:synthetic-org",
+      },
+      ...plan.effects.filter((effect) => !["resources", "install"].includes(effect.kind)),
+      { description: "Deliver Gateway", kind: "gateway-delivery", id: "gateway-delivery" },
+    ],
+  });
+  const desired = {
+    branch: selection.branch,
+    gitSha: "2".repeat(40),
+    projectId: "prj_gateway",
+    repoId: "gateway-repo",
+  };
+  const interrupted = async () => {
+    const f = fixture();
+    f.deps.plan = async () => originalPlan;
+    const original = await prepared(f);
+    f.approve();
+    const execute = f.deps.executeEffect;
+    f.deps.executeEffect = async (input) => {
+      if (input.effect.kind !== "auth-membership") {
+        return await execute(input);
+      }
+      const checkpoint = await input.bindWorkerContext({ contextDigest: "d".repeat(64) });
+      await checkpoint({
+        contextDigest: "d".repeat(64),
+        effectId: "auth-owned-organization",
+        fenceGeneration: input.fenceGeneration,
+        operationId: input.operationRef,
+        receipt: { state: "applied", readbackSha256: "e".repeat(64) },
+        resourceId: originalPlan.authDatabase.resourceId,
+        sequence: 1,
+        tenantId: "synthetic-org",
+      });
+      throw new HostedOperatorError("reconciliation_required");
+    };
+    expect(await f.client.request(original)).toMatchObject({
+      status: "blocked",
+      code: "reconciliation_required",
+    });
+    const previous = structuredClone(f.row);
+    if (previous?.record.operator === undefined) {
+      throw new Error("Expected interrupted original membership");
+    }
+    f.deps.readGatewayDeliverySource = async () => desired;
+    f.deps.plan = async () =>
+      readAppGatewaySourceContinuationPlan(f.row?.record, desired, Date.now()) ?? originalPlan;
+    return { f, original, previous, execute };
+  };
+
+  // oxlint-disable-next-line eslint/complexity -- This sequential recovery journey checks the original and successor authority at each durable boundary.
+  it("reconciles the original pending context then yields before any next effect and re-exposes one source proposal", async () => {
+    const { f, original, previous, execute } = await interrupted();
+    const pending = previous.record.operator;
+    if (pending === undefined) {
+      throw new Error("Missing original operator");
+    }
+    expect(await prepared(f)).toMatchObject({
+      operationRef: original.operationRef,
+      planDigest: original.planDigest,
+    });
+    expect(f.row?.record.operator?.pendingEffectAttempt).toEqual(pending.pendingEffectAttempt);
+    expect(createAppGatewaySourceSuccessorPlan(f.row?.record, desired, Date.now())).toBeUndefined();
+    const reconciled: string[] = [];
+    const oldReconcile = f.deps.reconcile;
+    f.deps.reconcile = async (input) => {
+      if (input.effect.kind !== "auth-membership") {
+        return await oldReconcile(input);
+      }
+      reconciled.push(input.effect.id);
+      expect(input.plan).toEqual(originalPlan);
+      expect(input.operationRef).toBe(original.operationRef);
+      expect(input.fenceGeneration).toBe(pending.fenceGeneration);
+      expect(input.workerCheckpoints).toEqual(pending.workerCheckpoints);
+      expect(f.row?.record.operator?.pendingEffectAttempt).toEqual(pending.pendingEffectAttempt);
+      return {
+        status: "applied",
+        receipt: {
+          effectId: input.effect.id,
+          observedAt: new Date().toISOString(),
+          resourceVersion: "owned-organization-observed",
+        },
+      };
+    };
+    f.deps.executeEffect = vi.fn<ProtectedHostedOperatorDependencies["executeEffect"]>(
+      async (input) => await execute(input),
+    );
+    const lostResponse = createHostedOperatorClient({
+      endpoint: "https://operator.example",
+      ownerContext,
+      token: async () => "fixture-service-identity",
+      fetch: async (url, init) => {
+        const result = await f.handler(new Request(url instanceof Request ? url.url : url, init));
+        expect(operatorPublicResultSchema.parse(await result.json())).toMatchObject({
+          status: "planned",
+          operationRef: original.operationRef,
+          planDigest: original.planDigest,
+          plan: originalPlan,
+        });
+        throw new Error("Controlled response loss after original execution settled");
+      },
+    });
+    await expect(lostResponse.request(original)).rejects.toMatchObject({
+      name: "HostedOperatorTransportUnknown",
+    });
+    expect(reconciled).toEqual(["auth-membership:synthetic-org"]);
+    expect(f.deps.executeEffect).not.toHaveBeenCalled();
+    const settled = structuredClone(f.row);
+    expect(settled?.record.operator?.planDigest).toBe(original.planDigest);
+    expect(settled?.record.operator?.pendingEffectId).toBeUndefined();
+    expect(settled?.record.operator?.pendingEffectAttempt).toBeUndefined();
+    expect(settled?.record.operator?.workerCheckpoints).toEqual(pending.workerCheckpoints);
+    expect(settled?.record.leaseId).toBeUndefined();
+    expect(settled?.record.executionObservation).toMatchObject({
+      state: "settled",
+      outcome: { status: "planned" },
+      planDigest: original.planDigest,
+    });
+    const status = await f.client.request({
+      action: "status",
+      operationRef: original.operationRef,
+      selection,
+    });
+    expect(status).toMatchObject({
+      status: "pending",
+      operationRef: original.operationRef,
+      planDigest: original.planDigest,
+      execution: { state: "settled", outcome: { status: "planned" } },
+    });
+    const readApproval = f.deps.readApproval;
+    f.deps.readApproval = async (input) =>
+      input.planDigest === original.planDigest ? await readApproval(input) : null;
+    const successor = { ...(await prepared(f)), callId: "successor-human-call" };
+    expect(successor.operationRef).toBe(original.operationRef);
+    expect(successor.planDigest).not.toBe(original.planDigest);
+    expect(f.row?.record.privateState).toEqual(settled?.record.privateState);
+    expect(f.row?.record.operator?.receipts).toEqual(settled?.record.operator?.receipts);
+    expect(f.row?.record.operator?.fenceGeneration).toBe(pending.fenceGeneration);
+    expect(f.row?.record.operator?.workerCheckpoints).toEqual(pending.workerCheckpoints);
+    const retained = f.row?.record.operator?.retainedGatewayDeliveries?.find(
+      (entry) => entry.approvedByCallId === original.callId,
+    );
+    expect(retained?.operator.planDigest).toBe(original.planDigest);
+    expect(retained?.operator.workerCheckpoints).toEqual(pending.workerCheckpoints);
+    const reserved = structuredClone(f.row);
+    for (const source of [
+      { ...desired, projectId: "different-gateway" },
+      { ...desired, branch: "different-branch" },
+      { ...desired, repoId: "different-repository" },
+    ]) {
+      expect(
+        readAppGatewaySourceContinuationPlan(reserved?.record, source, Date.now()),
+      ).toBeUndefined();
+    }
+    // A lost planning response re-exposes the exact saved proposal without allocating or running anything.
+    expect(await prepared(f)).toMatchObject({
+      operationRef: successor.operationRef,
+      planDigest: successor.planDigest,
+    });
+    expect(f.row).toEqual(reserved);
+    let revisionAdvanced = false;
+    const sourceApproval = f.deps.readApproval;
+    f.deps.readApproval = async (input) => {
+      const approval = await sourceApproval(input);
+      if (!revisionAdvanced && f.row !== undefined) {
+        f.row = { ...f.row, revision: f.row.revision + 1 };
+        revisionAdvanced = true;
+      }
+      return approval;
+    };
+    expect(await prepared(f)).toMatchObject({
+      operationRef: successor.operationRef,
+      planDigest: successor.planDigest,
+    });
+    expect(revisionAdvanced).toBe(true);
+    expect(await f.client.request(successor)).toMatchObject({
+      status: "blocked",
+      code: "authorization_required",
+    });
+    expect(f.deps.executeEffect).not.toHaveBeenCalled();
+    f.deps.readApproval = readApproval;
+    const delivered: string[] = [];
+    f.deps.executeEffect = async (input) => {
+      if (input.effect.kind === "gateway-delivery") {
+        delivered.push(input.plan.gatewayDelivery?.gitSha ?? "missing");
+      }
+      return await execute(input);
+    };
+    expect(await f.client.request(successor)).toMatchObject({ status: "prepared" });
+    expect(delivered).toEqual([desired.gitSha]);
+  });
+
+  it("keeps an unknown pending membership and all original checkpoint authority unchanged", async () => {
+    const { f, original, previous } = await interrupted();
+    f.unknown();
+    f.deps.executeEffect = vi.fn(f.deps.executeEffect);
+    expect(await f.client.request(original)).toMatchObject({ code: "reconciliation_required" });
+    expect(f.row?.record.operator).toEqual(previous.record.operator);
+    expect(f.row?.record.privateState).toEqual(previous.record.privateState);
+    expect(f.deps.executeEffect).not.toHaveBeenCalled();
+  });
+
+  it.each(["owner", "approval"] as const)(
+    "does not continue after %s revocation",
+    async (revoke) => {
+      const { f, original } = await interrupted();
+      if (revoke === "owner") {
+        f.revoke();
+      } else {
+        f.deps.readApproval = async () => null;
+      }
+      f.deps.executeEffect = vi.fn(f.deps.executeEffect);
+      expect(await f.client.request(original)).toMatchObject({ code: "authorization_required" });
+      expect(f.deps.executeEffect).not.toHaveBeenCalled();
+    },
+  );
+
+  it("leaves changed scope, active leases and Gateway attempt states to their existing paths", async () => {
+    const { f, previous } = await interrupted();
+    const clear = structuredClone(previous.record);
+    if (clear.operator === undefined) {
+      throw new Error("Missing source fixture operator");
+    }
+    delete clear.operator.pendingEffectId;
+    delete clear.operator.pendingEffectAttempt;
+    const candidate = createAppGatewaySourceSuccessorPlan(clear, desired, Date.now());
+    expect(candidate?.gatewayDelivery?.gitSha).toBe(desired.gitSha);
+    expect(candidate).toEqual({ ...originalPlan, gatewayDelivery: desired });
+    if (candidate === undefined) {
+      throw new Error("Expected source candidate");
+    }
+    expect(
+      isAppGatewaySourceSuccessor(
+        clear,
+        { ...candidate, release: { ...originalPlan.release, id: "different-release" } },
+        Date.now(),
+      ),
+    ).toBe(false);
+    expect(
+      createAppGatewaySourceSuccessorPlan(
+        clear,
+        { ...desired, projectId: "different-project" },
+        Date.now(),
+      ),
+    ).toBeUndefined();
+    expect(
+      createAppGatewaySourceSuccessorPlan(
+        {
+          ...clear,
+          leaseId: "owned-active",
+          leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+        },
+        desired,
+        Date.now(),
+      ),
+    ).toBeUndefined();
+    clear.operator.pendingEffectId = "gateway-delivery";
+    expect(readAppGatewaySourceContinuationPlan(clear, desired, Date.now())).toBeUndefined();
+    delete clear.operator.pendingEffectId;
+    clear.operator.gatewayDeliveryCandidates = [
+      {
+        branch: selection.branch,
+        deploymentId: "unknown-gateway",
+        operationRef: clear.operator.operationRef,
+        origin: "https://pending-gateway.example.test",
+        projectId: "prj_gateway",
+        readyState: "BUILDING",
+        repoId: "gateway-repo",
+        gatewayAliasAttempted: true,
+      },
+    ];
+    expect(createAppGatewaySourceSuccessorPlan(clear, desired, Date.now())).toBeUndefined();
+    expect(f.row?.record).toEqual(previous.record);
+  });
 });

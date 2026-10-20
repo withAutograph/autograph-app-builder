@@ -272,6 +272,47 @@ describe("automatic observation of one approved execution", () => {
     expect(sleepReceivers).toEqual([true]);
     expect(f.calls).toEqual(["execute", "status", "status"]);
   });
+  it("maps the observed settled planned outcome to ordinary planning without replaying execute", async () => {
+    const f = fixture();
+    const prepared = await f.prepare();
+    f.setObserved({
+      ...f.observed,
+      status: "pending",
+      execution: { state: "settled", outcome: { status: "planned" } },
+    });
+    const sleepUntil = vi.fn<(deadline: Date) => Promise<void>>(() => Promise.resolve());
+    const generator = continueHostedRuntimeExecutionObservation(f.approved, f.context, prepared, {
+      snapshot: f.snapshot,
+      read: f.read,
+      sleepUntil,
+    });
+    expect(await generator.next()).toMatchObject({ done: false, value: { status: "pending" } });
+    expect(await generator.next()).toMatchObject({
+      done: true,
+      value: {
+        identityInput: null,
+        result: {
+          status: "planned",
+          operationRef: f.approved.operationRef,
+          planDigest: f.approved.planDigest,
+          nextAction: {
+            tool: "plan-app-hosted-runtime",
+            approval: "normal-plan-approval",
+            input: {
+              appId: f.approved.appId,
+              branch: f.approved.branch,
+              projectId: f.approved.projectId,
+              environment: f.approved.environment,
+              operation: "prepare",
+            },
+          },
+        },
+      },
+    });
+    expect(f.calls).toEqual(["execute", "status"]);
+    expect(f.prepare).toHaveBeenCalledOnce();
+    expect(sleepUntil).not.toHaveBeenCalled();
+  });
   it.each(["prepared", "reconciliation_required"] as const)(
     "keeps waiting after lost transport and returns actual %s without another execute/plan",
     async (outcome) => {

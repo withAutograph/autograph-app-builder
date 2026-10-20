@@ -103,6 +103,15 @@ const preparationResult = (
   input: HostedRuntimeInput,
   inputValidated: boolean,
 ) => {
+  if (inputValidated && result.status === "planned") {
+    return {
+      ...result,
+      nextAction: preparationPlanningAction(
+        input,
+        "The approved operation finished its pending effect and yielded before the next outward effect. Plan again in this session using the current trusted source, then prepare the returned plan through the normal approval flow. Preserve the existing resources and reconcile any unknown outcome before repeating an effect.",
+      ),
+    };
+  }
   if (result.code === "gateway_delivery_failed") {
     return {
       ...result,
