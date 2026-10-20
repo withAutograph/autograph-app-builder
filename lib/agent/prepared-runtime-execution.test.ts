@@ -297,20 +297,31 @@ describe("approved hosted runtime consumers", () => {
       provider: fixture.provider,
       root: context.root,
     });
+    expect(fixture.provider.runCommand).toHaveBeenNthCalledWith(1, {
+      args: ["mise", "run", "app:describe", context.appId],
+      cmd: "/usr/bin/env",
+      cwd: context.root,
+      signal: undefined,
+    });
     await runtime.runTask({
       task,
       shard,
       environment: {
         APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
+        PATH: "/sandbox/custom/bin:/usr/bin",
         APP_RUNTIME_STATE_DIR: "/untrusted-state-directory",
         OPTIONAL_INPUT: undefined,
       },
     });
     expect(fixture.provider.runCommand).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        args: ["run", "app:runtime", "run", context.appId, task, ...(shard ? [shard] : [])],
+        args: ["mise", "run", "app:runtime", "run", context.appId, task, ...(shard ? [shard] : [])],
+        cmd: "/usr/bin/env",
+        cwd: context.root,
+        detached: true,
         env: {
           APP_SCHEMA_TRANSITION_PREDECESSOR_FILES: '["original.json"]',
+          PATH: "/sandbox/custom/bin:/usr/bin",
           APP_RUNTIME_STATE_DIR: "/private-state",
         },
       }),
@@ -362,7 +373,7 @@ describe("approved hosted runtime consumers", () => {
       await runtime?.runTask({ task: "repository-check" });
       expect(fixture.provider.runCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          args: ["run", "app:runtime", "run", context.appId, "repository-check"],
+          args: ["mise", "run", "app:runtime", "run", context.appId, "repository-check"],
           env: { APP_RUNTIME_STATE_DIR: `/tmp/app-builder-operator/${operationRef}` },
         }),
       );
@@ -372,7 +383,7 @@ describe("approved hosted runtime consumers", () => {
       });
       expect(fixture.provider.runCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          args: ["run", "app:runtime", "run", context.appId, "test-e2e"],
+          args: ["mise", "run", "app:runtime", "run", context.appId, "test-e2e"],
           env: {
             APP_RUNTIME_STATE_DIR: `/tmp/app-builder-operator/${operationRef}`,
             ...(publicOrigin === undefined ? {} : { APP_TEST_BASE_URL: publicOrigin }),
@@ -647,6 +658,43 @@ describe("approved hosted runtime consumers", () => {
     ).rejects.toBe(closedError);
   });
 
+  it("resumes the retained task identity without redispatching through env", async () => {
+    const fixture = transport();
+    const resumeCommand = vi.fn().mockResolvedValue(fixture.command);
+    const commandCheckpoint = vi.fn();
+    const runtime = await restorePreparedRuntimeExecution({
+      appId: context.appId,
+      binding: binding(),
+      observeInstallation: async () => ({
+        actors: proof.actors,
+        artifactHash: proof.artifactHash,
+        authenticatedBehavior: proof.authenticatedBehavior,
+        releaseId: proof.releaseId,
+        tenants: proof.tenants,
+      }),
+      provider: fixture.provider,
+      resumeCommand,
+      root: context.root,
+    });
+    await expect(
+      runtime.runTask({
+        task: "test-e2e",
+        commandId: "retained-command",
+        commandCheckpoint,
+        allowDispatch: false,
+      }),
+    ).resolves.toMatchObject({ exitCode: 0 });
+    expect(resumeCommand).toHaveBeenCalledExactlyOnceWith("retained-command");
+    expect(commandCheckpoint).not.toHaveBeenCalled();
+    expect(fixture.provider.runCommand).toHaveBeenCalledTimes(1);
+    expect(fixture.provider.runCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cmd: "/usr/bin/env",
+        args: ["mise", "run", "app:describe", context.appId],
+      }),
+    );
+  });
+
   it("redacts a session token split across provider log chunks before durable output", async () => {
     const fixture = transport(descriptor, [
       "Authenticated ",
@@ -705,7 +753,7 @@ describe("approved hosted runtime consumers", () => {
     expect(onChunk).toHaveBeenCalledWith("stdout", "8 passed [REDACTED]");
     expect(fixture.provider.runCommand).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        args: ["run", "app:runtime", "run", "spend-review", "test-e2e"],
+        args: ["mise", "run", "app:runtime", "run", "spend-review", "test-e2e"],
         env: { APP_RUNTIME_STATE_DIR: "/private-state" },
       }),
     );
