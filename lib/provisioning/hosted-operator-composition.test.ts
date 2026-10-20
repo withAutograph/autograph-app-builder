@@ -1126,6 +1126,321 @@ const existingAuthRecord = (plan = bootstrapPlan()) =>
     },
   });
 
+describe("retained APP Gateway source planning continuation", () => {
+  const setup = async () => {
+    const f = participantResolutionFixture();
+    const appPlan = await resolveFullPlan(
+      f.base,
+      context,
+      f.configuration,
+      f.ports,
+      {},
+      true,
+      true,
+    );
+    f.readCapturedRealmIdentity.mockClear();
+    f.readCapturedRealmIdentityProof.mockClear();
+    const record = existingAuthRecord(appPlan);
+    const operator = record.operator!;
+    const pending =
+      appPlan.effects.find((effect) => effect.kind === "auth-membership") ??
+      appPlan.effects.find((effect) => effect.kind === "install");
+    if (pending === undefined) {
+      throw new Error("The controlled plan has no pending worker effect");
+    }
+    operator.pendingEffectId = pending.id;
+    operator.pendingEffectAttempt = {
+      id: "00000000-0000-4000-8000-000000000003",
+      contextDigest: "e".repeat(64),
+    };
+    operator.receipts = operator.receipts.filter(
+      (receipt) => receipt.effectId !== pending.id && receipt.effectId !== "gateway-delivery",
+    );
+    operator.workerCheckpoints = [
+      {
+        attemptId: operator.pendingEffectAttempt.id,
+        contextDigest: "e".repeat(64),
+        effectId: "controlled-inner-effect",
+        parentEffectId: pending.id,
+        operationRef: operator.operationRef,
+        fenceGeneration: operator.fenceGeneration!,
+        resourceId: appPlan.authDatabase.resourceId,
+        sequence: 1,
+        receipt: { state: "applied", readbackSha256: "f".repeat(64) },
+      },
+    ];
+    const row = { record, revision: 7 };
+    f.configuration.gateway.gitSha = "e".repeat(40);
+    const read = vi.fn(async () => row);
+    const assertCanonicalOwner = vi.fn(async () => {});
+    const readApproval = vi.fn<ProtectedHostedOperatorDependencies["readApproval"]>(async () => ({
+      action: "prepare",
+      approved: true,
+      approvalId: operator.approvalId!,
+      callId: record.approvedByCallId,
+      planDigest: operator.planDigest,
+    }));
+    const controlPlane = { ...f.controlPlane, assertCanonicalOwner, readApproval, store: { read } };
+    const dependencies = composeHostedOperatorDependencies(
+      f.configuration,
+      // SAFETY: The focused planning branch uses only the implemented owner, approval and journal ports.
+      // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- Unsupported states stop at the observed ordinary planning boundary.
+      controlPlane as unknown as Parameters<typeof composeHostedOperatorDependencies>[1],
+    );
+    return { ...f, row, read, assertCanonicalOwner, readApproval, dependencies };
+  };
+
+  it("keeps the complete original pending plan and worker evidence after configured source changes", async () => {
+    const f = await setup();
+    const before = structuredClone(f.row);
+    const planned = await f.dependencies.plan({
+      ...context,
+      action: "prepare",
+      normalActorProgram: before.record.operator!.plan.normalActorProgram,
+    });
+    expect(planned).toEqual(before.record.operator!.plan);
+    expect(planned).not.toBe(f.row.record.operator!.plan);
+    expect(planned.gatewayDelivery?.gitSha).not.toBe(f.configuration.gateway.gitSha);
+    expect(f.row).toEqual(before);
+    expect(f.read).toHaveBeenCalledTimes(2);
+    expect(f.assertCanonicalOwner).toHaveBeenCalledTimes(2);
+    expect(f.readApproval).toHaveBeenCalledWith({
+      ...context,
+      normalActorProgram: before.record.operator!.plan.normalActorProgram,
+      action: "prepare",
+      callId: before.record.approvedByCallId,
+      planDigest: before.record.operator!.planDigest,
+    });
+    expect(f.unexpectedPort).not.toHaveBeenCalled();
+    expect(f.readCapturedRealmIdentity).not.toHaveBeenCalled();
+    expect(f.readCapturedRealmIdentityProof).not.toHaveBeenCalled();
+  });
+
+  it("proposes only the future Gateway source after the original pending receipt is cleared", async () => {
+    const f = await setup();
+    const operator = f.row.record.operator!;
+    operator.receipts.push({
+      effectId: operator.pendingEffectId!,
+      observedAt: "2026-10-20T12:00:00Z",
+      resourceVersion: "controlled-observation",
+    });
+    delete operator.pendingEffectId;
+    delete operator.pendingEffectAttempt;
+    const before = structuredClone(f.row);
+    const planned = await f.dependencies.plan({ ...context, action: "prepare" });
+    expect(planned).toEqual({
+      ...before.record.operator!.plan,
+      gatewayDelivery: {
+        ...before.record.operator!.plan.gatewayDelivery,
+        gitSha: f.configuration.gateway.gitSha,
+      },
+    });
+    expect(f.row).toEqual(before);
+    expect(f.readApproval.mock.calls[0]?.[0].planDigest).toBe(before.record.operator!.planDigest);
+    expect(f.unexpectedPort).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])(
+    "re-exposes the exact saved source proposal after a lost response (approved=%s)",
+    async (approved) => {
+      const f = await setup();
+      const original = structuredClone(f.row.record.operator!);
+      const approvedByCallId = f.row.record.approvedByCallId;
+      delete original.pendingEffectId;
+      delete original.pendingEffectAttempt;
+      const proposal = hostedOperatorPlanSchema.parse({
+        ...original.plan,
+        gatewayDelivery: {
+          ...original.plan.gatewayDelivery,
+          gitSha: f.configuration.gateway.gitSha,
+        },
+      });
+      f.row.record.operator = {
+        ...original,
+        plan: proposal,
+        planDigest: operatorPlanDigest(proposal),
+        approvalId: approved ? "successor-approval" : undefined,
+        retainedGatewayDeliveries: [{ approvedByCallId, operator: original }],
+      };
+      f.row.record.approvedByCallId = approved ? "successor-call" : "operator:unapproved-plan";
+      f.readApproval.mockImplementation(async (input) => ({
+        action: "prepare",
+        approved: true,
+        approvalId:
+          input.planDigest === original.planDigest ? original.approvalId! : "successor-approval",
+        callId: input.callId,
+        planDigest: input.planDigest,
+      }));
+      const before = structuredClone(f.row);
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Lost-response replay must observe the same saved proposal sequentially.
+        const planned = await f.dependencies.plan({
+          ...context,
+          action: "prepare",
+          normalActorProgram: proposal.normalActorProgram,
+        });
+        expect(planned).toEqual(proposal);
+        expect(f.row).toEqual(before);
+        expect(f.row.record.operator!.operationRef).toBe(original.operationRef);
+      }
+      const approvalsPerRead = approved ? 2 : 1;
+      expect(f.readApproval).toHaveBeenCalledTimes(approvalsPerRead * 2);
+      expect(f.readCapturedRealmIdentity).not.toHaveBeenCalled();
+      expect(f.unexpectedPort).not.toHaveBeenCalled();
+    },
+  );
+
+  it("accepts ordinary receipt progress under the same approval at the fresh canonical read", async () => {
+    const f = await setup();
+    const later = structuredClone(f.row);
+    const operator = later.record.operator!;
+    operator.receipts.push({
+      effectId: operator.pendingEffectId!,
+      observedAt: "2026-10-20T12:00:00Z",
+      resourceVersion: "new-observation",
+    });
+    delete operator.pendingEffectId;
+    delete operator.pendingEffectAttempt;
+    later.revision += 1;
+    f.read.mockResolvedValueOnce(f.row).mockResolvedValueOnce(later);
+    const planned = await f.dependencies.plan({ ...context, action: "prepare" });
+    expect(planned.gatewayDelivery?.gitSha).toBe(f.configuration.gateway.gitSha);
+    expect(operatorPlanDigest(f.row.record.operator!.plan)).toBe(f.row.record.operator!.planDigest);
+  });
+
+  it.each(["program", "signup"] as const)(
+    "does not hide a changed supplied product %s behind a source continuation",
+    async (input) => {
+      const f = await setup();
+      const ordinary = new Error("controlled ordinary product planning");
+      const selection = vi
+        .spyOn(planningAuthority, "readOwnedOperatorPlanningSelection")
+        .mockRejectedValueOnce(ordinary);
+      const program = structuredClone(f.row.record.operator!.plan.normalActorProgram!);
+      program.actors[0]!.name = "Revised ordinary product name";
+      await expect(
+        f.dependencies.plan({
+          ...context,
+          action: "prepare",
+          ...(input === "program"
+            ? { normalActorProgram: program }
+            : {
+                authSignupPolicy: {
+                  version: 1,
+                  appPath: "/review",
+                  appRoles: ["member"],
+                  eligibility: "public",
+                  membershipRole: "member",
+                  organizationId: "first-org",
+                },
+              }),
+        }),
+      ).rejects.toBe(ordinary);
+      expect(selection).toHaveBeenCalledOnce();
+      expect(f.readApproval).not.toHaveBeenCalled();
+    },
+  );
+
+  it("provides only the trusted configured source without per-effect owner or provider requests", async () => {
+    const f = await setup();
+    expect(await f.dependencies.readGatewayDeliverySource!(context)).toEqual({
+      branch: f.configuration.gateway.branch,
+      gitSha: f.configuration.gateway.gitSha,
+      projectId: f.configuration.gateway.projectId,
+      repoId: f.configuration.gateway.repoId,
+    });
+    expect(f.assertCanonicalOwner).not.toHaveBeenCalled();
+    expect(f.read).not.toHaveBeenCalled();
+    expect(f.readApproval).not.toHaveBeenCalled();
+    expect(f.unexpectedPort).not.toHaveBeenCalled();
+  });
+
+  it.each(["approval", "call", "digest", "action", "denied"] as const)(
+    "retains original %s approval authority",
+    async (mismatch) => {
+      const f = await setup();
+      f.readApproval.mockResolvedValueOnce({
+        action: mismatch === "action" ? "cleanup" : "prepare",
+        approved: mismatch !== "denied",
+        approvalId:
+          mismatch === "approval" ? "foreign-approval" : f.row.record.operator!.approvalId!,
+        callId: mismatch === "call" ? "foreign-call" : f.row.record.approvedByCallId,
+        planDigest: mismatch === "digest" ? "0".repeat(64) : f.row.record.operator!.planDigest,
+      });
+      const before = structuredClone(f.row);
+      await expect(f.dependencies.plan({ ...context, action: "prepare" })).rejects.toMatchObject({
+        code: "authorization_required",
+      });
+      expect(f.row).toEqual(before);
+      expect(f.read).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("preserves owner and journal failures and rejects a changed canonical read", async () => {
+    const owner = await setup();
+    const denied = new HostedOperatorError("authorization_required");
+    owner.assertCanonicalOwner.mockRejectedValueOnce(denied);
+    await expect(owner.dependencies.plan({ ...context, action: "prepare" })).rejects.toBe(denied);
+    expect(owner.readApproval).not.toHaveBeenCalled();
+    const journal = await setup();
+    const unavailable = new Error("controlled journal unavailable");
+    journal.read.mockRejectedValueOnce(unavailable);
+    await expect(journal.dependencies.plan({ ...context, action: "prepare" })).rejects.toBe(
+      unavailable,
+    );
+    const raced = await setup();
+    const later = structuredClone(raced.row);
+    later.record.operator!.pendingEffectId = "unknown-effect";
+    raced.read.mockResolvedValueOnce(raced.row).mockResolvedValueOnce(later);
+    await expect(raced.dependencies.plan({ ...context, action: "prepare" })).rejects.toMatchObject({
+      code: "operation_in_progress",
+    });
+  });
+
+  it.each([
+    "branch",
+    "project",
+    "repository",
+    "live-lease",
+    "unknown-effect",
+    "orphan-attempt",
+    "attempted-gateway",
+  ] as const)("leaves %s states on the existing ordinary planning path", async (state) => {
+    const f = await setup();
+    if (state === "branch") {
+      f.configuration.gateway.branch = "different-branch";
+    }
+    if (state === "project") {
+      f.configuration.gateway.projectId = "different-project";
+    }
+    if (state === "repository") {
+      f.configuration.gateway.repoId = "different-repository";
+    }
+    if (state === "live-lease") {
+      f.row.record.leaseId = "live-lease";
+      f.row.record.leaseExpiresAt = new Date(Date.now() + 60_000).toISOString();
+    }
+    if (state === "unknown-effect") {
+      f.row.record.operator!.pendingEffectId = "unknown-effect";
+    }
+    if (state === "orphan-attempt") {
+      delete f.row.record.operator!.pendingEffectId;
+    }
+    if (state === "attempted-gateway") {
+      f.row.record.operator!.pendingEffectId = "gateway-delivery";
+    }
+    const ordinary = new Error("controlled ordinary planning path");
+    const selection = vi
+      .spyOn(planningAuthority, "readOwnedOperatorPlanningSelection")
+      .mockRejectedValueOnce(ordinary);
+    const before = structuredClone(f.row);
+    await expect(f.dependencies.plan({ ...context, action: "prepare" })).rejects.toBe(ordinary);
+    expect(selection).toHaveBeenCalledOnce();
+    expect(f.readApproval).not.toHaveBeenCalled();
+    expect(f.row).toEqual(before);
+  });
+});
+
 describe("existing populated Auth workflow planning", () => {
   const setup = (mode: "current" | "retained" | "adopted" | "empty") => {
     const f = publicationFixture();

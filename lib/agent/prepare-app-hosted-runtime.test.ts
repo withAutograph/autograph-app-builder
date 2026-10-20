@@ -597,6 +597,58 @@ it("reports actual approval evaluator entry and preserves its denied response", 
   }
 });
 
+describe("settled preparation yielding for ordinary replanning", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+  it("returns the original planned result with the existing planning action and no extra execution", async () => {
+    const result: OperatorPublicResult = {
+      appId: input.appId,
+      authenticatedBehavior: "unassessed",
+      operationRef: input.operationRef,
+      planDigest: input.planDigest,
+      status: "planned",
+    };
+    operator.request.mockResolvedValueOnce(result);
+    const retainSelection = vi.fn<(selection: PreparedRuntimeSelection) => void>();
+    const frozen = structuredClone(input);
+    const prepared = await prepareHostedRuntimeWithOperator(
+      input,
+      ctx,
+      operator,
+      retainSelection,
+      contract,
+    );
+    expect(prepared.identityInput).toBeNull();
+    expect(prepared.result).toMatchObject({
+      ...result,
+      nextAction: {
+        tool: "plan-app-hosted-runtime",
+        approval: "normal-plan-approval",
+        input: {
+          appId: input.appId,
+          branch: input.branch,
+          environment: input.environment,
+          projectId: input.projectId,
+          operation: "prepare",
+        },
+      },
+    });
+    expect(operator.request).toHaveBeenCalledOnce();
+    expect(operator.request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "execute",
+        operationRef: input.operationRef,
+        planDigest: input.planDigest,
+      }),
+      ctx.abortSignal,
+    );
+    expect(operator.authIdentityInput).not.toHaveBeenCalled();
+    expect(retainSelection).not.toHaveBeenCalled();
+    expect(input).toEqual(frozen);
+  });
+});
+
 describe("confirmed Gateway build failure recovery", () => {
   beforeEach(() => {
     vi.clearAllMocks();

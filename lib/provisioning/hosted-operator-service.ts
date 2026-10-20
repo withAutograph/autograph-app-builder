@@ -36,6 +36,13 @@ import {
   projectSettingsDeliveryProvenance,
 } from "./hosted-operator-project-settings-successor";
 import { isInstallerSourceSuccessor } from "./hosted-operator-installer-source-successor";
+import {
+  hasAppGatewaySourceUpdate,
+  isAppGatewaySourceSuccessor,
+  readSavedAppGatewaySourcePlan,
+  readAppGatewaySourcePredecessor,
+} from "./hosted-operator-app-gateway-source-successor";
+import type { AppGatewayDeliverySource } from "./hosted-operator-app-gateway-source-successor";
 import { savedPreviewEnvironmentGitBranch } from "./native-preview-environment-scope";
 import { isDeepStrictEqual } from "node:util";
 import {
@@ -235,6 +242,8 @@ export interface ProtectedHostedOperatorDependencies {
   continuityRequest?: (request: Request, input: ContinuityTransportRequest) => Promise<Response>;
   /** Explicit separate export dispatcher; never enters preparation/cleanup state. */
   exportRequest?: (request: Request, input: TenantExportTransportRequest) => Promise<Response>;
+  /** Trusted deployment-owned desired source; ordinary source changes do not mutate an approved plan. */
+  readGatewayDeliverySource?: (context: HostedOperatorContext) => Promise<AppGatewayDeliverySource>;
   store: HostedRuntimeJournalStore;
   /** Verify caller signature/audience and independently resolve this session's owner and selected project. Never trust body owner IDs. */
   authorize: (
@@ -496,6 +505,69 @@ const handlePlanOperation = async (
       "saved_plan_read",
       async () => await deps.store.read(context),
     );
+    const savedGatewaySource =
+      saved?.record.approvedByCallId === UNAPPROVED_PLAN &&
+      saved.record.operator?.retainedGatewayDeliveries !== undefined
+        ? await deps.readGatewayDeliverySource?.(context)
+        : undefined;
+    const pendingGatewaySource =
+      saved?.record.approvedByCallId === UNAPPROVED_PLAN
+        ? readSavedAppGatewaySourcePlan(saved.record, now(), savedGatewaySource)
+        : undefined;
+    if (saved !== undefined && pendingGatewaySource !== undefined) {
+      const predecessor = readAppGatewaySourcePredecessor(saved.record);
+      const savedOperator = requireOperator(saved.record);
+      if (
+        predecessor === undefined ||
+        !sameOperatorSelection(pendingGatewaySource.selection, input.selection)
+      ) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+      await deps.assertAuthorized({ ...context, plan: pendingGatewaySource, purpose: "planning" });
+      const approval = await deps.readApproval({
+        ...context,
+        action: "prepare",
+        callId: predecessor.approvedByCallId,
+        planDigest: predecessor.operator.planDigest,
+      });
+      if (
+        approval?.approved !== true ||
+        approval.approvalId !== predecessor.operator.approvalId ||
+        approval.callId !== predecessor.approvedByCallId ||
+        approval.planDigest !== predecessor.operator.planDigest ||
+        approval.action !== "prepare"
+      ) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      const current = await deps.store.read(context);
+      await deps.assertAuthorized({ ...context, plan: pendingGatewaySource, purpose: "planning" });
+      const freshPlan = readSavedAppGatewaySourcePlan(current?.record, now(), savedGatewaySource);
+      const freshPrior =
+        current === undefined ? undefined : readAppGatewaySourcePredecessor(current.record);
+      const sameAuthority = [
+        current?.record.approvedByCallId === saved.record.approvedByCallId,
+        current?.record.operator?.operationRef === savedOperator.operationRef,
+        current?.record.operator?.planDigest === savedOperator.planDigest,
+        current?.record.operator?.approvalId === savedOperator.approvalId,
+        isDeepStrictEqual(current?.record.request, saved.record.request),
+        freshPlan !== undefined && operatorPlanDigest(freshPlan) === savedOperator.planDigest,
+        freshPrior?.approvedByCallId === predecessor.approvedByCallId,
+        freshPrior?.operator.operationRef === predecessor.operator.operationRef,
+        freshPrior?.operator.planDigest === predecessor.operator.planDigest,
+        freshPrior?.operator.approvalId === predecessor.operator.approvalId,
+      ].every(Boolean);
+      if (!sameAuthority) {
+        throw new HostedOperatorError("operation_in_progress");
+      }
+      return response({
+        appId,
+        authenticatedBehavior: "unassessed",
+        operationRef: savedOperator.operationRef,
+        plan: pendingGatewaySource,
+        planDigest: savedOperator.planDigest,
+        status: "planned",
+      });
+    }
     const pendingRenewal = await observeOperatorPlanStage(
       context.target.sessionId,
       "saved_plan_classification",
@@ -641,6 +713,7 @@ const handlePlanOperation = async (
   const {
     sharedHostSuccessor,
     installerSuccessor,
+    appGatewaySuccessor,
     settingsSuccessor,
     retentionRenewal,
     readySuccessor,
@@ -651,6 +724,9 @@ const handlePlanOperation = async (
     installerSuccessor:
       successorPrior !== undefined &&
       isInstallerSourceSuccessor(successorPrior.record, plan, now()),
+    appGatewaySuccessor:
+      successorPrior !== undefined &&
+      isAppGatewaySourceSuccessor(successorPrior.record, plan, now()),
     settingsSuccessor:
       successorPrior !== undefined &&
       isProjectSettingsSuccessor(successorPrior.record, plan, now()),
@@ -718,6 +794,7 @@ const handlePlanOperation = async (
   if (
     sharedHostSuccessor ||
     installerSuccessor ||
+    appGatewaySuccessor ||
     settingsSuccessor ||
     retentionRenewal ||
     readySuccessor
@@ -731,6 +808,7 @@ const handlePlanOperation = async (
   const recovered =
     sharedHostSuccessor ||
     installerSuccessor ||
+    appGatewaySuccessor ||
     settingsSuccessor ||
     retentionRenewal ||
     readySuccessor
@@ -805,7 +883,11 @@ const handlePlanOperation = async (
         ...context,
         now,
         store: deps.store,
-        ...(installerSuccessor || settingsSuccessor || retentionRenewal || readySuccessor
+        ...(installerSuccessor ||
+        appGatewaySuccessor ||
+        settingsSuccessor ||
+        retentionRenewal ||
+        readySuccessor
           ? {
               beforeUpdate: async (record: HostedRuntimeJournalRecord) => {
                 await deps.assertAuthorized({ ...context, plan, purpose: "planning" });
@@ -832,6 +914,16 @@ const handlePlanOperation = async (
             record.operator.plan.stage === AUTH_PARTICIPANTS_STAGE &&
             record.accountPreparation !== undefined;
           const gatewaySourceSuccessor = isGatewaySourceSuccessor(record, plan, now());
+          const appGatewaySourceSuccessor =
+            appGatewaySuccessor &&
+            record.operator.operationRef === successorPrior?.record.operator?.operationRef &&
+            record.operator.planDigest === successorPrior?.record.operator?.planDigest &&
+            record.operator.approvalId === successorPrior?.record.operator?.approvalId &&
+            record.approvedByCallId === successorPrior?.record.approvedByCallId &&
+            isAppGatewaySourceSuccessor(record, plan, now());
+          if (appGatewaySuccessor && !appGatewaySourceSuccessor) {
+            throw new HostedOperatorError("operation_in_progress");
+          }
           const sharedHostProtectionSuccessor =
             sharedHostSuccessor &&
             record.operator.operationRef === successorPrior?.record.operator?.operationRef &&
@@ -889,6 +981,7 @@ const handlePlanOperation = async (
           }
           if (
             !gatewaySourceSuccessor &&
+            !appGatewaySourceSuccessor &&
             !sharedHostProtectionSuccessor &&
             !installerSourceSuccessor &&
             !projectSettingsSuccessor &&
@@ -954,7 +1047,11 @@ const handlePlanOperation = async (
           nextOperator.retainedRenewalOperations = record.operator.retainedRenewalOperations;
           nextOperator.retainedReadyDeliveryOperations =
             record.operator.retainedReadyDeliveryOperations;
-          if (gatewaySourceSuccessor || sharedHostProtectionSuccessor) {
+          if (
+            gatewaySourceSuccessor ||
+            appGatewaySourceSuccessor ||
+            sharedHostProtectionSuccessor
+          ) {
             const {
               retainedGatewayDeliveries,
               retainedInstallerOperations,
@@ -972,6 +1069,17 @@ const handlePlanOperation = async (
               { approvedByCallId: record.approvedByCallId, operator: priorOperator },
             ];
             nextOperator.receipts = record.operator.receipts;
+          }
+          if (appGatewaySourceSuccessor) {
+            // Only settled receipt boundaries reach this branch. The original unknown worker
+            // context was reconciled under its own approval before any plan digest changed.
+            nextOperator.operationRef = record.operator.operationRef;
+            nextOperator.fenceGeneration = record.operator.fenceGeneration;
+            nextOperator.workerCheckpoints = record.operator.workerCheckpoints;
+            nextOperator.deliveredDeploymentId = record.operator.deliveredDeploymentId;
+            // Completed bootstrap candidates remain in retained Auth and approved history;
+            // they never attest the new source's delivery.
+            nextOperator.gatewayDeliveryCandidates = [];
           }
           if (installerSourceSuccessor) {
             const {
@@ -1093,10 +1201,15 @@ const handlePlanOperation = async (
               nextOperator,
             ),
           );
-          if (!retainedRenewalSuccessor && !readyDeliverySuccessor) {
+          if (!appGatewaySourceSuccessor && !retainedRenewalSuccessor && !readyDeliverySuccessor) {
             nextOperator.gatewayDeliveryCandidates = record.operator.gatewayDeliveryCandidates;
           }
-          if (!gatewaySourceSuccessor && !retainedRenewalSuccessor && !readyDeliverySuccessor) {
+          if (
+            !gatewaySourceSuccessor &&
+            !appGatewaySourceSuccessor &&
+            !retainedRenewalSuccessor &&
+            !readyDeliverySuccessor
+          ) {
             nextOperator.deliveredGatewayDeploymentId =
               record.operator.deliveredGatewayDeploymentId;
           }
@@ -1139,6 +1252,7 @@ const handlePlanOperation = async (
           delete next.proof;
           if (
             gatewaySourceSuccessor ||
+            appGatewaySourceSuccessor ||
             sharedHostProtectionSuccessor ||
             installerSourceSuccessor ||
             projectSettingsSuccessor ||
@@ -1912,6 +2026,28 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
             };
             for (const effect of plan.effects) {
               await assertCurrent();
+              if (
+                plan.action === "prepare" &&
+                plan.stage === "app" &&
+                requireOperator(record).pendingEffectId === undefined &&
+                requireOperator(record).pendingEffectAttempt === undefined &&
+                deps.readGatewayDeliverySource !== undefined
+              ) {
+                const desiredSource = await deps.readGatewayDeliverySource(context);
+                await assertCurrent();
+                if (hasAppGatewaySourceUpdate(record, desiredSource)) {
+                  // Keep the original operator/approval until settlement and lease release.
+                  // The next ordinary planning call proposes the separately approved delivery.
+                  return response({
+                    appId,
+                    authenticatedBehavior: "unassessed",
+                    operationRef,
+                    plan,
+                    planDigest,
+                    status: "planned",
+                  });
+                }
+              }
               const priorReceipt = requireOperator(record).receipts.find(
                 (receipt) => receipt.effectId === effect.id,
               );

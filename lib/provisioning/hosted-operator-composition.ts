@@ -1,4 +1,9 @@
 import {
+  readAppGatewaySourceContinuationPlan,
+  readAppGatewaySourcePredecessor,
+} from "./hosted-operator-app-gateway-source-successor";
+import type { AppGatewayDeliverySource } from "./hosted-operator-app-gateway-source-successor";
+import {
   readExistingAuthBootstrapPrerequisite,
   configuredBootstrapGatewayBindings,
 } from "./hosted-operator-existing-auth-bootstrap";
@@ -35,6 +40,7 @@ import { createHostedOperatorRealmHttpTransport } from "./hosted-operator-realm-
 import {
   HostedOperatorError,
   hostedOperatorPlanSchema,
+  hostedOperatorAuthSignupPolicyInputSchema,
   operatorReceiptSchema,
   restrictedOperatorEnvironment,
   operatorSelectionSchema,
@@ -530,6 +536,111 @@ const assertParticipantOrganizationProposal = (
     throw new HostedOperatorError(RESOURCE_MISMATCH);
   }
 };
+const gatewayApprovalIdentity = (record: HostedRuntimeJournalRecord | undefined) => {
+  const predecessor = record === undefined ? undefined : readAppGatewaySourcePredecessor(record);
+  return {
+    request: record?.request,
+    approvedByCallId: record?.approvedByCallId,
+    operationRef: record?.operator?.operationRef,
+    planDigest: record?.operator?.planDigest,
+    approvalId: record?.operator?.approvalId,
+    predecessor:
+      predecessor === undefined
+        ? undefined
+        : {
+            approvedByCallId: predecessor.approvedByCallId,
+            operationRef: predecessor.operator.operationRef,
+            planDigest: predecessor.operator.planDigest,
+            approvalId: predecessor.operator.approvalId,
+          },
+  };
+};
+type AppGatewaySourcePlanningContext = HostedOperatorContext & {
+  normalActorProgram?: NormalActorProgram;
+  authSignupPolicy?: HostedOperatorAuthSignupPolicyInput;
+};
+const matchesGatewayContinuationProductInput = (
+  context: AppGatewaySourcePlanningContext,
+  retainedPlan: HostedOperatorPlan | undefined,
+) =>
+  [
+    context.normalActorProgram === undefined ||
+      isDeepStrictEqual(context.normalActorProgram, retainedPlan?.normalActorProgram),
+    context.authSignupPolicy === undefined ||
+      isDeepStrictEqual(
+        context.authSignupPolicy,
+        retainedPlan?.authSignupPolicy === undefined
+          ? undefined
+          : hostedOperatorAuthSignupPolicyInputSchema.strip().parse(retainedPlan.authSignupPolicy),
+      ),
+  ].every(Boolean);
+const readAppGatewaySourcePlanningContinuation = async (
+  context: AppGatewaySourcePlanningContext,
+  current: Awaited<ReturnType<ControlPlane["store"]["read"]>>,
+  gatewaySource: AppGatewayDeliverySource,
+  controlPlane: Pick<ControlPlane, "assertCanonicalOwner" | "readApproval" | "store">,
+): Promise<HostedOperatorPlan | undefined> => {
+  const requestedProductMatches = matchesGatewayContinuationProductInput(
+    context,
+    current?.record.operator?.plan,
+  );
+  const continuation = requestedProductMatches
+    ? readAppGatewaySourceContinuationPlan(current?.record, gatewaySource, Date.now())
+    : undefined;
+  if (continuation === undefined) {
+    return undefined;
+  }
+  const operator = current?.record.operator;
+  if (operator === undefined || current === undefined) {
+    throw new HostedOperatorError(OPERATION_IN_PROGRESS);
+  }
+  await controlPlane.assertCanonicalOwner(context);
+  const predecessor = readAppGatewaySourcePredecessor(current.record);
+  const approvals = [
+    ...(predecessor === undefined ? [] : [predecessor]),
+    ...(predecessor === undefined || operator.approvalId !== undefined
+      ? [{ approvedByCallId: current.record.approvedByCallId, operator }]
+      : []),
+  ];
+  await Promise.all(
+    approvals.map(async (original) => {
+      const approval = await controlPlane.readApproval({
+        ...context,
+        action: "prepare",
+        callId: original.approvedByCallId,
+        planDigest: original.operator.planDigest,
+      });
+      if (
+        [
+          // oxlint-disable-next-line typescript/no-unnecessary-boolean-literal-compare -- The authority port must supply an explicit positive approval receipt.
+          approval?.approved !== true,
+          approval?.approvalId !== original.operator.approvalId,
+          approval?.callId !== original.approvedByCallId,
+          approval?.planDigest !== original.operator.planDigest,
+          approval?.action !== "prepare",
+        ].some(Boolean)
+      ) {
+        throw new HostedOperatorError("authorization_required");
+      }
+    }),
+  );
+  const latest = await controlPlane.store.read(context);
+  if (
+    !isDeepStrictEqual(
+      gatewayApprovalIdentity(latest?.record),
+      gatewayApprovalIdentity(current.record),
+    )
+  ) {
+    throw new HostedOperatorError(OPERATION_IN_PROGRESS);
+  }
+  const fresh = readAppGatewaySourceContinuationPlan(latest?.record, gatewaySource, Date.now());
+  if (fresh === undefined) {
+    throw new HostedOperatorError(OPERATION_IN_PROGRESS);
+  }
+  await controlPlane.assertCanonicalOwner(context);
+  return structuredClone(fresh);
+};
+
 const createCompletedParticipantBootstrapHandoff = (
   plan: HostedOperatorPlan,
   record: HostedRuntimeJournalRecord | undefined,
@@ -1148,9 +1259,20 @@ export const composeHostedOperatorDependencies = (
         stage: "app",
       });
     }
-    // Repair only a frozen installer or native app build profile before fresh composition.
-    // Resource, source, release, access and retention intent stay unchanged.
-    const installerSuccessor = await planRetainedSuccessor();
+    const gatewayContinuation = await readAppGatewaySourcePlanningContinuation(
+      context,
+      current,
+      {
+        branch: configuration.gateway.branch,
+        gitSha: configuration.gateway.gitSha,
+        projectId: configuration.gateway.projectId,
+        repoId: configuration.gateway.repoId,
+      },
+      controlPlane,
+    );
+    // Complete a source-only continuation or repair the frozen installer/build
+    // profile before composing new resource, release, access or retention intent.
+    const installerSuccessor = gatewayContinuation ?? (await planRetainedSuccessor());
     if (installerSuccessor !== undefined) {
       return installerSuccessor;
     }
@@ -2335,6 +2457,13 @@ export const composeHostedOperatorDependencies = (
     normalActorRuntimeBindings: async (input) =>
       await controlPlane.readNormalActorRuntimeBindings(input),
     executeEffect,
+    readGatewayDeliverySource: () =>
+      Promise.resolve({
+        branch: configuration.gateway.branch,
+        gitSha: configuration.gateway.gitSha,
+        projectId: configuration.gateway.projectId,
+        repoId: configuration.gateway.repoId,
+      }),
     readAppProjectSettings: (context) =>
       Promise.resolve(selectedApplication(configuration, context).projectSettings),
     neonAuthorization: createHostedOperatorNeonAuthorization({
