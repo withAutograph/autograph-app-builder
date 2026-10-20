@@ -8,7 +8,10 @@ import {
   operatorPlanDigest,
 } from "./hosted-operator-contract";
 import type { HostedOperatorPlan, RetainedOperatorAuth } from "./hosted-operator-contract";
-import { retainedOperatorAuthFromJournal } from "./hosted-runtime-journal";
+import {
+  retainedOperatorAuthFromJournal,
+  retainedParticipantGatewaySchema,
+} from "./hosted-runtime-journal";
 import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
 import { hostedOperatorRealmLinkConfigSha256 } from "./hosted-operator-realm-link-config";
 import { normalActorProgramDigest } from "./hosted-operator-normal-actor-program";
@@ -20,6 +23,7 @@ import type {
 export const completedParticipantBootstrapSchema = z.strictObject({
   auth: retainedOperatorAuthSchema,
   candidate: operatorDeploymentCandidateSchema,
+  gateway: retainedOperatorAuthSchema.optional(),
 });
 export type CompletedParticipantBootstrap = z.infer<typeof completedParticipantBootstrapSchema>;
 
@@ -148,11 +152,123 @@ const matchesAppParticipantBootstrap = (
   ].some(Boolean);
 };
 
+const completedGatewayEffects = (completion: RetainedOperatorAuth) =>
+  ["gateway-bindings", "gateway-delivery"].every((kind) =>
+    completion.plan.effects.some(
+      (effect) =>
+        effect.kind === kind &&
+        completion.receipts.some((receipt) => receipt.effectId === effect.id),
+    ),
+  );
+
+const allowsBootstrapState = (record: HostedRuntimeJournalRecord, planning: boolean) => {
+  const pending = [record.status === "pending", record.step === "reserved"].every(Boolean);
+  const settled = [
+    planning,
+    record.operator?.plan.stage === "app",
+    record.status === "prepared",
+    record.step === "bound",
+  ].every(Boolean);
+  return pending || settled;
+};
+
+const deliveredGatewayCandidate = (operator: NonNullable<HostedRuntimeJournalRecord["operator"]>) =>
+  operator.gatewayDeliveryCandidates?.find((value) =>
+    [
+      value.deploymentId === operator.deliveredGatewayDeploymentId,
+      value.readyState === "READY",
+    ].every(Boolean),
+  );
+
+type ParticipantGateway = NonNullable<HostedRuntimeJournalRecord["retainedParticipantGateway"]>;
+
+const inspectPlanningGateway = (
+  desired: HostedOperatorPlan,
+  record: HostedRuntimeJournalRecord,
+): ParticipantGateway | undefined => {
+  const operator = record.operator;
+  if (
+    operator === undefined ||
+    desired.gatewayDelivery === undefined ||
+    desired.gatewayBindings === undefined ||
+    record.privateState === undefined
+  ) {
+    return undefined;
+  }
+  const completed = retainedOperatorAuthFromJournal(record);
+  const currentCandidate = operator.gatewayDeliveryCandidates?.find(
+    (value) =>
+      value.deploymentId === operator.deliveredGatewayDeploymentId && value.readyState === "READY",
+  );
+  const current =
+    completed?.plan.stage === "app" && currentCandidate !== undefined
+      ? { completion: completed, candidate: currentCandidate }
+      : undefined;
+  const parsedRetained = retainedParticipantGatewaySchema.safeParse(
+    record.retainedParticipantGateway,
+  );
+  const retained = parsedRetained.success ? parsedRetained.data : undefined;
+  // A settled record must prove its current completion; retained snapshots belong only to a later reservation.
+  const candidates = record.status === "prepared" ? [current] : [retained];
+  const desiredValue = hostedOperatorRealmLinkConfigSha256(desired);
+  const binding = operator.gatewayEnvironment?.find((row) =>
+    [
+      row.key === "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
+      row.projectId === desired.gatewayDelivery?.projectId,
+      row.branch === desired.gatewayDelivery?.branch,
+      row.pendingOperationRef === undefined,
+      row.pendingValueSha256 === undefined,
+      row.valueSha256 === desiredValue,
+    ].every(Boolean),
+  );
+  return candidates.find((value) => {
+    if (
+      value === undefined ||
+      value.completion.plan.gatewayBindings === undefined ||
+      value.completion.plan.gatewayDelivery === undefined ||
+      binding === undefined
+    ) {
+      return false;
+    }
+    const { completion, candidate } = value;
+    return [
+      completion.plan.stage === "app",
+      completion.plan.selection.appId === desired.selection.appId,
+      completion.plan.selection.sessionId === desired.selection.sessionId,
+      completion.plan.selection.environment === desired.selection.environment,
+      sameAuth(desired, completion),
+      isDeepStrictEqual(completion.plan.gatewayDelivery, desired.gatewayDelivery),
+      hostedOperatorRealmLinkConfigSha256(completion.plan) === desiredValue,
+      completion.gatewayEnvironment?.some((row) => isDeepStrictEqual(row, binding)) === true,
+      candidate.deploymentId === operator.deliveredGatewayDeploymentId,
+      candidate.readyState === "READY",
+      candidate.operationRef === completion.operationRef,
+      candidate.projectId === desired.gatewayDelivery?.projectId,
+      candidate.branch === desired.gatewayDelivery?.branch,
+      candidate.repoId === desired.gatewayDelivery?.repoId,
+      operator.gatewayDeliveryCandidates?.some((row) => isDeepStrictEqual(row, candidate)) === true,
+      completedGatewayEffects(completion),
+    ].every(Boolean);
+  });
+};
+
 /** Structural handoff evidence; original enrollment and completed Auth approvals remain live reads. */
-export const inspectCompletedParticipantBootstrap = (
+const readBootstrapContext = (
   desired: HostedOperatorPlan,
   record: HostedRuntimeJournalRecord | undefined,
-): CompletedParticipantBootstrap | undefined => {
+  planning: boolean,
+):
+  | {
+      record: HostedRuntimeJournalRecord;
+      operator: NonNullable<HostedRuntimeJournalRecord["operator"]>;
+      preparation: NonNullable<HostedRuntimeJournalRecord["accountPreparation"]>;
+      auth: RetainedOperatorAuth;
+      program: NonNullable<HostedOperatorPlan["normalActorProgram"]>;
+      currentProgram: NonNullable<HostedOperatorPlan["normalActorProgram"]>;
+      account: HostedOperatorPlan;
+      appPlanning: boolean;
+    }
+  | undefined => {
   const operator = record?.operator;
   const preparation = record?.accountPreparation;
   if (
@@ -162,8 +278,7 @@ export const inspectCompletedParticipantBootstrap = (
     [
       record.leaseId !== undefined,
       record.leaseExpiresAt !== undefined,
-      record.status !== "pending",
-      record.step !== "reserved",
+      !allowsBootstrapState(record, planning),
       operator.plan.stage !== "auth-bootstrap" && operator.plan.stage !== "app",
     ].some(Boolean)
   ) {
@@ -179,8 +294,26 @@ export const inspectCompletedParticipantBootstrap = (
   if (auth === undefined || program === undefined || currentProgram === undefined) {
     return undefined;
   }
+  return { record, operator, preparation, auth, program, currentProgram, account, appPlanning };
+};
+
+const inspectParticipantBootstrap = (
+  desired: HostedOperatorPlan,
+  input: HostedRuntimeJournalRecord | undefined,
+  planning: boolean,
+): CompletedParticipantBootstrap | undefined => {
+  const context = readBootstrapContext(desired, input, planning);
+  if (context === undefined) {
+    return undefined;
+  }
+  const { record, operator, preparation, auth, program, currentProgram, account, appPlanning } =
+    context;
   // App planning retains the original enrollment and completed Auth, not unfinished app receipts.
   if (appPlanning && !matchesAppParticipantBootstrap(operator, preparation, auth)) {
+    return undefined;
+  }
+  const gateway = planning && appPlanning ? inspectPlanningGateway(desired, record) : undefined;
+  if (planning && appPlanning && record.status === "prepared" && gateway === undefined) {
     return undefined;
   }
   const sameScope = [
@@ -196,15 +329,56 @@ export const inspectCompletedParticipantBootstrap = (
     isDeepStrictEqual(operator.plan.appDatabase, desired.appDatabase),
 
     sameAuth(desired, auth),
-    inspectParticipantBootstrapPreparation(desired, record).gatewayPrepared,
+    gateway !== undefined ||
+      inspectParticipantBootstrapPreparation(desired, record).gatewayPrepared,
   ].every(Boolean);
-  const candidate = operator.gatewayDeliveryCandidates?.find(
-    (value) =>
-      value.deploymentId === operator.deliveredGatewayDeploymentId && value.readyState === "READY",
-  );
+  const candidate = gateway?.candidate ?? deliveredGatewayCandidate(operator);
   return sameScope && candidate !== undefined
-    ? completedParticipantBootstrapSchema.parse({ auth, candidate })
+    ? completedParticipantBootstrapSchema.parse({
+        auth,
+        candidate,
+        ...(gateway === undefined ? {} : { gateway: gateway.completion }),
+      })
     : undefined;
+};
+
+/** Preserve the original pending/reserved handoff contract for existing consumers. */
+export const inspectCompletedParticipantBootstrap = (
+  desired: HostedOperatorPlan,
+  record: HostedRuntimeJournalRecord | undefined,
+): CompletedParticipantBootstrap | undefined => inspectParticipantBootstrap(desired, record, false);
+
+/** Planning may reuse settled APP delivery while retaining the original Auth authority. */
+export const inspectPlanningParticipantBootstrap = (
+  desired: HostedOperatorPlan,
+  record: HostedRuntimeJournalRecord | undefined,
+): CompletedParticipantBootstrap | undefined => inspectParticipantBootstrap(desired, record, true);
+
+/** Include separately retained Gateway completion only in the explicit planning handoff. */
+export const inspectPlanningParticipantBootstrapPreparation = (
+  desired: HostedOperatorPlan,
+  record: HostedRuntimeJournalRecord | undefined,
+): ParticipantBootstrapPreparation => {
+  const completed = inspectPlanningParticipantBootstrap(desired, record);
+  return completed?.gateway === undefined
+    ? inspectParticipantBootstrapPreparation(desired, record)
+    : { auth: completed.auth, gatewayPrepared: true };
+};
+
+/** Capture only a complete current APP Gateway before a new plan replaces its operator snapshot. */
+export const retainCompletedParticipantGateway = (
+  record: HostedRuntimeJournalRecord,
+): HostedRuntimeJournalRecord => {
+  if (record.status !== "prepared" || record.step !== "bound" || record.operator === undefined) {
+    return record;
+  }
+  const selected = inspectPlanningParticipantBootstrap(record.operator.plan, record);
+  return selected?.gateway === undefined
+    ? record
+    : {
+        ...record,
+        retainedParticipantGateway: { completion: selected.gateway, candidate: selected.candidate },
+      };
 };
 
 export const assertCompletedParticipantBootstrapApproval = async (
@@ -212,22 +386,29 @@ export const assertCompletedParticipantBootstrapApproval = async (
   bootstrap: CompletedParticipantBootstrap,
   readApproval: ProtectedHostedOperatorDependencies["readApproval"],
 ) => {
-  const { auth } = bootstrap;
-  const approval = await readApproval({
-    ...context,
-    action: "prepare",
-    callId: auth.approvedByCallId,
-    planDigest: auth.planDigest,
-  });
-  if (
-    [
-      approval?.approved !== true,
-      approval?.approvalId !== auth.approvalId,
-      approval?.callId !== auth.approvedByCallId,
-      approval?.planDigest !== auth.planDigest,
-      approval?.action !== "prepare",
-    ].some(Boolean)
-  ) {
-    throw new HostedOperatorError("authorization_required");
-  }
+  const authorities = [
+    bootstrap.auth,
+    ...(bootstrap.gateway === undefined ? [] : [bootstrap.gateway]),
+  ];
+  await Promise.all(
+    authorities.map(async (auth) => {
+      const approval = await readApproval({
+        ...context,
+        action: "prepare",
+        callId: auth.approvedByCallId,
+        planDigest: auth.planDigest,
+      });
+      if (
+        [
+          approval?.approved !== true,
+          approval?.approvalId !== auth.approvalId,
+          approval?.callId !== auth.approvedByCallId,
+          approval?.planDigest !== auth.planDigest,
+          approval?.action !== "prepare",
+        ].some(Boolean)
+      ) {
+        throw new HostedOperatorError("authorization_required");
+      }
+    }),
+  );
 };

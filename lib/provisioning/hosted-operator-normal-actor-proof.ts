@@ -1,9 +1,5 @@
 import { createHash } from "node:crypto";
-import { isDeepStrictEqual } from "node:util";
-import {
-  completedParticipantBootstrapSchema,
-  inspectCompletedParticipantBootstrap,
-} from "./hosted-operator-participant-bootstrap";
+import { completedParticipantBootstrapSchema } from "./hosted-operator-participant-bootstrap";
 import type { CompletedParticipantBootstrap } from "./hosted-operator-participant-bootstrap";
 /* oxlint-disable eslint/no-await-in-loop -- Bounded response reading cancels immediately at the byte limit. */
 import { Cookie, CookieJar } from "tough-cookie";
@@ -360,21 +356,13 @@ export const createHostedOperatorNormalActorProofCollector = (
       observe({ stage: "realm_binding" });
       const binding = await deps.resolveRealmBinding({ context: input, preparation });
       if (binding.bootstrap !== undefined) {
-        const bootstrap = completedParticipantBootstrapSchema.parse(binding.bootstrap);
+        completedParticipantBootstrapSchema.parse(binding.bootstrap);
         assertBootstrapCurrent = binding.assertBootstrapCurrent;
         if (assertBootstrapCurrent === undefined) {
           throw mismatch();
         }
-        await assertBootstrapCurrent();
-        const row = await deps.journalPorts.store.read(input);
-        if (
-          !isDeepStrictEqual(
-            inspectCompletedParticipantBootstrap(bootstrap.auth.plan, row?.record),
-            bootstrap,
-          )
-        ) {
-          throw mismatch();
-        }
+        // The supplied guard rereads the actual desired Gateway and both original Auth/current APP approvals.
+        // Reinspecting with the original Auth plan would incorrectly require its historical Gateway source.
         await assertBootstrapCurrent();
       }
       assertRealmBinding(input, preparation, binding);

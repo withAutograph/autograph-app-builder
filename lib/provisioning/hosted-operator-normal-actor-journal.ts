@@ -83,6 +83,7 @@ export const normalActorOrganizationProofSchema = z.strictObject({
     .strictObject({
       auth: retainedOperatorAuthSchema,
       candidate: operatorDeploymentCandidateSchema,
+      gateway: retainedOperatorAuthSchema.optional(),
     })
     .optional(),
   transportSource:
@@ -546,7 +547,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
           const selected =
             row.record.operator === undefined
               ? undefined
-              : bootstrapInspector?.inspectCompletedParticipantBootstrap(
+              : bootstrapInspector?.inspectPlanningParticipantBootstrap(
                   row.record.operator.plan,
                   row.record,
                 );

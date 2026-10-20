@@ -8,6 +8,11 @@ import type { PrivateHostedApprovalReceipt } from "../eve/private-hosted-approva
 import { publicApprovalDescription } from "../agent/approval-receipt";
 import { createHash } from "node:crypto";
 import { hostedOperatorRealmLinkConfigSha256 } from "./hosted-operator-realm-link-config";
+import {
+  inspectParticipantBootstrapPreparation,
+  inspectPlanningParticipantBootstrap,
+} from "./hosted-operator-participant-bootstrap";
+import { configuredBootstrapGatewayBindings } from "./hosted-operator-existing-auth-bootstrap";
 import { createProtectedHostedOperatorHandler } from "./hosted-operator-service";
 import type {
   ProtectedHostedOperatorDependencies,
@@ -1773,8 +1778,262 @@ describe("existing populated Auth workflow planning", () => {
         appDatabase: { migrationUrl: "private-app", runtimeUrl: "private-app-runtime" },
       };
     });
-    return { ...f, retained, snapshot, readSnapshot, readApproval, assertAuthorized };
+    return { ...f, retained, snapshot, readSnapshot, readApproval, assertAuthorized, participant };
   };
+
+  const settledAppPlanningFixture = async () => {
+    const f = await retainedAuthReadinessFixture();
+    const record = f.row.record;
+    const operator = record.operator!;
+    f.configuration.applications.actual!.repoId = "actual-repository-id";
+    f.configuration.applications.actual!.gitSha = "c".repeat(40);
+    vi.mocked(planningAuthority.readOwnedOperatorPlanningSelection).mockResolvedValue({
+      currentSpec: { appSpecDigest: "new-spec" },
+      selection: {
+        artifactRef: "release-artifact",
+        releaseId: "release",
+        manifestSha256: "b".repeat(64),
+        publishedSource: {
+          repositoryId: "actual-repository-id",
+          branch: context.target.branch,
+          gitSha: "c".repeat(40),
+          gitTree: "a".repeat(40),
+          changeSetDigest: "b".repeat(64),
+          reviewDigest: "c".repeat(64),
+        },
+      },
+    } as Awaited<ReturnType<typeof planningAuthority.readOwnedOperatorPlanningSelection>>);
+    const originalAuth = record.retainedAuth!;
+    originalAuth.plan.gatewayDelivery!.gitSha = "a".repeat(40);
+    originalAuth.planDigest = operatorPlanDigest(originalAuth.plan);
+    operator.plan.gatewayDelivery!.gitSha = f.configuration.gateway.gitSha;
+    operator.plan.neon.connectionRef = f.configuration.nativeNeon.configuration.connector;
+    // The prepared APP plan and provider row describe the same current realm configuration.
+    operator.plan.gatewayBindings = configuredBootstrapGatewayBindings(f.configuration);
+    operator.planDigest = operatorPlanDigest(operator.plan);
+    operator.receipts = operator.plan.effects.map((effect) => ({
+      effectId: effect.id,
+      observedAt: "2026-10-15T12:00:00Z",
+      resourceVersion: "settled-app-readback",
+      ...(["access", "revoke"].includes(effect.kind)
+        ? { fenceGeneration: operator.fenceGeneration }
+        : {}),
+    }));
+    operator.gatewayEnvironment![0].valueSha256 = hostedOperatorRealmLinkConfigSha256(
+      operator.plan,
+    );
+    const candidate = operator.gatewayDeliveryCandidates![0]!;
+    candidate.operationRef = operator.operationRef;
+    candidate.deploymentId = "settled-current-gateway";
+    operator.deliveredGatewayDeploymentId = candidate.deploymentId;
+    record.accountPreparation = f.participant.preparation;
+    record.status = "prepared";
+    record.step = "bound";
+    record.environmentBound = true;
+    record.proof = {
+      actors: 1,
+      tenants: 2,
+      authenticatedBehavior: "unassessed",
+      artifactHash: "a".repeat(64),
+      manifestSha256: operator.plan.release.sha256,
+      releaseId: operator.plan.release.id,
+    };
+    const readApproval = vi.fn<ProtectedHostedOperatorDependencies["readApproval"]>(
+      async (input) => {
+        const auth =
+          input.planDigest === originalAuth.planDigest
+            ? originalAuth
+            : {
+                approvalId: operator.approvalId!,
+                approvedByCallId: record.approvedByCallId,
+                planDigest: operator.planDigest,
+              };
+        return {
+          action: "prepare",
+          approved: true,
+          approvalId: auth.approvalId,
+          callId: auth.approvedByCallId,
+          planDigest: auth.planDigest,
+        };
+      },
+    );
+    const assertCanonicalOwner = vi.fn(async () => {});
+    f.readResourceBindings.mockImplementation(async (input) => {
+      const authorized = requireFinalResourceBindingPhase(
+        selectAuthPlanningResourceBindingRow(f.row, input.plan),
+        input,
+      );
+      const approved = await readApproval({
+        ...context,
+        action: "prepare",
+        callId: authorized.record.approvedByCallId,
+        planDigest: authorized.record.operator!.planDigest,
+      });
+      if (
+        approved?.approvalId !== authorized.record.operator!.approvalId ||
+        approved?.approved !== true
+      ) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      return {
+        authDatabase: {
+          migrationUrl: f.migrationUrl,
+          runtimeUrl:
+            "postgresql://auth_runtime:synthetic-password@ep-fixture.neon.tech/auth?sslmode=verify-full",
+        },
+        appDatabase: { migrationUrl: "private-app", runtimeUrl: "private-app-runtime" },
+      };
+    });
+    f.participant.ports.readNormalActorOrganizationProofs.mockClear();
+    Object.assign(f.controlPlane, {
+      readApproval,
+      assertCanonicalOwner,
+      readNormalActorPreparation: f.participant.ports.readNormalActorPreparation,
+      readNormalActorOrganizationProofs: f.participant.ports.readNormalActorOrganizationProofs,
+    });
+    return {
+      ...f,
+      originalAuth,
+      appApprovalId: operator.approvalId!,
+      appPlanDigest: operator.planDigest,
+      readApproval,
+      assertCanonicalOwner,
+      readOrganizations: f.participant.ports.readNormalActorOrganizationProofs,
+    };
+  };
+
+  it("replans a settled app using original Auth and independently approved current Gateway", async () => {
+    const f = await settledAppPlanningFixture();
+    const before = structuredClone(f.row.record);
+    expect(retainedOperatorAuthFromJournal(f.row.record)).toBeDefined();
+    expect(
+      inspectParticipantBootstrapPreparation(f.row.record.operator!.plan, f.row.record)
+        .gatewayPrepared,
+    ).toBe(true);
+    expect(
+      inspectPlanningParticipantBootstrap(f.row.record.operator!.plan, f.row.record),
+    ).toBeDefined();
+    const plan = await f.dependencies.plan({ ...context, action: "prepare" });
+    expect(plan.stage).toBe("app");
+    expect(plan.gatewayDelivery?.gitSha).toBe(f.configuration.gateway.gitSha);
+    expect(plan.normalActorPreparation?.accountApprovalId).toBe(
+      f.participant.preparation.accountApprovalId,
+    );
+    for (const planDigest of [f.originalAuth.planDigest, f.appPlanDigest]) {
+      expect(f.readApproval).toHaveBeenCalledWith(expect.objectContaining({ planDigest }));
+    }
+    expect(f.readOrganizations).toHaveBeenCalled();
+    expect(f.row.record).toEqual(before);
+  });
+
+  it("persists both settled authorities through the actual plan reservation and next planning read", async () => {
+    const f = await settledAppPlanningFixture();
+    const original = structuredClone(f.row.record);
+    const store: ProtectedHostedOperatorDependencies["store"] = {
+      read: async () => structuredClone(f.row),
+      reserve: async () => structuredClone(f.row),
+      compareAndSet: async (input) => {
+        if (input.expectedRevision !== f.row.revision) {
+          return undefined;
+        }
+        f.row.record = hostedRuntimeJournalRecordSchema.parse(input.record);
+        f.row.revision += 1;
+        return structuredClone(f.row);
+      },
+      reserveFenceGeneration: async () => {
+        throw new Error("Planning must not acquire an execution fence");
+      },
+    };
+    Object.assign(f.controlPlane.store, store);
+    const executeEffect = vi.fn<ProtectedHostedOperatorDependencies["executeEffect"]>(async () => {
+      throw new Error("Planning must not execute an outward effect");
+    });
+    const handler = createProtectedHostedOperatorHandler({
+      ...f.dependencies,
+      store,
+      authorize: async () => context,
+      assertAuthorized: async () => {
+        await f.assertCanonicalOwner();
+      },
+      readApproval: f.readApproval,
+      withResourceLease: async () => {
+        throw new Error("Planning must not lease an outward effect");
+      },
+      executeEffect,
+    });
+    const response = await handler(
+      new Request("https://operator.example/v1/runtime", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "plan",
+          operation: "prepare",
+          selection: original.operator!.plan.selection,
+        }),
+      }),
+    );
+    const result = operatorPublicResultSchema.parse(await response.json());
+    expect(result.status).toBe("planned");
+    expect(f.row.record.status).toBe("pending");
+    expect(f.row.record.step).toBe("reserved");
+    expect(f.row.record.operator?.approvalId).toBeUndefined();
+    expect(f.row.record.retainedAuth?.approvalId).toBe(original.retainedAuth?.approvalId);
+    expect(f.row.record.retainedParticipantGateway?.completion.approvalId).toBe(
+      original.operator?.approvalId,
+    );
+    expect(f.row.record.retainedParticipantGateway?.candidate.deploymentId).toBe(
+      original.operator?.deliveredGatewayDeploymentId,
+    );
+    expect(f.row.record.accountPreparation).toEqual(original.accountPreparation);
+    expect(f.row.record.privateState).toEqual(original.privateState);
+    expect(executeEffect).not.toHaveBeenCalled();
+    const replay = await f.dependencies.plan({ ...context, action: "prepare" });
+    expect(replay.stage).toBe("app");
+    expect(replay.gatewayDelivery?.gitSha).toBe(f.configuration.gateway.gitSha);
+    expect(f.row.record.retainedParticipantGateway?.completion.planDigest).toBe(f.appPlanDigest);
+  });
+
+  it.each(["auth", "app"] as const)(
+    "rejects settled app planning without its %s approval",
+    async (missing) => {
+      const f = await settledAppPlanningFixture();
+      const read = f.readApproval.getMockImplementation()!;
+      f.readApproval.mockImplementation(async (input) =>
+        input.planDigest === (missing === "auth" ? f.originalAuth.planDigest : f.appPlanDigest)
+          ? null
+          : await read(input),
+      );
+      await expect(f.dependencies.plan({ ...context, action: "prepare" })).rejects.toMatchObject({
+        code: missing === "auth" ? "operator_unavailable" : "authorization_required",
+      });
+      expect(f.readApproval).toHaveBeenCalledWith(
+        expect.objectContaining({
+          planDigest: missing === "auth" ? f.originalAuth.planDigest : f.appPlanDigest,
+        }),
+      );
+      expect(f.readOrganizations).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rechecks the completed Gateway snapshot after reading organization evidence", async () => {
+    const f = await settledAppPlanningFixture();
+    f.readOrganizations.mockImplementation(async () => {
+      f.row.record.operator!.gatewayDeliveryCandidates![0]!.readyState = "ERROR";
+      return f.participant.organizations;
+    });
+    await expect(f.dependencies.plan({ ...context, action: "prepare" })).rejects.toMatchObject({
+      code: "operation_in_progress",
+    });
+  });
+
+  it("rejects current-owner revocation before borrowing settled app bootstrap authority", async () => {
+    const f = await settledAppPlanningFixture();
+    f.assertCanonicalOwner.mockRejectedValue(new HostedOperatorError("authorization_required"));
+    await expect(f.dependencies.plan({ ...context, action: "prepare" })).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(f.readOrganizations).not.toHaveBeenCalled();
+  });
 
   it("uses completed retained Auth readiness while the app has only its three prerequisite receipts", async () => {
     const f = await retainedAuthReadinessFixture();

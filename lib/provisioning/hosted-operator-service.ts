@@ -1,3 +1,8 @@
+import {
+  retainCompletedParticipantGateway,
+  inspectPlanningParticipantBootstrap,
+  assertCompletedParticipantBootstrapApproval,
+} from "./hosted-operator-participant-bootstrap";
 import { continuityTransportRequestSchema } from "./hosted-operator-continuity-transport";
 import type { ContinuityTransportRequest } from "./hosted-operator-continuity-transport";
 import { tenantExportTransportRequestSchema } from "./hosted-operator-export-transport";
@@ -884,24 +889,39 @@ const handlePlanOperation = async (
         ...context,
         now,
         store: deps.store,
-        ...(installerSuccessor ||
-        appGatewaySuccessor ||
-        settingsSuccessor ||
-        retentionRenewal ||
-        readySuccessor
-          ? {
-              beforeUpdate: async (record: HostedRuntimeJournalRecord) => {
-                await deps.assertAuthorized({ ...context, plan, purpose: "planning" });
-                if (record.operator?.planDigest !== planDigest) {
-                  await observeOperatorPlanStage(
-                    context.target.sessionId,
-                    "prior_successor_approval",
-                    assertPriorSuccessorApproval,
-                  );
-                }
-              },
+        beforeUpdate: async (record: HostedRuntimeJournalRecord) => {
+          if (
+            installerSuccessor ||
+            appGatewaySuccessor ||
+            settingsSuccessor ||
+            retentionRenewal ||
+            readySuccessor
+          ) {
+            await deps.assertAuthorized({ ...context, plan, purpose: "planning" });
+            if (record.operator?.planDigest !== planDigest) {
+              await observeOperatorPlanStage(
+                context.target.sessionId,
+                "prior_successor_approval",
+                assertPriorSuccessorApproval,
+              );
             }
-          : {}),
+          }
+          if (record.status === "prepared" && record.operator !== undefined) {
+            const bootstrap = inspectPlanningParticipantBootstrap(record.operator.plan, record);
+            if (bootstrap?.gateway !== undefined) {
+              await deps.assertAuthorized({
+                ...context,
+                plan: record.operator.plan,
+                purpose: "planning",
+              });
+              await assertCompletedParticipantBootstrapApproval(
+                context,
+                bootstrap,
+                deps.readApproval,
+              );
+            }
+          }
+        },
         update: (record) => {
           if (!record.operator) {
             throw new HostedOperatorError("legacy_runtime_requires_migration");
@@ -1239,7 +1259,7 @@ const handlePlanOperation = async (
             });
           }
           const next = {
-            ...record,
+            ...retainCompletedParticipantGateway(record),
             approvedByCallId: UNAPPROVED_PLAN,
             environmentBound: false,
             operator: nextOperator,

@@ -10,6 +10,7 @@ import {
   hostedOperatorRecordSchema,
   retainedOperatorAuthSchema,
   operatorExecutionOutcomeSchema,
+  operatorDeploymentCandidateSchema,
 } from "./hosted-operator-contract";
 import type { RetainedOperatorAuth } from "./hosted-operator-contract";
 
@@ -52,6 +53,11 @@ const encryptedStateSchema = z.strictObject({
   keyVersion: z.string().min(1),
   tokenIv: z.string().min(1),
   tokenTag: z.string().min(1),
+});
+
+export const retainedParticipantGatewaySchema = z.strictObject({
+  completion: retainedOperatorAuthSchema,
+  candidate: operatorDeploymentCandidateSchema,
 });
 
 export const hostedRuntimeJournalRecordSchema = z.strictObject({
@@ -129,6 +135,8 @@ export const hostedRuntimeJournalRecordSchema = z.strictObject({
   proof: hostedRuntimeProofSchema.optional(),
   request: hostedRuntimeTargetSchema,
   retainedAuth: retainedOperatorAuthSchema.optional(),
+  /** Completed APP Gateway authority retained separately from the original Auth bootstrap. */
+  retainedParticipantGateway: retainedParticipantGatewaySchema.optional(),
   status: z.enum(["pending", "participants-prepared", "prepared", "failed", "cleaning", "cleaned"]),
   step: z.enum([
     "reserved",
