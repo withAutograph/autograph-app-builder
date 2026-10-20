@@ -1486,14 +1486,19 @@ export const composeHostedOperatorDependencies = (
       },
     });
     let participantsBootstrapPrepared = false;
+    const bootstrapPreparation =
+      gatewayPlan.normalActorProgram === undefined
+        ? undefined
+        : inspectParticipantBootstrapPreparation(gatewayPlan, current?.record);
     if (
-      gatewayPlan.normalActorProgram !== undefined &&
-      inspectParticipantBootstrapPreparation(gatewayPlan, current?.record).gatewayPrepared &&
+      bootstrapPreparation?.gatewayPrepared === true &&
+      bootstrapPreparation.auth !== undefined &&
       current?.record.operator !== undefined
     ) {
       const verification = {
         ...context,
-        plan: current.record.operator.plan,
+        // Read readiness under the completed original Auth approval, independent of unfinished app effects.
+        plan: bootstrapPreparation.auth.plan,
         privateState: current.record.privateState,
         assertCurrent: async () => {
           await controlPlane.assertPlanningAuthorized(context);
