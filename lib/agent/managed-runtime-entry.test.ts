@@ -206,6 +206,10 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
         appEnvironment: {
           PATH: `${bin}:${path.dirname(process.execPath)}:/usr/bin:/bin`,
           HOME: directory,
+          VERCEL_OIDC_TOKEN: "worker-only-provider-token",
+          BETTER_AUTH_SECRET: "worker-only-auth-secret",
+          PLATFORM_AUTH_DATABASE_URL: "postgresql://worker-only.invalid/auth",
+          PLATFORM_MANAGED_GATEWAY_PUBLIC_PROFILE: "worker-only-untrusted-profile",
         },
         stopTimeoutMs: 2000,
       })();
@@ -237,7 +241,10 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
         stateDirectory: path.join(input.rootDirectory, "app-state"),
         stateMode: 0o700,
         environmentMode: 0o600,
-        runtimeEnvironment: input.appEnvironment,
+        runtimeEnvironment: {
+          ...input.appEnvironment,
+          PLATFORM_MANAGED_GATEWAY_PUBLIC_PROFILE: JSON.stringify(input.profile),
+        },
       });
       await expect(access(inputFile)).rejects.toThrow();
       const body = Buffer.from('{"content":"租户😀"}\n');
@@ -281,6 +288,12 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
         expect(JSON.stringify(first.environment)).not.toContain(bearer);
       }
       expect(first.environment.APP_RUNTIME_STATE_DIR).toBeUndefined();
+      expect(
+        JSON.parse(first.environment.PLATFORM_MANAGED_GATEWAY_PUBLIC_PROFILE ?? "null"),
+      ).toEqual(input.profile);
+      expect(first.environment.VERCEL_OIDC_TOKEN).toBeUndefined();
+      expect(first.environment.BETTER_AUTH_SECRET).toBeUndefined();
+      expect(first.environment.PLATFORM_AUTH_DATABASE_URL).toBeUndefined();
       expect(first.environment.ORCHARD_DATABASE_URL).toBe(
         input.appEnvironment.ORCHARD_DATABASE_URL,
       );

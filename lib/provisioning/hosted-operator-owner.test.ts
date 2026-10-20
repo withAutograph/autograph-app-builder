@@ -1,3 +1,4 @@
+import { createAppGatewaySourceSuccessorPlan } from "./hosted-operator-app-gateway-source-successor";
 import {
   mintRealmContinuationAuthority,
   readRealmContinuationServiceIdentity,
@@ -1375,6 +1376,86 @@ const narrowedGatewayApprovalFixture = () => {
   return retained;
 };
 
+const retainedAppGatewaySourceApprovalFixture = async () => {
+  const f = retainedProjectSettingsApprovalFixture();
+  const context = { authority: ownerContext.authority, ownerContext, target: f.target };
+  const gatewayPlan = narrowedGatewayApprovalFixture().prepareReceipt.toolInput.plan;
+  const gatewayDelivery = gatewayPlan.gatewayDelivery;
+  if (gatewayDelivery === undefined) {
+    throw new Error("Missing native Gateway source fixture");
+  }
+  const oldPlan = hostedOperatorPlanSchema.parse({
+    ...f.approval.toolInput.plan,
+    deploymentBoundary: gatewayPlan.deploymentBoundary,
+    publicGateway: gatewayPlan.publicGateway,
+    gatewayDelivery,
+    effects: [
+      ...f.approval.toolInput.plan.effects,
+      { description: "Deploy Gateway source", id: "gateway-delivery", kind: "gateway-delivery" },
+    ],
+  });
+  f.approval.toolInput.plan = oldPlan;
+  f.approval.toolInput.planDigest = operatorPlanDigest(oldPlan);
+  const predecessor = {
+    approvalId: f.approval.requestId,
+    fenceGeneration: 19,
+    mode: "protected-operator-v1" as const,
+    operationRef: f.approval.toolInput.operationRef,
+    plan: oldPlan,
+    planDigest: operatorPlanDigest(oldPlan),
+    receipts: oldPlan.effects
+      .filter((effect) => effect.kind === "resources")
+      .map((effect) => ({
+        effectId: effect.id,
+        observedAt: "2026-10-20T00:00:00.000Z",
+        resourceVersion: "a".repeat(64),
+      })),
+  };
+  const record = hostedRuntimeJournalRecordSchema.parse({
+    approvedByCallId: f.callId,
+    kind: "app-runtime",
+    operator: predecessor,
+    privateState: {
+      encryptedToken: "ciphertext",
+      keyVersion: "key-v1",
+      tokenIv: "iv",
+      tokenTag: "tag",
+    },
+    request: f.target,
+    status: "pending",
+    step: "reserved",
+    version: 1,
+  });
+  const successor = createAppGatewaySourceSuccessorPlan(
+    record,
+    { ...gatewayDelivery, gitSha: "4".repeat(40) },
+    Date.parse("2026-10-20T00:00:00.000Z"),
+  );
+  if (successor === undefined) {
+    throw new Error("Missing canonical APP source successor");
+  }
+  record.approvedByCallId = "successor-call";
+  record.operator = {
+    ...predecessor,
+    approvalId: "successor-approval",
+    plan: successor,
+    planDigest: operatorPlanDigest(successor),
+    retainedGatewayDeliveries: [{ approvedByCallId: f.callId, operator: predecessor }],
+  };
+  vi.mocked(f.journal.read).mockResolvedValue({ record, revision: 3 });
+  await Promise.resolve();
+  return {
+    ...f,
+    record,
+    prepareInput: {
+      ...context,
+      action: "prepare" as const,
+      callId: f.callId,
+      planDigest: predecessor.planDigest,
+    },
+  };
+};
+
 describe("owner project access diagnostics", () => {
   it.each([
     ["direct", 403],
@@ -1506,6 +1587,74 @@ describe("owner project access diagnostics", () => {
 });
 
 describe("hosted operator owner authority", () => {
+  it.each([false, true])(
+    "reads exact retained APP source approval before and after successor approval (%s)",
+    async (unapproved) => {
+      const f = await retainedAppGatewaySourceApprovalFixture();
+      if (unapproved && f.record.operator !== undefined) {
+        f.record.approvedByCallId = "operator:unapproved-plan";
+        delete f.record.operator.approvalId;
+      }
+      await expect(f.readApproval(f.prepareInput)).resolves.toEqual({
+        action: "prepare",
+        approved: true,
+        approvalId: f.approval.requestId,
+        callId: f.callId,
+        planDigest: f.prepareInput.planDigest,
+      });
+      expect(f.observe).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["operation", "plan", "call", "approval", "foreign", "cancelled", "missing"] as const)(
+    "rejects retained APP source approval with mismatched %s",
+    async (mismatch) => {
+      const f = await retainedAppGatewaySourceApprovalFixture();
+      const current = f.record.operator;
+      const original = current?.retainedGatewayDeliveries?.[0]?.operator;
+      if (current === undefined || original === undefined) {
+        throw new Error("Missing APP source fixture");
+      }
+      switch (mismatch) {
+        case "operation": {
+          original.operationRef = "fcc825bc-d683-422c-8b58-0d0a065ceb57";
+          break;
+        }
+        case "plan": {
+          current.plan = { ...current.plan, contextId: "changed-intent" };
+          current.planDigest = operatorPlanDigest(current.plan);
+          break;
+        }
+        case "call": {
+          f.prepareInput.callId = "another-call";
+          break;
+        }
+        case "approval": {
+          original.approvalId = "another-approval";
+          break;
+        }
+        case "foreign": {
+          f.approval.responderPrincipalId = "another-owner";
+          break;
+        }
+        case "cancelled": {
+          f.approval.outcome = "cancelled";
+          break;
+        }
+        case "missing": {
+          f.fixture.currentSession.privateApprovalReceipts = [];
+          break;
+        }
+        default: {
+          throw new Error("Unexpected APP approval mismatch");
+        }
+      }
+      await expect(f.readApproval(f.prepareInput)).rejects.toMatchObject({
+        code: "authorization_required",
+      });
+    },
+  );
+
   it("reads exact original Gateway approval after an approved host-only narrowing", async () => {
     const retained = narrowedGatewayApprovalFixture();
     await expect(retained.readApproval(retained.prepareInput)).resolves.toEqual({

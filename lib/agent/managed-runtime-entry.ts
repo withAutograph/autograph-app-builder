@@ -133,16 +133,25 @@ export const runManagedRuntimeEntry = async <Configuration>(
     "PLATFORM_PUBLIC_ORIGIN",
     "PLATFORM_APP_BOUNDARY",
   ]);
-  if (Object.keys(parsed.appEnvironment).some((key) => !permitted.has(key))) {
+  if (
+    parsed.profile.appId !== identity.appId ||
+    Object.keys(parsed.appEnvironment).some((key) => !permitted.has(key))
+  ) {
     throw unavailable();
   }
+  // Public verification data is projected by this owner, never accepted as an app override.
+  // The existing strict profile schema excludes signer material and private JWK fields.
+  const appEnvironment = {
+    ...parsed.appEnvironment,
+    PLATFORM_MANAGED_GATEWAY_PUBLIC_PROFILE: JSON.stringify(parsed.profile),
+  };
   // Arrusted's app:runtime reads its binding from this private state directory
   // before launching an app. Preserve the same resource across process replacement.
   const appStateDirectory = path.join(parsed.rootDirectory, "app-state");
   await mkdir(appStateDirectory, { recursive: true, mode: 0o700 });
   await writeFile(
     path.join(appStateDirectory, "environment.json"),
-    JSON.stringify(parsed.appEnvironment),
+    JSON.stringify(appEnvironment),
     { mode: 0o600, flag: "wx" },
   );
   const launchSameEnvironment = createManagedOwnedChildLauncher({
@@ -150,7 +159,7 @@ export const runManagedRuntimeEntry = async <Configuration>(
     args: ["run", "app:runtime", "run", identity.appId, "dev"],
     cwd: parsed.root,
     appEnvironment: {
-      ...parsed.appEnvironment,
+      ...appEnvironment,
       APP_RUNTIME_STATE_DIR: appStateDirectory,
       PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
       HOME: process.env.HOME ?? "/tmp",

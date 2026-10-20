@@ -3,6 +3,7 @@ import { z } from "zod";
 import { expect, it, vi } from "vitest";
 import {
   hostedOperatorPlanSchema,
+  protectedAppBoundarySchema,
   restrictedOperatorEnvironment,
   operatorPlanDigest,
 } from "./hosted-operator-contract";
@@ -377,18 +378,92 @@ it.each([undefined, target.installationId])(
     expect(f.requests.filter((row) => row.method === "POST")).toHaveLength(5);
   },
 );
-it("does not reconcile a complete set of owned rows with a stale encrypted value as applied", async () => {
-  const f = fixture();
+it.each(["main", target.branch])(
+  "reconciles stale owned values under production branch %s and patches only exact rows",
+  async (productionBranch) => {
+    const f = fixture(target.installationId);
+    f.project.link.productionBranch = productionBranch;
+    const bound = await f.writer.bind(f.input, values);
+    const staleKeys = ["PLATFORM_ORIGIN", "PLATFORM_JWKS_URL", "PLATFORM_APP_BOUNDARY"];
+    const untouched = structuredClone(f.rows.filter((row) => !staleKeys.includes(String(row.key))));
+    for (const key of staleKeys) {
+      const owned = f.rows.find((row) => row.key === key)!;
+      owned.value =
+        key === "PLATFORM_APP_BOUNDARY"
+          ? JSON.stringify({
+              ...protectedAppBoundarySchema.parse(JSON.parse(values.PLATFORM_APP_BOUNDARY)),
+              verification: {
+                publicOrigin: "https://stale.example.test",
+                jwksUrl: "https://stale.example.test/_platform/jwks.json",
+              },
+            })
+          : "https://stale.example.test";
+    }
+    f.requests.length = 0;
+    f.checkpointManagedEnvironment.mockClear();
+    expect(await f.writer.reconcile(f.input, values)).toMatchObject({ status: "retryable" });
+    expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+    expect(f.checkpointManagedEnvironment).not.toHaveBeenCalled();
+    const repaired = await f.writer.bind(f.input, values);
+    expect(repaired.rows.map((row) => row.id)).toEqual(bound.rows.map((row) => row.id));
+    const writes = f.requests.filter((request) => request.method !== "GET");
+    expect(writes).toHaveLength(staleKeys.length);
+    for (const key of staleKeys) {
+      const row = f.rows.find((item) => item.key === key)!;
+      expect(writes).toContainEqual({
+        method: "PATCH",
+        path: `/v9/projects/${target.projectId}/env/${z.string().parse(row.id)}`,
+        body: { type: "encrypted", value: values[key] },
+      });
+    }
+    expect(f.rows.filter((row) => !staleKeys.includes(String(row.key)))).toEqual(untouched);
+    expect(await f.writer.reconcile(f.input, values)).toMatchObject({ status: "applied" });
+  },
+);
+it("does not adopt an unjournaled stale row from its matching operation comment alone", async () => {
+  const f = fixture(target.installationId);
   await f.writer.bind(f.input, values);
-  const owned = f.rows.find((row) => row.key === "PLATFORM_ORIGIN");
-  if (!owned) {
-    throw new Error("Missing owned fixture row");
-  }
-  owned.value = "https://stale.example.test";
-  f.checkpointManagedEnvironment.mockClear();
+  f.rows.find((row) => row.key === "PLATFORM_ORIGIN")!.value = "https://stale.example.test";
+  f.input.managedEnvironment = [];
+  f.requests.length = 0;
   expect(await f.writer.reconcile(f.input, values)).toEqual({ status: "unknown" });
-  expect(f.checkpointManagedEnvironment).not.toHaveBeenCalled();
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
 });
+it.each(["missing", "null", "number", "invalid-json", "failed"] as const)(
+  "keeps a known stale row plus a later %s value response unknown without writes",
+  async (failure) => {
+    const f = fixture();
+    await f.writer.bind(f.input, values);
+    const owned = f.rows.find((row) => row.key === "PLATFORM_ORIGIN")!;
+    owned.value = "https://stale.example.test";
+    const later = f.rows.find((row) => row.key === "PLATFORM_PUBLIC_ORIGIN")!;
+    const fetcher = f.fetcher.getMockImplementation()!;
+    f.fetcher.mockImplementation(async (url, init) => {
+      const response = await fetcher(url, init);
+      const parsed = new URL(url instanceof Request ? url.url : url.toString());
+      if (
+        parsed.pathname === `/v1/projects/${target.projectId}/env/${z.string().parse(later.id)}`
+      ) {
+        if (failure === "invalid-json") {
+          return new Response("not-json");
+        }
+        if (failure === "failed") {
+          return new Response("private provider failure", { status: 500 });
+        }
+        if (failure === "missing") {
+          return Response.json({});
+        }
+        return Response.json({ value: failure === "null" ? null : 42 });
+      }
+      return response;
+    });
+    f.requests.length = 0;
+    f.checkpointManagedEnvironment.mockClear();
+    expect(await f.writer.reconcile(f.input, values)).toEqual({ status: "unknown" });
+    expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+    expect(f.checkpointManagedEnvironment).not.toHaveBeenCalled();
+  },
+);
 it("keeps provider failures unknown and does not write", async () => {
   const f = fixture();
   f.setFailedRead();
@@ -756,7 +831,7 @@ it("retains legacy saved branch-specific references exactly after production-bra
   expect(result.rows).toEqual(legacy);
   expect(result.rows.every((row) => !Object.hasOwn(row, "gitBranch"))).toBe(true);
 });
-it.each(["owner", "installation", "value", "replacement", "duplicate"])(
+it.each(["owner", "installation", "replacement", "duplicate"])(
   "does not adopt generic Preview rows with foreign %s",
   async (failure) => {
     const f = fixture();
@@ -768,9 +843,6 @@ it.each(["owner", "installation", "value", "replacement", "duplicate"])(
     }
     if (failure === "installation") {
       row.configurationId = "foreign-installation";
-    }
-    if (failure === "value") {
-      row.value = "https://wrong.example.test";
     }
     if (failure === "replacement") {
       row.id = "replacement-id";
