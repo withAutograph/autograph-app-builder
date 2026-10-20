@@ -3,6 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { HostedOperatorError, operatorPublicResultSchema } from "./hosted-operator-contract";
 import {
+  NormalAuthClientError,
+  normalAuthClientFailureDiagnosticSchema,
+} from "./hosted-operator-normal-auth-client";
+import {
   createHostedOperatorConsentDiagnostic,
   reportOperatorNormalActorProofFailure,
   reportOperatorInventoryReadFailure,
@@ -1437,5 +1441,305 @@ describe("normal actor proof failure diagnostics", () => {
         hostileSink,
       );
     }).not.toThrow();
+  });
+});
+
+describe("closed normal Auth execution diagnostics", () => {
+  it("retains actual client metadata and the original rejection without inspecting private error content", async () => {
+    const error = new NormalAuthClientError("auth_rejected", {
+      operation: "invite_member",
+      httpStatus: 403,
+      authCode: "YOU_ARE_NOT_ALLOWED_TO_INVITE_USERS_TO_THIS_ORGANIZATION",
+      retryAfterMs: 1500,
+    });
+    const getter = vi.fn(() => {
+      throw new Error(secret);
+    });
+    for (const field of ["message", "cause", "body", "url", "cookie", "toJSON"]) {
+      Object.defineProperty(error, field, { get: getter });
+    }
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    await expect(
+      observeOperatorExecutionStage(
+        secret,
+        "execution_settlement",
+        () => {
+          throw error;
+        },
+        sink,
+      ),
+    ).rejects.toBe(error);
+    expect(sink.mock.calls[0]?.[0].executionFailure).toEqual({
+      stage: "execution_settlement",
+      errorClass: "unexpected",
+      normalAuth: {
+        code: "auth_rejected",
+        operation: "invite_member",
+        httpStatus: 403,
+        authCode: "YOU_ARE_NOT_ALLOWED_TO_INVITE_USERS_TO_THIS_ORGANIZATION",
+        retryAfterMs: 1500,
+      },
+    });
+    expect(getter).not.toHaveBeenCalled();
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
+
+  it.each(normalAuthClientFailureDiagnosticSchema.shape.code.options)(
+    "preserves the existing closed %s client failure code",
+    (code) => {
+      const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+      reportOperatorExecutionFailure(
+        secret,
+        "resource_lease",
+        new NormalAuthClientError(code),
+        sink,
+      );
+      expect(sink.mock.calls[0]?.[0].executionFailure?.normalAuth).toEqual({ code });
+    },
+  );
+
+  it.each(normalAuthClientFailureDiagnosticSchema.shape.operation.unwrap().options)(
+    "preserves the existing closed %s client operation",
+    (operation) => {
+      const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+      reportOperatorExecutionFailure(
+        secret,
+        "resource_lease",
+        new NormalAuthClientError("transport_failed", { operation }),
+        sink,
+      );
+      expect(sink.mock.calls[0]?.[0].executionFailure?.normalAuth).toEqual({
+        code: "transport_failed",
+        operation,
+      });
+    },
+  );
+
+  it.each([
+    [100, 0],
+    [599, Number.MAX_SAFE_INTEGER],
+  ])("retains valid numeric boundary metadata (%s, %s)", (httpStatus, retryAfterMs) => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    reportOperatorExecutionFailure(
+      secret,
+      "resource_lease",
+      new NormalAuthClientError("deadline_exceeded", { httpStatus, retryAfterMs }),
+      sink,
+    );
+    expect(sink.mock.calls[0]?.[0].executionFailure?.normalAuth).toEqual({
+      code: "deadline_exceeded",
+      httpStatus,
+      retryAfterMs,
+    });
+  });
+
+  it("drops arbitrary and inherited optional values independently without invoking accessors", () => {
+    const error = new NormalAuthClientError("invalid_response");
+    const getter = vi.fn(() => {
+      throw new Error(secret);
+    });
+    Object.defineProperty(error, "operation", { get: getter });
+    Object.defineProperty(error, "httpStatus", { value: secret });
+    Object.defineProperty(error, "authCode", { value: secret });
+    Object.defineProperty(error, "retryAfterMs", { value: Number.POSITIVE_INFINITY });
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    reportOperatorExecutionFailure(secret, "resource_lease", error, sink);
+    expect(sink.mock.calls[0]?.[0].executionFailure?.normalAuth).toEqual({
+      code: "invalid_response",
+    });
+    expect(getter).not.toHaveBeenCalled();
+    const inherited = new NormalAuthClientError("auth_rejected");
+    Reflect.deleteProperty(inherited, "operation");
+    Reflect.deleteProperty(inherited, "httpStatus");
+    const inheritedPrototype = { operation: "list_members", httpStatus: 403 };
+    Object.setPrototypeOf(inheritedPrototype, NormalAuthClientError.prototype);
+    Object.setPrototypeOf(inherited, inheritedPrototype);
+    reportOperatorExecutionFailure(secret, "resource_lease", inherited, sink);
+    expect(sink.mock.calls[1]?.[0].executionFailure?.normalAuth).toEqual({ code: "auth_rejected" });
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
+
+  it.each([99, 600, Number.NaN, Number.POSITIVE_INFINITY, 200.5])(
+    "discards an invalid HTTP status %s",
+    (httpStatus) => {
+      const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+      reportOperatorExecutionFailure(
+        secret,
+        "resource_lease",
+        new NormalAuthClientError("invalid_response", { operation: "list_members", httpStatus }),
+        sink,
+      );
+      expect(sink.mock.calls[0]?.[0].executionFailure?.normalAuth).toEqual({
+        code: "invalid_response",
+        operation: "list_members",
+      });
+    },
+  );
+
+  it.each([-1, 0.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])(
+    "discards an invalid mutated retry interval %s",
+    (retryAfterMs) => {
+      const error = new NormalAuthClientError("deadline_exceeded", { httpStatus: 429 });
+      Object.defineProperty(error, "retryAfterMs", { value: retryAfterMs });
+      const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+      reportOperatorExecutionFailure(secret, "resource_lease", error, sink);
+      expect(sink.mock.calls[0]?.[0].executionFailure?.normalAuth).toEqual({
+        code: "deadline_exceeded",
+        httpStatus: 429,
+      });
+    },
+  );
+
+  it("does not classify unbranded objects, inherited/invalid codes or code accessors as client failures", () => {
+    const getter = vi.fn(() => {
+      throw new Error(secret);
+    });
+    const accessor = new NormalAuthClientError("auth_rejected");
+    Object.defineProperty(accessor, "code", { get: getter });
+    const invalid = new NormalAuthClientError("auth_rejected");
+    Object.defineProperty(invalid, "code", { value: secret });
+    const inherited: unknown = Object.create(new NormalAuthClientError("auth_rejected"));
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    for (const error of [
+      accessor,
+      invalid,
+      inherited,
+      { name: "NormalAuthClientError", code: "auth_rejected", operation: "list_members" },
+    ]) {
+      reportOperatorExecutionFailure(secret, "resource_lease", error, sink);
+    }
+    expect(
+      sink.mock.calls.every(
+        ([diagnostic]) => diagnostic.executionFailure?.normalAuth === undefined,
+      ),
+    ).toBe(true);
+    expect(getter).not.toHaveBeenCalled();
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
+
+  it("preserves hostile proxy failures and ignores throwing sinks without leaking or replacing errors", async () => {
+    const revoked = Proxy.revocable(new NormalAuthClientError("auth_rejected"), {});
+    revoked.revoke();
+    const descriptorTrap = new Proxy(new NormalAuthClientError("auth_rejected"), {
+      getOwnPropertyDescriptor: () => {
+        throw new Error(secret);
+      },
+    });
+    const prototypeTrap = new Proxy(new Error(secret), {
+      getPrototypeOf: () => {
+        throw new Error(secret);
+      },
+    });
+    for (const error of [revoked.proxy, descriptorTrap, prototypeTrap]) {
+      const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Observe each exact hostile original rejection with its own nonthrowing diagnostic sink.
+      await expect(
+        observeOperatorExecutionStage(
+          secret,
+          "resource_lease",
+          () => {
+            throw error;
+          },
+          sink,
+        ),
+      ).rejects.toBe(error);
+      expect(sink.mock.calls[0]?.[0].executionFailure?.normalAuth).toBeUndefined();
+      expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+      expect(() => {
+        reportOperatorExecutionFailure(secret, "resource_lease", error, () => {
+          throw new Error(secret);
+        });
+      }).not.toThrow();
+    }
+  });
+});
+
+describe("closed normal actor journal-change execution marker", () => {
+  it("projects only the exact owned Error message while retaining the original rejection", async () => {
+    const error = new Error("normal_actor_journal_changed");
+    const getter = vi.fn(() => {
+      throw new Error(secret);
+    });
+    for (const key of ["body", "cause", "cookie", "toJSON"]) {
+      Object.defineProperty(error, key, { get: getter });
+    }
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    await expect(
+      observeOperatorExecutionStage(
+        secret,
+        "resource_lease",
+        () => {
+          throw error;
+        },
+        sink,
+      ),
+    ).rejects.toBe(error);
+    expect(sink.mock.calls[0]?.[0].executionFailure).toEqual({
+      stage: "resource_lease",
+      errorClass: "unexpected",
+      journalFailure: "normal_actor_journal_changed",
+    });
+    expect(getter).not.toHaveBeenCalled();
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
+  it("does not project arbitrary, similar, inherited or accessor messages", () => {
+    const getter = vi.fn(() => {
+      throw new Error(secret);
+    });
+    const accessor = new Error(secret);
+    Object.defineProperty(accessor, "message", { get: getter });
+    const inherited = new Error(secret);
+    Reflect.deleteProperty(inherited, "message");
+    const prototype = { message: "normal_actor_journal_changed" };
+    Object.setPrototypeOf(prototype, Error.prototype);
+    Object.setPrototypeOf(inherited, prototype);
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    for (const error of [
+      new Error(secret),
+      new Error("normal_actor_journal_changed-extra"),
+      new Error(" normal_actor_journal_changed"),
+      accessor,
+      inherited,
+      { message: "normal_actor_journal_changed" },
+    ]) {
+      reportOperatorExecutionFailure(secret, "resource_lease", error, sink);
+    }
+    expect(
+      sink.mock.calls.every(
+        ([diagnostic]) => diagnostic.executionFailure?.journalFailure === undefined,
+      ),
+    ).toBe(true);
+    expect(getter).not.toHaveBeenCalled();
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
+  it("contains hostile and revoked proxies and throwing sinks without reading messages or changing failures", async () => {
+    const revoked = Proxy.revocable(new Error("normal_actor_journal_changed"), {});
+    revoked.revoke();
+    const hostile = new Proxy(new Error("normal_actor_journal_changed"), {
+      getOwnPropertyDescriptor: () => {
+        throw new Error(secret);
+      },
+    });
+    for (const error of [revoked.proxy, hostile]) {
+      const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Each exact hostile rejection is observed independently with its own diagnostic sink.
+      await expect(
+        observeOperatorExecutionStage(
+          secret,
+          "resource_lease",
+          () => {
+            throw error;
+          },
+          sink,
+        ),
+      ).rejects.toBe(error);
+      expect(sink.mock.calls[0]?.[0].executionFailure?.journalFailure).toBeUndefined();
+      expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+      expect(() => {
+        reportOperatorExecutionFailure(secret, "resource_lease", error, () => {
+          throw new Error(secret);
+        });
+      }).not.toThrow();
+    }
   });
 });
