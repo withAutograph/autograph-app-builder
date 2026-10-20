@@ -7,9 +7,22 @@ import type {
   ValidationLogKey,
 } from "../repository/validation-log";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 import getValidationLog, { validationLogInputSchema } from "../../agent/tools/get_validation_log";
 import { appBuilderWorkflowState, APP_BUILDER_WORKFLOW_VERSION } from "./workflow-state";
 import type { AppBuilderWorkflowState } from "./workflow-state";
+import type { CandidateValidationAttempt } from "./draft-reconciliation-state";
+
+// SAFETY: The attempt array is typed to the exact retained session evidence contract.
+// oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Hoisted Vitest state needs a type-only seed for the real state interface.
+const candidateState = vi.hoisted(() => ({
+  attempts: [] as CandidateValidationAttempt[],
+  get: vi.fn(() => candidateState.attempts),
+}));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Test injects the retained-state handle without an active Eve runtime.
+vi.mock("@/lib/agent/draft-reconciliation-state", () => ({
+  candidateValidationAttemptHistory: { get: candidateState.get },
+}));
 
 const attemptDigest = "a".repeat(64);
 const receiptDigest = "b".repeat(64);
@@ -97,7 +110,12 @@ const context = (current = auth(), initiator = current) => ({
   toolName: "get_validation_log",
 });
 
+const keyFor = (key: ValidationLogKey) =>
+  JSON.stringify([key.sessionId, key.attemptDigest, key.command, key.channel, key.logId]);
+
 beforeEach(() => {
+  candidateState.attempts = [];
+  candidateState.get.mockClear();
   vi.stubEnv("APP_BUILDER_EXECUTION_MODE", "hosted");
 });
 afterEach(() => {
@@ -185,6 +203,7 @@ describe("owned current validation attempt discovery", () => {
         getValidationLog.execute({ operation: "validation-attempts" }, ctx),
       ).rejects.toThrow("authority");
       expect(getState).not.toHaveBeenCalled();
+      expect(candidateState.get).not.toHaveBeenCalled();
     },
   );
 
@@ -211,8 +230,140 @@ describe("owned current validation attempt discovery", () => {
   });
 });
 
-const keyFor = (key: ValidationLogKey) =>
-  JSON.stringify([key.sessionId, key.attemptDigest, key.command, key.channel, key.logId]);
+it("discovers retained candidate failure references after repair and reads every authenticated page", async () => {
+  const candidateAttemptDigest = "f".repeat(64);
+  const manifests = new Map<string, ValidationLogReference>();
+  const chunks = new Map<string, { content: string; digest: string }>();
+  const store: ValidationLogStore = {
+    async getChunk(key, index) { return await Promise.resolve(chunks.get(`${keyFor(key)}:${index}`)); },
+    async getReference(key) { return await Promise.resolve(manifests.get(keyFor(key))); },
+    async publish(key, reference) { await Promise.resolve(manifests.set(keyFor(key), reference)); },
+    async putChunk(key, index, content, digest) {
+      await Promise.resolve(chunks.set(`${keyFor(key)}:${index}`, { content, digest }));
+    },
+    async removeStaged(key) { await Promise.resolve(manifests.delete(keyFor(key))); },
+  };
+  vi.spyOn(logStoreBoundary, "validationLogStoreForSession").mockResolvedValue(store);
+  const writer = new ValidationLogWriter(store, {
+    attemptDigest: candidateAttemptDigest,
+    channel: "stderr",
+    command: "check-build",
+    sessionId: "session-a",
+  });
+  const original = `${"assertion failed\n".repeat(6000)}Bearer should-be-redacted`;
+  await writer.append(original);
+  const { reference } = await writer.finishCapture("complete");
+  vi.spyOn(appBuilderWorkflowState, "get").mockReturnValue(workflow("empty"));
+  candidateState.attempts.push({
+    appId: "spend-review",
+    attemptDigest: candidateAttemptDigest,
+    baseSha: "base",
+    callId: "call-1",
+    category: "check-build",
+    command: "mise run --no-deps --skip-tools app:check spend-review",
+    completion: "complete",
+    durability: "available",
+    exitCode: 2,
+    githubSourceDigest: "source",
+    headSha: "head",
+    logs: { stderr: reference },
+    originalReviewDigest: "review",
+    pullRequestNumber: 7,
+    repositoryId: "repo",
+    resolvedTree: "tree",
+  });
+  const discovery = await getValidationLog.execute(
+    { operation: "validation-attempts" }, context(),
+  );
+  expect(discovery).toMatchObject({ attempts: [{
+    commands: [{ logs: { stderr: { readInput: {
+      attemptDigest: candidateAttemptDigest,
+      channel: "stderr",
+      command: "check-build",
+      digest: reference?.digest,
+      logId: reference?.logId,
+    } } } }],
+    identity: { appId: "spend-review", headSha: "head" },
+    status: "failed",
+  }] });
+  // A simulated ordinary repair/reset does not mutate this separately retained history.
+  // SAFETY: Discovery was just asserted to contain the candidate failure's complete stderr reference.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Narrow the tool's test context result to the asserted discovery shape.
+  const retained = (await getValidationLog.execute(
+    { operation: "validation-attempts" },
+    context(),
+  )) as {
+    attempts: {
+      commands: {
+        logs: {
+          stderr: {
+            readInput: {
+              attemptDigest: string;
+              channel: "stderr";
+              command: "check-build";
+              digest: string;
+              logId: string;
+            };
+          };
+        };
+      }[];
+    }[];
+  };
+  const recovered = retained.attempts[0]?.commands[0]?.logs.stderr.readInput;
+  if (recovered === undefined) {
+    throw new Error("Candidate failure log reference was not retained.");
+  }
+  let cursor: string | undefined;
+  let assembled = "";
+  do {
+    const pageInput = cursor === undefined ? recovered : { ...recovered, cursor };
+    // SAFETY: The page call uses the real strict input schema and session-owned store fixture.
+    // oxlint-disable-next-line eslint/no-await-in-loop, typescript/no-unsafe-type-assertion -- Page reads are cursor chained and the tool result is narrowed to this fixture response.
+    const page = (await getValidationLog.execute(pageInput, context())) as {
+      complete: boolean;
+      content: string;
+      nextCursor?: string;
+    };
+    assembled += page.content;
+    cursor = page.nextCursor;
+    if (page.complete) {
+      break;
+    }
+  } while (cursor !== undefined);
+  expect(createHash("sha256").update(assembled).digest("hex")).toBe(reference?.digest);
+  expect(assembled).not.toContain("should-be-redacted");
+  expect(context().getSandbox).not.toHaveBeenCalled();
+});
+
+it("keeps command success separate from unavailable log durability in historical discovery", async () => {
+  vi.spyOn(appBuilderWorkflowState, "get").mockReturnValue(workflow("empty"));
+  candidateState.attempts.push({
+    appId: "spend-review",
+    attemptDigest: "c".repeat(64),
+    baseSha: "base",
+    callId: "call-success",
+    category: "check-build",
+    command: "mise run --no-deps --skip-tools app:check spend-review",
+    completion: "complete",
+    durability: "unavailable",
+    exitCode: 0,
+    githubSourceDigest: "source",
+    headSha: "head",
+    logs: {},
+    originalReviewDigest: "review",
+    pullRequestNumber: 7,
+    repositoryId: "repo",
+    resolvedTree: "tree",
+  });
+  await expect(
+    getValidationLog.execute({ operation: "validation-attempts" }, context()),
+  ).resolves.toMatchObject({
+    attempts: [{
+      commands: [{ completion: "complete", durability: "unavailable", exitCode: 0 }],
+      status: "passed",
+    }],
+  });
+});
 
 it("rejects a mixed attempt/log tuple rather than substituting the current discovered attempt", async () => {
   const manifests = new Map<string, ValidationLogReference>();

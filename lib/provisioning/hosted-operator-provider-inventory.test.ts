@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { VercelInstallationBinding } from "../integrations/vercel-installation";
 import { readHostedOperatorProviderInventory } from "./hosted-operator-provider-inventory";
 import type { OperatorInventoryConfiguration } from "./hosted-operator-provider-inventory";
+import type { HostedOperatorConsentDiagnosticSink } from "./hosted-operator-consent-diagnostic";
 
 const requestUrl = (request: Parameters<typeof fetch>[0]): string => {
   if (request instanceof Request) {
@@ -173,6 +174,142 @@ const fixture = () => {
 };
 
 describe("private read-only operator provider inventory", () => {
+  it.each([
+    ["non-OK response", "http_response", 503],
+    ["malformed JSON", "json_decode", undefined],
+    ["malformed 2xx schema", "schema", 200],
+    ["rejected fetch", "fetch", undefined],
+  ] as const)("reports a closed inventory read phase for %s", async (_label, phase, status) => {
+    const f = fixture();
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    const projectUrl = `https://api.vercel.com/v9/projects/${configuration.app.projectId}?teamId=${context.target.scopeId}`;
+    f.fetcher.mockImplementation(async (url, options) => {
+      const parsed = new URL(url instanceof Request ? url.url : url.toString());
+      if (parsed.pathname === "/v9/projects/prj_app") {
+        if (phase === "fetch") {
+          throw new Error("secret https://private.example/path");
+        }
+        if (phase === "json_decode") {
+          return new Response("not-json", { status: 200 });
+        }
+        if (phase === "schema") {
+          return Response.json({ privatePayload: "do-not-log" });
+        }
+        return Response.json({ error: "private provider response" }, { status: status ?? 503 });
+      }
+      expect(parsed.origin + parsed.pathname + parsed.search).not.toBe(projectUrl);
+      const original = fixture().fetcher.getMockImplementation();
+      if (original === undefined) {
+        throw new Error("fixture missing");
+      }
+      return await original(url, options);
+    });
+    await expect(readHostedOperatorProviderInventory({ ...f.input, diagnosticSink: sink })).rejects.toThrow(
+      "operator_unavailable",
+    );
+    expect(sink.mock.calls.map(([event]) => event.inventoryReadFailure)).toContainEqual(
+      expect.objectContaining({
+        target: "app",
+        operation: "project",
+        phase,
+        ...(status && phase === "http_response"
+          ? { httpStatus: status, errorClass: "operator_error", publicCode: "operator_unavailable" }
+          : {}),
+      }),
+    );
+    expect(sink.mock.calls.filter(([event]) => event.inventoryReadFailure !== undefined)).toHaveLength(1);
+    expect(JSON.stringify(sink.mock.calls)).not.toMatch(/private\.example|do-not-log|private provider response/u);
+  });
+
+  it("attributes owner and credential failures and does not alert for the expected bootstrap alias 404", async () => {
+    const owner = fixture();
+    const ownerSink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    owner.input.assertCurrentOwner.mockRejectedValue(new Error("owner-secret"));
+    await expect(readHostedOperatorProviderInventory({ ...owner.input, diagnosticSink: ownerSink })).rejects.toThrow(
+      "operator_unavailable",
+    );
+    expect(ownerSink.mock.calls[0]?.[0].inventoryReadFailure).toMatchObject({
+      target: "inventory", operation: "owner", phase: "owner",
+    });
+    expect(owner.fetcher).not.toHaveBeenCalled();
+
+    const credential = fixture();
+    const credentialSink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    credential.readVercelCredential.mockRejectedValue(new Error("credential-secret"));
+    await expect(readHostedOperatorProviderInventory({ ...credential.input, diagnosticSink: credentialSink })).rejects.toThrow(
+      "operator_unavailable",
+    );
+    expect(credentialSink.mock.calls[0]?.[0].inventoryReadFailure).toMatchObject({
+      target: "inventory", operation: "credential", phase: "credential",
+    });
+    expect(credential.fetcher).not.toHaveBeenCalled();
+
+    const alias = fixture();
+    const aliasSink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    alias.input.configuration = {
+      ...configuration,
+      gateway: { ...configuration.gateway, deploymentId: undefined },
+    };
+    alias.fetcher.mockImplementation(async (url, options) => {
+      const parsed = new URL(url instanceof Request ? url.url : url.toString());
+      if (parsed.pathname === "/v13/deployments/gateway.example.test") {
+        return Response.json({}, { status: 404 });
+      }
+      const original = fixture().fetcher.getMockImplementation();
+      if (original === undefined) {
+        throw new Error("fixture missing");
+      }
+      return await original(url, options);
+    });
+    await expect(readHostedOperatorProviderInventory({
+      ...alias.input, phase: "bootstrap-planning", resolveGatewayByPublicOrigin: true,
+      diagnosticSink: aliasSink,
+    })).resolves.toBeDefined();
+    expect(aliasSink.mock.calls.some(([event]) => event.inventoryReadFailure)).toBe(false);
+  });
+
+  it("keeps concurrent role attribution local and preserves the rejected public result with hostile diagnostics", async () => {
+    const f = fixture();
+    const observed: unknown[] = [];
+    f.fetcher.mockImplementation(async (url, options) => {
+      const parsed = new URL(url instanceof Request ? url.url : url.toString());
+      if (parsed.pathname === "/v9/projects/prj_app" || parsed.pathname === "/v9/projects/prj_gateway") {
+        observed.push(parsed.pathname);
+        await Promise.resolve();
+        return Response.json({ malformed: true });
+      }
+      const original = fixture().fetcher.getMockImplementation();
+      if (original === undefined) {
+        throw new Error("fixture missing");
+      }
+      return await original(url, options);
+    });
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    await expect(readHostedOperatorProviderInventory({
+      ...f.input, diagnosticSink: sink,
+    })).rejects.toThrow("operator_unavailable");
+    expect(observed).toHaveLength(2);
+    expect(sink.mock.calls.map(([event]) => event.inventoryReadFailure)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ target: "app", operation: "project", phase: "schema" }),
+        expect.objectContaining({ target: "gateway", operation: "project", phase: "schema" }),
+      ]),
+    );
+    const projectReads = f.fetcher.mock.calls
+      .map(([url]) => new URL(url instanceof Request ? url.url : url.toString()).pathname)
+      .filter((path) => path.startsWith("/v9/projects/"));
+    expect(projectReads).toHaveLength(3);
+    expect(new Set(projectReads).size).toBe(3);
+
+    const hostile = new Proxy(vi.fn<HostedOperatorConsentDiagnosticSink>(), {
+      apply() {
+        throw new Error("sink-private");
+      },
+    });
+    await expect(readHostedOperatorProviderInventory({ ...f.input, diagnosticSink: hostile }))
+      .rejects.toThrow("operator_unavailable");
+  });
+
   it("reports malformed final inventory before preserving its sanitized public error", async () => {
     const f = fixture();
     const secret = "https://private-host/private-path?token=private-token";

@@ -1,4 +1,7 @@
-import { validationAttemptLogReadInputs } from "@/lib/agent/validation-log-read-input";
+import {
+  validationAttemptLogReadInputs,
+  validationLogReadInput,
+} from "@/lib/agent/validation-log-read-input";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
@@ -8,6 +11,7 @@ import {
 } from "@/lib/agent/validation-log-store-for-session";
 import { readValidationLogPage } from "@/lib/repository/validation-log";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import { candidateValidationAttemptHistory } from "@/lib/agent/draft-reconciliation-state";
 
 export const validationLogInputSchema = z.union([
   z.strictObject({
@@ -24,7 +28,7 @@ export const validationLogInputSchema = z.union([
 
 export default defineTool({
   description:
-    "Read one authenticated page of a saved validation or dependency command log after execution or sandbox cleanup. To recover the current saved validation references, use operation: validation-attempts and copy a complete channel readInput. For saved dependency references, use operation: dependency-attempts. Discovery lists retained workflow receipts, not historical attempts removed by later apply or reset. For pages supply the exact attempt, command, channel, log ID and digest. Continue with each nextCursor and verify assembled UTF-8 SHA-256 against digest. Page complete means the manifest is exhausted; completion distinguishes complete capture, interrupted output, and an unavailable durable suffix.",
+    "Read one authenticated page of a saved validation or dependency command log after execution or sandbox cleanup. To recover saved validation references, use operation: validation-attempts and copy a complete channel readInput. Discovery lists retained workflow receipts and historical supported candidate check/test attempts, including attempts from before a source repair or validation reset. Historical candidate attempts are evidence of that execution only, not current validation. For saved dependency references, use operation: dependency-attempts. For pages supply the exact attempt, command, channel, log ID and digest. Continue with each nextCursor and verify assembled UTF-8 SHA-256 against digest. Page complete means the manifest is exhausted; completion distinguishes complete capture, interrupted output, and an unavailable durable suffix.",
   async execute(input, ctx) {
     if ("operation" in input) {
       await assertValidationLogSession({
@@ -37,13 +41,45 @@ export default defineTool({
           attempts: state.phase === "empty" ? [] : (state.checkoutDependencyAttempts ?? []),
         };
       }
+      const candidateAttempts = candidateValidationAttemptHistory.get().map((attempt) => ({
+        attemptDigest: attempt.attemptDigest,
+        commands: [{
+          category: attempt.category,
+          command: attempt.command,
+          completion: attempt.completion,
+          durability: attempt.durability,
+          exitCode: attempt.exitCode,
+          logs: Object.fromEntries(
+            Object.entries(attempt.logs).map(([channel, reference]) => [
+              channel,
+              reference === undefined ? undefined : {
+                ...reference,
+                readInput: validationLogReadInput(attempt.attemptDigest, attempt.category, reference),
+              },
+            ]),
+          ),
+          name: attempt.category,
+        }],
+        identity: {
+          appId: attempt.appId,
+          baseSha: attempt.baseSha,
+          callId: attempt.callId,
+          githubSourceDigest: attempt.githubSourceDigest,
+          headSha: attempt.headSha,
+          originalReviewDigest: attempt.originalReviewDigest,
+          pullRequestNumber: attempt.pullRequestNumber,
+          repositoryId: attempt.repositoryId,
+          resolvedTree: attempt.resolvedTree,
+        },
+        status: attempt.completion === "complete" && attempt.exitCode === 0 ? "passed" : "failed",
+      }));
       if (state.phase === "validation_failed") {
-        return { attempts: [validationAttemptLogReadInputs(state.validationFailure)] };
+        return { attempts: [...candidateAttempts, validationAttemptLogReadInputs(state.validationFailure)] };
       }
       if ("validationReceipt" in state) {
-        return { attempts: [validationAttemptLogReadInputs(state.validationReceipt)] };
+        return { attempts: [...candidateAttempts, validationAttemptLogReadInputs(state.validationReceipt)] };
       }
-      return { attempts: [] };
+      return { attempts: candidateAttempts };
     }
     const store = await validationLogStoreForSession({
       sessionAuth: ctx.session.auth,

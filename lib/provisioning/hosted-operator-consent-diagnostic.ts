@@ -725,6 +725,27 @@ const gatewayBindingsDiagnostic = z.strictObject({
 });
 export type OperatorGatewayBindingsDiagnostic = z.infer<typeof gatewayBindingsDiagnostic>;
 
+const inventoryReadFailure = z.strictObject({
+  target: z.enum(["inventory", "app", "gateway", "operator"]),
+  operation: z.enum([
+    "owner",
+    "credential",
+    "project",
+    "deployment",
+    "public_alias",
+    "environment",
+    "aliases",
+    "store_list",
+    "store_detail",
+  ]),
+  phase: z.enum(["owner", "credential", "fetch", "http_response", "json_decode", "schema"]),
+  httpStatus: z.number().int().min(100).max(599).optional(),
+  errorClass: operatorPlanningFailure.shape.errorClass.optional(),
+  publicCode: operatorPublicResultSchema.shape.code.unwrap().optional(),
+});
+export type OperatorInventoryReadFailure = z.infer<typeof inventoryReadFailure>;
+type InventoryReadDescriptor = Omit<OperatorInventoryReadFailure, "errorClass" | "publicCode">;
+
 const metadata = z.strictObject({
   accessClass: z
     .enum(["upstream_auth_denied", "application_auth_denied", "other_failed", "ok"])
@@ -789,6 +810,7 @@ const metadata = z.strictObject({
   executionFailure: operatorExecutionFailure.optional(),
   hostedEnvironmentBindingFailure: hostedEnvironmentBindingFailure.optional(),
   gatewayBindings: gatewayBindingsDiagnostic.optional(),
+  inventoryReadFailure: inventoryReadFailure.optional(),
   planningMismatch: z
     .strictObject({
       boundary: operatorPlanningMismatchBoundary,
@@ -1086,6 +1108,47 @@ export const reportOperatorExecutionFailure = (
     });
   } catch {
     /* Reporting cannot change the original rejection. */
+  }
+};
+
+/** Report one private provider inventory read using only closed operation and error labels. */
+export const reportOperatorInventoryReadFailure = (
+  sessionId: string,
+  descriptor: InventoryReadDescriptor,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Exception boundaries accept arbitrary thrown values and project only closed labels.
+  error: unknown,
+  sink?: HostedOperatorConsentDiagnosticSink,
+): void => {
+  try {
+    const failure: OperatorInventoryReadFailure = { ...descriptor };
+    try {
+      if (error instanceof HostedOperatorError) {
+        failure.errorClass = "operator_error";
+        const code = operatorPublicResultSchema.shape.code
+          .unwrap()
+          .safeParse(ownDiagnosticValue(error, "code"));
+        if (code.success) {
+          failure.publicCode = code.data;
+        }
+      } else if (error instanceof z.ZodError) {
+        failure.errorClass = "validation_error";
+      } else if (error instanceof TypeError) {
+        failure.errorClass = "type_error";
+      } else {
+        failure.errorClass = "unexpected";
+      }
+    } catch {
+      /* Hostile error objects cannot change provider read behavior. */
+    }
+    createHostedOperatorConsentDiagnostic(sessionId, sink)({
+      boundary: "operator",
+      phase: "inline",
+      stage: "operator_request",
+      outcome: "setup_unavailable",
+      inventoryReadFailure: failure,
+    });
+  } catch {
+    /* Hostile descriptors and diagnostics never change provider read behavior. */
   }
 };
 

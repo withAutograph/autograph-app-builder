@@ -1,4 +1,5 @@
 import { defineState } from "eve/context";
+import type { ValidationLogReference } from "../repository/validation-log";
 
 import type {
   ExistingDraftReconciliationProposal,
@@ -47,10 +48,39 @@ export interface DraftReconciliationCandidate {
   publishedReconciliation?: ExistingDraftReconciliationProposal;
 }
 
+export interface CandidateValidationAttempt {
+  attemptDigest: string;
+  appId: string;
+  baseSha: string;
+  callId: string;
+  category: "check-build" | "test";
+  command: string;
+  completion: "complete" | "interrupted" | "unavailable";
+  durability: "available" | "unavailable";
+  exitCode: number | null;
+  githubSourceDigest: string;
+  headSha: string;
+  logs: Partial<Record<"stdout" | "stderr", ValidationLogReference>>;
+  originalReviewDigest: string;
+  pullRequestNumber: number;
+  repositoryId: string;
+  resolvedTree: string;
+}
+
 export const draftReconciliationState = defineState<DraftReconciliationCandidate | null>(
   "autograph-app-builder.draft-reconciliation.v1",
   () => null,
 );
+
+/** Historical command evidence survives resets of the current candidate validation run. */
+export const candidateValidationAttemptHistory = defineState<CandidateValidationAttempt[]>(
+  "autograph-app-builder.draft-reconciliation-validation-attempts.v1",
+  () => [],
+);
+
+export const retainCandidateValidationAttempt = (attempt: CandidateValidationAttempt): void => {
+  candidateValidationAttemptHistory.update((current) => [...current, attempt]);
+};
 
 export const updateExactDraftReconciliation = (input: {
   expected: DraftReconciliationCandidate | null;
