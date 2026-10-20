@@ -174,11 +174,11 @@ const inspectRevision = async (sandbox: SandboxSession, root: string, sha: strin
 const preimageProgram = String.raw`
 const { spawnSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
-const { closeSync, mkdtempSync, openSync, readSync, rmSync } = require("node:fs");
+const { chmodSync, closeSync, copyFileSync, mkdirSync, mkdtempSync, openSync, readSync, renameSync, rmSync } = require("node:fs");
 const { tmpdir } = require("node:os");
-const { join } = require("node:path");
-const [root, path, revision] = process.argv.slice(1);
-const entry = spawnSync("git", ["-C", root, "ls-tree", "-z", revision, "--", path], { encoding: "utf8" });
+const { dirname, join } = require("node:path");
+const [root, path, revision, operation] = process.argv.slice(1);
+const entry = spawnSync("git", ["--literal-pathspecs", "-C", root, "ls-tree", "-z", revision, "--", path], { encoding: "utf8" });
 if (entry.status !== 0) throw Error(entry.stderr || "Git ls-tree failed");
 if (!entry.stdout) { console.log("null"); process.exit(0); }
 const match = /^(100644|100755) blob ([0-9a-f]{40})\t/.exec(entry.stdout);
@@ -196,6 +196,19 @@ try {
     if (length === 0) break;
     hash.update(buffer.subarray(0, length));
     offset += length;
+  }
+  if (operation === "restore") {
+    const destination = join(root, path);
+    mkdirSync(dirname(destination), { recursive: true });
+    const replacement = mkdtempSync(join(dirname(destination), ".builder-restore-"));
+    try {
+      const file = join(replacement, "blob");
+      copyFileSync(join(directory, "blob"), file);
+      chmodSync(file, match[1] === "100755" ? 0o755 : 0o644);
+      renameSync(file, destination);
+    } finally {
+      rmSync(replacement, { force: true, recursive: true });
+    }
   }
   console.log(JSON.stringify({ mode: match[1] === "100755" ? "755" : "644", digest: hash.digest("hex") }));
 } finally {
@@ -807,6 +820,50 @@ export const readDraftReconciliationCandidateFile = async (input: {
     );
   }
   return { content, digest: createHash("sha256").update(content).digest("hex") };
+};
+
+/** Restore one app-owned regular file from the server-retained draft head without checkout filters. */
+export const restoreDraftReconciliationCandidateFile = async (input: {
+  sandbox: SandboxSession;
+  prepared: PreparedDraftReconciliation;
+  path: string;
+}): Promise<{ digest: string; mode: "644" | "755" }> => {
+  const { prepared, path, sandbox } = input;
+  if (!appPath(prepared.appId, path)) {
+    throw new Error(`Builder cannot restore ${path}: it is outside apps/${prepared.appId}/.`);
+  }
+  await assertDraftReconciliationCandidateAvailable(input);
+  await checked(
+    sandbox,
+    `verify the candidate restore path ${path}`,
+    `node -e ${quote(safeResolutionProgram)} ${quote(prepared.root)} ${quote(path)}`,
+  );
+  const raw = await checked(
+    sandbox,
+    `restore the retained draft file ${path}`,
+    `node -e ${quote(preimageProgram)} ${quote(prepared.root)} ${quote(path)} ${quote(prepared.headSha)} 'restore'`,
+  );
+  const result = z
+    .strictObject({ digest: z.string(), mode: z.enum(["644", "755"]) })
+    .nullable()
+    .parse(JSON.parse(raw));
+  if (result === null) {
+    throw new Error(`Builder cannot restore ${path}: it is absent from the retained draft head.`);
+  }
+  await checked(
+    sandbox,
+    `stage the retained draft file ${path}`,
+    git(prepared.root, [
+      "--literal-pathspecs",
+      "restore",
+      "--source",
+      prepared.headSha,
+      "--staged",
+      "--",
+      path,
+    ]),
+  );
+  return result;
 };
 
 /** Apply one exact text replacement against the observed candidate bytes. */

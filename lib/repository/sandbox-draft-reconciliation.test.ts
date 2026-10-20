@@ -25,6 +25,7 @@ import {
   readDraftReconciliationConflict,
   readDraftReconciliationDiff,
   replaceDraftReconciliationCandidateText,
+  restoreDraftReconciliationCandidateFile,
   writeDraftReconciliationResolution,
 } from "./sandbox-draft-reconciliation";
 
@@ -130,6 +131,151 @@ const fixture = (platformConflict = false) => {
 };
 
 describe("isolated draft reconciliation", () => {
+  it.each([0o644, 0o755])(
+    "restores only the selected retained binary blob and mode %s without checkout filters",
+    async (mode) => {
+      const f = fixture();
+      const checkout = path.join(f.root, "repository");
+      const selected = "apps/demo/archive/[issued].bin";
+      const other = "apps/demo/archive/i.bin";
+      const retained = Buffer.alloc(150_000, 0xff);
+      retained.set([0, 0xc3, 0x28, 10, 13, 10]);
+      mkdirSync(path.dirname(path.join(checkout, selected)), { recursive: true });
+      writeFileSync(path.join(checkout, selected), retained);
+      chmodSync(path.join(checkout, selected), mode);
+      writeFileSync(path.join(checkout, other), "retained unrelated file\n");
+      git(checkout, "add", "apps/demo/archive");
+      git(
+        checkout,
+        "-c",
+        "user.name=Fixture",
+        "-c",
+        "user.email=fixture@example.test",
+        "commit",
+        "-m",
+        "retain binary app artifact",
+      );
+      const headSha = git(checkout, "rev-parse", "HEAD");
+      git(checkout, "push", "origin", "draft");
+      const prepared = await prepareDraftReconciliation({
+        appId: "demo",
+        baseBranch: "main",
+        baseSha: f.baseSha,
+        headBranch: "draft",
+        headSha,
+        repository: { name: "arrusted-development", owner: "withAutograph" },
+        sandbox: f.sandbox,
+        workspaceRoot: f.root,
+      });
+      const destination = path.join(prepared.root, selected);
+      writeFileSync(destination, "changed issued file\n");
+      chmodSync(destination, mode === 0o755 ? 0o644 : 0o755);
+      writeFileSync(path.join(prepared.root, other), "unrelated app repair\n");
+      writeFileSync(path.join(prepared.root, "apps/demo/new-file.txt"), "new app repair\n");
+      writeFileSync(
+        path.join(prepared.root, "apps/demo/archive/.gitattributes"),
+        "*.bin filter=fixture\n",
+      );
+      git(prepared.root, "config", "filter.fixture.smudge", "false");
+      git(prepared.root, "config", "filter.fixture.required", "true");
+      const unrelatedIndex = git(prepared.root, "ls-files", "--stage", "--", other);
+
+      await expect(
+        restoreDraftReconciliationCandidateFile({ path: selected, prepared, sandbox: f.sandbox }),
+      ).resolves.toEqual({
+        digest: createHash("sha256").update(retained).digest("hex"),
+        mode: mode === 0o755 ? "755" : "644",
+      });
+
+      expect(readFileSync(destination)).toEqual(retained);
+      // oxlint-disable-next-line eslint/no-bitwise -- POSIX permission bits establish the restored Git executable mode.
+      expect(lstatSync(destination).mode & 0o777).toBe(mode);
+      const retainedBlob = git(prepared.root, "rev-parse", `${headSha}:${selected}`);
+      expect(git(prepared.root, "--literal-pathspecs", "ls-files", "--stage", "--", selected)).toBe(
+        `${mode === 0o755 ? "100755" : "100644"} ${retainedBlob} 0\t${selected}`,
+      );
+      expect(readFileSync(path.join(prepared.root, other), "utf-8")).toBe("unrelated app repair\n");
+      expect(readFileSync(path.join(prepared.root, "apps/demo/new-file.txt"), "utf-8")).toBe(
+        "new app repair\n",
+      );
+      expect(git(prepared.root, "ls-files", "--stage", "--", other)).toBe(unrelatedIndex);
+      expect(readFileSync(path.join(prepared.root, "docs/platform.md"), "utf-8")).toBe("main\n");
+    },
+  );
+
+  it("rejects unowned, unsafe, missing, and nonregular retained sources before changing candidate bytes", async () => {
+    const f = fixture();
+    const checkout = path.join(f.root, "repository");
+    symlinkSync("tests/journey.spec.ts", path.join(checkout, "apps/demo/retained-link"));
+    git(checkout, "add", "apps/demo/retained-link");
+    git(
+      checkout,
+      "-c",
+      "user.name=Fixture",
+      "-c",
+      "user.email=fixture@example.test",
+      "commit",
+      "-m",
+      "retain app symlink",
+    );
+    const headSha = git(checkout, "rev-parse", "HEAD");
+    git(checkout, "push", "origin", "draft");
+    const prepared = await prepareDraftReconciliation({
+      appId: "demo",
+      baseBranch: "main",
+      baseSha: f.baseSha,
+      headBranch: "draft",
+      headSha,
+      repository: { name: "arrusted-development", owner: "withAutograph" },
+      sandbox: f.sandbox,
+      workspaceRoot: f.root,
+    });
+    const selected = "apps/demo/tests/journey.spec.ts";
+    const destination = path.join(prepared.root, selected);
+    writeFileSync(destination, "keep this repair\n");
+    writeFileSync(path.join(prepared.root, "apps/demo/not-in-head.txt"), "keep new file\n");
+    rmSync(path.join(prepared.root, "apps/demo/retained-link"));
+    writeFileSync(path.join(prepared.root, "apps/demo/retained-link"), "keep replaced symlink\n");
+    const index = readFileSync(git(prepared.root, "rev-parse", "--git-path", "index"));
+    for (const unsafe of [
+      "docs/platform.md",
+      "apps/other/file.txt",
+      "apps/demo/../other/file.txt",
+      "apps/demo/not-in-head.txt",
+      "apps/demo/retained-link",
+      "apps/demo/tests",
+    ]) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- verify every rejected mutation against the same preserved candidate.
+      await expect(
+        restoreDraftReconciliationCandidateFile({ path: unsafe, prepared, sandbox: f.sandbox }),
+      ).rejects.toThrow();
+    }
+    expect(readFileSync(destination, "utf-8")).toBe("keep this repair\n");
+    expect(readFileSync(path.join(prepared.root, "apps/demo/not-in-head.txt"), "utf-8")).toBe(
+      "keep new file\n",
+    );
+    expect(readFileSync(path.join(prepared.root, "apps/demo/retained-link"), "utf-8")).toBe(
+      "keep replaced symlink\n",
+    );
+    expect(readFileSync(git(prepared.root, "rev-parse", "--git-path", "index"))).toEqual(index);
+
+    const external = path.join(f.root, "external");
+    mkdirSync(external);
+    writeFileSync(path.join(external, "journey.spec.ts"), "outside app\n");
+    rmSync(destination);
+    symlinkSync(path.join(external, "journey.spec.ts"), destination);
+    await expect(
+      restoreDraftReconciliationCandidateFile({ path: selected, prepared, sandbox: f.sandbox }),
+    ).rejects.toThrow("symlink in app path");
+    rmSync(path.dirname(destination), { recursive: true });
+    symlinkSync(external, path.dirname(destination));
+    await expect(
+      restoreDraftReconciliationCandidateFile({ path: selected, prepared, sandbox: f.sandbox }),
+    ).rejects.toThrow("symlink in app path");
+    expect(readFileSync(path.join(external, "journey.spec.ts"), "utf-8")).toBe("outside app\n");
+    expect(readFileSync(git(prepared.root, "rev-parse", "--git-path", "index"))).toEqual(index);
+  });
+
   it("makes an exact app-owned candidate edit without rewriting other test coverage", async () => {
     const { root, sandbox, headSha, baseSha } = fixture();
     const prepared = await prepareDraftReconciliation({

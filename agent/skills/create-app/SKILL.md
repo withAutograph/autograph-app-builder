@@ -265,7 +265,13 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    only reported conflicts under the selected app: read each file with
    `inspect_github_draft_pr_reconciliation`, then write its complete resolved
    content with `resolve_github_draft_pr_conflict`. Report a platform-owned conflict
-   with its path and leave it for its owner. Run the selected app's schema,
+   with its path and leave it for its owner. If a repair requires one app-owned
+   file exactly as retained in the draft head, use
+   `edit_github_draft_pr_candidate` with `kind: "restore"` and that file's `path`.
+   This restores its exact bytes and mode, including binary and executable files,
+   while preserving other repairs. Do not retype historical bytes or supply an
+   alternate revision. Restore invalidates saved validation and review; validate
+   the complete candidate and review both diffs again. Run the selected app's schema,
    repository checks, browser tests, and applicable guard on the reconciled
    candidate with `validate_github_draft_pr_reconciliation`.
    If CI reports app formatting defects, run the repository-owned formatter

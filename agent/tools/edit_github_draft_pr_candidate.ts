@@ -10,11 +10,12 @@ import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import {
   readDraftReconciliationCandidateFile,
   replaceDraftReconciliationCandidateText,
+  restoreDraftReconciliationCandidateFile,
 } from "@/lib/repository/sandbox-draft-reconciliation";
 
 export default defineTool({
   description:
-    "Read a current app-owned text file in Builder's isolated draft merge candidate, or replace one unique exact passage using the observed content digest. This changes no GitHub branch. Revalidate and review both diffs after an edit.",
+    "Read a current app-owned text file in Builder's isolated draft merge candidate, replace one unique exact passage using the observed content digest, or restore one app-owned file's exact bytes and mode from the retained draft head. Restore accepts only a path and preserves other repairs. This changes no GitHub branch. Revalidate and review both diffs after an edit.",
   async execute(input, ctx) {
     const candidate = draftReconciliationState.get();
     const state = appBuilderWorkflowState.get();
@@ -40,14 +41,21 @@ export default defineTool({
         status: "current_file" as const,
       };
     }
-    const result = await replaceDraftReconciliationCandidateText({
-      expectedDigest: input.expectedDigest,
-      newText: input.newText,
-      oldText: input.oldText,
-      path: input.path,
-      prepared: candidate,
-      sandbox,
-    });
+    const result =
+      input.kind === "restore"
+        ? await restoreDraftReconciliationCandidateFile({
+            path: input.path,
+            prepared: candidate,
+            sandbox,
+          })
+        : await replaceDraftReconciliationCandidateText({
+            expectedDigest: input.expectedDigest,
+            newText: input.newText,
+            oldText: input.oldText,
+            path: input.path,
+            prepared: candidate,
+            sandbox,
+          });
     updateExactDraftReconciliation({
       expected: candidate,
       operation: `editing ${input.path}`,
@@ -57,6 +65,7 @@ export default defineTool({
         delete next.review;
         delete next.reviewReadProgress;
         delete next.validation;
+        delete next.validationRun;
         return next;
       },
     });
@@ -69,6 +78,7 @@ export default defineTool({
   },
   inputSchema: z.discriminatedUnion("kind", [
     z.strictObject({ kind: z.literal("read"), path: z.string().min(1) }),
+    z.strictObject({ kind: z.literal("restore"), path: z.string().min(1) }),
     z.strictObject({
       expectedDigest: z.string().regex(/^[0-9a-f]{64}$/u),
       kind: z.literal("replace"),
