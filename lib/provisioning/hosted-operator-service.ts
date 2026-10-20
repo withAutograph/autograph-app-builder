@@ -1,3 +1,5 @@
+import { tenantExportTransportRequestSchema } from "./hosted-operator-export-transport";
+import type { TenantExportTransportRequest } from "./hosted-operator-export-transport";
 import {
   OPERATOR_EXECUTION_OBSERVATION_HEADER,
   OPERATOR_EXECUTION_OBSERVATION_PREFERENCE,
@@ -61,7 +63,7 @@ import type {
 } from "./hosted-operator-neon-authorization";
 /* oxlint-disable eslint/no-await-in-loop, eslint/no-loop-func, sonarjs/no-nested-functions, eslint/complexity, sonarjs/expression-complexity, sonarjs/cognitive-complexity, unicorn/no-await-expression-member, eslint/prefer-destructuring -- Effects, fences and journal checkpoints are deliberately sequential inside one resource lease. */
 import { randomUUID } from "node:crypto";
-import type { z } from "zod";
+import { z } from "zod";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import type { BuilderProvisionAuthority } from "./journal";
 import {
@@ -227,6 +229,8 @@ export type HostedOperatorWorkerEffectContext = HostedOperatorEffectContext & {
   bindWorkerContext: (binding: WorkerContextBinding) => Promise<RecordWorkerCheckpoint>;
 };
 export interface ProtectedHostedOperatorDependencies {
+  /** Explicit separate export dispatcher; never enters preparation/cleanup state. */
+  exportRequest?: (request: Request, input: TenantExportTransportRequest) => Promise<Response>;
   store: HostedRuntimeJournalStore;
   /** Verify caller signature/audience and independently resolve this session's owner and selected project. Never trust body owner IDs. */
   authorize: (
@@ -1310,7 +1314,17 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
       if (request.method !== "POST" || new URL(request.url).pathname !== "/v1/runtime") {
         return response({ code: "not_found" }, 404);
       }
-      const input = operatorRequestSchema.parse(await request.json());
+      const body: unknown = await request.json();
+      const exportAction = z
+        .object({ action: z.enum(["export-plan", "export-status", "export-approval", "export"]) })
+        .safeParse(body);
+      if (exportAction.success) {
+        if (deps.exportRequest === undefined) {
+          throw new HostedOperatorError("protected_operator_required");
+        }
+        return await deps.exportRequest(request, tenantExportTransportRequestSchema.parse(body));
+      }
+      const input = operatorRequestSchema.parse(body);
       const isConsentRequest = input.action === "neon-authorization";
       createHostedOperatorConsentDiagnostic(
         isConsentRequest || input.action === "resolve-preview-target"

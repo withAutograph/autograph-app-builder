@@ -1,3 +1,12 @@
+import {
+  tenantExportTransportRequestSchema,
+  tenantExportPlannedSchema,
+} from "./hosted-operator-export-transport";
+import {
+  hostedTenantExportRequestSchema,
+  tenantExportStatusSchema,
+} from "./hosted-operator-export-contract";
+import type { HostedTenantExportRequest } from "./hosted-operator-export-contract";
 import { Agent } from "undici";
 import {
   operatorHeaderProbeRequired,
@@ -252,7 +261,113 @@ export const createHostedOperatorClient = (input: {
     emit(accessClass, detail);
     return value;
   };
+  const sendExport = async (
+    request: z.input<typeof tenantExportTransportRequestSchema>,
+    signal?: AbortSignal,
+  ) => {
+    const body = tenantExportTransportRequestSchema.parse(request);
+    const token = await input.token();
+    const options: RequestInit & { dispatcher: Agent } = {
+      dispatcher: operatorDispatcher,
+      method: "POST",
+      body: JSON.stringify(body),
+      redirect: "error",
+      signal,
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+        "x-vercel-trusted-oidc-idp-token": token,
+      },
+    };
+    let result: Response;
+    try {
+      result = await (input.fetch ?? fetch)(new URL("/v1/runtime", url), options);
+    } catch (error) {
+      if (body.action === "export" && !isCancellation(error, signal)) {
+        throw new HostedOperatorTransportUnknown(error);
+      }
+      throw error;
+    }
+    if (!result.ok) {
+      throw new HostedOperatorError("operator_unavailable");
+    }
+    let value: unknown;
+    try {
+      value = await result.json();
+    } catch (error) {
+      if (body.action === "export" && !isCancellation(error, signal)) {
+        throw new HostedOperatorTransportUnknown(error);
+      }
+      throw error;
+    }
+    const blocked = operatorPublicResultSchema.safeParse(value);
+    if (blocked.success) {
+      throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable");
+    }
+    return value;
+  };
+  const exportOwner = () => {
+    if (input.ownerContext === undefined || input.ownerContext === null) {
+      throw new HostedOperatorError("authorization_required");
+    }
+    return input.ownerContext;
+  };
   return {
+    async planTenantExport(
+      selection: z.infer<typeof operatorSelectionSchema>,
+      customerId: string,
+      idempotencyKey: string,
+      signal?: AbortSignal,
+    ) {
+      return tenantExportPlannedSchema.parse(
+        await sendExport(
+          {
+            action: "export-plan",
+            selection,
+            customerId,
+            idempotencyKey,
+            ownerContext: exportOwner(),
+          },
+          signal,
+        ),
+      );
+    },
+    async tenantExportStatus(exportId: string, signal?: AbortSignal) {
+      return tenantExportStatusSchema.parse(
+        await sendExport(
+          { action: "export-status", exportId, ownerContext: exportOwner() },
+          signal,
+        ),
+      );
+    },
+    async tenantExportApproval(request: HostedTenantExportRequest, signal?: AbortSignal) {
+      return z.strictObject({ approved: z.boolean() }).parse(
+        await sendExport(
+          {
+            ...hostedTenantExportRequestSchema.parse(request),
+            action: "export-approval",
+            ownerContext: exportOwner(),
+          },
+          signal,
+        ),
+      );
+    },
+    async exportTenantData(
+      request: HostedTenantExportRequest,
+      callId: string,
+      signal?: AbortSignal,
+    ) {
+      return tenantExportStatusSchema.parse(
+        await sendExport(
+          {
+            ...hostedTenantExportRequestSchema.parse(request),
+            callId,
+            ownerContext: exportOwner(),
+          },
+          signal,
+        ),
+      );
+    },
     async authIdentityInput(
       request: Extract<OperatorRequest, { action: "auth-identity-input" }>,
       signal?: AbortSignal,

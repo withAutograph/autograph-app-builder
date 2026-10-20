@@ -1117,6 +1117,23 @@ describe("hosted operator artifact ownership", () => {
   });
 
   it.each(["direct", "handoff"] as const)(
+    "authenticates repeated %s export metadata reads without provider requests and still rejects revocation",
+    async (kind) => {
+      const fixture = makeFixture(kind === "direct" ? directSessionRecord() : undefined);
+      const context = contextFor(kind === "direct" ? directOwnerContext : ownerContext);
+      for (let page = 0; page < 20; page += 1) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Each simulated publication boundary checks current authority again.
+        expect(await fixture.authority.authorizeArtifactRead(request(), context)).toEqual(context);
+      }
+      expectNoProviderReads(fixture);
+      await expect(fixture.authority.authorizeArtifactRead(request(""), context)).rejects.toThrow();
+      vi.mocked(fixture.membership.isMember).mockResolvedValue(false);
+      await expect(fixture.authority.authorizeArtifactRead(request(), context)).rejects.toThrow();
+      expectNoProviderReads(fixture);
+    },
+  );
+
+  it.each(["direct", "handoff"] as const)(
     "reads current %s artifact ownership independently of provider grants",
     async (kind) => {
       const fixture = makeFixture(kind === "direct" ? directSessionRecord() : undefined);
