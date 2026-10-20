@@ -42,15 +42,17 @@ export interface NormalAuthSession {
 }
 export type NormalAuthInvitation = z.infer<typeof invitationSchema>;
 export type NormalAuthMember = z.infer<typeof memberSchema>;
-export type NormalAuthOperation =
-  | "sign_up"
-  | "sign_in"
-  | "get_session"
-  | "invite_member"
-  | "accept_invitation"
-  | "list_invitations"
-  | "list_members"
-  | "set_active_organization";
+const normalAuthOperationSchema = z.enum([
+  "sign_up",
+  "sign_in",
+  "get_session",
+  "invite_member",
+  "accept_invitation",
+  "list_invitations",
+  "list_members",
+  "set_active_organization",
+]);
+export type NormalAuthOperation = z.infer<typeof normalAuthOperationSchema>;
 
 /** Private orchestration port: none of these credential/session values are public tool results. */
 export interface NormalAuthClient {
@@ -92,15 +94,29 @@ const errorCodes = z.enum([
   "EMAIL_VERIFICATION_REQUIRED_BEFORE_ACCEPTING_OR_REJECTING_INVITATION",
   "YOU_ARE_NOT_ALLOWED_TO_INVITE_USERS_TO_THIS_ORGANIZATION",
 ]);
-type Failure =
-  | "invalid_origin"
-  | "invalid_storage_state"
-  | "invalid_input"
-  | "approval_required"
-  | "transport_failed"
-  | "deadline_exceeded"
-  | "auth_rejected"
-  | "invalid_response";
+const normalAuthFailureSchema = z.enum([
+  "invalid_origin",
+  "invalid_storage_state",
+  "invalid_input",
+  "approval_required",
+  "transport_failed",
+  "deadline_exceeded",
+  "auth_rejected",
+  "invalid_response",
+]);
+type Failure = z.infer<typeof normalAuthFailureSchema>;
+
+/** The same closed client vocabulary is used for request handling and safe diagnostics. */
+export const normalAuthClientFailureDiagnosticSchema = z.strictObject({
+  code: normalAuthFailureSchema,
+  operation: normalAuthOperationSchema.optional(),
+  httpStatus: z.number().int().min(100).max(599).optional(),
+  authCode: errorCodes.optional(),
+  retryAfterMs: z.number().int().nonnegative().refine(Number.isSafeInteger).optional(),
+});
+export type NormalAuthClientFailureDiagnostic = z.infer<
+  typeof normalAuthClientFailureDiagnosticSchema
+>;
 
 /** Deliberately has no raw body, cause, request URL, cookies, credentials, or server message. */
 export class NormalAuthClientError extends Error {
@@ -130,6 +146,45 @@ export class NormalAuthClientError extends Error {
     }
   }
 }
+
+/** Only own data descriptors and closed values survive; no message, body or inherited/accessor metadata is inspected. */
+export const projectNormalAuthClientFailure = (
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the exception-to-closed-metadata boundary and must accept hostile thrown values.
+  error: unknown,
+): NormalAuthClientFailureDiagnostic | undefined => {
+  try {
+    if (!(error instanceof NormalAuthClientError)) {
+      return undefined;
+    }
+    const code = normalAuthFailureSchema.safeParse(
+      Object.getOwnPropertyDescriptor(error, "code")?.value,
+    );
+    if (!code.success) {
+      return undefined;
+    }
+    const operation = normalAuthOperationSchema.safeParse(
+      Object.getOwnPropertyDescriptor(error, "operation")?.value,
+    );
+    const httpStatus = normalAuthClientFailureDiagnosticSchema.shape.httpStatus
+      .unwrap()
+      .safeParse(Object.getOwnPropertyDescriptor(error, "httpStatus")?.value);
+    const authCode = errorCodes.safeParse(
+      Object.getOwnPropertyDescriptor(error, "authCode")?.value,
+    );
+    const retryAfterMs = normalAuthClientFailureDiagnosticSchema.shape.retryAfterMs
+      .unwrap()
+      .safeParse(Object.getOwnPropertyDescriptor(error, "retryAfterMs")?.value);
+    return {
+      code: code.data,
+      ...(operation.success ? { operation: operation.data } : {}),
+      ...(httpStatus.success ? { httpStatus: httpStatus.data } : {}),
+      ...(authCode.success ? { authCode: authCode.data } : {}),
+      ...(retryAfterMs.success ? { retryAfterMs: retryAfterMs.data } : {}),
+    };
+  } catch {
+    return undefined;
+  }
+};
 
 const parseInput = <T>(schema: z.ZodType<T>, value: T, operation: NormalAuthOperation): T => {
   const parsed = schema.safeParse(value);

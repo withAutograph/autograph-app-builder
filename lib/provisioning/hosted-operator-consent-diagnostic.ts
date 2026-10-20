@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { HostedOperatorError, operatorPublicResultSchema } from "./hosted-operator-contract";
+import {
+  normalAuthClientFailureDiagnosticSchema,
+  projectNormalAuthClientFailure,
+} from "./hosted-operator-normal-auth-client";
 
 const operatorPlanStage = z.enum([
   "journal_read",
@@ -289,6 +293,7 @@ const operatorExecutionFailure = operatorPlanningFailure
     stage: operatorExecutionStage,
     runtimeReadinessStage: operatorRuntimeReadinessStage.optional(),
     authStartup: z.unknown().optional(),
+    normalAuth: normalAuthClientFailureDiagnosticSchema.optional(),
     mode: z.enum(["inspect", "execute"]).optional(),
     httpStatus: z.number().int().min(100).max(599).optional(),
     commandExit: z.enum(["zero", "nonzero"]).optional(),
@@ -1072,6 +1077,10 @@ export const reportOperatorExecutionFailure = (
     ...execution,
     errorClass: "unexpected",
   };
+  const normalAuth = projectNormalAuthClientFailure(error);
+  if (normalAuth !== undefined) {
+    executionFailure.normalAuth = normalAuth;
+  }
   try {
     if (error instanceof HostedOperatorError) {
       executionFailure.errorClass = "operator_error";
