@@ -9,6 +9,7 @@ import {
 import type {
   ApplicationReviewEvidence,
   ApplicationSourceReadCursor,
+  ApplicationSourceReviewRequestStart,
 } from "./application-source-review";
 import {
   createApplicationReviewEvidence,
@@ -21,6 +22,7 @@ import {
   validateSourceJudgment,
 } from "./product-source-review";
 import type { ProductSourceReviewInput } from "./product-source-review";
+import type { SourceReviewRequest } from "./product-source-review-batches";
 
 const input: ProductSourceReviewInput = {
   appSpec: "Build a draft screen.",
@@ -271,6 +273,90 @@ const completeApplication: ApplicationToolCall[] = [
 ];
 
 describe("independent application source review", () => {
+  it("measures projected request groups without logging evidence and joins actual model calls", async () => {
+    const evidence = applicationEvidence();
+    const secret = "private-message-shape-sentinel";
+    evidence.readRequirements = () => Promise.resolve({ text: secret.repeat(200) });
+    const readSource = evidence.readSource;
+    evidence.readSource = async (request) => ({
+      ...(await readSource(request)),
+      content: secret.repeat(300),
+    });
+    const model = applicationModel([
+      [
+        { toolName: "readRequirements", input: { id: "original" } },
+        { toolName: "listEvidence", input: { kind: "source" } },
+        { toolName: "readSource", input: { path: "apps/example/actions.ts" } },
+        { toolName: "readSource", input: { path: "packages/shared/server.ts" } },
+      ],
+      [{ toolName: "listEvidence", input: { kind: "requirements" } }],
+      completeApplication,
+    ]);
+    const starts: ApplicationSourceReviewRequestStart[] = [];
+    const completed: SourceReviewRequest[] = [];
+    const result = await assessApplicationSource(input, evidence, {
+      testModel: model,
+      onRequestStart: (request) => {
+        starts.push(request);
+      },
+      onRequest: (request) => {
+        completed.push(request);
+      },
+    });
+    expect(result.reviewCompleted).toBe(true);
+    expect(starts.map(({ requestOrdinal }) => requestOrdinal)).toEqual([1, 2, 3]);
+    expect(starts.map(({ sdkCallId }) => sdkCallId)).toEqual(
+      completed.map(({ sdkCallId }) => sdkCallId),
+    );
+    expect(starts).toHaveLength(model.doGenerateCalls.length);
+    const current = starts[1].messageMeasurements;
+    const historical = starts[2].messageMeasurements;
+    expect(current.sourceFullResultCount).toBe(2);
+    expect(current.sourceReferenceResultCount).toBe(0);
+    expect(historical.sourceFullResultCount).toBe(0);
+    expect(historical.sourceReferenceResultCount).toBe(2);
+    expect(historical.groups.source.serializedUtf16Characters).toBeLessThan(
+      current.groups.source.serializedUtf16Characters,
+    );
+    expect(historical.groups.requirements).toEqual(current.groups.requirements);
+    expect(historical.groups.listing.partCount).toBe(2);
+    expect(current.groups.listing.partCount).toBe(1);
+    for (const { messageMeasurements } of starts) {
+      expect(messageMeasurements.measurementAvailable).toBe(true);
+      expect(messageMeasurements.instructionSerializedUtf16Characters).toBeGreaterThan(0);
+      expect(messageMeasurements.toolDefinitionSerializedUtf16Characters).toBeGreaterThan(0);
+      expect(messageMeasurements.groups.other.partCount).toBeGreaterThan(0);
+      for (const group of Object.values(messageMeasurements.groups)) {
+        expect(Number.isSafeInteger(group.partCount)).toBe(true);
+        expect(Number.isSafeInteger(group.serializedUtf16Characters)).toBe(true);
+      }
+    }
+    const serialized = JSON.stringify(starts);
+    for (const privateValue of [
+      secret,
+      "apps/example/actions.ts",
+      "packages/shared/server.ts",
+      input.originalRequest,
+      input.appSpec,
+    ]) {
+      expect(serialized).not.toContain(privateValue);
+    }
+  });
+
+  it("keeps diagnostic callback failure from changing review completion or dispatch", async () => {
+    const model = applicationModel([completeApplication]);
+    const result = await assessApplicationSource(input, applicationEvidence(), {
+      testModel: model,
+      onRequestStart() {
+        throw new Error("private logging failure");
+      },
+    });
+    expect(result.reviewCompleted).toBe(true);
+    expect(model.doGenerateCalls).toHaveLength(1);
+    expect(result.invocation?.requestAttempts).toBe(1);
+    expect(JSON.stringify(result)).not.toContain("private logging failure");
+  });
+
   it("reads complete original evidence and related unchanged imports, retaining checked findings without fragment pairing", async () => {
     const evidence = applicationEvidence();
     const model = applicationModel([inspectApplication, recordApplication, completeApplication]);

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createGateway, tool, ToolLoopAgent } from "ai";
-import type { LanguageModel, ModelMessage } from "ai";
+import type { LanguageModel, ModelMessage, LanguageModelCallStartEvent } from "ai";
 import { getVercelOidcToken } from "@vercel/oidc";
 import { z } from "zod";
 import { builderValidationModelId } from "../integrations/active-model";
@@ -74,9 +74,30 @@ export class ApplicationReviewSelectionError extends Error {
   }
 }
 
+type SourceReviewMessageGroup = "requirements" | "source" | "listing" | "assistant" | "other";
+export interface ApplicationSourceReviewMessageMeasurements {
+  measurementAvailable: boolean;
+  messageCount: number;
+  groups: Record<
+    SourceReviewMessageGroup,
+    { partCount: number; serializedUtf16Characters: number }
+  >;
+  sourceFullResultCount: number;
+  sourceReferenceResultCount: number;
+  instructionSerializedUtf16Characters: number;
+  toolDefinitionSerializedUtf16Characters: number;
+}
+export interface ApplicationSourceReviewRequestStart {
+  requestOrdinal: number;
+  sdkCallId?: string;
+  stepNumber: number;
+  messageMeasurements: ApplicationSourceReviewMessageMeasurements;
+}
+
 export interface ApplicationSourceReviewOptions {
   abortSignal?: AbortSignal;
   onRequest?: (request: SourceReviewRequest) => void;
+  onRequestStart?: (request: ApplicationSourceReviewRequestStart) => void;
   onInvocation?: (invocation: SourceReviewInvocation) => void;
   sessionId?: string;
   assertCurrentOwner?: () => Promise<void>;
@@ -159,6 +180,92 @@ const projectSourceReviewMessages = (
       }),
     };
   });
+};
+
+const emptyMessageMeasurements = (): ApplicationSourceReviewMessageMeasurements => ({
+  measurementAvailable: false,
+  messageCount: 0,
+  groups: {
+    requirements: { partCount: 0, serializedUtf16Characters: 0 },
+    source: { partCount: 0, serializedUtf16Characters: 0 },
+    listing: { partCount: 0, serializedUtf16Characters: 0 },
+    assistant: { partCount: 0, serializedUtf16Characters: 0 },
+    other: { partCount: 0, serializedUtf16Characters: 0 },
+  },
+  sourceFullResultCount: 0,
+  sourceReferenceResultCount: 0,
+  instructionSerializedUtf16Characters: 0,
+  toolDefinitionSerializedUtf16Characters: 0,
+});
+type SerializedReviewContent =
+  | ModelMessage["content"]
+  | Exclude<ModelMessage["content"], string>[number]
+  | LanguageModelCallStartEvent["instructions"]
+  | LanguageModelCallStartEvent["tools"];
+const serializedUtf16Characters = (value: SerializedReviewContent): number =>
+  (JSON.stringify(value) ?? "").length;
+const fullSourceMeasurement = z.object({ content: z.string() });
+const sourceReferenceMeasurement = z.object({
+  kind: z.literal("source"),
+  contentDigest: z.string(),
+});
+
+type SourceReviewToolPart = Extract<ModelMessage, { role: "tool" }>["content"][number];
+const sourceReviewToolGroup = (
+  part: SourceReviewToolPart,
+  measurements: ApplicationSourceReviewMessageMeasurements,
+): SourceReviewMessageGroup => {
+  if (part.type !== "tool-result") {
+    return "other";
+  }
+  if (part.toolName === "readRequirements") {
+    return "requirements";
+  }
+  if (part.toolName === "listEvidence") {
+    return "listing";
+  }
+  if (part.toolName !== "readSource") {
+    return "other";
+  }
+  if (part.output.type === "json") {
+    if (fullSourceMeasurement.safeParse(part.output.value).success) {
+      measurements.sourceFullResultCount += 1;
+    } else if (sourceReferenceMeasurement.safeParse(part.output.value).success) {
+      measurements.sourceReferenceResultCount += 1;
+    }
+  }
+  return "source";
+};
+
+/** Numeric measurements only; these describe message JSON, never provider bytes or tokens. */
+const measureSourceReviewMessages = (
+  messages: readonly ModelMessage[],
+): ApplicationSourceReviewMessageMeasurements => {
+  try {
+    const measurements = emptyMessageMeasurements();
+    measurements.messageCount = messages.length;
+    const measurePart = (group: SourceReviewMessageGroup, part: SerializedReviewContent) => {
+      measurements.groups[group].partCount += 1;
+      // Encode once per part, discard it immediately and sum scalar counters.
+      measurements.groups[group].serializedUtf16Characters += serializedUtf16Characters(part);
+    };
+    for (const message of messages) {
+      if (message.role === "tool") {
+        for (const part of message.content) {
+          measurePart(sourceReviewToolGroup(part, measurements), part);
+        }
+      } else {
+        const group = message.role === "assistant" ? "assistant" : "other";
+        for (const part of Array.isArray(message.content) ? message.content : [message.content]) {
+          measurePart(group, part);
+        }
+      }
+    }
+    measurements.measurementAvailable = true;
+    return measurements;
+  } catch {
+    return emptyMessageMeasurements();
+  }
 };
 
 interface ReviewState {
@@ -454,6 +561,9 @@ export const assessApplicationSource = async (
     };
     let messages: ModelMessage[] = [{ role: "user", content: JSON.stringify(initial) }];
     let currentMessages = messages;
+    let preparedMessageMeasurements: ApplicationSourceReviewMessageMeasurements | undefined;
+    let preparedStepNumber = 0;
+    let requestOrdinal = 0;
     let lastRecovery: string | undefined;
     const agent = new ToolLoopAgent({
       model,
@@ -466,17 +576,47 @@ export const assessApplicationSource = async (
         state.evidenceFailed ||
         state.outputRejected ||
         (state.completionRequested && !state.invalidEvidence),
-      prepareStep: async ({ messages: nextMessages }) => {
+      prepareStep: async ({ messages: nextMessages, stepNumber }) => {
         await guard();
         currentMessages = projectSourceReviewMessages(nextMessages, state.sourceReads);
+        preparedStepNumber = stepNumber;
+        if (options.onRequestStart !== undefined) {
+          preparedMessageMeasurements = measureSourceReviewMessages(currentMessages);
+        }
         state.completionRequested = false;
         state.invalidEvidence = false;
         return { messages: currentMessages };
       },
-      onLanguageModelCallStart: () => {
+      onLanguageModelCallStart: (event) => {
         options.abortSignal?.throwIfAborted();
         invocation.requestAttempts += 1;
         invocation.requestsWithIncompleteUsage += 1;
+        requestOrdinal += 1;
+        if (options.onRequestStart !== undefined) {
+          let messageMeasurements = emptyMessageMeasurements();
+          try {
+            messageMeasurements = {
+              ...(preparedMessageMeasurements ?? emptyMessageMeasurements()),
+              instructionSerializedUtf16Characters: serializedUtf16Characters(event.instructions),
+              toolDefinitionSerializedUtf16Characters: serializedUtf16Characters(event.tools),
+            };
+          } catch {
+            // Retain only a closed unavailable measurements when measurement fails.
+          }
+          try {
+            options.onRequestStart({
+              requestOrdinal,
+              sdkCallId: z
+                .string()
+                .regex(/^[A-Za-z0-9_.:-]{1,256}$/u)
+                .safeParse(event.callId).data,
+              stepNumber: preparedStepNumber,
+              messageMeasurements,
+            });
+          } catch {
+            // Diagnostic measurement or logging must never alter the review.
+          }
+        }
       },
       onLanguageModelCallEnd: (event) => {
         recordSourceReviewRequest({ invocation, onRequest: options.onRequest }, event);

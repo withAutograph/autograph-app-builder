@@ -303,6 +303,19 @@ export const reviewAppliedProductSource = async (input: {
           }),
         );
       },
+      onRequestStart(startedRequest) {
+        console.info(
+          JSON.stringify({
+            callId: input.callId,
+            event: "app_builder.source_review_request_started",
+            sessionId: input.sessionId,
+            requestOrdinal: startedRequest.requestOrdinal,
+            sdkCallId: startedRequest.sdkCallId,
+            stepNumber: startedRequest.stepNumber,
+            messageMeasurements: startedRequest.messageMeasurements,
+          }),
+        );
+      },
       onRequest(completedRequest) {
         console.info(
           JSON.stringify({
