@@ -44,8 +44,8 @@ export const compileAppSchemaRelease = async (input: {
       request.abortSignal = input.signal;
     }
     const result = await input.sandbox.run(request);
-    const stdout = safeCommandOutput(result.stdout);
-    const stderr = safeCommandOutput(result.stderr);
+    const stdout = safeCommandOutput(result.stdout, { taskLabel: "app:compile" });
+    const stderr = safeCommandOutput(result.stderr, { taskLabel: "app:compile" });
     if (result.exitCode !== 0) {
       return {
         command,

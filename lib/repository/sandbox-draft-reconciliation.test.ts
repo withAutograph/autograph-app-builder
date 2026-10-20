@@ -7,6 +7,7 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   rmdirSync,
   symlinkSync,
@@ -44,7 +45,7 @@ const git = (cwd: string, ...args: string[]) => {
   return execFileSync("git", args, { cwd, encoding: "utf-8" }).trim();
 };
 
-const fixture = (platformConflict = false) => {
+const fixture = (platformConflict = false, dependencyWorkspace = false) => {
   const root = mkdtempSync(path.join(tmpdir(), "builder-draft-merge-"));
   temporary.push(root);
   const remote = path.join(root, "remote.git");
@@ -59,6 +60,32 @@ const fixture = (platformConflict = false) => {
   mkdirSync(path.join(checkout, "docs"), { recursive: true });
   writeFileSync(path.join(checkout, "apps/demo/tests/journey.spec.ts"), "initial\n");
   writeFileSync(path.join(checkout, "docs/platform.md"), "initial\n");
+  if (dependencyWorkspace) {
+    mkdirSync(path.join(checkout, "packages/probe"), { recursive: true });
+    writeFileSync(path.join(checkout, ".gitignore"), "node_modules/\n");
+    writeFileSync(
+      path.join(checkout, "package.json"),
+      JSON.stringify({ private: true, workspaces: ["packages/*"] }),
+    );
+    writeFileSync(
+      path.join(checkout, "packages/probe/package.json"),
+      JSON.stringify({
+        name: "@fixture/probe",
+        type: "module",
+        exports: "./index.js",
+        bin: { "workspace-probe": "./bin.cjs" },
+      }),
+    );
+    writeFileSync(
+      path.join(checkout, "packages/probe/index.js"),
+      'import { config } from "@vercel/microfrontends/config"; export const value = "initial:" + config;\n',
+    );
+    writeFileSync(
+      path.join(checkout, "packages/probe/bin.cjs"),
+      `#!${process.execPath}\nconsole.log("initial-workspace-tool");\n`,
+    );
+    chmodSync(path.join(checkout, "packages/probe/bin.cjs"), 0o755);
+  }
   git(checkout, "add", ".");
   git(checkout, "commit", "-m", "initial");
   git(checkout, "push", "origin", "main");
@@ -74,6 +101,16 @@ const fixture = (platformConflict = false) => {
   git(checkout, "switch", "main");
   writeFileSync(path.join(checkout, "apps/demo/tests/journey.spec.ts"), "main\n");
   writeFileSync(path.join(checkout, "docs/platform.md"), "main\n");
+  if (dependencyWorkspace) {
+    writeFileSync(
+      path.join(checkout, "packages/probe/index.js"),
+      'import { config } from "@vercel/microfrontends/config"; export const value = "merged-main:" + config;\n',
+    );
+    writeFileSync(
+      path.join(checkout, "packages/probe/bin.cjs"),
+      `#!${process.execPath}\nconsole.log("merged-workspace-tool");\n`,
+    );
+  }
   git(checkout, "add", ".");
   git(checkout, "commit", "-m", "main moved");
   const baseSha = git(checkout, "rev-parse", "HEAD");
@@ -132,6 +169,124 @@ const fixture = (platformConflict = false) => {
 };
 
 describe("isolated draft reconciliation", () => {
+  it("reuses the checkout dependency closure while binding workspace imports to candidate source", async () => {
+    const f = fixture(false, true);
+    const checkout = path.join(f.root, "repository");
+    const closure = path.join(f.root, "installed/node_modules");
+    const externalPackage = path.join(closure, "@vercel/microfrontends");
+    const externalTool = path.join(f.root, "installed/bin/probe.cjs");
+    mkdirSync(path.dirname(externalTool), { recursive: true });
+    writeFileSync(externalTool, `#!${process.execPath}\nconsole.log("external-cached-tool");\n`);
+    chmodSync(externalTool, 0o755);
+    const externalToolBytes = readFileSync(externalTool);
+    const externalToolMode = lstatSync(externalTool).mode;
+    mkdirSync(path.join(closure, ".bin"), { recursive: true });
+    symlinkSync("../../bin/probe.cjs", path.join(closure, ".bin/probe"));
+    symlinkSync(
+      path.join(checkout, "packages/probe/bin.cjs"),
+      path.join(closure, ".bin/workspace-probe"),
+    );
+    const executeWorkspaceTool = (cwd: string) =>
+      execFileSync(path.join(cwd, "node_modules/.bin/workspace-probe"), [], {
+        cwd,
+        encoding: "utf-8",
+      }).trim();
+    const executeTool = (cwd: string) =>
+      execFileSync(path.join(cwd, "node_modules/.bin/probe"), [], {
+        cwd,
+        encoding: "utf-8",
+      }).trim();
+    mkdirSync(externalPackage, { recursive: true });
+    mkdirSync(path.join(closure, "@fixture"), { recursive: true });
+    writeFileSync(
+      path.join(externalPackage, "package.json"),
+      JSON.stringify({
+        name: "@vercel/microfrontends",
+        type: "module",
+        exports: { "./config": "./config.js" },
+      }),
+    );
+    const installedSource = path.join(externalPackage, "config.js");
+    writeFileSync(installedSource, 'export const config = "reused-external-config";\n');
+    const installedBytes = readFileSync(installedSource);
+    const installedMode = lstatSync(installedSource).mode;
+    symlinkSync(path.join(checkout, "packages/probe"), path.join(closure, "@fixture/probe"));
+    symlinkSync(closure, path.join(checkout, "node_modules"));
+    const importValue = (cwd: string) =>
+      execFileSync(
+        process.execPath,
+        [
+          "--input-type=module",
+          "--eval",
+          'import { value } from "@fixture/probe"; console.log(value);',
+        ],
+        { cwd, encoding: "utf-8" },
+      ).trim();
+    expect(importValue(checkout)).toBe("initial:reused-external-config");
+    expect(executeTool(checkout)).toBe("external-cached-tool");
+    expect(executeWorkspaceTool(checkout)).toBe("initial-workspace-tool");
+    const input = {
+      appId: "demo",
+      baseBranch: "main",
+      baseSha: f.baseSha,
+      headBranch: "draft",
+      headSha: f.headSha,
+      repository: { name: "arrusted-development", owner: "withAutograph" },
+      sandbox: f.sandbox,
+      workspaceRoot: f.root,
+    };
+    const prepared = await prepareDraftReconciliation(input);
+    expect(importValue(prepared.root)).toBe("merged-main:reused-external-config");
+    expect(executeTool(prepared.root)).toBe("external-cached-tool");
+    expect(realpathSync(path.join(prepared.root, "node_modules/.bin/probe"))).toBe(
+      realpathSync(externalTool),
+    );
+    expect(executeWorkspaceTool(prepared.root)).toBe("merged-workspace-tool");
+    const repaired = path.join(prepared.root, "apps/demo/tests/journey.spec.ts");
+    const added = path.join(prepared.root, "apps/demo/tests/new-repair.txt");
+    writeFileSync(repaired, "retained candidate repair\n");
+    writeFileSync(added, "retained new file\n");
+    const resolved = await inspectDraftReconciliation({ prepared, sandbox: f.sandbox });
+    expect(resolved.unresolvedConflicts).toEqual([]);
+    expect(resolved.baseChanges.map((change) => change.path)).toContain(
+      "apps/demo/tests/new-repair.txt",
+    );
+    expect(
+      [...resolved.baseChanges, ...resolved.headChanges].some((change) =>
+        change.path.split("/").includes("node_modules"),
+      ),
+    ).toBe(false);
+    const retained = await prepareDraftReconciliation({
+      ...input,
+      previousCandidate: prepared,
+      replayPreviousCandidate: true,
+    });
+    expect(importValue(retained.root)).toBe("merged-main:reused-external-config");
+    expect(executeTool(retained.root)).toBe("external-cached-tool");
+    expect(executeWorkspaceTool(retained.root)).toBe("merged-workspace-tool");
+    const inspected = await inspectDraftReconciliation({ prepared: retained, sandbox: f.sandbox });
+    expect(inspected.unresolvedConflicts).toEqual([]);
+    expect(inspected.baseChanges.map((change) => change.path)).toContain(
+      "apps/demo/tests/new-repair.txt",
+    );
+    expect(
+      [...inspected.baseChanges, ...inspected.headChanges].some((change) =>
+        change.path.split("/").includes("node_modules"),
+      ),
+    ).toBe(false);
+    expect(readFileSync(path.join(retained.root, "apps/demo/tests/journey.spec.ts"), "utf-8")).toBe(
+      "retained candidate repair\n",
+    );
+    expect(readFileSync(path.join(retained.root, "apps/demo/tests/new-repair.txt"), "utf-8")).toBe(
+      "retained new file\n",
+    );
+    expect(importValue(checkout)).toBe("initial:reused-external-config");
+    expect(readFileSync(installedSource)).toEqual(installedBytes);
+    expect(lstatSync(installedSource).mode).toBe(installedMode);
+    expect(readFileSync(externalTool)).toEqual(externalToolBytes);
+    expect(lstatSync(externalTool).mode).toBe(externalToolMode);
+  });
+
   it("pages a large long-line candidate completely without transferring its full text through the sandbox API", async () => {
     const f = fixture();
     const prepared = await prepareDraftReconciliation({

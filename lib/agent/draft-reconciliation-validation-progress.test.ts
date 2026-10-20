@@ -7,6 +7,7 @@ import type {
 } from "../repository/validation-log";
 
 import validateReconciliation from "../../agent/tools/validate_github_draft_pr_reconciliation";
+import formatCandidate from "../../agent/tools/format_github_draft_pr_candidate";
 import editCandidate from "../../agent/tools/edit_github_draft_pr_candidate";
 
 const digest = "a".repeat(64);
@@ -167,6 +168,7 @@ describe("draft reconciliation command progress", () => {
       pullRequestNumber: 7,
       repositoryId: "repo-id",
       root: "/workspace/candidate",
+      workspaceRoot: "/workspace",
       version: 1,
     };
     mocks.attempts = [];
@@ -176,10 +178,113 @@ describe("draft reconciliation command progress", () => {
       phase: "reviewed",
       reviewReceipt: { digest },
     };
-    mocks.inspect.mockResolvedValue({ resolvedTree: tree, unresolvedConflicts: [] });
+    mocks.inspect.mockResolvedValue({
+      resolvedTree: tree,
+      unresolvedConflicts: [],
+      baseChanges: [],
+      headChanges: [],
+    });
     mocks.run.mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
     mocks.check.mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
   });
+
+  it.each(["format", "validate"] as const)(
+    "attaches the saved candidate dependency view before direct resumed %s commands",
+    async (operation) => {
+      let attached = false;
+      const events: string[] = [];
+      const root = mocks.candidate?.root;
+      mocks.run.mockImplementation((input: { command: string; workingDirectory?: string }) => {
+        if (input.command === "mise run --no-deps --skip-tools format:app") {
+          expect(attached).toBe(true);
+          events.push("format");
+        } else {
+          expect(input.workingDirectory).toBe("/workspace");
+          attached = true;
+          events.push("attached");
+        }
+        return Promise.resolve({ exitCode: 0, stderr: "", stdout: "" });
+      });
+      mocks.inspect.mockImplementation(() => {
+        expect(attached).toBe(true);
+        return Promise.resolve({
+          resolvedTree: tree,
+          unresolvedConflicts: [],
+          baseChanges: [],
+          headChanges: [],
+        });
+      });
+      mocks.compile.mockImplementation(() => {
+        expect(attached).toBe(true);
+        events.push("compile");
+        return Promise.resolve({
+          command: schemaCommand,
+          exitCode: 0,
+          status: "compiled",
+          stderr: "",
+          stdout: "",
+        });
+      });
+      if (operation === "format") {
+        await expect(formatCandidate.execute({}, context)).resolves.toMatchObject({
+          status: "formatted",
+        });
+        expect(events.indexOf("attached")).toBeLessThan(events.indexOf("format"));
+        expect(mocks.compile).not.toHaveBeenCalled();
+      } else {
+        await expect(
+          validateReconciliation.execute(
+            {
+              additionalCheckTasks: [],
+              expectedCommand: schemaCommand,
+              incremental: true,
+              runBrowserTests: false,
+            },
+            context,
+          ),
+        ).resolves.toMatchObject({ status: "in_progress", command: schemaCommand });
+        expect(events.indexOf("attached")).toBeLessThan(events.indexOf("compile"));
+      }
+      expect(mocks.candidate?.root).toBe(root);
+      expect(mocks.run).not.toHaveBeenCalledWith(
+        expect.objectContaining({ command: installCommand }),
+      );
+    },
+  );
+
+  it.each(["format", "validate"] as const)(
+    "preserves an actual dependency attachment failure before resumed %s commands",
+    async (operation) => {
+      const saved = mocks.candidate;
+      mocks.run.mockResolvedValueOnce({
+        exitCode: 1,
+        stderr: "existing dependency unavailable",
+        stdout: "",
+      });
+      const result =
+        operation === "format"
+          ? formatCandidate.execute({}, context)
+          : validateReconciliation.execute(
+              {
+                additionalCheckTasks: [],
+                expectedCommand: schemaCommand,
+                incremental: true,
+                runBrowserTests: false,
+              },
+              context,
+            );
+      await expect(result).rejects.toThrow("could not attach the existing checkout dependencies");
+      expect(mocks.candidate).toBe(saved);
+      expect(mocks.compile).not.toHaveBeenCalled();
+      expect(mocks.check).not.toHaveBeenCalled();
+      expect(mocks.run).not.toHaveBeenCalledWith(
+        expect.objectContaining({ command: "mise run --no-deps --skip-tools format:app" }),
+      );
+      expect(mocks.run).not.toHaveBeenCalledWith(
+        expect.objectContaining({ command: installCommand }),
+      );
+    },
+  );
 
   it("records checks before independently capturing the actual selected release", async () => {
     await expect(incremental(checkCommand)).resolves.toMatchObject({
@@ -188,7 +293,9 @@ describe("draft reconciliation command progress", () => {
       passedCommands: 2,
       status: "in_progress",
     });
-    expect(mocks.run).not.toHaveBeenCalled();
+    expect(mocks.run).not.toHaveBeenCalledWith(
+      expect.objectContaining({ command: installCommand }),
+    );
     expect(mocks.compile).toHaveBeenCalledOnce();
     expect(mocks.publish).not.toHaveBeenCalled();
     await expect(incremental(testCommand)).resolves.toMatchObject({
@@ -216,7 +323,9 @@ describe("draft reconciliation command progress", () => {
       ),
     ).resolves.toMatchObject({ status: "validated" });
     expect(mocks.publish).toHaveBeenCalledOnce();
-    expect(mocks.run).not.toHaveBeenCalled();
+    expect(mocks.run).not.toHaveBeenCalledWith(
+      expect.objectContaining({ command: installCommand }),
+    );
     expect(mocks.compile).toHaveBeenCalledOnce();
     expect(mocks.check).toHaveBeenCalledTimes(2);
     expect(mocks.candidate?.validation).toMatchObject({
@@ -233,7 +342,9 @@ describe("draft reconciliation command progress", () => {
     await incremental(checkCommand);
     await expect(incremental(checkCommand)).rejects.toThrow(`ready for ${testCommand}`);
     expect(mocks.check).toHaveBeenCalledOnce();
-    expect(mocks.run).not.toHaveBeenCalled();
+    expect(mocks.run).not.toHaveBeenCalledWith(
+      expect.objectContaining({ command: installCommand }),
+    );
   });
 
   it("resumes checks and capture and validates only after the final result", async () => {
@@ -271,7 +382,9 @@ describe("draft reconciliation command progress", () => {
       exitCode: null,
     });
     expect(mocks.attempts[1]).toMatchObject({ completion: "complete", exitCode: 0 });
-    expect(mocks.run).not.toHaveBeenCalled();
+    expect(mocks.run).not.toHaveBeenCalledWith(
+      expect.objectContaining({ command: installCommand }),
+    );
     expect(mocks.compile).toHaveBeenCalledOnce();
   });
 
@@ -286,7 +399,9 @@ describe("draft reconciliation command progress", () => {
     await incremental(checkCommand);
     expect(mocks.compile).toHaveBeenCalledTimes(2);
     expect(mocks.check).toHaveBeenCalledTimes(2);
-    expect(mocks.run).not.toHaveBeenCalled();
+    expect(mocks.run).not.toHaveBeenCalledWith(
+      expect.objectContaining({ command: installCommand }),
+    );
     expect(mocks.compile).toHaveBeenCalledTimes(2);
   });
 
@@ -374,7 +489,14 @@ describe("draft reconciliation command progress", () => {
       status: "in_progress",
       exitCode: 1,
     });
-    mocks.run.mockResolvedValueOnce({ exitCode: 1, stderr: "lockfile mismatch", stdout: "" });
+    let installFailed = false;
+    mocks.run.mockImplementation((input: { command: string }) => {
+      if (input.command === installCommand && !installFailed) {
+        installFailed = true;
+        return Promise.resolve({ exitCode: 1, stderr: "lockfile mismatch", stdout: "" });
+      }
+      return Promise.resolve({ exitCode: 0, stderr: "", stdout: "" });
+    });
     await expect(incremental(installCommand)).resolves.toMatchObject({
       command: installCommand,
       exitCode: 1,
@@ -510,7 +632,9 @@ describe("draft reconciliation command progress", () => {
       status: "needs_repair",
       exitCode: 2,
     });
-    expect(mocks.run).not.toHaveBeenCalled();
+    expect(mocks.run).not.toHaveBeenCalledWith(
+      expect.objectContaining({ command: installCommand }),
+    );
     expect(mocks.compile).toHaveBeenCalledOnce();
     expect(mocks.publish).not.toHaveBeenCalled();
   });
@@ -550,7 +674,9 @@ describe("draft reconciliation command progress", () => {
     ).resolves.toMatchObject({ status: "validated" });
     expect(mocks.check).toHaveBeenCalledTimes(2);
     expect(mocks.compile).toHaveBeenCalledOnce();
-    expect(mocks.run).not.toHaveBeenCalled();
+    expect(mocks.run).not.toHaveBeenCalledWith(
+      expect.objectContaining({ command: installCommand }),
+    );
   });
 
   it("captures static app completion as not-required after its selected compile task", async () => {
@@ -650,7 +776,9 @@ describe("draft reconciliation command progress", () => {
       ),
     ).resolves.toMatchObject({ status: "validated" });
     expect(mocks.check).toHaveBeenCalledTimes(4);
-    expect(mocks.run).not.toHaveBeenCalled();
+    expect(mocks.run).not.toHaveBeenCalledWith(
+      expect.objectContaining({ command: installCommand }),
+    );
     expect(mocks.publish).toHaveBeenCalledTimes(2);
     expect(mocks.compile).toHaveBeenCalledTimes(2);
     expect(mocks.candidate?.validation).toMatchObject({
@@ -770,7 +898,9 @@ describe("draft reconciliation command progress", () => {
       status: "needs_repair",
       exitCode: 1,
     });
-    expect(mocks.run).not.toHaveBeenCalled();
+    expect(mocks.run).not.toHaveBeenCalledWith(
+      expect.objectContaining({ command: installCommand }),
+    );
     expect(mocks.compile).toHaveBeenCalledOnce();
     expect(mocks.candidate?.validationRun).toMatchObject({
       nextIndex: 1,
@@ -789,7 +919,9 @@ describe("draft reconciliation command progress", () => {
       status: "needs_repair",
       exitCode: 1,
     });
-    expect(mocks.run).not.toHaveBeenCalled();
+    expect(mocks.run).not.toHaveBeenCalledWith(
+      expect.objectContaining({ command: installCommand }),
+    );
   });
   it.each([
     "Error: Cannot find package 'vitest/wrong-internal-path' imported from '/workspace/candidate/apps/spend-review/test.ts'",
@@ -802,7 +934,9 @@ describe("draft reconciliation command progress", () => {
         status: "needs_repair",
         exitCode: 1,
       });
-      expect(mocks.run).not.toHaveBeenCalled();
+      expect(mocks.run).not.toHaveBeenCalledWith(
+        expect.objectContaining({ command: installCommand }),
+      );
       expect(mocks.compile).toHaveBeenCalledOnce();
     },
   );
@@ -821,7 +955,9 @@ describe("draft reconciliation command progress", () => {
     await incremental(testCommand);
     await incremental(captureCommand);
     expect(mocks.compile).toHaveBeenCalledOnce();
-    expect(mocks.run).not.toHaveBeenCalled();
+    expect(mocks.run).not.toHaveBeenCalledWith(
+      expect.objectContaining({ command: installCommand }),
+    );
   });
 
   it("repairs a declared missing compiler dependency before acknowledging compilation", async () => {

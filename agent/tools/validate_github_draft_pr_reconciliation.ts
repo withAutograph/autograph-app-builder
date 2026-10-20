@@ -4,6 +4,7 @@ import { publishCompiledOperatorArtifactsForSession } from "@/lib/agent/compiled
 import type { ToolContext } from "eve/tools";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import { withCandidateCommandEnvironment } from "@/lib/agent/candidate-command-environment";
+import { attachCheckoutDependencyView } from "@/lib/repository/dependency-cache";
 import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
 
@@ -752,6 +753,12 @@ export default defineTool({
       );
     }
     const sandbox = withCandidateCommandEnvironment(await getSourceBoundSandbox(ctx));
+    await attachCheckoutDependencyView({
+      sandbox,
+      checkoutRoot: `${candidate.workspaceRoot}/repository`,
+      candidateRoot: candidate.root,
+      workspaceRoot: candidate.workspaceRoot,
+    });
     let current = candidate;
     let expectedCommand = input.expectedCommand;
     for (;;) {

@@ -7,6 +7,7 @@ import { z } from "zod";
 import type { GitHubDraftPullRequestContentSource } from "./github-publication";
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { safeSourcePath } from "./source-path";
+import { attachCheckoutDependencyView } from "./dependency-cache";
 import type { OverlayChange } from "./target-apply";
 
 const SHA = /^[0-9a-f]{40}$/u;
@@ -359,6 +360,50 @@ const stageUnpublished = async (
   );
 };
 
+const ownedDependencyRootProgram = String.raw`
+const ownedDependencyRoot = (root, workspace, relative) => {
+  if (relative.split("/").at(-1) !== "node_modules") return false;
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const entry = path.join(root, relative);
+  if (!fs.lstatSync(entry, { throwIfNoEntry: false })?.isSymbolicLink()) return false;
+  const key = require("node:crypto").createHash("sha256").update(root).digest("hex");
+  const expected = path.join(fs.realpathSync(workspace), ".app-builder/dependency-views/checkout", key, relative);
+  return path.resolve(path.dirname(entry), fs.readlinkSync(entry)) === expected;
+};
+`;
+
+const candidateUntrackedProgram = String.raw`
+const fs = require("node:fs");
+const path = require("node:path");
+const { spawnSync } = require("node:child_process");
+const [root, workspace] = process.argv.slice(1);
+${ownedDependencyRootProgram}
+const directory = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "builder-untracked-"));
+const output = path.join(directory, "paths");
+const descriptor = fs.openSync(output, "w");
+try {
+  const result = spawnSync("git", ["--no-optional-locks", "-C", root, "ls-files", "--others", "--exclude-standard", "-z"], { stdio: ["ignore", descriptor, "pipe"], encoding: "utf8" });
+  if (result.status !== 0) throw Error(result.stderr || "Git untracked read failed");
+  const paths = fs.readFileSync(output, "utf8").split("\0").filter(Boolean);
+  const dependencyRoots = paths.filter(relative => ownedDependencyRoot(root, workspace, relative));
+  console.log(JSON.stringify({ paths: paths.filter(relative => !dependencyRoots.includes(relative)), dependencyRoots }));
+} finally { fs.closeSync(descriptor); fs.rmSync(directory, { force: true, recursive: true }); }
+`;
+
+const candidateUntracked = async (sandbox: SandboxSession, root: string, workspace: string) =>
+  z
+    .strictObject({ paths: z.array(z.string()), dependencyRoots: z.array(z.string()) })
+    .parse(
+      JSON.parse(
+        await checked(
+          sandbox,
+          "inspect private candidate untracked files",
+          `node -e ${quote(candidateUntrackedProgram)} ${quote(root)} ${quote(workspace)}`,
+        ),
+      ),
+    );
+
 const outsideCandidateChanges = async (
   input: DraftReconciliationInput,
   root: string,
@@ -389,18 +434,10 @@ const outsideCandidateChanges = async (
       ]),
     ),
   );
-  const untracked = records(
-    await checked(
-      input.sandbox,
-      "inspect private candidate untracked files",
-      git(root, [
-        "--no-optional-locks",
-        "ls-files",
-        "--others",
-        "--exclude-standard",
-        ZERO_TERMINATED,
-      ]),
-    ),
+  const { paths: untracked } = await candidateUntracked(
+    input.sandbox,
+    root,
+    input.workspaceRoot ?? DEFAULT_WORKSPACE,
   );
   return [...changed, ...untracked].some((path) => !appPath(input.appId, path));
 };
@@ -411,7 +448,8 @@ const { createHash } = require("node:crypto");
 const { closeSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, rmSync, rmdirSync, chmodSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
-const [oldRoot, newRoot, head, base, app] = process.argv.slice(1);
+const [oldRoot, newRoot, head, base, app, workspace] = process.argv.slice(1);
+${ownedDependencyRootProgram}
 const git = (root, args, input) => {
   const temporary = mkdtempSync(join(tmpdir(), "builder-candidate-git-"));
   const output = join(temporary, "output");
@@ -445,7 +483,7 @@ const scoped=["--","apps/"+app];
 const paths=[...new Set([
   ...records(git(oldRoot,["diff","--no-renames","--name-only","-z",head,...scoped])),
   ...records(git(oldRoot,["diff","--no-renames","--name-only","-z",base,...scoped])),
-  ...records(git(oldRoot,["ls-files","--others","--exclude-standard","-z",...scoped])),
+  ...records(git(oldRoot,["ls-files","--others","--exclude-standard","-z",...scoped])).filter(relative => !ownedDependencyRoot(oldRoot, workspace, relative)),
 ])].sort();
 const unmerged=git(oldRoot,["ls-files","--unmerged","-z",...scoped]);
 const oldHead=git(oldRoot,["rev-parse","HEAD"]).toString("utf8");
@@ -498,7 +536,7 @@ const replayCandidateApp = async (
     await checked(
       input.sandbox,
       "preserve app repairs in a fresh private candidate",
-      `node -e ${quote(replayCandidateProgram)} ${[oldRoot, newRoot, input.headSha, input.baseSha, input.appId].map(quote).join(" ")}`,
+      `node -e ${quote(replayCandidateProgram)} ${[oldRoot, newRoot, input.headSha, input.baseSha, input.appId, input.workspaceRoot ?? DEFAULT_WORKSPACE].map(quote).join(" ")}`,
     );
   } catch (error) {
     throw new Error(
@@ -703,6 +741,12 @@ export const prepareDraftReconciliation = async (
   if (replayedAppChanges && preservedCandidateRoot !== undefined) {
     await replayCandidateApp(input, preservedCandidateRoot, root);
   }
+  await attachCheckoutDependencyView({
+    sandbox,
+    checkoutRoot: checkout,
+    candidateRoot: root,
+    workspaceRoot,
+  });
   const conflicts = await readCandidateConflicts(input, root);
   return {
     appId: input.appId,
@@ -1132,12 +1176,10 @@ export const inspectDraftReconciliation = async (input: {
       git(prepared.root, [DIFF_COMMAND, NAME_ONLY, ZERO_TERMINATED]),
     ),
   );
-  const untracked = records(
-    await checked(
-      sandbox,
-      "inspect untracked reconciliation changes",
-      git(prepared.root, ["ls-files", "--others", "--exclude-standard", ZERO_TERMINATED]),
-    ),
+  const { paths: untracked, dependencyRoots } = await candidateUntracked(
+    sandbox,
+    prepared.root,
+    prepared.workspaceRoot,
   );
   const outside = [...unstaged, ...untracked].find((path) => !appPath(prepared.appId, path));
   if (outside !== undefined) {
@@ -1148,7 +1190,13 @@ export const inspectDraftReconciliation = async (input: {
   await checked(
     sandbox,
     "stage resolved app files",
-    git(prepared.root, ["add", "--all", "--", `apps/${prepared.appId}`]),
+    git(prepared.root, [
+      "add",
+      "--all",
+      "--",
+      `apps/${prepared.appId}`,
+      ...dependencyRoots.map((root) => `:(exclude,literal)${root}`),
+    ]),
   );
   const unresolvedConflicts = records(
     await checked(

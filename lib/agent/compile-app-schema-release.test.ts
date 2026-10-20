@@ -1,6 +1,8 @@
 /* oxlint-disable anti-slop/no-module-mocking -- Eve state and owner publication ports isolate the actual production tool execute boundary. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { validationOutputExcerpt } from "../repository/target-validation";
+import { safeCommandOutput } from "./command-output";
 import { SchemaPredecessorError } from "./schema-predecessor";
 
 import compileTool, {
@@ -321,4 +323,56 @@ describe("private app schema release compilation", () => {
       status: "failed",
     });
   });
+});
+
+it.each([false, true])(
+  "retains compiler task diagnostics through candidate reporting (ANSI=%s)",
+  async (ansi) => {
+    const label = ansi ? "\u001B[34m[app:compile]\u001B[0m" : "[app:compile]";
+    const detail = "apps/example/schema/app.cue:18: conflicting values";
+    const result = await compileAppSchemaRelease({
+      appId: "example",
+      root: "/workspace/repository",
+      sandbox: {
+        run: vi.fn().mockResolvedValue({
+          exitCode: 1,
+          stdout: `${label} compiler starting`,
+          stderr: `${label} ${detail}\n${label}     field: expected string\n${label}     ^`,
+        }),
+      },
+    });
+    expect(result).toMatchObject({ status: "failed", exitCode: 1 });
+    expect(result.stderr).toContain(detail);
+    expect(result.stderr).toContain("    field: expected string");
+    expect(validationOutputExcerpt(result.stdout, result.stderr).stderr).toContain(detail);
+  },
+);
+
+it("keeps decorated structured compiler payloads and credentials private", async () => {
+  const stderr = [
+    "[app:compile] apps/example/schema/app.cue:8: conflicting values",
+    '[app:compile] {"private":"private-single-canary"}',
+    "[app:compile] {",
+    '[app:compile]   "private": "private-multiline-canary",',
+    '[app:compile]   "nested": [{"value":"private-nested-canary"}]',
+    "[app:compile] }",
+    '[app:compile] ["private-array-canary"]',
+    "[app:compile] token=private-token-canary Authorization: Bearer private-bearer-canary",
+    "[app:compile] https://private-user:private-password@private-host/private-path",
+    "[app:compile] apps/example/schema/app.cue:9: invalid field",
+  ].join("\n");
+  const result = await compileAppSchemaRelease({
+    appId: "example",
+    root: "/workspace/repository",
+    sandbox: { run: vi.fn().mockResolvedValue({ exitCode: 1, stdout: "", stderr }) },
+  });
+  expect(result.stderr).toContain("conflicting values");
+  expect(result.stderr).toContain("invalid field");
+  expect(result.stderr).toContain("[structured output redacted]");
+  expect(result.stderr).toContain("[REDACTED]");
+  expect(JSON.stringify(result)).not.toContain("private-");
+  expect(safeCommandOutput('{"private":"private-default-canary"}')).not.toContain(
+    "private-default-canary",
+  );
+  expect(safeCommandOutput('["private-default-array"]')).not.toContain("private-default-array");
 });
