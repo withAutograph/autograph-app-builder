@@ -5,6 +5,7 @@ import {
   operatorDeploymentCandidateSchema,
   retainedOperatorAuthSchema,
   sameOperatorSelection,
+  operatorPlanDigest,
 } from "./hosted-operator-contract";
 import type { HostedOperatorPlan, RetainedOperatorAuth } from "./hosted-operator-contract";
 import { retainedOperatorAuthFromJournal } from "./hosted-runtime-journal";
@@ -114,7 +115,40 @@ export const inspectParticipantBootstrapPreparation = (
   return { auth, gatewayPrepared };
 };
 
-/** Structural handoff evidence; both original enrollment and current bootstrap approvals remain live reads. */
+const matchesAppParticipantBootstrap = (
+  operator: NonNullable<HostedRuntimeJournalRecord["operator"]>,
+  preparation: NonNullable<HostedRuntimeJournalRecord["accountPreparation"]>,
+  auth: RetainedOperatorAuth,
+): boolean => {
+  const account = preparation.accountPlan;
+  const readiness = operator.authPreparation;
+  return ![
+    operator.pendingEffectId !== undefined,
+    operator.pendingEffectAttempt !== undefined,
+    operator.plan.action !== "prepare",
+    readiness?.database !== auth.authPreparation.database,
+    readiness?.runtimeRole !== auth.authPreparation.runtimeRole,
+    readiness?.targetDigest !== auth.authPreparation.targetDigest,
+    readiness?.assetSha256 !== auth.authPreparation.assetSha256,
+    readiness?.catalogFingerprint !== auth.authPreparation.catalogFingerprint,
+    !sameAuth(operator.plan, auth),
+    account.stage !== "auth-participants",
+    account.action !== "prepare",
+    preparation.accountPlanDigest !== operatorPlanDigest(account),
+    normalActorProgramDigest(preparation.program) !== preparation.programDigest,
+    account.normalActorProgram === undefined ||
+      normalActorProgramDigest(account.normalActorProgram) !== preparation.programDigest,
+    !isDeepStrictEqual(operator.plan.normalActorPreparation, {
+      accountOperationRef: preparation.accountOperationRef,
+      accountPlanDigest: preparation.accountPlanDigest,
+      programDigest: preparation.programDigest,
+      accountApprovalId: preparation.accountApprovalId,
+      accountApprovedByCallId: preparation.accountApprovedByCallId,
+    }),
+  ].some(Boolean);
+};
+
+/** Structural handoff evidence; original enrollment and completed Auth approvals remain live reads. */
 export const inspectCompletedParticipantBootstrap = (
   desired: HostedOperatorPlan,
   record: HostedRuntimeJournalRecord | undefined,
@@ -130,16 +164,23 @@ export const inspectCompletedParticipantBootstrap = (
       record.leaseExpiresAt !== undefined,
       record.status !== "pending",
       record.step !== "reserved",
-      operator.plan.stage !== "auth-bootstrap",
+      operator.plan.stage !== "auth-bootstrap" && operator.plan.stage !== "app",
     ].some(Boolean)
   ) {
     return undefined;
   }
-  const auth = retainedOperatorAuthFromJournal(record);
+  const retained = retainedOperatorAuthSchema.safeParse(record.retainedAuth);
+  const appPlanning = operator.plan.stage === "app";
+  const retainedAuth = retained.success ? retained.data : undefined;
+  const auth = appPlanning ? retainedAuth : retainedOperatorAuthFromJournal(record);
   const program = desired.normalActorProgram;
   const currentProgram = operator.plan.normalActorProgram;
   const account = preparation.accountPlan;
   if (auth === undefined || program === undefined || currentProgram === undefined) {
+    return undefined;
+  }
+  // App planning retains the original enrollment and completed Auth, not unfinished app receipts.
+  if (appPlanning && !matchesAppParticipantBootstrap(operator, preparation, auth)) {
     return undefined;
   }
   const sameScope = [

@@ -539,6 +539,47 @@ const completedEnrollmentBootstrap = () => {
   return record;
 };
 
+const incompleteAppRecord = () => {
+  const record = completedEnrollmentBootstrap();
+  const operator = requiredFixture(record.operator);
+  const preparation = requiredFixture(record.accountPreparation);
+  const retainedAuth = requiredFixture(retainedOperatorAuthFromJournal(record));
+  const appPlan = hostedOperatorPlanSchema.parse({
+    ...operator.plan,
+    stage: "app",
+    normalActorPreparation: {
+      accountOperationRef: preparation.accountOperationRef,
+      accountPlanDigest: preparation.accountPlanDigest,
+      programDigest: preparation.programDigest,
+      accountApprovalId: preparation.accountApprovalId,
+      accountApprovedByCallId: preparation.accountApprovedByCallId,
+    },
+    effects: [
+      ...bootstrapPlan().effects,
+      { id: "app-install", kind: "install", description: "App schema" },
+      { id: "access", kind: "access", description: "Approved app access" },
+      { id: "bindings", kind: "bindings", description: "App bindings" },
+      { id: "gateway-bindings", kind: "gateway-bindings", description: "Gateway configuration" },
+      { id: "gateway-delivery", kind: "gateway-delivery", description: "Gateway delivery" },
+    ],
+  });
+  return hostedRuntimeJournalRecordSchema.parse({
+    ...record,
+    approvedByCallId: "app-call",
+    retainedAuth,
+    operator: {
+      ...operator,
+      operationRef: "00000000-0000-4000-8000-000000000010",
+      approvalId: "app-approval",
+      plan: appPlan,
+      planDigest: operatorPlanDigest(appPlan),
+      receipts: operator.receipts.filter((receipt) =>
+        ["auth-resources", "app-resources", "auth-schema"].includes(receipt.effectId),
+      ),
+    },
+  });
+};
+
 describe("completed enrollment and Gateway bootstrap handoff", () => {
   it("selects only the independently completed current bootstrap while preserving the original enrollment", () => {
     const record = completedEnrollmentBootstrap();
@@ -586,6 +627,155 @@ describe("completed enrollment and Gateway bootstrap handoff", () => {
     }
     expect(inspectCompletedParticipantBootstrap(desired, record)).toBeUndefined();
   });
+  it("selects completed retained Auth and enrolled accounts beneath an idle incomplete app plan", () => {
+    const record = incompleteAppRecord();
+    const before = structuredClone(record);
+    const retained = requiredFixture(record.retainedAuth);
+    const operator = requiredFixture(record.operator);
+    expect(operator.receipts).toHaveLength(3);
+    expect(retainedOperatorAuthFromJournal(record)).toBeUndefined();
+    for (const desired of [operator.plan, retained.plan]) {
+      const selected = inspectCompletedParticipantBootstrap(desired, record);
+      expect(selected?.auth).toEqual(retained);
+      expect(selected?.candidate.origin).toBe("https://gateway.example");
+    }
+    expect(record).toEqual(before);
+  });
+
+  it("preserves completed Auth provenance across an ordinary app branch change and readiness re-observation", () => {
+    const record = incompleteAppRecord();
+    const retained = requiredFixture(record.retainedAuth);
+    retained.plan.selection.branch = "feature/original-auth";
+    requiredFixture(retained.plan.deploymentBoundary).app.branch = "feature/original-auth";
+    retained.planDigest = operatorPlanDigest(retained.plan);
+    requiredFixture(requiredFixture(record.operator).authPreparation).observedAt =
+      "2026-10-15T12:00:00Z";
+    expect(
+      inspectCompletedParticipantBootstrap(requiredFixture(record.operator).plan, record)?.auth,
+    ).toEqual(retained);
+  });
+
+  it.each([
+    "accountOperationRef",
+    "accountPlanDigest",
+    "accountApprovalId",
+    "accountApprovedByCallId",
+    "programDigest",
+  ] as const)("rejects an app plan with changed original %s", (field) => {
+    const record = incompleteAppRecord();
+    const plan = requiredFixture(record.operator).plan;
+    requiredFixture(plan.normalActorPreparation)[field] = "unrelated-authority";
+    expect(inspectCompletedParticipantBootstrap(plan, record)).toBeUndefined();
+  });
+
+  it.each([
+    "missing-retained-auth",
+    "incomplete-retained-auth",
+    "missing-private-state",
+    "unfinished-accounts",
+    "changed-account-plan",
+    "changed-account-program",
+    "changed-auth-target",
+    "changed-auth-preparation",
+    "changed-auth-resource",
+    "changed-app-resource",
+    "changed-endpoint",
+    "changed-selection",
+    "cleanup",
+    "changed-candidate-operation",
+    "changed-candidate-project",
+    "changed-candidate-branch",
+    "changed-candidate-repository",
+    "unready-candidate",
+    "pending-binding",
+    "pending-effect",
+    "pending-attempt",
+    "lease",
+    "lease-expiry",
+  ] as const)("does not borrow completed Auth for app planning with %s", (change) => {
+    const record = incompleteAppRecord();
+    const operator = requiredFixture(record.operator);
+    const preparation = requiredFixture(record.accountPreparation);
+    const retained = requiredFixture(record.retainedAuth);
+    const desired = structuredClone(operator.plan);
+    const candidate = requiredFixture(operator.gatewayDeliveryCandidates)[0];
+    const mutations = {
+      "missing-retained-auth": () => {
+        delete record.retainedAuth;
+      },
+      "incomplete-retained-auth": () => {
+        retained.receipts.pop();
+      },
+      "missing-private-state": () => {
+        delete record.privateState;
+      },
+      "unfinished-accounts": () => {
+        delete preparation.accountsCompletedAt;
+      },
+      "changed-account-plan": () => {
+        preparation.accountPlan.contextId = "unapproved-account-plan";
+      },
+      "changed-account-program": () => {
+        preparation.program.actors[0].name = "Different account";
+      },
+      "changed-auth-target": () => {
+        requiredFixture(operator.plan.authSchema).targetDigest = "0".repeat(64);
+      },
+      "changed-auth-preparation": () => {
+        requiredFixture(operator.authPreparation).catalogFingerprint = "0".repeat(64);
+      },
+      "changed-auth-resource": () => {
+        operator.plan.authDatabase.resourceId = "other-auth";
+      },
+      "changed-app-resource": () => {
+        operator.plan.appDatabase.resourceId = "other-app";
+      },
+      "changed-endpoint": () => {
+        operator.plan.neon.endpoint = "other.neon.tech";
+      },
+      "changed-selection": () => {
+        operator.plan.selection.sessionId = "other-session";
+      },
+      cleanup: () => {
+        operator.plan.action = "cleanup";
+      },
+      "changed-candidate-operation": () => {
+        candidate.operationRef = "00000000-0000-4000-8000-000000000011";
+      },
+      "changed-candidate-project": () => {
+        candidate.projectId = "other-gateway";
+      },
+      "changed-candidate-branch": () => {
+        candidate.branch = "other-branch";
+      },
+      "changed-candidate-repository": () => {
+        candidate.repoId = "other-repository";
+      },
+      "unready-candidate": () => {
+        candidate.readyState = "BUILDING";
+      },
+      "pending-binding": () => {
+        requiredFixture(operator.gatewayEnvironment)[0].pendingOperationRef = operationRef;
+      },
+      "pending-effect": () => {
+        operator.pendingEffectId = "app-install";
+      },
+      "pending-attempt": () => {
+        operator.pendingEffectAttempt = { id: "00000000-0000-4000-8000-000000000012" };
+      },
+      lease: () => {
+        record.leaseId = "00000000-0000-4000-8000-000000000013";
+      },
+      "lease-expiry": () => {
+        record.leaseExpiresAt = "2027-01-01T00:00:00Z";
+      },
+    } satisfies Record<string, () => void>;
+    mutations[change]();
+    const before = structuredClone(record);
+    expect(inspectCompletedParticipantBootstrap(desired, record)).toBeUndefined();
+    expect(record).toEqual(before);
+  });
+
   it("rechecks the actual current bootstrap approval separately", async () => {
     const selected = requiredFixture(
       inspectCompletedParticipantBootstrap(desiredPlan(), completedEnrollmentBootstrap()),

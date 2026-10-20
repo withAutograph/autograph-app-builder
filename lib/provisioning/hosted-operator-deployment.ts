@@ -2154,6 +2154,37 @@ export const createHostedOperatorControlPlane = async (input: {
       assertCurrentPlan,
       normalRealmFetch,
     };
+    // Only planning owner-proof collection can reuse settled Auth beneath an unfinished app plan.
+    // Identity-link reservation and browser capture continue using readKnownAuthBootstrap above.
+    const readParticipantBootstrapForPlanning = async (context: HostedOperatorContext) => {
+      const owned = await owner.readCurrentPlanningOwner(context);
+      if (["cancelled", "completed"].includes(owned.session.status)) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      const current = await store.read(context);
+      const operator = current?.record.operator;
+      if (current === undefined || operator?.plan.stage !== "app") {
+        return await readKnownAuthBootstrap(context);
+      }
+      const bootstrap = inspectCompletedParticipantBootstrap(
+        {
+          ...operator.plan,
+          gatewayDelivery: {
+            branch: configuration.gateway.branch,
+            gitSha: configuration.gateway.gitSha,
+            projectId: configuration.gateway.projectId,
+            repoId: configuration.gateway.repoId,
+          },
+        },
+        current.record,
+      );
+      if (bootstrap === undefined) {
+        throw new HostedOperatorError("auth_schema_not_ready");
+      }
+      await assertCompletedParticipantBootstrapApproval(context, bootstrap, readApproval);
+      await owner.assertPlanningAuthorized(context);
+      return { ...current, operator };
+    };
     const assertParticipantBootstrapCurrent = async (
       context: HostedOperatorContext,
       preparation: NormalActorAccountPreparation,
@@ -2163,9 +2194,13 @@ export const createHostedOperatorControlPlane = async (input: {
       await owner.assertArtifactAuthorized(context);
       const accounts = await normalActorJournal.read(context);
       if (
-        accounts?.preparation.accountOperationRef !== preparation.accountOperationRef ||
-        accounts.preparation.accountPlanDigest !== preparation.accountPlanDigest ||
-        accounts.preparation.programDigest !== preparation.programDigest
+        ![
+          accounts?.preparation.accountOperationRef === preparation.accountOperationRef,
+          accounts?.preparation.accountPlanDigest === preparation.accountPlanDigest,
+          accounts?.preparation.programDigest === preparation.programDigest,
+          accounts?.preparation.accountApprovalId === preparation.accountApprovalId,
+          accounts?.preparation.accountApprovedByCallId === preparation.accountApprovedByCallId,
+        ].every(Boolean)
       ) {
         throw new HostedOperatorError("auth_identity_required");
       }
@@ -2187,7 +2222,8 @@ export const createHostedOperatorControlPlane = async (input: {
         return ownedArtifacts(context);
       },
       resolveRealmBinding: async ({ context, preparation }) => {
-        const known = await readKnownAuthBootstrap(context);
+        const known = await readParticipantBootstrapForPlanning(context);
+        // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Recheck original account approval and decrypt its AAD-bound state after selecting the planning bootstrap.
         const current = await normalActorJournal.read(context);
         const candidate = known.operator.gatewayDeliveryCandidates?.find(
           (entry) =>
@@ -2222,6 +2258,8 @@ export const createHostedOperatorControlPlane = async (input: {
           current.preparation.accountOperationRef === preparation.accountOperationRef,
           current.preparation.accountPlanDigest === preparation.accountPlanDigest,
           current.preparation.programDigest === preparation.programDigest,
+          current.preparation.accountApprovalId === preparation.accountApprovalId,
+          current.preparation.accountApprovedByCallId === preparation.accountApprovedByCallId,
           originalAccount || bootstrap !== undefined,
           (bootstrap?.auth.plan.gatewayBindings?.operatorOrigin ?? bindings.operatorOrigin) ===
             bindings.operatorOrigin,
