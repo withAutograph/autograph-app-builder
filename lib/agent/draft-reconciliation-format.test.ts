@@ -48,6 +48,7 @@ describe("draft reconciliation app formatter", () => {
       proposal: { digest },
       review: { digest },
       root: "/workspace/candidate",
+      workspaceRoot: "/workspace",
       validation: { resolvedTree: "b".repeat(40) },
       validationRun: { nextIndex: 2 },
       version: 1,
@@ -89,7 +90,11 @@ describe("draft reconciliation app formatter", () => {
   });
 
   it("reports formatter failure without retaining a new review", async () => {
-    mocks.run.mockResolvedValue({ exitCode: 1, stderr: "formatter failed", stdout: "" });
+    mocks.run.mockImplementation(async ({ command }: { command: string }) =>
+      command === "mise run --no-deps --skip-tools format:app"
+        ? { exitCode: 1, stderr: "formatter failed", stdout: "" }
+        : { exitCode: 0, stderr: "", stdout: "" },
+    );
     await expect(formatCandidate.execute({}, context)).resolves.toMatchObject({
       command: "mise run --no-deps --skip-tools format:app",
       exitCode: 1,
