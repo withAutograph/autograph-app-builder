@@ -1,3 +1,4 @@
+import { runAppBrowserTests } from "./app-browser-test-runner";
 import type { createManagedRuntimeWorkerAsset } from "./managed-runtime-worker-asset";
 /* oxlint-disable eslint/no-await-in-loop -- Readiness, retained command and file checkpoints are sequenced under one approved attempt. */
 import type { Sandbox } from "@vercel/sandbox";
@@ -31,8 +32,8 @@ import {
   readManagedRuntimePublicProfile,
   managedCapabilitySha256,
 } from "../sandbox/managed-runtime-capabilities";
-import { restorePreparedRuntimeExecution } from "./prepared-runtime-execution";
-import type { RuntimeCommand, RuntimeTransport } from "./prepared-runtime-execution";
+import { restorePreparedRuntimeExecution } from "./prepared-runtime-execution-core";
+import type { RuntimeCommand, RuntimeTransport } from "./prepared-runtime-execution-core";
 import type { HostedRuntimeProof } from "../provisioning/hosted-runtime-service";
 import type { NormalActorRuntimeProjection } from "../provisioning/hosted-operator-normal-actor-program";
 
@@ -504,7 +505,6 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
             allowDispatch,
           }),
       };
-      const { runAppBrowserTests } = await import("../../agent/tools/run-app-browser-tests");
       const result = await runAppBrowserTests({
         appId: record.plan.target.appId,
         root: record.plan.runtime.root,

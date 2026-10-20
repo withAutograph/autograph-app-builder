@@ -28,6 +28,16 @@ import {
 } from "../provisioning/hosted-operator-continuity-contract";
 import type { ContinuityRecord } from "../provisioning/hosted-operator-continuity-contract";
 
+// The native operator executes the real managed suite without agent tool or inference packages.
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Reproduce the actual missing deployment dependency; no runtime implementation is replaced.
+vi.mock("eve/tools", () => {
+  throw new Error("Agent tools are unavailable in the native operator");
+});
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Reproduce the actual missing inference dependency while exercising the real operator and runner.
+vi.mock("ai", () => {
+  throw new Error("Model inference is unavailable in the native operator");
+});
+
 const authority = {
   issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
