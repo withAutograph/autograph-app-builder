@@ -84,7 +84,7 @@ export interface OperatorDeploymentReference {
 export interface OperatorInventoryConfiguration {
   app: OperatorDeploymentReference & { branch: string };
   gateway: OperatorDeploymentReference & { branch: string };
-  operator: OperatorDeploymentReference & { deploymentId: string };
+  operator: OperatorDeploymentReference & { deploymentId: string; origin?: string };
   verification: { gatewayOrigin: string; publicOrigin: string };
 }
 
@@ -120,6 +120,15 @@ const qualifiedGatewayOrigin = (
       : `https://${currentGatewayTransport.url}`,
   );
 };
+
+const configuredOperatorPlanningAlias = (
+  reference: OperatorInventoryConfiguration["operator"],
+  bootstrapPlanning: boolean,
+  resolve: true | undefined,
+): string | undefined =>
+  bootstrapPlanning && resolve === true
+    ? new URL(origin(reference.origin ?? "")).hostname
+    : undefined;
 
 const invalidDeploymentObservation = (input: {
   deployment: z.infer<typeof deploymentSchema>;
@@ -224,6 +233,8 @@ export const readHostedOperatorProviderInventory = async (input: {
   phase?: "bootstrap-planning";
   /** New plan creation only; approved operations retain their exact deployment reference. */
   resolveGatewayByPublicOrigin?: true;
+  /** New plan creation only; resolve the trusted configured operator origin and freeze its actual ID. */
+  resolveOperatorByConfiguredOrigin?: true;
   /** The app ref from the already approved delivery plan; resource identity stays unchanged. */
   approvedAppBranch?: string;
   context: HostedOperatorContext;
@@ -534,7 +545,17 @@ export const readHostedOperatorProviderInventory = async (input: {
           ? new URL(origin(config.verification.publicOrigin)).hostname
           : undefined,
       ),
-      observe("operator", config.operator),
+      observe(
+        "operator",
+        config.operator,
+        undefined,
+        false,
+        configuredOperatorPlanningAlias(
+          config.operator,
+          bootstrapPlanning,
+          input.resolveOperatorByConfiguredOrigin,
+        ),
+      ),
     ]);
     const publicOrigin = origin(config.verification.publicOrigin);
     const gatewayOrigin = qualifiedGatewayOrigin(

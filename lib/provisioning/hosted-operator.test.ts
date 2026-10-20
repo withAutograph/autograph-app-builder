@@ -3074,6 +3074,10 @@ describe("canonical runtime proof through the production verifier and handler", 
       );
       const selectedPlan = hostedOperatorPlanSchema.parse({
         ...plan,
+        deploymentBoundary: {
+          ...plan.deploymentBoundary,
+          operator: { ...plan.deploymentBoundary?.operator, environment: "preview" },
+        },
         neon: { ...plan.neon, branchId: "br-fixture" },
         delivery: { branch: selection.branch, projectId: selection.projectId, repoId: "repo-app" },
         gatewayDelivery: {
@@ -3179,7 +3183,7 @@ describe("canonical runtime proof through the production verifier and handler", 
             },
           },
           operator: {
-            deploymentId: "dpl_operator",
+            deploymentId: "dpl_operator_mutable_config",
             environment: "preview",
             origin: "https://operator.example",
             projectId: "prj_operator",
@@ -3353,6 +3357,11 @@ describe("canonical runtime proof through the production verifier and handler", 
         const result = await f.client.request(execute);
         expect(f.deps.executeEffect).toHaveBeenCalledTimes(selectedPlan.effects.length);
         expect(fetcher).toHaveBeenCalled();
+        const deploymentReads = fetcher.mock.calls.map(
+          ([input]) => new URL(input instanceof Request ? input.url : input).pathname,
+        );
+        expect(deploymentReads).toContain("/v13/deployments/dpl_operator");
+        expect(deploymentReads).not.toContain("/v13/deployments/dpl_operator_mutable_config");
         expect(readRuntimeSnapshot).toHaveBeenCalledOnce();
         const [richResult] = richResults;
         expect(richResult).toMatchObject({
