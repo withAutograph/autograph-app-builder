@@ -30,7 +30,7 @@ export const operatorArtifactReferenceSchema = z
   .string()
   .refine(
     (value) =>
-      /^_protected-operator\/artifacts\/(?:generated-release|auth-plan|realm-identity-proof|realm-identity-stage)\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\/[a-f0-9]{64}$/u.test(
+      /^_protected-operator\/artifacts\/(?:generated-release|auth-plan|realm-identity-proof|realm-identity-stage|source-review-context)\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\/[a-f0-9]{64}$/u.test(
         value,
       ) || exportReference.test(value),
   );

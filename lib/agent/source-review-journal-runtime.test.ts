@@ -2,7 +2,10 @@ import { mkdtemp, mkdir, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { sourceReviewJournalForSession } from "./source-review-journal-runtime";
+import {
+  sourceReviewJournalForSession,
+  sourceReviewContextStoreForSession,
+} from "./source-review-journal-runtime";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -49,4 +52,60 @@ describe("server-selected source review persistence", () => {
       sourceReviewJournalForSession({ sessionAuth: {}, sessionId: "session" }),
     ).rejects.toThrow();
   });
+});
+
+it("stores prepared review context under the original native session and selected app", async () => {
+  await local();
+  const first = await sourceReviewContextStoreForSession({
+    appId: "example",
+    sessionAuth: {},
+    sessionId: "native-parent",
+  });
+  const prepared = {
+    version: 1 as const,
+    appId: "example",
+    parentSessionId: "native-parent",
+    sandboxName: "server-selected",
+    applyRoot: "/workspace/repository",
+    observed: { files: [], treeDigest: "tree" },
+    normalizedChanges: [],
+    visiblePaths: [],
+    reviewKey: "a".repeat(64),
+    reviewInput: {
+      appSpec: "Full requested behavior",
+      appSpecDigest: "spec",
+      clarifications: [],
+      omissions: [],
+      originalRequest: "Original brief",
+      sourceDigest: "tree",
+    },
+  };
+  const ref = await first.publishContext(prepared);
+  const resumed = await sourceReviewContextStoreForSession({
+    appId: "example",
+    sessionAuth: {},
+    sessionId: "native-parent",
+  });
+  expect(await resumed.readContext(ref)).toEqual(prepared);
+  const other = await sourceReviewContextStoreForSession({
+    appId: "example",
+    sessionAuth: {},
+    sessionId: "other-parent",
+  });
+  await expect(other.readContext(ref)).rejects.toThrow();
+  const otherApp = await sourceReviewContextStoreForSession({
+    appId: "different",
+    sessionAuth: {},
+    sessionId: "native-parent",
+  });
+  await expect(otherApp.readContext(ref)).rejects.toThrow();
+  const controller = new AbortController();
+  const cancelled = await sourceReviewContextStoreForSession({
+    appId: "example",
+    sessionAuth: {},
+    sessionId: "native-parent",
+    abortSignal: controller.signal,
+  });
+  controller.abort(new Error("Stopped"));
+  await expect(cancelled.readContext(ref)).rejects.toThrow("Stopped");
 });

@@ -1,8 +1,13 @@
 # Product source review
 
-Independent source review runs at final `accept_change_set`, after implementation
-and technical validation are ready. Intermediate `validate_app_creation` returns
-deferred source evidence without a paid independent review:
+The final independent review attempt starts at ordinary `accept_change_set`,
+after implementation and technical validation are ready. It prepares an opaque
+review reference, Builder runs the blocking `review-current-product-source`
+workflow, then ordinary `accept_change_set` finalizes with the returned reference.
+A matching completed assessment can take the existing reuse path. Builder owns
+this continuation; it is not an extra product question or public MCP tool.
+Intermediate `validate_app_creation` returns deferred source evidence without a
+paid independent review:
 `status: "unassessed"`, `reviewCompleted: false`, and empty findings.
 That expected result does not require another validation attempt.
 
@@ -42,19 +47,31 @@ includes the actual review protocol/model/rubric, original requirements and
 accepted spec, complete observed source snapshot, and normalized intended diff.
 Normal input changes create a cache miss; they are not infrastructure drift.
 
-This implementation checkpoints completed application assessments, not every
-intermediate model step. An interrupted incomplete application review may rerun.
-Legacy fragment judgments and context-split records remain historical evidence;
-they do not establish completion of an application-level review. No journal
-migration or new provisioning step is introduced. See the
+The blocking workflow checkpoints each completed provider/tool round through
+native private Workflow continuation. Resuming that same workflow reuses its
+committed rounds. One in-flight, uncommitted round can repeat; a separate new
+workflow call is not guaranteed to resume the old one. This is not an exactly-once
+billing guarantee. The sanitized completed-assessment journal remains separate.
+Legacy fragment judgments and context-split records retain their historical
+provenance and do not establish application-level completion. No new journal
+migration, resource or provisioning step is introduced. See the
 [continuation contract](source-review-continuation.md).
+
+Within the current context, the first full result for each distinct source,
+requirement or listing selection remains visible. Only older exact duplicate
+results become references to that retained full result; the newest parallel
+read group stays full. Unique full pages can still grow context. No total-work
+quota or preemptive truncation is introduced.
 
 An actual provider context rejection can compact prior read payloads into
 immutable evidence references and validated findings, with original documents
 still accessible. Actual output-capacity rejection can use smaller evidence
 submissions. Neither recovery path drops findings, changes the review model, or
-returns to exhaustive fragment pairing. Caller cancellation remains effective
-throughout; cancelled work cannot publish a completed assessment.
+returns to exhaustive fragment pairing. Current owner and Stop checks surround
+every round and private evidence read.
+The read-only Sandbox adapter uses the captured existing name with `resume:false`
+and reads through its public `currentSession()` API, without automatic resume,
+creation or commands. Cancelled work cannot publish a completed assessment.
 
 ## Source and runtime evidence
 
@@ -63,9 +80,12 @@ publication approval and assessment detail references remain authoritative.
 A review interruption alone does not require another technical validation.
 Concrete implementation repairs use the normal focused validation path.
 
-Source opinions remain advisory. Unavailable or interrupted review is reported
-truthfully; it must not become a new admission gate or a fabricated passing
-result. A completed review with no cited contradictions still has
+The final independent review attempt is required; source opinions remain
+advisory. An unavailable or interrupted assessment is reported truthfully as
+unassessed, without gating private preview/publication, fabricating a pass, or
+requiring another technical validation. Concrete findings still use the normal
+repair path, and existing source and outward-effect approvals remain intact. A
+completed review with no cited contradictions still has
 `status: "unassessed"` for actual runtime behavior. Source cannot prove
 authentication, persistence, isolation, provisioning, deployment, or hosted
 readiness. Execute the requested product behavior separately.
