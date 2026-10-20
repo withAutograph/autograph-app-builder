@@ -383,6 +383,7 @@ const composed = (active = true) => {
     return preparedCredentials(input);
   });
   const controlPlane: ControlPlane = {
+    exportRequest: unavailable,
     readApprovedPlan: unavailable,
     registerOwnerRealmIdentityWait: unavailable,
     acknowledgeOwnerRealmIdentityWait: unavailable,
