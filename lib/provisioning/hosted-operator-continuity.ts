@@ -248,6 +248,15 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
         status: continuityStatus(record),
       };
     },
+    async readPlan(context: HostedOperatorContext, intentId: string) {
+      const record = await read(context, z.uuid().parse(intentId));
+      const { plan, planDigest, idempotencyKey } = record;
+      const request = parseContinuityRequestForPlan(
+        { action: "continuity", planRef: plan.planRef, planDigest, idempotencyKey },
+        plan,
+      );
+      return { plan, request, status: continuityStatus(record) };
+    },
     async status(context: HostedOperatorContext, intentId: string) {
       return continuityStatus(await read(context, z.uuid().parse(intentId)));
     },

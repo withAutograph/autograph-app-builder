@@ -2,7 +2,7 @@
 import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { createLocalJWKSet, SignJWT } from "jose";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
   createHostedOperatorClient,
   HostedOperatorTransportUnknown,
@@ -187,6 +187,7 @@ const setup = () => {
   let held = false;
   let live = false;
   let incoming: Request | undefined;
+  let currentSelection = preparedPlan.selection;
   const receipts = new Map<string, ContinuityApproval>();
   const custody = createContinuityCapabilityCustody({
     tokenKey: randomBytes(32),
@@ -447,7 +448,7 @@ const setup = () => {
     await verifyWorkload(request);
     if (
       !owner ||
-      !sameOperatorSelection(selection, preparedPlan.selection) ||
+      !sameOperatorSelection(selection, currentSelection) ||
       !isDeepStrictEqual(hint, ownerContext)
     ) {
       throw new HostedOperatorError("authorization_required");
@@ -551,6 +552,9 @@ const setup = () => {
     revokeOriginal() {
       originalApproved = false;
     },
+    selectPreparedTarget(selection: typeof preparedPlan.selection) {
+      currentSelection = selection;
+    },
   };
 };
 
@@ -592,6 +596,109 @@ it("uses the real client/handler/dispatcher/service through exact approval and c
   expect(f.record.plan.originalSetup).toEqual(planned.plan.originalSetup);
   expect(f.record.plan.preparedPlan.release).toEqual(preparedPlan.release);
   expect(f.record.planDigest).toBe(continuityPlanDigest(planned.plan));
+});
+
+it("reads the exact saved continuity intent after the prepared target changes without planning or effects", async () => {
+  const f = setup();
+  const planned = await f.client.planContinuity(
+    preparedPlan.selection,
+    logicalRuntime,
+    "saved-journey",
+  );
+  const original = f.record;
+  const writes = f.snapshots.length;
+  const authorizations = f.stats.authorizations;
+  f.selectPreparedTarget({
+    ...preparedPlan.selection,
+    branch: "new-preview",
+    projectId: "prj_new",
+  });
+  const resolve = vi
+    .spyOn(f.dependencies, "resolvePlan")
+    .mockRejectedValue(new Error("No replanning"));
+  const setupAuthority = vi
+    .spyOn(f.dependencies, "assertSetup")
+    .mockRejectedValue(new Error("No current setup lookup"));
+  const approval = vi.spyOn(f.dependencies, "readApproval");
+  const reserve = vi.spyOn(f.dependencies.store, "reserve");
+  const cas = vi.spyOn(f.dependencies.store, "compareAndSet");
+  const abort = new AbortController();
+  const saved = await f.client.readContinuity(planned.plan.intentId, abort.signal);
+  expect(saved).toEqual(planned);
+  expect(saved.request.idempotencyKey).toBe("saved-journey");
+  expect(f.record).toEqual(original);
+  expect(f.snapshots).toHaveLength(writes);
+  expect(f.stats.authorizations).toBe(authorizations);
+  expect(f.stats.readAuthorizations).toBe(1);
+  expect(f.stats.requests).toEqual(["continuity-plan", "continuity-read"]);
+  expect(resolve).not.toHaveBeenCalled();
+  expect(setupAuthority).not.toHaveBeenCalled();
+  expect(approval).not.toHaveBeenCalled();
+  expect(reserve).not.toHaveBeenCalled();
+  expect(cas).not.toHaveBeenCalled();
+  expect(f.stats.starts).toBe(0);
+  expect(f.stats.publishes).toBe(0);
+  expect(f.stats.suiteDispatches).toBe(0);
+});
+
+it("refuses a foreign owner, missing intent and revoked owner when reading saved continuity", async () => {
+  const f = setup();
+  const planned = await f.client.planContinuity(
+    preparedPlan.selection,
+    logicalRuntime,
+    "saved-journey",
+  );
+  const foreign = structuredClone(ownerContext);
+  foreign.authority.ownerUserId = "foreign-owner";
+  foreign.principal.ownerUserId = "foreign-owner";
+  await expect(f.clientFor(foreign).readContinuity(planned.plan.intentId)).rejects.toMatchObject({
+    code: "resource_mismatch",
+  });
+  await expect(f.client.readContinuity(randomUUID())).rejects.toMatchObject({
+    code: "resource_mismatch",
+  });
+  f.setOwner(false);
+  await expect(f.client.readContinuity(planned.plan.intentId)).rejects.toMatchObject({
+    code: "authorization_required",
+  });
+  expect(f.snapshots).toHaveLength(1);
+  expect(f.stats.starts).toBe(0);
+  expect(f.stats.publishes).toBe(0);
+});
+
+it("rejects a continuity response belonging to a different requested intent or owner", async () => {
+  const f = setup();
+  const planned = await f.client.planContinuity(
+    preparedPlan.selection,
+    logicalRuntime,
+    "saved-journey",
+  );
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json(planned));
+  const client = createHostedOperatorClient({
+    endpoint: "https://operator.fixture.test",
+    ownerContext,
+    sessionId: target.sessionId,
+    fetch: fetcher,
+    token: async () => "controlled-workload",
+  });
+  await expect(client.readContinuity(randomUUID())).rejects.toMatchObject({
+    code: "resource_mismatch",
+  });
+  const foreignPlan = {
+    ...planned.plan,
+    authority: { ...authority, ownerUserId: "foreign-owner" },
+  };
+  fetcher.mockResolvedValueOnce(
+    Response.json({
+      ...planned,
+      plan: foreignPlan,
+      request: { ...planned.request, planDigest: continuityPlanDigest(foreignPlan) },
+    }),
+  );
+  await expect(client.readContinuity(planned.plan.intentId)).rejects.toMatchObject({
+    code: "authorization_required",
+  });
+  expect(f.stats.starts).toBe(0);
 });
 
 it("rejects missing or invalid signed workload before any private hint lookup", async () => {

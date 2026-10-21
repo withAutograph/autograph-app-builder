@@ -1527,6 +1527,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           action: z.enum([
             "continuity-plan",
             "continuity-status",
+            "continuity-read",
             "continuity-approval",
             "continuity",
           ]),
