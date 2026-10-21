@@ -1,3 +1,5 @@
+import type { runAppBrowserTests as runAppBrowserTestsPort } from "../../agent/tools/run-app-browser-tests";
+import type { resolvePreparedRuntimeExecution } from "./prepared-runtime-execution";
 /* oxlint-disable anti-slop/no-module-mocking, anti-slop/require-safety-comment-for-type-assertion, anti-slop/no-unsafe-dictionary-type, anti-slop/no-unknown-returns, typescript/no-unsafe-type-assertion, eslint/require-await -- Isolated Eve state and sandbox stubs exercise the real validation tool. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
@@ -28,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   compile: vi.fn(),
   local: vi.fn(),
   browser: vi.fn(),
+  resolveRuntime: vi.fn<typeof resolvePreparedRuntimeExecution>(),
   declaresLocal: false,
   inspect: vi.fn(),
   logStore: vi.fn(),
@@ -46,7 +49,11 @@ vi.mock("./compiled-operator-artifacts", () => ({
 }));
 vi.mock("eve/tools", () => ({ defineTool: <T>(value: T): T => value }));
 vi.mock("./source-bound-sandbox", () => ({
-  getSourceBoundSandbox: async () => ({ readTextFile: mocks.readText, run: mocks.run }),
+  getSourceBoundSandbox: async () => ({
+    id: "owned-provider-sandbox",
+    readTextFile: mocks.readText,
+    run: mocks.run,
+  }),
 }));
 vi.mock("./draft-reconciliation-state", () => ({
   candidateValidationAttemptHistory: { get: () => mocks.attempts },
@@ -76,6 +83,9 @@ vi.mock("../../agent/tools/prepare-app-local-preview", () => ({
 vi.mock("../../agent/tools/compile-app-schema-release", () => ({
   appSchemaReleaseCommand: () => schemaCommand,
   compileAppSchemaRelease: mocks.compile,
+}));
+vi.mock("./prepared-runtime-execution", () => ({
+  resolvePreparedRuntimeExecution: mocks.resolveRuntime,
 }));
 vi.mock("../../agent/tools/run-app-browser-tests", () => ({
   appBrowserTestCommand: () => "mise run --no-deps app:runtime run spend-review test-e2e",
@@ -784,6 +794,14 @@ describe("draft reconciliation command progress", () => {
       ),
     ).resolves.toMatchObject({ status: "validated" });
     expect(mocks.local).toHaveBeenCalledOnce();
+    expect(mocks.local).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appId: "spend-review",
+        root: "/workspace/candidate",
+        signal: abortSignal,
+      }),
+    );
+    expect(mocks.local.mock.calls[0]?.[0]).not.toHaveProperty("execution");
     expect(mocks.browser).toHaveBeenCalledOnce();
     expect(mocks.run).toHaveBeenCalledWith(
       expect.objectContaining({ command: "mise run --no-deps --skip-tools check:vercel-services" }),
@@ -799,6 +817,124 @@ describe("draft reconciliation command progress", () => {
       ],
     });
   });
+  it.each([false, true])(
+    "supplies fresh owner-bound browser context for candidate validation, incremental=%s",
+    async (isIncremental) => {
+      const changedRoot = "/workspace/reconciled-candidate";
+      if (mocks.candidate === null) {
+        throw new Error("Candidate fixture unavailable");
+      }
+      mocks.candidate.root = changedRoot;
+      const initialWorkflow = mocks.workflow;
+      mocks.check.mockImplementation(() => {
+        mocks.workflow = { ...mocks.workflow, bindingGeneration: "fresh-at-browser-step" };
+        return Promise.resolve({ exitCode: 0, stderr: "", stdout: "" });
+      });
+      if (isIncremental) {
+        for (const expectedCommand of [
+          schemaCommand,
+          checkCommand,
+          testCommand,
+          "mise run --no-deps app:runtime run spend-review test-e2e",
+        ]) {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- Advance the actual durable candidate sequence to its browser step.
+          await validateReconciliation.execute(
+            { additionalCheckTasks: [], expectedCommand, incremental: true, runBrowserTests: true },
+            context,
+          );
+        }
+      } else {
+        await validateReconciliation.execute(
+          { additionalCheckTasks: [], incremental: false, runBrowserTests: true },
+          context,
+        );
+      }
+      expect(mocks.workflow).not.toBe(initialWorkflow);
+      expect(mocks.browser).toHaveBeenCalledOnce();
+      expect(mocks.browser).toHaveBeenCalledWith(
+        expect.objectContaining({
+          appId: "spend-review",
+          root: changedRoot,
+          signal: abortSignal,
+          execution: {
+            appId: "spend-review",
+            root: changedRoot,
+            sandboxId: "owned-provider-sandbox",
+            sessionAuth: { owned: "auth" },
+            sessionId: "adapter",
+            signal: abortSignal,
+            state: mocks.workflow,
+          },
+        }),
+      );
+      expect(mocks.local).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    { isIncremental: false, cancelled: false },
+    { isIncremental: true, cancelled: false },
+    { isIncremental: false, cancelled: true },
+    { isIncremental: true, cancelled: true },
+  ])(
+    "stops refused/cancelled binding before browser dispatch, incremental=$isIncremental cancelled=$cancelled",
+    async ({ isIncremental, cancelled }) => {
+      const actual = await vi.importActual<{ runAppBrowserTests: typeof runAppBrowserTestsPort }>(
+        "../../agent/tools/run-app-browser-tests",
+      );
+      mocks.browser.mockImplementationOnce(actual.runAppBrowserTests);
+      const requestAbort = new AbortController();
+      if (cancelled) {
+        requestAbort.abort();
+      }
+      const requestedSignal = cancelled ? requestAbort.signal : abortSignal;
+      mocks.resolveRuntime.mockImplementationOnce((execution) => {
+        execution.signal?.throwIfAborted();
+        return Promise.reject(new Error("Approved HTTPS binding unavailable"));
+      });
+      // Synthetic Eve context supplies only the same consumed request/session fields as the shared fixture.
+      const callContext = {
+        abortSignal: requestedSignal,
+        callId: "validation_1",
+        session: { auth: { owned: "auth" }, id: "adapter" },
+      } as never;
+      if (mocks.candidate === null) {
+        throw new Error("Candidate fixture unavailable");
+      }
+      mocks.candidate.validationRun = {
+        commands: [],
+        compilation: undefined,
+        nextIndex: 0,
+        resolvedTree: tree,
+        schemaTaskCompleted: true,
+        steps: [
+          { kind: "browser", command: "mise run --no-deps app:runtime run spend-review test-e2e" },
+        ],
+      };
+      const result = await validateReconciliation.execute(
+        { additionalCheckTasks: [], incremental: isIncremental, runBrowserTests: true },
+        callContext,
+      );
+      expect(result).toMatchObject({ status: "needs_repair" });
+      expect(mocks.resolveRuntime).toHaveBeenCalledWith({
+        appId: "spend-review",
+        root: "/workspace/candidate",
+        sandboxId: "owned-provider-sandbox",
+        sessionAuth: { owned: "auth" },
+        sessionId: "adapter",
+        signal: requestedSignal,
+        state: mocks.workflow,
+      });
+      expect(mocks.run).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: "mise run --no-deps app:runtime run spend-review test-e2e",
+        }),
+      );
+      expect(mocks.publish).not.toHaveBeenCalled();
+      expect(mocks.local).not.toHaveBeenCalled();
+    },
+  );
+
   it("revalidates after the real candidate edit clears progress without reinstalling or recompiling", async () => {
     await validateReconciliation.execute(
       { additionalCheckTasks: [], incremental: false, runBrowserTests: false },

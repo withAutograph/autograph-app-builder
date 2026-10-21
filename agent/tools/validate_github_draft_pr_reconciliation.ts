@@ -1,3 +1,4 @@
+import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
 import { defineTool } from "eve/tools";
 import { createHash, randomUUID } from "node:crypto";
 import { publishCompiledOperatorArtifactsForSession } from "@/lib/agent/compiled-operator-artifacts";
@@ -537,6 +538,15 @@ const runIncrementalValidation = async (
     } else if (step.kind === "browser") {
       const browser = await runAppBrowserTests({
         appId: candidate.appId,
+        execution: {
+          appId: candidate.appId,
+          root: candidate.root,
+          sandboxId: getBuilderSandboxId(sandbox),
+          sessionAuth: ctx.session.auth,
+          sessionId: ctx.session.id,
+          signal: ctx.abortSignal,
+          state: appBuilderWorkflowState.get(),
+        },
         root: candidate.root,
         sandbox,
         signal: ctx.abortSignal,
