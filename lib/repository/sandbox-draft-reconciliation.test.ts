@@ -7,6 +7,7 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
   rmSync,
   rmdirSync,
@@ -32,6 +33,7 @@ import {
 } from "./sandbox-draft-reconciliation";
 
 import { retireUnusedDraftWorktrees } from "./retire-unused-draft-worktrees";
+import { attachCheckoutDependencyView } from "./dependency-cache";
 
 const temporary: string[] = [];
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -1718,6 +1720,241 @@ describe("unused draft worktree retirement", () => {
       retainedRoots,
     });
   };
+  const attachDependencies = async (f: ReturnType<typeof registeredFixture>, ignored = false) => {
+    git(f.checkout, "config", "core.excludesFile", "/dev/null");
+    if (ignored) {
+      writeFileSync(path.join(f.checkout, ".git/info/exclude"), "node_modules\n");
+    }
+    const roots = ["node_modules", "apps/demo/node_modules"];
+    for (const relative of roots) {
+      const source = path.join(f.checkout, relative, "fixture-package");
+      mkdirSync(source, { recursive: true });
+      writeFileSync(path.join(source, "private-cache"), "external dependency bytes\n");
+    }
+    await attachCheckoutDependencyView({
+      sandbox: f.sandbox,
+      checkoutRoot: f.checkout,
+      candidateRoot: f.retiredRoot,
+      workspaceRoot: f.workspaceRoot,
+    });
+    return roots.map((relative) => {
+      const link = path.join(f.retiredRoot, relative);
+      return { link, target: readlinkSync(link) };
+    });
+  };
+  const retireWithFault = async (
+    f: ReturnType<typeof registeredFixture>,
+    fault: string,
+    setup = "",
+  ) => {
+    const preload = path.join(f.workspaceRoot, "derived-link-fault.cjs");
+    writeFileSync(
+      preload,
+      `const cp = require("node:child_process");
+const fs = require("node:fs");
+const original = cp.spawn;
+let statuses = 0;
+let references = 0;
+${setup}
+cp.spawn = (command, args, options) => {
+  ${fault}
+  return original(command, args, options);
+};`,
+    );
+    await retireUnusedDraftWorktrees({
+      workspaceRoot: f.workspaceRoot,
+      retainedRoots: [],
+      sandbox: {
+        run(input) {
+          const result = spawnSync("/bin/sh", ["-c", input.command], {
+            cwd: f.workspaceRoot,
+            encoding: "utf-8",
+            env: {
+              ...process.env,
+              GIT_CONFIG_GLOBAL: "/dev/null",
+              GIT_CONFIG_NOSYSTEM: "1",
+              HOME: f.workspaceRoot,
+              NODE_OPTIONS: `--require ${preload}`,
+              PATH: `${path.dirname(process.execPath)}:${process.env.PATH ?? ""}`,
+            },
+          });
+          return Promise.resolve({
+            exitCode: result.status ?? 1,
+            stdout: result.stdout,
+            stderr: result.stderr,
+          });
+        },
+      },
+    });
+  };
+
+  it.each([false, true])(
+    "retires attached dependency links (ignored=%s) without touching their external bytes",
+    async (ignored) => {
+      const f = registeredFixture();
+      const links = await attachDependencies(f, ignored);
+      await retire(f);
+      expect(existsSync(f.retiredRoot)).toBe(false);
+      expect(git(f.checkout, "worktree", "list", "--porcelain")).not.toContain(f.retiredRoot);
+      for (const { target } of links) {
+        expect(readFileSync(path.join(target, "fixture-package/private-cache"), "utf-8")).toBe(
+          "external dependency bytes\n",
+        );
+      }
+      const ref = `refs/app-builder/retired-draft-worktrees/${digest(f.retiredRoot)}`;
+      expect(git(f.checkout, "rev-parse", ref)).toBe(f.headSha);
+    },
+  );
+
+  it.each([
+    "referenced",
+    "private sibling",
+    "real dependencies",
+    "foreign link",
+    "wrong candidate",
+    "wrong relative",
+    "tracked link",
+  ])("retains %s alongside an attached dependency view", async (kind) => {
+    const f = registeredFixture();
+    const links = await attachDependencies(f, true);
+    const selected = links[0];
+    if (selected === undefined) {
+      throw new Error("Missing fixture dependency link");
+    }
+    if (kind === "private sibling") {
+      writeFileSync(path.join(f.retiredRoot, "private-record"), "private bytes\n");
+      writeFileSync(path.join(f.checkout, ".git/info/exclude"), "node_modules\nprivate-record\n");
+    } else if (kind !== "referenced") {
+      rmSync(selected.link);
+      if (kind === "real dependencies") {
+        mkdirSync(selected.link);
+        writeFileSync(path.join(selected.link, "private-record"), "private bytes\n");
+      } else {
+        let target = f.checkout;
+        if (kind === "wrong candidate") {
+          target = selected.target.replace(digest(f.retiredRoot), digest("different candidate"));
+        } else if (kind === "wrong relative") {
+          target = path.join(selected.target, "nested/node_modules");
+        } else if (kind === "tracked link") {
+          symlinkSync(target, selected.link);
+          git(f.retiredRoot, "add", "--force", "node_modules");
+          git(
+            f.retiredRoot,
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.test",
+            "commit",
+            "-m",
+            "tracked link",
+          );
+          rmSync(selected.link);
+          target = selected.target;
+        }
+        symlinkSync(target, selected.link);
+      }
+    }
+    await retire(f, kind === "referenced" ? [f.retiredRoot] : []);
+    expect(existsSync(f.retiredRoot)).toBe(true);
+    expect(readlinkSync(path.join(f.retiredRoot, "apps/demo/node_modules"))).toBe(links[1]?.target);
+    expect(readFileSync(path.join(selected.target, "fixture-package/private-cache"), "utf-8")).toBe(
+      "external dependency bytes\n",
+    );
+    if (kind === "real dependencies") {
+      expect(readFileSync(path.join(selected.link, "private-record"), "utf-8")).toBe(
+        "private bytes\n",
+      );
+    }
+    if (kind === "private sibling") {
+      expect(readFileSync(path.join(f.retiredRoot, "private-record"), "utf-8")).toBe(
+        "private bytes\n",
+      );
+    }
+  });
+
+  it("retains a foreign-owned symlink even when its target matches the derived convention", async () => {
+    const f = registeredFixture();
+    const links = await attachDependencies(f);
+    const link = path.join(f.retiredRoot, "node_modules");
+    await retireWithFault(
+      f,
+      "",
+      `const originalLstat = fs.lstatSync;
+fs.lstatSync = (...args) => {
+  const stat = originalLstat(...args);
+  if (args[0] === ${JSON.stringify(link)} && stat) stat.uid = process.getuid() + 1;
+  return stat;
+};`,
+    );
+    expect(existsSync(f.retiredRoot)).toBe(true);
+    expect(readlinkSync(link)).toBe(links[0]?.target);
+  });
+
+  it("restores detached links when unforced Git removal fails", async () => {
+    const f = registeredFixture();
+    const links = await attachDependencies(f);
+    await retireWithFault(
+      f,
+      `if (args.includes("remove")) return original(process.execPath, ["-e", "process.exit(1)"], options);`,
+    );
+    expect(existsSync(f.retiredRoot)).toBe(true);
+    for (const { link, target } of links) {
+      expect(readlinkSync(link)).toBe(target);
+      expect(readFileSync(path.join(target, "fixture-package/private-cache"), "utf-8")).toBe(
+        "external dependency bytes\n",
+      );
+    }
+  });
+
+  it("does not overwrite replacement private bytes while restoring after detachment", async () => {
+    const f = registeredFixture();
+    const links = await attachDependencies(f, true);
+    const link = path.join(f.retiredRoot, "node_modules");
+    await retireWithFault(
+      f,
+      `if (args.includes("status") && ++statuses === 3) fs.writeFileSync(${JSON.stringify(link)}, "replacement private bytes");`,
+    );
+    expect(readFileSync(link, "utf-8")).toBe("replacement private bytes");
+    expect(readlinkSync(path.join(f.retiredRoot, "apps/demo/node_modules"))).toBe(links[1]?.target);
+  });
+
+  it("retains a dependency link replaced by a private directory before detachment", async () => {
+    const f = registeredFixture();
+    await attachDependencies(f, true);
+    const link = path.join(f.retiredRoot, "node_modules");
+    await retireWithFault(
+      f,
+      `if (args.includes("update-ref")) {
+      const child = original(command, args, options);
+      child.on("close", () => { fs.unlinkSync(${JSON.stringify(link)}); fs.mkdirSync(${JSON.stringify(link)}); fs.writeFileSync(${JSON.stringify(path.join(link, "private-record"))}, "replacement private bytes"); });
+      return child;
+    }`,
+    );
+    expect(readFileSync(path.join(link, "private-record"), "utf-8")).toBe(
+      "replacement private bytes",
+    );
+  });
+
+  it("does not unlink through a parent replaced after inspection", async () => {
+    const f = registeredFixture();
+    await attachDependencies(f, true);
+    const parent = path.join(f.retiredRoot, "apps/demo");
+    const foreign = path.join(f.workspaceRoot, "foreign-parent");
+    mkdirSync(foreign);
+    const foreignLink = path.join(foreign, "node_modules");
+    symlinkSync(f.checkout, foreignLink);
+    await retireWithFault(
+      f,
+      `if (args.includes("rev-parse") && args.includes("--quiet") && ++references === 2) {
+      const child = original(command, args, options);
+      child.on("close", () => { fs.renameSync(${JSON.stringify(parent)}, ${JSON.stringify(`${parent}-preserved`)}); fs.symlinkSync(${JSON.stringify(foreign)}, ${JSON.stringify(parent)}); });
+      return child;
+    }`,
+    );
+    expect(readlinkSync(foreignLink)).toBe(f.checkout);
+    expect(lstatSync(parent).isSymbolicLink()).toBe(true);
+    expect(existsSync(`${parent}-preserved/tests/journey.spec.ts`)).toBe(true);
+  });
 
   it("retires a clean registered checkout while retaining its detached private commit", async () => {
     const f = registeredFixture();
