@@ -11,6 +11,7 @@ import type {
   ContinuityRecord,
   ContinuityCapabilities,
 } from "./hosted-operator-continuity-contract";
+import { createPostgresContinuityJournalStore } from "./postgres-hosted-operator-continuity-journal";
 import { createHostedContinuityOperations } from "./hosted-operator-continuity";
 import type { HostedContinuityDependencies } from "./hosted-operator-continuity";
 import { createContinuityCapabilityCustody } from "./hosted-operator-continuity-custody";
@@ -295,6 +296,47 @@ const setup = () => {
 };
 
 describe("approved managed app continuity service", () => {
+  it("reserves a positive first database revision and preserves idempotence and CAS recovery", async () => {
+    const f = setup();
+    const values = vi.fn((value: { revision: number; record: ContinuityRecord }) => {
+      // Model the real PostgreSQL revision CHECK at the terminal database boundary.
+      if (value.revision <= 0) {
+        throw new Error("Controlled builder_provisioning_journal_revision_check failure");
+      }
+      expect(value.revision).toBe(value.record.revision);
+      return {
+        onConflictDoNothing: () => ({ returning: async () => [{ record: value.record }] }),
+      };
+    });
+    const database = { insert: () => ({ values }) };
+    // SAFETY: This controlled terminal database implements every method used by reservation;
+    // the actual PostgreSQL adapter still maps and parses the operation's record.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Isolate the existing SQL adapter without opening a database or mocking its implementation.
+    const postgresStore = createPostgresContinuityJournalStore(database as never);
+    const retain = f.deps.store.reserve;
+    f.deps.store.reserve = async (input) =>
+      await retain({ ...input, record: await postgresStore.reserve(input) });
+
+    const planned = await f.operations.plan(context, selection.runtime, "database-revision");
+    const initialRevision = f.read().revision;
+    expect(initialRevision).toBeGreaterThan(0);
+    expect(f.read().fence).toBe(0);
+    expect(await f.operations.plan(context, selection.runtime, "database-revision")).toEqual(
+      planned,
+    );
+    expect(values).toHaveBeenCalledOnce();
+    f.approve();
+    f.rejectNextCas();
+    await expect(
+      f.operations.execute(context, planned.request, "continuity-call"),
+    ).rejects.toThrow();
+    expect(f.read().revision).toBe(initialRevision);
+    expect(f.events).toEqual([]);
+    const recovered = await f.operations.execute(context, planned.request, "continuity-call");
+    expect(recovered.state).toBe("settled");
+    expect(f.read().revision).toBeGreaterThan(initialRevision);
+    expect(f.events.filter((event) => event === "dispatch-suite")).toHaveLength(1);
+  });
   it("plans idempotently and status/approval reads perform no runtime or projection work", async () => {
     const f = setup();
     const first = await f.operations.plan(context, selection.runtime, "request");
