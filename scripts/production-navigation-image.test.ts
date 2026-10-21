@@ -269,17 +269,20 @@ describe("production navigation pinned image preparation", () => {
     ["storage_exhausted", "no space left on device"],
     ["platform_mismatch", "no matching manifest for linux/amd64"],
     ["unrecognized_diagnostic", "private-sensitive-command-failure"],
-  ])("reports a bounded, secret-free pinned-image pull failure: %s", async (reason, stderr) => {
-    const f = fixture();
-    f.runCommand
-      .mockResolvedValueOnce(missing)
-      .mockResolvedValueOnce({ exitCode: 1, stderr });
-    const failure = ensureProductionNavigationImage(f.input);
-    await expect(failure).rejects.toThrow(`(${reason}; exit 1)`);
-    await expect(failure).rejects.not.toThrow("private-sensitive");
-    expect(f.wait).not.toHaveBeenCalled();
-    expect(f.runCommand).toHaveBeenCalledTimes(2);
-  });
+  ])(
+    "reports a bounded, secret-free pinned-image pull failure: %s",
+    async (reason, stderr) => {
+      const f = fixture();
+      f.runCommand
+        .mockResolvedValueOnce(missing)
+        .mockResolvedValueOnce({ exitCode: 1, stderr });
+      const failure = ensureProductionNavigationImage(f.input);
+      await expect(failure).rejects.toThrow(`(${reason}; exit 1)`);
+      await expect(failure).rejects.not.toThrow("private-sensitive");
+      expect(f.wait).not.toHaveBeenCalled();
+      expect(f.runCommand).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it.each([
     "unauthorized: authentication required",

@@ -147,7 +147,9 @@ export const ensureProductionNavigationImage = async (
       return image;
     }
     if (!registryThrottled(pulled)) {
-      throw new Error(`Production navigation could not pull the pinned PostgreSQL image (${pullFailureReason(pulled.stderr)}; exit ${pulled.exitCode}).`);
+      throw new Error(
+        `Production navigation could not pull the pinned PostgreSQL image (${pullFailureReason(pulled.stderr)}; exit ${pulled.exitCode}).`,
+      );
     }
     if (image === PRODUCTION_NAVIGATION_POSTGRES_IMAGE) {
       // The canonical registry supplies the identical digest when the public mirror is throttled.
