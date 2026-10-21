@@ -693,13 +693,12 @@ test("actual SDK exposes retained mixed orphan without inventing or replaying it
   assert.deepEqual(history, before);
 });
 
-test("baseline reconciler ready can retain mixed orphan; diagnostic reports it without claiming safe replay", async () => {
+test("a mixed orphan without trusted repeatability remains uncertain and retains diagnostic evidence", async () => {
   const f = await fixture({ mixedStorage: true });
   const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
-  assert.equal(result.kind, "ready");
-  const summary = summarizeModelProtocol(
-    readDurableSession(result.checkpointCore.sessionState).history,
-  );
+  assert.equal(result.kind, "uncertain");
+  assert.equal(result.reason, "uncommitted-action-dispatch");
+  const summary = summarizeModelProtocol(f.latest.history);
   assert.equal(summary.missingResultCount, 1);
   assert.equal(
     summary.sample.find((value) => value.idHash === protocolIdentityHash("original-native"))
@@ -707,7 +706,9 @@ test("baseline reconciler ready can retain mixed orphan; diagnostic reports it w
     0,
   );
   const diagnostic = diagnosticRecords.findLast((record) => record.message === "recovery-protocol");
-  assert.equal(diagnostic.fields.reconciled.missingResultCount, 1);
+  assert.equal(diagnostic.fields.outcomeHash, protocolIdentityHash("uncertain"));
+  assert.equal(diagnostic.fields.latest.missingResultCount, 1);
+  assert.equal(diagnostic.fields.reconciled.callParts, 0);
   assert.equal(diagnostic.fields.latestCoordination.callParts, 0);
   assert.equal(
     diagnostic.fields.nativeResults.sample.some(

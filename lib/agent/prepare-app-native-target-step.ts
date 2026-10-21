@@ -1,6 +1,6 @@
 import type { WorkflowStepToolContext } from "eve/tools";
 import type { ApprovalContext, ApprovalResponseContext } from "eve/tools/approval";
-import type { NativeTargetPreparationRequest } from "./native-target-onboarding-runtime";
+import type { NativeTargetPreparationRequest } from "./native-target-onboarding-input-schema";
 
 // eslint-disable-next-line eslint/func-style -- Workflow SDK requires a hoisted top-level step.
 export async function readNativeTargetApprovalStep(
@@ -14,10 +14,11 @@ export async function readNativeTargetApprovalStep(
   return await runtime.hasApproval(input, ctx);
 }
 
-// eslint-disable-next-line eslint/func-style -- Plain native response policy keeps SDK auth functions inside its authenticated invocation.
+// eslint-disable-next-line eslint/func-style -- Workflow SDK requires a hoisted top-level step.
 export async function authorizeNativeTargetApprovalResponseStep(
   ctx: ApprovalResponseContext<NativeTargetPreparationRequest>,
 ) {
+  "use step";
   const { nativeTargetOnboardingRuntimeForSession } =
     await import("./native-target-onboarding-runtime");
   const runtime = await nativeTargetOnboardingRuntimeForSession(ctx);
