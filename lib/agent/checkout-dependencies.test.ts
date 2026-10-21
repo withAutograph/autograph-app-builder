@@ -2,7 +2,11 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import type { SandboxSession } from "eve/sandbox";
-import { ensureCheckoutDependencies } from "./checkout-dependencies";
+import {
+  ensureCheckoutDependencies,
+  repairCheckoutDependenciesAfterValidationFailure,
+} from "./checkout-dependencies";
+import type { TargetValidationFailureReceipt } from "../repository/target-validation";
 import type { DependencyAttemptResult } from "./checkout-dependencies";
 import { readValidationLogPage } from "../repository/validation-log";
 import type {
@@ -411,5 +415,173 @@ describe("replacement checkout dependencies", () => {
       expect(result.attempts[1]?.excerpt).toBe("install succeeded");
       expect(spawn).toHaveBeenCalledTimes(2);
     }
+  });
+});
+
+const dependencyFailure = (
+  stderr = 'Error: Cannot find package "@workspace/next-config"',
+): TargetValidationFailureReceipt => ({
+  appId: "app",
+  appSpecDigest: "spec",
+  appSpecPath: "spec.md",
+  appValidationSha256: "validation",
+  appliedTreeDigest: "tree",
+  applyDigest: "apply",
+  artifactRevision: "revision",
+  attemptDigest: "original-attempt",
+  changedContentDigest: "changed",
+  commands: [],
+  commandFailure: { exitCode: 1, name: "check-build", operation: "run-validation-command" },
+  dependencyCacheContentDigest: "cache-content",
+  dependencyCacheDigest: "cache",
+  dependencyReceiptDigest: "dependencies",
+  digest: "original-failure",
+  eligibilityDigest: "eligible",
+  identityDigest: "identity",
+  imageDigest: "image",
+  output: { stderr, stdout: "", truncated: false },
+  proposalDigest: "proposal",
+  reason: "command-failed",
+  recoveryRequired: true,
+  sourceReceiptDigest: "source",
+  sourceSha: "sha",
+  sourceTree: "source-tree",
+  status: "failed",
+  testShards: [],
+  validatedByCallId: "original-call",
+  version: 3,
+  workspaceDigest: "workspace",
+});
+
+describe("saved validation dependency recovery", () => {
+  const recovery = (spawn: SandboxSession["spawn"], failure = dependencyFailure()) => {
+    const { store } = memoryStore();
+    const attempts: DependencyAttemptResult[] = [];
+    return {
+      ...input(spawn, store),
+      assertCurrent: vi.fn(),
+      attempts,
+      failure,
+      onAttempt: vi.fn((attempt: DependencyAttemptResult) => {
+        attempts.push(attempt);
+      }),
+      prepareInstall: vi.fn(async () => {}),
+    };
+  };
+
+  it.each([
+    "Module not found: Can't resolve '@workspace/playwright-config'",
+    'error: Cannot find module "library/subpath"',
+    'Unable to resolve "@workspace/next-config"',
+    'Could not resolve "library"',
+  ])("repairs real bare module resolution using native install: %s", async (stderr) => {
+    const spawn = vi.fn().mockResolvedValue(process(0, ["installed\n"]));
+    const request = recovery(spawn, dependencyFailure(stderr));
+    await repairCheckoutDependenciesAfterValidationFailure(request);
+    expect(request.prepareInstall).toHaveBeenCalledBefore(spawn);
+    expect(spawn).toHaveBeenCalledExactlyOnceWith({
+      command: "bun install",
+      workingDirectory: "/workspace/repository",
+    });
+    expect(request.onAttempt.mock.calls.map(([attempt]) => attempt.completion)).toEqual([
+      "pending",
+      "complete",
+    ]);
+    expect(request.attempts[1]).toMatchObject({
+      exitCode: 0,
+      recoveryOfValidationFailure: request.failure,
+    });
+    const installed = request.attempts[1];
+    if (installed === undefined || request.logStore === undefined) {
+      throw new Error("Missing install logs");
+    }
+    expect(await readAll(request.logStore, installed, "stdout")).toBe("installed\n");
+    await repairCheckoutDependenciesAfterValidationFailure(request);
+    expect(spawn).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    'Cannot find module "./missing-file"',
+    'Cannot find module "@/app/page"',
+    'Cannot find module "/workspace/missing"',
+    "Could not resolve module './local'",
+    "Cannot resolve package '/app/x'",
+    "Unable to resolve module specifier '@/app'",
+    "TS2322: Type string is not assignable to number",
+    "Expected Save to equal Submitted",
+    "Network request failed: ECONNRESET",
+  ])("preserves unrelated repository failures without installing: %s", async (stderr) => {
+    const spawn = vi.fn();
+    const request = recovery(spawn, dependencyFailure(stderr));
+    await repairCheckoutDependenciesAfterValidationFailure(request);
+    expect(spawn).not.toHaveBeenCalled();
+    expect(request.prepareInstall).not.toHaveBeenCalled();
+  });
+
+  it("retains failed install and original logs, permits next normal retry, and suppresses only success", async () => {
+    const spawn = vi
+      .fn()
+      .mockResolvedValueOnce(process(1, [], ["registry unavailable\n"]))
+      .mockResolvedValueOnce(process(0, ["restored\n"]));
+    const request = recovery(spawn);
+    await expect(repairCheckoutDependenciesAfterValidationFailure(request)).rejects.toThrow(
+      "exited with status 1",
+    );
+    expect(request.attempts.at(-1)).toMatchObject({
+      completion: "complete",
+      exitCode: 1,
+      recoveryOfValidationFailure: request.failure,
+    });
+    await repairCheckoutDependenciesAfterValidationFailure(request);
+    await repairCheckoutDependenciesAfterValidationFailure(request);
+    expect(spawn).toHaveBeenCalledTimes(2);
+    const newFailure = { ...request.failure, attemptDigest: "new-attempt", digest: "new-failure" };
+    spawn.mockResolvedValueOnce(process(0));
+    await repairCheckoutDependenciesAfterValidationFailure({ ...request, failure: newFailure });
+    expect(spawn).toHaveBeenCalledTimes(3);
+  });
+
+  it("records provider interruption truthfully and permits a later normal retry", async () => {
+    const spawn = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("provider disconnected"))
+      .mockResolvedValueOnce(process(0));
+    const request = recovery(spawn);
+    await expect(repairCheckoutDependenciesAfterValidationFailure(request)).rejects.toThrow(
+      "was interrupted",
+    );
+    expect(request.attempts.at(-1)).toMatchObject({ completion: "interrupted", exitCode: null });
+    await repairCheckoutDependenciesAfterValidationFailure(request);
+    expect(spawn).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not dispatch when intent persistence or current-owner guard fails", async () => {
+    const spawn = vi.fn();
+    const request = recovery(spawn);
+    request.onAttempt.mockImplementation(() => {
+      throw new Error("state unavailable");
+    });
+    await expect(repairCheckoutDependenciesAfterValidationFailure(request)).rejects.toThrow(
+      "state unavailable",
+    );
+    expect(spawn).not.toHaveBeenCalled();
+    request.assertCurrent.mockImplementation(() => {
+      throw new Error("owner changed");
+    });
+    await expect(repairCheckoutDependenciesAfterValidationFailure(request)).rejects.toThrow(
+      "owner changed",
+    );
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it("preserves cancellation before dispatch", async () => {
+    const spawn = vi.fn();
+    const request = recovery(spawn);
+    const controller = new AbortController();
+    controller.abort(new Error("cancelled"));
+    await expect(
+      repairCheckoutDependenciesAfterValidationFailure({ ...request, signal: controller.signal }),
+    ).rejects.toThrow("cancelled");
+    expect(spawn).not.toHaveBeenCalled();
   });
 });

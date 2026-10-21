@@ -3,7 +3,10 @@ import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { createRepositoryObservation } from "../repository/github-publication";
 import type { ImmutableGitHubSourceReceipt } from "../repository/github-publication";
-import { inspectExistingRepositorySnapshotReceipt } from "../repository/source-receipt";
+import {
+  inspectCanonicalTemplateSnapshotReceipt,
+  inspectExistingRepositorySnapshotReceipt,
+} from "../repository/source-receipt";
 import { recordRepositoryAccessReceipt } from "./repository-access-state";
 import type { AppBuilderWorkflowState } from "./workflow-state";
 import type { SourceWorkflowState } from "./source-state";
@@ -44,6 +47,17 @@ const receipt = inspectExistingRepositorySnapshotReceipt({
   sourceSha: sha,
   sourceTree: tree,
 });
+const freshReceipt = inspectCanonicalTemplateSnapshotReceipt({
+  readinessDigest: "5".repeat(64),
+  snapshot: {
+    contents: {},
+    contract: [],
+    dirtyPaths: [],
+    sourcePath: "/workspace/repository",
+    sourceSha: sha,
+    sourceTree: tree,
+  },
+});
 const access = recordRepositoryAccessReceipt({
   access: {
     accessDigest: "4".repeat(64),
@@ -72,8 +86,71 @@ const input = {
   stage: "prepare-workspace" as const,
   workflow,
 };
+const freshWorkflow = {
+  ...workflow,
+  sourceReceipt: freshReceipt,
+} as AppBuilderWorkflowState;
+const freshSource: SourceWorkflowState = {
+  phase: "reviewed",
+  receipt: freshReceipt,
+  version: 3,
+};
 
 describe("saved accepted GitHub binding recovery", () => {
+  it.each(["prepare-workspace", "resolve-source-state", "resolve-workflow-state"] as const)(
+    "keeps a fresh template without a GitHub binding unchanged at %s",
+    (stage) => {
+      const recovered = recoverSavedWorkflowGitHubBinding({
+        access: undefined,
+        providerWorkspaceId: "saved-provider",
+        sessionId: "original-session",
+        source: freshSource,
+        stage,
+        workflow: freshWorkflow,
+      });
+      expect(recovered.githubSource).toBeUndefined();
+      expect(recovered.recovered).toBe(false);
+      expect(recovered.workflow).toBe(freshWorkflow);
+      expect(freshWorkflow).not.toHaveProperty("githubSource");
+      expect(freshSource).not.toHaveProperty("githubSource");
+    },
+  );
+
+  it.each([
+    { source: { ...freshSource, receipt }, workflow: freshWorkflow },
+    { source: freshSource, workflow },
+    { source: { phase: "empty", version: 3 } as SourceWorkflowState, workflow: freshWorkflow },
+    { source: { ...source, githubSource: undefined }, workflow },
+  ])("rejects an unbound saved source without matching fresh-template provenance", (states) => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(() =>
+      recoverSavedWorkflowGitHubBinding({
+        ...input,
+        access: undefined,
+        ...states,
+      }),
+    ).toThrow(SavedGitHubBindingError);
+    expect(states.workflow).not.toHaveProperty("githubSource");
+    vi.restoreAllMocks();
+  });
+
+  it("rejects conflicting saved GitHub repositories or branches", () => {
+    if (source.phase === "empty" || workflow.phase === "empty") {
+      throw new Error("The conflicting-binding fixture requires saved source and workflow states.");
+    }
+    const conflictingSource: SourceWorkflowState = {
+      ...source,
+      githubSource: seal({ ...githubSource, resolvedRef: "refs/heads/other" }),
+    };
+    expect(() =>
+      recoverSavedWorkflowGitHubBinding({
+        ...input,
+        source: conflictingSource,
+        workflow: { ...workflow, githubSource },
+      }),
+    ).toThrow(/different GitHub repositories or branches/u);
+  });
+
   it("recovers the missing slot of an applied workflow from its original durable authority", () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
     const recovered = recoverSavedWorkflowGitHubBinding(input);
