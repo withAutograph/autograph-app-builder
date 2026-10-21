@@ -75,6 +75,69 @@ const fixture = () => {
 };
 
 describe("native target Vercel project provider", () => {
+  it("accepts provider defaults for omitted source settings while verifying the exact root and protection", async () => {
+    const f = fixture();
+    const rootOnly = { rootDirectory: "apps/spend-review" };
+    f.request.mockResolvedValueOnce(json({ id: project.id }, 201));
+    f.request.mockResolvedValueOnce(
+      Response.json({
+        ...project,
+        buildCommand: null,
+        framework: null,
+        sourceFilesOutsideRootDirectory: true,
+      }),
+    );
+    expect(await createNativeTargetVercelProject({ ...f.input, settings: rootOnly })).toEqual({
+      name,
+      projectId: project.id,
+      scopeId: installation.scopeId,
+      settings: rootOnly,
+      protection: nativeTargetRequiredProjectProtection,
+      status: "verified",
+    });
+    const createOptions = f.request.mock.calls[0]?.[1];
+    expect(createOptions?.body).toBe(
+      JSON.stringify({
+        name,
+        rootDirectory: rootOnly.rootDirectory,
+        ssoProtection: nativeTargetRequiredProjectProtection.ssoProtection,
+        oidcTokenConfig: nativeTargetRequiredProjectProtection.oidcTokenConfig,
+      }),
+    );
+    expect(f.order).toEqual(["journal", "receipt"]);
+    expect(f.request).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    {
+      requested: { rootDirectory: settings.rootDirectory, framework: null },
+      observed: { ...project, framework: "nextjs" },
+    },
+    {
+      requested: { rootDirectory: settings.rootDirectory, buildCommand: null },
+      observed: { ...project, buildCommand: "provider default" },
+    },
+    {
+      requested: { rootDirectory: settings.rootDirectory, sourceFilesOutsideRootDirectory: true },
+      observed: { ...project, sourceFilesOutsideRootDirectory: false },
+    },
+  ])("rejects an explicit source setting mismatch on readback", async ({ requested, observed }) => {
+    const f = fixture();
+    f.request.mockResolvedValueOnce(Response.json(observed));
+    expect(
+      await observeNativeTargetVercelProject({
+        ...f.input,
+        settings: requested,
+        projectId: project.id,
+      }),
+    ).toEqual({
+      status: "candidate",
+      projectId: project.id,
+      reason: "name_or_profile_mismatch",
+    });
+    expect(f.request).toHaveBeenCalledTimes(1);
+  });
+
   it("journals before one exact create, saves the ID, then independently verifies the trusted native profile", async () => {
     const f = fixture();
     expect(await createNativeTargetVercelProject(f.input)).toEqual({

@@ -71,20 +71,23 @@ const projectMatches = (project: Project, input: ProviderInput, projectId: strin
   ) {
     return false;
   }
-  if (
-    (project.framework ?? null) !== input.settings.framework ||
-    project.rootDirectory !== input.settings.rootDirectory
-  ) {
+  const frameworkMatches =
+    input.settings.framework === undefined ||
+    (project.framework ?? null) === input.settings.framework;
+  if (!frameworkMatches || project.rootDirectory !== input.settings.rootDirectory) {
     return false;
   }
-  const settingsMatch =
-    (project.buildCommand ?? null) === (input.settings.buildCommand ?? null) &&
+  const buildCommandMatches =
+    input.settings.buildCommand === undefined ||
+    (project.buildCommand ?? null) === input.settings.buildCommand;
+  const outsideRootMatches =
+    input.settings.sourceFilesOutsideRootDirectory === undefined ||
     project.sourceFilesOutsideRootDirectory === input.settings.sourceFilesOutsideRootDirectory;
   const protectionMatch =
     project.ssoProtection?.deploymentType === input.protection.ssoProtection.deploymentType &&
     project.oidcTokenConfig?.enabled === input.protection.oidcTokenConfig.enabled &&
     project.oidcTokenConfig?.issuerMode === input.protection.oidcTokenConfig.issuerMode;
-  return settingsMatch && protectionMatch;
+  return buildCommandMatches && outsideRootMatches && protectionMatch;
 };
 
 /** Read only the already accepted project ID; a name match is never ownership evidence. */
