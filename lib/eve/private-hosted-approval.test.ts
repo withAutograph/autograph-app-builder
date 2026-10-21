@@ -24,7 +24,8 @@ import {
   hostedSessionSummary,
   InMemoryHostedEveStore,
 } from "./hosted-store";
-import type { HostedEveStore } from "./hosted-store";
+import type { HostedEveStore, HostedPagedCheckpointMetadata } from "./hosted-store";
+import { nativeObservationStateSchema } from "./native-observation-state";
 import {
   hostedOperatorPlanSchema,
   operatorPlanDigest,
@@ -766,4 +767,229 @@ describe("private approval delta checkpoints", () => {
       }),
     ).toBeUndefined();
   });
+});
+
+const recoveredApprovalFixture = async (outcome: "approved" | "cancelled", cold: boolean) => {
+  const original = await startedStore();
+  const child = await startedStore();
+  const childId = child.sessionId;
+  const originalId = original.sessionId;
+  const initial = await child.store.getSession(principal, childId);
+  if (initial?.version !== 2) {
+    throw new Error("Expected durable child fixture.");
+  }
+  const { checkpoint: _inline, ...childRecord } = initial;
+  void _inline;
+  let metadata: HostedPagedCheckpointMetadata = {
+    capturedAtEpochMs: 10,
+    status: "waiting",
+    version: 1,
+  };
+  const digest = `sha256:${"a".repeat(64)}`;
+  const storedChild = hostedSessionRecordSchema.parse({
+    ...childRecord,
+    adapterSessionId: "child_physical",
+    originAdapterSessionId: "child_physical",
+    checkpointDigest: digest,
+    checkpointRef: { digest, eventCount: 0, id: randomUUID() },
+    nativeRecoveryBinding: {
+      version: 1,
+      operationId: "recovery_operation",
+      sourcePublicSessionId: originalId,
+      sourceOwnerRunId: "original_physical",
+      sourceAdapterGeneration: 1,
+      logicalSessionId: "original_logical",
+      originalAuthoritySessionId: originalId,
+      parentCancellationRevision: 0,
+      ownerRunId: "child_physical",
+      provenance: {
+        kind: "completed-terminal-turn-input",
+        sourceStepId: "source_step",
+        sourceEventId: "source_event",
+        sourceSlot: 1,
+        checkpointVersion: 1,
+      },
+    },
+  });
+  const requestedPlan = hostedOperatorPlanSchema.parse({
+    ...plan,
+    selection: { ...selection, sessionId: originalId },
+  });
+  const requestedInput = {
+    ...toolInput,
+    plan: requestedPlan,
+    planDigest: operatorPlanDigest(requestedPlan),
+  };
+  const writes: string[] = [];
+  const observed: { adapterSessionId: string; sessionId: string }[] = [];
+  let observation = 0;
+  const store: HostedEveStore = {
+    getSession: async (candidate, id) => {
+      if (id === originalId) {
+        return await original.store.getSession(candidate, id);
+      }
+      const current = await child.store.getSession(candidate, id);
+      return current === null ? null : storedChild;
+    },
+    listSessions: child.store.listSessions.bind(child.store),
+    reserveOperation: child.store.reserveOperation.bind(child.store),
+    settleSucceeded: child.store.settleSucceeded.bind(child.store),
+    settleUnsuccessful: child.store.settleUnsuccessful.bind(child.store),
+    recordPrivateApprovalReceipts: async (input) => {
+      writes.push(input.sessionId);
+      await original.store.recordPrivateApprovalReceipts(input);
+    },
+    observeSessionPaged: async (input) => {
+      const events = [];
+      for await (const event of input.events) {
+        events.push(event);
+      }
+      expect(events).toEqual([]);
+      metadata = input.metadata;
+      return storedChild;
+    },
+    // oxlint-disable-next-line eslint/require-await -- Match the asynchronous checkpoint store port.
+    readCheckpointPage: async () => ({
+      checkpointDigest: digest,
+      cursor: 0,
+      events: [],
+      metadata,
+      totalEvents: 0,
+    }),
+  };
+  // oxlint-disable-next-line eslint/require-await -- Match asynchronous transport ports.
+  const empty = async () => ({ events: [], status: "waiting" as const });
+  const transport: HostedEveTransport = {
+    cancel: empty,
+    get: empty,
+    respond: empty,
+    send: empty,
+    start: async () => ({ adapterSessionId: "unused", snapshot: await empty() }),
+    observe: async (input) => {
+      observed.push({ adapterSessionId: input.adapterSessionId, sessionId: input.sessionId });
+      observation += 1;
+      await input.onPrivateEvent?.(
+        observation === 1
+          ? inputRequested("recovered_setup", undefined, requestedInput)
+          : approvalSettled("recovered_setup", outcome),
+      );
+      return {
+        artifactProjectionRequiresLegacyReadback: false,
+        installedEventCount: observation,
+        nativeObservationState: nativeObservationStateSchema.parse({
+          adapterSessionId: "child_physical",
+          artifactReadback: {
+            incompleteArtifacts: [],
+            incompleteUiPreviews: [],
+            legacy: false,
+            markdownCalls: [],
+            pending: [],
+            references: { requested: [], requestedUiPreview: [] },
+          },
+          boundary: "waiting",
+          invalidInput: false,
+          nextNativeIndex: observation,
+          pendingRequests: [],
+          prototypeProjector: {
+            artifactReadRequests: [],
+            readChunks: [],
+            requested: [],
+            transfers: [],
+          },
+          prototypeReference: { requested: [], requestedUiPreview: [] },
+          publicEventCount: 0,
+          version: 1,
+        }),
+        nextNativeIndex: observation,
+        observationComplete: !(cold && observation === 1),
+        pendingRequests: [],
+        publicEventCount: 0,
+        status: "waiting",
+      };
+    },
+  };
+  const service = () =>
+    createHostedEveSessionService({ now: () => 20, principal, store, transport });
+  return {
+    child,
+    childId,
+    originalId,
+    original,
+    metadata: () => metadata,
+    requestedPlan,
+    requestedInput,
+    observed,
+    writes,
+    service,
+  };
+};
+
+describe("recovered child private hosted approval authority", () => {
+  it.each([
+    ["approved", false],
+    ["cancelled", false],
+    ["approved", true],
+    ["cancelled", true],
+  ] as const)(
+    "persists %s under original authority across cold=%s child reads",
+    async (outcome, cold) => {
+      const f = await recoveredApprovalFixture(outcome, cold);
+      await f.service().get({ sessionId: f.childId, cursor: 0, limit: 10 });
+      const pending = cold
+        ? f.metadata().coldReadProgress?.privateApprovalCaptureState
+        : f.metadata().privateApprovalCaptureState;
+      expect(pending).toMatchObject({
+        sessionId: f.originalId,
+        pendingRequests: [{ requestId: "recovered_setup" }],
+      });
+      expect(f.writes).toEqual([]);
+      const result = await f.service().get({ sessionId: f.childId, cursor: 0, limit: 10 });
+      expect(f.observed).toEqual([
+        { adapterSessionId: "child_physical", sessionId: f.childId },
+        { adapterSessionId: "child_physical", sessionId: f.childId },
+      ]);
+      expect(f.writes).toEqual([f.originalId]);
+      const saved = await readPrivateHostedApproval({
+        store: f.original.store,
+        principal,
+        sessionId: f.originalId,
+        action: "prepare",
+        callId: "call_fixture",
+        planDigest: operatorPlanDigest(f.requestedPlan),
+        selection: f.requestedPlan.selection,
+        requestId: "recovered_setup",
+      });
+      expect(saved).toMatchObject({
+        outcome,
+        responderPrincipalId: principal.ownerUserId,
+        toolInput: f.requestedInput,
+      });
+      const child = await f.child.store.getSession(principal, f.childId);
+      expect(child?.version === 2 ? child.privateApprovalReceipts : undefined).toBeUndefined();
+      expect(JSON.stringify(result)).not.toContain("privateApproval");
+      expect(JSON.stringify(result)).not.toContain("call_fixture");
+    },
+  );
+
+  it.each([false, true])(
+    "rejects foreign private capture metadata before observing cold=%s",
+    async (cold) => {
+      const f = await recoveredApprovalFixture("approved", cold);
+      await f.service().get({ sessionId: f.childId, cursor: 0, limit: 10 });
+      const metadata = f.metadata();
+      const capture = cold
+        ? metadata.coldReadProgress?.privateApprovalCaptureState
+        : metadata.privateApprovalCaptureState;
+      if (capture === undefined) {
+        throw new Error("Missing retained private capture.");
+      }
+      capture.sessionId = f.childId;
+      capture.pendingRequests = [];
+      await expect(
+        f.service().get({ sessionId: f.childId, cursor: 0, limit: 10 }),
+      ).rejects.toThrow();
+      expect(f.observed).toHaveLength(1);
+      expect(f.writes).toEqual([]);
+    },
+  );
 });

@@ -17,7 +17,17 @@ import {
   assertExistingStartSession,
   sendAcknowledgementCursorSchema,
   unsettledSendAcknowledgementPageSchema,
+  assertNativeRecoverySourceBinding,
+  assertNativeRecoverySessionReceipt,
+  assertRecoveredBuildContinuationChild,
+  recoveredBuildDecision,
+  inheritRecoveryBuildDecision,
 } from "./hosted-store";
+import {
+  nativeRecoveryDescriptorSchema,
+  nativeRecoveryBindingSchema,
+  assertNativeRecoveryReceipt,
+} from "./native-recovery-contract";
 import { HostedCheckpointObservationConflictError } from "./hosted-checkpoint-observation-conflict-error";
 import { approvedBuildDecisionSchema } from "../agent/approved-build-continuation";
 import { and, asc, count, desc, eq, gt, inArray, lte, ne, or, sql } from "drizzle-orm";
@@ -282,8 +292,100 @@ async function sessionByAdapterSessionId(
     .where(
       and(sessionTenantPredicate(principal), eq(agentSessions.adapterSessionId, adapterSessionId)),
     )
-    .limit(1);
+    .limit(2);
+  if (rows.length > 1) {
+    throw new Error("Hosted adapter session binding is ambiguous.");
+  }
   return rows[0] === undefined ? null : parseHostedSessionRow(rows[0]);
+}
+
+/** Resolve only a tenant-owned recovered child with its exact committed native receipt. */
+// oxlint-disable-next-line eslint/func-style -- Keep the tenant-scoped transactional lookup adjacent to other store lookups.
+async function currentBuildSession(
+  transaction: Transaction,
+  principal: HostedPrincipal,
+  authoritySessionId: string,
+  logicalSessionId: string,
+) {
+  const authority = await sessionById(transaction, principal, authoritySessionId, true);
+  if (authority === null) {
+    throw new Error(SESSION_NOT_FOUND);
+  }
+  const rows = await transaction
+    .select()
+    .from(agentSessions)
+    .where(
+      and(
+        sessionTenantPredicate(principal),
+        sql`${agentSessions.record}->'nativeRecoveryBinding'->>'originalAuthoritySessionId' = ${authoritySessionId}`,
+        sql`${agentSessions.record}->'nativeRecoveryBinding'->>'logicalSessionId' = ${logicalSessionId}`,
+      ),
+    )
+    .for("update");
+  const children = rows.map(parseHostedSessionRow);
+  for (const child of children) {
+    if (child.version !== 2 || child.nativeRecoveryBinding === undefined) {
+      throw new Error(SESSION_NOT_FOUND);
+    }
+    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Lock each receipt and source in this transaction before accepting a child.
+    const source = await sessionById(transaction, principal, child.parentSessionId ?? "", true);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- This follows the locked source for the same child.
+    const operation = await operationById(
+      transaction,
+      principal,
+      child.nativeRecoveryBinding.operationId,
+      true,
+    );
+    assertRecoveredBuildContinuationChild(
+      authoritySessionId,
+      logicalSessionId,
+      source,
+      child,
+      operation,
+    );
+  }
+  const leaves = children.filter(
+    (candidate) =>
+      !children.some(
+        (child) => child.version === 2 && child.parentSessionId === candidate.sessionId,
+      ),
+  );
+  if (leaves.length > 1) {
+    throw new Error("Recovered build continuation owner is ambiguous.");
+  }
+  const current = leaves[0] ?? authority;
+  if (leaves.length === 0 && current.adapterSessionId !== logicalSessionId) {
+    throw new Error(SESSION_NOT_FOUND);
+  }
+  return toDurableHostedSessionRecord(current);
+}
+
+/** Carry a decision written during parked-child activation into the atomic child creation. */
+// oxlint-disable-next-line eslint/func-style -- The settlement calls this transaction-scoped helper before inserting its child.
+async function withRecoveryBuildDecision(
+  transaction: Transaction,
+  principal: HostedPrincipal,
+  operation: HostedOperationRecord,
+  child: HostedSessionRecord,
+): Promise<HostedSessionRecord> {
+  const descriptor = operation.nativeRecovery;
+  if (descriptor === undefined) {
+    return child;
+  }
+  const authority = await sessionById(
+    transaction,
+    principal,
+    descriptor.originalAuthoritySessionId,
+    true,
+  );
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Lock the original authority first so early projection and child creation serialize.
+  const source = await sessionById(transaction, principal, descriptor.sourcePublicSessionId, true);
+  if (authority === null || source === null) {
+    throw new Error(SESSION_NOT_FOUND);
+  }
+  assertNativeRecoverySourceBinding(operation, source, descriptor);
+  assertNativeRecoverySessionReceipt(operation, child);
+  return inheritRecoveryBuildDecision(source, authority, child);
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -295,6 +397,7 @@ function isExactReservation(existing: HostedOperationRecord, candidate: HostedOp
     existing.clientRequestId === candidate.clientRequestId &&
     (candidate.kind === "start" || existing.sessionId === candidate.sessionId) &&
     existing.resumeSessionId === candidate.resumeSessionId &&
+    JSON.stringify(existing.nativeRecovery) === JSON.stringify(candidate.nativeRecovery) &&
     existing.startAlias?.canonicalClientRequestId ===
       candidate.startAlias?.canonicalClientRequestId &&
     existing.startAlias?.sourceHandoffId === candidate.startAlias?.sourceHandoffId
@@ -362,13 +465,31 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
     async claimInternalBuildMessage(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
       return await database.transaction(async (transaction) => {
+        const priorOperation =
+          input.logicalSessionId === undefined
+            ? await operationById(transaction, principal, input.operationId, false)
+            : null;
+        const logicalSessionId =
+          input.logicalSessionId ??
+          priorOperation?.internalBuildContinuation?.decision.adapterSessionId;
+        if (logicalSessionId === undefined) {
+          return false;
+        }
+        const current = await currentBuildSession(
+          transaction,
+          principal,
+          input.sessionId,
+          logicalSessionId,
+        );
+        // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Lock the current owner before the marker operation to keep a consistent transaction order.
         const operation = await operationById(transaction, principal, input.operationId, true);
         const marker = operation?.internalBuildContinuation;
         if (
           operation === null ||
           marker === undefined ||
           operation.state === "rejected" ||
-          operation.sessionId !== input.sessionId ||
+          operation.sessionId !== current.sessionId ||
+          marker.decision.adapterSessionId !== current.adapterSessionId ||
           marker.nonce !== input.nonce ||
           input.turnSequence <= marker.decision.turnSequence
         ) {
@@ -670,13 +791,15 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
     async recordPrivateBuildDecision(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
       await database.transaction(async (transaction) => {
-        const stored = await sessionById(transaction, principal, input.sessionId, true);
-        if (stored === null) {
-          throw new Error(SESSION_NOT_FOUND);
-        }
-        const current = toDurableHostedSessionRecord(stored);
         const decision = approvedBuildDecisionSchema.parse(input.decision);
-        if (decision.adapterSessionId !== current.adapterSessionId) {
+        const current = await currentBuildSession(
+          transaction,
+          principal,
+          input.sessionId,
+          decision.adapterSessionId,
+        );
+        const boundDecision = recoveredBuildDecision(decision, current);
+        if (boundDecision === undefined) {
           throw new Error(SESSION_NOT_FOUND);
         }
         if ((current.privateBuildDecision?.turnSequence ?? -1) > decision.turnSequence) {
@@ -684,13 +807,13 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         }
         const updated = durableHostedSessionRecordSchema.parse({
           ...current,
-          privateBuildDecision: decision,
+          privateBuildDecision: boundDecision,
         });
         const rows = await transaction
           .update(agentSessions)
           .set(sessionValues(updated))
           .where(
-            and(sessionTenantPredicate(principal), eq(agentSessions.sessionId, input.sessionId)),
+            and(sessionTenantPredicate(principal), eq(agentSessions.sessionId, current.sessionId)),
           )
           .returning();
         if (rows.length !== 1) {
@@ -1031,10 +1154,12 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           }
         }
         if (candidate.kind === "start" && candidate.resumeSessionId !== undefined) {
-          if (
-            (await sessionById(transaction, principal, candidate.resumeSessionId, true)) === null
-          ) {
+          const source = await sessionById(transaction, principal, candidate.resumeSessionId, true);
+          if (source === null) {
             return { disposition: "conflict" as const };
+          }
+          if (candidate.nativeRecovery !== undefined) {
+            assertNativeRecoverySourceBinding(candidate, source, candidate.nativeRecovery);
           }
           const activeResume = await transaction
             .select({ value: count() })
@@ -1043,7 +1168,12 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
               and(
                 tenantPredicate(principal),
                 eq(agentOperations.kind, "start"),
-                eq(agentOperations.state, "reserved"),
+                or(
+                  inArray(agentOperations.state, ["reserved", "submission_unknown"]),
+                  ...(candidate.nativeRecovery === undefined
+                    ? []
+                    : [sql`${agentOperations.record}->'nativeRecoveryReceipt' is not null`]),
+                ),
                 sql`${agentOperations.record}->>'resumeSessionId' = ${candidate.resumeSessionId}`,
                 ne(agentOperations.operationId, candidate.operationId),
               ),
@@ -1083,6 +1213,56 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
             ? { disposition: "existing" as const, operation: raced }
             : { disposition: "conflict" as const };
         }
+      });
+    },
+
+    // oxlint-disable-next-line eslint/require-await -- Transaction ownership is returned as the store's async contract.
+    async commitNativeRecoveryReceipt(input) {
+      const principal = hostedPrincipalSchema.parse(input.principal);
+      const descriptor = nativeRecoveryDescriptorSchema.parse(input.descriptor);
+      const receipt = nativeRecoveryBindingSchema.parse(input.recoveryBinding);
+      assertNativeRecoveryReceipt(descriptor, receipt);
+      return database.transaction(async (transaction) => {
+        const operation = await operationById(transaction, principal, descriptor.operationId, true);
+        if (operation === null) {
+          throw new Error("Native recovery reservation is unavailable.");
+        }
+        const source = await sessionById(
+          transaction,
+          principal,
+          descriptor.sourcePublicSessionId,
+          true,
+        );
+        assertNativeRecoverySourceBinding(operation, source, descriptor);
+        if (operation.nativeRecoveryReceipt !== undefined) {
+          if (JSON.stringify(operation.nativeRecoveryReceipt) !== JSON.stringify(receipt)) {
+            throw new Error("Native recovery owner receipt conflicts.");
+          }
+          return operation.nativeRecoveryReceipt;
+        }
+        if (operation.state === "succeeded") {
+          throw new Error("Native recovery receipt was not committed before activation.");
+        }
+        const updated = hostedOperationRecordSchema.parse({
+          ...operation,
+          nativeRecoveryReceipt: receipt,
+          updatedAtEpochMs: Math.max(operation.updatedAtEpochMs, input.nowEpochMs),
+        });
+        const rows = await transaction
+          .update(agentOperations)
+          .set(operationValues(updated))
+          .where(
+            and(tenantPredicate(principal), eq(agentOperations.operationId, operation.operationId)),
+          )
+          .returning();
+        if (rows.length !== 1) {
+          throw new Error("Native recovery owner receipt was not durable.");
+        }
+        const committed = parseHostedOperationRow(rows[0]).nativeRecoveryReceipt;
+        if (committed === undefined) {
+          throw new Error("Native recovery owner receipt was not durable.");
+        }
+        return committed;
       });
     },
 
@@ -1243,13 +1423,16 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           throw new Error(OPERATION_CANNOT_SETTLE);
         }
         const result = eveSessionResultSchema.parse(input.result);
-        const session =
+        let session =
           input.session === undefined ? undefined : hostedSessionRecordSchema.parse(input.session);
         if (session !== undefined && tenantKeyFor(session.principal) !== tenantKeyFor(principal)) {
           throw new Error("Hosted store principal mismatch.");
         }
         if (operation.kind === "start" && session === undefined) {
           throw new Error("A successful start must atomically persist its session.");
+        }
+        if (session !== undefined && operation.nativeRecovery !== undefined) {
+          session = await withRecoveryBuildDecision(transaction, principal, operation, session);
         }
         if (operation.kind !== "start" && session !== undefined) {
           throw new Error("Only start may create a hosted session.");
@@ -1302,7 +1485,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
     // oxlint-disable-next-line eslint/require-await -- Async keeps this Promise-returning store contract consistent.
     async settleSucceededPaged(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
-      const base = durableHostedSessionRecordSchema.parse(input.session);
+      let base = durableHostedSessionRecordSchema.parse(input.session);
       if (
         base.version !== 2 ||
         base.checkpoint !== undefined ||
@@ -1334,6 +1517,11 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         const result = eveSessionResultSchema.parse(input.result);
         if (result.sessionId !== base.sessionId) {
           throw new Error("Hosted operation result session mismatch.");
+        }
+        if (operation.nativeRecovery !== undefined) {
+          base = durableHostedSessionRecordSchema.parse(
+            await withRecoveryBuildDecision(transaction, principal, operation, base),
+          );
         }
         const insertedBase = await transaction
           .insert(agentSessions)

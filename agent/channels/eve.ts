@@ -2,10 +2,16 @@ import { eveChannel } from "eve/channels/eve";
 import { localDev, placeholderAuth, vercelOidc } from "eve/channels/auth";
 
 import { readHostedForwarderSubject } from "@/lib/eve/hosted-forwarder";
+import { createHostedNativeRecoveryBinding } from "@/lib/eve/native-recovery-binding";
 
 const hostedForwarderSubject = readHostedForwarderSubject(process.env);
 
 export default eveChannel({
+  ...(hostedForwarderSubject === undefined
+    ? {}
+    : {
+        terminalRecovery: createHostedNativeRecoveryBinding(process.env),
+      }),
   auth: [
     // Lets the eve TUI and your Vercel deployments reach the deployed agent.
     vercelOidc(),

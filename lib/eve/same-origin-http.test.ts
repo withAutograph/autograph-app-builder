@@ -762,6 +762,68 @@ describe("same-origin canonical Eve transport", () => {
       expect(String(body.message)).not.toContain(sourceHandoffId);
     }
   });
+
+  it("accepts a typed native recovery receipt and routes later mutation to the retained logical inbox", async () => {
+    const recovery = {
+      version: 1 as const,
+      operationId: "op_recovery",
+      sourcePublicSessionId: "ses_parent",
+      sourceOwnerRunId: "run_parent",
+      sourceAdapterGeneration: 1,
+      logicalSessionId: "run_parent",
+      originalAuthoritySessionId: "ses_parent",
+      parentCancellationRevision: 0,
+    };
+    const recoveryBinding = {
+      ...recovery,
+      ownerRunId: "run_child",
+      provenance: {
+        kind: "completed-terminal-turn-input" as const,
+        sourceStepId: "step_1",
+        sourceEventId: "event_1",
+        sourceSlot: 1,
+        checkpointVersion: 1 as const,
+      },
+    };
+    // oxlint-disable-next-line eslint/require-await -- The transport test double follows fetch's async contract.
+    const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
+      if (String(url).endsWith("/eve/v1/session")) {
+        expect(JSON.parse(String(init?.body))).toMatchObject({
+          operationId: recovery.operationId,
+          recovery,
+        });
+        return Response.json(
+          { ok: true, status: "accepted", sessionId: "run_child", recoveryBinding },
+          { status: 202 },
+        );
+      }
+      return accepted("run_parent");
+    });
+    const transport = createSameOriginEveTransport({
+      config,
+      fetchImplementation,
+      workloadIdentity: identity(),
+    });
+    await expect(
+      transport.start({ operationId: recovery.operationId, principal, prompt: "", recovery }),
+    ).resolves.toMatchObject({
+      adapterSessionId: "run_child",
+      recoveryBinding,
+    });
+    await expect(
+      transport.sendAccepted?.({
+        adapterSessionId: "run_child",
+        logicalSessionId: "run_parent",
+        message: "Continue",
+        operationId: "op_send",
+        principal,
+      }),
+    ).resolves.toBeUndefined();
+    expect(fetchImplementation.mock.calls.map(([url]) => String(url))).toEqual([
+      "https://builder.example.test/eve/v1/session",
+      "https://builder.example.test/eve/v1/session/run_parent",
+    ]);
+  });
   it("carries verified prototype HTML without projecting raw action events", async () => {
     const content = "<!doctype html><html><body><button>Approve vendor</button></body></html>";
     const path = "prototype/vendor-onboarding/index.html";

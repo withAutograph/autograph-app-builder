@@ -9,6 +9,7 @@ import {
 import type { RealmContinuationAuthority } from "../hosted/realm-continuation-authority";
 import { activeBuilderModelId } from "../integrations/active-model";
 import { hostedEveOperationScopes } from "../eve/hosted-auth";
+import type { HostedPrincipal } from "../eve/hosted-auth";
 import {
   durableHostedSessionRecordSchema,
   hostedSessionRecordSchema,
@@ -341,6 +342,74 @@ describe("hosted operator owner context", () => {
       "adapter-current",
     );
     expect(f.handoffs.read).not.toHaveBeenCalled();
+  });
+
+  it("maps a recovered physical worker to its exact original direct grant authority", async () => {
+    const source = durableHostedSessionRecordSchema.parse({
+      ...directSessionRecord(),
+      resumability: "terminal",
+      stage: "needs_attention",
+      status: "failed",
+    });
+    const child = durableHostedSessionRecordSchema.parse({
+      ...source,
+      adapterGeneration: 1,
+      adapterSessionId: "adapter-child",
+      originAdapterSessionId: "adapter-child",
+      parentSessionId: source.sessionId,
+      sessionId: "public-child",
+      nativeRecoveryBinding: {
+        version: 1,
+        operationId: "op_recovery",
+        sourcePublicSessionId: source.sessionId,
+        sourceOwnerRunId: source.adapterSessionId,
+        sourceAdapterGeneration: source.adapterGeneration,
+        logicalSessionId: source.adapterSessionId,
+        originalAuthoritySessionId: source.sessionId,
+        parentCancellationRevision: 0,
+        ownerRunId: "adapter-child",
+        provenance: {
+          kind: "failed-turn-input",
+          sourceStepId: "step_1",
+          sourceEventId: "event_1",
+          sourceSlot: 1,
+          checkpointVersion: 1,
+        },
+      },
+    });
+    const sessions = {
+      // oxlint-disable-next-line eslint/require-await -- The fixture follows the async session-store contract.
+      getSession: vi.fn(async (_principal: HostedPrincipal, sessionId: string) =>
+        sessionId === source.sessionId ? source : null,
+      ),
+      // oxlint-disable-next-line eslint/require-await -- The fixture follows the async session-store contract.
+      getSessionByAdapterSessionId: vi.fn(async () => child),
+    };
+    const resolver = createHostedOperatorOwnerContextResolver({
+      audience: authority.audience,
+      handoffs: {
+        read: vi.fn(async () => {
+          await Promise.resolve();
+          return new Map<string, BuilderHandoffRecord>().get("missing");
+        }),
+      },
+      isActiveMember: vi.fn(async () => await Promise.resolve(true)),
+      issuer: authority.issuer,
+      sessions,
+    });
+    await expect(
+      resolver({
+        adapterSessionId: child.adapterSessionId,
+        authority,
+        principal,
+        sessionAuth: directSessionAuth,
+      }),
+    ).resolves.toMatchObject({
+      adapterSessionId: child.adapterSessionId,
+      kind: "direct",
+      sessionId: source.sessionId,
+    });
+    expect(sessions.getSession).toHaveBeenCalledWith(principal, source.sessionId);
   });
 
   it("resolves a real public prompt start without fabricating a handoff", async () => {
