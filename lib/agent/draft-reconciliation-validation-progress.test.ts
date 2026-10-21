@@ -6,6 +6,8 @@ import type {
   ValidationLogStore,
 } from "../repository/validation-log";
 
+import type { retireUnusedDraftWorktrees } from "../repository/retire-unused-draft-worktrees";
+
 import validateReconciliation from "../../agent/tools/validate_github_draft_pr_reconciliation";
 import formatCandidate from "../../agent/tools/format_github_draft_pr_candidate";
 import editCandidate from "../../agent/tools/edit_github_draft_pr_candidate";
@@ -19,6 +21,8 @@ const testCommand = "mise run --no-deps --skip-deps --skip-tools app:test spend-
 const captureCommand = "Capture selected checked app release";
 const mocks = vi.hoisted(() => ({
   candidate: null as Record<string, unknown> | null,
+  completions: [] as { root: string }[],
+  retire: vi.fn<typeof retireUnusedDraftWorktrees>(),
   attempts: [] as Record<string, unknown>[],
   check: vi.fn(),
   compile: vi.fn(),
@@ -34,6 +38,9 @@ const mocks = vi.hoisted(() => ({
   workflow: null as Record<string, unknown> | null,
 }));
 
+vi.mock("../repository/retire-unused-draft-worktrees", () => ({
+  retireUnusedDraftWorktrees: mocks.retire,
+}));
 vi.mock("./compiled-operator-artifacts", () => ({
   publishCompiledOperatorArtifactsForSession: mocks.publish,
 }));
@@ -43,6 +50,7 @@ vi.mock("./source-bound-sandbox", () => ({
 }));
 vi.mock("./draft-reconciliation-state", () => ({
   candidateValidationAttemptHistory: { get: () => mocks.attempts },
+  draftReconciliationCompletions: { get: () => mocks.completions },
   draftReconciliationState: { get: () => mocks.candidate },
   retainCandidateValidationAttempt: (attempt: Record<string, unknown>) =>
     mocks.attempts.push(attempt),
@@ -81,8 +89,9 @@ vi.mock("./validation-log-store-for-session", () => ({
   validationLogStoreForSession: mocks.logStore,
 }));
 
+const abortSignal = new AbortController().signal;
 const context = {
-  abortSignal: new AbortController().signal,
+  abortSignal,
   callId: "validation_1",
   session: { auth: { owned: "auth" }, id: "adapter" },
 } as never;
@@ -108,6 +117,8 @@ const incremental = async (expectedCommand: string) => {
 describe("draft reconciliation command progress", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.retire.mockResolvedValue();
+    mocks.completions = [];
     mocks.publish.mockResolvedValue({
       status: "published",
       compilation: {
@@ -174,6 +185,9 @@ describe("draft reconciliation command progress", () => {
     mocks.attempts = [];
     mocks.workflow = {
       appSpec: { digest },
+      workspace: { workspacePath: "/workspace/repository" },
+      applyReceipt: { applyRoot: "/workspace/applied" },
+      validationReceipt: { commands: [{ validationRoot: "/workspace/validation" }] },
       githubSource: { digest },
       phase: "reviewed",
       reviewReceipt: { digest },
@@ -186,6 +200,67 @@ describe("draft reconciliation command progress", () => {
     });
     mocks.run.mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
     mocks.check.mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
+  });
+
+  it("retires only unused worktrees before a direct failed-compilation retry", async () => {
+    mocks.completions = [
+      { root: "/workspace/completed-one" },
+      { root: "/workspace/completed-two" },
+    ];
+    mocks.compile.mockResolvedValueOnce({
+      command: schemaCommand,
+      exitCode: 1,
+      status: "failed",
+      stderr: "No space left on device",
+      stdout: "",
+    });
+    await expect(incremental(schemaCommand)).resolves.toMatchObject({ status: "needs_repair" });
+    expect(mocks.candidate?.validationRun).not.toHaveProperty("schemaTaskCompleted", true);
+    mocks.retire.mockClear();
+    const events: string[] = [];
+    mocks.retire.mockImplementation(async (input) => {
+      expect(input).toMatchObject({
+        workspaceRoot: "/workspace",
+        retainedRoots: [
+          "/workspace/repository",
+          "/workspace/applied",
+          "/workspace/validation",
+          "/workspace/candidate",
+          "/workspace/completed-one",
+          "/workspace/completed-two",
+        ],
+        signal: abortSignal,
+      });
+      expect(input.sandbox.run).toBeTypeOf("function");
+      events.push("retire");
+    });
+    mocks.run.mockImplementation(async () => {
+      events.push("attach");
+      return { exitCode: 0, stderr: "", stdout: "" };
+    });
+    mocks.compile.mockImplementation(async () => {
+      events.push("compile");
+      return { command: schemaCommand, exitCode: 0, status: "compiled", stderr: "", stdout: "" };
+    });
+    await expect(incremental(schemaCommand)).resolves.toMatchObject({
+      status: "in_progress",
+      nextCommand: checkCommand,
+    });
+    expect(mocks.retire).toHaveBeenCalledOnce();
+    expect(events.indexOf("retire")).toBeLessThan(events.indexOf("attach"));
+    expect(events.indexOf("attach")).toBeLessThan(events.indexOf("compile"));
+    expect(mocks.candidate?.validationRun).toMatchObject({ schemaTaskCompleted: true });
+    await incremental(checkCommand);
+    await incremental(testCommand);
+    await expect(incremental(captureCommand)).resolves.toMatchObject({ status: "validated" });
+    expect(mocks.retire).toHaveBeenCalledOnce();
+  });
+
+  it("does not retire worktrees for a candidate that fails the existing context check", async () => {
+    mocks.workflow = { ...mocks.workflow, phase: "validated" };
+    await expect(incremental(schemaCommand)).rejects.toThrow("no longer matches");
+    expect(mocks.retire).not.toHaveBeenCalled();
+    expect(mocks.run).not.toHaveBeenCalled();
   });
 
   it.each(["format", "validate"] as const)(

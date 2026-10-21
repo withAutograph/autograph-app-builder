@@ -5,6 +5,7 @@ import type { ToolContext } from "eve/tools";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import { withCandidateCommandEnvironment } from "@/lib/agent/candidate-command-environment";
 import { attachCheckoutDependencyView } from "@/lib/repository/dependency-cache";
+import { retireUnusedDraftWorktrees } from "@/lib/repository/retire-unused-draft-worktrees";
 import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
 
@@ -16,6 +17,7 @@ import {
 } from "./prepare-app-local-preview";
 import { appBrowserTestCommand, runAppBrowserTests } from "./run-app-browser-tests";
 import {
+  draftReconciliationCompletions,
   draftReconciliationState,
   retainCandidateValidationAttempt,
   updateExactDraftReconciliation,
@@ -753,6 +755,20 @@ export default defineTool({
       );
     }
     const sandbox = withCandidateCommandEnvironment(await getSourceBoundSandbox(ctx));
+    if (candidate.validationRun?.schemaTaskCompleted !== true) {
+      await retireUnusedDraftWorktrees({
+        sandbox,
+        workspaceRoot: candidate.workspaceRoot,
+        retainedRoots: [
+          state.workspace.workspacePath,
+          state.applyReceipt.applyRoot,
+          ...state.validationReceipt.commands.map((command) => command.validationRoot),
+          candidate.root,
+          ...draftReconciliationCompletions.get().map((completion) => completion.root),
+        ],
+        signal: ctx.abortSignal,
+      });
+    }
     await attachCheckoutDependencyView({
       sandbox,
       checkoutRoot: `${candidate.workspaceRoot}/repository`,

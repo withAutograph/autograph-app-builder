@@ -31,6 +31,8 @@ import {
   writeDraftReconciliationResolution,
 } from "./sandbox-draft-reconciliation";
 
+import { retireUnusedDraftWorktrees } from "./retire-unused-draft-worktrees";
+
 const temporary: string[] = [];
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 afterEach(() => {
@@ -1354,5 +1356,240 @@ describe("isolated draft reconciliation", () => {
         workspaceRoot: root,
       }),
     ).rejects.toThrow("docs/platform.md");
+  });
+});
+
+describe("unused draft worktree retirement", () => {
+  const registeredFixture = () => {
+    const f = fixture();
+    const workspaceRoot = realpathSync(f.root);
+    const checkout = path.join(workspaceRoot, "repository");
+    const root = path.join(workspaceRoot, ".app-builder/draft-reconcile/previous");
+    mkdirSync(path.dirname(root), { recursive: true });
+    git(checkout, "worktree", "add", "--detach", root, f.headSha);
+    return { ...f, workspaceRoot, checkout, retiredRoot: root };
+  };
+  const retire = async (f: ReturnType<typeof registeredFixture>, retainedRoots: string[] = []) => {
+    await retireUnusedDraftWorktrees({
+      sandbox: f.sandbox,
+      workspaceRoot: f.workspaceRoot,
+      retainedRoots,
+    });
+  };
+
+  it("retires a clean registered checkout while retaining its detached private commit", async () => {
+    const f = registeredFixture();
+    writeFileSync(
+      path.join(f.retiredRoot, "apps/demo/tests/journey.spec.ts"),
+      "local committed repair\n",
+    );
+    git(f.retiredRoot, "add", ".");
+    git(
+      f.retiredRoot,
+      "-c",
+      "user.name=Fixture",
+      "-c",
+      "user.email=fixture@example.test",
+      "commit",
+      "-m",
+      "private repair",
+    );
+    const head = git(f.retiredRoot, "rev-parse", "HEAD");
+    await retire(f);
+    expect(existsSync(f.retiredRoot)).toBe(false);
+    const ref = `refs/app-builder/retired-draft-worktrees/${digest(f.retiredRoot)}`;
+    expect(git(f.checkout, "rev-parse", ref)).toBe(head);
+    expect(git(f.checkout, "show", `${ref}:apps/demo/tests/journey.spec.ts`)).toBe(
+      "local committed repair",
+    );
+    expect(git(f.checkout, "worktree", "list", "--porcelain")).not.toContain(f.retiredRoot);
+    expect(existsSync(f.checkout)).toBe(true);
+  });
+
+  it.each(["tracked", "staged", "untracked", "ignored", "empty directory", "assume unchanged"])(
+    "retains unique %s state",
+    async (kind) => {
+      const f = registeredFixture();
+      const tracked = path.join(f.retiredRoot, "apps/demo/tests/journey.spec.ts");
+      if (kind === "tracked" || kind === "staged" || kind === "assume unchanged") {
+        writeFileSync(tracked, "private repair\n");
+        if (kind === "staged") {
+          git(f.retiredRoot, "add", ".");
+        }
+        if (kind === "assume unchanged") {
+          git(
+            f.retiredRoot,
+            "update-index",
+            "--assume-unchanged",
+            "apps/demo/tests/journey.spec.ts",
+          );
+        }
+      } else if (kind === "empty directory") {
+        mkdirSync(path.join(f.retiredRoot, "private-empty"));
+      } else {
+        writeFileSync(path.join(f.retiredRoot, "private-record"), "private bytes\n");
+        if (kind === "ignored") {
+          writeFileSync(path.join(f.checkout, ".git/info/exclude"), "private-record\n");
+        }
+      }
+      await retire(f);
+      expect(existsSync(f.retiredRoot)).toBe(true);
+      if (kind === "tracked" || kind === "staged" || kind === "assume unchanged") {
+        expect(readFileSync(tracked, "utf-8")).toBe("private repair\n");
+      } else if (kind !== "empty directory") {
+        expect(readFileSync(path.join(f.retiredRoot, "private-record"), "utf-8")).toBe(
+          "private bytes\n",
+        );
+      }
+    },
+  );
+
+  it("retains unresolved index stages", async () => {
+    const f = registeredFixture();
+    const trackedPath = "apps/demo/tests/journey.spec.ts";
+    const hash = git(f.retiredRoot, "rev-parse", `HEAD:${trackedPath}`);
+    git(f.retiredRoot, "update-index", "--force-remove", trackedPath);
+    // oxlint-disable-next-line sonarjs/no-os-command-from-path -- Git creates unresolved stages only in this temporary fixture.
+    const result = spawnSync("git", ["-C", f.retiredRoot, "update-index", "--index-info"], {
+      input: [1, 2, 3].map((stage) => `100644 ${hash} ${stage}\t${trackedPath}\n`).join(""),
+      encoding: "utf-8",
+    });
+    expect(result.status).toBe(0);
+    const unresolved = git(f.retiredRoot, "ls-files", "--unmerged");
+    expect(unresolved).not.toBe("");
+    await retire(f);
+    expect(existsSync(f.retiredRoot)).toBe(true);
+    expect(git(f.retiredRoot, "ls-files", "--unmerged")).toBe(unresolved);
+  });
+
+  it.each(["exact", "parent", "child"])(
+    "retains a referenced root with %s overlap",
+    async (kind) => {
+      const f = registeredFixture();
+      let retained = f.retiredRoot;
+      if (kind === "parent") {
+        retained = path.dirname(f.retiredRoot);
+      }
+      if (kind === "child") {
+        retained = path.join(f.retiredRoot, "apps/demo");
+      }
+      await retire(f, [retained]);
+      expect(existsSync(f.retiredRoot)).toBe(true);
+    },
+  );
+
+  it("retains a worktree whose private retention ref already names different history", async () => {
+    const f = registeredFixture();
+    const ref = `refs/app-builder/retired-draft-worktrees/${digest(f.retiredRoot)}`;
+    git(f.checkout, "update-ref", ref, f.baseSha);
+    await retire(f);
+    expect(existsSync(f.retiredRoot)).toBe(true);
+    expect(git(f.checkout, "rev-parse", ref)).toBe(f.baseSha);
+  });
+
+  it("retains symbolic retention refs and their target history", async () => {
+    const f = registeredFixture();
+    const ref = `refs/app-builder/retired-draft-worktrees/${digest(f.retiredRoot)}`;
+    const target = "refs/app-builder/existing-history";
+    git(f.checkout, "update-ref", target, f.headSha);
+    git(f.checkout, "symbolic-ref", ref, target);
+    await retire(f);
+    expect(existsSync(f.retiredRoot)).toBe(true);
+    expect(git(f.checkout, "symbolic-ref", ref)).toBe(target);
+    expect(git(f.checkout, "rev-parse", target)).toBe(f.headSha);
+  });
+
+  it("retains a registered path whose Git common directory changed", async () => {
+    const f = registeredFixture();
+    const foreign = fixture();
+    writeFileSync(
+      path.join(f.retiredRoot, ".git"),
+      `gitdir: ${path.join(foreign.root, "repository/.git")}\n`,
+    );
+    await retire(f);
+    expect(existsSync(f.retiredRoot)).toBe(true);
+    expect(git(path.join(foreign.root, "repository"), "rev-parse", "HEAD")).toBe(foreign.headSha);
+  });
+
+  it("does not touch an unregistered directory or a foreign repository", async () => {
+    const f = registeredFixture();
+    const foreign = fixture();
+    const foreignRoot = path.join(path.dirname(f.retiredRoot), "foreign");
+    git(
+      path.join(foreign.root, "repository"),
+      "worktree",
+      "add",
+      "--detach",
+      foreignRoot,
+      foreign.headSha,
+    );
+    const unknown = path.join(path.dirname(f.retiredRoot), "unknown");
+    mkdirSync(unknown);
+    writeFileSync(path.join(unknown, "private"), "unregistered bytes\n");
+    await retire(f, [f.retiredRoot]);
+    expect(existsSync(foreignRoot)).toBe(true);
+    expect(readFileSync(path.join(unknown, "private"), "utf-8")).toBe("unregistered bytes\n");
+  });
+
+  it.each(["race", "ref failure", "remove failure"])(
+    "retains on %s without overwriting private state",
+    async (failure) => {
+      const f = registeredFixture();
+      const preload = path.join(f.workspaceRoot, "git-fault.cjs");
+      writeFileSync(
+        preload,
+        `
+const cp = require("node:child_process");
+const fs = require("node:fs");
+const original = cp.spawn;
+cp.spawn = (command, args, options) => {
+  if (command === "git" && args.includes("update-ref")) {
+    if (${JSON.stringify(failure)} === "ref failure") return original(process.execPath, ["-e", "process.exit(1)"], options);
+    const child = original(command, args, options);
+    if (${JSON.stringify(failure)} === "race") child.on("close", () => fs.writeFileSync(${JSON.stringify(path.join(f.retiredRoot, "late-private"))}, "late bytes"));
+    return child;
+  }
+  if (command === "git" && args.includes("remove") && ${JSON.stringify(failure)} === "remove failure") return original(process.execPath, ["-e", "process.exit(1)"], options);
+  return original(command, args, options);
+};
+`,
+      );
+      await retireUnusedDraftWorktrees({
+        workspaceRoot: f.workspaceRoot,
+        retainedRoots: [],
+        sandbox: {
+          run(input) {
+            const result = spawnSync("/bin/sh", ["-c", input.command], {
+              cwd: f.workspaceRoot,
+              encoding: "utf-8",
+              env: {
+                ...process.env,
+                NODE_OPTIONS: `--require ${preload}`,
+                PATH: `${path.dirname(process.execPath)}:${process.env.PATH ?? ""}`,
+              },
+            });
+            return Promise.resolve({
+              exitCode: result.status ?? 1,
+              stdout: result.stdout,
+              stderr: result.stderr,
+            });
+          },
+        },
+      });
+      expect(existsSync(f.retiredRoot)).toBe(true);
+      if (failure === "race") {
+        expect(readFileSync(path.join(f.retiredRoot, "late-private"), "utf-8")).toBe("late bytes");
+      }
+    },
+  );
+
+  it("leaves an unknown provider outcome alone", async () => {
+    const f = registeredFixture();
+    await retireUnusedDraftWorktrees({
+      workspaceRoot: f.workspaceRoot,
+      retainedRoots: [],
+      sandbox: { run: () => Promise.reject(new Error("unknown provider outcome")) },
+    });
+    expect(existsSync(f.retiredRoot)).toBe(true);
   });
 });
