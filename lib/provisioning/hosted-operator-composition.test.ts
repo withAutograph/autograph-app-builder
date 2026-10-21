@@ -39,6 +39,7 @@ import {
   retainedOperatorAuthFromJournal,
 } from "./hosted-runtime-journal";
 import {
+  createHostedOperatorControlPlane,
   createRetainedAppInstallationCustomerReader,
   matchesApprovedMembershipJwks,
   selectAuthPlanningResourceBindingRow,
@@ -3421,6 +3422,161 @@ describe("retained active schema installation scope", () => {
     });
     return { desired, prior, receipt, session, readOwner, readApproval, readActiveCustomers, read };
   };
+
+  const deploymentFixture = async () => {
+    const f = fixture();
+    const row = {
+      revision: 1,
+      record: hostedRuntimeJournalRecordSchema.parse({
+        version: 1,
+        kind: "app-runtime",
+        approvedByCallId: "approved-call-1",
+        request: context.target,
+        status: "prepared",
+        step: "bound",
+        privateState: {
+          encryptedToken: "protected-resource-ciphertext",
+          keyVersion: "fixture-key",
+          tokenIv: "fixture-iv",
+          tokenTag: "fixture-tag",
+        },
+        operator: {
+          mode: "protected-operator-v1",
+          approvalId: "prior-approval",
+          operationRef: f.receipt(1).toolInput.operationRef,
+          plan: f.prior,
+          planDigest: operatorPlanDigest(f.prior),
+          fenceGeneration: 1,
+          receipts: f.prior.effects.map((effect) => ({
+            effectId: effect.id,
+            observedAt: "2026-10-20T12:00:00Z",
+            resourceVersion: "observed-resource",
+            ...(effect.kind === "access" ? { fenceGeneration: 1 } : {}),
+          })),
+        },
+      }),
+    };
+    const journal = await import("./postgres-hosted-runtime-journal");
+    const eve = await import("../eve/postgres-hosted-store");
+    const owners = await import("./hosted-operator-owner");
+    const credentials = await import("./hosted-operator-resource-credentials");
+    const appReadiness = await import("./hosted-operator-app-readiness");
+    const readJournal = vi.fn(async () => await Promise.resolve(row));
+    const createJournal = journal.createPostgresHostedRuntimeJournalStore;
+    vi.spyOn(journal, "createPostgresHostedRuntimeJournalStore").mockImplementation((database) => ({
+      ...createJournal(database),
+      read: readJournal,
+    }));
+    const createEve = eve.createPostgresHostedEveStore;
+    vi.spyOn(eve, "createPostgresHostedEveStore").mockImplementation((database) => ({
+      ...createEve(database),
+      getSession: async () => await Promise.resolve(f.session),
+    }));
+    const assertPlanningAuthorized = vi.fn(async () => {
+      await Promise.resolve();
+    });
+    const createOwner = owners.createHostedOperatorOwnerAuthority;
+    vi.spyOn(owners, "createHostedOperatorOwnerAuthority").mockImplementation((dependencies) => ({
+      ...createOwner(dependencies),
+      readCurrentPlanningOwner: async () =>
+        await Promise.resolve({ session: f.session, target: context.target }),
+      assertPlanningAuthorized,
+    }));
+    const bindings = {
+      appDatabase: { migrationUrl: "fixture-app-migrator", runtimeUrl: "fixture-app-runtime" },
+      authDatabase: { migrationUrl: "fixture-auth-migrator", runtimeUrl: "fixture-auth-runtime" },
+    };
+    const readBindings = vi
+      .spyOn(credentials, "readHostedOperatorResourceBindings")
+      .mockReturnValue(bindings);
+    const metadataRead = vi.fn(async () => await Promise.resolve(["original-org"]));
+    const readMetadata = vi
+      .spyOn(appReadiness, "readActiveAppInstallationCustomerIds")
+      .mockImplementation(async (input) => {
+        await input.assertCurrent();
+        return await metadataRead();
+      });
+    const { configuration } = publicationFixture();
+    const controlPlane = await createHostedOperatorControlPlane({
+      environment: {
+        DATABASE_URL: "postgresql://fixture@db.example/control_plane",
+        BETTER_AUTH_URL: authority.issuer,
+        MCP_RESOURCE_URL: authority.audience,
+        VERCEL_INTEGRATION_TOKEN_KEY: Buffer.alloc(32, 1).toString("base64"),
+        VERCEL_INTEGRATION_TOKEN_KEY_VERSION: "fixture-key",
+      },
+      sourceConfiguration: configuration,
+      workloadPolicy: configuration.workloadPolicy,
+    });
+    const read = controlPlane.readAppInstallationCustomerIds;
+    if (read === undefined) {
+      throw new Error("Factory installation planning reader is missing");
+    }
+    return {
+      ...f,
+      row,
+      read,
+      readBindings,
+      readJournal,
+      readMetadata,
+      metadataRead,
+      assertPlanningAuthorized,
+      bindings,
+    };
+  };
+
+  it("uses the deployed retained-scope reader with prepared protected bindings", async () => {
+    const f = await deploymentFixture();
+    await expect(f.read(context, f.desired)).resolves.toEqual(["original-org"]);
+    expect(f.readBindings).toHaveBeenCalledWith(
+      expect.objectContaining({ record: f.row.record, plan: f.prior }),
+    );
+    expect(f.readMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({
+        plan: f.desired,
+        runtimeUrl: f.bindings.appDatabase.runtimeUrl,
+        scopes: [
+          {
+            appId: context.target.appId,
+            actorId: "original-owner",
+            organizationId: "original-org",
+            role: "member",
+          },
+        ],
+      }),
+    );
+    expect(f.metadataRead).toHaveBeenCalled();
+  });
+
+  it.each([
+    ["private state", "operation_in_progress"],
+    ["plan", "resource_mismatch"],
+    ["phase", "operation_in_progress"],
+  ] as const)(
+    "rejects a changed deployed binding %s before reading retained metadata",
+    async (changed, code) => {
+      const f = await deploymentFixture();
+      f.readBindings.mockImplementation(() => {
+        if (changed === "private state" && f.row.record.privateState !== undefined) {
+          f.row.record.privateState.encryptedToken = "replacement-protected-state";
+        }
+        if (changed === "plan" && f.row.record.operator !== undefined) {
+          f.row.record.operator.plan = hostedOperatorPlanSchema.parse({
+            ...f.prior,
+            contextId: "replacement-approved-context",
+          });
+          f.row.record.operator.planDigest = operatorPlanDigest(f.row.record.operator.plan);
+        }
+        if (changed === "phase") {
+          f.row.record.status = "pending";
+          f.row.record.step = "reserved";
+        }
+        return f.bindings;
+      });
+      await expect(f.read(context, f.desired)).rejects.toMatchObject({ code });
+      expect(f.metadataRead).not.toHaveBeenCalled();
+    },
+  );
 
   it("canonically checks only the latest duplicate scope and preserves the prior release tenant", async () => {
     const f = fixture();
