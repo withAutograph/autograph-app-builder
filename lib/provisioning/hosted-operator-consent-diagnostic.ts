@@ -935,6 +935,23 @@ export type HostedOperatorConsentDiagnosticSink = (
   value: HostedOperatorConsentDiagnostic,
 ) => void | Promise<void>;
 
+const routineOwnerProgressStages = new Set<HostedOperatorConsentMetadata["stage"]>([
+  "owner_configuration",
+  "owner_authority",
+  "owner_membership",
+  "owner_session_binding",
+]);
+
+const isRoutineOwnerProgress = (value: HostedOperatorConsentMetadata): boolean => {
+  if (value.boundary !== "builder" || value.phase !== "inline") {
+    return false;
+  }
+  return (
+    (value.outcome === "started" || value.outcome === "verified") &&
+    routineOwnerProgressStages.has(value.stage)
+  );
+};
+
 /** Closed metadata only. Never receives exceptions, URLs, inputs, outputs or credentials. */
 export const createHostedOperatorConsentDiagnostic = (
   sessionId: string,
@@ -960,6 +977,10 @@ export const createHostedOperatorConsentDiagnostic = (
         sessionIdHash,
       };
       if (sink === undefined) {
+        // Reauthorization still runs for every effect; routine progress must not crowd out failures.
+        if (isRoutineOwnerProgress(parsed.data)) {
+          return;
+        }
         console.info("[builder:hosted-neon-consent]", diagnostic);
       } else {
         const deliver = async () => {

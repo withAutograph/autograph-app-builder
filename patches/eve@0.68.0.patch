@@ -1837,10 +1837,10 @@ index 0000000..6c1aed3
 +export declare function observeTerminalSession(input: TerminalRecoveryAuthorityInput & { readonly ports: Pick<TerminalRecoveryPorts, "authorize" | "readReceipt" | "observeCandidateFacts" | "observeRecoveryHolderBinding"> }, dependencies: TerminalRecoveryObservationDependencies): Promise<{ readonly kind: "accepted"; readonly sessionId: string }>;
 diff --git a/dist/src/execution/session/terminal-recovery.js b/dist/src/execution/session/terminal-recovery.js
 new file mode 100644
-index 0000000..3d20fc3
+index 0000000..0e5a9e8
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.js
-@@ -0,0 +1,369 @@
+@@ -0,0 +1,440 @@
 +import { createHash } from "node:crypto";
 +import { DEFAULT_SESSION_TIMEOUT_MS } from "#execution/session/timeout.js";
 +import { SESSION_CHECKPOINT_VERSION } from "#execution/session/handoff.js";
@@ -1886,64 +1886,92 @@ index 0000000..3d20fc3
 +  return { capabilities, retention: source.retention, sessionTimeoutMs };
 +}
 +
-+export async function recoverTerminalSession(input, dependencies) {
++export async function recoverTerminalSession(input, dependencies, onPrepareStage) {
++  let stage = "source_authorization";
++  const preparing = (value) => {
++    stage = value;
++    try { onPrepareStage?.(value); }
++    catch { /* A diagnostic observer cannot change recovery behavior. */ }
++  };
++  try {
 +  const { auth, descriptor, ports } = input;
 +  const call = { auth, descriptor };
++  preparing("source_authorization");
 +  await ports.authorize(call);
 +  const token = terminalRecoveryActivationToken(auth, descriptor);
++  preparing("receipt_read");
 +  const existing = await ports.readReceipt(call);
 +  if (existing !== null && existing !== undefined) {
++    preparing("receipt_validate");
 +    if (!matchesDescriptor(existing, descriptor)) throw new Error("Recovery receipt binding changed.");
 +    return { kind: "accepted", recoveryBinding: existing };
 +  }
-+  let ready = await findReady();
++  let ready = await findReady("initial_ready");
 +  if (ready === undefined && dependencies.closeHolder !== undefined) {
 +    const authorizeCurrent = async () => {
++      preparing("holder_authorization");
 +      await ports.authorize(call);
++      preparing("holder_receipt_read");
 +      if (await ports.readReceipt(call) != null) throw new Error("Recovery receipt changed during holder closure.");
++      preparing("holder_closure");
 +    };
 +    await authorizeCurrent();
++    preparing("holder_closure");
 +    await dependencies.closeHolder({ auth, descriptor, ports, authorizeCurrent });
++    preparing("post_holder_authorization");
 +    await ports.authorize(call);
++    preparing("post_holder_receipt_read");
 +    const current = await ports.readReceipt(call);
 +    if (current != null) {
++      preparing("post_holder_receipt_validate");
 +      if (!matchesDescriptor(current, descriptor)) throw new Error("Recovery receipt binding changed.");
 +      return { kind: "accepted", recoveryBinding: current };
 +    }
-+    ready = await findReady();
++    ready = await findReady("post_holder_ready");
 +  }
 +  if (ready === undefined) {
++    preparing("candidate_collect");
 +    const collected = await dependencies.collect({
 +      binding: { ownerRunId: descriptor.sourceOwnerRunId, logicalSessionId: descriptor.logicalSessionId },
 +      authorizeOwner: async (binding) => {
++        preparing("candidate_authorization");
 +        if (binding.ownerRunId !== descriptor.sourceOwnerRunId || binding.logicalSessionId !== descriptor.logicalSessionId) throw new Error("Recovery source binding changed.");
 +        await ports.authorize(call);
++        preparing("candidate_collect");
 +      },
 +    });
 +    if (collected.kind !== "candidate") return { kind: "unavailable", reason: collected.reason };
++    preparing("candidate_read");
 +    const payload = dependencies.readCandidate(collected.candidate);
 +    let repeatableCallIds;
 +    if (ports.authorizeRepeatableRecoveryCalls !== undefined) {
 +      const binding = { ownerRunId: descriptor.sourceOwnerRunId, logicalSessionId: descriptor.logicalSessionId };
++      preparing("candidate_authorization");
 +      if (payload.binding?.ownerRunId !== binding.ownerRunId || payload.binding?.logicalSessionId !== binding.logicalSessionId) throw new Error("Recovery source binding changed.");
 +      const authorizeCandidate = async () => {
++        preparing("candidate_authorization");
 +        await ports.authorize(call);
++        preparing("candidate_receipt_read");
 +        if (await ports.readReceipt(call) != null) throw new Error("Recovery receipt changed during candidate authorization.");
 +      };
 +      await authorizeCandidate();
 +      try {
++        preparing("candidate_authorization");
 +        const authorized = await ports.authorizeRepeatableRecoveryCalls({ ...call, binding, payload });
 +        if (Array.isArray(authorized) && authorized.every((id) => typeof id === "string" && id.length > 0)) repeatableCallIds = [...new Set(authorized)];
 +      } catch { /* A failed app decision grants no repeatable calls; strict reconciliation still applies. */ }
 +      // Revocation and a concurrently committed owner must never be advisory.
 +      await authorizeCandidate();
 +    }
++    preparing("candidate_reconcile");
 +    const reconciled = await dependencies.reconcile(collected.candidate, repeatableCallIds === undefined ? undefined : { repeatableCallIds });
 +    if (reconciled.kind !== "ready") return reconciled;
 +    let policy;
++    preparing("source_policy");
 +    try { policy = terminalRecoveryPolicy(await dependencies.readEntry(payload)); }
 +    catch { return { kind: "unavailable", reason: "source-policy-unavailable" }; }
 +    if (policy === undefined) return { kind: "unavailable", reason: "source-policy-unavailable" };
++    preparing("checkpoint_prepare");
 +    const selected = payload.candidates.find((candidate) => candidate.origin.eventId === reconciled.provenance.selectedOrigin.eventId && candidate.origin.stepId === reconciled.provenance.selectedOrigin.stepId);
 +    if (selected === undefined) return { kind: "uncertain", reason: "checkpoint-origin-unavailable" };
 +    const provenance = {
@@ -1955,43 +1983,61 @@ index 0000000..3d20fc3
 +    };
 +    const checkpoint = { ...reconciled.checkpointCore, ...policy, version: SESSION_CHECKPOINT_VERSION };
 +    if (checkpoint.sessionState.sessionId !== descriptor.logicalSessionId || checkpoint.serializedContext["eve.sessionId"] !== descriptor.logicalSessionId) return { kind: "uncertain", reason: "checkpoint-identity-mismatch" };
++    preparing("pre_start_authorization");
 +    await ports.authorize(call);
++    preparing("pre_start_receipt_read");
 +    const current = await ports.readReceipt(call);
 +    if (current != null) {
++      preparing("pre_start_receipt_validate");
 +      if (!matchesDescriptor(current, descriptor)) throw new Error("Recovery receipt binding changed.");
 +      return { kind: "accepted", recoveryBinding: current };
 +    }
-+    ready = await findReady();
++    ready = await findReady("pre_start_ready");
 +    if (ready === undefined) {
++      preparing("owner_start");
 +      await dependencies.start({ activationToken: token, checkpoint, descriptor, provenance, replayInput: reconciled.replayInput });
 +      // A start timeout remains unknown. A later exact request discovers the ready hook;
 +      // no checkpoint may execute until its canonical physical owner receipt is committed.
++      preparing("owner_readiness_deadline");
 +      const deadline = dependencies.now() + 30_000;
 +      let observationDelayMs = 250;
 +      do {
-+        ready = await findReady();
++        ready = await findReady("owner_readiness");
 +        if (ready !== undefined) break;
++        preparing("owner_readiness_deadline");
 +        const remainingMs = deadline - dependencies.now();
 +        if (remainingMs <= 0) throw new Error("Recovery owner acceptance is unknown.");
++        preparing("owner_readiness_wait");
 +        await dependencies.wait(Math.min(observationDelayMs, remainingMs));
 +        observationDelayMs = Math.min(observationDelayMs * 2, 2_000);
 +      } while (true);
 +    }
 +  }
++  preparing("receipt_authorization");
 +  await ports.authorize(call);
++  preparing("receipt_commit");
 +  const receipt = await ports.commitReceipt({ ...call, recoveryBinding: ready });
++  preparing("receipt_validate");
 +  if (!matchesDescriptor(receipt, descriptor) || !sameReceipt(receipt, ready)) throw new Error("Recovery receipt did not retain its physical owner and provenance.");
 +  return { kind: "accepted", recoveryBinding: receipt };
 +
-+  async function findReady() {
++  async function findReady(prefix) {
++    preparing(`${prefix}_lookup`);
 +    let hook;
 +    try { hook = await dependencies.getHook(token); }
 +    catch (error) { if (dependencies.isHookNotFound(error)) return; throw error; }
++    preparing(`${prefix}_metadata`);
 +    const binding = (await hook.metadata)?.recoveryBinding;
++    preparing(`${prefix}_validate`);
 +    if (!matchesDescriptor(binding, descriptor) || binding.ownerRunId !== hook.runId) throw new Error("Recovery activation owner changed.");
 +    return binding;
 +  }
-+
++  } catch (error) {
++    // The native handler emits at its existing 503 boundary. Direct calls use
++    // the same failure-only projection without requiring a transport wrapper.
++    if (onPrepareStage === undefined) reportPrepareFailure(stage, error);
++    throw error;
++  }
 +}
 +
 +// A diagnostic is never an activation authority. Only fixed labels and data-only
@@ -2016,6 +2062,29 @@ index 0000000..3d20fc3
 +    }
 +  } catch { /* Error projection is advisory, including hostile accessors/proxies. */ }
 +  try { console.error(`[eve:terminal-recovery-activation] ${JSON.stringify(summary)}`); }
++  catch { /* A failed diagnostic sink must never replace the original exception. */ }
++}
++
++function reportPrepareFailure(stage, error) {
++  const summary = { event: "eve.terminal_recovery_prepare_failed", stage, errorClass: "other" };
++  try {
++    const names = new Set(["WorkflowWorldError", "RunExpiredError", "HookNotFoundError", "RuntimeDecryptionError", "WorkflowRunNotFoundError", "HookForceClaimedError", "EntityConflictError", "SerializationError", "TypeError", "Error"]);
++    const codes = new Set(["TIMEOUT", "TRANSPORT", "PARSE_ERROR", "SCHEMA_VALIDATION", "run-expired", "stream-expired"]);
++    const seen = new Set();
++    let candidate = error;
++    for (let depth = 0; depth < 3; depth += 1) {
++      if (candidate === null || (typeof candidate !== "object" && typeof candidate !== "function") || seen.has(candidate)) break;
++      seen.add(candidate);
++      const name = Object.getOwnPropertyDescriptor(candidate, "name")?.value;
++      const code = Object.getOwnPropertyDescriptor(candidate, "code")?.value;
++      const status = Object.getOwnPropertyDescriptor(candidate, "status")?.value;
++      if (summary.errorClass === "other" && names.has(name)) summary.errorClass = name;
++      if (summary.code === undefined && codes.has(code)) summary.code = code;
++      if (summary.status === undefined && Number.isSafeInteger(status) && status >= 100 && status <= 599) summary.status = status;
++      candidate = Object.getOwnPropertyDescriptor(candidate, "cause")?.value;
++    }
++  } catch { /* Error projection is advisory, including hostile accessors/proxies. */ }
++  try { console.error(`[eve:terminal-recovery-prepare] ${JSON.stringify(summary)}`); }
 +  catch { /* A failed diagnostic sink must never replace the original exception. */ }
 +}
 +
@@ -2195,16 +2264,18 @@ index 0000000..3d20fc3
 +  if (Object.keys(payload).some((key) => !["operationId", "recovery", "recoveryPhase", "forwardedPrincipal"].includes(key))) return Response.json({ ok: false, code: "terminal_recovery_invalid" }, { status: 400 });
 +  const descriptor = parseTerminalRecoveryDescriptor(payload.recovery, payload.operationId);
 +  if (descriptor === undefined || (payload.recoveryPhase !== undefined && !["activate", "observe"].includes(payload.recoveryPhase))) return Response.json({ ok: false, code: "terminal_recovery_invalid" }, { status: 400 });
++  let prepareStage = "dependencies";
 +  try {
 +    if (payload.recoveryPhase === "observe") {
 +      const result = await observeTerminalSession({ auth, descriptor, ports }, await nativeObservationDependencies());
 +      return Response.json({ ok: true, status: "accepted", sessionId: result.sessionId }, { status: 202, headers: { "cache-control": "no-store", "x-eve-session-id": result.sessionId } });
 +    }
 +    const execute = payload.recoveryPhase === "activate" ? activateTerminalSession : recoverTerminalSession;
-+    const result = await execute({ auth, descriptor, ports }, await nativeDependencies());
++    const result = await execute({ auth, descriptor, ports }, await nativeDependencies(), (stage) => { prepareStage = stage; });
 +    if (result.kind !== "accepted") return Response.json({ ok: false, code: result.kind === "uncertain" ? "terminal_recovery_uncertain" : "terminal_recovery_unavailable" }, { status: 409 });
 +    return Response.json({ ok: true, status: "accepted", sessionId: result.recoveryBinding.ownerRunId, recoveryBinding: result.recoveryBinding }, { status: 202, headers: { "cache-control": "no-store", "x-eve-session-id": result.recoveryBinding.ownerRunId } });
-+  } catch {
++  } catch (error) {
++    if (payload.recoveryPhase === undefined) reportPrepareFailure(prepareStage, error);
 +    // Acceptance may have happened. Do not turn a lost receipt/activation response
 +    // into a pre-dispatch rejection or expose checkpoint contents in diagnostics.
 +    return Response.json({ ok: false, code: "terminal_recovery_submission_unknown" }, { status: 503 });
