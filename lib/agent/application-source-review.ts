@@ -1,3 +1,4 @@
+import { withBuilderGatewayReporting } from "./builder-gateway-reporting";
 import { createHash } from "node:crypto";
 import { createGateway, isStepCount, tool, ToolLoopAgent } from "ai";
 import type { LanguageModel, ModelMessage, LanguageModelCallStartEvent, StepResult } from "ai";
@@ -835,12 +836,16 @@ export const assessApplicationSourceRound = async (
       tools,
       toolChoice: "required",
       maxRetries: 0,
-      providerOptions: {
-        gateway: {
-          only: ["openai"],
-          ...(options.cacheSessionId === undefined ? {} : { sessionId: options.cacheSessionId }),
+      providerOptions: withBuilderGatewayReporting(
+        {
+          gateway: {
+            only: ["openai"],
+            ...(options.cacheSessionId === undefined ? {} : { sessionId: options.cacheSessionId }),
+          },
         },
-      },
+        () => options.sessionId,
+        "source-review",
+      ),
       // This is a durable execution unit, never a limit on the complete review.
       stopWhen: isStepCount(1),
       prepareStep: async ({ messages: nextMessages }) => {

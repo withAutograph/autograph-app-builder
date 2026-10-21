@@ -481,7 +481,7 @@ export const createHostedOperatorClient = (input: {
     },
     async planTenantExport(
       selection: z.infer<typeof operatorSelectionSchema>,
-      customerId: string,
+      customer: string | { kind: "owner-organization" },
       idempotencyKey: string,
       signal?: AbortSignal,
     ) {
@@ -490,7 +490,10 @@ export const createHostedOperatorClient = (input: {
           {
             action: "export-plan",
             selection,
-            customerId,
+            // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This public client accepts its typed raw-ID or semantic-selection union; transport validation remains at the server boundary.
+            ...(typeof customer === "string"
+              ? { customerId: customer }
+              : { customerScope: customer.kind }),
             idempotencyKey,
             ownerContext: exportOwner(),
           },

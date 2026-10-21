@@ -181,6 +181,23 @@ const retainedOperations = (operator: OperatorHistory): RetainedOperation[] => [
   ...(operator.retainedRenewalOperations ?? []),
 ];
 
+/** Only typed protected operation history; nested proof/bootstrap copies are not authority. */
+export const retainedHostedOperatorOperations = (
+  record: HostedRuntimeJournalRecord,
+): RetainedOperation[] => {
+  const operator = record.operator;
+  return operator === undefined
+    ? []
+    : [
+        { approvedByCallId: record.approvedByCallId, operator },
+        ...retainedOperations(operator),
+        ...(operator.retainedReadyDeliveryOperations ?? []).flatMap((entry) => [
+          entry,
+          ...retainedOperations(entry.operator),
+        ]),
+      ];
+};
+
 const retainedParticipantMembershipOperations = (
   record: HostedRuntimeJournalRecord,
   organizationId?: string,

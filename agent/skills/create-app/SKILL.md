@@ -467,6 +467,13 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
   These statuses do not replace intermediate operator outcomes. Never ask users
   to confirm an Auth connection in Builder or expose passwords, cookies or
   private proof.
+- For a requested private data export, use the explicitly selected `customerId`
+  or `customerScope: "owner-organization"` when the user chooses their original
+  owner organization. The protected planner resolves the latter from approved
+  owner identity into a currently approved installed tenant. Never substitute a
+  QA organization or guess an ID; if selection remains ambiguous, ask for the
+  organization's product name. The concrete export plan still needs its separate
+  extraction approval before any data is exported.
 - When accepted requirements need several authenticated participants, derive
   `normalActorProgram` for `plan-app-hosted-runtime` from those accounts,
   organizations, memberships and app roles. Use the verified native public

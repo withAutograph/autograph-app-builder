@@ -49,6 +49,7 @@ import { createPostgresPhysicalResourceLease } from "./postgres-physical-resourc
 import { createTenantExportSandbox } from "./hosted-operator-export-sandbox";
 import { createTenantExportArtifacts } from "./hosted-operator-export-artifacts";
 import { createTenantExportDispatcher } from "./hosted-operator-export-transport";
+import { resolveExportOwnerOrganization } from "./hosted-operator-export-customer";
 import { createPrivateTenantExportApprovalCapture } from "../eve/private-export-approval";
 import { requireFinalResourceBindingPhase } from "./hosted-operator-resource-binding-phase";
 import {
@@ -97,7 +98,10 @@ import { createNormalActorRuntimeBindings } from "./hosted-operator-normal-actor
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
 import { createNormalActorJournal } from "./hosted-operator-normal-actor-journal";
 import type { NormalActorAccountPreparation } from "./hosted-operator-normal-actor-journal";
-import { createRealmIdentityBrowserUrl } from "./hosted-operator-auth-identity";
+import {
+  createRealmIdentityBrowserUrl,
+  verifyCapturedRealmIdentityProof,
+} from "./hosted-operator-auth-identity";
 import { readHostedOperatorProviderInventory } from "./hosted-operator-provider-inventory";
 import { createNormalActorJournalAuthority } from "./hosted-operator-normal-actor-authority";
 import { confirmNormalActorCapture } from "./hosted-operator-normal-actor-confirmation";
@@ -3082,6 +3086,140 @@ export const createHostedOperatorControlPlane = async (input: {
       verifyWorkload: owner.verifyWorkload,
       authorize: owner.authorize,
       authorizeRead: owner.authorizeArtifactRead,
+      async resolveOwnerOrganization(context) {
+        const { current, operator } = await preparedForExport(context, true);
+        const { plan } = operator;
+        const preparedOwner = operatorOwnerContextSchema.parse(context.ownerContext);
+        // Resolve keys only through this currently prepared Realm's trusted Gateway,
+        // never through a URL/issuer supplied by the historical JWT.
+        const gateway = operator.gatewayDeliveryCandidates?.find(
+          (candidate) =>
+            candidate.deploymentId === operator.deliveredGatewayDeploymentId &&
+            candidate.projectId === plan.gatewayDelivery?.projectId &&
+            candidate.readyState === "READY",
+        );
+        const origin = gateway?.origin ?? plan.deploymentBoundary?.verification.gatewayOrigin;
+        if (origin === undefined) {
+          throw new HostedOperatorError("export_customer_selection_required");
+        }
+        const transport = createHostedOperatorRealmHttpTransport(
+          configuration,
+          "operator",
+          { fetch: input.fetch },
+          origin,
+        );
+        const getKey = createRemoteJWKSet(new URL("/_platform/jwks.json", origin), {
+          [customFetch]: transport,
+        });
+        const assertCurrent = async () => {
+          await owner.assertArtifactAuthorized(context);
+          const fresh = await store.read(context);
+          const active = fresh?.record.operator;
+          const samePrepared = [
+            fresh?.record.status === "prepared",
+            fresh?.record.approvedByCallId === current.record.approvedByCallId,
+            active?.operationRef === operator.operationRef,
+            active?.approvalId === operator.approvalId,
+            active?.planDigest === operator.planDigest,
+            active !== undefined && operatorPlanDigest(active.plan) === operator.planDigest,
+          ].every(Boolean);
+          if (!samePrepared) {
+            throw new HostedOperatorError("operation_in_progress");
+          }
+        };
+        // Original terminal settlements are immutable facts. Cache this actual
+        // canonical accessor only within this planning call; live owner checks do not use it.
+        let approvalSession: ReturnType<typeof eve.getSession> | undefined;
+        const approvalStore = {
+          getSession: (principal: Parameters<typeof eve.getSession>[0], sessionId: string) => {
+            if (
+              !samePrincipal(principal, preparedOwner.principal) ||
+              sessionId !== context.target.sessionId
+            ) {
+              throw new HostedOperatorError("authorization_required");
+            }
+            approvalSession ??= eve.getSession(principal, sessionId);
+            return approvalSession;
+          },
+        };
+        const proofCache = new Map<string, Promise<string>>();
+        const artifacts = ownedArtifacts(context);
+        return await resolveExportOwnerOrganization({
+          context,
+          prepared: plan,
+          assertCurrent,
+          readCurrentRecord: async () => {
+            const fresh = await store.read(context);
+            if (fresh === undefined) {
+              throw new HostedOperatorError("resource_mismatch");
+            }
+            return fresh.record;
+          },
+          readApproval: async (witness) => {
+            const receipt = await readPrivateHostedApproval({
+              store: approvalStore,
+              principal: preparedOwner.principal,
+              sessionId: context.target.sessionId,
+              callId: witness.approvedByCallId,
+              action: "prepare",
+              planDigest: witness.operator.planDigest,
+              selection: witness.operator.plan.selection,
+              requestId: witness.operator.approvalId,
+            });
+            return [
+              receipt?.outcome === "approved",
+              receipt?.requestId === witness.operator.approvalId,
+              receipt?.responderPrincipalId === preparedOwner.principal.ownerUserId,
+              receipt?.toolInput.operationRef === witness.operator.operationRef,
+              receipt !== null && isDeepStrictEqual(receipt.toolInput.plan, witness.operator.plan),
+            ].every(Boolean);
+          },
+          verifyProof: async (witness) => {
+            const { reference, sha256 } = witness.membership.identityProof;
+            const expected = `_protected-operator/artifacts/realm-identity-proof/${context.target.appId}/${sha256}`;
+            if (reference !== expected) {
+              throw new HostedOperatorError("resource_mismatch");
+            }
+            let proof = proofCache.get(reference);
+            if (proof === undefined) {
+              proof = (async () => {
+                const content = await artifacts.store.read(artifacts.context, expected, 0);
+                if (content === undefined) {
+                  throw new HostedOperatorError("auth_identity_required");
+                }
+                const bytes = Buffer.from(content, "base64");
+                const text = bytes.toString("utf-8");
+                if (
+                  bytes.length > 16_384 ||
+                  bytes.toString("base64") !== content ||
+                  !Buffer.from(text, "utf-8").equals(bytes) ||
+                  createHash("sha256").update(bytes).digest("hex") !== sha256
+                ) {
+                  throw new HostedOperatorError("auth_identity_required");
+                }
+                return text;
+              })();
+              proofCache.set(reference, proof);
+            }
+            return await verifyCapturedRealmIdentityProof({
+              proof: await proof,
+              pending: witness.link,
+              getKey,
+              resource: {
+                version: 1,
+                database: plan.authDatabase.database,
+                environment: "preview",
+                hostname: plan.neon.endpoint,
+                migratorRole: plan.authDatabase.migratorRole,
+                runtimeRole: plan.authDatabase.runtimeRole,
+                port: 5432,
+                schema: "public",
+                neon: { branchId: plan.neon.branchId, projectId: plan.neon.projectId },
+              },
+            });
+          },
+        });
+      },
     });
     // This request-private association contains only the exact carrier already verified by
     // the dispatcher. No token enters the journal, model, worker files or app environment.

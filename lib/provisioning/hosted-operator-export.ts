@@ -5,7 +5,10 @@ import { hostedRuntimeTargetSchema } from "./hosted-runtime-journal";
 import { createHash, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
-import { HostedOperatorError } from "./hosted-operator-contract";
+import {
+  HostedOperatorError,
+  hostedOperatorInstallationCustomerIds,
+} from "./hosted-operator-contract";
 import type { HostedOperatorPlan } from "./hosted-operator-contract";
 import type { HostedOperatorContext } from "./hosted-operator-service";
 import type { PhysicalResourceLeaseInput } from "./postgres-physical-resource-lease";
@@ -127,7 +130,7 @@ export interface HostedTenantExportDependencies {
 }
 /** Caller first verifies the exact approved, fully prepared installation and its receipts. */
 export const assertTenantExportCustomer = (
-  plan: Pick<HostedOperatorPlan, "access" | "authMembership">,
+  plan: Pick<HostedOperatorPlan, "access" | "authMembership" | "appInstallation">,
   customerId: string,
 ) => {
   const membership = plan.authMembership;
@@ -137,7 +140,7 @@ export const assertTenantExportCustomer = (
       membership.kind === "create-owned-organization" ? [membership] : membership.organizations;
   }
   const authorized =
-    plan.access.some((grant) => grant.organizationId === customerId) ||
+    hostedOperatorInstallationCustomerIds(plan).includes(customerId) ||
     organizations.some((organization) => organization.organizationId === customerId);
   if (!authorized) {
     throw new HostedOperatorError("authorization_required");

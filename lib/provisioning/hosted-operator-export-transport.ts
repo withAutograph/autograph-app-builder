@@ -29,13 +29,19 @@ export const tenantExportTransportRequestSchema = z.discriminatedUnion("action",
     action: z.literal("export-approval"),
     ownerContext: operatorOwnerContextSchema,
   }),
-  z.strictObject({
-    action: z.literal("export-plan"),
-    selection: operatorSelectionSchema,
-    customerId: z.string().min(1),
-    idempotencyKey: z.string().min(1),
-    ownerContext: operatorOwnerContextSchema,
-  }),
+  z
+    .strictObject({
+      action: z.literal("export-plan"),
+      selection: operatorSelectionSchema,
+      customerId: z.string().min(1).optional(),
+      customerScope: z.literal("owner-organization").optional(),
+      idempotencyKey: z.string().min(1),
+      ownerContext: operatorOwnerContextSchema,
+    })
+    .refine(
+      (input) => (input.customerId === undefined) !== (input.customerScope === undefined),
+      "Select one export customer scope.",
+    ),
   z.strictObject({
     action: z.literal("export-status"),
     exportId: z.uuid(),
@@ -60,6 +66,7 @@ export const createTenantExportDispatcher =
   (dependencies: {
     store: Pick<TenantExportJournalStore, "read">;
     operations: ReturnType<typeof createHostedTenantExportOperations>;
+    resolveOwnerOrganization?: (context: HostedOperatorContext) => Promise<string>;
     verifyWorkload: (request: Request) => Promise<void>;
     authorize: ProtectedHostedOperatorDependencies["authorize"];
     authorizeRead: (
@@ -107,12 +114,14 @@ export const createTenantExportDispatcher =
       let result;
       switch (parsed.action) {
         case "export-plan": {
-          result = await operations.plan(
-            context,
-            parsed.customerId,
-            parsed.idempotencyKey,
-            onPlanStage,
-          );
+          const customerId =
+            parsed.customerScope === undefined
+              ? z.string().parse(parsed.customerId)
+              : await dependencies.resolveOwnerOrganization?.(context);
+          if (customerId === undefined) {
+            throw new HostedOperatorError("export_customer_selection_required");
+          }
+          result = await operations.plan(context, customerId, parsed.idempotencyKey, onPlanStage);
           break;
         }
         case "export-status": {

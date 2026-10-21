@@ -140,6 +140,23 @@ export const verifyRealmIdentityLinkProof = async (
   return await verifySignedRealmIdentityProof(input);
 };
 
+/** Historical identity fact only: no live session or membership authority is granted. */
+export const verifyCapturedRealmIdentityProof = async (
+  input: Omit<Parameters<typeof verifySignedRealmIdentityProof>[0], "now">,
+) => {
+  const pending = pendingRealmIdentityLinkSchema.parse(input.pending);
+  const capturedAt = pending.consumedAt;
+  if (
+    capturedAt === undefined ||
+    pending.proofRef === undefined ||
+    pending.proofSha256 !== createHash("sha256").update(input.proof).digest("hex") ||
+    Date.parse(capturedAt) > Date.now()
+  ) {
+    throw new HostedOperatorError("auth_identity_required");
+  }
+  return await verifySignedRealmIdentityProof({ ...input, pending, now: new Date(capturedAt) });
+};
+
 /** Uses the configured trusted HTTP/OIDC reader; no Realm cookies, SQL URLs or admin credentials enter Builder. */
 export const readVerifiedRealmAccess = async (input: {
   nonce?: string;
