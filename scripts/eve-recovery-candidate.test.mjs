@@ -400,21 +400,24 @@ test("completed native terminal step preserves its original paired input and rea
   const result = await f.collect(f.input);
   const payload = readTerminalRecoveryCandidate(result.candidate);
   const original = payload.candidates.find(({ kind }) => kind === "completed-terminal-turn-input");
-  assert.ok(original);
+  assert.ok(original !== undefined);
   assert.deepEqual(original.sessionState, f.final.sessionState);
   assert.deepEqual(original.incoming, f.inputs.failed.input);
   assert.equal(original.origin.slot, 5);
-  assert.ok(
+  assert.equal(
     payload.frontier.find(({ origin }) => origin === original.origin).events.includes(f.events[5]),
+    true,
   );
-  assert.ok(
+  assert.equal(
     payload.candidates.some(
       ({ kind, sessionState }) =>
         kind === "committed-turn-output" && sessionState.snapshot.session.history.length === 2,
     ),
+    true,
   );
-  assert.ok(
+  assert.equal(
     result.inspection.uncertaintyReasons.includes("completed-terminal-effects-unreconciled"),
+    true,
   );
   assert.equal(f.calls.filter(([kind]) => kind === "step").length, 3);
 });
@@ -453,7 +456,7 @@ test("legacy missing step-name metadata fetches the step once without hydrating 
   const unrelated = readTerminalRecoveryCandidate(result.candidate).steps.find(
     ({ step }) => step.stepId === "step-later",
   );
-  assert.ok(unrelated);
+  assert.ok(unrelated !== undefined);
   assert.equal(unrelated.arguments, undefined);
   assert.equal(unrelated.output, undefined);
   assert.equal(f.calls.filter(([kind]) => kind === "step").length, 4);
@@ -515,7 +518,7 @@ test("unreadable final input retains the prior paired candidates and records unc
     result.inspection.candidates.map(({ kind }) => kind),
     ["failed-turn-input", "committed-turn-output"],
   );
-  assert.ok(result.inspection.uncertaintyReasons.includes("native-step-input-unreadable"));
+  assert.equal(result.inspection.uncertaintyReasons.includes("native-step-input-unreadable"), true);
   assert.equal(
     readTerminalRecoveryCandidate(result.candidate).steps.find(
       ({ step }) => step.stepId === "step-final",
@@ -528,7 +531,7 @@ test("partial native stream remains partial evidence with explicit uncertainty",
   const f = await fixture({ streamFailure: true });
   const result = await f.collect(f.input);
   assert.deepEqual(readTerminalRecoveryCandidate(result.candidate).nativeEvents, [protocolResult]);
-  assert.ok(result.inspection.uncertaintyReasons.includes("native-stream-incomplete"));
+  assert.equal(result.inspection.uncertaintyReasons.includes("native-stream-incomplete"), true);
   assert.ok(!JSON.stringify(result).includes("provider details"));
 });
 

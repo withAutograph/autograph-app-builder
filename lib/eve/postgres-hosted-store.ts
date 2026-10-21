@@ -528,6 +528,19 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       return await operationById(database, hostedPrincipalSchema.parse(principal), operationId);
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    async readCurrentBuildSession(input) {
+      const principal = hostedPrincipalSchema.parse(input.principal);
+      return await database.transaction(
+        async (transaction) =>
+          await currentBuildSession(
+            transaction,
+            principal,
+            input.authoritySessionId,
+            input.logicalSessionId,
+          ),
+      );
+    },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async getSession(principalInput, sessionId) {
       const principal = hostedPrincipalSchema.parse(principalInput);
       return sessionById(database, principal, sessionId);
@@ -582,11 +595,13 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           input.explicitSendOperationId === undefined
             ? null
             : await operationById(transaction, principal, input.explicitSendOperationId);
+        const provedResume = mayReviveCancelledSession(
+          explicitSend,
+          current,
+          input.checkpoint.nativeDeliveryState,
+        );
         // Passive observations never undo Stop; exact native SEND proof is required.
-        if (
-          current.status === "cancelled" &&
-          !mayReviveCancelledSession(explicitSend, current, input.checkpoint.nativeDeliveryState)
-        ) {
+        if (current.status === "cancelled" && !provedResume) {
           return current;
         }
         const checkpointDigest = hostedSessionCheckpointDigest(input.checkpoint);
@@ -595,6 +610,9 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         void priorCheckpointRef;
         const observed = durableHostedSessionRecordSchema.parse({
           ...inlineBase,
+          ...(provedResume
+            ? { resumedCancellationRevision: current.cancellationRevision ?? 0 }
+            : {}),
           checkpoint: input.checkpoint,
           checkpointDigest,
           checkpointProgressDigest,
@@ -649,16 +667,14 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
             input.explicitSendOperationId === undefined
               ? null
               : await operationById(transaction, principal, input.explicitSendOperationId);
-          if (
-            durable.status === "cancelled" &&
-            !mayReviveCancelledSession(
-              explicitSend,
-              durable,
-              input.metadata.nativeObservationState?.nativeDeliveryState ??
-                input.metadata.coldReadProgress?.nativeObservationState.nativeDeliveryState ??
-                input.metadata.nativeDeliveryState,
-            )
-          ) {
+          const provedResume = mayReviveCancelledSession(
+            explicitSend,
+            durable,
+            input.metadata.nativeObservationState?.nativeDeliveryState ??
+              input.metadata.coldReadProgress?.nativeObservationState.nativeDeliveryState ??
+              input.metadata.nativeDeliveryState,
+          );
+          if (durable.status === "cancelled" && !provedResume) {
             return durable;
           }
           if (durable.checkpointDigest !== input.expectedCheckpointDigest) {
@@ -677,6 +693,9 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           void priorInlineCheckpoint;
           const observed = durableHostedSessionRecordSchema.parse({
             ...pagedBase,
+            ...(provedResume
+              ? { resumedCancellationRevision: durable.cancellationRevision ?? 0 }
+              : {}),
             checkpointDigest: staged.checkpointDigest,
             checkpointProgressDigest: staged.checkpointProgressDigest,
             checkpointRef: {

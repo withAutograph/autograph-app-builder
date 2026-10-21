@@ -1,3 +1,4 @@
+import { nativeDeliveryForEvents } from "../eve/native-delivery-state";
 import type { ApprovedBuildDecision } from "../agent/approved-build-continuation";
 import { createAppGatewaySourceSuccessorPlan } from "./hosted-operator-app-gateway-source-successor";
 import {
@@ -10,7 +11,12 @@ import type { MessageStreamEvent } from "eve/client";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { activeBuilderModelId } from "../integrations/active-model";
-import { durableHostedSessionRecordSchema, hostedSessionRecordSchema } from "../eve/hosted-store";
+import {
+  durableHostedSessionRecordSchema,
+  hostedSessionRecordSchema,
+  InMemoryHostedEveStore,
+  toDurableHostedSessionRecord,
+} from "../eve/hosted-store";
 import type { HostedEveStore, HostedSessionRecord } from "../eve/hosted-store";
 import type { HostedEveTransport } from "../eve/hosted-service";
 import { privateHostedApprovalReceiptSchema } from "../eve/private-hosted-approval";
@@ -1102,6 +1108,333 @@ describe("retained READY replacement private approval lookup", () => {
     await expect(
       f.readApproval(mismatch === "cleanup" ? { ...context, action: "cleanup" } : context),
     ).rejects.toMatchObject({ code: "authorization_required" });
+    expectNoProviderReads(f.fixture);
+  });
+});
+
+const recoveredOwnerFixture = async (kind: "direct" | "handoff" = "direct") => {
+  const fixture = makeFixture();
+  const store = new InMemoryHostedEveStore();
+  const original = durableHostedSessionRecordSchema.parse({
+    ...(kind === "direct" ? directSessionRecord() : fixture.currentSession),
+    createdAtEpochMs: 1,
+    updatedAtEpochMs: 1,
+    lastProgressAtEpochMs: 1,
+    privateApprovalReceipts: [retainedApprovalFixture().prepareReceipt],
+    status: "failed",
+    stage: "needs_attention",
+    resumability: "terminal",
+  });
+  const initial = {
+    clientRequestId: "initial-owner",
+    createdAtEpochMs: 1,
+    kind: "start" as const,
+    operationId: "initial-owner-operation",
+    principal,
+    requestDigest: `sha256:${"a".repeat(64)}`,
+    state: "reserved" as const,
+    updatedAtEpochMs: 1,
+    version: 1 as const,
+  };
+  await store.reserveOperation(principal, initial);
+  await store.settleSucceeded({
+    principal,
+    operationId: initial.operationId,
+    requestDigest: initial.requestDigest,
+    nowEpochMs: 1,
+    result: { cursor: 0, events: [], sessionId: original.sessionId, status: "failed" },
+    session: original,
+  });
+  const recover = async (
+    source: ReturnType<typeof toDurableHostedSessionRecord>,
+    childId: string,
+  ) => {
+    const descriptor = {
+      version: 1 as const,
+      operationId: `${childId}-operation`,
+      sourcePublicSessionId: source.sessionId,
+      sourceOwnerRunId: source.adapterSessionId,
+      sourceAdapterGeneration: source.adapterGeneration,
+      logicalSessionId: original.adapterSessionId,
+      originalAuthoritySessionId: original.sessionId,
+      parentCancellationRevision: source.cancellationRevision ?? 0,
+      ...(source.sourceHandoffId === undefined ? {} : { sourceHandoffId: source.sourceHandoffId }),
+    };
+    const binding = {
+      ...descriptor,
+      ownerRunId: `${childId}-physical`,
+      provenance: {
+        kind: "failed-turn-input" as const,
+        sourceStepId: "step",
+        sourceEventId: "event",
+        sourceSlot: 1,
+        checkpointVersion: 1 as const,
+      },
+    };
+    const operation = {
+      ...initial,
+      clientRequestId: childId,
+      operationId: descriptor.operationId,
+      nativeRecovery: descriptor,
+      resumeSessionId: source.sessionId,
+      createdAtEpochMs: 2,
+      updatedAtEpochMs: 2,
+    };
+    await store.reserveOperation(principal, operation);
+    await store.commitNativeRecoveryReceipt({
+      descriptor,
+      principal,
+      recoveryBinding: binding,
+      nowEpochMs: 2,
+    });
+    const child = durableHostedSessionRecordSchema.parse({
+      ...source,
+      checkpoint: undefined,
+      checkpointDigest: undefined,
+      checkpointProgressDigest: undefined,
+      checkpointRef: undefined,
+      privateApprovalReceipts: [],
+      adapterSessionId: binding.ownerRunId,
+      originAdapterSessionId: binding.ownerRunId,
+      adapterGeneration: 1,
+      sessionId: childId,
+      parentSessionId: source.sessionId,
+      nativeRecoveryBinding: binding,
+      status: "waiting",
+      stage: "ready",
+      resumability: "live",
+    });
+    await store.settleSucceeded({
+      principal,
+      operationId: operation.operationId,
+      requestDigest: operation.requestDigest,
+      nowEpochMs: 3,
+      result: { cursor: 0, events: [], sessionId: childId, status: "waiting" },
+      session: child,
+    });
+    return child;
+  };
+  const child = await recover(original, "child-owner");
+  const owner = {
+    ...(kind === "direct" ? directOwnerContext : ownerContext),
+    adapterSessionId: child.adapterSessionId,
+    adapterGeneration: child.adapterGeneration,
+  };
+  const authority = createHostedOperatorOwnerAuthority({
+    eve: store,
+    handoffs: fixture.handoffs,
+    membership: fixture.membership,
+    workloadPolicy,
+    keyResolver,
+    fetch: fixture.fetch,
+    apiOrigin: "https://vercel.example",
+    listVercelInstallations: fixture.listVercelInstallations,
+    readVercelCredential: fixture.readVercelCredential,
+  });
+  const context = {
+    authority: owner.authority,
+    ownerContext: owner,
+    target: hostedRuntimeTargetSchema.parse({
+      ...selection,
+      installationId: "icfg_1",
+      scopeId: "team_1",
+      scopeType: "team",
+    }),
+  };
+  return { fixture, store, original, child, owner, authority, context, recover };
+};
+
+describe("recovered operator owner authority", () => {
+  it.each(["direct", "handoff"] as const)(
+    "accepts committed current %s child with original grant bytes intact",
+    async (kind) => {
+      const f = await recoveredOwnerFixture(kind);
+      await f.authority.assertArtifactAuthorized(f.context);
+      expectNoProviderReads(f.fixture);
+      const readback = await f.authority.readCurrentPlanningOwner(f.context);
+      expect(readback.session).toMatchObject({
+        sessionId: f.original.sessionId,
+        adapterSessionId: f.child.adapterSessionId,
+        adapterGeneration: f.child.adapterGeneration,
+        privateApprovalReceipts: f.original.privateApprovalReceipts,
+      });
+      expect(await f.store.getSession(principal, f.original.sessionId)).toEqual(f.original);
+      expect(
+        await f.store.readCurrentBuildSession({
+          principal,
+          authoritySessionId: f.original.sessionId,
+          logicalSessionId: f.original.adapterSessionId,
+        }),
+      ).toMatchObject({ sessionId: f.child.sessionId });
+    },
+  );
+  it("rejects old original adapter and stale physical generation", async () => {
+    const f = await recoveredOwnerFixture();
+    await expect(
+      f.authority.assertArtifactAuthorized({ ...f.context, ownerContext: directOwnerContext }),
+    ).rejects.toThrow();
+    await expect(
+      f.authority.assertArtifactAuthorized({
+        ...f.context,
+        ownerContext: { ...f.owner, adapterGeneration: 2 },
+      }),
+    ).rejects.toThrow();
+  });
+  it.each(["source", "child"] as const)(
+    "rejects cancellation of %s without changing original approval bytes",
+    async (cancelled) => {
+      const f = await recoveredOwnerFixture();
+      await f.store.recordCancellationIntent({
+        principal,
+        sessionId: cancelled === "source" ? f.original.sessionId : f.child.sessionId,
+        nowEpochMs: 4,
+      });
+      await expect(f.authority.assertArtifactAuthorized(f.context)).rejects.toThrow();
+      const source = await f.store.getSession(principal, f.original.sessionId);
+      expect(source?.version === 2 ? source.privateApprovalReceipts : undefined).toEqual(
+        f.original.privateApprovalReceipts,
+      );
+    },
+  );
+  it("admits only a proved explicit resume and fences the next Stop immediately", async () => {
+    const f = await recoveredOwnerFixture();
+    await f.store.recordCancellationIntent({
+      principal,
+      sessionId: f.child.sessionId,
+      nowEpochMs: 4,
+    });
+    await f.store.observeSession({
+      principal,
+      sessionId: f.child.sessionId,
+      nowEpochMs: 4,
+      checkpoint: { capturedAtEpochMs: 4, events: [], status: "cancelled", version: 1 },
+      stage: "needs_attention",
+      resumability: "terminal",
+    });
+    const operationId = "explicit-resume";
+    const requestDigest = `sha256:${"b".repeat(64)}`;
+    await f.store.reserveOperation(principal, {
+      version: 1,
+      operationId,
+      requestDigest,
+      principal,
+      kind: "send",
+      state: "reserved",
+      clientRequestId: operationId,
+      createdAtEpochMs: 5,
+      updatedAtEpochMs: 5,
+      sessionId: f.child.sessionId,
+      sendDelivery: {
+        adapterGeneration: f.child.adapterGeneration,
+        adapterSessionId: f.child.adapterSessionId,
+        deliveryId: "resume-delivery",
+        requestDigest,
+        resumeCancellationRevision: 1,
+        sessionId: f.child.sessionId,
+      },
+    });
+    const proof = nativeDeliveryForEvents([
+      {
+        type: "turn.started",
+        data: { sequence: 1, turnId: "resumed-turn" },
+        meta: { at: "2026-10-21T00:00:00Z", id: "resume-event", deliveryIds: ["resume-delivery"] },
+      },
+    ]);
+    const observation = {
+      principal,
+      sessionId: f.child.sessionId,
+      nowEpochMs: 5,
+      checkpoint: {
+        capturedAtEpochMs: 5,
+        events: [],
+        status: "working" as const,
+        version: 1 as const,
+        nativeDeliveryState: proof,
+      },
+      stage: "planning" as const,
+      resumability: "live" as const,
+    };
+    await f.store.observeSession(observation);
+    await expect(f.authority.assertArtifactAuthorized(f.context)).rejects.toThrow();
+    const resumed = await f.store.observeSession({
+      ...observation,
+      explicitSendOperationId: operationId,
+    });
+    expect(resumed).toMatchObject({ cancellationRevision: 1, resumedCancellationRevision: 1 });
+    await f.authority.assertArtifactAuthorized(f.context);
+    await f.store.observeSession({ ...observation, nowEpochMs: 6 });
+    await f.authority.assertArtifactAuthorized(f.context);
+    await f.store.recordCancellationIntent({
+      principal,
+      sessionId: f.child.sessionId,
+      nowEpochMs: 7,
+    });
+    await expect(f.authority.assertArtifactAuthorized(f.context)).rejects.toThrow();
+    expect(await f.store.getSession(principal, f.child.sessionId)).toMatchObject({
+      cancellationRevision: 2,
+      resumedCancellationRevision: 1,
+    });
+    expectNoProviderReads(f.fixture);
+  });
+  it("rejects an older child after a second committed recovery and accepts only the new leaf", async () => {
+    const f = await recoveredOwnerFixture();
+    const failed = toDurableHostedSessionRecord(
+      await f.store.observeSession({
+        principal,
+        sessionId: f.child.sessionId,
+        checkpoint: { capturedAtEpochMs: 4, events: [], status: "failed", version: 1 },
+        stage: "needs_attention",
+        resumability: "terminal",
+        nowEpochMs: 4,
+      }),
+    );
+    const latest = await f.recover(failed, "latest-owner");
+    await expect(f.authority.assertArtifactAuthorized(f.context)).rejects.toThrow();
+    await f.authority.assertArtifactAuthorized({
+      ...f.context,
+      ownerContext: {
+        ...f.owner,
+        adapterSessionId: latest.adapterSessionId,
+        adapterGeneration: latest.adapterGeneration,
+      },
+    });
+    expectNoProviderReads(f.fixture);
+  });
+  it("does not accept an uncommitted physical child or foreign principal lookup", async () => {
+    const f = await recoveredOwnerFixture();
+    const getPhysical = vi.spyOn(f.store, "getSessionByAdapterSessionId");
+    const binding = f.child.nativeRecoveryBinding;
+    if (binding === undefined) {
+      throw new Error("Recovery binding missing from fixture.");
+    }
+    getPhysical.mockResolvedValue({
+      ...f.child,
+      adapterSessionId: "uncommitted-physical",
+      sessionId: "uncommitted-public",
+      nativeRecoveryBinding: {
+        ...binding,
+        ownerRunId: "uncommitted-physical",
+      },
+    });
+    await expect(
+      f.authority.assertArtifactAuthorized({
+        ...f.context,
+        ownerContext: { ...f.owner, adapterSessionId: "uncommitted-physical" },
+      }),
+    ).rejects.toThrow();
+    getPhysical.mockRestore();
+    await expect(
+      f.store.readCurrentBuildSession({
+        principal: { ...principal, ownerUserId: "foreign" },
+        authoritySessionId: f.original.sessionId,
+        logicalSessionId: f.original.adapterSessionId,
+      }),
+    ).rejects.toThrow();
+  });
+  it("retains current membership checks after a proved recovery", async () => {
+    const f = await recoveredOwnerFixture();
+    vi.mocked(f.fixture.membership.isMember).mockResolvedValue(false);
+    await expect(f.authority.assertArtifactAuthorized(f.context)).rejects.toThrow();
     expectNoProviderReads(f.fixture);
   });
 });
