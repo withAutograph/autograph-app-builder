@@ -209,6 +209,91 @@ describe("Postgres credential URL scan", () => {
   });
 });
 describe("immutable private operator artifacts", () => {
+  it("reads the exact prepared publication and all original files among mixed retained markers", async () => {
+    const f = fixture();
+    const originalFiles = Object.fromEntries(
+      Object.entries(f.files).map(([name, bytes]) => [name, Buffer.from(bytes)]),
+    );
+    const old = await f.publication.publishGeneratedRelease({
+      context,
+      description,
+      source: f.source,
+    });
+    f.files["sql-bundle.sql"] = Buffer.from("select 2;");
+    const newer = await f.publication.publishGeneratedRelease({
+      context,
+      description,
+      source: f.source,
+    });
+    const source = {
+      repositoryId: "owned-repository",
+      branch: "reviewed-draft",
+      gitSha: "1".repeat(40),
+      gitTree: "2".repeat(40),
+      changeSetDigest: "3".repeat(64),
+      reviewDigest: "4".repeat(64),
+    };
+    const identity = {
+      ...old,
+      appId: context.target.appId,
+      appSpecDigest: "5".repeat(64),
+      version: 1 as const,
+    };
+    const published = { ...identity, publishedSource: source };
+    const markers = [
+      identity,
+      { ...identity, ...newer },
+      { ...published, publishedSource: { ...source, gitSha: "6".repeat(40) } },
+      published,
+    ];
+    const selections: OperatorArtifactSelections = {
+      read: async () => await Promise.resolve(markers[1]),
+      readExact: async (_context, lookup) =>
+        await Promise.resolve(selectExactCompiledOperatorRelease(markers, lookup)),
+      record: async (_context, _callId, value) => await Promise.resolve(value),
+    };
+    const lookup = {
+      artifactRef: old.artifactRef,
+      appSpecDigest: identity.appSpecDigest,
+      publishedSource: {
+        repositoryId: source.repositoryId,
+        branch: source.branch,
+        gitSha: source.gitSha,
+      },
+    };
+    const result = await readExactCompiledOperatorRelease({
+      assertCurrentOwner: f.assertCurrentOwner,
+      context,
+      lookup,
+      selections,
+      store: f.store,
+    });
+    expect(result?.selection).toEqual(published);
+    expect(result?.files).toEqual(originalFiles);
+    await expect(
+      readExactCompiledOperatorRelease({
+        assertCurrentOwner: f.assertCurrentOwner,
+        context,
+        lookup: {
+          ...lookup,
+          publishedSource: { ...lookup.publishedSource, gitSha: "7".repeat(40) },
+        },
+        selections,
+        store: f.store,
+      }),
+    ).resolves.toBeUndefined();
+    f.revoke();
+    await expect(
+      readExactCompiledOperatorRelease({
+        assertCurrentOwner: f.assertCurrentOwner,
+        context,
+        lookup,
+        selections,
+        store: f.store,
+      }),
+    ).rejects.toThrow("owner revoked");
+  });
+
   it("returns every actual predecessor member by recorded reference after source overwrite", async () => {
     const f = fixture();
     const oldBytes = Buffer.from(f.files["sql-bundle.sql"]);

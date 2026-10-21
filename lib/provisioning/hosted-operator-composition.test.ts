@@ -2116,6 +2116,63 @@ describe("existing populated Auth workflow planning", () => {
     };
   };
 
+  it("composes prepared Preview restoration entirely from the selected frozen release", async () => {
+    const f = await settledAppPlanningFixture();
+    const readSelection = vi.mocked(planningAuthority.readOwnedOperatorPlanningSelection);
+    const frozenSelection = {
+      appId: context.target.appId,
+      appSpecDigest: "f".repeat(64),
+      artifactRef: "prepared-release-artifact",
+      releaseId: "prepared-release",
+      manifestSha256: "d".repeat(64),
+      schemaSha256: "e".repeat(64),
+      version: 1 as const,
+      publishedSource: {
+        repositoryId: "actual-repository-id",
+        branch: context.target.branch,
+        gitSha: "c".repeat(40),
+        gitTree: "a".repeat(40),
+        changeSetDigest: "b".repeat(64),
+        reviewDigest: "c".repeat(64),
+      },
+    };
+    const assertCurrent = vi.fn(async () => {});
+    readSelection.mockResolvedValue({
+      currentSpec: {
+        appId: context.target.appId,
+        appSpecDigest: "a".repeat(64),
+        sessionId: "adapter",
+        workspaceId: "sandbox",
+      },
+      approvedScope: undefined,
+      selection: frozenSelection,
+      contextId: "prepared-context",
+      assertCurrent,
+    });
+    const result = await f.dependencies.plan({
+      ...context,
+      action: "prepare",
+      releaseIntent: "prepared-preview",
+    });
+    expect(readSelection).toHaveBeenCalledWith({
+      context: { ...context, action: "prepare", releaseIntent: "prepared-preview" },
+      controlPlane: f.controlPlane,
+      releaseIntent: "prepared-preview",
+    });
+    expect(result.releaseIntent).toBe("prepared-preview");
+    expect(result.contextId).toBe("prepared-context");
+    expect(result.release).toEqual({
+      artifactRef: frozenSelection.artifactRef,
+      id: frozenSelection.releaseId,
+      sha256: frozenSelection.manifestSha256,
+    });
+    expect(result.delivery?.gitSha).toBe(frozenSelection.publishedSource?.gitSha);
+    expect(f.controlPlane.readGeneratedRelease).toHaveBeenCalledWith(
+      expect.objectContaining(context),
+      frozenSelection,
+    );
+    expect(assertCurrent).toHaveBeenCalled();
+  });
   it("replans a settled app using original Auth and independently approved current Gateway", async () => {
     const f = await settledAppPlanningFixture();
     const before = structuredClone(f.row.record);

@@ -204,6 +204,7 @@ import type {
 import { createPostgresOperatorArtifactStore } from "./hosted-operator-artifact-store";
 import type { OperatorArtifactContext } from "./hosted-operator-artifact-store";
 import { createPostgresOperatorArtifactSelections } from "./hosted-operator-artifact-selection";
+import type { ExactCompiledOperatorReleaseLookup } from "./hosted-operator-artifact-selection";
 import { createOperatorArtifactPublication } from "./hosted-operator-artifacts";
 import {
   updateHostedRuntimeJournal,
@@ -2049,9 +2050,15 @@ export const createHostedOperatorControlPlane = async (input: {
         const artifacts = ownedArtifacts(context);
         return await artifacts.publication.readGeneratedRelease(artifacts.context, selection);
       },
-      async readGeneratedSelection(context: HostedOperatorContext, appSpecDigest: string) {
+      async readGeneratedSelection(
+        context: HostedOperatorContext,
+        appSpecDigest: string,
+        lookup?: ExactCompiledOperatorReleaseLookup,
+      ) {
         const artifacts = ownedArtifacts(context);
-        return await artifacts.selections.read(artifacts.context, appSpecDigest);
+        return lookup === undefined
+          ? await artifacts.selections.read(artifacts.context, appSpecDigest)
+          : await artifacts.selections.readExact?.(artifacts.context, { ...lookup, appSpecDigest });
       },
       async readPendingRealmIdentityLinkForStaging(stagingInput: {
         ownerSessionId: string;
@@ -2608,7 +2615,13 @@ export const createHostedOperatorControlPlane = async (input: {
         if (plan === undefined || !isDeepStrictEqual(plan.release, release)) {
           throw new HostedOperatorError("resource_mismatch");
         }
-        const selection = await controlPlane.readGeneratedSelection(context, plan.contextId);
+        const selection = await controlPlane.readGeneratedSelection(
+          context,
+          plan.contextId,
+          plan.release.artifactRef === undefined
+            ? undefined
+            : { artifactRef: plan.release.artifactRef },
+        );
         const sameRelease = [
           selection !== undefined,
           selection?.releaseId === release.id,
