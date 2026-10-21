@@ -431,7 +431,13 @@ const readRelease = async (
   controlPlane: ControlPlane,
   input: HostedOperatorContext & { plan: HostedOperatorPlan },
 ) => {
-  const selection = await controlPlane.readGeneratedSelection(input, input.plan.contextId);
+  const selection = await controlPlane.readGeneratedSelection(
+    input,
+    input.plan.contextId,
+    input.plan.release.artifactRef === undefined
+      ? undefined
+      : { artifactRef: input.plan.release.artifactRef },
+  );
   if (
     selection === undefined ||
     selection.releaseId !== input.plan.release.id ||
@@ -1216,6 +1222,7 @@ export const composeHostedOperatorDependencies = (
     context: HostedOperatorContext & {
       action: "prepare" | "cleanup";
       normalActorProgram?: NormalActorProgram;
+      releaseIntent?: "prepared-preview";
       authSignupPolicy?: HostedOperatorAuthSignupPolicyInput;
     },
   ): Promise<HostedOperatorPlan> => {
@@ -1329,7 +1336,12 @@ export const composeHostedOperatorDependencies = (
     }
     const selected = await observe(
       "accepted_spec",
-      async () => await readOwnedOperatorPlanningSelection({ context, controlPlane }),
+      async () =>
+        await readOwnedOperatorPlanningSelection({
+          context,
+          controlPlane,
+          ...(context.releaseIntent === undefined ? {} : { releaseIntent: context.releaseIntent }),
+        }),
     );
     const selection = await observe("release_selection", () => {
       if (selected.selection === undefined) {
@@ -1341,6 +1353,7 @@ export const composeHostedOperatorDependencies = (
       "release_read",
       async () => await controlPlane.readGeneratedRelease(context, selection),
     );
+    await selected.assertCurrent?.();
     await observe("neon_planning", async () => {
       const planning = createNativePreviewNeonPlanningAuthority({
         context,
@@ -1506,6 +1519,7 @@ export const composeHostedOperatorDependencies = (
       hostedOperatorPlanSchema.parse({
         access: [],
         action: "prepare",
+        ...(context.releaseIntent === undefined ? {} : { releaseIntent: context.releaseIntent }),
         appDatabase: application.appDatabase,
         authAdoption: activeAuth?.adoption ?? adopted?.adoption,
         authDatabase: configuration.authDatabase,
@@ -1515,7 +1529,7 @@ export const composeHostedOperatorDependencies = (
           maintenanceDatabase: native.maintenanceDatabase,
           role: native.maintenanceRole,
         },
-        contextId: selected.currentSpec.appSpecDigest,
+        contextId: selected.contextId ?? selected.currentSpec.appSpecDigest,
         cost: {
           class: "shared-recovery-group",
           description:

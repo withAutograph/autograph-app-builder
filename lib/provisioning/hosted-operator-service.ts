@@ -99,6 +99,7 @@ import {
   operatorAuthSchemaPreparationSchema,
   operatorDeploymentCandidatesSchema,
   hostedOperatorPlanSchema,
+  hostedOperatorAuthSignupPolicyInputSchema,
   hostedOperatorInstallationCustomerIds,
   operatorPlanDigest,
   operatorPublicResultSchema,
@@ -273,6 +274,7 @@ export interface ProtectedHostedOperatorDependencies {
     context: Context & {
       action: "prepare" | "cleanup";
       normalActorProgram?: NormalActorProgram;
+      releaseIntent?: "prepared-preview";
       authSignupPolicy?: HostedOperatorAuthSignupPolicyInput;
     },
   ) => Promise<HostedOperatorPlan>;
@@ -492,6 +494,62 @@ const retainCompletedAuth = (record: HostedRuntimeJournalRecord): HostedRuntimeJ
       : (record.retainedAuth ?? retainedOperatorAuthFromJournal(record)),
 });
 
+/** Re-reading an owned pending restoration proposal grants no approval or effects. */
+const readPendingPreparedPreviewPlan = async (
+  deps: ProtectedHostedOperatorDependencies,
+  context: Context,
+  input: Extract<OperatorRequest, { action: "plan" }>,
+  now: () => number,
+) => {
+  if (input.operation !== "prepare" || input.releaseIntent !== "prepared-preview") {
+    return null;
+  }
+  const saved = await deps.store.read(context);
+  const operator = saved?.record.operator;
+  if (
+    saved?.record.approvedByCallId !== UNAPPROVED_PLAN ||
+    operator?.plan.releaseIntent !== "prepared-preview"
+  ) {
+    return null;
+  }
+  const { plan } = operator;
+  const sameProductInput = [
+    operatorPlanDigest(plan) === operator.planDigest,
+    plan.action === "prepare",
+    sameOperatorSelection(plan.selection, input.selection),
+    input.normalActorProgram === undefined ||
+      isDeepStrictEqual(input.normalActorProgram, plan.normalActorProgram),
+    input.authSignupPolicy === undefined ||
+      isDeepStrictEqual(
+        input.authSignupPolicy,
+        plan.authSignupPolicy === undefined
+          ? undefined
+          : hostedOperatorAuthSignupPolicyInputSchema.strip().parse(plan.authSignupPolicy),
+      ),
+  ].every(Boolean);
+  if (!sameProductInput) {
+    throw new HostedOperatorError("operation_in_progress");
+  }
+  assertUnexpired(plan, now());
+  await deps.assertAuthorized({ ...context, plan, purpose: "planning" });
+  const fresh = await deps.store.read(context);
+  const active = fresh?.record.operator;
+  const samePendingProposal = [
+    fresh?.record.status === "pending",
+    fresh?.record.approvedByCallId === UNAPPROVED_PLAN,
+    active?.operationRef === operator.operationRef,
+    active?.planDigest === operator.planDigest,
+    active?.approvalId === undefined,
+    active !== undefined && operatorPlanDigest(active.plan) === operator.planDigest,
+    active?.pendingEffectId === undefined,
+    active?.pendingEffectAttempt === undefined,
+  ].every(Boolean);
+  if (!samePendingProposal) {
+    throw new HostedOperatorError("operation_in_progress");
+  }
+  return { plan, planDigest: operator.planDigest, operationRef: operator.operationRef };
+};
+
 const handlePlanOperation = async (
   deps: ProtectedHostedOperatorDependencies,
   context: Context,
@@ -499,6 +557,15 @@ const handlePlanOperation = async (
   appId: string,
   now: () => number,
 ) => {
+  const pendingPreview = await readPendingPreparedPreviewPlan(deps, context, input, now);
+  if (pendingPreview !== null) {
+    return response({
+      appId,
+      authenticatedBehavior: "unassessed",
+      ...pendingPreview,
+      status: "planned",
+    });
+  }
   // A saved unapproved profile repair is already a concrete proposal. Return it
   // before fresh composition; approval and all effects still use execute's checks.
   if (
@@ -683,6 +750,7 @@ const handlePlanOperation = async (
       return await deps.plan({
         ...context,
         action: input.operation,
+        ...(input.releaseIntent === undefined ? {} : { releaseIntent: input.releaseIntent }),
         ...(input.normalActorProgram === undefined
           ? {}
           : { normalActorProgram: input.normalActorProgram }),

@@ -1171,6 +1171,168 @@ describe("protected hosted operator boundary", () => {
       expect(description).toContain(value);
     }
   });
+  it("carries explicit prepared Preview intent through normal owner-authorized planning", async () => {
+    const f = fixture();
+    const result = await f.client.request({
+      action: "plan",
+      operation: "prepare",
+      selection,
+      releaseIntent: "prepared-preview",
+    });
+    expect(result.status).toBe("planned");
+    expect(f.deps.plan).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "prepare", releaseIntent: "prepared-preview", target }),
+    );
+    expect(f.deps.executeEffect).not.toHaveBeenCalled();
+  });
+  it("re-exposes the same unapproved prepared Preview proposal on retry without effects", async () => {
+    const f = fixture();
+    f.deps.plan = vi.fn(async () => ({ ...plan, releaseIntent: "prepared-preview" as const }));
+    const request = {
+      action: "plan" as const,
+      operation: "prepare" as const,
+      selection,
+      releaseIntent: "prepared-preview" as const,
+    };
+    const first = await f.client.request(request);
+    const before = structuredClone(f.row);
+    const second = await f.client.request(request);
+    expect(second).toMatchObject({
+      status: "planned",
+      operationRef: first.operationRef,
+      planDigest: first.planDigest,
+      plan: first.plan,
+    });
+    expect(f.deps.plan).toHaveBeenCalledTimes(1);
+    expect(f.row).toEqual(before);
+    expect(f.deps.executeEffect).not.toHaveBeenCalled();
+    const execution = await f.client.request({
+      action: "execute",
+      callId: "not-approved",
+      operationRef: z.uuid().parse(second.operationRef),
+      planDigest: z.string().parse(second.planDigest),
+      selection,
+    });
+    expect(execution).toMatchObject({ status: "blocked", code: "authorization_required" });
+    expect(f.deps.executeEffect).not.toHaveBeenCalled();
+  });
+  it("denies changed product input or revoked owner on pending prepared Preview retry", async () => {
+    const f = fixture();
+    f.deps.plan = vi.fn(async () => ({ ...plan, releaseIntent: "prepared-preview" as const }));
+    const request = {
+      action: "plan" as const,
+      operation: "prepare" as const,
+      selection,
+      releaseIntent: "prepared-preview" as const,
+    };
+    await f.client.request(request);
+    const before = structuredClone(f.row);
+    const changed = await f.client.request({
+      ...request,
+      authSignupPolicy: {
+        version: 1,
+        appPath: "/",
+        organizationId: "other-org",
+        eligibility: "public",
+        membershipRole: "member",
+        appRoles: ["reviewer"],
+      },
+    });
+    expect(changed).toMatchObject({ status: "blocked", code: "operation_in_progress" });
+    expect(f.row).toEqual(before);
+    f.revoke();
+    expect(await f.client.request(request)).toMatchObject({
+      status: "blocked",
+      code: "authorization_required",
+    });
+    expect(f.deps.executeEffect).not.toHaveBeenCalled();
+  });
+  it("retains pending prepared Preview retry across harmless revision updates and denies operation replacement", async () => {
+    const f = fixture();
+    f.deps.plan = vi.fn(async () => ({ ...plan, releaseIntent: "prepared-preview" as const }));
+    const request = {
+      action: "plan" as const,
+      operation: "prepare" as const,
+      selection,
+      releaseIntent: "prepared-preview" as const,
+    };
+    const first = await f.client.request(request);
+    const authorize = f.deps.assertAuthorized;
+    f.deps.assertAuthorized = async (input) => {
+      await authorize(input);
+      if (f.row !== undefined) {
+        f.row.revision += 1;
+        f.row.record.operator?.receipts.push({
+          effectId: "resources",
+          observedAt: "2026-10-21T00:00:00Z",
+          resourceVersion: "inherited-observation",
+        });
+      }
+    };
+    expect(await f.client.request(request)).toMatchObject({
+      status: "planned",
+      operationRef: first.operationRef,
+      planDigest: first.planDigest,
+    });
+    f.deps.assertAuthorized = async (input) => {
+      await authorize(input);
+      if (f.row?.record.operator !== undefined) {
+        f.row.record.operator.operationRef = "00000000-0000-4000-8000-000000000002";
+      }
+    };
+    expect(await f.client.request(request)).toMatchObject({
+      status: "blocked",
+      code: "operation_in_progress",
+    });
+    expect(f.deps.executeEffect).not.toHaveBeenCalled();
+  });
+  it("matches supplied signup input to the bound pending prepared Preview policy", async () => {
+    const f = fixture();
+    const policy = {
+      version: 1 as const,
+      appPath: "/",
+      organizationId: "synthetic-org",
+      eligibility: "public" as const,
+      membershipRole: "member" as const,
+      appRoles: ["reviewer"],
+    };
+    const pending = hostedOperatorPlanSchema.parse({
+      ...plan,
+      stage: "app",
+      releaseIntent: "prepared-preview",
+      authSignupPolicy: {
+        ...policy,
+        policyId: "owned-policy",
+        authResourceId: plan.authDatabase.resourceId,
+        appId: selection.appId,
+        origin: plan.deploymentBoundary?.verification.publicOrigin,
+      },
+      effects: plan.effects.flatMap((effect) =>
+        effect.kind === "access"
+          ? [
+              { id: "signup", kind: "auth-signup-policy", description: "Persist approved signup" },
+              effect,
+            ]
+          : [effect],
+      ),
+    });
+    f.deps.plan = vi.fn(async () => pending);
+    const request = {
+      action: "plan" as const,
+      operation: "prepare" as const,
+      selection,
+      releaseIntent: "prepared-preview" as const,
+      authSignupPolicy: policy,
+    };
+    const first = await f.client.request(request);
+    expect(await f.client.request(request)).toMatchObject({
+      status: "planned",
+      planDigest: first.planDigest,
+      operationRef: first.operationRef,
+    });
+    expect(f.deps.plan).toHaveBeenCalledTimes(1);
+    expect(f.deps.executeEffect).not.toHaveBeenCalled();
+  });
   it("requires a verified Gateway origin on newly planned operations", async () => {
     const f = fixture();
     f.deps.plan = async () => {

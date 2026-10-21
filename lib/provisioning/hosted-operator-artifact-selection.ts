@@ -54,10 +54,12 @@ export type CompiledOperatorReleaseSelection = z.infer<
 export const exactCompiledOperatorReleaseLookupSchema = z.union([
   z.strictObject({
     appSpecDigest: digest.optional(),
+    publishedSource: publishedAppSourceLookupSchema.omit({ gitTree: true }).optional(),
     artifactRef: operatorArtifactReferenceSchema,
   }),
   z.strictObject({
     appSpecDigest: digest.optional(),
+    publishedSource: publishedAppSourceLookupSchema.omit({ gitTree: true }).optional(),
     manifestSha256: digest.optional(),
     releaseId: z.string().min(1),
     schemaSha256: digest,
@@ -74,6 +76,17 @@ export const matchesExactCompiledOperatorRelease = (
 ) => {
   if (lookup.appSpecDigest !== undefined && selection.appSpecDigest !== lookup.appSpecDigest) {
     return false;
+  }
+  if (lookup.publishedSource !== undefined) {
+    const source = selection.publishedSource;
+    if (
+      source === undefined ||
+      source.repositoryId !== lookup.publishedSource.repositoryId ||
+      source.branch !== lookup.publishedSource.branch ||
+      source.gitSha !== lookup.publishedSource.gitSha
+    ) {
+      return false;
+    }
   }
   if ("artifactRef" in lookup) {
     return selection.artifactRef === lookup.artifactRef;

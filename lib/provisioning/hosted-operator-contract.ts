@@ -278,6 +278,7 @@ const hostedOperatorPlanDataSchema = z.strictObject({
     z.strictObject({ actorId: id, organizationId: id, roles: z.array(sqlName).min(1) }),
   ),
   action: z.enum(["prepare", "cleanup"]),
+  releaseIntent: z.literal("prepared-preview").optional(),
   appDatabase: databaseResource,
   /** Schema installation scope is independent of actor and role grants. */
   appInstallation: z.strictObject({ customerIds: z.array(id).min(1) }).optional(),
@@ -1517,6 +1518,7 @@ export const operatorRequestSchema = z.discriminatedUnion("action", [
   }),
   z.strictObject({
     action: z.literal("plan"),
+    releaseIntent: z.literal("prepared-preview").optional(),
     authSignupPolicy: hostedOperatorAuthSignupPolicyInputSchema.optional(),
     normalActorProgram: normalActorProgramSchema.optional(),
     operation: z.enum(["prepare", "cleanup"]),
