@@ -1,3 +1,5 @@
+import { createPrivateOperatorApprovalCapture } from "./private-operator-approval-observation";
+import type { PrivateOperatorApprovalCapture } from "./private-operator-approval-observation";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import type { MessageStreamEvent } from "eve/client";
@@ -42,10 +44,19 @@ export const createPrivateContinuityApprovalCapture = (input: {
   request: HostedContinuityRequest;
   principal: HostedPrincipal;
   callId?: string;
+  state?: PrivateOperatorApprovalCapture;
 }) => {
-  const pending = new Map<string, { callId: string }>();
-  let receipt: ContinuityApproval | null = null;
-  let cancelled = false;
+  parseContinuityRequestForPlan(input.request, input.plan);
+  const { issuer, audience, workspaceId, ownerUserId } = input.principal;
+  if (!isDeepStrictEqual(input.plan.authority, { issuer, audience, workspaceId, ownerUserId })) {
+    throw new Error("Private approval owner differs from its frozen plan.");
+  }
+  const capture = createPrivateOperatorApprovalCapture({
+    request: input.request,
+    ownerUserId: input.principal.ownerUserId,
+    ...(input.callId === undefined ? {} : { callId: input.callId }),
+    ...(input.state === undefined ? {} : { state: input.state }),
+  });
   return {
     observe(event: MessageStreamEvent) {
       if (event.type === "input.requested") {
@@ -57,44 +68,27 @@ export const createPrivateContinuityApprovalCapture = (input: {
             continue;
           }
           const parsed = continuityApprovalInputSchema.safeParse(requested.action.input);
-          if (
-            !parsed.success ||
-            (input.callId !== undefined && requested.action.callId !== input.callId)
-          ) {
+          if (!parsed.success) {
             continue;
           }
           const { plan, ...request } = parsed.data;
           if (!isDeepStrictEqual(plan, input.plan) || !isDeepStrictEqual(request, input.request)) {
             continue;
           }
-          pending.set(requested.requestId, { callId: requested.action.callId });
+          capture.acceptRequest(requested.requestId, requested.action.callId);
         }
         return;
       }
       if (event.type !== "approval.settled") {
         return;
       }
-      const requested = pending.get(event.data.requestId);
-      if (requested === undefined) {
-        return;
-      }
-      if (
-        event.data.outcome !== "approved" ||
-        event.data.responderPrincipalId !== input.principal.ownerUserId
-      ) {
-        cancelled = true;
-        return;
-      }
-      const next = {
-        ...input.request,
-        approvalId: event.data.requestId,
-        approvedByCallId: requested.callId,
-      };
-      if (receipt !== null && !isDeepStrictEqual(receipt, next)) {
-        throw new Error("Continuity approval is ambiguous.");
-      }
-      receipt = next;
+      capture.settle(event);
     },
-    read: () => (cancelled ? null : receipt),
+    read: (): ContinuityApproval | null => {
+      const receipt = capture.read();
+      return receipt === null ? null : { ...input.request, ...receipt };
+    },
+    snapshot: capture.snapshot,
+    proveComplete: capture.proveComplete,
   };
 };

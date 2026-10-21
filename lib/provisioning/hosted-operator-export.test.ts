@@ -1,3 +1,6 @@
+import { createPrivateTenantExportApprovalCapture } from "../eve/private-export-approval";
+import { readPrivateOperatorApproval } from "../eve/private-operator-approval-observation";
+import { HostedSessionReadTimeoutError } from "../eve/hosted-session-read-timeout-error";
 import {
   createHostedOperatorClient,
   HostedOperatorTransportUnknown,
@@ -29,7 +32,7 @@ import type { TenantExportWorkerInput } from "./hosted-operator-export-contract"
 import { tenantExportWireFixtureSchema } from "./hosted-operator-export-contract";
 import wire from "./fixtures/tenant-export-wire-v1.json";
 import type { ExportPlanningStage } from "./hosted-operator-consent-diagnostic";
-import { HostedOperatorError } from "./hosted-operator-contract";
+import { HostedOperatorError, operatorOwnerContextSchema } from "./hosted-operator-contract";
 
 const fixture = tenantExportWireFixtureSchema.parse(wire);
 const authority = {
@@ -997,5 +1000,143 @@ describe("approved installed tenant export scope", () => {
         customerScope: "owner-organization",
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("incremental canonical export approval history", () => {
+  const owner = operatorOwnerContextSchema.parse({
+    kind: "direct",
+    adapterGeneration: 1,
+    adapterSessionId: "native",
+    authority,
+    principal: { ...authority, scopes: ["autograph:send"] },
+    sessionId: context.target.sessionId,
+  });
+  const configure = (
+    f: ReturnType<typeof setup>,
+    options: { revoke?: boolean; fullNoReceipt?: boolean } = {},
+  ) => {
+    const starts: number[] = [];
+    f.dependencies.readApproval = vi.fn<HostedTenantExportDependencies["readApproval"]>(
+      async (_context, request, callId, observation) =>
+        await readPrivateOperatorApproval({
+          owner,
+          observation,
+          capture: (state) =>
+            createPrivateTenantExportApprovalCapture({
+              plan: f.read().journal.plan,
+              request,
+              principal: owner.principal,
+              callId,
+              state,
+            }),
+          assertOwner: async () => {
+            await f.dependencies.assertOwner(context);
+          },
+          readHistory: async (startIndex, onEvent) => {
+            starts.push(startIndex);
+            if (startIndex === 0) {
+              onEvent({
+                type: "input.requested",
+                meta: { at: "2026-10-21T00:00:00Z", id: "requested" },
+                data: {
+                  sequence: 1,
+                  stepIndex: 0,
+                  turnId: "turn",
+                  requests: [
+                    {
+                      kind: "tool-approval",
+                      requestId: "human-approval",
+                      prompt: "Export?",
+                      action: {
+                        kind: "tool-call",
+                        toolName: "export-app-hosted-data",
+                        callId: "export-call",
+                        input: { ...request, plan: f.read().journal.plan },
+                      },
+                    },
+                  ],
+                },
+              });
+              if (options.revoke === true) {
+                f.revoke();
+              }
+              return {
+                nextNativeIndex: 1,
+                nativeTailIndex: 1,
+                complete: options.fullNoReceipt === true,
+              };
+            }
+            onEvent({
+              type: "approval.settled",
+              meta: { at: "2026-10-21T00:00:01Z", id: "settled" },
+              data: {
+                sequence: 2,
+                stepIndex: 0,
+                turnId: "turn",
+                requestId: "human-approval",
+                responderPrincipalId: "owner",
+                outcome: "approved",
+              },
+            });
+            return { nextNativeIndex: 2, nativeTailIndex: 1, complete: true };
+          },
+        }),
+    );
+    return starts;
+  };
+  it("saves cursor/pair atomically before retry and uses the original approval CAS after resume", async () => {
+    const f = setup();
+    const planned = await f.operations.plan(context, "customer-one", "original-request");
+    const starts = configure(f);
+    await expect(f.operations.approval(context, planned.request)).rejects.toBeInstanceOf(
+      HostedSessionReadTimeoutError,
+    );
+    expect(f.read()).toMatchObject({
+      approvalObservation: { nextNativeIndex: 1 },
+      journal: { revision: 2, state: "planned" },
+    });
+    expect(await f.operations.approval(context, planned.request)).toEqual({ approved: true });
+    expect(f.read()).toMatchObject({
+      journal: {
+        revision: 3,
+        state: "approved",
+        approval: { approvalId: "human-approval", approvedByCallId: "export-call" },
+      },
+    });
+    expect(starts).toEqual([0, 1]);
+    expect(await f.operations.approval(context, planned.request)).toEqual({ approved: true });
+    expect(starts).toEqual([0, 1]);
+    expect(f.dependencies.runWorker).not.toHaveBeenCalled();
+  });
+  it("checkpoints a complete unapproved tail so the later UI settlement is a delta read", async () => {
+    const f = setup();
+    const planned = await f.operations.plan(context, "customer-one", "original-request");
+    const starts = configure(f, { fullNoReceipt: true });
+    expect(await f.operations.approval(context, planned.request)).toEqual({ approved: false });
+    expect(await f.operations.approval(context, planned.request)).toEqual({ approved: true });
+    expect(starts).toEqual([0, 1]);
+  });
+  it("does not save or grant progress after post-read ownership revocation", async () => {
+    const f = setup();
+    const planned = await f.operations.plan(context, "customer-one", "original-request");
+    configure(f, { revoke: true });
+    await expect(f.operations.approval(context, planned.request)).rejects.toThrow(
+      "authorization_required",
+    );
+    expect(f.read().approvalObservation).toBeUndefined();
+    expect(f.read().journal.revision).toBe(1);
+  });
+  it("propagates a checkpoint CAS race without reporting saved progress", async () => {
+    const f = setup();
+    const planned = await f.operations.plan(context, "customer-one", "original-request");
+    configure(f);
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Explicit missing CAS result models the actual conflict contract.
+    vi.spyOn(f.dependencies.store, "compareAndSet").mockResolvedValueOnce(undefined);
+    await expect(f.operations.approval(context, planned.request)).rejects.toThrow(
+      "operation_in_progress",
+    );
+    expect(f.read().approvalObservation).toBeUndefined();
+    expect(f.read().journal.approval).toBeUndefined();
   });
 });
