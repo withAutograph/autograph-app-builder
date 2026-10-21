@@ -223,6 +223,9 @@ describe("Builder Vercel provider", () => {
     "%s preserves state and reconnects without applying new source or seeds",
     async (close) => {
       const original = nativeFixture();
+      const drive = driveFixture(startedDriveName);
+      drives.getOrCreate.mockResolvedValue(drive);
+      drives.list.mockResolvedValue(listedDrives(drive));
       sdk.create.mockResolvedValue(original);
       const provider = createBuilderVercelProvider();
       const started = await provider.start(context, undefined, { files: [] });
@@ -259,6 +262,7 @@ describe("Builder Vercel provider", () => {
       expect(drives.list).not.toHaveBeenCalled();
       await recovered.onSessionDelete();
       expect(reattached.delete).toHaveBeenCalledOnce();
+      expect(drive.delete).toHaveBeenCalledOnce();
       expect(reattached.stop).not.toHaveBeenCalled();
     },
   );
