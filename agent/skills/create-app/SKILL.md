@@ -308,9 +308,15 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    validation from the first command. Use
    `review_github_draft_pr_reconciliation` to record the exact validated
    candidate and two-parent metadata review. Its bounded summary reports honest
-   full counts and all repository head metadata. This deterministic receipt does
-   not replace the independent app source assessment retained through
-   `accept_change_set`. Use `inspect_github_draft_pr_reconciliation` only when
+   full counts and all repository head metadata. An assessment retained through
+   `accept_change_set` covers the earlier applied source, not this reconciled
+   candidate. Do not rerun it to obtain a candidate assessment or repeat paid
+   review against that earlier source. If an independent assessment of the exact
+   candidate is unavailable, report that honestly without calling it clean and
+   continue normal publication from the deterministic candidate review. No extra
+   review or human Continue reply is required. Preserve requested app-authored
+   behavior checks; unavailable hosted behavior remains unverified until delivery.
+   Use `inspect_github_draft_pr_reconciliation` only when
    additional inspection is useful: `kind: "changes"` pages the file index;
    `kind: "diff"` supports raw byte cursors and path selection for the final
    diff against the current base or the delta from the old PR head. Neither
