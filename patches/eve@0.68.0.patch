@@ -647,6 +647,261 @@ index 0000000..019c969
 +    now: Date.now,
 +  })(input);
 +}
+diff --git a/dist/src/execution/session/recovery-holder-closure.d.ts b/dist/src/execution/session/recovery-holder-closure.d.ts
+new file mode 100644
+index 0000000..4c40bdc
+--- /dev/null
++++ b/dist/src/execution/session/recovery-holder-closure.d.ts
+@@ -0,0 +1,35 @@
++import type { TerminalRecoveryAuthorityInput, TerminalRecoveryDescriptor } from "#execution/session/terminal-recovery.js";
++export interface RecoveryHolderClosureAuthorizationInput extends TerminalRecoveryAuthorityInput {
++  readonly holderOwnerRunId: string;
++  readonly holderHookId: string;
++  readonly holderDescriptor: TerminalRecoveryDescriptor;
++}
++export interface RecoveryHolderClosureAuthorization {
++  readonly kind: "immutable-loser";
++  readonly winnerOwnerRunId: string;
++}
++export interface RecoveryHolderClosureInput extends TerminalRecoveryAuthorityInput {
++  readonly ports: {
++    authorizeRecoveryHolderClosure?(input: RecoveryHolderClosureAuthorizationInput): Promise<RecoveryHolderClosureAuthorization>;
++  };
++  /** Re-read current app authority/Stop and require its exact operation still has no receipt. */
++  authorizeCurrent(): Promise<void>;
++}
++export interface RecoveryHolderClosureHook {
++  readonly runId: string;
++  readonly hookId: string;
++  readonly specVersion?: number;
++}
++export interface RecoveryHolderClosureDependencies {
++  getHook(token: string): Promise<RecoveryHolderClosureHook & { readonly metadata: Promise<unknown> }>;
++  getHookById(hookId: string): Promise<RecoveryHolderClosureHook>;
++  isHookNotFound(error: unknown): boolean;
++  readRunEntry(ownerRunId: string): Promise<{ readonly runId: string; readonly status: string; readonly entry: unknown }>;
++  readRun(ownerRunId: string): Promise<{ readonly runId: string; readonly status: string }>;
++  cancelRun(ownerRunId: string): Promise<void>;
++  disposeHook(input: { readonly ownerRunId: string; readonly hookId: string; readonly specVersion?: number }): Promise<void>;
++}
++/** Prepare-time closure only. Captures the retained owner's command, continuation and activation hooks;
++ * disposes only their immutable IDs after fresh immutable-loser proof. Missing/reassigned aliases are
++ * preserved, absent inbox returns, unproven ownership throws, and receipts are never replaced. */
++export declare function closeNoncanonicalRecoveryInboxHolder(input: RecoveryHolderClosureInput, dependencies?: RecoveryHolderClosureDependencies): Promise<void>;
+diff --git a/dist/src/execution/session/recovery-holder-closure.js b/dist/src/execution/session/recovery-holder-closure.js
+new file mode 100644
+index 0000000..c898c45
+--- /dev/null
++++ b/dist/src/execution/session/recovery-holder-closure.js
+@@ -0,0 +1,208 @@
++import { sessionCommandHookToken, sessionInboxHookToken } from "#execution/session-inbox/address.js";
++import { sessionHookTokens } from "#execution/session/hook-tokens.js";
++import { parseTerminalRecoveryDescriptor, terminalRecoveryActivationToken } from "#execution/session/terminal-recovery.js";
++
++const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
++const terminal = (status) => ["completed", "failed", "cancelled"].includes(status);
++
++/** Close only a positively authorized immutable loser; never retarget a token to its next owner. */
++export async function closeNoncanonicalRecoveryInboxHolder(input, suppliedDependencies) {
++  let stage = "lookup";
++  try {
++    const dependencies = suppliedDependencies ?? await nativeDependencies();
++    const { descriptor, ports } = input;
++    const token = sessionInboxHookToken(sessionCommandHookToken(descriptor.logicalSessionId));
++    await authorizeCurrent();
++    const captured = await lookup(token);
++    if (captured === undefined) return;
++    const ownerRunId = captured.runId;
++    requireIdentity(captured);
++    await requireMetadata(captured, "session");
++    await authorizeCurrent();
++    if (ports.authorizeRecoveryHolderClosure === undefined) throw new Error("Recovery inbox holder closure is not authorized.");
++    stage = "entry";
++    const retained = await dependencies.readRunEntry(ownerRunId);
++    await authorizeCurrent();
++    stage = "entry";
++    const entry = retained.entry;
++    if (retained.runId !== ownerRunId || !record(entry) || entry.kind !== "terminal-recovery" ||
++        entry.checkpoint?.sessionState?.sessionId !== descriptor.logicalSessionId ||
++        entry.checkpoint?.serializedContext?.["eve.sessionId"] !== descriptor.logicalSessionId) throw new Error("Recovery inbox holder is not a bound recovery candidate.");
++    const holderDescriptor = parseTerminalRecoveryDescriptor(entry.descriptor, entry.descriptor?.operationId);
++    if (holderDescriptor === undefined || holderDescriptor.logicalSessionId !== descriptor.logicalSessionId ||
++        holderDescriptor.originalAuthoritySessionId !== descriptor.originalAuthoritySessionId) throw new Error("Recovery inbox holder lineage differs.");
++    const closureCall = { auth: input.auth, descriptor, holderOwnerRunId: ownerRunId, holderHookId: captured.hookId, holderDescriptor };
++    await authorizeClosure();
++    // These are the addresses this actual retained owner claimed at boot. Read
++    // them afresh once; a missing or reassigned alias is never a cleanup target.
++    stage = "entry";
++    const addresses = sessionHookTokens(entry.checkpoint).map((alias) => ({ token: sessionInboxHookToken(alias), kind: "session" }));
++    addresses.push({ token: terminalRecoveryActivationToken(input.auth, holderDescriptor), kind: "activation" });
++    const hooks = new Map([[captured.hookId, captured]]);
++    for (const address of addresses) {
++      if (address.token === token) continue;
++      const hook = await lookup(address.token);
++      if (hook === undefined || hook.runId !== ownerRunId) continue;
++      requireIdentity(hook);
++      await requireMetadata(hook, address.kind);
++      hooks.set(hook.hookId, hook);
++    }
++    await authorizeClosure();
++    if (!await sameCommandHook()) return;
++    let run = await readExactRun();
++    if (!terminal(run.status)) {
++      if (!["pending", "running"].includes(run.status)) throw new Error("Recovery inbox holder status is unavailable.");
++      await authorizeClosure();
++      if (!await sameCommandHook()) return;
++      stage = "cancel";
++      try { await dependencies.cancelRun(ownerRunId); }
++      catch (error) {
++        // A concurrent terminal transition converges; a live run still fails.
++        run = await readExactRun();
++        if (!terminal(run.status)) { stage = "cancel"; throw error; }
++      }
++      run = await readExactRun();
++      if (!terminal(run.status)) throw new Error("Recovery inbox holder cancellation is unconfirmed.");
++    }
++    // Native cancellation does not run workflow finally. Release every captured
++    // owned address explicitly, always by its immutable ID and physical owner.
++    for (const hook of hooks.values()) {
++      await authorizeClosure();
++      if (await readCapturedHook(hook) === undefined) continue;
++      await authorizeClosure();
++      stage = "dispose";
++      try { await dependencies.disposeHook({ ownerRunId, hookId: hook.hookId, specVersion: hook.specVersion }); }
++      catch (error) {
++        if (await readCapturedHook(hook) !== undefined) { stage = "dispose"; throw error; }
++      }
++      if (await readCapturedHook(hook) !== undefined) throw new Error("Recovery inbox holder release is unconfirmed.");
++    }
++    const current = await lookup(token, "readback");
++    if (current !== undefined && (current.hookId === captured.hookId || current.runId === ownerRunId)) {
++      stage = "readback";
++      throw new Error("Recovery inbox remains bound to the closed holder.");
++    }
++    await authorizeCurrent();
++
++    async function authorizeCurrent() {
++      stage = "authorize";
++      await input.authorizeCurrent();
++    }
++    async function authorizeClosure() {
++      await authorizeCurrent();
++      const proof = await ports.authorizeRecoveryHolderClosure(closureCall);
++      if (proof?.kind !== "immutable-loser" || typeof proof.winnerOwnerRunId !== "string" || proof.winnerOwnerRunId.length === 0 || proof.winnerOwnerRunId === ownerRunId) throw new Error("Recovery inbox holder lacks an immutable winner.");
++      await authorizeCurrent();
++    }
++    async function lookup(address, lookupStage = "lookup") {
++      await authorizeCurrent();
++      stage = lookupStage;
++      let hook;
++      try { hook = await dependencies.getHook(address); }
++      catch (error) { if (!dependencies.isHookNotFound(error)) throw error; }
++      await authorizeCurrent();
++      return hook;
++    }
++    function requireIdentity(hook) {
++      stage = "lookup";
++      if (typeof hook.runId !== "string" || hook.runId.length === 0 || typeof hook.hookId !== "string" || hook.hookId.length === 0) throw new Error("Recovery inbox holder identity is unavailable.");
++    }
++    async function requireMetadata(hook, kind) {
++      stage = "lookup";
++      const metadata = await hook.metadata;
++      await authorizeCurrent();
++      stage = "lookup";
++      if (kind === "session") {
++        if (!record(metadata) || metadata.sessionId !== descriptor.logicalSessionId) throw new Error("Recovery inbox holder logical identity differs.");
++      } else {
++        const binding = metadata?.recoveryBinding;
++        if (!record(binding) || binding.ownerRunId !== ownerRunId) throw new Error("Recovery holder activation identity differs.");
++        const { ownerRunId: ignoredOwner, provenance: ignoredProvenance, ...boundDescriptor } = binding;
++        const parsed = parseTerminalRecoveryDescriptor(boundDescriptor, holderDescriptor.operationId);
++        if (parsed === undefined || JSON.stringify(parsed) !== JSON.stringify(holderDescriptor)) throw new Error("Recovery holder activation lineage differs.");
++      }
++    }
++    async function sameCommandHook() {
++      const current = await lookup(token);
++      if (current === undefined) return false;
++      stage = "lookup";
++      if (current.runId !== ownerRunId || current.hookId !== captured.hookId) throw new Error("Recovery inbox holder changed before closure.");
++      await requireMetadata(current, "session");
++      return true;
++    }
++    async function readExactRun() {
++      await authorizeCurrent();
++      stage = "readback";
++      const current = await dependencies.readRun(ownerRunId);
++      await authorizeCurrent();
++      stage = "readback";
++      if (current.runId !== ownerRunId) throw new Error("Recovery closure physical run changed.");
++      return current;
++    }
++    async function readCapturedHook(hook) {
++      await authorizeCurrent();
++      stage = "readback";
++      let current;
++      try { current = await dependencies.getHookById(hook.hookId); }
++      catch (error) { if (!dependencies.isHookNotFound(error)) throw error; }
++      await authorizeCurrent();
++      stage = "readback";
++      if (current !== undefined && (current.runId !== ownerRunId || current.hookId !== hook.hookId)) throw new Error("Recovery closure immutable hook changed.");
++      return current;
++    }
++  } catch (error) {
++    reportClosureFailure(stage, error);
++    throw error;
++  }
++}
++
++// Failure-only advisory projection: fixed labels and primitive facts, no error serialization.
++function reportClosureFailure(stage, error) {
++  const summary = { event: "eve.terminal_recovery_holder_closure_failed", stage, errorClass: "other" };
++  try {
++    const names = new Set(["WorkflowWorldError", "RunExpiredError", "HookNotFoundError", "RuntimeDecryptionError", "WorkflowRunNotFoundError", "HookForceClaimedError", "EntityConflictError", "SerializationError", "TypeError", "Error"]);
++    const codes = new Set(["TIMEOUT", "TRANSPORT", "PARSE_ERROR", "SCHEMA_VALIDATION", "run-expired", "stream-expired"]);
++    const seen = new Set();
++    let candidate = error;
++    for (let depth = 0; depth < 3; depth += 1) {
++      if (candidate === null || (typeof candidate !== "object" && typeof candidate !== "function") || seen.has(candidate)) break;
++      seen.add(candidate);
++      const name = Object.getOwnPropertyDescriptor(candidate, "name")?.value;
++      const code = Object.getOwnPropertyDescriptor(candidate, "code")?.value;
++      const status = Object.getOwnPropertyDescriptor(candidate, "status")?.value;
++      if (summary.errorClass === "other" && names.has(name)) summary.errorClass = name;
++      if (summary.code === undefined && codes.has(code)) summary.code = code;
++      if (summary.status === undefined && Number.isSafeInteger(status) && status >= 100 && status <= 599) summary.status = status;
++      candidate = Object.getOwnPropertyDescriptor(candidate, "cause")?.value;
++    }
++  } catch { /* A hostile error or diagnostic sink cannot change the original failure. */ }
++  try { console.error(`[eve:terminal-recovery-holder-closure] ${JSON.stringify(summary)}`); }
++  catch { /* Observation never authorizes or changes closure. */ }
++}
++
++async function nativeDependencies() {
++  const [runtime, serialization, errors] = await Promise.all([
++    import("#internal/workflow/runtime.js"),
++    import("#compiled/@workflow/core/serialization.js"),
++    import("#compiled/@workflow/errors/index.js"),
++  ]);
++  return {
++    getHook: runtime.getHookByToken,
++    getHookById: async (hookId) => (await runtime.getWorld()).hooks.get(hookId, { resolveData: "none" }),
++    isHookNotFound: (error) => errors.HookNotFoundError.is(error),
++    readRun: async (ownerRunId) => (await runtime.getWorld()).runs.get(ownerRunId, { resolveData: "none" }),
++    async readRunEntry(ownerRunId) {
++      const world = await runtime.getWorld();
++      const run = await world.runs.get(ownerRunId, { resolveData: "all" });
++      if (run.runId !== ownerRunId) throw new Error("Recovery closure run changed.");
++      const key = await runtime.resolveRunEncryptionKey(world, run);
++      const revivers = Object.fromEntries(["ReadableStream", "WritableStream", "AbortController", "AbortSignal"].map((type) => [type, (value) => ({ kind: "native-recovery-transport-reference", type, value })]));
++      const args = await serialization.hydrateWorkflowArguments(run.input, run.runId, key, globalThis, revivers);
++      return { runId: run.runId, status: run.status, entry: Array.isArray(args) && args.length === 1 ? args[0] : undefined };
++    },
++    cancelRun: async (ownerRunId) => runtime.cancelRun(await runtime.getWorld(), ownerRunId, { cancelReason: "Noncanonical terminal recovery candidate closed after immutable winner proof" }),
++    async disposeHook({ ownerRunId, hookId, specVersion }) {
++      await (await runtime.getWorld()).events.create(ownerRunId, { eventType: "hook_disposed", correlationId: hookId, ...(specVersion === undefined ? {} : { specVersion }) });
++    },
++  };
++}
 diff --git a/dist/src/execution/session/recovery-holder-observation.d.ts b/dist/src/execution/session/recovery-holder-observation.d.ts
 new file mode 100644
 index 0000000..02c1302
@@ -1471,10 +1726,10 @@ index 0000000..ae1eb1e
 +}
 diff --git a/dist/src/execution/session/terminal-recovery.d.ts b/dist/src/execution/session/terminal-recovery.d.ts
 new file mode 100644
-index 0000000..c0a5256
+index 0000000..6c1aed3
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.d.ts
-@@ -0,0 +1,101 @@
+@@ -0,0 +1,105 @@
 +import type { SessionAuthContext } from "#channel/types.js";
 +import type { SessionCheckpoint } from "#execution/session/handoff.js";
 +import type { TerminalRecoveryWorkflowEntryInput } from "#execution/session/entry-input.js";
@@ -1530,6 +1785,8 @@ index 0000000..c0a5256
 +  observeCandidateFacts?(input: TerminalRecoveryCandidateFactsInput): Promise<TerminalRecoveryCandidateFacts | undefined>;
 +  /** Trusted read-only canonical binding facts for the authenticated logical inbox holder. */
 +  observeRecoveryHolderBinding?(input: import("#execution/session/recovery-holder-observation.js").RecoveryHolderBindingInput): Promise<import("#execution/session/recovery-holder-observation.js").RecoveryHolderBindingFacts | undefined>;
++  /** Fresh canonical proof authorizing closure of only the exact immutable losing physical holder. */
++  authorizeRecoveryHolderClosure?(input: import("#execution/session/recovery-holder-closure.js").RecoveryHolderClosureAuthorizationInput): Promise<import("#execution/session/recovery-holder-closure.js").RecoveryHolderClosureAuthorization>;
 +  /** Requires the succeeded operation and exact committed public child, with current cancellation fences. */
 +  authorizeActivation(input: TerminalRecoveryAuthorityInput): Promise<void>;
 +  readReceipt(input: TerminalRecoveryAuthorityInput): Promise<TerminalRecoveryBinding | null | undefined>;
@@ -1538,6 +1795,8 @@ index 0000000..c0a5256
 +export interface TerminalRecoveryDependencies {
 +  collect(input: CollectTerminalRecoveryCandidateInput): Promise<TerminalRecoveryCandidateResult>;
 +  reconcile: typeof import("#execution/session/recovery-reconciliation.js").reconcileTerminalRecoveryCandidate;
++  /** Native prepare always loads the fresh exact-holder closure; optional for injected legacy dependencies. */
++  closeHolder?: typeof import("#execution/session/recovery-holder-closure.js").closeNoncanonicalRecoveryInboxHolder;
 +  readCandidate(candidate: PrivateNativeRecoveryCandidate): PrivateNativeRecoveryPayload;
 +  readEntry(payload: PrivateNativeRecoveryPayload): Promise<unknown>;
 +  start(input: Omit<TerminalRecoveryWorkflowEntryInput, "kind" | "ownerDeploymentId">): Promise<unknown>;
@@ -1578,10 +1837,10 @@ index 0000000..c0a5256
 +export declare function observeTerminalSession(input: TerminalRecoveryAuthorityInput & { readonly ports: Pick<TerminalRecoveryPorts, "authorize" | "readReceipt" | "observeCandidateFacts" | "observeRecoveryHolderBinding"> }, dependencies: TerminalRecoveryObservationDependencies): Promise<{ readonly kind: "accepted"; readonly sessionId: string }>;
 diff --git a/dist/src/execution/session/terminal-recovery.js b/dist/src/execution/session/terminal-recovery.js
 new file mode 100644
-index 0000000..89cfd77
+index 0000000..3d20fc3
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.js
-@@ -0,0 +1,344 @@
+@@ -0,0 +1,369 @@
 +import { createHash } from "node:crypto";
 +import { DEFAULT_SESSION_TIMEOUT_MS } from "#execution/session/timeout.js";
 +import { SESSION_CHECKPOINT_VERSION } from "#execution/session/handoff.js";
@@ -1638,6 +1897,21 @@ index 0000000..89cfd77
 +    return { kind: "accepted", recoveryBinding: existing };
 +  }
 +  let ready = await findReady();
++  if (ready === undefined && dependencies.closeHolder !== undefined) {
++    const authorizeCurrent = async () => {
++      await ports.authorize(call);
++      if (await ports.readReceipt(call) != null) throw new Error("Recovery receipt changed during holder closure.");
++    };
++    await authorizeCurrent();
++    await dependencies.closeHolder({ auth, descriptor, ports, authorizeCurrent });
++    await ports.authorize(call);
++    const current = await ports.readReceipt(call);
++    if (current != null) {
++      if (!matchesDescriptor(current, descriptor)) throw new Error("Recovery receipt binding changed.");
++      return { kind: "accepted", recoveryBinding: current };
++    }
++    ready = await findReady();
++  }
 +  if (ready === undefined) {
 +    const collected = await dependencies.collect({
 +      binding: { ownerRunId: descriptor.sourceOwnerRunId, logicalSessionId: descriptor.logicalSessionId },
@@ -1682,19 +1956,27 @@ index 0000000..89cfd77
 +    const checkpoint = { ...reconciled.checkpointCore, ...policy, version: SESSION_CHECKPOINT_VERSION };
 +    if (checkpoint.sessionState.sessionId !== descriptor.logicalSessionId || checkpoint.serializedContext["eve.sessionId"] !== descriptor.logicalSessionId) return { kind: "uncertain", reason: "checkpoint-identity-mismatch" };
 +    await ports.authorize(call);
-+    await dependencies.start({ activationToken: token, checkpoint, descriptor, provenance, replayInput: reconciled.replayInput });
-+    // A start timeout remains unknown. A later exact request discovers the ready hook;
-+    // no checkpoint may execute until its canonical physical owner receipt is committed.
-+    const deadline = dependencies.now() + 30_000;
-+    let observationDelayMs = 250;
-+    do {
-+      ready = await findReady();
-+      if (ready !== undefined) break;
-+      const remainingMs = deadline - dependencies.now();
-+      if (remainingMs <= 0) throw new Error("Recovery owner acceptance is unknown.");
-+      await dependencies.wait(Math.min(observationDelayMs, remainingMs));
-+      observationDelayMs = Math.min(observationDelayMs * 2, 2_000);
-+    } while (true);
++    const current = await ports.readReceipt(call);
++    if (current != null) {
++      if (!matchesDescriptor(current, descriptor)) throw new Error("Recovery receipt binding changed.");
++      return { kind: "accepted", recoveryBinding: current };
++    }
++    ready = await findReady();
++    if (ready === undefined) {
++      await dependencies.start({ activationToken: token, checkpoint, descriptor, provenance, replayInput: reconciled.replayInput });
++      // A start timeout remains unknown. A later exact request discovers the ready hook;
++      // no checkpoint may execute until its canonical physical owner receipt is committed.
++      const deadline = dependencies.now() + 30_000;
++      let observationDelayMs = 250;
++      do {
++        ready = await findReady();
++        if (ready !== undefined) break;
++        const remainingMs = deadline - dependencies.now();
++        if (remainingMs <= 0) throw new Error("Recovery owner acceptance is unknown.");
++        await dependencies.wait(Math.min(observationDelayMs, remainingMs));
++        observationDelayMs = Math.min(observationDelayMs * 2, 2_000);
++      } while (true);
++    }
 +  }
 +  await ports.authorize(call);
 +  const receipt = await ports.commitReceipt({ ...call, recoveryBinding: ready });
@@ -1880,18 +2162,20 @@ index 0000000..89cfd77
 +}
 +
 +async function nativeDependencies() {
-+  const [collector, reconciler, runtime, workflow, serialization, errors] = await Promise.all([
++  const [collector, reconciler, runtime, workflow, serialization, errors, closure] = await Promise.all([
 +    import("#execution/session/recovery-candidate.js"),
 +    import("#execution/session/recovery-reconciliation.js"),
 +    import("#internal/workflow/runtime.js"),
 +    import("#execution/workflow-runtime.js"),
 +    import("#compiled/@workflow/core/serialization.js"),
 +    import("#compiled/@workflow/errors/index.js"),
++    import("#execution/session/recovery-holder-closure.js"),
 +  ]);
 +  return {
 +    collect: collector.collectTerminalRecoveryCandidate,
 +    readCandidate: collector.readTerminalRecoveryCandidate,
 +    reconcile: reconciler.reconcileTerminalRecoveryCandidate,
++    closeHolder: closure.closeNoncanonicalRecoveryInboxHolder,
 +    async readEntry(payload) {
 +      const revivers = Object.fromEntries(["ReadableStream", "WritableStream", "AbortController", "AbortSignal"].map((type) => [type, (value) => ({ kind: "native-recovery-transport-reference", type, value })]));
 +      const args = await serialization.hydrateWorkflowArguments(payload.run.input, payload.run.runId, payload.nativeRunKey, globalThis, revivers);
