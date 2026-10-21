@@ -51,6 +51,7 @@ import { canonical, digest, stableId } from "./hosted-operation-identifiers";
 import { hostedPrincipalSchema, requireHostedOperationScope, tenantKeyFor } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
 import {
+  assertRecoveredBuildContinuationChild,
   isProvedSendDelivery,
   canProjectQueuedSendAcknowledgement,
   unsettledSendAcknowledgementPageSchema,
@@ -2485,6 +2486,8 @@ export function createHostedEveSessionService(input: {
   ) {
     const { sessionId, cursor, limit } = inputValue;
     const session = toDurableHostedSessionRecord(await requireSession(sessionId));
+    let activationFailure: HostedSubmissionUnknownError | undefined;
+    let terminalReadOperation: HostedOperationRecord | undefined;
     if (session.nativeRecoveryBinding !== undefined) {
       let operation: HostedOperationRecord | null | undefined;
       try {
@@ -2514,17 +2517,82 @@ export function createHostedEveSessionService(input: {
         });
         throw error;
       }
-      await activateCommittedRecovery(operation);
+      try {
+        await activateCommittedRecovery(operation);
+      } catch (error) {
+        if (
+          !(error instanceof HostedSubmissionUnknownError) ||
+          error.verificationStep !== "activation_transport"
+        ) {
+          throw error;
+        }
+        activationFailure = error;
+        terminalReadOperation = operation;
+      }
+    }
+    const continueWork = inputValue.continueWork !== false && activationFailure === undefined;
+    // This fallback observes the already committed owner; it grants no activation authority.
+    const assertTerminalReadAuthority = async (
+      failure: HostedSubmissionUnknownError,
+      observedCancellation = false,
+    ) => {
+      if (terminalReadOperation === undefined || session.nativeRecoveryBinding === undefined) {
+        throw failure;
+      }
+      const operation = requireOwnedOperation(
+        await input.store.getPrivateOperation?.(principal, terminalReadOperation.operationId),
+        terminalReadOperation,
+      );
+      const child = toDurableHostedSessionRecord(
+        await requireBoundSucceededStartSession(operation),
+      );
+      const source = toDurableHostedSessionRecord(
+        await requireSession(session.nativeRecoveryBinding.sourcePublicSessionId),
+      );
+      assertRecoveredBuildContinuationChild(
+        session.nativeRecoveryBinding.originalAuthoritySessionId,
+        session.nativeRecoveryBinding.logicalSessionId,
+        source,
+        child,
+        operation,
+      );
+      if (
+        child.adapterSessionId !== session.adapterSessionId ||
+        child.adapterGeneration !== session.adapterGeneration ||
+        canonical(child.nativeRecoveryBinding) !== canonical(session.nativeRecoveryBinding) ||
+        (child.status === "cancelled" && !observedCancellation) ||
+        (child.cancellationRevision ?? 0) !== (session.cancellationRevision ?? 0) ||
+        (child.cancellationRevision ?? 0) !== (child.resumedCancellationRevision ?? 0)
+      ) {
+        throw failure;
+      }
+      await (input.assertNativeRecoveryOwner ?? assertHostedBuildDecisionOwner)(source);
+    };
+    if (activationFailure !== undefined) {
+      try {
+        if (
+          input.transport.observe === undefined ||
+          input.store.observeSessionPaged === undefined ||
+          input.store.readCheckpointPage === undefined
+        ) {
+          throw activationFailure;
+        }
+        await assertTerminalReadAuthority(activationFailure);
+      } catch {
+        throw activationFailure;
+      }
     }
     // The recovered child owns its public stream; protected plans retain the original authority.
     const privateApprovalSessionId =
       session.nativeRecoveryBinding?.originalAuthoritySessionId ?? sessionId;
-    await input.beforeRead?.({
-      adapterSessionId: session.adapterSessionId,
-      principal,
-      sessionId,
-      sourceHandoffId: session.sourceHandoffId,
-    });
+    if (activationFailure === undefined) {
+      await input.beforeRead?.({
+        adapterSessionId: session.adapterSessionId,
+        principal,
+        sessionId,
+        sourceHandoffId: session.sourceHandoffId,
+      });
+    }
     if (
       input.transport.observe !== undefined &&
       input.store.observeSessionPaged !== undefined &&
@@ -2635,6 +2703,19 @@ export function createHostedEveSessionService(input: {
           store: input.store,
           transport: input.transport.observe,
         });
+        if (activationFailure !== undefined) {
+          const observation = spool.observation;
+          if (
+            observation.observationComplete !== true ||
+            observation.nativeTailIndex === undefined ||
+            observation.nextNativeIndex !== observation.nativeTailIndex + 1 ||
+            observation.nativeObservationState?.adapterSessionId !== session.adapterSessionId ||
+            observation.activeTurnId !== undefined ||
+            !["completed", "failed", "cancelled"].includes(observation.status)
+          ) {
+            throw activationFailure;
+          }
+        }
         const nativeReadObservation: NativeSendReadObservation = {
           nativeStartIndex: nativeObservationState?.nextNativeIndex ?? 0,
           ...(spool.observation.nextNativeIndex === undefined
@@ -2791,7 +2872,7 @@ export function createHostedEveSessionService(input: {
             : "live";
           const stage = stageForResult(summary);
           const unchangedObservation =
-            inputValue.continueWork !== false &&
+            continueWork &&
             explicitSendOperationId === undefined &&
             coldReadProgress === undefined &&
             checkpointMetadata !== null &&
@@ -2822,8 +2903,13 @@ export function createHostedEveSessionService(input: {
             const result = await resultFromDurableCheckpoint(sessionId, current, cursor, limit);
             return continueApprovedWork(sessionId, result, sendRead);
           }
+          if (activationFailure !== undefined) {
+            await assertTerminalReadAuthority(activationFailure);
+          }
           const stored = await input.store.observeSessionPaged({
-            ...(explicitSendOperationId === undefined ? {} : { explicitSendOperationId }),
+            ...(activationFailure !== undefined || explicitSendOperationId === undefined
+              ? {}
+              : { explicitSendOperationId }),
             ...(summary.uiPreview?.appId === undefined ? {} : { appId: summary.uiPreview.appId }),
             events: orderedEvents,
             expectedCheckpointDigest: session.checkpointDigest,
@@ -2834,20 +2920,26 @@ export function createHostedEveSessionService(input: {
             sessionId,
             stage,
           });
+          if (activationFailure !== undefined) {
+            await assertTerminalReadAuthority(activationFailure, summary.status === "cancelled");
+            if (stored.status !== summary.status) {
+              throw activationFailure;
+            }
+          }
           const result = await resultFromDurableCheckpoint(sessionId, stored, cursor, limit);
-          return inputValue.continueWork === false
-            ? result
-            : continueApprovedWork(sessionId, result, sendRead);
+          return continueWork ? continueApprovedWork(sessionId, result, sendRead) : result;
         }
       } catch (error) {
+        // An old checkpoint, partial stream or concurrent winner cannot prove this owner ended.
+        if (activationFailure !== undefined) {
+          throw activationFailure;
+        }
         if (error instanceof HostedCheckpointObservationConflictError) {
           // The losing spool is discarded by the store and this read's finally.
           // Read the committed owner-scoped winner without replaying its loser.
           const winner = await requireSession(sessionId);
           const result = await resultFromDurableCheckpoint(sessionId, winner, cursor, limit);
-          return inputValue.continueWork === false
-            ? result
-            : continueApprovedWork(sessionId, result);
+          return continueWork ? continueApprovedWork(sessionId, result) : result;
         }
         if (error instanceof HostedSessionReadTimeoutError) {
           if (session.checkpoint === undefined && session.checkpointRef === undefined) {
@@ -2871,6 +2963,9 @@ export function createHostedEveSessionService(input: {
           await rm(spool.directory, { force: true, recursive: true });
         }
       }
+    }
+    if (activationFailure !== undefined) {
+      throw activationFailure;
     }
     try {
       const snapshot = await input.transport.get({
@@ -2932,15 +3027,11 @@ export function createHostedEveSessionService(input: {
         const durable = toDurableHostedSessionRecord(await requireSession(sessionId));
         if (durable.checkpoint) {
           const result = resultFromHostedCheckpoint(sessionId, durable.checkpoint, cursor, limit);
-          return inputValue.continueWork === false
-            ? result
-            : await continueApprovedWork(sessionId, result);
+          return continueWork ? await continueApprovedWork(sessionId, result) : result;
         }
         if (durable.checkpointRef !== undefined) {
           const result = await resultFromDurableCheckpoint(sessionId, durable, cursor, limit);
-          return inputValue.continueWork === false
-            ? result
-            : await continueApprovedWork(sessionId, result);
+          return continueWork ? await continueApprovedWork(sessionId, result) : result;
         }
       }
       const result = projectSnapshot(sessionId, snapshot, cursor, limit);
@@ -2949,9 +3040,7 @@ export function createHostedEveSessionService(input: {
         !progressUnchanged ||
         observedAt - session.lastProgressAtEpochMs < HOSTED_PROGRESS_NOTICE_MS
       ) {
-        return inputValue.continueWork === false
-          ? result
-          : await continueApprovedWork(sessionId, result);
+        return continueWork ? await continueApprovedWork(sessionId, result) : result;
       }
       const operation = pendingBuilderOperation(publicSnapshotEvents(snapshot));
       const elapsedMinutes = Math.max(
