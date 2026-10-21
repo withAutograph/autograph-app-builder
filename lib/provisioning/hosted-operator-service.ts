@@ -1557,7 +1557,15 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
       const read = async () => await deps.store.read(context);
       const update = async (
         change: (record: HostedRuntimeJournalRecord) => HostedRuntimeJournalRecord,
-      ) => await updateHostedRuntimeJournal({ ...context, now, store: deps.store, update: change });
+        beforeUpdate?: (record: HostedRuntimeJournalRecord) => Promise<void>,
+      ) =>
+        await updateHostedRuntimeJournal({
+          ...context,
+          beforeUpdate,
+          now,
+          store: deps.store,
+          update: change,
+        });
       if (input.action === "plan") {
         return await handlePlanOperation(deps, context, input, appId, now);
       }
@@ -1924,6 +1932,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
       }
       const ownedUpdate = async (
         change: (record: HostedRuntimeJournalRecord) => HostedRuntimeJournalRecord,
+        beforeUpdate?: (record: HostedRuntimeJournalRecord) => Promise<void>,
       ) =>
         await update((record) => {
           if (
@@ -1935,23 +1944,77 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
             throw new HostedOperatorError("operation_in_progress");
           }
           return change({ ...record, leaseExpiresAt: new Date(now() + 60_000).toISOString() });
-        });
+        }, beforeUpdate);
+      const leaseAbort = new AbortController();
+      const executionSignal = AbortSignal.any([request.signal, leaseAbort.signal]);
+      const assertCurrentObservation = async (assertFence: () => Promise<void>) => {
+        executionSignal.throwIfAborted();
+        const currentApproval = await assertApproval(true);
+        if (currentApproval.approvalId !== approval.approvalId) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        await assertFence();
+        executionSignal.throwIfAborted();
+      };
       const withExecutionObservation = async (
         leased: Parameters<ProtectedHostedOperatorDependencies["withResourceLease"]>[0],
         run: (assertFence: () => Promise<void>) => Promise<Response>,
       ): Promise<Response> => {
+        let stopLeaseRenewal: (() => Promise<void>) | undefined;
         try {
           return await deps.withResourceLease(leased, async (assertFence) => {
+            // Renew throughout the acquired resource lease, including credential
+            // preparation before a worker exists. Observations never renew it.
+            let renewal: Promise<void> | undefined;
+            const renewalTimer = setInterval(() => {
+              if (renewal !== undefined || executionSignal.aborted) {
+                return;
+              }
+              renewal = (async () => {
+                try {
+                  await ownedUpdate(
+                    (record) => record,
+                    async () => {
+                      await assertCurrentObservation(assertFence);
+                    },
+                  );
+                } catch (error) {
+                  leaseAbort.abort(
+                    error instanceof HostedOperatorError
+                      ? error
+                      : new HostedOperatorError("operator_unavailable"),
+                  );
+                } finally {
+                  renewal = undefined;
+                }
+              })();
+            }, 20_000);
+            stopLeaseRenewal = async () => {
+              clearInterval(renewalTimer);
+              await renewal;
+            };
+            const runWithRenewal = async () => {
+              try {
+                const result = await run(assertFence);
+                executionSignal.throwIfAborted();
+                return result;
+              } finally {
+                await stopLeaseRenewal?.();
+              }
+            };
             if (!executionObservationRequested) {
               try {
-                return await run(assertFence);
+                const result = await runWithRenewal();
+                executionSignal.throwIfAborted();
+                return result;
               } catch (error) {
                 reportPrepareFailure(error);
                 throw error;
               }
             }
             try {
-              const executionResponse = await run(assertFence);
+              const executionResponse = await runWithRenewal();
+              executionSignal.throwIfAborted();
               await observePrepare("execution_settlement", async () => {
                 const result = operatorPublicResultSchema.parse(
                   await executionResponse.clone().json(),
@@ -1985,8 +2048,17 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
             }
           });
         } catch (error) {
+          leaseAbort.abort(
+            error instanceof HostedOperatorError
+              ? error
+              : new HostedOperatorError("operator_unavailable"),
+          );
           reportPrepareFailure(error);
           throw error;
+        } finally {
+          // The physical lease may reject before its callback has returned.
+          // Stop its timer and drain any renewal before journal lease release.
+          await stopLeaseRenewal?.();
         }
       };
       try {
@@ -1994,18 +2066,10 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           { ...context, operationRef, plan },
           async (assertFence) => {
             const assertCurrent = async () => {
-              request.signal.throwIfAborted();
+              executionSignal.throwIfAborted();
               await assertApproval();
               await assertFence();
-              await ownedUpdate((record) => record);
-            };
-            const assertCurrentObservation = async () => {
-              const currentApproval = await assertApproval(true);
-              if (currentApproval.approvalId !== approval.approvalId) {
-                throw new HostedOperatorError("authorization_required");
-              }
-              await assertFence();
-              await ownedUpdate((record) => record);
+              executionSignal.throwIfAborted();
             };
             let { record } = claimed;
             const checkpointAccountPreparation = async (
@@ -2197,12 +2261,14 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
               }
               const effectInput: HostedOperatorEffectContext = {
                 ...context,
-                signal: request.signal,
+                signal: executionSignal,
                 leaseId,
                 assertCurrent,
                 accountPreparation: record.accountPreparation,
                 checkpointAccountPreparation,
-                assertCurrentObservation,
+                assertCurrentObservation: async () => {
+                  await assertCurrentObservation(assertFence);
+                },
                 checkpoint: async (privateState) => {
                   await assertCurrent();
                   record = (await ownedUpdate((value) => ({ ...value, privateState }))).record;

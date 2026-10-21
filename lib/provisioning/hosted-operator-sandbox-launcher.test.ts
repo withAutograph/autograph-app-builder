@@ -1099,7 +1099,7 @@ describe("hosted protected installer Sandbox launcher", () => {
     expect(fixture.sandbox.delete).toHaveBeenCalledOnce();
   });
 
-  it("renews the durable operator lease while Sandbox creation is still pending", async () => {
+  it("leaves lease renewal to the owning service while Sandbox creation is pending", async () => {
     vi.useFakeTimers();
     const { promise: delayCreate, resolve: releaseSandbox } = Promise.withResolvers<undefined>();
     const fixture = makeFixture({ delayCreate });
@@ -1108,14 +1108,40 @@ describe("hosted protected installer Sandbox launcher", () => {
       await vi.waitFor(() => {
         expect(fixture.createSandbox).toHaveBeenCalledOnce();
       });
+      const authorizations = fixture.assertCurrent.mock.calls.length;
       await vi.advanceTimersByTimeAsync(41_000);
-      expect(fixture.assertCurrent.mock.calls.length).toBeGreaterThanOrEqual(3);
+      expect(fixture.assertCurrent).toHaveBeenCalledTimes(authorizations);
       releaseSandbox(undefined);
       await execution;
     } finally {
       releaseSandbox(undefined);
       vi.useRealTimers();
     }
+  });
+
+  it("uses fresh observation for inspection but full authorization for execution", async () => {
+    const inspect = makeFixture({
+      access: true,
+      fenceOnly: true,
+      generated: true,
+      readbackStatus: "applied",
+    });
+    const observe = vi.fn(async () => {});
+    await inspect.launcher.inspect({
+      ...inspect.input,
+      assertCurrentObservation: observe,
+      readbackOnly: true,
+    });
+    expect(observe).toHaveBeenCalled();
+    expect(inspect.assertCurrent).not.toHaveBeenCalled();
+    const execute = makeFixture();
+    const executingObservation = vi.fn(async () => {});
+    await execute.launcher.execute({
+      ...execute.input,
+      assertCurrentObservation: executingObservation,
+    });
+    expect(execute.assertCurrent).toHaveBeenCalled();
+    expect(executingObservation).not.toHaveBeenCalled();
   });
 });
 

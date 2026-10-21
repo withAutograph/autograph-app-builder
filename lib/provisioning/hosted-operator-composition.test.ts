@@ -993,7 +993,220 @@ const participantResolutionFixture = () => {
   return { ...f, ports, base, program, accountPlan, state, preparation, organizations };
 };
 
+const unusedCompositionControlPlane = (): Parameters<
+  typeof composeHostedOperatorDependencies
+>[1] => {
+  const unexpectedPort = (): never => {
+    throw new Error("Unexpected control-plane operation in signup guard fixture");
+  };
+  const store = {
+    reserve: unexpectedPort,
+    read: unexpectedPort,
+    compareAndSet: unexpectedPort,
+    reserveFenceGeneration: unexpectedPort,
+  };
+  return {
+    exportRequest: unexpectedPort,
+    continuityRequest: unexpectedPort,
+    readNormalActorRuntimeBindings: unexpectedPort,
+    ensureNormalActorCapture: unexpectedPort,
+    normalActorAuthIdentityInput: unexpectedPort,
+    prepareNormalActorAccounts: unexpectedPort,
+    verifyNormalActorAccounts: unexpectedPort,
+    prepareNormalActorMemberships: unexpectedPort,
+    verifyNormalActorMemberships: unexpectedPort,
+    reconcileNormalActorMemberships: unexpectedPort,
+    readNormalActorPreparation: unexpectedPort,
+    readNormalActorOrganizationProofs: unexpectedPort,
+    readApprovedPlan: unexpectedPort,
+    registerOwnerRealmIdentityWait: unexpectedPort,
+    acknowledgeOwnerRealmIdentityWait: unexpectedPort,
+    readRealmIdentityWaitDelivery: unexpectedPort,
+    resolveOwnerRealmContinuationContext: unexpectedPort,
+    reconcileOwnerRealmContinuation: unexpectedPort,
+    readRealmContinuationPendingBaseline: unexpectedPort,
+    isObsoleteRealmAuthWait: unexpectedPort,
+    readRealmContinuationDeliveryStartIndex: unexpectedPort,
+    readRealmContinuationDeliveryTargetRequestId: unexpectedPort,
+    acceptRealmContinuationDelivery: unexpectedPort,
+    readRealmContinuationDeliveryReceipt: unexpectedPort,
+    readRealmContinuationDeliveryClaim: unexpectedPort,
+    claimRealmContinuationDelivery: unexpectedPort,
+    normalActorJournalPorts: {
+      store,
+      get keyring() {
+        return unexpectedPort();
+      },
+      assertAuthorized: unexpectedPort,
+      assertAccountApproval: unexpectedPort,
+      assertMutationAuthority: unexpectedPort,
+      now: unexpectedPort,
+    },
+    assertAuthorized: unexpectedPort,
+    assertMembershipCapture: unexpectedPort,
+    assertCanonicalOwner: unexpectedPort,
+    assertPlanningAuthorized: unexpectedPort,
+    authorize: unexpectedPort,
+    checkpointSharedAuthAdoption: unexpectedPort,
+    close: unexpectedPort,
+    consumeOwnerRealmIdentityCallback: unexpectedPort,
+    prepareRealmIdentityLink: unexpectedPort,
+    prepareNormalActorCapture: unexpectedPort,
+    readPendingNormalActorCapture: unexpectedPort,
+    prepareResourceCredentials: unexpectedPort,
+    publishAuthPlan: unexpectedPort,
+    readActiveSharedAuth: unexpectedPort,
+    readApproval: unexpectedPort,
+    readAuthPlan: unexpectedPort,
+    readMembershipInspectionPlan: unexpectedPort,
+    readCapturedRealmIdentity: unexpectedPort,
+    readCapturedRealmIdentityProof: unexpectedPort,
+    readCredential: unexpectedPort,
+    readCurrentPlanningOwner: unexpectedPort,
+    readGeneratedRelease: unexpectedPort,
+    readGeneratedSelection: unexpectedPort,
+    readPendingRealmIdentityLinkForStaging: unexpectedPort,
+    readRealmIdentityLink: unexpectedPort,
+    readResourceBindings: unexpectedPort,
+    readRetirementResourceCredentials: unexpectedPort,
+    readSharedAuthAdoption: unexpectedPort,
+    readSharedGatewayRows: unexpectedPort,
+    reserveRealmIdentityLink: unexpectedPort,
+    resolveRealmIdentityCallbackContext: unexpectedPort,
+    store,
+    verifySharedAuthAdoption: unexpectedPort,
+    withResourceLease: unexpectedPort,
+  };
+};
+
 describe("participant plan resolution", () => {
+  it.each(["inspect", "execute"] as const)(
+    "keeps current authority and participant signup state checks on %s callbacks",
+    async (mode) => {
+      const f = participantResolutionFixture();
+      f.configuration.sandbox.membershipWorker = {
+        ...f.configuration.sandbox.authWorker,
+        id: "membership-fixture",
+        operationScope: "auth-protected-membership-v1",
+        subcommand: "auth-protected-membership",
+      };
+      f.state.organizations = f.state.organizations.map((organization) => ({
+        ...organization,
+        status: "complete",
+      }));
+      f.state.memberships = f.state.memberships.map((membership) => ({
+        ...membership,
+        status: "complete",
+      }));
+      const plan = await resolveFullPlan(
+        f.base,
+        context,
+        f.configuration,
+        f.ports,
+        {},
+        true,
+        true,
+        undefined,
+        {
+          version: 1,
+          appPath: "/dashboard",
+          appRoles: ["member"],
+          eligibility: "approved-email",
+          allowedEmails: ["owner@example.test"],
+          membershipRole: "member",
+          organizationId: "first-org",
+        },
+      );
+      const effect = plan.effects.find((candidate) => candidate.kind === "auth-signup-policy");
+      if (effect === undefined) {
+        throw new Error("Fixture signup policy effect missing");
+      }
+      const full = vi.fn<HostedOperatorEffectContext["assertCurrent"]>(() => Promise.resolve());
+      const observation = vi.fn<
+        NonNullable<HostedOperatorEffectContext["assertCurrentObservation"]>
+      >(() => Promise.resolve());
+      const input: HostedOperatorWorkerEffectContext = {
+        ...context,
+        plan,
+        effect,
+        operationRef: "11111111-1111-4111-8111-111111111111",
+        fenceGeneration: 1,
+        workerAttemptId: "22222222-2222-4222-8222-222222222222",
+        workerCheckpoints: [],
+        assertCurrent: full,
+        assertCurrentObservation: observation,
+        checkpoint: vi.fn<HostedOperatorWorkerEffectContext["checkpoint"]>(() => Promise.resolve()),
+        bindWorkerContext: vi
+          .fn<HostedOperatorWorkerEffectContext["bindWorkerContext"]>()
+          .mockResolvedValue(() => Promise.resolve()),
+      };
+      let worker: HostedOperatorEffectContext | undefined;
+      const stop = new Error("controlled execute transport stop");
+      type Launcher = ReturnType<typeof membershipLauncher.createHostedOperatorSandboxLauncher>;
+      vi.spyOn(membershipLauncher, "createHostedOperatorSandboxLauncher").mockReturnValue({
+        inspect: vi.fn<Launcher["inspect"]>((current) => {
+          worker = current;
+          const readback: Awaited<ReturnType<Launcher["inspect"]>> = {
+            version: 1,
+            operation_id: input.operationRef,
+            context_digest: "d".repeat(64),
+            fence_generation: 1,
+            status: "applied",
+            readback_sha256: "e".repeat(64),
+          };
+          return Promise.resolve(readback);
+        }),
+        execute: vi.fn<Launcher["execute"]>((current) => {
+          worker = current;
+          return Promise.reject(stop);
+        }),
+      });
+      vi.stubEnv(
+        "VERCEL_OIDC_TOKEN",
+        `fixture.${Buffer.from(JSON.stringify({ exp: 2_000_000_000 })).toString("base64url")}.fixture`,
+      );
+      const dependencies = composeHostedOperatorDependencies(f.configuration, {
+        ...unusedCompositionControlPlane(),
+        assertPlanningAuthorized: f.ports.assertPlanningAuthorized,
+        readNormalActorPreparation: f.ports.readNormalActorPreparation,
+        readNormalActorOrganizationProofs: f.ports.readNormalActorOrganizationProofs,
+        assertAuthorized: vi.fn(() => Promise.resolve()),
+        readResourceBindings: vi.fn(() =>
+          Promise.resolve({
+            authDatabase: { migrationUrl: "private-auth", runtimeUrl: "private-auth-runtime" },
+            appDatabase: { migrationUrl: "private-app", runtimeUrl: "private-app-runtime" },
+          }),
+        ),
+      });
+      await (mode === "inspect"
+        ? dependencies.reconcile(input)
+        : expect(dependencies.executeEffect(input)).rejects.toBe(stop));
+      if (worker === undefined) {
+        throw new Error("Fixture worker missing");
+      }
+      const guard = mode === "inspect" ? worker.assertCurrentObservation : worker.assertCurrent;
+      if (guard === undefined) {
+        throw new Error("Fixture worker observation guard missing");
+      }
+      const base = mode === "inspect" ? observation : full;
+      const unused = mode === "inspect" ? full : observation;
+      base.mockClear();
+      unused.mockClear();
+      await guard();
+      expect(base).toHaveBeenCalledTimes(2);
+      expect(unused).not.toHaveBeenCalled();
+      base
+        .mockImplementationOnce(() => Promise.resolve())
+        .mockRejectedValueOnce(new HostedOperatorError("authorization_required"));
+      await expect(guard()).rejects.toMatchObject({ code: "authorization_required" });
+      const organization = f.state.organizations[0];
+      if (organization === undefined) {
+        throw new Error("Fixture participant organization missing");
+      }
+      organization.status = "pending";
+      await expect(guard()).rejects.toMatchObject({ code: "reconciliation_required" });
+    },
+  );
   it("retains the accepted program during bootstrap and never starts the legacy singular identity path", async () => {
     const f = participantResolutionFixture();
     expect(await resolveFullPlan(f.base, context, f.configuration, f.ports)).toEqual(f.base);
@@ -3232,13 +3445,14 @@ describe("approved historical organization inspection", () => {
       fenceGeneration: 9,
       leaseId: "current-lease",
       workerCheckpoints: [],
+      assertCurrentObservation: vi.fn(async () => {}),
       assertCurrent: vi.fn(async () => {}),
       checkpoint: vi.fn(async () => {}),
     };
     const inspect = vi.fn<
       ReturnType<typeof membershipLauncher.createHostedOperatorSandboxLauncher>["inspect"]
     >(async (observed) => {
-      await observed.assertCurrent();
+      await (observed.assertCurrentObservation ?? observed.assertCurrent)();
       return {
         version: 1,
         operation_id: input.operationRef,

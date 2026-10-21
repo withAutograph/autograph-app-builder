@@ -41,9 +41,6 @@ const SPOOL_ROOT = "/vercel/sandbox/protected-installer";
 const INITIAL_SANDBOX_TIMEOUT_MS = 15 * 60_000;
 const EXTEND_SANDBOX_TIMEOUT_MS = 5 * 60_000;
 const SANDBOX_RENEWAL_INTERVAL_MS = 4 * 60_000;
-// The service lease is shorter than the Sandbox lifetime. Keep renewing it
-// while the fixed worker runs; the authority reply timeout is not a lease.
-const JOURNAL_LEASE_RENEWAL_INTERVAL_MS = 20_000;
 const AUTHORITY_REPLY_TIMEOUT_MS = 120_000;
 const HC_APP_ID = "hc";
 const VENDOR_APP_ID = "vendor";
@@ -922,6 +919,10 @@ const runSandboxWorker = async (
   input: SandboxWorkerInput,
   execution: LauncherExecution,
 ) => {
+  const assertCurrent =
+    input.readbackOnly === true
+      ? (input.assertCurrentObservation ?? input.assertCurrent)
+      : input.assertCurrent;
   const runId =
     input.readbackOnly === true ? randomUUID() : workerRunIdSchema.parse(input.workerAttemptId);
   const resources = input.effect.kind === "resources" || input.effect.kind === "retire";
@@ -1173,9 +1174,7 @@ const runSandboxWorker = async (
   let sandbox: OperatorSandbox | undefined;
   let command: Command | undefined;
   let timer: ReturnType<typeof setInterval> | undefined;
-  let journalTimer: ReturnType<typeof setInterval> | undefined;
   let renewal: Promise<void> | null = null;
-  let journalRenewal: Promise<void> | null = null;
   let started = false;
   let succeeded = false;
   let terminal = false;
@@ -1254,7 +1253,7 @@ const runSandboxWorker = async (
         ) {
           throw unknownSeen ? reconciliationRequired() : resourceMismatch();
         }
-        await input.assertCurrent();
+        await assertCurrent();
         terminal = true;
         succeeded = true;
         return;
@@ -1292,7 +1291,7 @@ const runSandboxWorker = async (
       ) {
         throw resourceMismatch();
       }
-      await input.assertCurrent();
+      await assertCurrent();
       await atomicReply(
         requireSandbox(),
         path.posix.join(SPOOL_ROOT, runId),
@@ -1331,7 +1330,7 @@ const runSandboxWorker = async (
       ) {
         throw unknownSeen ? reconciliationRequired() : resourceMismatch();
       }
-      await input.assertCurrent();
+      await assertCurrent();
       await atomicReply(
         requireSandbox(),
         path.posix.join(SPOOL_ROOT, runId),
@@ -1377,7 +1376,7 @@ const runSandboxWorker = async (
     ) {
       throw resourceMismatch();
     }
-    await input.assertCurrent();
+    await assertCurrent();
     const recordWorkerCheckpoint: RecordWorkerCheckpoint = recordCheckpoint;
     await recordWorkerCheckpoint(checkpointFrame(request));
     await atomicReply(
@@ -1435,21 +1434,7 @@ const runSandboxWorker = async (
 
   try {
     failOnAbort();
-    journalTimer = setInterval(() => {
-      if (journalRenewal !== null || signal.aborted) {
-        return;
-      }
-      journalRenewal = (async () => {
-        try {
-          await input.assertCurrent();
-        } catch {
-          leaseAbort.abort();
-        } finally {
-          journalRenewal = null;
-        }
-      })();
-    }, JOURNAL_LEASE_RENEWAL_INTERVAL_MS);
-    await input.assertCurrent();
+    await assertCurrent();
     const create = createSandbox;
     execution.stage = "sandbox_create";
     sandbox = await create({
@@ -1485,7 +1470,7 @@ const runSandboxWorker = async (
     execution.stage = "worker_pin";
     await verifyWorkerPin(sandbox, worker, signal);
     execution.stage = "spool_setup";
-    await input.assertCurrent();
+    await assertCurrent();
     const spool = path.posix.join(SPOOL_ROOT, runId);
     const startup = path.posix.join(spool, "startup");
     await sandbox.fs.mkdir(startup, { recursive: true, signal });
@@ -1691,7 +1676,7 @@ const runSandboxWorker = async (
     }
     execution.stage = "readback";
     if (input.readbackOnly === true && (access || installReadback || membership)) {
-      await input.assertCurrent();
+      await assertCurrent();
       const observed = accessReadbackSchema.parse(
         await readSpoolJson(sandbox, path.posix.join(spool, "readback.json"), signal),
       );
@@ -1702,11 +1687,11 @@ const runSandboxWorker = async (
       ) {
         throw resourceMismatch();
       }
-      await input.assertCurrent();
+      await assertCurrent();
       return observed;
     }
     if (input.readbackOnly === true && resources && "kind" in context) {
-      await input.assertCurrent();
+      await assertCurrent();
       const observed = resourceReadbackSchema.parse(
         await readSpoolJson(sandbox, path.posix.join(spool, "resource-observation.json"), signal),
       );
@@ -1719,7 +1704,7 @@ const runSandboxWorker = async (
       ) {
         throw resourceMismatch();
       }
-      await input.assertCurrent();
+      await assertCurrent();
       return observed;
     }
   } catch (error) {
@@ -1741,14 +1726,8 @@ const runSandboxWorker = async (
     if (timer !== undefined) {
       clearInterval(timer);
     }
-    if (journalTimer !== undefined) {
-      clearInterval(journalTimer);
-    }
     if (renewal !== null) {
       await Promise.resolve(renewal);
-    }
-    if (journalRenewal !== null) {
-      await Promise.resolve(journalRenewal);
     }
     if (command !== undefined && (!terminal || !succeeded || operationError !== null)) {
       try {
