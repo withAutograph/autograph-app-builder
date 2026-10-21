@@ -1387,10 +1387,10 @@ index 0000000..185e294
 +export declare function observeTerminalSession(input: TerminalRecoveryAuthorityInput & { readonly ports: Pick<TerminalRecoveryPorts, "authorize" | "readReceipt" | "observeCandidateFacts"> }, dependencies: TerminalRecoveryObservationDependencies): Promise<{ readonly kind: "accepted"; readonly sessionId: string }>;
 diff --git a/dist/src/execution/session/terminal-recovery.js b/dist/src/execution/session/terminal-recovery.js
 new file mode 100644
-index 0000000..24852a7
+index 0000000..0949701
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.js
-@@ -0,0 +1,295 @@
+@@ -0,0 +1,332 @@
 +import { createHash } from "node:crypto";
 +import { DEFAULT_SESSION_TIMEOUT_MS } from "#execution/session/timeout.js";
 +import { SESSION_CHECKPOINT_VERSION } from "#execution/session/handoff.js";
@@ -1521,29 +1521,66 @@ index 0000000..24852a7
 +
 +}
 +
++// A diagnostic is never an activation authority. Only fixed labels and data-only
++// primitive error facts may leave this boundary; never serialize an exception.
++function reportActivationFailure(stage, error) {
++  const summary = { event: "eve.terminal_recovery_activation_failed", stage, errorClass: "other" };
++  try {
++    const names = new Set(["WorkflowWorldError", "RunExpiredError", "HookNotFoundError", "RuntimeDecryptionError", "WorkflowRunNotFoundError", "HookForceClaimedError", "EntityConflictError", "SerializationError", "TypeError", "Error"]);
++    const codes = new Set(["TIMEOUT", "TRANSPORT", "PARSE_ERROR", "SCHEMA_VALIDATION", "run-expired", "stream-expired"]);
++    const seen = new Set();
++    let candidate = error;
++    for (let depth = 0; depth < 3; depth += 1) {
++      if (candidate === null || (typeof candidate !== "object" && typeof candidate !== "function") || seen.has(candidate)) break;
++      seen.add(candidate);
++      const name = Object.getOwnPropertyDescriptor(candidate, "name")?.value;
++      const code = Object.getOwnPropertyDescriptor(candidate, "code")?.value;
++      const status = Object.getOwnPropertyDescriptor(candidate, "status")?.value;
++      if (summary.errorClass === "other" && names.has(name)) summary.errorClass = name;
++      if (summary.code === undefined && codes.has(code)) summary.code = code;
++      if (summary.status === undefined && Number.isSafeInteger(status) && status >= 100 && status <= 599) summary.status = status;
++      candidate = Object.getOwnPropertyDescriptor(candidate, "cause")?.value;
++    }
++  } catch { /* Error projection is advisory, including hostile accessors/proxies. */ }
++  try { console.error(`[eve:terminal-recovery-activation] ${JSON.stringify(summary)}`); }
++  catch { /* A failed diagnostic sink must never replace the original exception. */ }
++}
++
 +/** Release only an already committed owner after the app proves its canonical public child. */
 +export async function activateTerminalSession(input, dependencies) {
 +  const { auth, descriptor, ports } = input;
 +  const call = { auth, descriptor };
 +  await ports.authorizeActivation(call);
-+  const receipt = await ports.readReceipt(call);
-+  if (!matchesDescriptor(receipt, descriptor)) throw new Error("Recovery activation receipt is unavailable.");
-+  const token = terminalRecoveryActivationToken(auth, descriptor);
-+  let hook;
-+  try { hook = await dependencies.getHook(token); }
-+  catch (error) { if (!dependencies.isHookNotFound(error)) throw error; }
-+  // A consumed/ended hook never authorizes creation of another physical owner.
-+  if (hook !== undefined) {
-+    const ready = (await hook.metadata)?.recoveryBinding;
-+    if (!matchesDescriptor(ready, descriptor) || ready.ownerRunId !== hook.runId || !sameReceipt(ready, receipt)) throw new Error("Recovery activation does not match the receipt.");
-+    await ports.authorizeActivation(call);
-+    try {
-+      await dependencies.resumeHook(token, { kind: "activate-terminal-recovery", operationId: descriptor.operationId, ownerRunId: receipt.ownerRunId });
-+    } catch (error) {
-+      if (!dependencies.isHookNotFound(error)) throw error;
++  let stage = "receipt_read";
++  try {
++    const receipt = await ports.readReceipt(call);
++    stage = "receipt_validate";
++    if (!matchesDescriptor(receipt, descriptor)) throw new Error("Recovery activation receipt is unavailable.");
++    const token = terminalRecoveryActivationToken(auth, descriptor);
++    let hook;
++    stage = "hook_lookup";
++    try { hook = await dependencies.getHook(token); }
++    catch (error) { if (!dependencies.isHookNotFound(error)) throw error; }
++    // A consumed/ended hook never authorizes creation of another physical owner.
++    if (hook !== undefined) {
++      stage = "hook_metadata";
++      const ready = (await hook.metadata)?.recoveryBinding;
++      stage = "hook_validate";
++      if (!matchesDescriptor(ready, descriptor) || ready.ownerRunId !== hook.runId || !sameReceipt(ready, receipt)) throw new Error("Recovery activation does not match the receipt.");
++      stage = "reauthorize";
++      await ports.authorizeActivation(call);
++      stage = "resume";
++      try {
++        await dependencies.resumeHook(token, { kind: "activate-terminal-recovery", operationId: descriptor.operationId, ownerRunId: receipt.ownerRunId });
++      } catch (error) {
++        if (!dependencies.isHookNotFound(error)) throw error;
++      }
 +    }
++    return { kind: "accepted", recoveryBinding: receipt };
++  } catch (error) {
++    reportActivationFailure(stage, error);
++    throw error;
 +  }
-+  return { kind: "accepted", recoveryBinding: receipt };
 +}
 +
 +// Diagnostic suppression only: hashes, completion flags and timestamps, never checkpoint bytes.
