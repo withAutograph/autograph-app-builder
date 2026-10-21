@@ -306,12 +306,13 @@ async function currentBuildSession(
   principal: HostedPrincipal,
   authoritySessionId: string,
   logicalSessionId: string,
+  lockRows = true,
 ) {
-  const authority = await sessionById(transaction, principal, authoritySessionId, true);
+  const authority = await sessionById(transaction, principal, authoritySessionId, lockRows);
   if (authority === null) {
     throw new Error(SESSION_NOT_FOUND);
   }
-  const rows = await transaction
+  const query = transaction
     .select()
     .from(agentSessions)
     .where(
@@ -320,21 +321,21 @@ async function currentBuildSession(
         sql`${agentSessions.record}->'nativeRecoveryBinding'->>'originalAuthoritySessionId' = ${authoritySessionId}`,
         sql`${agentSessions.record}->'nativeRecoveryBinding'->>'logicalSessionId' = ${logicalSessionId}`,
       ),
-    )
-    .for("update");
+    );
+  const rows = lockRows ? await query.for("update") : await query;
   const children = rows.map(parseHostedSessionRow);
   for (const child of children) {
     if (child.version !== 2 || child.nativeRecoveryBinding === undefined) {
       throw new Error(SESSION_NOT_FOUND);
     }
-    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Lock each receipt and source in this transaction before accepting a child.
-    const source = await sessionById(transaction, principal, child.parentSessionId ?? "", true);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- This follows the locked source for the same child.
+    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Read each child's source in this transaction; mutation callers retain its row lock.
+    const source = await sessionById(transaction, principal, child.parentSessionId ?? "", lockRows);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Read the receipt after its source; mutation callers retain both locks.
     const operation = await operationById(
       transaction,
       principal,
       child.nativeRecoveryBinding.operationId,
-      true,
+      lockRows,
     );
     assertRecoveredBuildContinuationChild(
       authoritySessionId,
@@ -537,7 +538,10 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
             principal,
             input.authoritySessionId,
             input.logicalSessionId,
+            false,
           ),
+        // Observation needs one coherent source/child/receipt snapshot, without write authority.
+        { isolationLevel: "repeatable read", accessMode: "read only" },
       );
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
