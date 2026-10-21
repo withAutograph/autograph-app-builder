@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
+import { materializeFreshApplyOverlay } from "./target-apply";
 import type { SandboxSession } from "eve/sandbox";
 
 import {
@@ -78,10 +80,10 @@ describe("planning from the current checkout", () => {
     });
     expect(written.join("")).toBe(content);
     expect(written.length).toBeGreaterThan(20);
-    expect(sandbox.writeTextFile).toHaveBeenCalledTimes(1);
+    expect(sandbox.writeTextFile).not.toHaveBeenCalled();
   });
   it.each(["inventory-queue", "travel-approvals"])(
-    "uses the planning mise profile for target identity commands for %s",
+    "runs target identity on the live checkout with scoped setup controls for %s",
     async (appId) => {
       // oxlint-disable-next-line eslint/require-await -- model the sandbox's async command API
       const run = vi.fn(async () => ({ exitCode: 0, stderr: "", stdout: "{}" }));
@@ -96,9 +98,13 @@ describe("planning from the current checkout", () => {
 
       expect(run).toHaveBeenCalledWith(
         expect.objectContaining({
-          command: `mise run repository:exec -- app-identity.ts --app ${appId}`,
-          env: { MISE_ENV: "app-builder" },
-          workingDirectory: "/workspace/planning",
+          command: `mise run --no-deps repository:exec -- app-identity.ts --app ${appId}`,
+          env: {
+            MISE_EXEC_AUTO_INSTALL: "false",
+            MISE_NOT_FOUND_AUTO_INSTALL: "false",
+            MISE_TASK_RUN_AUTO_INSTALL: "false",
+          },
+          workingDirectory: "/workspace/repository",
         }),
       );
     },
@@ -354,7 +360,7 @@ describe("planning from the current checkout", () => {
     });
   });
   it.each([null, "invalid old inventory"])(
-    "copies current files without requiring an inspection manifest (%s)",
+    "retains only accepted scratch input without requiring a source inventory (%s)",
     async (manifest) => {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const run = vi.fn(async () => ({ exitCode: 0, stderr: "", stdout: "" }));
@@ -379,63 +385,152 @@ describe("planning from the current checkout", () => {
       });
 
       expect(readTextFile).not.toHaveBeenCalled();
-      expect(run).toHaveBeenCalledWith(
-        expect.objectContaining({
-          command: expect.stringContaining("cp -R /workspace/repository/."),
-        }),
+      expect(result.planningRoot).toBe(
+        `/workspace/.app-builder/target-inputs/${"a".repeat(64)}/repository`,
       );
-      expect(result.planningRoot).toContain("/workspace/");
-      expect(writeTextFile).toHaveBeenCalledWith(
-        expect.objectContaining({ content: "Stock Exceptions product design" }),
-      );
+      expect(writeTextFile).toHaveBeenCalledWith({
+        content: "Stock Exceptions product design",
+        path: `.app-builder/target-inputs/${"a".repeat(64)}/repository/prototype/stock-exceptions/app-spec.md`,
+      });
     },
   );
 
-  it("reports an actual checkout copy failure", async () => {
+  it("observes ordinary source edits and new files while retaining accepted input outside source", async () => {
+    const revision = "a".repeat(64);
+    const scratchRoot = `/workspace/.app-builder/target-inputs/${revision}/repository`;
+    const sourceRoot = "/workspace/repository";
+    const identityFile = `${sourceRoot}/repository-identity.txt`;
+    const spec = "Accepted product requirements";
+    const specDigest = createHash("sha256").update(spec).digest("hex");
+    const files = new Map([[identityFile, "Initial title"]]);
+    const identityResult = await fixtureTargetCommandExecutor()({
+      appId: "example",
+      appSpecDigest: specDigest,
+      command: "identity",
+      planningRoot: scratchRoot,
+    });
+    const identity = targetIdentitySchema.parse(JSON.parse(identityResult.stdout));
+    const run = vi.fn<SandboxSession["run"]>((input) => {
+      const result = { exitCode: 0, stderr: "", stdout: "" };
+      if (input.command.startsWith("mkdir ")) {
+        return Promise.resolve(result);
+      }
+      if (input.command.includes("app-identity.ts")) {
+        const title = files.get(`${input.workingDirectory}/repository-identity.txt`);
+        if (title === undefined) {
+          throw new Error("Identity did not read the live source");
+        }
+        return Promise.resolve({ ...result, stdout: JSON.stringify({ ...identity, title }) });
+      }
+      if (input.command.startsWith("test -d ")) {
+        return Promise.resolve({ ...result, exitCode: 1 });
+      }
+      if (input.command.startsWith("test -f ")) {
+        const path = `${input.workingDirectory}/${input.command.slice("test -f ".length)}`;
+        return Promise.resolve({ ...result, exitCode: files.has(path) ? 0 : 1 });
+      }
+      throw new Error("Unexpected planning filesystem mutation or command");
+    });
     const sandbox = {
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      removePath: vi.fn(async () => {}),
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      run: vi.fn(async ({ command }: { command: string }) => ({
-        exitCode: command.startsWith("cp ") ? 1 : 0,
-        stderr: command.startsWith("cp ") ? "cp: cannot stat /workspace/repository" : "",
-        stdout: "",
-      })),
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      writeTextFile: vi.fn(async () => {}),
+      run,
+      removePath: ({ path }: { path: string }) => {
+        for (const file of files.keys()) {
+          if (file.startsWith(`/workspace/${path}/`)) {
+            files.delete(file);
+          }
+        }
+        return Promise.resolve();
+      },
+      writeTextFile: ({ path, content }: { path: string; content: string }) => {
+        files.set(`/workspace/${path}`, content);
+        return Promise.resolve();
+      },
+      readBinaryFile: ({ path }: { path: string }) => {
+        const content = files.get(`/workspace/${path}`);
+        return Promise.resolve(content === undefined ? null : Buffer.from(content));
+      },
     } as unknown as SandboxSession;
-
-    await expect(
-      materializePlanningOverlay({
-        appId: "stock-exceptions",
-        appSpecContent: "Stock Exceptions product design",
-        appSpecDigest: "b".repeat(64),
-        artifactRevision: "a".repeat(64),
+    const plan = () =>
+      executeTargetIdentityAndPlanning({
+        appId: "example",
+        appSpecContent: spec,
+        appSpecDigest: specDigest,
+        artifactRevision: revision,
+        executor: sandboxTargetCommandExecutor(sandbox),
         sandbox,
-      }),
-    ).rejects.toThrow(/source copy.*exit 1.*Check that.*cannot stat/u);
+      });
+    const first = await plan();
+    expect(first.identity.title).toBe("Initial title");
+    expect(first.proposal).toMatchObject({ plan: { source: { schema: { kind: "none" } } } });
+    files.set(identityFile, "Updated title");
+    files.set(`${sourceRoot}/${identity.cueSourcePath}`, "new schema input");
+    const updated = await plan();
+    expect(updated.identity.title).toBe("Updated title");
+    expect(updated.proposal).toMatchObject({ plan: { source: { schema: { kind: "kernel" } } } });
+    expect(updated.planningRoot).toBe(scratchRoot);
+    expect(files.get(`${scratchRoot}/${updated.proposal.contract.appSpec.path}`)).toBe(
+      "Accepted product requirements",
+    );
+    expect(files.has(`${sourceRoot}/${updated.proposal.contract.appSpec.path}`)).toBe(false);
+    expect(files.get(identityFile)).toBe("Updated title");
+    const apply = await materializeFreshApplyOverlay({
+      sandbox,
+      artifactRevision: revision,
+      proposalDigest: "c".repeat(64),
+      proposal: updated.proposal,
+    });
+    expect(Buffer.from(apply.acceptedAppSpec).toString("utf-8")).toBe(spec);
+    expect(apply.applyRoot).toBe(sourceRoot);
   });
 
-  it("names a sandbox rejection while copying the current checkout", async () => {
-    const sandbox = {
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      removePath: vi.fn(async () => {}),
-      run: vi
-        .fn()
-        .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" })
-        .mockRejectedValueOnce(new Error("sandbox command timed out")),
-    } as unknown as SandboxSession;
+  it("preserves an actual repository identity failure", async () => {
+    const failure = { exitCode: 128, stderr: "Git could not read this checkout", stdout: "" };
+    const run = vi.fn<SandboxSession["run"]>().mockResolvedValue(failure);
+    const sandbox = { run } as unknown as SandboxSession;
     await expect(
-      materializePlanningOverlay({
+      sandboxTargetCommandExecutor(sandbox)({
         appId: "stock-exceptions",
-        appSpecContent: "Stock Exceptions product design",
         appSpecDigest: "b".repeat(64),
-        artifactRevision: "a".repeat(64),
-        sandbox,
+        command: "identity",
+        planningRoot: "/workspace/private-planning-input",
       }),
-    ).rejects.toThrow(
-      /source copy into the planning overlay could not run.*sandbox command timed out/u,
-    );
+    ).resolves.toBe(failure);
+  });
+
+  it("preserves an actual sandbox rejection while inspecting identity", async () => {
+    const failure = new Error("sandbox command timed out");
+    const run = vi.fn<SandboxSession["run"]>().mockRejectedValue(failure);
+    const sandbox = { run } as unknown as SandboxSession;
+    await expect(
+      sandboxTargetCommandExecutor(sandbox)({
+        appId: "stock-exceptions",
+        appSpecDigest: "b".repeat(64),
+        command: "identity",
+        planningRoot: "/workspace/private-planning-input",
+      }),
+    ).rejects.toBe(failure);
+  });
+
+  it("repairs missing identity dependencies in the live checkout and retries the command", async () => {
+    const run = vi
+      .fn<SandboxSession["run"]>()
+      .mockResolvedValueOnce({ exitCode: 1, stderr: "Cannot find module dependency", stdout: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "installed" })
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "identity" });
+    const setNetworkPolicy = vi.fn(() => Promise.resolve());
+    const sandbox = { run, setNetworkPolicy } as unknown as SandboxSession;
+    const result = await sandboxTargetCommandExecutor(sandbox)({
+      appId: "stock-exceptions",
+      appSpecDigest: "b".repeat(64),
+      command: "identity",
+      planningRoot: "/workspace/private-planning-input",
+    });
+    expect(result.stdout).toBe("identity");
+    expect(setNetworkPolicy).toHaveBeenCalledWith("allow-all");
+    expect(run).toHaveBeenCalledWith({
+      command: "bun install --ignore-scripts --filter @autograph/platform-microfrontends",
+      workingDirectory: "/workspace/repository",
+    });
   });
 
   it("includes mkdir stderr when preparing the planning workspace fails", async () => {

@@ -168,15 +168,6 @@ export type TargetIterationChange = z.infer<typeof iterationChangeSchema>;
 export const targetContractDigest = (contract: TargetProposal["contract"]): string =>
   sha256(JSON.stringify(contract));
 
-export const TARGET_PLANNING_MISE_PROFILE = `[settings]
-exec_auto_install = false
-not_found_auto_install = false
-task.run_auto_install = false
-
-[deps]
-disable = ["bun"]
-`;
-
 export type TargetCommand = "identity";
 export interface TargetCommandResult {
   exitCode: number;
@@ -300,36 +291,10 @@ export const materializePlanningOverlay = async (input: {
 }) => {
   planningMarker("planning-overlay", "start");
   const root = planningOverlayRoot(input.artifactRevision);
-  // The overlay is builder-owned scratch state. Recreate it from the current
-  // checkout, including files generated since cloning. An inspection manifest
-  // is optional diagnostic data, not a prerequisite for repository commands.
+  // Retain accepted planning input outside the live checkout. Identity and
+  // source inspection use current repository bytes without copying its tree.
   await input.sandbox.removePath({ force: true, path: root, recursive: true });
   await ensureSandboxDirectories(input.sandbox, [root, `${root}/prototype/${input.appId}`]);
-  // Copy the current writable checkout in one operation. Let the filesystem
-  // report a real missing-checkout or copy failure instead of predicting one
-  // from a stale or absent inventory.
-  let copy: Awaited<ReturnType<SandboxSession["run"]>>;
-  try {
-    copy = await input.sandbox.run({
-      command: `cp -R /workspace/repository/. /workspace/${root}/`,
-      workingDirectory: "/workspace",
-    });
-  } catch (error) {
-    throw new Error(
-      `The source copy into the planning overlay could not run. Check sandbox availability and /workspace/repository, then retry. Cause: ${planningFailureDetail(error instanceof Error ? error.message : String(error)) || "The sandbox provider returned no diagnostic output."}`,
-      { cause: error },
-    );
-  }
-  if (copy.exitCode !== 0) {
-    await input.sandbox.removePath({
-      force: true,
-      path: root,
-      recursive: true,
-    });
-    throw new Error(
-      `Prepared source copy into the planning overlay failed with exit ${copy.exitCode}. Check that /workspace/repository exists and is readable and that the sandbox has enough space, then retry. Cause: ${planningFailureDetail(copy.stderr || copy.stdout) || "The copy command returned no diagnostic output."}`,
-    );
-  }
   const appSpecPath = `prototype/${input.appId}/app-spec.md`;
   if (input.appSpecStream === undefined) {
     if (input.appSpecContent === undefined) {
@@ -350,10 +315,6 @@ export const materializePlanningOverlay = async (input: {
     appSpec: { path: appSpecPath, sha256: input.appSpecDigest },
     version: 1,
   } as const;
-  await input.sandbox.writeTextFile({
-    content: TARGET_PLANNING_MISE_PROFILE,
-    path: `${root}/.config/mise/config.app-builder.toml`,
-  });
   const result = {
     contractDigest: targetContractDigest(contract),
     planningRoot: `/workspace/${root}`,
@@ -364,11 +325,16 @@ export const materializePlanningOverlay = async (input: {
 
 export const sandboxTargetCommandExecutor =
   (sandbox: SandboxSession): TargetCommandExecutor =>
-  async ({ appId: requestedAppId, planningRoot }) => {
+  async ({ appId: requestedAppId }) => {
+    // planningRoot retains accepted input; repository commands read live source.
     const request = {
-      command: `mise run repository:exec -- app-identity.ts --app ${requestedAppId}`,
-      env: { MISE_ENV: "app-builder" },
-      workingDirectory: planningRoot,
+      command: `mise run --no-deps repository:exec -- app-identity.ts --app ${requestedAppId}`,
+      env: {
+        MISE_EXEC_AUTO_INSTALL: "false",
+        MISE_NOT_FOUND_AUTO_INSTALL: "false",
+        MISE_TASK_RUN_AUTO_INSTALL: "false",
+      },
+      workingDirectory: "/workspace/repository",
     };
     const result = await sandbox.run(request);
     if (
@@ -383,7 +349,7 @@ export const sandboxTargetCommandExecutor =
     await setBuilderSandboxNetworkPolicy(sandbox, "allow-all");
     const setup = await sandbox.run({
       command: "bun install --ignore-scripts --filter @autograph/platform-microfrontends",
-      workingDirectory: planningRoot,
+      workingDirectory: "/workspace/repository",
     });
     if (setup.exitCode !== 0) {
       return setup;
@@ -571,7 +537,7 @@ export const executeTargetIdentityAndPlanning = async (input: {
   await input.onIdentity?.(identity);
   const cue = await input.sandbox.run({
     command: `test -f ${identity.cueSourcePath}`,
-    workingDirectory: overlay.planningRoot,
+    workingDirectory: "/workspace/repository",
   });
   const proposal = creationPlan(identity, input.appSpecDigest, cue.exitCode === 0);
   const result = { identity, proposal, ...overlay };

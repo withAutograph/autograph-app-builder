@@ -3081,15 +3081,42 @@ const observationFixture = () => {
     const approval = await readApproval(input);
     return approval === null ? null : { ...approval, approvalId };
   };
-  f.deps.withResourceLease = async (input, run) =>
-    await withResourceLease(
+  const readLeaseFence = async (
+    input: Parameters<ProtectedHostedOperatorDependencies["withResourceLease"]>[0],
+  ) => {
+    const row = await f.deps.store.read(input);
+    const record = row?.record;
+    const operator = record?.operator;
+    const hasLiveLease =
+      record?.leaseId !== undefined &&
+      record.leaseExpiresAt !== undefined &&
+      Date.parse(record.leaseExpiresAt) > currentTime;
+    const hasCurrentFence =
+      operator?.operationRef === input.operationRef && operator.fenceGeneration !== undefined;
+    const hasCurrentPlan = operator?.planDigest === operatorPlanDigest(input.plan);
+    if (!hasLiveLease || !hasCurrentFence || !hasCurrentPlan) {
+      throw new HostedOperatorError("operation_in_progress");
+    }
+    return { leaseId: record.leaseId, fenceGeneration: operator.fenceGeneration };
+  };
+  f.deps.withResourceLease = async (input, run) => {
+    const initialFence = await readLeaseFence(input);
+    return await withResourceLease(
       input,
       async (assertFence) =>
         await run(async () => {
           physicalFenceReads += 1;
+          const currentFence = await readLeaseFence(input);
+          if (
+            currentFence.leaseId !== initialFence.leaseId ||
+            currentFence.fenceGeneration !== initialFence.fenceGeneration
+          ) {
+            throw new HostedOperatorError("operation_in_progress");
+          }
           await assertFence();
         }),
     );
+  };
   const handler = createProtectedHostedOperatorHandler(f.deps);
   const client = createHostedOperatorClient({
     endpoint: "https://operator.example",
@@ -3127,6 +3154,7 @@ describe("private observation within the approved operator effect", () => {
     f.deps.executeEffect = async (input) => {
       const before = f.counters();
       const revision = f.base.row?.revision;
+      const leaseExpiresAt = f.base.row?.record.leaseExpiresAt;
       if (input.assertCurrentObservation === undefined) {
         throw new Error("Missing observation guard");
       }
@@ -3136,7 +3164,8 @@ describe("private observation within the approved operator effect", () => {
       expect(after.canonicalOwnerReads).toBe(before.canonicalOwnerReads + 1);
       expect(after.durableApprovalReads).toBe(before.durableApprovalReads + 1);
       expect(after.physicalFenceReads).toBe(before.physicalFenceReads + 1);
-      expect(f.base.row?.revision).toBeGreaterThan(revision ?? 0);
+      expect(f.base.row?.revision).toBe(revision);
+      expect(f.base.row?.record.leaseExpiresAt).toBe(leaseExpiresAt);
       observations += 1;
       return await original(input);
     };
