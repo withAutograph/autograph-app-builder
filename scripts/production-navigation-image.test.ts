@@ -262,15 +262,20 @@ describe("production navigation pinned image preparation", () => {
   });
 
   it.each([
-    ["authorization_failed", "unauthorized: private-sensitive-credential"],
-    ["manifest_unavailable", "manifest unknown: private-sensitive-reference"],
-    ["daemon_unavailable", "Cannot connect to the Docker daemon at private-sensitive-endpoint"],
-    ["transport_failed", "Get https://private-sensitive-endpoint: no such host"],
+    ["registry_rate_limited", "registry HTTP status 429"],
+    ["authorization_failed", "pull access denied token=fixture-secret"],
+    ["manifest_unavailable", "manifest unknown token=fixture-secret"],
+    ["registry_client_error", "HTTP status 403 token=fixture-secret"],
+    ["registry_server_error", "HTTP status 503 token=fixture-secret"],
+    ["daemon_unavailable", "Docker daemon unavailable token=fixture-secret"],
+    ["transport_failed", "no such host token=fixture-secret"],
     ["storage_exhausted", "no space left on device"],
     ["platform_mismatch", "no matching manifest for linux/amd64"],
-    ["unrecognized_diagnostic", "private-sensitive-command-failure"],
+    ["docker_configuration_invalid", "error parsing config file"],
+    ["invalid_reference", "invalid reference format"],
+    ["unrecognized_diagnostic", "Docker pull failure token=fixture-secret"],
   ])(
-    "reports a bounded, secret-free pinned-image pull failure: %s",
+    "reports an allowlisted, secret-free pinned-image pull reason: %s",
     async (reason, stderr) => {
       const f = fixture();
       f.runCommand
@@ -278,7 +283,8 @@ describe("production navigation pinned image preparation", () => {
         .mockResolvedValueOnce({ exitCode: 1, stderr });
       const failure = ensureProductionNavigationImage(f.input);
       await expect(failure).rejects.toThrow(`(${reason}; exit 1)`);
-      await expect(failure).rejects.not.toThrow("private-sensitive");
+      await expect(failure).rejects.not.toThrow("fixture-secret");
+      await expect(failure).rejects.not.toThrow("token=");
       expect(f.wait).not.toHaveBeenCalled();
       expect(f.runCommand).toHaveBeenCalledTimes(2);
     },

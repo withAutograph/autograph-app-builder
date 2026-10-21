@@ -67,39 +67,32 @@ const inspectFailureReason = (stderr: string) => {
   return reasons.find(({ pattern }) => pattern.test(stderr))?.reason ?? "unrecognized_diagnostic";
 };
 
-const safeDockerDiagnostic = (stderr: string) =>
-  stderr
-    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/gu, "")
-    .replace(/\b(Bearer|Basic)\s+\S+/giu, "$1 [redacted]")
-    .replace(
-      /\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})\b/giu,
-      "[redacted token]",
-    )
-    .replace(
-      /\b(password|token|secret|credential|authorization|api[_-]?key)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/giu,
-      "$1$2[redacted]",
-    )
-    .replace(/(https?:\/\/)[^/@\s:]+:[^/@\s]+@/giu, "$1[redacted]@")
-    .replace(/([?&](?:token|password|secret|key|auth)=)[^&\s]+/giu, "$1[redacted]")
-    .replace(/[\u0000-\u001f\u007f]/gu, " ")
-    .replace(/\s+/gu, " ")
-    .trim()
-    .slice(0, 320);
-
 const pullFailureReason = (stderr: string) => {
   const reasons = [
     {
+      reason: "registry_rate_limited",
+      pattern: /\btoomanyrequests\b|\bHTTP(?:\/\d(?:\.\d)?)?\s+(?:status\s+)?429\b|\b429\s+Too Many Requests\b|\bstatus code\s*:?\s*429\b/iu,
+    },
+    {
       reason: "authorization_failed",
-      pattern: /unauthorized|authentication required|permission denied|forbidden/iu,
+      pattern: /unauthorized|authentication required|permission denied|forbidden|pull access denied|no basic auth credentials|failed to authorize/iu,
     },
     {
       reason: "manifest_unavailable",
       pattern: /manifest unknown|name unknown|repository does not exist|not found/iu,
     },
     {
+      reason: "registry_client_error",
+      pattern: /\b(?:HTTP(?:\/\d(?:\.\d)?)?\s+(?:status\s+)?|status code\s*:?\s*|unexpected status code\s*)(?:4\d\d)\b/iu,
+    },
+    {
+      reason: "registry_server_error",
+      pattern: /\b(?:HTTP(?:\/\d(?:\.\d)?)?\s+(?:status\s+)?|status code\s*:?\s*|unexpected status code\s*)(?:5\d\d)\b/iu,
+    },
+    {
       reason: "daemon_unavailable",
       pattern:
-        /cannot connect to the docker daemon|is the docker daemon running|connection refused|error during connect/iu,
+        /cannot connect to the docker daemon|cannot connect to docker daemon|docker daemon unavailable|is the docker daemon running|connection refused|error during connect/iu,
     },
     {
       reason: "transport_failed",
@@ -108,6 +101,11 @@ const pullFailureReason = (stderr: string) => {
     },
     { reason: "storage_exhausted", pattern: /no space left on device/iu },
     { reason: "platform_mismatch", pattern: /no matching manifest for/iu },
+    {
+      reason: "docker_configuration_invalid",
+      pattern: /error parsing config file|credential helper.*not found|credentials store.*not found/iu,
+    },
+    { reason: "invalid_reference", pattern: /invalid reference format|invalid image reference/iu },
   ];
   return reasons.find(({ pattern }) => pattern.test(stderr))?.reason ?? "unrecognized_diagnostic";
 };
@@ -166,9 +164,8 @@ export const ensureProductionNavigationImage = async (
       return image;
     }
     if (!registryThrottled(pulled)) {
-      const detail = safeDockerDiagnostic(pulled.stderr);
       throw new Error(
-        `Production navigation could not pull the pinned PostgreSQL image (${pullFailureReason(pulled.stderr)}; exit ${pulled.exitCode}; stderr: ${detail || "empty"}).`,
+        `Production navigation could not pull the pinned PostgreSQL image (${pullFailureReason(pulled.stderr)}; exit ${pulled.exitCode}).`,
       );
     }
     if (image === PRODUCTION_NAVIGATION_POSTGRES_IMAGE) {
