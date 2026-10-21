@@ -30,6 +30,13 @@ interface CapturedValidationLog {
 
 const mocks = vi.hoisted(() => ({
   attempt: vi.fn(),
+  logStore: {
+    getChunk: vi.fn(),
+    getReference: vi.fn(),
+    publish: vi.fn(),
+    putChunk: vi.fn(),
+    removeStaged: vi.fn(),
+  },
   browser: vi.fn(),
   clear: vi.fn(),
   describe: vi.fn(),
@@ -57,6 +64,11 @@ vi.mock("./prepared-runtime-execution", () => ({ resolvePreparedRuntimeExecution
 vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
 vi.mock("./workflow-state", () => ({
   APP_BUILDER_WORKFLOW_VERSION: 1,
+  assertExactWorkflowState: (latest: unknown, expected: unknown) => {
+    if (JSON.stringify(latest) !== JSON.stringify(expected)) {
+      throw new Error("Workflow changed concurrently");
+    }
+  },
   appBuilderWorkflowState: {
     get: () => mocks.state.current,
     update: mocks.state.update,
@@ -75,7 +87,7 @@ vi.mock("../repository/target-validation", () => ({
 vi.mock("../testing/test-capability", () => ({ hasTestCapability: () => false }));
 vi.mock("@/lib/mcp/hosted-route", () => ({ openHostedPostgresDatabase: vi.fn(() => ({})) }));
 vi.mock("@/lib/repository/postgres-validation-log-store", () => ({
-  createPostgresValidationLogStore: vi.fn(() => ({})),
+  createPostgresValidationLogStore: vi.fn(() => mocks.logStore),
 }));
 
 const workflow = (phase: "validated" | "reviewed") => ({
@@ -688,4 +700,120 @@ describe("behavior evidence invalidation during validation repair", () => {
       expect(result).toMatchObject({ reused: false, status: "validated" });
     },
   );
+  const missingDependencyFailure = {
+    attemptDigest: "saved-attempt",
+    commandFailure: { exitCode: 1, name: "check-build" },
+    commands: [],
+    digest: "saved-failure",
+    output: {
+      stderr: 'Cannot find package "@workspace/next-config"',
+      stdout: "",
+      truncated: false,
+    },
+    reason: "command-failed",
+    status: "failed",
+  };
+  const dependencySandbox = (exitCode = 0) => ({
+    id: "retained-sandbox",
+    setNetworkPolicy: vi.fn().mockResolvedValue(null),
+    spawn: vi.fn().mockResolvedValue({
+      kill: vi.fn().mockResolvedValue(null),
+      stderr: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.close();
+        },
+      }),
+      stdout: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.close();
+        },
+      }),
+      wait: vi.fn().mockResolvedValue({ exitCode }),
+    }),
+  });
+
+  it.each(["validated", "validation_failed", "local-data-failed"])(
+    "repairs the saved dependency failure before local setup and preserves its provenance through %s",
+    async (outcome) => {
+      mocks.state.current = {
+        ...workflow("validated"),
+        phase: "validation_failed",
+        validationFailure: missingDependencyFailure,
+      };
+      const sandbox = dependencySandbox();
+      if (outcome === "validation_failed") {
+        mocks.execute.mockResolvedValueOnce({
+          ok: false,
+          receipt: {
+            ...missingDependencyFailure,
+            digest: "new-failure",
+            attemptDigest: "new-attempt",
+          },
+        });
+      }
+      if (outcome === "local-data-failed") {
+        mocks.prepare.mockRejectedValueOnce(new Error("local setup failed"));
+      }
+      const result = await validateAppCreation.execute({ implementationFiles: [] }, {
+        callId: "repair_dependencies",
+        getSandbox: () => Promise.resolve(sandbox),
+        session: { auth: {}, id: "session" },
+      } as never);
+      expect(sandbox.setNetworkPolicy).toHaveBeenCalledExactlyOnceWith("allow-all");
+      expect(sandbox.setNetworkPolicy).toHaveBeenCalledBefore(sandbox.spawn);
+      expect(sandbox.spawn).toHaveBeenCalledExactlyOnceWith({
+        command: "bun install",
+        workingDirectory: "/workspace/repository",
+      });
+      expect(sandbox.spawn).toHaveBeenCalledBefore(mocks.prepare);
+      expect(mocks.prepare).toHaveBeenCalledOnce();
+      expect(mocks.execute).toHaveBeenCalledTimes(outcome === "local-data-failed" ? 0 : 1);
+      expect(mocks.state.current.checkoutDependencyAttempts).toEqual([
+        expect.objectContaining({
+          completion: "complete",
+          exitCode: 0,
+          recoveryOfValidationFailure: missingDependencyFailure,
+        }),
+      ]);
+      expect(result).toMatchObject({
+        status: outcome === "validated" ? "validated" : "needs_repair",
+      });
+    },
+  );
+
+  it("retains the original validation failure after install failure and repairs on the next ordinary invocation", async () => {
+    mocks.state.current = {
+      ...workflow("validated"),
+      phase: "validation_failed",
+      validationFailure: missingDependencyFailure,
+    };
+    const failed = dependencySandbox(1);
+    const context = (sandbox: ReturnType<typeof dependencySandbox>) =>
+      ({
+        callId: "retry_dependencies",
+        getSandbox: () => Promise.resolve(sandbox),
+        session: { auth: {}, id: "session" },
+      }) as never;
+    const result = await validateAppCreation.execute({ implementationFiles: [] }, context(failed));
+    expect(result).toMatchObject({ reason: "dependency-recovery", status: "needs_repair" });
+    expect(mocks.state.current.validationFailure).toBe(missingDependencyFailure);
+    expect(mocks.prepare).not.toHaveBeenCalled();
+    expect(mocks.execute).not.toHaveBeenCalled();
+    const restored = dependencySandbox();
+    await validateAppCreation.execute({ implementationFiles: [] }, context(restored));
+    expect(restored.spawn).toHaveBeenCalledOnce();
+    expect(mocks.execute).toHaveBeenCalledOnce();
+    expect(mocks.state.current.checkoutDependencyAttempts).toEqual([
+      expect.objectContaining({
+        completion: "complete",
+        exitCode: 1,
+        recoveryOfValidationFailure: missingDependencyFailure,
+      }),
+      expect.objectContaining({
+        completion: "complete",
+        exitCode: 0,
+        recoveryOfValidationFailure: missingDependencyFailure,
+      }),
+    ]);
+  });
 });

@@ -1,6 +1,9 @@
 import { validationLogsWithReadInputs } from "@/lib/agent/validation-log-read-input";
 import { publishCompiledOperatorArtifactsForSession } from "@/lib/agent/compiled-operator-artifacts";
-import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
+import {
+  getBuilderSandboxId,
+  setBuilderSandboxNetworkPolicy,
+} from "../../lib/sandbox/builder-sandbox";
 import { describeSelectedApp } from "@/lib/repository/app-description";
 import { runAppBrowserTests } from "./run-app-browser-tests";
 import { unavailableSourceAssessment } from "@/lib/agent/product-source-review";
@@ -17,7 +20,12 @@ import {
   assertExistingAppImplementationFiles,
   implementationFilesSchema,
 } from "@/lib/agent/apply-implementation-files";
-import { APP_BUILDER_WORKFLOW_VERSION, appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import {
+  APP_BUILDER_WORKFLOW_VERSION,
+  appBuilderWorkflowState,
+  assertExactWorkflowState,
+} from "@/lib/agent/workflow-state";
+import { repairCheckoutDependenciesAfterValidationFailure } from "@/lib/agent/checkout-dependencies";
 import {
   createTargetValidationAttempt,
   executeProposalBoundValidation,
@@ -159,7 +167,7 @@ export const createAppValidationTool = (
   defineTool({
     description:
       "Run the repository's normal validation commands against the current applied app. Command exit status is the technical validation result. Repository-owned local setup and technical checks precede full authenticated runtime preparation. For persistent apps, run any declared authenticated browser task after that preparation succeeds and report its result separately; a runtime block preserves the technical receipt. Independent paid source assessment is deferred to final accept_change_set after implementation and technical checks are ready; deferred evidence is unassessed and does not require another validation run. None of these results alone proves hosted durability. This does not publish or otherwise change an external repository.",
-    // oxlint-disable-next-line eslint/complexity -- The existing workflow phase and receipt branches remain explicit.
+    // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Keep the workflow phase, cancellation and original failure receipt branches explicit.
     async execute(input, ctx) {
       const current = appBuilderWorkflowState.get();
       if (
@@ -181,7 +189,7 @@ export const createAppValidationTool = (
       const priorPublishedGitHubDraftProposalDigest =
         current.publishedGitHubDraftProposalDigest ??
         (current.phase === "reviewed" ? current.githubDraftProposal?.proposal.digest : undefined);
-      const base = {
+      let base = {
         appSpec: current.appSpec,
         applyReceipt: current.applyReceipt,
         artifacts: current.artifacts,
@@ -189,6 +197,9 @@ export const createAppValidationTool = (
           ? {}
           : { publishedGitHubDraftProposalDigest: priorPublishedGitHubDraftProposalDigest }),
         dependencyReceipt: current.dependencyReceipt,
+        ...(current.checkoutDependencyAttempts === undefined
+          ? {}
+          : { checkoutDependencyAttempts: current.checkoutDependencyAttempts }),
         ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
         identityReceipt: current.identityReceipt,
         preparedByCallId: current.preparedByCallId,
@@ -207,6 +218,73 @@ export const createAppValidationTool = (
         validationPhase(ctx.callId, "writing_implementation_files");
         await applyImplementationFiles(sandbox, relativeApplyRoot, input.implementationFiles);
         validationPhase(ctx.callId, "implementation_files_written");
+      }
+      let logStore: Awaited<ReturnType<typeof validationLogStoreForSession>> | undefined;
+      if (current.phase === "validation_failed") {
+        let expected = appBuilderWorkflowState.get();
+        const assertCurrent = () => {
+          assertExactWorkflowState(
+            appBuilderWorkflowState.get(),
+            expected,
+            "restore validation checkout dependencies",
+          );
+        };
+        try {
+          logStore = fixture
+            ? undefined
+            : await validationLogStoreForSession({
+                sessionAuth: ctx.session.auth,
+                sessionId: ctx.session.id,
+              });
+          await repairCheckoutDependenciesAfterValidationFailure({
+            assertCurrent,
+            attempts: base.checkoutDependencyAttempts ?? [],
+            checkoutIdentity: current.applyReceipt.digest,
+            failure: current.validationFailure,
+            logStore,
+            onAttempt: (dependencyAttempt) => {
+              assertCurrent();
+              const attempts = [
+                ...(base.checkoutDependencyAttempts ?? []).filter(
+                  (saved) => saved.attemptDigest !== dependencyAttempt.attemptDigest,
+                ),
+                dependencyAttempt,
+              ];
+              appBuilderWorkflowState.update((latest) => {
+                assertExactWorkflowState(latest, expected, "record dependency recovery");
+                return { ...latest, checkoutDependencyAttempts: attempts };
+              });
+              expected = appBuilderWorkflowState.get();
+              base = { ...base, checkoutDependencyAttempts: attempts };
+            },
+            prepareInstall: async () => {
+              ctx.abortSignal?.throwIfAborted();
+              assertCurrent();
+              await setBuilderSandboxNetworkPolicy(sandbox, "allow-all");
+            },
+            root: current.applyReceipt.applyRoot,
+            sandbox,
+            sessionId: ctx.session.id,
+            signal: ctx.abortSignal,
+          });
+        } catch (error) {
+          appBuilderWorkflowState.update((latest) => {
+            assertExactWorkflowState(latest, expected, "retain failed dependency recovery");
+            return {
+              ...base,
+              phase: "validation_failed",
+              validationFailure: current.validationFailure,
+            };
+          });
+          ctx.abortSignal?.throwIfAborted();
+          return {
+            dependencyAttempts: base.checkoutDependencyAttempts ?? [],
+            problem:
+              error instanceof Error ? error.message : "Repository dependency recovery failed.",
+            reason: "dependency-recovery",
+            status: "needs_repair" as const,
+          };
+        }
       }
       // Some repository test tasks start local services. Prepare the declared
       // local data task first so its server inherits the setup log file rather
@@ -253,7 +331,7 @@ export const createAppValidationTool = (
         validationPhase(ctx.callId, "declared_local_data_ready");
       }
       validationPhase(ctx.callId, "running_repository_commands");
-      const logStore = fixture
+      logStore ??= fixture
         ? undefined
         : await validationLogStoreForSession({
             sessionAuth: ctx.session.auth,

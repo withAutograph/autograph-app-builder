@@ -4,17 +4,20 @@ import type { SandboxProcess, SandboxSession } from "eve/sandbox";
 import { ValidationLogWriter } from "../repository/validation-log";
 import type { ValidationLogReference, ValidationLogStore } from "../repository/validation-log";
 import { sanitizeValidationDiagnosticText } from "../repository/validation-output-sanitize";
+import type { TargetValidationFailureReceipt } from "../repository/target-validation";
 
 export interface DependencyAttemptResult {
   attemptDigest: string;
   command: "dependency-probe" | "dependency-install";
   executionCommand: string;
   exitCode: number | null;
-  completion: "complete" | "interrupted";
+  completion: "pending" | "complete" | "interrupted";
   excerpt: string;
   truncated: boolean;
   durability: "available" | "unavailable";
   logs: { stdout?: ValidationLogReference; stderr?: ValidationLogReference };
+  /** Exact failed command and its original durable logs; never an approval or source gate. */
+  recoveryOfValidationFailure?: TargetValidationFailureReceipt;
 }
 
 interface DependencyRecoveryInput {
@@ -26,10 +29,11 @@ interface DependencyRecoveryInput {
   requiredExecutable?: string;
   logStore?: ValidationLogStore;
   onAttempt?: (attempt: DependencyAttemptResult) => void | Promise<void>;
+  assertCurrent?: () => void;
 }
 interface DependencyExecution {
   exitCode: number | null;
-  completion: DependencyAttemptResult["completion"];
+  completion: "complete" | "interrupted";
   failure?: Error;
 }
 
@@ -117,6 +121,7 @@ const captureProcess = async (
   };
   try {
     input.signal?.throwIfAborted();
+    input.assertCurrent?.();
     const options = { command, workingDirectory: input.root };
     process = await input.sandbox.spawn(
       input.signal === undefined ? options : { ...options, abortSignal: input.signal },
@@ -153,6 +158,7 @@ const dependencyAttempt = async (
   input: DependencyRecoveryInput,
   command: DependencyAttemptResult["command"],
   executionCommand: string,
+  recoveryOfValidationFailure?: TargetValidationFailureReceipt,
 ) => {
   const attemptDigest = createHash("sha256")
     .update(
@@ -174,6 +180,22 @@ const dependencyAttempt = async (
     );
   const stdout = writer("stdout");
   const stderr = writer("stderr");
+  if (recoveryOfValidationFailure !== undefined) {
+    // Retain dispatch provenance before execution; pending is an intent,
+    // not a fabricated command result or a gate on a later ordinary retry.
+    await input.onAttempt?.({
+      attemptDigest,
+      command,
+      completion: "pending",
+      durability: "unavailable",
+      excerpt: "",
+      executionCommand,
+      exitCode: null,
+      logs: {},
+      recoveryOfValidationFailure,
+      truncated: false,
+    });
+  }
   const execution = await captureProcess(input, executionCommand, stdout, stderr);
   const [out, err] = await Promise.all([
     stdout.finishCapture(execution.completion),
@@ -200,6 +222,7 @@ const dependencyAttempt = async (
     exitCode: execution.exitCode,
     logs,
     truncated: out.omitted || err.omitted || combined.length > 2400,
+    ...(recoveryOfValidationFailure === undefined ? {} : { recoveryOfValidationFailure }),
   };
   // Persist references before any failure is surfaced to the workflow.
   await input.onAttempt?.(attempt);
@@ -223,6 +246,73 @@ const dependencyAttempt = async (
     );
   }
   return attempt;
+};
+
+const hasUnresolvedPackage = (output: string): boolean => {
+  const messages = output.matchAll(
+    /(?:cannot find (?:module|package)|(?:unable to|could not|failed to|can't|cannot) resolve)\b[\t :]*(?<specifier>[^\r\n]*)/giu,
+  );
+  for (const message of messages) {
+    const remainder = message.groups?.specifier ?? "";
+    // Parse the specifier separately: optional diagnostic nouns must never
+    // backtrack into a package name when the actual import is a source path.
+    const specifier =
+      remainder
+        .replace(/^(?:module(?: specifier)?|package)\b[\t :]*/iu, "")
+        .replace(/^["'`]/u, "")
+        .split(/["'`\s]/u, 1)[0] ?? "";
+    if (
+      /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9._/-]+)?$/iu.test(specifier)
+    ) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/** One native install per invocation; only a successful repair suppresses repeats. */
+export const repairCheckoutDependenciesAfterValidationFailure = async (
+  input: DependencyRecoveryInput & {
+    failure: TargetValidationFailureReceipt;
+    attempts: readonly DependencyAttemptResult[];
+    assertCurrent: () => void;
+    prepareInstall: () => Promise<void>;
+    onAttempt: (attempt: DependencyAttemptResult) => void | Promise<void>;
+  },
+): Promise<void> => {
+  const { failure } = input;
+  if (
+    failure.reason !== "command-failed" ||
+    failure.commandFailure === undefined ||
+    failure.commandFailure.exitCode <= 0 ||
+    !hasUnresolvedPackage(`${failure.output?.stderr ?? ""}\n${failure.output?.stdout ?? ""}`)
+  ) {
+    return;
+  }
+  const alreadyRepaired = input.attempts.some((attempt) => {
+    if (
+      attempt.command !== "dependency-install" ||
+      attempt.completion !== "complete" ||
+      attempt.exitCode !== 0
+    ) {
+      return false;
+    }
+    return (
+      attempt.recoveryOfValidationFailure?.digest === failure.digest &&
+      attempt.recoveryOfValidationFailure.attemptDigest === failure.attemptDigest
+    );
+  });
+  if (alreadyRepaired) {
+    return;
+  }
+  input.signal?.throwIfAborted();
+  input.assertCurrent();
+  await input.prepareInstall();
+  input.signal?.throwIfAborted();
+  input.assertCurrent();
+  await dependencyAttempt(input, "dependency-install", "bun install", failure);
+  input.signal?.throwIfAborted();
+  input.assertCurrent();
 };
 
 /** Reinstalls repository dependencies only when replacement compute lacks them. */

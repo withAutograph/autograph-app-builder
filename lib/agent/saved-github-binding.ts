@@ -80,6 +80,16 @@ export const recoverSavedWorkflowGitHubBinding = (input: {
   if (workflow.phase === "empty" || acceptedBinding !== undefined) {
     return { githubSource, recovered: false, workflow };
   }
+  // Canonical starter acquisition records source receipts without a selected
+  // GitHub repository binding. Preparing that same app needs no binding repair.
+  if (
+    githubSource === undefined &&
+    source.phase !== "empty" &&
+    source.receipt.sourceKind === "fresh-template" &&
+    workflow.sourceReceipt.sourceKind === "fresh-template"
+  ) {
+    return { githubSource, recovered: false, workflow };
+  }
   if (source.phase === "empty" || githubSource === undefined) {
     throwSavedBindingGuard(workflow, source, input.stage);
     return { githubSource, recovered: false, workflow };
