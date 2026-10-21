@@ -21,6 +21,14 @@
   after delivery settles; it is separate from the immutable message/CID receipt.
   Without it, an exact retry may return its earlier settled page. Preserve every
   returned event page even when its cursor is older.
+- On the supported hosted public queue, `working` does not prevent a genuinely
+  new ordinary SEND from being durably queued when no approval or user input is
+  outstanding. Give it a fresh stable
+  `clientRequestId` and include the largest saved cursor as `observationCursor`
+  for that same session. An acknowledgement proves durable acceptance only, not
+  native turn start or effect completion; `working` can also describe accepted
+  feedback waiting to start. Keep reading the same session; do not issue a new
+  SEND to repeat acknowledged feedback.
 - `input_required` means the exact outstanding request must be answered before an unrelated follow-up.
 - An `authorization` input remains parked until the provider callback settles;
   it is never answered with `autograph_respond`. Refresh the same session after
@@ -35,4 +43,7 @@
   `clientRequestId` and retry that exact call. The server reconciles its existing
   delivery without sending the message again. Do not use a new request ID or a
   child session to bypass the unknown outcome.
+- Treat `busy` or another definite SEND error as the server's decision. Preserve
+  that result and inspect the same session; do not bypass it with a new request ID,
+  a resume, or a child session.
 - Only allowlisted public events are evidence. Internal reasoning, raw tool data, and traces are not user-visible proof.

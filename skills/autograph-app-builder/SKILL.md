@@ -38,15 +38,25 @@ or direct filesystem implementation.
    A separate choice between already connected GitHub accounts is a normal
    product question: submit its exact option id in the full response batch.
    Repository scopes shown on an authorization card are read-only.
-5. Send unrelated follow-ups with `autograph_send` only while the app build is
-   `waiting` and no input is unresolved. When the user explicitly wants to resume
-   stopped work, send that continuation to the same `sessionId`; confirmed native
-   delivery may advance the cancelled session. Ordinary reads never resume Stop.
+5. For ordinary new product feedback, a genuinely new `autograph_send` may be
+   queued on a supported hosted public session while it is `working`, or sent as a
+   follow-up while it is `waiting`, only when no approval batch or user input is
+   outstanding. Use a fresh stable `clientRequestId` for each new SEND and include
+   the largest saved `observationCursor` for that same session. An accepted
+   acknowledgement proves durable acceptance only; it does not prove native turn
+   start or effect completion. Poll the same session; do not issue a new SEND to
+   repeat acknowledged feedback. Stop, terminal state, pending approval/input, or a
+   replaced adapter takes precedence. If the user explicitly wants to resume after
+   Stop, use a same-session
+   SEND; only confirmed native delivery may advance the cancelled session. Ordinary
+   reads never resume Stop.
 6. Treat cancellation as cooperative and poll for the resulting state. If a SEND
    returns `submission_unknown`, retry the exact same call with the same
    `clientRequestId`, session and message, including its saved `observationCursor`
    to read current progress after delivery settles. Do not send a new message or create a
-   child to bypass the unknown outcome. A later Stop wins.
+   child to bypass the unknown outcome. A later Stop wins. If a SEND returns `busy`
+   or another definite error, preserve that result and inspect the same session; do
+   not bypass it with a new request ID, resume, or child.
 7. Treat the MCP App as an optional progress and input-control surface only. Never
    use it to display or embed the generated app preview.
 8. When Autograph provides a preview URL, open it in the integrated ChatGPT or
