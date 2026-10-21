@@ -1,3 +1,4 @@
+import { privateOperatorApprovalObservationSchema } from "../eve/private-operator-approval-observation";
 import { createHash } from "node:crypto";
 import { managedRuntimePublicProfileSchema } from "../sandbox/managed-runtime-capabilities";
 import { isDeepStrictEqual } from "node:util";
@@ -194,6 +195,7 @@ export const continuityRecordSchema = z
     plan: hostedContinuityPlanSchema,
     planDigest: digest,
     approval: continuityApprovalSchema.optional(),
+    approvalObservation: privateOperatorApprovalObservationSchema.optional(),
     state: z.enum([
       "planned",
       "approved",

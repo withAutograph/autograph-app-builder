@@ -1,3 +1,4 @@
+import { readPrivateOperatorApproval } from "../eve/private-operator-approval-observation";
 import { createHostedOperatorSandboxFetch } from "./hosted-operator-sandbox-fetch";
 import {
   observeContinuityPlanningStage,
@@ -2982,7 +2983,7 @@ export const createHostedOperatorControlPlane = async (input: {
       resolvePlan: async (context, customerId, onPlanStage) =>
         await resolveExportPlan(context, customerId, true, onPlanStage),
       assertSetup: assertExportSetup,
-      async readApproval(context, request, callId) {
+      async readApproval(context, request, callId, observation) {
         await owner.assertArtifactAuthorized(context);
         const recorded = await exportStore.read({
           authority: context.authority,
@@ -2992,30 +2993,29 @@ export const createHostedOperatorControlPlane = async (input: {
           throw new HostedOperatorError("resource_mismatch");
         }
         const ownerContext = operatorOwnerContextSchema.parse(context.ownerContext);
-        const capture = createPrivateTenantExportApprovalCapture({
-          plan: recorded.journal.plan,
-          request,
-          principal: ownerContext.principal,
-          ...(callId === undefined ? {} : { callId }),
-        });
-        let publicCount = 0;
-        const observed = await approvalObserver.forContext(context)({
-          adapterSessionId: ownerContext.adapterSessionId,
-          sessionId: ownerContext.sessionId,
-          principal: ownerContext.principal,
-          readDeadline: true,
-          onEvent: () => {
-            publicCount += 1;
+        return await readPrivateOperatorApproval({
+          owner: ownerContext,
+          ...(observation === undefined ? {} : { observation }),
+          capture: (state) =>
+            createPrivateTenantExportApprovalCapture({
+              plan: recorded.journal.plan,
+              request,
+              principal: ownerContext.principal,
+              ...(callId === undefined ? {} : { callId }),
+              ...(state === undefined ? {} : { state }),
+            }),
+          readHistory: async (startIndex, onEvent) =>
+            await approvalObserver.privateHistoryForContext(context)({
+              adapterSessionId: ownerContext.adapterSessionId,
+              sessionId: ownerContext.sessionId,
+              principal: ownerContext.principal,
+              startIndex,
+              onEvent,
+            }),
+          assertOwner: async () => {
+            await owner.assertArtifactAuthorized(context);
           },
-          onPrivateEvent: (event) => {
-            capture.observe(event);
-          },
         });
-        if (observed.publicEventCount !== publicCount) {
-          throw new HostedOperatorError("authorization_required");
-        }
-        await owner.assertArtifactAuthorized(context);
-        return capture.read();
       },
       withResourceLease: exportLease,
       disposeWorker: async (locator) => {
@@ -3424,7 +3424,7 @@ export const createHostedOperatorControlPlane = async (input: {
           })),
         };
       },
-      async readApproval(context, request, callId) {
+      async readApproval(context, request, callId, observation) {
         await owner.assertArtifactAuthorized(context);
         const saved = await continuityStore.read({
           authority: context.authority,
@@ -3434,30 +3434,29 @@ export const createHostedOperatorControlPlane = async (input: {
           throw new HostedOperatorError("resource_mismatch");
         }
         const canonical = operatorOwnerContextSchema.parse(context.ownerContext);
-        const capture = createPrivateContinuityApprovalCapture({
-          plan: saved.plan,
-          request,
-          principal: canonical.principal,
-          ...(callId === undefined ? {} : { callId }),
-        });
-        let count = 0;
-        const observed = await approvalObserver.forContext(context)({
-          adapterSessionId: canonical.adapterSessionId,
-          sessionId: canonical.sessionId,
-          principal: canonical.principal,
-          readDeadline: true,
-          onEvent: () => {
-            count += 1;
+        return await readPrivateOperatorApproval({
+          owner: canonical,
+          ...(observation === undefined ? {} : { observation }),
+          capture: (state) =>
+            createPrivateContinuityApprovalCapture({
+              plan: saved.plan,
+              request,
+              principal: canonical.principal,
+              ...(callId === undefined ? {} : { callId }),
+              ...(state === undefined ? {} : { state }),
+            }),
+          readHistory: async (startIndex, onEvent) =>
+            await approvalObserver.privateHistoryForContext(context)({
+              adapterSessionId: canonical.adapterSessionId,
+              sessionId: canonical.sessionId,
+              principal: canonical.principal,
+              startIndex,
+              onEvent,
+            }),
+          assertOwner: async () => {
+            await owner.assertArtifactAuthorized(context);
           },
-          onPrivateEvent: (event) => {
-            capture.observe(event);
-          },
         });
-        if (observed.publicEventCount !== count) {
-          throw new HostedOperatorError("authorization_required");
-        }
-        await owner.assertArtifactAuthorized(context);
-        return capture.read();
       },
       ...createContinuityCapabilityCustody(tokenKeyring),
       withResourceLease: exportLease,

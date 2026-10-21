@@ -1,3 +1,4 @@
+import type { PrivateOperatorApprovalObservationPort } from "../eve/private-operator-approval-observation";
 /* oxlint-disable sonarjs/no-nested-functions -- One resource lease retains a single approved attempt through its private checkpoints. */
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
@@ -50,6 +51,7 @@ export interface HostedContinuityDependencies {
     context: HostedOperatorContext,
     request: HostedContinuityRequest,
     callId?: string,
+    observation?: PrivateOperatorApprovalObservationPort,
   ) => Promise<ContinuityApproval | null>;
   seal: (
     record: ContinuityRecord,
@@ -160,6 +162,14 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
     }
     return saved;
   };
+  const approvalObservation = (
+    record: ContinuityRecord,
+  ): PrivateOperatorApprovalObservationPort => ({
+    ...(record.approvalObservation === undefined ? {} : { state: record.approvalObservation }),
+    save: async (state) => {
+      await update(record, (value) => ({ ...value, approvalObservation: state }));
+    },
+  });
   const approval = async (
     context: HostedOperatorContext,
     record: ContinuityRecord,
@@ -172,7 +182,9 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
       planDigest: record.planDigest,
       idempotencyKey: record.idempotencyKey,
     };
-    const approved = record.approval ?? (await deps.readApproval(context, request, callId));
+    const approved =
+      record.approval ??
+      (await deps.readApproval(context, request, callId, approvalObservation(record)));
     if (
       approved === null ||
       !isDeepStrictEqual(
@@ -249,7 +261,12 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
         return { approved: true };
       }
       await deps.assertSetup(context, record.plan);
-      const receipt = await deps.readApproval(context, request);
+      const receipt = await deps.readApproval(
+        context,
+        request,
+        undefined,
+        approvalObservation(record),
+      );
       if (receipt !== null) {
         record = await update(record, (value) => ({
           ...value,

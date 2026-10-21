@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createBuilderApprovalStreamFetch,
   createHostedOperatorApprovalObserver,
@@ -198,5 +198,67 @@ describe("Builder approval stream credential boundary", () => {
     expect(init?.signal?.aborted).toBe(false);
     requestAbort.abort();
     expect(init?.signal?.aborted).toBe(true);
+  });
+});
+
+describe("native approval history reads", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+  it("resumes absolute native indices after a complete callback at the unchanged deadline", async () => {
+    const f = setup();
+    const owned = context();
+    f.observer.bindWorkload(owned, () => "builder-token", new AbortController().signal);
+    const deadline = new AbortController();
+    vi.spyOn(AbortSignal, "timeout").mockReturnValueOnce(deadline.signal);
+    const events: string[] = [];
+    const first = await f.observer.privateHistoryForContext({ ...owned })({
+      ...observation,
+      startIndex: 0,
+      onEvent: (event) => {
+        events.push(event.type);
+        deadline.abort();
+      },
+    });
+    expect(first).toEqual({ complete: false, nextNativeIndex: 1, nativeTailIndex: 1 });
+    const tail = new Response(`${JSON.stringify({ data: {}, type: "session.waiting" })}\n`, {
+      headers: stream().headers,
+    });
+    f.fetchImplementation.mockResolvedValueOnce(tail);
+    const next = await f.observer.privateHistoryForContext(owned)({
+      ...observation,
+      startIndex: first.nextNativeIndex,
+      onEvent: (event) => {
+        events.push(event.type);
+      },
+    });
+    expect(next).toEqual({ complete: true, nextNativeIndex: 2, nativeTailIndex: 1 });
+    expect(events).toEqual(["session.started", "session.waiting"]);
+    const resumedResource = f.fetchImplementation.mock.calls[1]?.[0];
+    const resumedUrl = resumedResource instanceof Request ? resumedResource.url : resumedResource;
+    expect(resumedUrl?.toString()).toContain("startIndex=1&");
+    expect(f.verifyReadAuthority).toHaveBeenCalledTimes(2);
+    expect(f.ambientToken).not.toHaveBeenCalled();
+    expect(
+      new Headers(f.fetchImplementation.mock.calls[1]?.[1]?.headers).get("authorization"),
+    ).toBe("Bearer builder-token");
+  });
+  it("does not checkpoint a failed event callback or bypass fresh read authority", async () => {
+    const f = setup();
+    const failure = new Error("capture rejected");
+    await expect(
+      f.observer.privateHistoryForContext(context())({
+        ...observation,
+        startIndex: 0,
+        onEvent: () => {
+          throw failure;
+        },
+      }),
+    ).rejects.toBe(failure);
+    const denied = setup(false);
+    await expect(
+      denied.observer.privateHistoryForContext(context())({ ...observation, startIndex: 0 }),
+    ).rejects.toBeInstanceOf(SubmissionRejectedBeforeDispatchError);
+    expect(denied.fetchImplementation).not.toHaveBeenCalled();
   });
 });

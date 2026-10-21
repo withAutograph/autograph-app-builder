@@ -1,3 +1,5 @@
+import { privateOperatorApprovalObservationSchema } from "../eve/private-operator-approval-observation";
+import type { PrivateOperatorApprovalObservationPort } from "../eve/private-operator-approval-observation";
 import { advanceExportPlanningStage } from "./hosted-operator-consent-diagnostic";
 import type { ExportPlanningStageObserver } from "./hosted-operator-consent-diagnostic";
 import { hostedRuntimeTargetSchema } from "./hosted-runtime-journal";
@@ -42,6 +44,7 @@ export const hostedTenantExportExecutionRecordSchema = z.strictObject({
   kind: z.literal("app-export"),
   originalTarget: hostedRuntimeTargetSchema,
   journal: tenantExportJournalRecordSchema,
+  approvalObservation: privateOperatorApprovalObservationSchema.optional(),
   workers: z.array(
     z.strictObject({
       attemptId: z.uuid(),
@@ -96,6 +99,7 @@ export interface HostedTenantExportDependencies {
     context: HostedOperatorContext,
     request: HostedTenantExportRequest,
     callId?: string,
+    observation?: PrivateOperatorApprovalObservationPort,
   ) => Promise<ExportApproval | null>;
   withResourceLease: <T>(
     input: PhysicalResourceLeaseInput,
@@ -234,6 +238,14 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
     }
     return result;
   };
+  const approvalObservation = (
+    record: HostedTenantExportExecutionRecord,
+  ): PrivateOperatorApprovalObservationPort => ({
+    ...(record.approvalObservation === undefined ? {} : { state: record.approvalObservation }),
+    save: async (state) => {
+      await update(record, (value) => ({ ...value, approvalObservation: state }));
+    },
+  });
   const assertApproval = async (
     context: HostedOperatorContext,
     record: HostedTenantExportExecutionRecord,
@@ -246,7 +258,9 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
       planDigest: record.journal.planDigest,
       idempotencyKey: record.journal.idempotencyKey,
     };
-    const approval = record.journal.approval ?? (await deps.readApproval(context, request, callId));
+    const approval =
+      record.journal.approval ??
+      (await deps.readApproval(context, request, callId, approvalObservation(record)));
     if (
       approval === null ||
       !isDeepStrictEqual(
@@ -400,7 +414,9 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
         return { approved: current.journal.approval !== undefined };
       }
       await deps.assertSetup(context, current.journal.plan);
-      const approval = current.journal.approval ?? (await deps.readApproval(context, request));
+      const approval =
+        current.journal.approval ??
+        (await deps.readApproval(context, request, undefined, approvalObservation(current)));
       if (approval !== null && current.journal.approval === undefined) {
         await update(current, (value) => {
           value.journal.approval = approval;

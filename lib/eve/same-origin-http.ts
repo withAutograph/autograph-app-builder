@@ -1320,6 +1320,19 @@ async function readCancellationSettlementIncremental(input: {
   }
 }
 
+export interface PrivateHistoryObservation {
+  nextNativeIndex: number;
+  nativeTailIndex: number;
+  complete: boolean;
+}
+export interface PrivateHistoryRequest {
+  principal: HostedPrincipal;
+  sessionId: string;
+  adapterSessionId: string;
+  startIndex: number;
+  onEvent: (event: MessageStreamEvent) => void | Promise<void>;
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createSameOriginEveTransport(input: {
   config: unknown;
@@ -1332,6 +1345,7 @@ export function createSameOriginEveTransport(input: {
     adapterSessionId: string;
   }) => Promise<boolean>;
 }): HostedEveTransport & {
+  observePrivateHistory?: (request: PrivateHistoryRequest) => Promise<PrivateHistoryObservation>;
   respondAccepted?: (
     request: Parameters<HostedEveTransport["respond"]>[0] & {
       nativeObservationState?: NativeObservationState;
@@ -1373,6 +1387,74 @@ export function createSameOriginEveTransport(input: {
     ...(input.verifyReadAuthority === undefined
       ? {}
       : {
+          async observePrivateHistory(request) {
+            const principal = hostedPrincipalSchema.parse(request.principal);
+            const authorized = await input.verifyReadAuthority?.({
+              adapterSessionId: request.adapterSessionId,
+              principal,
+              sessionId: request.sessionId,
+            });
+            if (authorized !== true) {
+              throw new SubmissionRejectedBeforeDispatchError("session_access_denied");
+            }
+            const readTrace = createHostedReadTrace({ sessionId: request.adapterSessionId });
+            const signal = AbortSignal.timeout(SESSION_READ_TIMEOUT_MS);
+            const stopWatching = readTrace.watch(signal);
+            let nextNativeIndex = z.number().int().nonnegative().parse(request.startIndex);
+            let nativeTailIndex: number | undefined;
+            let eventInFlight = false;
+            let complete = true;
+            readTrace.set("nativeStartIndex", nextNativeIndex);
+            readTrace.set("nativeNextIndex", nextNativeIndex);
+            try {
+              try {
+                for await (const event of streamSameOriginEveEvents({
+                  ...common,
+                  sessionId: request.adapterSessionId,
+                  startIndex: nextNativeIndex,
+                  readSignal: signal,
+                  readTrace,
+                  onNativeTail: (tail) => {
+                    nativeTailIndex = tail;
+                  },
+                })) {
+                  eventInFlight = true;
+                  readTrace.enter("private_callback");
+                  // oxlint-disable-next-line eslint/no-await-in-loop -- Private capture completes before advancing the native cursor.
+                  await request.onEvent(event);
+                  nextNativeIndex += 1;
+                  readTrace.increment("decodedEvents");
+                  readTrace.increment("privateCallbacks");
+                  readTrace.set("nativeNextIndex", nextNativeIndex);
+                  readTrace.enter("decode");
+                  eventInFlight = false;
+                }
+              } catch (error) {
+                if (
+                  !(error instanceof HostedSessionReadTimeoutError) ||
+                  eventInFlight ||
+                  nativeTailIndex === undefined
+                ) {
+                  throw error;
+                }
+                complete = false;
+              }
+              if (nativeTailIndex === undefined) {
+                throw new HostedSessionReadTimeoutError();
+              }
+              if (complete) {
+                readTrace.completed();
+              } else {
+                readTrace.failed();
+              }
+              return { nextNativeIndex, nativeTailIndex, complete };
+            } catch (error) {
+              readTrace.failed();
+              throw error;
+            } finally {
+              stopWatching();
+            }
+          },
           async observe(request) {
             const principal = hostedPrincipalSchema.parse(request.principal);
             const authorized = await input.verifyReadAuthority?.({
