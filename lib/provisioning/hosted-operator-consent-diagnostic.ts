@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { APIError } from "@vercel/sandbox";
 import { z } from "zod";
 import { HostedOperatorError, operatorPublicResultSchema } from "./hosted-operator-contract";
 import {
@@ -182,7 +183,16 @@ const continuityPlanningStage = z.enum([
 export type ContinuityPlanningStage = z.infer<typeof continuityPlanningStage>;
 const continuityPlanningFailure = z.strictObject({
   stage: continuityPlanningStage,
-  errorClass: z.enum(["operator_error", "validation_error", "type_error", "unexpected"]),
+  errorClass: z.enum([
+    "operator_error",
+    "validation_error",
+    "type_error",
+    "unexpected",
+    "sandbox_api_error",
+    "abort_error",
+  ]),
+  httpStatus: z.number().int().min(100).max(599).optional(),
+  signalAborted: z.boolean().optional(),
 });
 
 const normalActorProofFailure = z.strictObject({
@@ -1024,6 +1034,39 @@ export const reportOperatorPlanningMismatch = (
   }
 };
 
+type SandboxResumeFailure = Partial<
+  Pick<z.infer<typeof continuityPlanningFailure>, "errorClass" | "httpStatus" | "signalAborted">
+>;
+
+/** Only the SDK's exported error class and closed HTTP/cancellation metadata may leave resume. */
+const sandboxResumeFailure = (
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- SDK and cancellation rejections are projected without reading exception details.
+  error: unknown,
+  requestSignal?: AbortSignal,
+): SandboxResumeFailure => {
+  const failure: SandboxResumeFailure = {};
+  try {
+    if (requestSignal !== undefined) {
+      failure.signalAborted = requestSignal.aborted;
+    }
+    if (error instanceof APIError) {
+      failure.errorClass = "sandbox_api_error";
+      const response = ownDiagnosticValue(error, "response");
+      if (response instanceof Response) {
+        const status = continuityPlanningFailure.shape.httpStatus.safeParse(response.status);
+        if (status.success && status.data !== undefined) {
+          failure.httpStatus = status.data;
+        }
+      }
+    } else if (error instanceof DOMException && error.name === "AbortError") {
+      failure.errorClass = "abort_error";
+    }
+  } catch {
+    /* Closed SDK classification never changes the original rejection. */
+  }
+  return failure;
+};
+
 /** Continuity diagnostics retain only fixed stage/class labels, never exception details. */
 export const reportContinuityPlanningFailure = (
   sessionId: string,
@@ -1031,6 +1074,7 @@ export const reportContinuityPlanningFailure = (
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This rejection boundary classifies arbitrary thrown values without reading their properties.
   error: unknown,
   sink?: HostedOperatorConsentDiagnosticSink,
+  requestSignal?: AbortSignal,
 ): void => {
   const failure: z.infer<typeof continuityPlanningFailure> = {
     stage: planStage,
@@ -1046,6 +1090,9 @@ export const reportContinuityPlanningFailure = (
     }
   } catch {
     /* Hostile prototypes cannot change the original rejection. */
+  }
+  if (planStage === "sandbox_resume") {
+    Object.assign(failure, sandboxResumeFailure(error, requestSignal));
   }
   try {
     createHostedOperatorConsentDiagnostic(
@@ -1070,11 +1117,12 @@ export const observeContinuityPlanningStage = async <T>(
   planStage: ContinuityPlanningStage,
   run: () => T | Promise<T>,
   sink?: HostedOperatorConsentDiagnosticSink,
+  requestSignal?: AbortSignal,
 ): Promise<T> => {
   try {
     return await run();
   } catch (error) {
-    reportContinuityPlanningFailure(sessionId, planStage, error, sink);
+    reportContinuityPlanningFailure(sessionId, planStage, error, sink, requestSignal);
     throw error;
   }
 };

@@ -3162,6 +3162,8 @@ export const createHostedOperatorControlPlane = async (input: {
           context.target.sessionId,
           "sandbox_resume",
           () => getContinuitySandbox(context, runtime),
+          undefined,
+          continuityWorkloads.get(context)?.signal,
         );
         const observedPorts = await observeContinuityPlanningStage(
           context.target.sessionId,
