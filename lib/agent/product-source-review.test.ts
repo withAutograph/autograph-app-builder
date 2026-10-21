@@ -533,7 +533,16 @@ describe("independent application source review", () => {
     expect(result.invocation?.splits).toBeGreaterThan(0);
     expect(expected).toMatch(/^[a-f0-9]{64}$/u);
     for (const call of model.doGenerateCalls) {
-      expect(call.providerOptions?.gateway).toEqual({ only: ["openai"], sessionId: expected });
+      expect(call.providerOptions?.gateway).toEqual({
+        only: ["openai"],
+        sessionId: expected,
+        tags: [
+          `builder-native-sha256:${createHash("sha256")
+            .update(JSON.stringify(["builder-native-session-attribution-v1", sessionId]))
+            .digest("hex")}`,
+          "builder-callsite:source-review",
+        ],
+      });
       expect(call.providerOptions?.openai).toBeUndefined();
       const metadata = JSON.stringify(call.providerOptions);
       for (const privateValue of [sessionId, key, input.originalRequest, changes[0].path]) {

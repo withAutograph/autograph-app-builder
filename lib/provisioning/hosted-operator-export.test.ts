@@ -7,7 +7,11 @@ import type {
   ProtectedHostedOperatorDependencies,
   HostedOperatorContext,
 } from "./hosted-operator-service";
-import { createTenantExportDispatcher } from "./hosted-operator-export-transport";
+import {
+  createTenantExportDispatcher,
+  tenantExportTransportRequestSchema,
+  tenantExportPlannedSchema,
+} from "./hosted-operator-export-transport";
 import { createOperatorWorkloadVerifier } from "./hosted-operator-workload";
 /* oxlint-disable eslint/require-await -- Controlled asynchronous dependency ports exercise the real export state machine. */
 import { describe, expect, it, vi } from "vitest";
@@ -814,5 +818,115 @@ describe("export planning failure boundaries", () => {
     } finally {
       consoleSink.mockRestore();
     }
+  });
+});
+
+describe("approved installed tenant export scope", () => {
+  it.each([false, true])(
+    "freezes the resolved tenant and keeps extraction approval separate (semantic=%s)",
+    async (semantic) => {
+      const f = setup();
+      const resolveOwnerOrganization = vi.fn(async () => {
+        if (!semantic) {
+          throw new Error("Explicit selection must bypass historical resolution");
+        }
+        return "customer-one";
+      });
+      const dispatch = createTenantExportDispatcher({
+        store: f.dependencies.store,
+        operations: f.operations,
+        verifyWorkload: async () => {},
+        authorize: async () => context,
+        authorizeRead: async (_request, selected) => selected,
+        resolveOwnerOrganization,
+      });
+      const response = await dispatch(
+        new Request("https://operator.test/exports", { method: "POST" }),
+        tenantExportTransportRequestSchema.parse({
+          action: "export-plan",
+          idempotencyKey: "owned-selection",
+          selection: {
+            appId: context.target.appId,
+            branch: context.target.branch,
+            environment: "preview",
+            projectId: context.target.projectId,
+            sessionId: context.target.sessionId,
+          },
+          ownerContext: {
+            adapterGeneration: 1,
+            adapterSessionId: "adapter",
+            authority,
+            kind: "direct",
+            principal: { ...authority, scopes: ["autograph:send"] },
+            sessionId: context.target.sessionId,
+          },
+          ...(semantic ? { customerScope: "owner-organization" } : { customerId: "customer-one" }),
+        }),
+      );
+      expect(response.status).toBe(200);
+      expect(f.read().journal.plan.scope.customerId).toBe("customer-one");
+      expect(resolveOwnerOrganization).toHaveBeenCalledTimes(semantic ? 1 : 0);
+      expect(f.dependencies.runWorker).not.toHaveBeenCalled();
+      await expect(
+        f.operations.execute(
+          context,
+          tenantExportPlannedSchema.parse(await response.json()).request,
+          "unapproved-extraction",
+        ),
+      ).rejects.toThrow();
+      expect(f.dependencies.runWorker).not.toHaveBeenCalled();
+    },
+  );
+
+  it("allows retained installed tenants without regranting current actor access", () => {
+    const plan = {
+      access: [{ actorId: "qa-actor", organizationId: "qa-org", roles: ["reviewer"] }],
+      appInstallation: { customerIds: ["original-org", "qa-org"] },
+    };
+    expect(() => {
+      assertTenantExportCustomer(plan, "original-org");
+    }).not.toThrow();
+    expect(() => {
+      assertTenantExportCustomer(plan, "foreign-org");
+    }).toThrow();
+    expect(() => {
+      assertTenantExportCustomer({ access: plan.access }, "original-org");
+    }).toThrow();
+  });
+  it("requires exactly one raw or semantic export selection", () => {
+    const base = {
+      action: "export-plan",
+      selection: {
+        appId: context.target.appId,
+        branch: context.target.branch,
+        environment: "preview",
+        projectId: context.target.projectId,
+        sessionId: context.target.sessionId,
+      },
+      idempotencyKey: "selection",
+      ownerContext: {
+        adapterGeneration: 1,
+        adapterSessionId: "adapter",
+        authority,
+        kind: "direct",
+        principal: { ...authority, scopes: ["autograph:send"] },
+        sessionId: context.target.sessionId,
+      },
+    };
+    expect(
+      tenantExportTransportRequestSchema.safeParse({ ...base, customerId: "original-org" }).success,
+    ).toBe(true);
+    expect(
+      tenantExportTransportRequestSchema.safeParse({ ...base, customerScope: "owner-organization" })
+        .success,
+    ).toBe(true);
+    expect(tenantExportTransportRequestSchema.safeParse(base).success).toBe(false);
+    expect(
+      tenantExportTransportRequestSchema.safeParse({
+        ...base,
+        customerId: "original-org",
+        customerScope: "owner-organization",
+      }).success,
+    ).toBe(false);
   });
 });

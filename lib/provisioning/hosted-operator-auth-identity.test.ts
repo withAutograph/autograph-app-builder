@@ -7,6 +7,7 @@ import {
   readVerifiedRealmAccess,
   realmIdentityNonceSha256,
   verifyRealmIdentityLinkProof,
+  verifyCapturedRealmIdentityProof,
 } from "./hosted-operator-auth-identity";
 
 const keys = generateKeyPairSync("ed25519");
@@ -341,4 +342,36 @@ it("uses the immutable consumed receipt for an expired transport proof while fre
       readback: async () => await Promise.resolve(new Response(null, { status: 401 })),
     }),
   ).rejects.toThrow();
+});
+
+it("verifies an expired historical owner capture without requiring a live old session", async () => {
+  const f = await fixture();
+  const issued = Math.floor(Date.now() / 1000) - 600;
+  const proof = await new SignJWT({ ...f.claims, iat: issued, exp: issued + 240 })
+    .setProtectedHeader({
+      alg: "EdDSA",
+      kid: "actual-native-key",
+      typ: "platform-realm-operator-link+jwt",
+    })
+    .sign(keys.privateKey);
+  const pending = {
+    ...f.pending,
+    consumedAt: new Date((issued + 1) * 1000).toISOString(),
+    proofRef: "owned-proof",
+    proofSha256: createHash("sha256").update(proof).digest("hex"),
+  };
+  expect(await verifyCapturedRealmIdentityProof({ ...f, pending, proof })).toMatchObject({
+    sub: f.claims.sub,
+    organizationId: null,
+  });
+  await expect(
+    verifyCapturedRealmIdentityProof({ ...f, pending, proof: `${proof}tampered` }),
+  ).rejects.toThrow();
+  await expect(
+    verifyCapturedRealmIdentityProof({
+      ...f,
+      pending: { ...pending, ownerSessionId: "foreign" },
+      proof,
+    }),
+  ).rejects.toMatchObject({ code: "auth_identity_required" });
 });

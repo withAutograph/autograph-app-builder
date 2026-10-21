@@ -933,7 +933,9 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
 });
 export type HostedOperatorPlan = z.infer<typeof hostedOperatorPlanSchema>;
 /** Legacy plans install only their grant tenants; explicit plans retain owned installation tenants. */
-export const hostedOperatorInstallationCustomerIds = (plan: HostedOperatorPlan): string[] => [
+export const hostedOperatorInstallationCustomerIds = (
+  plan: Pick<HostedOperatorPlan, "access" | "appInstallation">,
+): string[] => [
   ...new Set(
     plan.appInstallation?.customerIds ?? plan.access.map((target) => target.organizationId),
   ),
@@ -1571,6 +1573,7 @@ const operatorPublicCodeSchema = z.enum([
   "gateway_delivery_failed",
   "app_delivery_configuration_changed",
   "app_source_publication_required",
+  "export_customer_selection_required",
   "operator_unavailable",
   "legacy_runtime_requires_migration",
   "signup_not_ready",

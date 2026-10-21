@@ -247,6 +247,34 @@ describe("closed export tool pre-dispatch diagnostics", () => {
       expect(JSON.stringify(vi.mocked(console.info).mock.calls)).not.toContain("private.example");
     },
   );
+  it("passes the explicit owner organization choice without guessing a customer ID", async () => {
+    const result = { status: "planned", retained: true };
+    hooks.export.mockResolvedValueOnce(result);
+    expect(
+      await planTool.execute({ ...exportInput, customerScope: "owner-organization" }, toolCtx),
+    ).toBe(result);
+    expect(hooks.export).toHaveBeenCalledWith(
+      selection,
+      { kind: "owner-organization" },
+      ctx.callId,
+      ctx.abortSignal,
+    );
+    expect(console.info).not.toHaveBeenCalled();
+  });
+  it("returns an ordinary organization clarification when owner scope is unresolved", async () => {
+    hooks.export.mockRejectedValueOnce(
+      new HostedOperatorError("export_customer_selection_required"),
+    );
+    const result = await planTool.execute(
+      { ...exportInput, customerScope: "owner-organization" },
+      toolCtx,
+    );
+    expect(result).toMatchObject({
+      status: "blocked",
+      code: "export_customer_selection_required",
+      nextAction: "Name the organization to export. No export was planned or data extracted.",
+    });
+  });
   it("preserves successful dispatch and produces no failure diagnostic", async () => {
     const result = { status: "planned", retained: true };
     hooks.export.mockResolvedValueOnce(result);

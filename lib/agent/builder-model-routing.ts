@@ -1,3 +1,4 @@
+import { withBuilderGatewayReporting } from "./builder-gateway-reporting";
 import { createHash } from "node:crypto";
 
 import { defineDynamic } from "eve";
@@ -51,9 +52,11 @@ export const builderModelConfiguration = ({
             model: modelId,
             modelContextWindowTokens: 128_000,
             modelOptions: {
-              providerOptions: {
-                gateway: { only: ["openai"], order: ["openai"] },
-              },
+              providerOptions: withBuilderGatewayReporting(
+                { gateway: { only: ["openai"], order: ["openai"] } },
+                () => ctx.session.id,
+                "main",
+              ),
             },
             reasoning,
           };

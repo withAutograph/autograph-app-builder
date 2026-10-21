@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 
+import type { AgentModelOptionsDefinition } from "eve";
+import { withBuilderGatewayReporting } from "./builder-gateway-reporting";
 import { defineAgent } from "eve";
 import { mockModel } from "eve/evals";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,6 +10,11 @@ import { activeBuilderModelId, builderValidationModelId } from "../integrations/
 import { builderModelConfiguration, builderModelForPhase } from "./builder-model-routing";
 import { APP_BUILDER_WORKFLOW_VERSION, appBuilderWorkflowState } from "./workflow-state";
 import type { AppBuilderWorkflowState } from "./workflow-state";
+
+const nativeTagFor = (sessionId: string) =>
+  `builder-native-sha256:${createHash("sha256")
+    .update(JSON.stringify(["builder-native-session-attribution-v1", sessionId]))
+    .digest("hex")}`;
 
 const discoveryPhases = ["empty", "prepared", "ui_previewed", "ui_accepted"] as const;
 const authoringPhases = [
@@ -93,7 +100,13 @@ describe("Builder model routing", () => {
       model: builderValidationModelId,
       modelContextWindowTokens: 128_000,
       modelOptions: {
-        providerOptions: { gateway: { only: ["openai"], order: ["openai"] } },
+        providerOptions: {
+          gateway: {
+            only: ["openai"],
+            order: ["openai"],
+            tags: [nativeTagFor(context.session.id), "builder-callsite:main"],
+          },
+        },
       },
       reasoning: "high",
     });
@@ -167,7 +180,13 @@ describe("Builder model routing", () => {
       model: builderValidationModelId,
       modelContextWindowTokens: 128_000,
       modelOptions: {
-        providerOptions: { gateway: { only: ["openai"], order: ["openai"] } },
+        providerOptions: {
+          gateway: {
+            only: ["openai"],
+            order: ["openai"],
+            tags: [nativeTagFor(context.session.id), "builder-callsite:main"],
+          },
+        },
       },
       reasoning: "high",
     });
@@ -182,6 +201,95 @@ describe("Builder model routing", () => {
     expect(agent.reasoning).toBe(localDevelopment ? "low" : "high");
     expect(agent).not.toHaveProperty("modelOptions");
     expect(state).not.toHaveBeenCalled();
+    expect(console.info).not.toHaveBeenCalled();
+  });
+});
+
+describe("native Gateway reporting metadata", () => {
+  it("appends native/callsite tags without mutating or replacing existing provider options", () => {
+    const options = {
+      gateway: {
+        only: ["openai"],
+        order: ["openai"],
+        sessionId: "existing-affinity",
+        user: "existing-user",
+        tags: ["retained", "retained"],
+      },
+      openai: { reasoningEffort: "high", nested: { retained: true } },
+    };
+    Object.freeze(options.gateway.tags);
+    Object.freeze(options.gateway);
+    Object.freeze(options);
+    const tagged = withBuilderGatewayReporting(options, () => "native-private-one", "main");
+    expect(tagged).toEqual({
+      ...options,
+      gateway: {
+        ...options.gateway,
+        tags: ["retained", "retained", nativeTagFor("native-private-one"), "builder-callsite:main"],
+      },
+    });
+    expect(tagged.openai).toBe(options.openai);
+    expect(options.gateway.tags).toEqual(["retained", "retained"]);
+    expect(withBuilderGatewayReporting(tagged, () => "native-private-one", "main")).toEqual(tagged);
+    expect(JSON.stringify(tagged)).not.toContain("native-private-one");
+  });
+
+  it("shares only the native hash across callsites and separates concurrent native identities", () => {
+    const options = { gateway: { only: ["openai"] } };
+    const main = withBuilderGatewayReporting(options, () => "native-one", "main");
+    const review = withBuilderGatewayReporting(options, () => "native-one", "source-review");
+    const another = withBuilderGatewayReporting(options, () => "native-two", "main");
+    expect(main.gateway.tags).toContain(nativeTagFor("native-one"));
+    expect(review.gateway.tags).toContain(nativeTagFor("native-one"));
+    expect(another.gateway.tags).not.toContain(nativeTagFor("native-one"));
+    expect(review.gateway.tags).toContain("builder-callsite:source-review");
+    expect(options).toEqual({ gateway: { only: ["openai"] } });
+  });
+
+  it("returns the same options when native context is missing, throws or metadata is unsupported", () => {
+    const options = { gateway: { sessionId: "retained-affinity", user: "retained-user" } };
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing native identity is a supported reporting-only fallback.
+    expect(withBuilderGatewayReporting(options, () => undefined, "main")).toBe(options);
+    expect(withBuilderGatewayReporting(options, () => "", "main")).toBe(options);
+    expect(
+      withBuilderGatewayReporting(
+        options,
+        () => {
+          throw new Error("private context");
+        },
+        "main",
+      ),
+    ).toBe(options);
+    const unsupported = { gateway: { tags: [1], sessionId: "retained-affinity" } };
+    expect(withBuilderGatewayReporting(unsupported, () => "native-one", "main")).toBe(unsupported);
+    const nullTags = { gateway: { tags: null, sessionId: "retained-affinity" } };
+    expect(withBuilderGatewayReporting(nullTags, () => "native-one", "main")).toBe(nullTags);
+    const hostile: NonNullable<AgentModelOptionsDefinition["providerOptions"]> = {
+      get gateway(): NonNullable<AgentModelOptionsDefinition["providerOptions"]>["gateway"] {
+        throw new Error("private metadata");
+      },
+    };
+    expect(withBuilderGatewayReporting(hostile, () => "native-one", "main")).toBe(hostile);
+    expect(console.info).not.toHaveBeenCalled();
+  });
+
+  it("keeps dynamic model selection working when only its reporting context is unavailable", async () => {
+    vi.spyOn(appBuilderWorkflowState, "get").mockReturnValue(savedState("validation_failed"));
+    const { handler } = nativeModel();
+    const unavailableContext = {
+      ...context,
+      session: {
+        ...context.session,
+        get id(): string {
+          throw new Error("private native context unavailable");
+        },
+      },
+    };
+    expect(await handler({ type: "step.started" }, unavailableContext)).toMatchObject({
+      model: builderValidationModelId,
+      reasoning: "high",
+      modelOptions: { providerOptions: { gateway: { only: ["openai"], order: ["openai"] } } },
+    });
     expect(console.info).not.toHaveBeenCalled();
   });
 });
