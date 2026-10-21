@@ -18,6 +18,7 @@ import type { HostedOperatorContext, HostedOperatorEffectContext } from "./hoste
 import { createHostedOperatorSandboxLauncher } from "./hosted-operator-sandbox-launcher";
 import type { GeneratedAppReleaseFiles } from "./hosted-operator-sandbox-launcher";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
+import type { ApprovedMembershipInspection } from "./hosted-operator-membership-inspection";
 
 type OrganizationWorkerInput = Parameters<
   NormalActorOperationsDependencies["inspectOrganization"]
@@ -43,6 +44,16 @@ export interface NormalActorOrganizationWorkerDependencies {
     spec: HostedOperatorOwnedOrganizationSpec;
     proof: string;
   }>;
+  /** Canonical original approvals, exclusively for SELECT-only inspection. */
+  readMembershipInspections: (
+    effect: HostedOperatorEffectContext,
+    selected: { organizationId: string },
+  ) => Promise<readonly ApprovedMembershipInspection[]>;
+  readMembershipInspectionProof: (
+    effect: HostedOperatorEffectContext,
+    inspection: ApprovedMembershipInspection,
+    selected: { organizationId: string },
+  ) => Promise<{ proof: string; preparation: NormalActorAccountPreparation }>;
 }
 interface TestDependencies {
   createLauncher?: typeof createHostedOperatorSandboxLauncher;
@@ -153,6 +164,63 @@ const assertRetained = (
   }
 };
 
+type HistoricalMembershipProof = Awaited<
+  ReturnType<NormalActorOrganizationWorkerDependencies["readMembershipInspectionProof"]>
+>;
+const assertHistoricalInspection = (
+  input: OrganizationWorkerInput,
+  historical: ApprovedMembershipInspection,
+  original: HistoricalMembershipProof | undefined,
+) => {
+  const membership = historical.plan.authMembership;
+  if (membership === undefined || original === undefined) {
+    throw mismatch();
+  }
+  const spec = selectHostedOperatorOwnedOrganizationSpec(membership, {
+    organizationId: input.organizationId,
+  });
+  // Historical JWT verification uses capturedAt. The host must retain
+  // the actual consumed canonical link, including superseded captures.
+  const captured = [
+    ...(original.preparation.organizationProofs ?? []),
+    ...(original.preparation.supersededOrganizationProofs ?? []),
+  ].some((entry) =>
+    [
+      entry.organizationId === input.organizationId,
+      entry.owner.actorId === spec.actorId,
+      entry.owner.realmSessionId === spec.identityCapture.realmSessionId,
+      entry.owner.origin === spec.identityVerification.issuer,
+      entry.link.ownerSessionId === historical.plan.selection.sessionId,
+      entry.link.organizationId === null,
+      entry.link.authResourceId === historical.plan.authDatabase.resourceId,
+      entry.link.browserOrigin === spec.identityVerification.issuer,
+      entry.link.proofRef === spec.identityProof.reference,
+      entry.link.proofSha256 === spec.identityProof.sha256,
+      entry.link.nonceSha256 === spec.identityNonceSha256,
+      entry.link.bootstrapPlanDigest === spec.bootstrapPlanDigest,
+      entry.link.consumedAt === spec.identityCapture.capturedAt,
+      entry.link.issuer === spec.identityVerification.issuer,
+      entry.link.audience === spec.identityVerification.audience,
+      `${entry.link.endpointOrigin}/_platform/jwks.json` === spec.identityVerification.jwksUrl,
+      isDeepStrictEqual(entry.transportSource, spec.identityVerification.transportSource),
+    ].every(Boolean),
+  );
+  const matches = [
+    captured,
+    historical.effect.kind === "auth-membership",
+    ["auth-membership", `auth-membership:${input.organizationId}`].includes(historical.effect.id),
+    spec.actorId === input.owner.actorId,
+    spec.identityProof.reference ===
+      `_protected-operator/artifacts/realm-identity-proof/${input.effect.target.appId}/${spec.identityProof.sha256}`,
+    Buffer.byteLength(original.proof, "utf-8") <= 16_384,
+    createHash("sha256").update(original.proof, "utf-8").digest("hex") ===
+      spec.identityProof.sha256,
+  ];
+  if (!matches.every(Boolean)) {
+    throw mismatch();
+  }
+};
+
 /** Real selected organization worker and readback through the deployment-owned launcher. Test overrides have no successful production defaults. */
 export const createNormalActorOrganizationWorkers = (
   deps: NormalActorOrganizationWorkerDependencies,
@@ -223,20 +291,71 @@ export const createNormalActorOrganizationWorkers = (
     async inspectOrganization(input) {
       return await privateOperation(async () => {
         const prepared = await privateInput(input);
-        try {
+        const currentFence = async () => {
+          await assertCurrent(input);
+        };
+        const inspect = async (
+          historical?: ApprovedMembershipInspection,
+          original?: HistoricalMembershipProof,
+        ) => {
+          if (historical !== undefined) {
+            assertHistoricalInspection(input, historical, original);
+          }
+          await assertCurrent(input);
           const observed = await launcher.inspect({
             ...input.effect,
             ...prepared,
+            ...(historical === undefined || original === undefined
+              ? {}
+              : {
+                  plan: historical.plan,
+                  effect: historical.effect,
+                  membershipProof: { ...prepared.membershipProof, proof: original.proof },
+                }),
+            // Only the observed marker uses historical plan bytes. Authority and
+            // every execution fence still belong to the current approved effect.
+            assertCurrent: currentFence,
             readbackOnly: true,
           });
           await assertCurrent(input);
-          if (observed?.status === "applied") {
-            return "applied";
+          return observed?.status;
+        };
+        try {
+          const historical = await deps.readMembershipInspections(input.effect, {
+            organizationId: input.organizationId,
+          });
+          for (const candidate of historical) {
+            // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Each candidate must recheck the same live owner and journal fence before private reads.
+            await assertCurrent(input);
+            try {
+              // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Original proof reads share the current authority journal and precede their selected worker inspection.
+              const original = await deps.readMembershipInspectionProof(input.effect, candidate, {
+                organizationId: input.organizationId,
+              });
+              // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Inspect one authorized marker at a time under the shared fence and stop on its exact live match.
+              if ((await inspect(candidate, original)) === "applied") {
+                return "applied";
+              }
+            } catch (error) {
+              if (
+                !(error instanceof HostedOperatorError) ||
+                ![
+                  "reconciliation_required",
+                  "auth_identity_required",
+                  "resource_mismatch",
+                ].includes(error.code)
+              ) {
+                throw error;
+              }
+            }
           }
-          if (observed?.status === "absent") {
-            return "absent";
+          if (historical.length > 0) {
+            // Missing historical state never authorizes recreation under any plan.
+            await assertCurrent(input);
+            return "unknown";
           }
-          return "unknown";
+          const status = await inspect();
+          return status === "applied" || status === "absent" ? status : "unknown";
         } catch (error) {
           if (error instanceof HostedOperatorError && error.code === "reconciliation_required") {
             return "unknown";

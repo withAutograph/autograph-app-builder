@@ -11,7 +11,10 @@ import type {
 import type { HostedEveStore } from "../eve/hosted-store";
 import { projectSettingsDeliveryProvenance } from "./hosted-operator-project-settings-successor";
 import { retentionRenewalDeliveryProvenance } from "./hosted-operator-retention-renewal";
-import { matchRetainedMembershipInspectionProvenance } from "./hosted-operator-membership-inspection-provenance";
+import {
+  matchRetainedMembershipInspectionProvenance,
+  RetainedMembershipApprovalUnavailableError,
+} from "./hosted-operator-membership-inspection-provenance";
 import { readyReplacementPriorOperators } from "./hosted-operator-native-preview-recovery";
 import { hostedSessionRecordSchema, toDurableHostedSessionRecord } from "../eve/hosted-store";
 import { hostedPrincipalSchema } from "../eve/hosted-auth";
@@ -664,11 +667,15 @@ const membershipInspectionApprovalCheckpoint = (
   if (context.action !== "prepare" || record?.operator === undefined) {
     return null;
   }
+  // Each selected organization's archived operation retains its own approval
+  // identity. It need not be the later operation holding the live SELECT fence.
   const retained = matchRetainedMembershipInspectionProvenance(record, record.operator.plan, {
     approvedByCallId: context.callId,
     planDigest: context.planDigest,
   });
-  return retained === undefined ? null : { current: retained.operator, retainedPrepare: true };
+  return retained === undefined
+    ? null
+    : { current: retained.operator, retainedPrepare: true, membershipInspection: true };
 };
 
 const appGatewaySourceApprovalCheckpoint = (
@@ -697,6 +704,10 @@ const approvalCheckpoint = (
   if (account !== null) {
     return account;
   }
+  const retainedMembership = membershipInspectionApprovalCheckpoint(record, context);
+  if (retainedMembership !== null) {
+    return retainedMembership;
+  }
   const appGatewayOriginal = appGatewaySourceApprovalCheckpoint(record, context);
   if (appGatewayOriginal !== null) {
     return appGatewayOriginal;
@@ -723,10 +734,6 @@ const approvalCheckpoint = (
   const retainedReady = readyReplacementApprovalCheckpoint(record, context);
   if (retainedReady !== null) {
     return retainedReady;
-  }
-  const retainedMembership = membershipInspectionApprovalCheckpoint(record, context);
-  if (retainedMembership !== null) {
-    return retainedMembership;
   }
   const retained = record?.retainedAuth;
   const retainedPrepare =
@@ -768,7 +775,8 @@ export const createHostedOperatorReadApproval =
   ) => {
     const owner = operatorOwnerContextSchema.safeParse(context.ownerContext);
     const row = await input.journal.read(context);
-    const { current, retainedPrepare } = approvalCheckpoint(row?.record, context);
+    const checkpoint = approvalCheckpoint(row?.record, context);
+    const { current, retainedPrepare } = checkpoint;
     if (!owner.success || current === undefined) {
       throw unavailable();
     }
@@ -816,7 +824,9 @@ export const createHostedOperatorReadApproval =
       receipt = await readReceipt();
     }
     if (receipt === null) {
-      throw unavailable();
+      throw "membershipInspection" in checkpoint
+        ? new RetainedMembershipApprovalUnavailableError()
+        : unavailable();
     }
     const receiptMatches = [
       receipt.outcome === "approved",
@@ -830,7 +840,9 @@ export const createHostedOperatorReadApproval =
       !retainedPrepare || receipt.requestId === current.approvalId,
     ].every(Boolean);
     if (!receiptMatches) {
-      throw unavailable();
+      throw "membershipInspection" in checkpoint
+        ? new RetainedMembershipApprovalUnavailableError()
+        : unavailable();
     }
     return {
       action: context.action,

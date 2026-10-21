@@ -5,13 +5,21 @@ import type { HostedEveStore } from "../eve/hosted-store";
 import { privateHostedApprovalReceiptSchema } from "../eve/private-hosted-approval";
 import {
   hostedOperatorPlanSchema,
+  HostedOperatorError,
   operatorOwnerContextSchema,
   operatorPlanDigest,
 } from "./hosted-operator-contract";
 import { createHostedOperatorReadApproval } from "./hosted-operator-owner";
-import { readApprovedRetainedMembershipInspection } from "./hosted-operator-membership-inspection";
+import {
+  readApprovedRetainedMembershipInspection,
+  readApprovedRetainedMembershipInspections,
+} from "./hosted-operator-membership-inspection";
 import type { HostedOperatorEffectContext } from "./hosted-operator-service";
 import { hostedRuntimeJournalRecordSchema } from "./hosted-runtime-journal";
+import {
+  normalActorProgramDigest,
+  normalActorProgramSchema,
+} from "./hosted-operator-normal-actor-program";
 
 const membershipInspectionFixture = () => {
   const principal = {
@@ -347,7 +355,243 @@ const approvedInspectionFixture = () => {
   return { ...f, context, readApproval, readCurrentRecord };
 };
 
+const selectedInspectionFixture = () => {
+  const f = approvedInspectionFixture();
+  const current = f.record.operator;
+  const original = current?.retainedInstallerOperations?.[0]?.operator;
+  const spec = current?.plan.authMembership;
+  if (
+    current === undefined ||
+    original === undefined ||
+    spec?.kind !== "create-owned-organization"
+  ) {
+    throw new Error("Expected current and original organization authority");
+  }
+  const organizations = [
+    spec,
+    { ...spec, organizationId: "second-org", name: "Second", slug: "second-org" },
+  ];
+  const program = normalActorProgramSchema.parse({
+    version: 1,
+    appId: current.plan.selection.appId,
+    origin: current.plan.publicGateway?.origin,
+    actors: [
+      {
+        actorKey: "owner",
+        email: "owner@example.test",
+        name: "Owner",
+        account: "capture-existing",
+      },
+    ],
+    organizations: organizations.map((organization) => ({
+      organizationId: organization.organizationId,
+      name: organization.name,
+      slug: organization.slug,
+      ownerActorKey: "owner",
+    })),
+    memberships: organizations.map(({ organizationId }) => ({
+      organizationId,
+      actorKey: "owner",
+      role: "owner",
+    })),
+    appAccess: organizations.map(({ organizationId }) => ({
+      organizationId,
+      actorKey: "owner",
+      roles: ["member"],
+    })),
+  });
+  current.plan = hostedOperatorPlanSchema.parse({
+    ...current.plan,
+    authMembership: { kind: "create-owned-organizations", organizations },
+    normalActorProgram: program,
+    normalActorPreparation: {
+      accountOperationRef: "33333333-3333-4333-8333-333333333333",
+      accountPlanDigest: "a".repeat(64),
+      accountApprovalId: "account-approval",
+      accountApprovedByCallId: "account-call",
+      programDigest: normalActorProgramDigest(program),
+    },
+    effects: current.plan.effects.flatMap((effect) =>
+      effect.kind === "auth-membership"
+        ? organizations.map(({ organizationId }) => ({
+            ...effect,
+            id: `auth-membership:${organizationId}`,
+          }))
+        : [effect],
+    ),
+  });
+  current.planDigest = operatorPlanDigest(current.plan);
+  current.operationRef = "44444444-4444-4444-8444-444444444444";
+  original.receipts = [];
+  const effect = current.plan.effects.find(
+    (entry) => entry.id === `auth-membership:${spec.organizationId}`,
+  );
+  if (effect === undefined) {
+    throw new Error("Expected selected current membership effect");
+  }
+  f.context.plan = current.plan;
+  f.context.effect = effect;
+  f.context.operationRef = current.operationRef;
+  return { ...f, organizationId: spec.organizationId, original };
+};
+
 describe("approved retained membership inspection", () => {
+  it("uses the canonical original approval after creation committed before receipt persistence", async () => {
+    const f = selectedInspectionFixture();
+    const currentDigest = operatorPlanDigest(f.context.plan);
+    const result = await readApprovedRetainedMembershipInspections({
+      effect: f.context,
+      organizationId: f.organizationId,
+      readApproval: f.readApproval,
+      readCurrentRecord: f.readCurrentRecord,
+    });
+    expect(result[0]?.plan).toEqual(f.approval.toolInput.plan);
+    expect(result[0]?.effect.id).toBe("membership");
+    expect(f.original.operationRef).toBe(f.approval.toolInput.operationRef);
+    expect(f.context.operationRef).not.toBe(f.original.operationRef);
+    expect(operatorPlanDigest(f.context.plan)).toBe(currentDigest);
+    expect(f.context.assertCurrent).toHaveBeenCalled();
+  });
+
+  it.each(["cancelled", "foreign-responder", "foreign-operation"] as const)(
+    "skips a %s original approval for selected organization recovery",
+    async (mismatch) => {
+      const f = selectedInspectionFixture();
+      if (mismatch === "cancelled") {
+        f.approval.outcome = "cancelled";
+      }
+      if (mismatch === "foreign-responder") {
+        f.approval.responderPrincipalId = "foreign-owner";
+      }
+      if (mismatch === "foreign-operation") {
+        f.approval.toolInput.operationRef = f.context.operationRef;
+      }
+      f.session.privateApprovalReceipts = [f.approval];
+      await expect(
+        readApprovedRetainedMembershipInspections({
+          effect: f.context,
+          organizationId: f.organizationId,
+          readApproval: f.readApproval,
+          readCurrentRecord: f.readCurrentRecord,
+        }),
+      ).resolves.toEqual([]);
+    },
+  );
+
+  it("rejects a different selected organization before reading its historical approval", async () => {
+    const f = selectedInspectionFixture();
+    await expect(
+      readApprovedRetainedMembershipInspections({
+        effect: f.context,
+        organizationId: "second-org",
+        readApproval: f.readApproval,
+        readCurrentRecord: f.readCurrentRecord,
+      }),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    expect(f.readApproval).not.toHaveBeenCalled();
+    expect(f.readCurrentRecord).not.toHaveBeenCalled();
+  });
+
+  it("returns independently approved source revisions for actual ownership readback", async () => {
+    const f = selectedInspectionFixture();
+    const plan = hostedOperatorPlanSchema.parse({
+      ...f.original.plan,
+      installer: { ...f.original.plan.installer, sha256: "9".repeat(64) },
+    });
+    if (f.record.operator === undefined) {
+      throw new Error("Expected current operator");
+    }
+    f.record.operator.retainedGatewayDeliveries = [
+      {
+        approvedByCallId: "another-original-call",
+        operator: {
+          ...f.original,
+          approvalId: "another-original-request",
+          plan,
+          planDigest: operatorPlanDigest(plan),
+        },
+      },
+    ];
+    const anotherApproval = privateHostedApprovalReceiptSchema.parse({
+      ...f.approval,
+      callId: "another-original-call",
+      requestId: "another-original-request",
+      sequence: 2,
+      toolInput: { ...f.approval.toolInput, plan, planDigest: operatorPlanDigest(plan) },
+    });
+    f.session.privateApprovalReceipts = [f.approval, anotherApproval];
+    const results = await readApprovedRetainedMembershipInspections({
+      effect: f.context,
+      organizationId: f.organizationId,
+      readApproval: f.readApproval,
+      readCurrentRecord: f.readCurrentRecord,
+    });
+    expect(results.map((result) => operatorPlanDigest(result.plan))).toEqual([
+      f.approval.toolInput.planDigest,
+      anotherApproval.toolInput.planDigest,
+    ]);
+  });
+
+  it("does not let a denied archived operation hide a separately approved identical plan", async () => {
+    const f = selectedInspectionFixture();
+    if (f.record.operator === undefined) {
+      throw new Error("Expected current operator");
+    }
+    const operationRef = "55555555-5555-4555-8555-555555555555";
+    f.record.operator.retainedGatewayDeliveries = [
+      {
+        approvedByCallId: "approved-original-call",
+        operator: { ...f.original, approvalId: "approved-original-request", operationRef },
+      },
+    ];
+    const approval = privateHostedApprovalReceiptSchema.parse({
+      ...f.approval,
+      callId: "approved-original-call",
+      requestId: "approved-original-request",
+      sequence: 2,
+      toolInput: { ...f.approval.toolInput, operationRef },
+    });
+    f.approval.outcome = "cancelled";
+    f.session.privateApprovalReceipts = [f.approval, approval];
+    const results = await readApprovedRetainedMembershipInspections({
+      effect: f.context,
+      organizationId: f.organizationId,
+      readApproval: f.readApproval,
+      readCurrentRecord: f.readCurrentRecord,
+    });
+    expect(results.map((result) => operatorPlanDigest(result.plan))).toEqual([
+      approval.toolInput.planDigest,
+    ]);
+  });
+
+  it("propagates a current owner authorization failure without classifying it as an old approval denial", async () => {
+    const f = selectedInspectionFixture();
+    const failure = new HostedOperatorError("authorization_required");
+    f.context.assertCurrent = vi.fn(() => Promise.reject(failure));
+    await expect(
+      readApprovedRetainedMembershipInspections({
+        effect: f.context,
+        organizationId: f.organizationId,
+        readApproval: f.readApproval,
+        readCurrentRecord: f.readCurrentRecord,
+      }),
+    ).rejects.toBe(failure);
+    expect(f.readApproval).not.toHaveBeenCalled();
+  });
+
+  it("does not swallow an authorization failure raised by the approval transport", async () => {
+    const f = selectedInspectionFixture();
+    const failure = new HostedOperatorError("authorization_required");
+    await expect(
+      readApprovedRetainedMembershipInspections({
+        effect: f.context,
+        organizationId: f.organizationId,
+        readApproval: () => Promise.reject(failure),
+        readCurrentRecord: f.readCurrentRecord,
+      }),
+    ).rejects.toBe(failure);
+  });
+
   it("requires the real original approval and preserves the current execution fence", async () => {
     const f = approvedInspectionFixture();
     const currentDigest = operatorPlanDigest(f.context.plan);
