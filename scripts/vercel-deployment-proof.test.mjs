@@ -28,6 +28,12 @@ const status = (id, state) => ({
   created_at: `2026-10-21T10:01:0${id}Z`,
   environment_url: "https://exact-source.vercel.app",
 });
+/**
+ * @param {string} line Synthetic process.argv recorded by the local mock binaries.
+ * @returns {string[]} The arguments emitted by the fixture-owned mock process.
+ */
+const parseRecordedArgs = (line) => JSON.parse(line);
+
 const runProof = (deployments, statuses) => {
   const directory = mkdtempSync(path.join(tmpdir(), "builder-deployment-proof-"));
   const fixture = path.join(directory, "fixture.json");
@@ -96,8 +102,8 @@ require("node:fs").appendFileSync(process.env.FIXTURE_ROOT+"/waits.jsonl",proces
     };
     return {
       result,
-      calls: readLines("calls.jsonl").map(JSON.parse),
-      probes: readLines("probes.jsonl").map(JSON.parse),
+      calls: readLines("calls.jsonl").map(parseRecordedArgs),
+      probes: readLines("probes.jsonl").map(parseRecordedArgs),
       proof: readLines("vercel-deployment-proof.json").join("\n"),
     };
   } finally {
