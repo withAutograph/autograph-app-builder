@@ -37,6 +37,7 @@ import {
 } from "./hosted-operator-composition";
 import { readNeonAuthorizationConfiguration } from "./hosted-operator-neon-authorization";
 import type { HostedOperatorRequestDependencyLoader } from "./hosted-operator-native";
+import { reportHostedOperatorNativeFailure } from "./hosted-operator-native-diagnostic";
 
 // Identity projection only: the existing protected handler validates the complete operation.
 // Onboarding/consent actions have their own authority and do not need a configured app yet.
@@ -116,44 +117,63 @@ export const createNativeTargetConfigurationResolver =
     openResources: () => Promise<NativeTargetConfigurationResources>;
   }) =>
   async (request: Request): Promise<HostedOperatorSourceConfiguration> => {
-    const parsed = configurationRequestSchema.safeParse(await request.json());
-    // Consent and independently dispatched actions keep their existing handler authority.
-    // Invalid requests remain the protected handler's responsibility, with no private reads here.
-    if (!parsed.success) {
-      return structuredClone(input.configuration);
-    }
-    const resources = await input.openResources();
+    let stage: Parameters<typeof reportHostedOperatorNativeFailure>[0] = "resolver_configuration";
     try {
-      const selected = await selectedApp(parsed.data, request, resources);
-      const ownerContext = parsed.data.ownerContext;
-      if (ownerContext === undefined || ownerContext.sessionId !== selected.sessionId) {
-        throw new HostedOperatorError("authorization_required");
+      const parsed = configurationRequestSchema.safeParse(await request.json());
+      // Consent and independently dispatched actions keep their existing handler authority.
+      // Invalid requests remain the protected handler's responsibility, with no private reads here.
+      if (!parsed.success) {
+        return structuredClone(input.configuration);
       }
-      const reader = createNativeTargetOnboardingReader<RegistryInvocation>({
-        store: resources.registry,
-        authorize: async (invocation, appId) => {
-          await resources.owner.verifyWorkload(invocation.request);
-          await resources.owner.assertCanonicalAppOwner({
-            authority: invocation.ownerContext.authority,
-            ownerContext: invocation.ownerContext,
-            target: { appId, sessionId: invocation.sessionId },
-          });
-          return {
-            authority: invocation.ownerContext.authority,
-            publicSessionId: invocation.sessionId,
-            adapterSessionId: invocation.ownerContext.adapterSessionId,
-            adapterGeneration: invocation.ownerContext.adapterGeneration,
-          };
-        },
-      });
-      return await resolveNativeTargetEffectiveConfiguration({
-        configuration: input.configuration,
-        invocation: { request, ownerContext, sessionId: selected.sessionId },
-        appId: selected.appId,
-        readReady: async (invocation, appId) => await reader.readReady(invocation, appId),
-      });
-    } finally {
-      await resources.close();
+      stage = "resolver_resources";
+      const resources = await input.openResources();
+      try {
+        stage = "resolver_owner";
+        const selected = await selectedApp(parsed.data, request, resources);
+        const ownerContext = parsed.data.ownerContext;
+        if (ownerContext === undefined || ownerContext.sessionId !== selected.sessionId) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        const reader = createNativeTargetOnboardingReader<RegistryInvocation>({
+          store: resources.registry,
+          authorize: async (invocation, appId) => {
+            stage = "resolver_workload";
+            await resources.owner.verifyWorkload(invocation.request);
+            stage = "resolver_owner";
+            await resources.owner.assertCanonicalAppOwner({
+              authority: invocation.ownerContext.authority,
+              ownerContext: invocation.ownerContext,
+              target: { appId, sessionId: invocation.sessionId },
+            });
+            stage = "resolver_registry";
+            return {
+              authority: invocation.ownerContext.authority,
+              publicSessionId: invocation.sessionId,
+              adapterSessionId: invocation.ownerContext.adapterSessionId,
+              adapterGeneration: invocation.ownerContext.adapterGeneration,
+            };
+          },
+        });
+        stage = "resolver_effective_config";
+        return await resolveNativeTargetEffectiveConfiguration({
+          configuration: input.configuration,
+          invocation: { request, ownerContext, sessionId: selected.sessionId },
+          appId: selected.appId,
+          readReady: async (invocation, appId) => {
+            const ready = await reader.readReady(invocation, appId);
+            stage = "resolver_effective_config";
+            return ready;
+          },
+        });
+      } finally {
+        const previousStage = stage;
+        stage = "resolver_dispose";
+        await resources.close();
+        stage = previousStage;
+      }
+    } catch (error) {
+      reportHostedOperatorNativeFailure(stage, error);
+      throw error;
     }
   };
 
@@ -162,8 +182,20 @@ export const openNativeTargetConfigurationResources = async (
   configuration: HostedOperatorSourceConfiguration,
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): Promise<NativeTargetConfigurationResources> => {
-  const settings = readHostedOperatorOwnerReaderConfiguration(environment);
-  const tokenKeyring = readVercelTokenKeyringEnvironment(environment);
+  let settings: ReturnType<typeof readHostedOperatorOwnerReaderConfiguration>;
+  try {
+    settings = readHostedOperatorOwnerReaderConfiguration(environment);
+  } catch (error) {
+    reportHostedOperatorNativeFailure("resolver_owner_reader_config", error);
+    throw error;
+  }
+  let tokenKeyring: ReturnType<typeof readVercelTokenKeyringEnvironment>;
+  try {
+    tokenKeyring = readVercelTokenKeyringEnvironment(environment);
+  } catch (error) {
+    reportHostedOperatorNativeFailure("resolver_keyring", error);
+    throw error;
+  }
   const client = postgres(settings.databaseUrl, hostedRuntimePostgresOptions);
   try {
     const database = drizzle(client, { schema: databaseSchema });
@@ -199,7 +231,12 @@ export const openNativeTargetConfigurationResources = async (
       },
     };
   } catch (error) {
-    await client.end({ timeout: 5 });
+    try {
+      await client.end({ timeout: 5 });
+    } catch (disposeError) {
+      reportHostedOperatorNativeFailure("resolver_dispose", disposeError);
+      throw disposeError;
+    }
     throw error;
   }
 };
@@ -214,14 +251,25 @@ export const createNativeTargetRequestDependencies =
       environment.PROTECTED_HOSTED_OPERATOR_CONFIGURATION === undefined ||
       environment.PROTECTED_HOSTED_OPERATOR_CONFIGURATION === ""
     ) {
-      return {
-        dependencies: composeHostedOperatorAuthorizationDependencies(
-          readNeonAuthorizationConfiguration(environment),
-        ),
-        close: () => Promise.resolve(),
-      };
+      try {
+        return {
+          dependencies: composeHostedOperatorAuthorizationDependencies(
+            readNeonAuthorizationConfiguration(environment),
+          ),
+          close: () => Promise.resolve(),
+        };
+      } catch (error) {
+        reportHostedOperatorNativeFailure("resolver_configuration_authorization", error);
+        throw error;
+      }
     }
-    const configuration = readHostedOperatorSourceConfiguration(environment);
+    let configuration: HostedOperatorSourceConfiguration;
+    try {
+      configuration = readHostedOperatorSourceConfiguration(environment);
+    } catch (error) {
+      reportHostedOperatorNativeFailure("resolver_configuration_source", error);
+      throw error;
+    }
     return await createRequestScopedHostedOperatorDependencies({
       environment,
       resolveConfiguration: createNativeTargetConfigurationResolver({
