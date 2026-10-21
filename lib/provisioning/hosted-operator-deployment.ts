@@ -1,4 +1,8 @@
-import { observeContinuityPlanningStage } from "./hosted-operator-consent-diagnostic";
+import {
+  observeContinuityPlanningStage,
+  advanceExportPlanningStage,
+} from "./hosted-operator-consent-diagnostic";
+import type { ExportPlanningStageObserver } from "./hosted-operator-consent-diagnostic";
 import { createManagedRuntimeWorkerAsset } from "../agent/managed-runtime-worker-asset";
 import { Sandbox } from "@vercel/sandbox";
 import {
@@ -2697,6 +2701,28 @@ export const createHostedOperatorControlPlane = async (input: {
           onclose: onConnectionClosed,
         }),
     });
+    const exportPreparationObserver = (diagnostic?: {
+      onPlanStage: ExportPlanningStageObserver;
+      setup: boolean;
+    }) => {
+      const stages =
+        diagnostic?.setup === true
+          ? ({
+              owner: "setup_owner_authorization",
+              journal: "setup_journal_read",
+              phase: "setup_phase_validation",
+              approval: "setup_approval_authorization",
+            } as const)
+          : ({
+              owner: "prepared_owner_authorization",
+              journal: "prepared_journal_read",
+              phase: "prepared_phase_validation",
+              approval: "prepared_approval_authorization",
+            } as const);
+      return (key: keyof typeof stages) => {
+        advanceExportPlanningStage(diagnostic?.onPlanStage, stages[key]);
+      };
+    };
     const preparedForExport = async (
       context: HostedOperatorContext,
       catchUpApproval = false,
@@ -2706,10 +2732,15 @@ export const createHostedOperatorControlPlane = async (input: {
         approvalId: string;
         approvedByCallId: string;
       },
+      diagnostic?: { onPlanStage: ExportPlanningStageObserver; setup: boolean },
     ) => {
+      const observe = exportPreparationObserver(diagnostic);
+      observe("owner");
       await owner.assertArtifactAuthorized(context);
+      observe("journal");
       const current = await store.read(context);
       const operator = current?.record.operator;
+      observe("phase");
       if (operator === undefined || current === undefined || current.record.status !== "prepared") {
         throw new HostedOperatorError("operation_in_progress");
       }
@@ -2723,6 +2754,7 @@ export const createHostedOperatorControlPlane = async (input: {
         plan: operator.plan,
         privateState: current.record.privateState,
       });
+      observe("approval");
       if (
         retainedApproval !== undefined &&
         isDeepStrictEqual(retainedApproval, {
@@ -2774,13 +2806,22 @@ export const createHostedOperatorControlPlane = async (input: {
       context: HostedOperatorContext,
       customerId: string,
       verifyRelease = false,
+      onPlanStage?: ExportPlanningStageObserver,
     ) => {
+      advanceExportPlanningStage(onPlanStage, "worker_configuration");
       if (configuration.sandbox.exportWorker === undefined) {
         throw new HostedOperatorError("protected_operator_required");
       }
-      const { current, operator } = await preparedForExport(context, true);
+      const { current, operator } = await preparedForExport(
+        context,
+        true,
+        undefined,
+        onPlanStage === undefined ? undefined : { onPlanStage, setup: false },
+      );
       const plan = operator.plan;
+      advanceExportPlanningStage(onPlanStage, "customer_authorization");
       assertTenantExportCustomer(plan, customerId);
+      advanceExportPlanningStage(onPlanStage, "release_selection");
       const ownedRelease = ownedArtifacts(context);
       if (plan.release.artifactRef === undefined) {
         throw new HostedOperatorError("resource_mismatch");
@@ -2789,6 +2830,7 @@ export const createHostedOperatorControlPlane = async (input: {
         appSpecDigest: plan.contextId,
         artifactRef: plan.release.artifactRef,
       });
+      advanceExportPlanningStage(onPlanStage, "release_match");
       if (
         selected === undefined ||
         selected.releaseId !== plan.release.id ||
@@ -2798,8 +2840,10 @@ export const createHostedOperatorControlPlane = async (input: {
         throw new HostedOperatorError("resource_mismatch");
       }
       if (verifyRelease) {
+        advanceExportPlanningStage(onPlanStage, "release_read");
         await controlPlane.readGeneratedRelease(context, selected);
       }
+      advanceExportPlanningStage(onPlanStage, "prepared_approval_authorization");
       if (operator.approvalId === undefined) {
         throw new HostedOperatorError("authorization_required");
       }
@@ -2845,9 +2889,16 @@ export const createHostedOperatorControlPlane = async (input: {
     const assertExportSetup = async (
       context: HostedOperatorContext,
       plan: HostedTenantExportPlan,
+      onPlanStage?: ExportPlanningStageObserver,
     ) => {
-      const { current, operator } = await preparedForExport(context);
+      const { current, operator } = await preparedForExport(
+        context,
+        false,
+        undefined,
+        onPlanStage === undefined ? undefined : { onPlanStage, setup: true },
+      );
       const prepared = operator.plan;
+      advanceExportPlanningStage(onPlanStage, "setup_customer_authorization");
       assertTenantExportCustomer(prepared, plan.scope.customerId);
       const observedSetup = {
         operationRef: operator.operationRef,
@@ -2867,15 +2918,28 @@ export const createHostedOperatorControlPlane = async (input: {
         migratorRole: prepared.appDatabase.migratorRole,
         runtimeRole: prepared.appDatabase.runtimeRole,
       };
-      const same = [
+      advanceExportPlanningStage(onPlanStage, "setup_match");
+      const comparisons = [
         isDeepStrictEqual(observedSetup, plan.originalSetup),
         isDeepStrictEqual(observedResource, plan.resource),
         prepared.release.id === plan.release.id,
         prepared.release.sha256 === plan.release.manifestSha256,
         prepared.release.artifactRef === plan.release.manifestRef,
         prepared.selection.appId === plan.scope.appId,
-      ].every(Boolean);
-      if (!same) {
+      ];
+      if (!comparisons.every(Boolean)) {
+        const failureStages = [
+          "setup_match_original_setup",
+          "setup_match_resource",
+          "setup_match_release_id",
+          "setup_match_release_manifest",
+          "setup_match_release_ref",
+          "setup_match_app",
+        ] as const;
+        const failedStage = failureStages[comparisons.indexOf(false)];
+        if (failedStage !== undefined) {
+          advanceExportPlanningStage(onPlanStage, failedStage);
+        }
         throw new HostedOperatorError("resource_mismatch");
       }
     };
@@ -2901,8 +2965,8 @@ export const createHostedOperatorControlPlane = async (input: {
     const exports = createHostedTenantExportOperations({
       store: exportStore,
       assertOwner: owner.assertArtifactAuthorized,
-      resolvePlan: async (context, customerId) =>
-        await resolveExportPlan(context, customerId, true),
+      resolvePlan: async (context, customerId, onPlanStage) =>
+        await resolveExportPlan(context, customerId, true, onPlanStage),
       assertSetup: assertExportSetup,
       async readApproval(context, request, callId) {
         await owner.assertArtifactAuthorized(context);
