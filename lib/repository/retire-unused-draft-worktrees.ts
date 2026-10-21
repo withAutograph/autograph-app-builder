@@ -36,7 +36,46 @@ const entry = fields => {
   return { root: fields[0].slice(9), head: fields[1].slice(5) };
 };
 const common = async root => fs.realpathSync((await read(root, ["rev-parse", "--path-format=absolute", "--git-common-dir"])).trim());
-const inspect = async (checkout, candidate, commonDirectory, retainedRoots, directory) => {
+// Same derived-link convention as candidate attachment/replay; never follow its target.
+const ownedDependencyRoot = (root, workspace, relative) => {
+  if (relative.split("/").at(-1) !== "node_modules") return false;
+  const entry = path.join(root, relative);
+  const stat = fs.lstatSync(entry, { throwIfNoEntry: false });
+  if (!stat?.isSymbolicLink() || stat.uid !== process.getuid()) return false;
+  const key = createHash("sha256").update(root).digest("hex");
+  const expected = path.join(workspace, ".app-builder/dependency-views/checkout", key, relative);
+  return path.resolve(path.dirname(entry), fs.readlinkSync(entry)) === expected;
+};
+const parentIdentity = (root, relative) => {
+  let parent = root;
+  if (fs.realpathSync(root) !== root) throw Error("Dependency parent changed");
+  const parents = [];
+  for (const part of ["", ...relative.split("/").slice(0, -1)]) {
+    if (part) parent = path.join(parent, part);
+    const stat = fs.lstatSync(parent);
+    if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid()) throw Error("Dependency parent changed");
+    parents.push({ dev: stat.dev, ino: stat.ino });
+  }
+  if (fs.realpathSync(parent) !== parent) throw Error("Dependency parent changed");
+  return parents;
+};
+const linkIdentity = (root, relative) => {
+  const entry = path.join(root, relative);
+  const stat = fs.lstatSync(entry);
+  if (!stat.isSymbolicLink() || stat.uid !== process.getuid()) throw Error("Dependency link changed");
+  return { relative, target: fs.readlinkSync(entry), dev: stat.dev, ino: stat.ino, ctime: stat.ctimeMs, parents: parentIdentity(root, relative) };
+};
+const sameLink = (root, link) => JSON.stringify(linkIdentity(root, link.relative)) === JSON.stringify(link);
+const restoreLinks = (root, links) => {
+  for (const link of links) {
+    try {
+      if (JSON.stringify(parentIdentity(root, link.relative)) === JSON.stringify(link.parents) && !fs.lstatSync(path.join(root, link.relative), { throwIfNoEntry: false })) {
+        fs.symlinkSync(link.target, path.join(root, link.relative));
+      }
+    } catch { /* Never overwrite a replacement or follow a changed parent. */ }
+  }
+};
+const inspect = async (checkout, candidate, commonDirectory, retainedRoots, directory, workspace) => {
   const root = candidate.root;
   if (path.dirname(root) !== directory || fs.realpathSync(root) !== root || retainedRoots.some(retained => overlap(root, retained))) throw Error("Referenced or ambiguous worktree");
   const stat = fs.lstatSync(root);
@@ -45,7 +84,7 @@ const inspect = async (checkout, candidate, commonDirectory, retainedRoots, dire
   if (current.length !== 1 || current[0].head !== candidate.head || await common(root) !== commonDirectory || await common(checkout) !== commonDirectory) throw Error("Worktree ownership changed");
   if ((await read(root, ["rev-parse", "--verify", "HEAD"])).trim() !== candidate.head) throw Error("Worktree HEAD changed");
   if ((await git(root, ["symbolic-ref", "--quiet", "HEAD"])).status !== 1) throw Error("Worktree is not detached");
-  if (await read(root, ["status", "--porcelain=v1", "--untracked-files=all", "--ignored=matching", "--ignore-submodules=none", "-z"]) !== "") throw Error("Private files remain");
+  const status = records(await read(root, ["status", "--porcelain=v1", "--untracked-files=all", "--ignored=matching", "--ignore-submodules=none", "-z"]));
   if (records(await read(root, ["ls-files", "-v", "-z"])).some(line => !line.startsWith("H "))) throw Error("Ambiguous index flags");
   const tree = new Map(records(await read(root, ["ls-tree", "-r", "-z", "--full-tree", candidate.head])).map(line => {
     const match = /^(100644|100755|120000) blob ([a-f0-9]+)\t([\s\S]+)$/.exec(line);
@@ -64,6 +103,8 @@ const inspect = async (checkout, candidate, commonDirectory, retainedRoots, dire
     parts.pop();
     while (parts.length) { directories.add(parts.join("/")); parts.pop(); }
   }
+  if (status.some(record => !["?? ", "!! "].includes(record.slice(0, 3)) || tree.has(record.slice(3)) || !ownedDependencyRoot(root, workspace, record.slice(3)))) throw Error("Private files remain");
+  const links = [];
   const regular = [];
   const observedPaths = new Set();
   const visit = async (parent, relative = "") => {
@@ -81,6 +122,10 @@ const inspect = async (checkout, candidate, commonDirectory, retainedRoots, dire
         continue;
       }
       const expected = tree.get(name);
+      if (!expected && ownedDependencyRoot(root, workspace, name)) {
+        links.push(linkIdentity(root, name));
+        continue;
+      }
       if (!expected) throw Error("Untracked or ignored bytes remain");
       observedPaths.add(name);
       if (expected.mode === "120000") {
@@ -97,6 +142,7 @@ const inspect = async (checkout, candidate, commonDirectory, retainedRoots, dire
     const hashes = (await read(root, ["hash-object", "--no-filters", "--stdin-paths"], regular.map(name => JSON.stringify(name)).join("\n") + "\n")).trim().split("\n");
     if (hashes.length !== regular.length || regular.some((name, index) => tree.get(name).hash !== hashes[index])) throw Error("Private tracked bytes remain");
   }
+  return links.sort((a, b) => a.relative.localeCompare(b.relative));
 };
 async function main() {
 let retired = 0;
@@ -127,19 +173,28 @@ try {
   for (const fields of await registered(checkout)) {
     const candidate = entry(fields);
     if (!candidate || path.dirname(candidate.root) !== directory) continue;
+    const detachedLinks = [];
     try {
-      await inspect(checkout, candidate, commonDirectory, retainedRoots, directory);
+      const links = await inspect(checkout, candidate, commonDirectory, retainedRoots, directory, workspace);
       const ref = "refs/app-builder/retired-draft-worktrees/" + createHash("sha256").update(candidate.root).digest("hex");
       if ((await git(checkout, ["symbolic-ref", "--quiet", ref])).status !== 1) throw Error("Symbolic retention ref");
       const prior = await git(checkout, ["rev-parse", "--verify", "--quiet", ref]);
       if (prior.status === 1) {
         if ((await git(checkout, ["update-ref", "--no-deref", ref, candidate.head, "0".repeat(candidate.head.length)])).status !== 0) throw Error("Retention ref unavailable");
       } else if (prior.status !== 0 || prior.stdout.trim() !== candidate.head) throw Error("Retention ref names different history");
-      await inspect(checkout, candidate, commonDirectory, retainedRoots, directory);
+      const currentLinks = await inspect(checkout, candidate, commonDirectory, retainedRoots, directory, workspace);
+      if (JSON.stringify(currentLinks) !== JSON.stringify(links)) throw Error("Dependency links changed");
       if ((await git(checkout, ["symbolic-ref", "--quiet", ref])).status !== 1 || (await read(checkout, ["rev-parse", "--verify", "--quiet", ref])).trim() !== candidate.head) throw Error("Retention ref changed");
+      for (const link of links) {
+        // No awaited command between the real-parent/identity check and unlink.
+        if (!sameLink(candidate.root, link) || !ownedDependencyRoot(candidate.root, workspace, link.relative)) throw Error("Dependency link changed before removal");
+        fs.unlinkSync(path.join(candidate.root, link.relative));
+        detachedLinks.push(link);
+      }
+      if (detachedLinks.length && (await inspect(checkout, candidate, commonDirectory, retainedRoots, directory, workspace)).length) throw Error("Dependency links reappeared");
       if ((await git(checkout, ["worktree", "remove", "--", candidate.root])).status !== 0) throw Error("Worktree removal refused");
       retired += 1;
-    } catch { retained += 1; }
+    } catch { restoreLinks(candidate.root, detachedLinks); retained += 1; }
   }
 } catch { /* Unknown scope/transport is a maintenance no-op. */ }
 console.log(JSON.stringify({ retired, retained }));
