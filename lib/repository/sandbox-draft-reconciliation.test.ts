@@ -170,6 +170,47 @@ const fixture = (platformConflict = false, dependencyWorkspace = false) => {
   return { baseSha, headSha, root, sandbox };
 };
 
+const candidateFixtureInput = (f: ReturnType<typeof fixture>, baseSha = f.baseSha) => ({
+  appId: "demo",
+  baseBranch: "main",
+  baseSha,
+  headBranch: "draft",
+  headSha: f.headSha,
+  repository: { name: "arrusted-development", owner: "withAutograph" },
+  sandbox: f.sandbox,
+  workspaceRoot: f.root,
+});
+
+const advanceFixtureBase = (
+  f: ReturnType<typeof fixture>,
+  files: Record<string, string | null>,
+) => {
+  const checkout = path.join(f.root, "repository");
+  git(checkout, "switch", "main");
+  for (const [relative, content] of Object.entries(files)) {
+    const target = path.join(checkout, relative);
+    if (content === null) {
+      rmSync(target);
+    } else {
+      mkdirSync(path.dirname(target), { recursive: true });
+      writeFileSync(target, content);
+    }
+  }
+  git(checkout, "add", "--all", "--", ...Object.keys(files));
+  git(
+    checkout,
+    "-c",
+    "user.name=Fixture",
+    "-c",
+    "user.email=fixture@example.test",
+    "commit",
+    "-m",
+    "advance fixture base",
+  );
+  git(checkout, "push", "origin", "main");
+  return git(checkout, "rev-parse", "HEAD");
+};
+
 describe("isolated draft reconciliation", () => {
   it("reuses the checkout dependency closure while binding workspace imports to candidate source", async () => {
     const f = fixture(false, true);
@@ -1219,7 +1260,7 @@ describe("isolated draft reconciliation", () => {
     expect(existsSync(path.join(next.root, "bun.lock"))).toBe(false);
   });
 
-  it("uses ordinary fresh reconciliation when the live base changes without replaying old resolutions", async () => {
+  it("three-way replays private app repairs when the live base advances", async () => {
     const f = fixture();
     const input = {
       appId: "demo",
@@ -1238,6 +1279,13 @@ describe("isolated draft reconciliation", () => {
       prepared: old,
       sandbox: f.sandbox,
     });
+    await inspectDraftReconciliation({ sandbox: f.sandbox, prepared: old });
+    const oldIndexPath = git(old.root, "rev-parse", "--git-path", "index");
+    const beforeIndex = readFileSync(oldIndexPath);
+    const oldHead = git(old.root, "rev-parse", "HEAD");
+    const archive = "apps/demo/schema/release/private-repair/artifact.json";
+    mkdirSync(path.dirname(path.join(old.root, archive)), { recursive: true });
+    writeFileSync(path.join(old.root, archive), "private archive\n");
     const checkout = path.join(f.root, "repository");
     git(checkout, "switch", "main");
     writeFileSync(path.join(checkout, "docs/platform.md"), "new live base\n");
@@ -1260,12 +1308,306 @@ describe("isolated draft reconciliation", () => {
       previousCandidate: old,
       replayPreviousCandidate: true,
     });
+    expect(next.root).not.toBe(old.root);
+    expect(next.preservedCandidateRoot).toBe(old.root);
+    expect(readFileSync(path.join(next.root, archive), "utf-8")).toBe("private archive\n");
+    expect(readFileSync(path.join(old.root, archive), "utf-8")).toBe("private archive\n");
+    expect(readFileSync(oldIndexPath)).toEqual(beforeIndex);
+    expect(git(old.root, "rev-parse", "HEAD")).toBe(oldHead);
+    expect(git(next.root, "rev-parse", "HEAD")).toBe(f.headSha);
     expect(next.baseSha).toBe(baseSha);
-    expect(next.replayedAppChanges).toBe(false);
-    expect(next.conflicts).toContain("apps/demo/tests/journey.spec.ts");
+    expect(next.replayedAppChanges).toBe(true);
+    expect(next.conflicts).toEqual([]);
+    expect(readFileSync(path.join(next.root, "apps/demo/tests/journey.spec.ts"), "utf-8")).toBe(
+      "old app repair\n",
+    );
     expect(readFileSync(path.join(next.root, "docs/platform.md"), "utf-8")).toBe("new live base\n");
     expect(readFileSync(path.join(old.root, "apps/demo/tests/journey.spec.ts"), "utf-8")).toBe(
       "old app repair\n",
+    );
+  });
+
+  it("three-way merges disjoint app edits while retaining new upstream archives", async () => {
+    const f = fixture();
+    const file = "apps/demo/shared.txt";
+    const before = "first\nsecond\nthird\nfourth\nfifth\nsixth\n";
+    const oldBase = advanceFixtureBase(f, { [file]: before });
+    const input = candidateFixtureInput(f, oldBase);
+    const old = await prepareDraftReconciliation(input);
+    await writeDraftReconciliationResolution({
+      prepared: old,
+      sandbox: f.sandbox,
+      path: "apps/demo/tests/journey.spec.ts",
+      content: "resolved draft\n",
+    });
+    await inspectDraftReconciliation({ prepared: old, sandbox: f.sandbox });
+    writeFileSync(path.join(old.root, file), before.replace("first", "private-first"));
+    const incomingArchive = "apps/demo/schema/release/upstream/artifact.json";
+    const baseSha = advanceFixtureBase(f, {
+      [file]: before.replace("sixth", "upstream-sixth"),
+      [incomingArchive]: "upstream archive\n",
+    });
+    const next = await prepareDraftReconciliation({
+      ...input,
+      baseSha,
+      previousCandidate: old,
+      replayPreviousCandidate: true,
+    });
+    expect(next.conflicts).toEqual([]);
+    expect(readFileSync(path.join(next.root, file), "utf-8")).toBe(
+      before.replace("first", "private-first").replace("sixth", "upstream-sixth"),
+    );
+    expect(readFileSync(path.join(next.root, incomingArchive), "utf-8")).toBe("upstream archive\n");
+    expect(readFileSync(path.join(old.root, file), "utf-8")).toBe(
+      before.replace("first", "private-first"),
+    );
+  });
+
+  it("three-way retains renamed executable and binary files through file-directory replacements", async () => {
+    const f = fixture();
+    const oldBase = advanceFixtureBase(f, {
+      "apps/demo/rename.ts": "original\n",
+      "apps/demo/file-to-directory": "old file\n",
+      "apps/demo/directory-to-file/nested/leaf.ts": "old leaf\n",
+      "apps/demo/obsolete.ts": "obsolete\n",
+    });
+    const input = candidateFixtureInput(f, oldBase);
+    const old = await prepareDraftReconciliation(input);
+    await writeDraftReconciliationResolution({
+      prepared: old,
+      sandbox: f.sandbox,
+      path: "apps/demo/tests/journey.spec.ts",
+      content: "resolved draft\n",
+    });
+    await inspectDraftReconciliation({ prepared: old, sandbox: f.sandbox });
+    git(old.root, "mv", "apps/demo/rename.ts", "apps/demo/renamed.ts");
+    chmodSync(path.join(old.root, "apps/demo/renamed.ts"), 0o755);
+    rmSync(path.join(old.root, "apps/demo/file-to-directory"));
+    mkdirSync(path.join(old.root, "apps/demo/file-to-directory"));
+    writeFileSync(path.join(old.root, "apps/demo/file-to-directory/child.ts"), "new child\n");
+    rmSync(path.join(old.root, "apps/demo/directory-to-file"), { recursive: true });
+    writeFileSync(path.join(old.root, "apps/demo/directory-to-file"), "new file\n");
+    rmSync(path.join(old.root, "apps/demo/obsolete.ts"));
+    const binary = Buffer.from([0, 255, 128, 10, 13, 0]);
+    writeFileSync(path.join(old.root, "apps/demo/private.bin"), binary);
+    const baseSha = advanceFixtureBase(f, { "apps/demo/rename.ts": "upstream update\n" });
+    const next = await prepareDraftReconciliation({
+      ...input,
+      baseSha,
+      previousCandidate: old,
+      replayPreviousCandidate: true,
+    });
+    expect(next.conflicts).toEqual([]);
+    expect(existsSync(path.join(next.root, "apps/demo/rename.ts"))).toBe(false);
+    expect(readFileSync(path.join(next.root, "apps/demo/renamed.ts"), "utf-8")).toBe(
+      "upstream update\n",
+    );
+    expect(git(next.root, "ls-files", "--stage", "apps/demo/renamed.ts")).toMatch(/^100755/u);
+    expect(
+      readFileSync(path.join(next.root, "apps/demo/file-to-directory/child.ts"), "utf-8"),
+    ).toBe("new child\n");
+    expect(readFileSync(path.join(next.root, "apps/demo/directory-to-file"), "utf-8")).toBe(
+      "new file\n",
+    );
+    expect(existsSync(path.join(next.root, "apps/demo/obsolete.ts"))).toBe(false);
+    expect(readFileSync(path.join(next.root, "apps/demo/private.bin"))).toEqual(binary);
+    expect(readFileSync(path.join(old.root, "apps/demo/renamed.ts"), "utf-8")).toBe("original\n");
+  });
+
+  it.each(["edit", "delete", "add"] as const)(
+    "three-way preserves ordinary %s conflicts against the advanced app base",
+    async (kind) => {
+      const f = fixture();
+      const file = "apps/demo/shared.txt";
+      const oldBase = kind === "add" ? f.baseSha : advanceFixtureBase(f, { [file]: "original\n" });
+      const input = candidateFixtureInput(f, oldBase);
+      const old = await prepareDraftReconciliation(input);
+      await writeDraftReconciliationResolution({
+        prepared: old,
+        sandbox: f.sandbox,
+        path: "apps/demo/tests/journey.spec.ts",
+        content: "resolved draft\n",
+      });
+      await inspectDraftReconciliation({ prepared: old, sandbox: f.sandbox });
+      if (kind === "delete") {
+        rmSync(path.join(old.root, file));
+      } else {
+        writeFileSync(path.join(old.root, file), "private\n");
+      }
+      const indexPath = git(old.root, "rev-parse", "--git-path", "index");
+      const oldIndex = readFileSync(indexPath);
+      const baseSha = advanceFixtureBase(f, { [file]: "upstream\n" });
+      const next = await prepareDraftReconciliation({
+        ...input,
+        baseSha,
+        previousCandidate: old,
+        replayPreviousCandidate: true,
+      });
+      expect(next.conflicts).toContain(file);
+      expect(git(next.root, "show", `:3:${file}`)).toBe("upstream");
+      if (kind !== "delete") {
+        expect(git(next.root, "show", `:2:${file}`)).toBe("private");
+      }
+      if (kind !== "add") {
+        expect(git(next.root, "show", `:1:${file}`)).toBe("original");
+      }
+      expect(readFileSync(indexPath)).toEqual(oldIndex);
+      if (kind === "delete") {
+        expect(existsSync(path.join(old.root, file))).toBe(false);
+      } else {
+        expect(readFileSync(path.join(old.root, file), "utf-8")).toBe("private\n");
+      }
+    },
+  );
+
+  it.each([false, true])(
+    "three-way keeps old unresolved work unresolved when upstream path changes: %s",
+    async (changed) => {
+      const f = fixture();
+      const input = candidateFixtureInput(f);
+      const old = await prepareDraftReconciliation(input);
+      const file = "apps/demo/tests/journey.spec.ts";
+      const original = readFileSync(path.join(old.root, file));
+      const oldStages = git(old.root, "ls-files", "--unmerged");
+      const indexPath = git(old.root, "rev-parse", "--git-path", "index");
+      const oldIndex = readFileSync(indexPath);
+      const baseSha = advanceFixtureBase(
+        f,
+        changed ? { [file]: "new upstream\n" } : { "docs/platform.md": "advanced platform\n" },
+      );
+      const next = await prepareDraftReconciliation({
+        ...input,
+        baseSha,
+        previousCandidate: old,
+        replayPreviousCandidate: true,
+      });
+      expect(next.conflicts).toContain(file);
+      expect(readFileSync(path.join(old.root, file))).toEqual(original);
+      expect(readFileSync(indexPath)).toEqual(oldIndex);
+      expect(git(old.root, "ls-files", "--unmerged")).toBe(oldStages);
+      if (changed) {
+        expect(git(next.root, "show", `:3:${file}`)).toBe("new upstream");
+      } else {
+        expect(git(next.root, "ls-files", "--unmerged")).toBe(oldStages);
+        expect(readFileSync(path.join(next.root, file))).toEqual(original);
+      }
+    },
+  );
+
+  it("three-way base refresh leaves ignored private bytes and outside-app changes in the old candidate", async () => {
+    const f = fixture();
+    const input = candidateFixtureInput(f);
+    const old = await prepareDraftReconciliation(input);
+    const checkout = path.join(f.root, "repository");
+    writeFileSync(path.join(checkout, ".git/info/exclude"), "apps/demo/private-state/\n");
+    mkdirSync(path.join(old.root, "apps/demo/private-state"));
+    writeFileSync(path.join(old.root, "apps/demo/private-state/session"), "private fixture\n");
+    writeFileSync(path.join(old.root, "docs/platform.md"), "private outside-app edit\n");
+    git(old.root, "add", "docs/platform.md");
+    const indexPath = git(old.root, "rev-parse", "--git-path", "index");
+    const oldIndex = readFileSync(indexPath);
+    const baseSha = advanceFixtureBase(f, { "docs/platform.md": "advanced platform\n" });
+    const next = await prepareDraftReconciliation({
+      ...input,
+      baseSha,
+      previousCandidate: old,
+      replayPreviousCandidate: true,
+    });
+    expect(readFileSync(path.join(next.root, "docs/platform.md"), "utf-8")).toBe(
+      "advanced platform\n",
+    );
+    expect(existsSync(path.join(next.root, "apps/demo/private-state"))).toBe(false);
+    expect(readFileSync(path.join(old.root, "apps/demo/private-state/session"), "utf-8")).toBe(
+      "private fixture\n",
+    );
+    expect(readFileSync(path.join(old.root, "docs/platform.md"), "utf-8")).toBe(
+      "private outside-app edit\n",
+    );
+    expect(readFileSync(indexPath)).toEqual(oldIndex);
+  });
+
+  it("three-way preserves owned dependency links attached to both old and fresh candidates", async () => {
+    const f = fixture();
+    const checkout = path.join(f.root, "repository");
+    mkdirSync(path.join(checkout, "apps/demo/node_modules/fixture-package"), { recursive: true });
+    writeFileSync(
+      path.join(checkout, "apps/demo/node_modules/fixture-package/package.json"),
+      '{"name":"fixture-package"}',
+    );
+    const input = candidateFixtureInput(f);
+    const old = await prepareDraftReconciliation(input);
+    expect(lstatSync(path.join(old.root, "apps/demo/node_modules")).isSymbolicLink()).toBe(true);
+    expect(
+      git(old.root, "ls-files", "--others", "--exclude-standard", "--", "apps/demo/node_modules"),
+    ).toBe("apps/demo/node_modules");
+    const baseSha = advanceFixtureBase(f, { "docs/platform.md": "advanced platform\n" });
+    const originalRun = f.sandbox.run.bind(f.sandbox);
+    const attached = new Set([old.root]);
+    const sandbox = {
+      ...f.sandbox,
+      async run(command: Parameters<SandboxSession["run"]>[0]) {
+        const result = await originalRun(command);
+        for (const line of git(checkout, "worktree", "list", "--porcelain").split("\n")) {
+          if (!line.startsWith("worktree ")) {
+            continue;
+          }
+          const reportedRoot = line.slice("worktree ".length);
+          const relative = path.relative(realpathSync(f.root), realpathSync(reportedRoot));
+          if (!relative.startsWith(".app-builder/draft-reconcile/")) {
+            continue;
+          }
+          const root = path.join(f.root, relative);
+          if (attached.has(root)) {
+            continue;
+          }
+          const view = path.join(
+            realpathSync(f.root),
+            ".app-builder/dependency-views/checkout",
+            digest(root),
+            "apps/demo/node_modules",
+          );
+          mkdirSync(view, { recursive: true });
+          symlinkSync(view, path.join(root, "apps/demo/node_modules"));
+          attached.add(root);
+        }
+        return result;
+      },
+    };
+    const next = await prepareDraftReconciliation({
+      ...input,
+      sandbox,
+      baseSha,
+      previousCandidate: old,
+      replayPreviousCandidate: true,
+    });
+    expect(attached.has(next.root)).toBe(true);
+    for (const root of [old.root, next.root]) {
+      expect(lstatSync(path.join(root, "apps/demo/node_modules")).isSymbolicLink()).toBe(true);
+      expect(
+        readFileSync(
+          path.join(root, "apps/demo/node_modules/fixture-package/package.json"),
+          "utf-8",
+        ),
+      ).toBe('{"name":"fixture-package"}');
+    }
+  });
+
+  it("three-way base refresh rebuilds an unavailable candidate without claiming to replay its lost files", async () => {
+    const f = fixture();
+    const input = candidateFixtureInput(f);
+    const old = await prepareDraftReconciliation(input);
+    git(path.join(f.root, "repository"), "worktree", "remove", "--force", old.root);
+    const baseSha = advanceFixtureBase(f, { "docs/platform.md": "advanced platform\n" });
+    const next = await prepareDraftReconciliation({
+      ...input,
+      baseSha,
+      previousCandidate: old,
+      replayPreviousCandidate: true,
+    });
+    expect(next.replayedAppChanges).not.toBe(true);
+    expect(next.preservedCandidateRoot).toBeUndefined();
+    expect(readFileSync(path.join(next.root, "docs/platform.md"), "utf-8")).toBe(
+      "advanced platform\n",
     );
   });
 
