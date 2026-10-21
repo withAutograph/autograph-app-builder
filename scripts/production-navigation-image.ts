@@ -68,42 +68,35 @@ const inspectFailureReason = (stderr: string) => {
 };
 
 const pullFailureReason = (stderr: string) => {
-  const reasons = [
-    {
-      reason: "registry_rate_limited",
-      pattern: /\btoomanyrequests\b|\bHTTP(?:\/\d(?:\.\d)?)?\s+(?:status\s+)?429\b|\b429\s+Too Many Requests\b|\bstatus code\s*:?\s*429\b/iu,
-    },
+  const reasons: { pattern: RegExp; reason: string }[] = [
+    { reason: "registry_rate_limited", pattern: /\btoomanyrequests\b|\b429\b|too many requests/iu },
     {
       reason: "authorization_failed",
-      pattern: /unauthorized|authentication required|permission denied|forbidden|pull access denied|no basic auth credentials|failed to authorize/iu,
+      pattern:
+        /unauthorized|authentication required|no basic auth credentials|permission denied|forbidden|pull access denied|failed to authorize/iu,
     },
     {
       reason: "manifest_unavailable",
-      pattern: /manifest unknown|name unknown|repository does not exist|not found/iu,
+      pattern: /manifest unknown|name unknown|repository does not exist/iu,
     },
-    {
-      reason: "registry_client_error",
-      pattern: /\b(?:HTTP(?:\/\d(?:\.\d)?)?\s+(?:status\s+)?|status code\s*:?\s*|unexpected status code\s*)(?:4\d\d)\b/iu,
-    },
-    {
-      reason: "registry_server_error",
-      pattern: /\b(?:HTTP(?:\/\d(?:\.\d)?)?\s+(?:status\s+)?|status code\s*:?\s*|unexpected status code\s*)(?:5\d\d)\b/iu,
-    },
+    { reason: "registry_client_error", pattern: /\b4\d\d\b/u },
+    { reason: "registry_server_error", pattern: /\b5\d\d\b/u },
     {
       reason: "daemon_unavailable",
       pattern:
-        /cannot connect to the docker daemon|cannot connect to docker daemon|docker daemon unavailable|is the docker daemon running|connection refused|error during connect/iu,
+        /cannot connect to .*docker daemon|is the docker daemon running|connection refused|error during connect/iu,
     },
     {
       reason: "transport_failed",
       pattern:
-        /x509|certificate|tls handshake|network is unreachable|i[/]o timeout|context deadline exceeded|no such host|connection reset|unexpected eof/iu,
+        /x509|certificate|tls|network is unreachable|timeout|no such host|connection reset|unexpected eof/iu,
     },
     { reason: "storage_exhausted", pattern: /no space left on device/iu },
     { reason: "platform_mismatch", pattern: /no matching manifest for/iu },
     {
       reason: "docker_configuration_invalid",
-      pattern: /error parsing config file|credential helper.*not found|credentials store.*not found/iu,
+      pattern:
+        /error parsing config file|credential helper.*not found|credentials store.*not found/iu,
     },
     { reason: "invalid_reference", pattern: /invalid reference format|invalid image reference/iu },
   ];

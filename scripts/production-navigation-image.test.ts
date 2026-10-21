@@ -262,25 +262,31 @@ describe("production navigation pinned image preparation", () => {
   });
 
   it.each([
-    ["registry_rate_limited", "registry HTTP status 429"],
-    ["authorization_failed", "pull access denied token=fixture-secret"],
-    ["manifest_unavailable", "manifest unknown token=fixture-secret"],
-    ["registry_client_error", "HTTP status 403 token=fixture-secret"],
-    ["registry_server_error", "HTTP status 503 token=fixture-secret"],
-    ["daemon_unavailable", "Docker daemon unavailable token=fixture-secret"],
-    ["transport_failed", "no such host token=fixture-secret"],
-    ["storage_exhausted", "no space left on device"],
-    ["platform_mismatch", "no matching manifest for linux/amd64"],
-    ["docker_configuration_invalid", "error parsing config file"],
-    ["invalid_reference", "invalid reference format"],
-    ["unrecognized_diagnostic", "Docker pull failure token=fixture-secret"],
+    { reason: "registry_rate_limited", stderr: "registry HTTP 429 token=fixture-secret" },
+    { reason: "authorization_failed", stderr: "pull access denied token=fixture-secret" },
+    { reason: "manifest_unavailable", stderr: "manifest unknown token=fixture-secret" },
+    { reason: "registry_client_error", stderr: "HTTP status 403 token=fixture-secret" },
+    { reason: "registry_server_error", stderr: "HTTP status 503 token=fixture-secret" },
+    {
+      reason: "daemon_unavailable",
+      stderr: "Cannot connect to Docker daemon token=fixture-secret",
+    },
+    { reason: "transport_failed", stderr: "no such host token=fixture-secret" },
+    { reason: "storage_exhausted", stderr: "no space left on device" },
+    { reason: "platform_mismatch", stderr: "no matching manifest for linux/amd64" },
+    { reason: "docker_configuration_invalid", stderr: "error parsing config file" },
+    {
+      reason: "docker_configuration_invalid",
+      stderr: "credential helper fixture-helper not found",
+    },
+    { reason: "invalid_reference", stderr: "invalid reference format" },
+    { reason: "unrecognized_diagnostic", stderr: "registry resource not found" },
+    { reason: "unrecognized_diagnostic", stderr: "Docker pull failure token=fixture-secret" },
   ])(
-    "reports an allowlisted, secret-free pinned-image pull reason: %s",
-    async (reason, stderr) => {
+    "reports an allowlisted, secret-free pinned-image pull reason: $reason",
+    async ({ reason, stderr }) => {
       const f = fixture();
-      f.runCommand
-        .mockResolvedValueOnce(missing)
-        .mockResolvedValueOnce({ exitCode: 1, stderr });
+      f.runCommand.mockResolvedValueOnce(missing).mockResolvedValueOnce({ exitCode: 1, stderr });
       const failure = ensureProductionNavigationImage(f.input);
       await expect(failure).rejects.toThrow(`(${reason}; exit 1)`);
       await expect(failure).rejects.not.toThrow("fixture-secret");
