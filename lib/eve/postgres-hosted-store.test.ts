@@ -227,9 +227,30 @@ describe("PostgreSQL explicit SEND cancellation authority", () => {
       adapterGeneration: f.record.adapterGeneration,
       adapterSessionId: f.record.adapterSessionId,
       cancellationRevision: 1,
+      resumedCancellationRevision: 1,
       resumability: "live",
       sessionId: f.record.sessionId,
       status: "working",
+    });
+  });
+  it("preserves server resume proof through observations and fences the next Stop", async () => {
+    const f = cancelledSendFixture();
+    await f.observe();
+    expect(await f.observe(false)).toMatchObject({
+      cancellationRevision: 1,
+      resumedCancellationRevision: 1,
+      status: "working",
+    });
+    if (f.store.recordCancellationIntent === undefined)
+      throw new Error("Missing cancellation writer");
+    await f.store.recordCancellationIntent({
+      principal,
+      sessionId: f.record.sessionId,
+      nowEpochMs: 5000,
+    });
+    expect(f.row().record).toMatchObject({
+      cancellationRevision: 2,
+      resumedCancellationRevision: 1,
     });
   });
   it("does not let a first or duplicate observation of an older SEND overrule a newer Stop", async () => {

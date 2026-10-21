@@ -72,7 +72,8 @@ export interface HostedOperatorOwnerDependencies {
   realmContinuation?: RealmContinuationVerificationOptions;
   workloadPolicy: OperatorWorkloadPolicy;
   keyResolver?: VerifierKeyResolver;
-  eve: Pick<HostedEveStore, "getSession">;
+  eve: Pick<HostedEveStore, "getSession"> &
+    Partial<Pick<HostedEveStore, "getSessionByAdapterSessionId" | "readCurrentBuildSession">>;
   handoffs: Pick<BuilderHandoffStore, "read">;
   membership: HostedWorkspaceMembership;
   listVercelInstallations: (
@@ -112,7 +113,7 @@ const ownerContextFromHint = (hint: OperatorOwnerContext | undefined) => {
 };
 
 const readCurrentOwnedSession = async (
-  deps: { eve: Pick<HostedEveStore, "getSession"> },
+  deps: Pick<HostedOperatorOwnerDependencies, "eve">,
   principal: HostedPrincipal,
   owner: OperatorOwnerContext,
 ) => {
@@ -133,7 +134,78 @@ const readCurrentOwnedSession = async (
   if (session === null) {
     throw unavailable();
   }
-  return { session, sessionVersion };
+  const { readCurrentBuildSession, getSessionByAdapterSessionId } = deps.eve;
+  if (sessionVersion !== 2 || readCurrentBuildSession === undefined) {
+    return { session, sessionVersion };
+  }
+  const original = session;
+  let logicalSessionId = original.adapterSessionId;
+  if (owner.adapterSessionId !== original.adapterSessionId) {
+    const physical = await getSessionByAdapterSessionId?.call(
+      deps.eve,
+      principal,
+      owner.adapterSessionId,
+    );
+    const parsedPhysical = hostedSessionRecordSchema.safeParse(physical);
+    if (!parsedPhysical.success || parsedPhysical.data.version !== 2) {
+      throw unavailable();
+    }
+    const binding = parsedPhysical.data.nativeRecoveryBinding;
+    const linked = [
+      binding !== undefined,
+      binding?.originalAuthoritySessionId === original.sessionId,
+      binding?.ownerRunId === owner.adapterSessionId,
+      parsedPhysical.data.adapterSessionId === owner.adapterSessionId,
+      parsedPhysical.data.adapterGeneration === owner.adapterGeneration,
+      samePrincipal(parsedPhysical.data.principal, principal),
+    ].every(Boolean);
+    if (!linked || binding === undefined) {
+      throw unavailable();
+    }
+    logicalSessionId = binding.logicalSessionId;
+  }
+  const current = await readCurrentBuildSession.call(deps.eve, {
+    principal,
+    authoritySessionId: original.sessionId,
+    logicalSessionId,
+  });
+  if (current.sessionId === original.sessionId) {
+    return { session: original, sessionVersion };
+  }
+  const currentBinding = current.nativeRecoveryBinding;
+  if (currentBinding === undefined) {
+    throw unavailable();
+  }
+  const matches = [
+    currentBinding.originalAuthoritySessionId === original.sessionId,
+    currentBinding.logicalSessionId === logicalSessionId,
+    currentBinding.ownerRunId === current.adapterSessionId,
+    current.adapterSessionId === owner.adapterSessionId,
+    current.adapterGeneration === owner.adapterGeneration,
+    current.status !== "cancelled",
+    (current.cancellationRevision ?? 0) === (current.resumedCancellationRevision ?? 0),
+    samePrincipal(original.principal, principal),
+    samePrincipal(current.principal, principal),
+    current.sourceHandoffId === original.sourceHandoffId,
+    current.appId === original.appId,
+  ].every(Boolean);
+  if (!matches) {
+    throw unavailable();
+  }
+  // A server-only view keeps original grant/approval ownership while using the proved current
+  // physical worker and its current build state. Neither durable session is rewritten.
+  return {
+    session: {
+      ...original,
+      adapterGeneration: current.adapterGeneration,
+      adapterSessionId: current.adapterSessionId,
+      privateBuildDecision: current.privateBuildDecision,
+      resumability: current.resumability,
+      stage: current.stage,
+      status: current.status,
+    },
+    sessionVersion,
+  };
 };
 
 const assertDirectOwnerIdentity = (
@@ -885,7 +957,8 @@ export const createHostedOperatorReadApproval =
 /** Select only an actual current-owner approval; proposed expiry never extends its authority. */
 export const createHostedOperatorReadApprovedPlan =
   (input: {
-    eve: Pick<HostedEveStore, "getSession">;
+    eve: Pick<HostedEveStore, "getSession"> &
+      Partial<Pick<HostedEveStore, "getSessionByAdapterSessionId" | "readCurrentBuildSession">>;
     assertCanonicalOwner: (context: HostedOperatorContext) => Promise<void>;
   }) =>
   async (

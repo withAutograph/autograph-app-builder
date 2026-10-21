@@ -253,6 +253,8 @@ const reportCheckpointDigestMismatch = (
 export const durableHostedSessionRecordSchema = z
   .object({
     cancellationRevision: z.number().int().nonnegative().optional(),
+    // Server-owned proof of an explicit SEND that superseded this cancellation revision.
+    resumedCancellationRevision: z.number().int().nonnegative().optional(),
     adapterGeneration: z.number().int().positive(),
     adapterSessionId: z.string().min(1).max(500),
     appId: z
@@ -289,6 +291,12 @@ export const durableHostedSessionRecordSchema = z
   })
   .strict()
   .superRefine((record, context) => {
+    if ((record.resumedCancellationRevision ?? 0) > (record.cancellationRevision ?? 0)) {
+      context.addIssue({
+        code: "custom",
+        message: "Resume proof exceeds the cancellation revision.",
+      });
+    }
     if (record.checkpoint !== undefined && record.checkpointRef !== undefined) {
       context.addIssue({
         code: "custom",
@@ -1127,6 +1135,12 @@ export interface HostedEveStore {
     principal: z.infer<typeof hostedPrincipalSchema>,
     clientRequestId: string,
   ) => Promise<HostedOperationRecord | null>;
+  /** Read the unique current physical owner through committed recovery receipts; no state mutation. */
+  readCurrentBuildSession?: (input: {
+    principal: HostedPrincipal;
+    authoritySessionId: string;
+    logicalSessionId: string;
+  }) => Promise<DurableHostedSessionRecord>;
   /** Exact tenant-scoped lookup through the unique adapter binding. */
   getSessionByAdapterSessionId?: (
     principal: z.infer<typeof hostedPrincipalSchema>,
@@ -1321,6 +1335,17 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       throw new Error(SESSION_NOT_FOUND);
     }
     return toDurableHostedSessionRecord(current);
+  }
+
+  // oxlint-disable-next-line eslint/require-await -- preserve asynchronous store failures
+  async readCurrentBuildSession(input: {
+    principal: HostedPrincipal;
+    authoritySessionId: string;
+    logicalSessionId: string;
+  }): Promise<DurableHostedSessionRecord> {
+    return structuredClone(
+      this.currentBuildSession(input.principal, input.authoritySessionId, input.logicalSessionId),
+    );
   }
 
   async bindExistingStart(
@@ -1910,19 +1935,18 @@ export class InMemoryHostedEveStore implements HostedEveStore {
         : this.operations.get(
             InMemoryHostedEveStore.operationKey(input.principal, input.explicitSendOperationId),
           );
+    const provedResume = mayReviveCancelledSession(
+      explicitSend ?? null,
+      durable,
+      input.checkpoint.nativeDeliveryState,
+    );
     // Passive observations never undo Stop; only its later explicit, proved SEND may advance.
-    if (
-      durable.status === "cancelled" &&
-      !mayReviveCancelledSession(
-        explicitSend ?? null,
-        durable,
-        input.checkpoint.nativeDeliveryState,
-      )
-    ) {
+    if (durable.status === "cancelled" && !provedResume) {
       return structuredClone(durable);
     }
     const observed = durableHostedSessionRecordSchema.parse({
       ...durable,
+      ...(provedResume ? { resumedCancellationRevision: durable.cancellationRevision ?? 0 } : {}),
       ...(input.appId === undefined ? {} : { appId: input.appId }),
       checkpoint: input.checkpoint,
       checkpointDigest: hostedSessionCheckpointDigest(input.checkpoint),
