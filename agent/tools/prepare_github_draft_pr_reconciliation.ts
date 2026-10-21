@@ -24,7 +24,10 @@ import { readPublishedOperatorSourceForSession } from "@/lib/agent/compiled-oper
 import { resolveAcceptedAppSpecContent } from "@/lib/agent/accepted-app-spec-content";
 import { recoverLegacyAppSpecTransport } from "@/lib/repository/legacy-app-spec-recovery";
 import { compactAcceptedPlanningInput } from "@/lib/repository/compact-accepted-planning-input";
-import { retireUnusedDraftWorktrees } from "@/lib/repository/retire-unused-draft-worktrees";
+import {
+  annotateDraftWorktreeRetirementError,
+  retireUnusedDraftWorktrees,
+} from "@/lib/repository/retire-unused-draft-worktrees";
 import { appBaselineState } from "@/lib/agent/app-baseline-state";
 import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-set";
 import { prepareDraftReconciliation } from "@/lib/repository/sandbox-draft-reconciliation";
@@ -200,170 +203,180 @@ export default defineTool({
       ...(retainedCandidate === null ? [] : [retainedCandidate.root]),
       ...draftReconciliationCompletions.get().map((completion) => completion.root),
     ];
-    await retireUnusedDraftWorktrees({ sandbox, retainedRoots, signal: ctx.abortSignal });
-    await compactAcceptedPlanningInput({
+    const workspaceMaintenance = await retireUnusedDraftWorktrees({
       sandbox,
-      appId: state.appSpec.appId,
-      artifactRevision: state.appSpec.artifactRevision,
-      appSpecDigest: state.appSpec.digest,
-      proposalAppSpec: state.proposal.target.contract.appSpec,
       retainedRoots,
-      readAcceptedContent,
+      signal: ctx.abortSignal,
     });
-    const transport = await recoverLegacyAppSpecTransport({
-      sandbox,
-      sessionId: ctx.session.id,
-      repository: state.githubSource.repository,
-      appId: state.appSpec.appId,
-      artifactRevision: state.appSpec.artifactRevision,
-      appSpecDigest: state.appSpec.digest,
-      apply: state.applyReceipt,
-      baseline: appBaselineState.get(),
-      readAcceptedContent,
-    });
-    const legacyTransportPath = `.config/app-specs/${state.appSpec.appId}.md`;
-    const reviewedTransport = state.reviewReceipt.changes.some(
-      (change) =>
-        change.path === legacyTransportPath && change.after?.digest === state.appSpec.digest,
-    );
-    const recovery = legacyTransportRecoveryResult(transport.status, reviewedTransport);
-    if (recovery !== null) {
-      return recovery;
-    }
-    const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
-    const original = draftReconciliationState.get();
-    const lineage = reconciliationLineageRequest(state, original);
-    const source = await runtime.inspectExistingDraftReconciliationSource({
-      ...lineage,
-      readPublishedSource: async (draft) =>
-        await readPublishedOperatorSourceForSession({
-          appId: state.appSpec.appId,
-          appSpecDigest: state.appSpec.digest,
-          root: state.applyReceipt.applyRoot,
-          callId: ctx.callId,
-          sessionAuth: ctx.session.auth,
-          adapterSessionId: ctx.session.id,
-          signal: ctx.abortSignal,
-          lookup: {
-            repositoryId: draft.repositoryId,
-            branch: draft.headBranch,
-            gitSha: draft.headSha,
-            gitTree: draft.headTree,
-          },
-        }),
-      name: state.githubSource.repository.name,
-      owner: state.githubSource.repository.owner,
-      pullRequestNumber: input.pullRequestNumber,
-      repositoryId: state.githubSource.repository.repositoryId,
-    });
-    assertReconciliationDraftLineage({
-      headBranch: source.draft.headBranch,
-      publishedHeadSha: source.publishedHeadSha,
-      resolvedRef: state.githubSource.resolvedRef,
-    });
-    const unpublished =
-      state.reviewReceipt.changes.length === 0
-        ? undefined
-        : {
-            changes: state.reviewReceipt.changes,
-            ...(source.publishedHeadSha === undefined
-              ? {}
-              : { priorPublishedHeadSha: source.publishedHeadSha }),
-            contentSource: publicationContentSourceForReviewedWorkflow({ sandbox, state }),
-            reviewDigest: state.reviewReceipt.digest,
-          };
-    const request: DraftReconciliationInput = {
-      appId: state.appSpec.appId,
-      baseBranch: source.draft.baseBranch,
-      baseSha: source.base.headSha,
-      headBranch: source.draft.headBranch,
-      headSha: source.draft.headSha,
-      repository: {
+    try {
+      await compactAcceptedPlanningInput({
+        sandbox,
+        appId: state.appSpec.appId,
+        artifactRevision: state.appSpec.artifactRevision,
+        appSpecDigest: state.appSpec.digest,
+        proposalAppSpec: state.proposal.target.contract.appSpec,
+        retainedRoots,
+        readAcceptedContent,
+      });
+      const transport = await recoverLegacyAppSpecTransport({
+        sandbox,
+        sessionId: ctx.session.id,
+        repository: state.githubSource.repository,
+        appId: state.appSpec.appId,
+        artifactRevision: state.appSpec.artifactRevision,
+        appSpecDigest: state.appSpec.digest,
+        apply: state.applyReceipt,
+        baseline: appBaselineState.get(),
+        readAcceptedContent,
+      });
+      const legacyTransportPath = `.config/app-specs/${state.appSpec.appId}.md`;
+      const reviewedTransport = state.reviewReceipt.changes.some(
+        (change) =>
+          change.path === legacyTransportPath && change.after?.digest === state.appSpec.digest,
+      );
+      const recovery = legacyTransportRecoveryResult(transport.status, reviewedTransport);
+      if (recovery !== null) {
+        return { ...recovery, workspaceMaintenance };
+      }
+      const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
+      const original = draftReconciliationState.get();
+      const lineage = reconciliationLineageRequest(state, original);
+      const source = await runtime.inspectExistingDraftReconciliationSource({
+        ...lineage,
+        readPublishedSource: async (draft) =>
+          await readPublishedOperatorSourceForSession({
+            appId: state.appSpec.appId,
+            appSpecDigest: state.appSpec.digest,
+            root: state.applyReceipt.applyRoot,
+            callId: ctx.callId,
+            sessionAuth: ctx.session.auth,
+            adapterSessionId: ctx.session.id,
+            signal: ctx.abortSignal,
+            lookup: {
+              repositoryId: draft.repositoryId,
+              branch: draft.headBranch,
+              gitSha: draft.headSha,
+              gitTree: draft.headTree,
+            },
+          }),
         name: state.githubSource.repository.name,
         owner: state.githubSource.repository.owner,
-      },
-      sandbox,
-    };
-    if (unpublished !== undefined) {
-      request.unpublished = unpublished;
-    }
-    Object.assign(
-      request,
-      previousCandidateRequest(original, {
-        appId: state.appSpec.appId,
-        repositoryId: state.githubSource.repository.repositoryId,
         pullRequestNumber: input.pullRequestNumber,
+        repositoryId: state.githubSource.repository.repositoryId,
+      });
+      assertReconciliationDraftLineage({
+        headBranch: source.draft.headBranch,
+        publishedHeadSha: source.publishedHeadSha,
+        resolvedRef: state.githubSource.resolvedRef,
+      });
+      const unpublished =
+        state.reviewReceipt.changes.length === 0
+          ? undefined
+          : {
+              changes: state.reviewReceipt.changes,
+              ...(source.publishedHeadSha === undefined
+                ? {}
+                : { priorPublishedHeadSha: source.publishedHeadSha }),
+              contentSource: publicationContentSourceForReviewedWorkflow({ sandbox, state }),
+              reviewDigest: state.reviewReceipt.digest,
+            };
+      const request: DraftReconciliationInput = {
+        appId: state.appSpec.appId,
+        baseBranch: source.draft.baseBranch,
+        baseSha: source.base.headSha,
+        headBranch: source.draft.headBranch,
+        headSha: source.draft.headSha,
+        repository: {
+          name: state.githubSource.repository.name,
+          owner: state.githubSource.repository.owner,
+        },
+        sandbox,
+      };
+      if (unpublished !== undefined) {
+        request.unpublished = unpublished;
+      }
+      Object.assign(
+        request,
+        previousCandidateRequest(original, {
+          appId: state.appSpec.appId,
+          repositoryId: state.githubSource.repository.repositoryId,
+          pullRequestNumber: input.pullRequestNumber,
+          githubSourceDigest: state.githubSource.digest,
+          originalReviewDigest: state.reviewReceipt.digest,
+          headSha: source.draft.headSha,
+          baseSha: source.base.headSha,
+        }),
+      );
+      const accessRuntime = await repositoryAccessRuntimeForSession(ctx.session.auth);
+      const { prepared, retriedGitFetch } = await prepareWithVerifiedGitHubFetchRecovery({
+        acquireCredential: async () =>
+          await accessRuntime.acquireExistingSourceCredential({
+            installationId: accessReceipt.scope.installationId,
+            repository: {
+              name: accessReceipt.repository.name,
+              owner: accessReceipt.repository.owner,
+              repositoryId: accessReceipt.repository.repositoryId,
+            },
+            sessionId: accessReceipt.sessionId,
+          }),
+        prepare: async () => await prepareDraftReconciliation(request),
+        sandbox: {
+          setNetworkPolicy: async (policy) => {
+            await setBuilderSandboxNetworkPolicy(sandbox, policy);
+          },
+        },
+      });
+      const {
+        created: _created,
+        preservedCandidateRoot: _preserved,
+        replayedAppChanges: _replayed,
+        ...preparedCandidate
+      } = prepared;
+      void _created;
+      void _preserved;
+      void _replayed;
+      const candidate = {
+        ...preparedCandidate,
+        ...retainedPublishedReconciliation(
+          source.publishedReconciliation,
+          lineage.publishedReconciliation,
+        ),
         githubSourceDigest: state.githubSource.digest,
         originalReviewDigest: state.reviewReceipt.digest,
-        headSha: source.draft.headSha,
-        baseSha: source.base.headSha,
-      }),
-    );
-    const accessRuntime = await repositoryAccessRuntimeForSession(ctx.session.auth);
-    const { prepared, retriedGitFetch } = await prepareWithVerifiedGitHubFetchRecovery({
-      acquireCredential: async () =>
-        await accessRuntime.acquireExistingSourceCredential({
-          installationId: accessReceipt.scope.installationId,
-          repository: {
-            name: accessReceipt.repository.name,
-            owner: accessReceipt.repository.owner,
-            repositoryId: accessReceipt.repository.repositoryId,
-          },
-          sessionId: accessReceipt.sessionId,
-        }),
-      prepare: async () => await prepareDraftReconciliation(request),
-      sandbox: {
-        setNetworkPolicy: async (policy) => {
-          await setBuilderSandboxNetworkPolicy(sandbox, policy);
-        },
-      },
-    });
-    const {
-      created: _created,
-      preservedCandidateRoot: _preserved,
-      replayedAppChanges: _replayed,
-      ...preparedCandidate
-    } = prepared;
-    void _created;
-    void _preserved;
-    void _replayed;
-    const candidate = {
-      ...preparedCandidate,
-      ...retainedPublishedReconciliation(
-        source.publishedReconciliation,
-        lineage.publishedReconciliation,
-      ),
-      githubSourceDigest: state.githubSource.digest,
-      originalReviewDigest: state.reviewReceipt.digest,
-      pullRequestNumber: input.pullRequestNumber,
-      repositoryId: state.githubSource.repository.repositoryId,
-      version: 1 as const,
-    };
-    updateExactDraftReconciliation({
-      expected: original,
-      operation: "preparing the isolated merge candidate",
-      transition: () => candidate,
-    });
-    const result = {
-      baseSha: prepared.baseSha,
-      conflicts: prepared.conflicts,
-      headSha: prepared.headSha,
-      root: prepared.root,
-      status: prepared.conflicts.length === 0 ? "ready_for_validation" : "needs_resolution",
-    };
-    const output: typeof result & {
-      recovery?: string;
-      gitTransportRecovery?: string;
-    } = result;
-    const candidateRecovery = candidateRecoveryGuidance(prepared, original);
-    if (candidateRecovery !== undefined) {
-      output.recovery = candidateRecovery;
+        pullRequestNumber: input.pullRequestNumber,
+        repositoryId: state.githubSource.repository.repositoryId,
+        version: 1 as const,
+      };
+      updateExactDraftReconciliation({
+        expected: original,
+        operation: "preparing the isolated merge candidate",
+        transition: () => candidate,
+      });
+      const result = {
+        baseSha: prepared.baseSha,
+        conflicts: prepared.conflicts,
+        headSha: prepared.headSha,
+        root: prepared.root,
+        status: prepared.conflicts.length === 0 ? "ready_for_validation" : "needs_resolution",
+        workspaceMaintenance,
+      };
+      const output: typeof result & {
+        recovery?: string;
+        gitTransportRecovery?: string;
+      } = result;
+      const candidateRecovery = candidateRecoveryGuidance(prepared, original);
+      if (candidateRecovery !== undefined) {
+        output.recovery = candidateRecovery;
+      }
+      if (retriedGitFetch) {
+        output.gitTransportRecovery =
+          "The first sandbox Git fetch was rejected even though GitHub installation access was verified. Builder reacquired the installation credential and the private fetch succeeded on retry.";
+      }
+      return output;
+    } catch (error) {
+      annotateDraftWorktreeRetirementError(error, workspaceMaintenance, ctx.abortSignal);
+      throw error;
     }
-    if (retriedGitFetch) {
-      output.gitTransportRecovery =
-        "The first sandbox Git fetch was rejected even though GitHub installation access was verified. Builder reacquired the installation credential and the private fetch succeeded on retry.";
-    }
-    return output;
   },
   inputSchema: z.strictObject({ pullRequestNumber: z.number().int().positive() }),
 });

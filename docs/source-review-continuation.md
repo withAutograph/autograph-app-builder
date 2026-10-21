@@ -1,8 +1,9 @@
 # Durable source review continuation
 
 Ordinary `accept_change_set` prepares final independent review from the parent
-session's current source and returns an opaque reference. Builder follows it
-through the blocking `review-current-product-source` workflow, then calls ordinary
+session's applied checkout at `state.applyReceipt.applyRoot` and returns an opaque
+reference. Builder follows it through the blocking
+`review-current-product-source` workflow, then calls ordinary
 `accept_change_set` with the returned reference to finalize. Matching completed
 assessments can be reused directly. Intermediate technical validation returns
 deferred/unassessed source evidence without paid review.
@@ -11,6 +12,15 @@ The final review attempt is required. An unavailable or interrupted assessment
 remains truthfully unassessed and does not gate private preview/publication or
 require a technical-validation rerun. Concrete findings and existing approval
 boundaries remain authoritative.
+
+A later reconciled GitHub draft uses a separate `candidate.root`, so the earlier
+applied-source assessment does not assess that candidate. PR #945 clarifies that
+`accept_change_set` must not be rerun to obtain a candidate assessment or repeat
+old-source paid reviews. The deterministic candidate diff review remains usable
+for normal approved publication. Report an unavailable independent candidate
+assessment honestly and continue; no new paid feature, human Continue reply or
+review prerequisite is added. Preserve requested app-authored behavior checks;
+unavailable hosted behavior remains unverified until exercised after delivery.
 
 ## Completed application records
 

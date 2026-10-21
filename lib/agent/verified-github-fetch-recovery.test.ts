@@ -1,7 +1,10 @@
 import type { BuilderSandboxSession } from "../sandbox/builder-sandbox";
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import { prepareWithVerifiedGitHubFetchRecovery } from "./verified-github-fetch-recovery";
+import { annotateDraftWorktreeRetirementError } from "../repository/retire-unused-draft-worktrees";
+import type { DraftWorktreeRetirementAdvisory } from "../repository/retire-unused-draft-worktrees";
 
 const rejectedFetch = () =>
   new Error(
@@ -86,5 +89,115 @@ describe("verified GitHub fetch recovery", () => {
     ).rejects.toThrow("installation disconnected");
     expect(prepare).not.toHaveBeenCalled();
     expect(setNetworkPolicy).not.toHaveBeenCalled();
+  });
+});
+
+describe("preparation failure cleanup advisory", () => {
+  const advisory: DraftWorktreeRetirementAdvisory = {
+    status: "complete",
+    retired: 1,
+    retained: 2,
+    reasons: { referenced: 1, private_state: 1 },
+    capacity: { after: { bytes: { total: "4096", available: "0" } } },
+  };
+  const appendedAdvisory = (error: Error, original: string) => {
+    expect(error.message.startsWith(original)).toBe(true);
+    const suffix = error.message.slice(original.length);
+    return z.json().parse(JSON.parse(suffix.slice(suffix.indexOf("{"))));
+  };
+
+  it("preserves the actual command error identity and cause while adding sanitized maintenance evidence", async () => {
+    const f = fixture();
+    const cause = new Error("controlled command cause");
+    const original = new TypeError("Builder could not create its checkout (exit 128)", { cause });
+    const message = original.message;
+    const prepare = vi.fn().mockRejectedValue(original);
+    const run = async () => {
+      try {
+        return await prepareWithVerifiedGitHubFetchRecovery({ ...f, prepare });
+      } catch (error) {
+        annotateDraftWorktreeRetirementError(error, advisory);
+        throw error;
+      }
+    };
+    await expect(run()).rejects.toBe(original);
+    expect(original).toBeInstanceOf(TypeError);
+    expect(original.cause).toBe(cause);
+    expect(appendedAdvisory(original, message)).toEqual(advisory);
+    expect(prepare).toHaveBeenCalledOnce();
+    expect(f.acquireCredential).toHaveBeenCalledOnce();
+    expect(f.setNetworkPolicy).toHaveBeenLastCalledWith("allow-all");
+  });
+
+  it("keeps the existing single verified fetch retry before annotating its terminal failure", async () => {
+    const f = fixture();
+    const rejection = rejectedFetch();
+    const prepare = vi.fn().mockRejectedValue(rejection);
+    let terminal: unknown;
+    try {
+      await prepareWithVerifiedGitHubFetchRecovery({ ...f, prepare });
+    } catch (error) {
+      terminal = error;
+      const message = error instanceof Error ? error.message : "";
+      annotateDraftWorktreeRetirementError(error, advisory);
+      if (!(error instanceof Error)) {
+        throw new Error("Expected the original preparation failure", { cause: error });
+      }
+      expect(appendedAdvisory(error, message)).toEqual(advisory);
+    }
+    expect(terminal).toBeInstanceOf(Error);
+    expect(terminal).toHaveProperty("cause", rejection);
+    expect(prepare).toHaveBeenCalledTimes(2);
+    expect(f.acquireCredential).toHaveBeenCalledTimes(2);
+    expect(f.setNetworkPolicy).toHaveBeenCalledTimes(4);
+    expect(f.setNetworkPolicy).toHaveBeenLastCalledWith("allow-all");
+  });
+
+  it("reports unavailable maintenance without replacing an ordinary preparation failure", () => {
+    const error = new Error("Original command failed");
+    const message = error.message;
+    const unavailable: DraftWorktreeRetirementAdvisory = {
+      status: "unavailable",
+      retired: 0,
+      retained: 0,
+      reasons: {},
+    };
+    annotateDraftWorktreeRetirementError(error, unavailable);
+    expect(appendedAdvisory(error, message)).toEqual(unavailable);
+  });
+
+  it("keeps cancellation and nonwritable or unknown failures untouched", () => {
+    const controller = new AbortController();
+    const cancellation = new DOMException("Original Stop reason", "AbortError");
+    controller.abort(cancellation);
+    expect(() => {
+      annotateDraftWorktreeRetirementError(cancellation, advisory, controller.signal);
+    }).not.toThrow();
+    expect(cancellation.message).toBe("Original Stop reason");
+    const frozen = Object.freeze(new Error("Frozen original"));
+    expect(() => {
+      annotateDraftWorktreeRetirementError(frozen, advisory);
+    }).not.toThrow();
+    expect(frozen.message).toBe("Frozen original");
+    const unknown = { detail: "Unclassified original rejection" };
+    expect(() => {
+      annotateDraftWorktreeRetirementError(unknown, advisory);
+    }).not.toThrow();
+    expect(unknown).toEqual({ detail: "Unclassified original rejection" });
+  });
+
+  it("never appends unknown diagnostic fields or private reason strings", () => {
+    const error = new Error("Original command failed");
+    const unsafe = {
+      ...advisory,
+      secret: "private-token",
+      reasons: { ...advisory.reasons, "/private/source/root": 1 },
+    };
+    expect(() => {
+      annotateDraftWorktreeRetirementError(error, unsafe);
+    }).not.toThrow();
+    expect(error.message.startsWith("Original command failed")).toBe(true);
+    expect(error.message).not.toContain("private-token");
+    expect(error.message).not.toContain("/private/source/root");
   });
 });

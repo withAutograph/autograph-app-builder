@@ -37,6 +37,17 @@ committed provider/tool rounds; an in-flight uncommitted round can repeat, and a
 separate new workflow call has no prior-continuation guarantee. Technical checks
 are not cached or skipped by this scheduling change.
 
+Here, current source means the applied checkout at
+`state.applyReceipt.applyRoot`. A later GitHub draft reconciliation uses a
+different `candidate.root`; the earlier applied-source assessment does not assess
+that candidate. PR #945 clarifies this provenance: do not rerun
+`accept_change_set` to obtain a candidate assessment or repeat paid review of the
+earlier source. Continue deterministic candidate diff review and normal approved
+publication, reporting any unavailable candidate assessment honestly. No extra
+paid review, human Continue reply or review gate is introduced. Preserve requested
+app-authored behavior checks and their results; unavailable hosted behavior stays
+unverified until it can be exercised after delivery.
+
 ## Source review optimization
 
 The final reviewer assesses the application against the exact original request,
