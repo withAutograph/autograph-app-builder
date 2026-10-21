@@ -1,3 +1,4 @@
+import type { HostedSubmissionVerificationStep } from "./hosted-submission-unknown-error";
 import {
   captureResourceApprovalResponse,
   resourceApprovalResponseProofSchema,
@@ -1037,52 +1038,77 @@ export function createHostedEveSessionService(input: {
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function requireBoundSucceededStartSession(operation: HostedOperationRecord) {
-    if (
-      operation.kind !== "start" ||
-      operation.state !== "succeeded" ||
-      operation.sessionRecordDigest === undefined
-    ) {
-      throw new HostedSubmissionUnknownError();
+    if (operation.kind !== "start") {
+      throw new HostedSubmissionUnknownError("start_operation_kind");
     }
+    if (operation.state !== "succeeded") {
+      throw new HostedSubmissionUnknownError("start_operation_state");
+    }
+    if (operation.sessionRecordDigest === undefined) {
+      throw new HostedSubmissionUnknownError("start_creation_digest_missing");
+    }
+    let verificationStep: HostedSubmissionVerificationStep = "child_lookup";
     try {
       const storedSession = await input.store.getSession(principal, operation.sessionId);
       if (storedSession === null) {
-        throw new HostedSubmissionUnknownError();
+        throw new HostedSubmissionUnknownError("child_missing");
       }
+      verificationStep = "child_shape";
       const verifiedSession = hostedSessionRecordSchema.parse(storedSession);
-      if (
-        verifiedSession.sessionId !== operation.sessionId ||
-        tenantKeyFor(verifiedSession.principal) !== tenantKeyFor(principal) ||
-        hostedSessionCreationDigest(verifiedSession) !== operation.sessionRecordDigest
-      ) {
-        throw new HostedSubmissionUnknownError();
+      if (verifiedSession.sessionId !== operation.sessionId) {
+        throw new HostedSubmissionUnknownError("child_identity");
+      }
+      if (tenantKeyFor(verifiedSession.principal) !== tenantKeyFor(principal)) {
+        throw new HostedSubmissionUnknownError("child_tenant");
+      }
+      if (hostedSessionCreationDigest(verifiedSession) !== operation.sessionRecordDigest) {
+        throw new HostedSubmissionUnknownError("child_creation_digest");
       }
       return verifiedSession;
-    } catch {
-      throw new HostedSubmissionUnknownError();
+    } catch (error) {
+      throw error instanceof HostedSubmissionUnknownError
+        ? error
+        : new HostedSubmissionUnknownError(verificationStep);
     }
   }
+
+  // Recovery settlement may atomically inherit a newer private build decision
+  // from the locked source or original authority. Compare the public child
+  // proposal and committed record without this store-owned projection.
+  const comparableStartSession = <T extends HostedSessionRecord | HostedPagedSessionBase>(
+    operation: HostedOperationRecord,
+    session: T,
+  ): T => {
+    if (operation.nativeRecovery === undefined || session.version !== 2) {
+      return session;
+    }
+    const { privateBuildDecision: _storeOwnedDecision, ...comparable } = session;
+    void _storeOwnedDecision;
+    return comparable as T;
+  };
 
   // eslint-disable-next-line eslint/func-style -- Called by settlement, exact retry and GET after canonical readback.
   async function activateCommittedRecovery(operation: HostedOperationRecord): Promise<void> {
     if (operation.nativeRecovery === undefined) {
       return;
     }
-    const child = await requireBoundSucceededStartSession(operation);
-    if (
-      child.version !== 2 ||
-      child.nativeRecoveryBinding === undefined ||
-      input.transport.activateRecovery === undefined
-    ) {
-      throw new HostedSubmissionUnknownError();
-    }
-    if (
-      child.status === "cancelled" ||
-      (child.cancellationRevision ?? 0) !== (child.resumedCancellationRevision ?? 0)
-    ) {
-      return;
-    }
+    let verificationStep: HostedSubmissionVerificationStep = "child_lookup";
     try {
+      const child = await requireBoundSucceededStartSession(operation);
+      if (
+        child.version !== 2 ||
+        child.nativeRecoveryBinding === undefined ||
+        input.transport.activateRecovery === undefined
+      ) {
+        throw new HostedSubmissionUnknownError("activation_prerequisites");
+      }
+      if (
+        child.status === "cancelled" ||
+        (child.cancellationRevision ?? 0) !== (child.resumedCancellationRevision ?? 0)
+      ) {
+        return;
+      }
+      verificationStep = "activation_transport";
       const binding = await input.transport.activateRecovery({
         operationId: operation.operationId,
         principal,
@@ -1090,11 +1116,24 @@ export function createHostedEveSessionService(input: {
         sourceHandoffId: child.sourceHandoffId,
       });
       if (canonical(binding) !== canonical(child.nativeRecoveryBinding)) {
-        throw new HostedSubmissionUnknownError();
+        throw new HostedSubmissionUnknownError("activation_receipt");
       }
-    } catch {
-      // The canonical child stays succeeded even if activation or its ACK is lost.
-      throw new HostedSubmissionUnknownError();
+    } catch (error) {
+      // Diagnostics cannot alter the canonical succeeded child or activation retry semantics.
+      const failure =
+        error instanceof HostedSubmissionUnknownError
+          ? error
+          : new HostedSubmissionUnknownError(verificationStep);
+      reportHostedSubmissionDiagnostic({
+        adapterSessionId: operation.nativeRecoveryReceipt?.ownerRunId,
+        clientRequestId: operation.clientRequestId,
+        error: failure,
+        operationId: operation.operationId,
+        operationKind: operation.kind,
+        phase: "recovery_activation",
+        sink: input.onSubmissionDiagnostic,
+      });
+      throw failure;
     }
   }
 
@@ -2106,10 +2145,12 @@ export function createHostedEveSessionService(input: {
         const verifiedSession = toDurableHostedSessionRecord(
           await requireBoundSucceededStartSession(verified),
         );
+        const comparableVerifiedSession = comparableStartSession(verified, verifiedSession);
+        const comparableDispatchedSession = comparableStartSession(verified, dispatchedSession);
         if (
-          hostedSessionRecordDigest(verifiedSession) !==
-            hostedSessionRecordDigest(dispatchedSession) ||
-          canonical(verifiedSession) !== canonical(dispatchedSession)
+          hostedSessionRecordDigest(comparableVerifiedSession) !==
+            hostedSessionRecordDigest(comparableDispatchedSession) ||
+          canonical(comparableVerifiedSession) !== canonical(comparableDispatchedSession)
         ) {
           throw new HostedSubmissionUnknownError();
         }
@@ -2127,14 +2168,15 @@ export function createHostedEveSessionService(input: {
           checkpointProgressDigest: _checkpointProgressDigest,
           checkpointRef: _checkpointRef,
           ...verifiedBase
-        } = verifiedSession;
+        } = comparableStartSession(verified, verifiedSession);
         void _checkpoint;
         void _checkpointDigest;
         void _checkpointProgressDigest;
         void _checkpointRef;
         if (
           verifiedSession.checkpointRef === undefined ||
-          canonical(verifiedBase) !== canonical(dispatchedPagedSession.session)
+          canonical(verifiedBase) !==
+            canonical(comparableStartSession(verified, dispatchedPagedSession.session))
         ) {
           throw new HostedSubmissionUnknownError();
         }
@@ -2444,17 +2486,33 @@ export function createHostedEveSessionService(input: {
     const { sessionId, cursor, limit } = inputValue;
     const session = toDurableHostedSessionRecord(await requireSession(sessionId));
     if (session.nativeRecoveryBinding !== undefined) {
-      const operation = await input.store.getPrivateOperation?.(
-        principal,
-        session.nativeRecoveryBinding.operationId,
-      );
-      if (
-        operation === undefined ||
-        operation === null ||
-        operation.state !== "succeeded" ||
-        operation.sessionId !== sessionId
-      ) {
-        throw new HostedSubmissionUnknownError();
+      let operation: HostedOperationRecord | null | undefined;
+      try {
+        operation = await input.store.getPrivateOperation?.(
+          principal,
+          session.nativeRecoveryBinding.operationId,
+        );
+        if (
+          operation === undefined ||
+          operation === null ||
+          operation.state !== "succeeded" ||
+          operation.sessionId !== sessionId
+        ) {
+          throw new HostedSubmissionUnknownError("child_operation_binding");
+        }
+      } catch (error) {
+        reportHostedSubmissionDiagnostic({
+          adapterSessionId: session.adapterSessionId,
+          error:
+            error instanceof HostedSubmissionUnknownError
+              ? error
+              : new HostedSubmissionUnknownError("child_operation_lookup"),
+          operationId: session.nativeRecoveryBinding.operationId,
+          operationKind: "start",
+          phase: "recovery_activation",
+          sink: input.onSubmissionDiagnostic,
+        });
+        throw error;
       }
       await activateCommittedRecovery(operation);
     }
@@ -3807,9 +3865,21 @@ export function createHostedEveSessionService(input: {
           throw new HostedIdempotencyConflictError();
         }
         if (operation.state === "succeeded") {
-          await (operation.kind === "start"
-            ? requireBoundSucceededStartSession(operation)
-            : requireSession(operation.sessionId));
+          try {
+            await (operation.kind === "start"
+              ? requireBoundSucceededStartSession(operation)
+              : requireSession(operation.sessionId));
+          } catch (error) {
+            reportHostedSubmissionDiagnostic({
+              clientRequestId: request.clientRequestId,
+              error,
+              operationId: operation.operationId,
+              operationKind: operation.kind,
+              phase: "start_lookup",
+              sink: input.onSubmissionDiagnostic,
+            });
+            throw error;
+          }
           await activateCommittedRecovery(operation);
           return operation.result;
         }

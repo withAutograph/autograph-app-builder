@@ -44,7 +44,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock("./compiled-operator-artifacts", () => ({
   publishCompiledOperatorArtifactsForSession: mocks.publish,
 }));
-vi.mock("../repository/app-description", () => ({ describeSelectedApp: mocks.describe }));
+vi.mock(import("../repository/app-description"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  describeSelectedApp: mocks.describe,
+}));
 vi.mock("../../agent/tools/run-app-browser-tests", () => ({ runAppBrowserTests: mocks.browser }));
 vi.mock("./review-applied-product-source", () => ({ reviewAppliedProductSource: mocks.review }));
 vi.mock("../../agent/tools/prepare-app-local-preview", () => ({

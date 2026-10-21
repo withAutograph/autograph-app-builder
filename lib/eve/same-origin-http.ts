@@ -283,6 +283,14 @@ async function postMutation(input: {
     return accepted;
   } catch (error) {
     if (error instanceof SubmissionRejectedBeforeDispatchError) {
+      if (input.body.recoveryPhase === "activate" && input.startDiagnostic !== undefined) {
+        reportHostedSubmissionDiagnostic({
+          ...input.startDiagnostic,
+          error,
+          operationKind: "start",
+          phase: "transport_acceptance",
+        });
+      }
       throw error;
     }
     if (input.startDiagnostic !== undefined) {
@@ -1804,12 +1812,27 @@ export function createSameOriginEveTransport(input: {
         path: "/eve/v1/session",
         principal: request.principal,
         sourceHandoffId: request.sourceHandoffId,
+        startDiagnostic: {
+          operationId: request.operationId,
+          sink: input.onSubmissionDiagnostic,
+        },
       });
-      const binding = nativeRecoveryBindingSchema.parse(accepted.recoveryBinding);
-      if (binding.ownerRunId !== accepted.sessionId) {
-        throw new SubmissionOutcomeUnknownError();
+      try {
+        const binding = nativeRecoveryBindingSchema.parse(accepted.recoveryBinding);
+        if (binding.ownerRunId !== accepted.sessionId) {
+          throw new SubmissionOutcomeUnknownError();
+        }
+        return binding;
+      } catch (error) {
+        reportHostedSubmissionDiagnostic({
+          operationId: request.operationId,
+          operationKind: "start",
+          phase: "transport_acceptance",
+          error,
+          sink: input.onSubmissionDiagnostic,
+        });
+        throw error;
       }
-      return binding;
     },
     async start(request) {
       const accepted = await postMutation({

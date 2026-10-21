@@ -60,6 +60,12 @@ test("unknown CID adopts a terminal receipt without replay, GET exposes failure 
       collectedOwners.push(binding);
       return { kind: "candidate", candidate: frontier };
     },
+    readCandidate: (candidate) => {
+      assert.equal(candidate, frontier);
+      const binding = collectedOwners.at(-1);
+      assert.ok(binding !== undefined);
+      return { binding };
+    },
     reconcile: async (candidate) => {
       reconciled.push(candidate);
       return { kind: "uncertain", reason: "fixture-stops-at-reconciler" };

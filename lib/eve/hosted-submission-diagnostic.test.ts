@@ -1,3 +1,4 @@
+import type { NativeRecoveryDescriptor, NativeRecoveryBinding } from "./native-recovery-contract";
 import { createHash } from "node:crypto";
 
 import { describe, expect, it, vi } from "vitest";
@@ -524,5 +525,180 @@ describe("verified pre-dispatch rejection diagnostics", () => {
       ["builder.hosted_submission_uncertain", "unclassified_failure", undefined],
     ]);
     expect(JSON.stringify(sink.mock.calls)).not.toContain(canary);
+  });
+});
+
+describe("native recovery verification diagnostics", () => {
+  const bindingFor = (descriptor: NativeRecoveryDescriptor): NativeRecoveryBinding => ({
+    ...descriptor,
+    ownerRunId: "private-recovered-owner",
+    provenance: {
+      kind: "committed-turn-output",
+      sourceStepId: "private-step",
+      sourceEventId: "private-event",
+      sourceSlot: 1,
+      checkpointVersion: 1,
+    },
+  });
+  const recoveredFixture = async () => {
+    const store = new InMemoryHostedEveStore();
+    const transport = adapter();
+    const sink = vi.fn<HostedSubmissionDiagnosticSink>();
+    vi.mocked(transport.start).mockImplementation(async (input) => {
+      if (input.recovery === undefined) {
+        return {
+          adapterSessionId: "private-original-owner",
+          snapshot: { events: [], status: "failed" },
+        };
+      }
+      const recoveryBinding = bindingFor(input.recovery);
+      await store.commitNativeRecoveryReceipt({
+        principal,
+        descriptor: input.recovery,
+        recoveryBinding,
+        nowEpochMs: 100,
+      });
+      return { adapterSessionId: recoveryBinding.ownerRunId, recoveryBinding, snapshot };
+    });
+    const activate = vi.fn<NonNullable<HostedEveTransport["activateRecovery"]>>(({ recovery }) =>
+      Promise.resolve(bindingFor(recovery)),
+    );
+    transport.activateRecovery = activate;
+    const service = createHostedEveSessionService({
+      principal,
+      store,
+      transport,
+      now: () => 100,
+      onSubmissionDiagnostic: sink,
+      assertNativeRecoveryOwner: () => Promise.resolve(),
+    });
+    const original = await service.start({
+      clientRequestId: "diagnostic-original",
+      prompt: canary,
+    });
+    const recoveryRequest = {
+      clientRequestId: "diagnostic-recovery",
+      resumeSessionId: original.sessionId,
+    };
+    return { service, store, transport, sink, activate, recoveryRequest };
+  };
+  it("allowlists internal verification tags without reading accessors or changing the public message", () => {
+    const sink = vi.fn<HostedSubmissionDiagnosticSink>();
+    const access = vi.fn(() => {
+      throw new Error(canary);
+    });
+    const tagged = new HostedSubmissionUnknownError("child_creation_digest");
+    const unsafe = new HostedSubmissionUnknownError();
+    Object.defineProperty(unsafe, "verificationStep", { get: access });
+    for (const error of [
+      tagged,
+      unsafe,
+      { verificationStep: "child_creation_digest", message: canary },
+    ]) {
+      reportHostedSubmissionDiagnostic({
+        operationKind: "start",
+        phase: "recovery_activation",
+        error,
+        sink,
+      });
+    }
+    expect(sink.mock.calls.map(([record]) => record.verificationStep)).toEqual([
+      "child_creation_digest",
+      undefined,
+      undefined,
+    ]);
+    expect(access).not.toHaveBeenCalled();
+    expect(tagged.message).toBe(new HostedSubmissionUnknownError().message);
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(canary);
+  });
+  it("reports exact-start child creation mismatch without another start or activation", async () => {
+    const f = await recoveredFixture();
+    const child = await f.service.start(f.recoveryRequest);
+    const read = f.store.getSession.bind(f.store);
+    vi.spyOn(f.store, "getSession").mockImplementation(async (owner, id) => {
+      const stored = await read(owner, id);
+      return stored !== null && id === child.sessionId
+        ? { ...stored, createdAtEpochMs: stored.createdAtEpochMs - 1 }
+        : stored;
+    });
+    f.activate.mockClear();
+    await expect(f.service.start(f.recoveryRequest)).rejects.toBeInstanceOf(
+      HostedSubmissionUnknownError,
+    );
+    expect(f.sink).toHaveBeenLastCalledWith(
+      expect.objectContaining({ phase: "start_lookup", verificationStep: "child_creation_digest" }),
+    );
+    expect(f.transport.start).toHaveBeenCalledTimes(2);
+    expect(f.activate).not.toHaveBeenCalled();
+  });
+  it("reports activation transport failure on settlement, exact retry and GET while preserving the succeeded child", async () => {
+    const f = await recoveredFixture();
+    f.activate.mockRejectedValue(new Error(canary));
+    await expect(f.service.start(f.recoveryRequest)).rejects.toBeInstanceOf(
+      HostedSubmissionUnknownError,
+    );
+    const operation = await f.store.getStartOperation(principal, f.recoveryRequest.clientRequestId);
+    if (operation?.state !== "succeeded") {
+      throw new Error("Expected committed child");
+    }
+    const sessionId = operation.sessionId;
+    await expect(f.service.start(f.recoveryRequest)).rejects.toBeInstanceOf(
+      HostedSubmissionUnknownError,
+    );
+    await expect(f.service.get({ sessionId, cursor: 0, limit: 10 })).rejects.toBeInstanceOf(
+      HostedSubmissionUnknownError,
+    );
+    expect(f.sink).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        phase: "recovery_activation",
+        verificationStep: "activation_transport",
+      }),
+    );
+    expect(
+      await f.store.getStartOperation(principal, f.recoveryRequest.clientRequestId),
+    ).toMatchObject({ state: "succeeded", sessionId });
+    expect(f.transport.start).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(f.sink.mock.calls)).not.toContain(canary);
+    expect(JSON.stringify(f.sink.mock.calls)).not.toContain("private-recovered-owner");
+  });
+  it("distinguishes an activation receipt mismatch and a missing canonical GET operation", async () => {
+    const f = await recoveredFixture();
+    const child = await f.service.start(f.recoveryRequest);
+    f.activate.mockImplementation(({ recovery }) =>
+      Promise.resolve({ ...bindingFor(recovery), ownerRunId: "different-private-owner" }),
+    );
+    await expect(
+      f.service.get({ sessionId: child.sessionId, cursor: 0, limit: 10 }),
+    ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    expect(f.sink).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        phase: "recovery_activation",
+        verificationStep: "activation_receipt",
+      }),
+    );
+    const lookup = vi.spyOn(f.store, "getPrivateOperation").mockResolvedValue(null);
+    f.activate.mockClear();
+    await expect(
+      f.service.get({ sessionId: child.sessionId, cursor: 0, limit: 10 }),
+    ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    expect(f.sink).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        phase: "recovery_activation",
+        verificationStep: "child_operation_binding",
+      }),
+    );
+    expect(f.activate).not.toHaveBeenCalled();
+    expect(f.transport.start).toHaveBeenCalledTimes(2);
+    lookup.mockRejectedValue(new Error(canary));
+    await expect(
+      f.service.get({ sessionId: child.sessionId, cursor: 0, limit: 10 }),
+    ).rejects.toThrow(canary);
+    expect(f.sink).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        phase: "recovery_activation",
+        verificationStep: "child_operation_lookup",
+      }),
+    );
+    expect(JSON.stringify(f.sink.mock.calls)).not.toContain(canary);
   });
 });
