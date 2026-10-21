@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { generatedAppRoleSchema } from "../repository/generated-app-role";
 
 const id = z.string().min(1).max(512);
 const actorKey = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
@@ -36,7 +37,11 @@ export const normalActorProgramSchema = z
     ),
     memberships: z.array(z.strictObject({ actorKey, organizationId: id, role })),
     appAccess: z.array(
-      z.strictObject({ actorKey, organizationId: id, roles: z.array(role).min(1) }),
+      z.strictObject({
+        actorKey,
+        organizationId: id,
+        roles: z.array(generatedAppRoleSchema).min(1),
+      }),
     ),
   })
   .superRefine((program, ctx) => {
@@ -282,7 +287,7 @@ export const normalActorIdentityManifestSchema = z.strictObject({
       actorKey,
       actorId: id,
       organizationId: id.nullable(),
-      roles: z.array(role),
+      roles: z.array(generatedAppRoleSchema),
       storageState: id,
     }),
   ),

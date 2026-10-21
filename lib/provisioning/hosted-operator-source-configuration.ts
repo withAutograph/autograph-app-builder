@@ -1,6 +1,7 @@
 import { managedRuntimeWorkerDescriptorSchema } from "./hosted-operator-continuity-contract";
 import { tenantExportWorkerDescriptorSchema } from "./hosted-operator-export-contract";
 import { z } from "zod";
+import { generatedAppRoleSchema } from "../repository/generated-app-role";
 import { configurationSchema, scopeSchema } from "./hosted-operator-native-preview-neon";
 import { createHostedOperatorControlPlane } from "./hosted-operator-deployment";
 import { createOperatorWorkloadVerifier } from "./hosted-operator-workload";
@@ -82,7 +83,9 @@ export const hostedOperatorSourceConfigurationSchema = z.strictObject({
   applications: z.record(
     id,
     z.strictObject({
-      accessRoles: z.array(z.string().regex(/^[a-z][a-z0-9_]{0,62}$/u)).min(1),
+      accessRoles: z.array(generatedAppRoleSchema),
+      /** Registry provenance: new access plans must read roles from the current captured release. */
+      nativeTargetRegistration: z.literal(true).optional(),
       appDatabase: resource,
       hostProtection: externallyManagedTrustedSourcesSchema.optional(),
       authAdoptionSource: hostedOperatorAuthAdoptionSourceSchema.optional(),

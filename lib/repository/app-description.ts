@@ -1,17 +1,25 @@
 import { z } from "zod";
 import type { SandboxSession } from "eve/sandbox";
 import { sanitizeValidationDiagnosticText } from "./validation-output-sanitize";
+import { generatedAppRoleSchema } from "./generated-app-role";
 
 const appId = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 export const appDescriptionSchema = z.object({
   app: z.object({ id: appId, routes: z.array(z.string()), workspacePath: z.string() }),
+  deployment: z
+    .object({
+      buildCommand: z.string().nullable().optional(),
+      framework: z.string().nullable(),
+      sourceFilesOutsideRootDirectory: z.boolean(),
+    })
+    .optional(),
   backend: z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("static") }),
     z.object({
       authorization: z.enum(["declared-policy", "app-owned"]),
       kind: z.literal("generated-postgres"),
       release: z.object({ artifactHash: z.string(), directory: z.string(), id: z.string() }),
-      roles: z.array(z.string().regex(/^[a-z][a-z0-9_]*$/u)),
+      roles: z.array(generatedAppRoleSchema),
       runtime: z.object({ databaseEnvironment: z.string() }),
       schemaReceipt: z
         .object({ contract: z.literal("authenticated-release-read"), path: z.string() })

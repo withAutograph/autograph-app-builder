@@ -1,6 +1,14 @@
 import { createProtectedHostedOperatorHandler } from "./hosted-operator-service";
 import type { ProtectedHostedOperatorDependencies } from "./hosted-operator-service";
 
+export interface HostedOperatorRequestDependencies {
+  dependencies: ProtectedHostedOperatorDependencies;
+  close: () => Promise<void>;
+}
+export type HostedOperatorRequestDependencyLoader = (
+  request: Request,
+) => Promise<HostedOperatorRequestDependencies>;
+
 export type HostedOperatorDependencyLoader = () => Promise<ProtectedHostedOperatorDependencies>;
 type Handler = ReturnType<typeof createProtectedHostedOperatorHandler>;
 const unavailable = () =>
@@ -11,7 +19,10 @@ const unavailable = () =>
 
 /** Trusted source composition only. No request/environment value chooses a factory. */
 export const createHostedOperatorNativeHandler = (
-  input: { createDependencies?: HostedOperatorDependencyLoader } = {},
+  input: {
+    createDependencies?: HostedOperatorDependencyLoader;
+    createRequestDependencies?: HostedOperatorRequestDependencyLoader;
+  } = {},
 ): Handler => {
   let initializing: Promise<Handler> | null = null;
   const initialize = async (): Promise<Handler> => {
@@ -39,6 +50,22 @@ export const createHostedOperatorNativeHandler = (
         { code: "not_found" },
         { headers: { "cache-control": "no-store" }, status: 404 },
       );
+    }
+    if (input.createRequestDependencies !== undefined) {
+      let scoped: HostedOperatorRequestDependencies | undefined;
+      try {
+        scoped = await input.createRequestDependencies(request);
+        return await createProtectedHostedOperatorHandler(scoped.dependencies)(request);
+      } catch {
+        return unavailable();
+      } finally {
+        // Releasing this request's connection pool cannot turn a committed effect into a retry.
+        try {
+          await scoped?.close();
+        } catch {
+          // The operation response remains authoritative after resource disposal fails.
+        }
+      }
     }
     let handler: Handler;
     try {

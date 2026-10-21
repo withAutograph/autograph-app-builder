@@ -27,7 +27,8 @@ import {
   readNeonAuthorizationConfiguration,
   neonAuthorizationConfigurationSchema,
 } from "./hosted-operator-neon-authorization";
-import type { createHostedOperatorControlPlane } from "./hosted-operator-deployment";
+import { createHostedOperatorControlPlane } from "./hosted-operator-deployment";
+import type { HostedOperatorRequestDependencyLoader } from "./hosted-operator-native";
 import { createHash } from "node:crypto";
 import postgres from "postgres";
 import { getVercelOidcToken } from "@vercel/oidc";
@@ -97,6 +98,7 @@ import {
 import { createHostedOperatorPublicGateway } from "./hosted-operator-public-gateway";
 import { resolvePublishedAppDelivery } from "./hosted-operator-published-app-delivery";
 import type { CompiledOperatorReleaseSelection } from "./hosted-operator-artifact-selection";
+import type { AppDescription } from "../repository/app-description";
 import { createHostedOperatorEnvironmentBindings } from "./hosted-operator-environment-bindings";
 import { createHostedOperatorAppReadiness } from "./hosted-operator-app-readiness";
 import {
@@ -226,6 +228,37 @@ type ControlPlane = Awaited<ReturnType<typeof createHostedOperatorControlPlane>>
       ProtectedHostedOperatorDependencies["normalActorRuntimeBindings"]
     >;
   };
+const rolesForNewPlan = (
+  application: HostedOperatorSourceConfiguration["applications"][string],
+  currentAppRoles?: readonly string[],
+) => currentAppRoles ?? application.accessRoles;
+const proposedAccessWithinCurrentRoles = (
+  program: NormalActorProgram,
+  state: NormalActorState,
+  allowedAppRoles: readonly string[],
+) => {
+  const proposed = proposeResolvedNormalActorAccess(program, state);
+  const allowed = new Set(allowedAppRoles);
+  if (proposed.some((grant) => grant.roles.some((role) => !allowed.has(role)))) {
+    throw new HostedOperatorError(RESOURCE_MISMATCH);
+  }
+  return proposed;
+};
+const verifiedActorAccess = (actorId: string, organizationId: string, roles: readonly string[]) =>
+  roles.length === 0 ? [] : [{ actorId, organizationId, roles: [...roles] }];
+const rolesFromCapturedRelease = (
+  application: HostedOperatorSourceConfiguration["applications"][string],
+  release: Awaited<ReturnType<ControlPlane["readGeneratedRelease"]>>,
+) => {
+  const describedRoles =
+    release?.description?.backend.kind === "generated-postgres"
+      ? release.description.backend.roles
+      : undefined;
+  if (application.nativeTargetRegistration === true && describedRoles === undefined) {
+    throw new HostedOperatorError(RESOURCE_MISMATCH);
+  }
+  return describedRoles ?? application.accessRoles;
+};
 export interface HostedOperatorNormalActorPlanningPorts {
   readAppInstallationCustomerIds?: (
     context: HostedOperatorContext,
@@ -725,6 +758,8 @@ const resolveParticipantPlan = async (
     bootstrap: CompletedParticipantBootstrap;
     assertCurrent: () => Promise<void>;
   },
+  currentAppRoles?: readonly string[],
+  sourceDescription?: AppDescription,
 ): Promise<HostedOperatorPlan> => {
   if (!participantsBootstrapPrepared) {
     return base;
@@ -769,9 +804,11 @@ const resolveParticipantPlan = async (
     throw new HostedOperatorError("operator_unavailable");
   }
   const application = selectedApplication(configuration, context);
+  const allowedAppRoles = rolesForNewPlan(application, currentAppRoles);
+  const proposedAccess = proposedAccessWithinCurrentRoles(program, state, allowedAppRoles);
   const appTrustedSources = appTrustedSourcesForNewPlan(base, configuration);
   const gatewayBindings = gatewayBindingsForNewAppPlan(base);
-  const delivery = resolvePublishedAppDelivery(application, selectedRelease);
+  const delivery = resolvePublishedAppDelivery(application, selectedRelease, sourceDescription);
   const organizations = await controlPlane.readNormalActorOrganizationProofs({
     ...context,
     plan: base,
@@ -837,11 +874,11 @@ const resolveParticipantPlan = async (
             signupPolicy,
             base,
             signupPolicy.organizationId,
-            application.accessRoles,
+            allowedAppRoles,
           ),
         }),
     stage: "app",
-    access: proposeResolvedNormalActorAccess(program, state),
+    access: proposedAccess,
     authMembership:
       organizations.length === 0
         ? undefined
@@ -885,6 +922,8 @@ export const resolveFullPlan = async (
     bootstrap: CompletedParticipantBootstrap;
     assertCurrent: () => Promise<void>;
   },
+  currentAppRoles?: readonly string[],
+  sourceDescription?: AppDescription,
 ): Promise<HostedOperatorPlan> => {
   if (base.normalActorProgram !== undefined) {
     return await resolveParticipantPlan(
@@ -898,6 +937,8 @@ export const resolveFullPlan = async (
       participantsCompleted,
       selectedRelease,
       completedBootstrap,
+      currentAppRoles,
+      sourceDescription,
     );
   }
 
@@ -906,11 +947,12 @@ export const resolveFullPlan = async (
     return base;
   }
   const application = selectedApplication(configuration, context);
+  const allowedAppRoles = rolesForNewPlan(application, currentAppRoles);
   // Bootstrap prepares owned Auth and database resources before app publication.
   // Only the app delivery plan needs the actual published Git source.
   const appTrustedSources = appTrustedSourcesForNewPlan(base, configuration);
   const gatewayBindings = gatewayBindingsForNewAppPlan(base);
-  const delivery = resolvePublishedAppDelivery(application, selectedRelease);
+  const delivery = resolvePublishedAppDelivery(application, selectedRelease, sourceDescription);
   const privateProof = await controlPlane.readCapturedRealmIdentityProof(context);
   const transportOrigin =
     base.deploymentBoundary?.verification.gatewayOrigin ?? captured.endpointOrigin;
@@ -1028,16 +1070,9 @@ export const resolveFullPlan = async (
     ...(signupPolicy === undefined
       ? {}
       : {
-          authSignupPolicy: bindSignupPolicy(
-            signupPolicy,
-            base,
-            organizationId,
-            application.accessRoles,
-          ),
+          authSignupPolicy: bindSignupPolicy(signupPolicy, base, organizationId, allowedAppRoles),
         }),
-    access: [
-      { actorId: verified.identity.actorId, organizationId, roles: application.accessRoles },
-    ],
+    access: verifiedActorAccess(verified.identity.actorId, organizationId, allowedAppRoles),
     authMembership,
     delivery,
     deploymentBoundary:
@@ -1349,10 +1384,11 @@ export const composeHostedOperatorDependencies = (
       }
       return selected.selection;
     });
-    await observe(
+    const generatedRelease = await observe(
       "release_read",
       async () => await controlPlane.readGeneratedRelease(context, selection),
     );
+    const currentAppRoles = rolesFromCapturedRelease(application, generatedRelease);
     await selected.assertCurrent?.();
     await observe("neon_planning", async () => {
       const planning = createNativePreviewNeonPlanningAuthority({
@@ -1697,6 +1733,8 @@ export const composeHostedOperatorDependencies = (
           selection,
           context.authSignupPolicy,
           completedBootstrap,
+          currentAppRoles,
+          generatedRelease?.description,
         ),
     );
     return withExternallyManagedHostProtection(resolved, application.hostProtection);
@@ -2465,6 +2503,7 @@ export const composeHostedOperatorDependencies = (
   return {
     exportRequest: controlPlane.exportRequest,
     continuityRequest: controlPlane.continuityRequest,
+    nativeTargetRequest: controlPlane.nativeTargetRequest,
     assertAuthorized: controlPlane.assertAuthorized,
     readReadyDeliveryReplacementPlan: async (context) => {
       const policy = selectedApplication(configuration, context).hostProtection;
@@ -2668,3 +2707,35 @@ export const createDependencies = async (): Promise<ProtectedHostedOperatorDepen
   const { configuration, controlPlane } = await openHostedOperatorCompositionResources();
   return composeHostedOperatorDependencies(configuration, controlPlane);
 };
+
+/**
+ * Resolve owner-authorized registry configuration before opening operation resources. The same
+ * snapshot reaches planning, execution and the control plane's normal Auth transport.
+ */
+export const createRequestScopedHostedOperatorDependencies =
+  (input: {
+    resolveConfiguration: (request: Request) => Promise<HostedOperatorSourceConfiguration>;
+    environment?: Readonly<Record<string, string | undefined>>;
+    openControlPlane?: typeof createHostedOperatorControlPlane;
+  }): HostedOperatorRequestDependencyLoader =>
+  async (request) => {
+    const configuration = await input.resolveConfiguration(request.clone());
+    const controlPlane = await (input.openControlPlane ?? createHostedOperatorControlPlane)({
+      environment: input.environment,
+      sourceConfiguration: configuration,
+      workloadPolicy: configuration.workloadPolicy,
+    });
+    try {
+      return {
+        dependencies: composeHostedOperatorDependencies(configuration, controlPlane),
+        close: () => controlPlane.close(),
+      };
+    } catch (error) {
+      try {
+        await controlPlane.close();
+      } catch {
+        // Preserve the original composition failure after disposal.
+      }
+      throw error;
+    }
+  };

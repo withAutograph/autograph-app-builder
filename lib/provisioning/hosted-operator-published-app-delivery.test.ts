@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import type { CompiledOperatorReleaseSelection } from "./hosted-operator-artifact-selection";
 import { operatorPublicResultSchema } from "./hosted-operator-contract";
+import { appDescriptionSchema } from "../repository/app-description";
 import {
   resolvePublishedAppDelivery,
   withAppPublicationGuidance,
@@ -91,6 +92,71 @@ it("freezes configured project settings alongside the selected release source", 
     projectId: application.projectId,
     projectSettings,
   });
+});
+it("uses the captured source profile and exact described workspace for a new selected release", () => {
+  const publishedSource = {
+    branch: "codex/generated-app",
+    changeSetDigest: "d".repeat(64),
+    gitSha: "e".repeat(40),
+    gitTree: "f".repeat(40),
+    repositoryId: "generated-repository",
+    reviewDigest: "b".repeat(64),
+  };
+  const description = appDescriptionSchema.parse({
+    app: { id: "spend-review", routes: ["/"], workspacePath: "apps/current-source" },
+    backend: { kind: "static" },
+    deployment: {
+      buildCommand: null,
+      framework: "nextjs",
+      sourceFilesOutsideRootDirectory: true,
+    },
+    validation: { browser: null, check: { task: "check" }, test: { shards: 1, task: "test" } },
+    version: 1,
+  });
+  const delivery = resolvePublishedAppDelivery(
+    {
+      ...application,
+      projectSettings: {
+        framework: "vite",
+        rootDirectory: "apps/initial-registration",
+        sourceFilesOutsideRootDirectory: false,
+      },
+    },
+    { ...release, publishedSource },
+    description,
+  );
+  expect(delivery.projectSettings).toEqual({
+    buildCommand: null,
+    framework: "nextjs",
+    rootDirectory: "apps/current-source",
+    sourceFilesOutsideRootDirectory: true,
+  });
+  expect(delivery.gitSha).toBe(publishedSource.gitSha);
+});
+it("passes only the described root for an older selected source without configured settings", () => {
+  const description = appDescriptionSchema.parse({
+    app: { id: "spend-review", routes: ["/"], workspacePath: "apps/accepted-source" },
+    backend: { kind: "static" },
+    validation: { browser: null, check: { task: "check" }, test: { shards: 1, task: "test" } },
+    version: 1,
+  });
+  const delivery = resolvePublishedAppDelivery(
+    application,
+    {
+      ...release,
+      publishedSource: {
+        branch: "current-branch",
+        changeSetDigest: "d".repeat(64),
+        gitSha: "e".repeat(40),
+        gitTree: "f".repeat(40),
+        repositoryId: "current-repository",
+        reviewDigest: "b".repeat(64),
+      },
+    },
+    description,
+  );
+  expect(delivery.projectSettings).toEqual({ rootDirectory: "apps/accepted-source" });
+  expect(Object.keys(delivery.projectSettings ?? {})).toEqual(["rootDirectory"]);
 });
 it("does not substitute configured starter source for an unpublished generated release", () => {
   expect(() => resolvePublishedAppDelivery(application, release)).toThrow(

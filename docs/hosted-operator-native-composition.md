@@ -93,13 +93,17 @@ association; it never substitutes configured starter source, a baseline commit,
 or a latest-repository guess. An update records its newly observed head, while
 replaying the original publication retains its original completion marker.
 
-App project build settings come from the trusted app description and are frozen
-with the delivery plan as an optional `projectSettings` profile. The profile
-records the provider framework, the exact described app `workspacePath` as
-`rootDirectory`, and whether shared source files outside that root are included
-in the build. An optional `buildCommand` carries an explicitly configured,
-source-derived command; omission preserves existing provider behavior and `null`
-is forwarded unchanged. Do not derive an app path from its ID
+For a new selected release, optional `deployment` metadata in the captured
+repository `app:describe` result supplies the provider framework, outside-root
+source inclusion, and any explicitly configured build command. Builder uses the
+same description's app `workspacePath` as `projectSettings.rootDirectory` and
+freezes those settings with the new delivery plan. An omitted `buildCommand`
+preserves existing provider behavior and `null` is forwarded unchanged. A
+description without deployment metadata still supplies its exact `workspacePath`
+as the new plan's root. Other configured fields remain for compatibility when
+present; when absent, framework detection, outside-root inclusion, and build
+command use provider defaults. This does not establish a complete current source
+build profile. Do not derive an app path from its ID
 or invent install, build, or output commands. For the current Next app source,
 the profile is `nextjs` at that exact workspace path with outside-root source
 inclusion enabled for shared workspace packages. A missing profile remains

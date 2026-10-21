@@ -96,7 +96,12 @@ in acceptance evidence.
 ## Repository runtime contract
 
 Use `app:describe` for selected release, declared roles, database environment and
-validation tasks. Use `app:runtime prepare` for isolated authenticated validation;
+validation tasks. For a source-owned Vercel build profile, declare
+`autograph.deployment` in that app's package manifest with explicit `framework`,
+`sourceFilesOutsideRootDirectory`, and optional `buildCommand`; `app:describe`
+emits it with the selected release, while `app.workspacePath` supplies the
+delivery root directory. An absent declaration remains valid for older source.
+Use `app:runtime prepare` for isolated authenticated validation;
 its protected environment and session files are injected by Builder into app
 validation and Preview startup. Author `test-e2e` to consume `APP_TEST_IDENTITIES_FILE`
 and exercise real browser submissions with those sessions. Backend validation

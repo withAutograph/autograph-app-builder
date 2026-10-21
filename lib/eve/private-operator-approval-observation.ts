@@ -7,7 +7,7 @@ import type { OperatorOwnerContext } from "../provisioning/hosted-operator-contr
 import type { PrivateHistoryObservation } from "./same-origin-http";
 
 const requestSchema = z.strictObject({
-  action: z.enum(["export", "continuity"]),
+  action: z.enum(["export", "continuity", "native-target"]),
   planRef: z.string().min(1),
   planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   idempotencyKey: z.string().min(1),

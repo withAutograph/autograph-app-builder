@@ -7,6 +7,8 @@ import { continuityTransportRequestSchema } from "./hosted-operator-continuity-t
 import type { ContinuityTransportRequest } from "./hosted-operator-continuity-transport";
 import { tenantExportTransportRequestSchema } from "./hosted-operator-export-transport";
 import type { TenantExportTransportRequest } from "./hosted-operator-export-transport";
+import { nativeTargetTransportRequestSchema } from "./native-target-onboarding-transport";
+import type { NativeTargetTransportRequest } from "./native-target-onboarding-transport";
 import {
   OPERATOR_EXECUTION_OBSERVATION_HEADER,
   OPERATOR_EXECUTION_OBSERVATION_PREFERENCE,
@@ -245,6 +247,11 @@ export type HostedOperatorWorkerEffectContext = HostedOperatorEffectContext & {
   bindWorkerContext: (binding: WorkerContextBinding) => Promise<RecordWorkerCheckpoint>;
 };
 export interface ProtectedHostedOperatorDependencies {
+  /** Dedicated pre-project native target dispatcher with current app-owner authority. */
+  nativeTargetRequest?: (
+    request: Request,
+    input: NativeTargetTransportRequest,
+  ) => Promise<Response>;
   /** Separate approved continuity dispatcher; the original verified request owns workload custody. */
   continuityRequest?: (request: Request, input: ContinuityTransportRequest) => Promise<Response>;
   /** Explicit separate export dispatcher; never enters preparation/cleanup state. */
@@ -1555,6 +1562,25 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           throw new HostedOperatorError("protected_operator_required");
         }
         return await deps.exportRequest(request, tenantExportTransportRequestSchema.parse(body));
+      }
+      const nativeTargetAction = z
+        .object({
+          action: z.enum([
+            "native-target-plan",
+            "native-target-prepare",
+            "native-target-approval-read",
+            "native-target-approval-candidate",
+          ]),
+        })
+        .safeParse(body);
+      if (nativeTargetAction.success) {
+        if (deps.nativeTargetRequest === undefined) {
+          throw new HostedOperatorError("protected_operator_required");
+        }
+        return await deps.nativeTargetRequest(
+          request,
+          nativeTargetTransportRequestSchema.parse(body),
+        );
       }
       const input = operatorRequestSchema.parse(body);
       const isConsentRequest = input.action === "neon-authorization";

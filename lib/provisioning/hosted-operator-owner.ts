@@ -50,6 +50,7 @@ import type {
   HostedRuntimeJournalStore,
 } from "./hosted-runtime-journal";
 import type { HostedOperatorContext } from "./hosted-operator-service";
+import type { NativeTargetReadyRegistration } from "./native-target-onboarding-contract";
 import {
   createPrivateHostedApprovalRecorder,
   readPrivateHostedApproval,
@@ -80,6 +81,11 @@ export interface HostedOperatorOwnerDependencies {
     authority: Authority,
   ) => Promise<readonly Pick<VercelInstallationBinding, "active" | "installationId">[]>;
   readVercelCredential: AccessReader;
+  /** Trusted registry read after the canonical handoff identity has been checked. */
+  readReadyNativeTarget?: (
+    authority: Authority,
+    appId: string,
+  ) => Promise<NativeTargetReadyRegistration | undefined>;
   fetch?: typeof fetch;
   diagnosticSink?: HostedOperatorConsentDiagnosticSink;
   apiOrigin?: string;
@@ -319,7 +325,7 @@ const readDirectOwnerTarget = async (
 };
 
 const readHandoffOwnerIdentity = async (
-  deps: HostedOperatorOwnerDependencies,
+  deps: Pick<HostedOperatorOwnerDependencies, "handoffs">,
   owner: OperatorOwnerContext & { kind: "handoff" },
   principal: HostedPrincipal,
   selection: Pick<OperatorSelection, "appId">,
@@ -357,6 +363,67 @@ const readHandoffOwnerIdentity = async (
   return handoff;
 };
 
+/** A registered new project has its own readback; the original handoff identity stays intact. */
+const readReadyHandoffOwnerTarget = async (
+  deps: HostedOperatorOwnerDependencies,
+  owner: OperatorOwnerContext & { kind: "handoff" },
+  selection: OperatorSelection,
+  handoff: Awaited<ReturnType<typeof readHandoffOwnerIdentity>>["data"],
+  session: ReturnType<typeof toDurableHostedSessionRecord>,
+) => {
+  const ready = await deps.readReadyNativeTarget?.(owner.authority, selection.appId);
+  const plan = ready?.plan;
+  const observed = ready?.registration.observed;
+  const targetMatches = [
+    ready?.appId === selection.appId,
+    plan?.appId === selection.appId,
+    plan?.branch === selection.branch,
+    observed?.projectId === selection.projectId,
+    observed?.teamId === plan?.project.teamId,
+    observed?.installationId === plan?.project.installationId,
+  ].every(Boolean);
+  if (!targetMatches || plan === undefined || observed === undefined) {
+    throw resourceMismatch();
+  }
+  const accessInput: Parameters<typeof readOwnerVercelProjectAccess>[0] = {
+    authority: owner.authority,
+    installationId: plan.project.installationId,
+    projectId: observed.projectId,
+    readCredential: deps.readVercelCredential,
+  };
+  accessInput.fetch = observeOwnerProjectFetch(deps, selection);
+  if (deps.apiOrigin !== undefined) {
+    accessInput.apiOrigin = deps.apiOrigin;
+  }
+  const access = await readOwnerVercelProjectAccess(accessInput);
+  if (access.status !== "ready" || access.project === undefined) {
+    throw resourceMismatch();
+  }
+  const accessMatches = [
+    access.project.id === observed.projectId,
+    access.scope.type === "team",
+    access.scope.id === plan.project.teamId,
+    access.scope.installationId === plan.project.installationId,
+  ].every(Boolean);
+  if (!accessMatches) {
+    throw resourceMismatch();
+  }
+  return {
+    handoff,
+    session,
+    target: hostedRuntimeTargetSchema.parse({
+      appId: selection.appId,
+      branch: selection.branch,
+      environment: selection.environment,
+      installationId: access.scope.installationId,
+      projectId: access.project.id,
+      scopeId: access.scope.id,
+      scopeType: access.scope.type,
+      sessionId: selection.sessionId,
+    }),
+  };
+};
+
 const readHandoffOwnerTarget = async (
   deps: HostedOperatorOwnerDependencies,
   owner: OperatorOwnerContext & { kind: "handoff" },
@@ -376,7 +443,7 @@ const readHandoffOwnerTarget = async (
 
   const vercel = handoff.data.intent.provisioning?.vercel;
   if (vercel?.status !== "succeeded" || vercel.projectId !== selection.projectId) {
-    throw resourceMismatch();
+    return await readReadyHandoffOwnerTarget(deps, owner, selection, handoff.data, session);
   }
   const accessInput: Parameters<typeof readPreparedVercelAccess>[0] = {
     authority: owner.authority,
@@ -533,6 +600,51 @@ const readOwnedState = async (
   return await readHandoffOwnerTarget(deps, owner, principal, selection, session, sessionVersion);
 };
 
+export interface HostedOperatorAppOwnerContext {
+  authority: HostedOperatorContext["authority"];
+  ownerContext?: OperatorOwnerContext;
+  target: Pick<HostedOperatorContext["target"], "appId" | "sessionId">;
+}
+export type HostedOperatorAppOwnerDependencies = Pick<
+  HostedOperatorOwnerDependencies,
+  "eve" | "handoffs" | "membership" | "realmContinuation" | "workloadPolicy" | "keyResolver"
+>;
+
+/** The same canonical app linkage protects pre-project registry and existing artifact reads. */
+const readCanonicalAppOwnerSession = async (
+  deps: HostedOperatorAppOwnerDependencies,
+  input: HostedOperatorAppOwnerContext,
+) => {
+  const { owner, principal } = ownerContextFromHint(input.ownerContext);
+  readRealmOwnerRestriction(deps, owner, input.target.appId);
+  if (
+    !sameAuthority(input.authority, owner.authority) ||
+    input.target.sessionId !== owner.sessionId
+  ) {
+    throw unavailable();
+  }
+  const { session, sessionVersion } = await readCurrentOwnedSession(deps, principal, owner);
+  if (!(await deps.membership.isMember({ principal, workspaceId: owner.authority.workspaceId }))) {
+    throw unavailable();
+  }
+  if (owner.kind === "direct") {
+    assertDirectOwnerIdentity(owner, principal, input.target, session, sessionVersion);
+  } else {
+    await readHandoffOwnerIdentity(deps, owner, principal, input.target, session, sessionVersion);
+  }
+  return session;
+};
+
+/** No project grant or provider credential is needed to read this owner's app registration. */
+export const createHostedOperatorAppOwnerAuthority = (
+  deps: HostedOperatorAppOwnerDependencies,
+) => ({
+  verifyWorkload: createOperatorWorkloadVerifier(deps.workloadPolicy, deps.keyResolver),
+  assertCanonicalAppOwner: async (input: HostedOperatorAppOwnerContext): Promise<void> => {
+    await readCanonicalAppOwnerSession(deps, input);
+  },
+});
+
 /**
  * Server-only delegated authority for the exact Builder workload. The owner tuple
  * is only a lookup hint: every call re-reads the owner-scoped handoff, Eve row,
@@ -574,28 +686,10 @@ export const createHostedOperatorOwnerAuthority = (deps: HostedOperatorOwnerDepe
     }
     return current;
   };
-  /** Read canonical artifact ownership without borrowing deployment authority. */
-  const readArtifactAuthorizedSession = async (input: HostedOperatorContext) => {
-    const { owner, principal } = ownerContextFromHint(input.ownerContext);
-    readRealmOwnerRestriction(deps, owner, input.target.appId);
-    if (
-      !sameAuthority(input.authority, owner.authority) ||
-      input.target.sessionId !== owner.sessionId
-    ) {
-      throw unavailable();
-    }
-    const { session, sessionVersion } = await readCurrentOwnedSession(deps, principal, owner);
-    if (
-      !(await deps.membership.isMember({ principal, workspaceId: owner.authority.workspaceId }))
-    ) {
-      throw unavailable();
-    }
-    if (owner.kind === "direct") {
-      assertDirectOwnerIdentity(owner, principal, input.target, session, sessionVersion);
-    } else {
-      await readHandoffOwnerIdentity(deps, owner, principal, input.target, session, sessionVersion);
-    }
-    return session;
+  const readArtifactAuthorizedSession = async (input: HostedOperatorContext) =>
+    await readCanonicalAppOwnerSession(deps, input);
+  const assertCanonicalAppOwner = async (input: HostedOperatorAppOwnerContext): Promise<void> => {
+    await readCanonicalAppOwnerSession(deps, input);
   };
   /** Recheck canonical artifact ownership without exposing the private session. */
   const assertArtifactAuthorized = async (input: HostedOperatorContext): Promise<void> => {
@@ -657,6 +751,7 @@ export const createHostedOperatorOwnerAuthority = (deps: HostedOperatorOwnerDepe
   return {
     verifyWorkload,
     assertArtifactAuthorized,
+    assertCanonicalAppOwner,
     assertSandboxAuthorized,
     authorizeArtifactRead,
     assertAuthorized,

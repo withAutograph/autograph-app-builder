@@ -2,6 +2,10 @@ import { continuityApprovalInputSchema } from "../eve/private-continuity-approva
 import { tenantExportApprovalInputSchema } from "../eve/private-export-approval";
 import { z } from "zod";
 import {
+  nativeTargetOnboardingPlanSchema,
+  nativeTargetOnboardingPlanDigest,
+} from "../provisioning/native-target-onboarding-contract";
+import {
   hostedOperatorPlanSchema,
   operatorPlanDigest,
 } from "../provisioning/hosted-operator-contract";
@@ -243,12 +247,35 @@ const continuityApprovalDescription = (input: unknown): string | undefined => {
   const plan = parsed.data.plan;
   return `Run one app-authored continuity suite for ${plan.target.appId} using prepared setup ${plan.originalSetup.operationRef}, release ${plan.preparedPlan.release.id}. Copy the exact verified runtime worker from one credential-free operator-source Sandbox into this owner's app Sandbox and dispose that source Sandbox. Resume this owner's logical Sandbox ${plan.runtime.sandboxId} at ${plan.runtime.root} on compute ${plan.runtime.ownerId}/${plan.runtime.projectId}; launch its same app environment on ports ${plan.runtime.appPort}/${plan.runtime.bridgePort}. Temporarily publish only intent ${plan.intentId}'s separate managed target and private transport row to Gateway ${plan.gateway.projectId}, refresh that Gateway once from the displayed source ${plan.preparedPlan.gatewayDelivery?.gitSha ?? plan.preparedPlan.gatewayDelivery?.branch}, and run the app's existing browser suite for the approved actor/organization pairs ${plan.actors.map((actor) => `${actor.actorId}/${actor.organizationId}`).join(", ")}. The suite may perform its authored app operations and stop/restart only this owned app process. Close the owned runtime before deleting its own configuration rows; a deployed Gateway may retain the now-closed target until normal refresh or expiry. This neither changes the native app target nor proves continuity after a native deployment. Scope digest ${parsed.data.planDigest}.`;
 };
+const nativeTargetApprovalDescription = (input: unknown): string | undefined => {
+  const parsed = z
+    .strictObject({
+      appId,
+      operationRef: z.uuid(),
+      planDigest: digest,
+      plan: nativeTargetOnboardingPlanSchema,
+    })
+    .safeParse(input);
+  if (
+    !parsed.success ||
+    parsed.data.appId !== parsed.data.plan.appId ||
+    nativeTargetOnboardingPlanDigest(parsed.data.plan) !== parsed.data.planDigest
+  )
+    return undefined;
+  const { plan } = parsed.data;
+  const conflict =
+    plan.conflictPolicy === "stop-on-conflict"
+      ? "Stop if the project name is already taken."
+      : "Use a unique suffix only after the provider confirms a name conflict.";
+  return `Create one dedicated Preview project ${plan.project.name} in Vercel team ${plan.project.teamId} for ${plan.appId}, and register it for branch ${plan.branch}. Set Vercel Authentication for All Deployments and enable team-issued OIDC tokens on this project; independently verify both settings before registration. ${conflict} Reserve the database name ${plan.appDatabase.database} and its separate migration/runtime role names for the later resource plan; this approval creates no database or access grants. Cost owner: current app owner; ${plan.cost.description}. Retention: ${plan.retention.policy}${plan.retention.expiresAt === undefined ? "" : `; expires ${plan.retention.expiresAt}`}. Resources remain billable until normal approved cleanup. This does not deploy the app or activate Production. Scope digest ${parsed.data.planDigest}.`;
+};
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function publicApprovalDescription(input: unknown, toolName?: string): string | undefined {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     return undefined;
   }
   const record = input as Record<string, unknown>;
+  if (toolName === "prepare-app-native-target") return nativeTargetApprovalDescription(record);
   if (toolName === "run-app-continuity-tests") return continuityApprovalDescription(record);
   if (toolName === "export-app-hosted-data") {
     const parsed = tenantExportApprovalInputSchema.safeParse(record);

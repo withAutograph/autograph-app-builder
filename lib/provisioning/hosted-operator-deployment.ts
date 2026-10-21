@@ -118,6 +118,8 @@ import { parseProtectedResourceLockDatabaseUrl } from "../db/protected-resource-
 import { createVercelWorkloadIdentity } from "../eve/vercel-workload-identity";
 import { parseHostedSessionRow, createPostgresHostedEveStore } from "../eve/postgres-hosted-store";
 import { createHostedOperatorApprovalObserver } from "./hosted-operator-approval-observer";
+import { createNativeTargetOnboardingDeployment } from "./native-target-onboarding-deployment";
+import { createPostgresNativeTargetOnboardingStore } from "./native-target-onboarding-store";
 import {
   account,
   agentOperations,
@@ -184,7 +186,11 @@ import {
   createHostedOperatorReadApprovedPlan,
 } from "./hosted-operator-owner";
 import { createHostedOperatorOwnerContextResolver } from "./hosted-operator-owner-context";
-import type { HostedOperatorContext, HostedOperatorEffectContext } from "./hosted-operator-service";
+import type {
+  HostedOperatorContext,
+  HostedOperatorEffectContext,
+  ProtectedHostedOperatorDependencies,
+} from "./hosted-operator-service";
 import type { HostedOperatorPlan } from "./hosted-operator-contract";
 import {
   assertResourceCredentialCheckpoint,
@@ -760,6 +766,13 @@ export const createHostedOperatorControlPlane = async (input: {
       },
       readVercelCredential: async ({ authority, installationId }) =>
         await readCredential(authority, installationId),
+      readReadyNativeTarget: async (authority, appId) => {
+        const row = await createPostgresNativeTargetOnboardingStore(database).read({
+          authority,
+          appId,
+        });
+        return row?.record.stage === "ready" ? row.record : undefined;
+      },
       workloadPolicy: input.workloadPolicy,
     });
 
@@ -3478,9 +3491,21 @@ export const createHostedOperatorControlPlane = async (input: {
         approvalObserver.bindWorkload(context, token, signal);
       },
     });
+    const nativeTargetRequest = createNativeTargetOnboardingDeployment({
+      database,
+      configuration: input.sourceConfiguration,
+      environment,
+      owner,
+      builderOrigin: new URL(config.resource).origin,
+      ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
+    });
+    const nativeTargetPort: Pick<ProtectedHostedOperatorDependencies, "nativeTargetRequest"> = {
+      nativeTargetRequest,
+    };
     return {
       ...controlPlane,
       ...normalActors,
+      ...nativeTargetPort,
       exportRequest,
       continuityRequest,
       readNormalActorRuntimeBindings: createNormalActorRuntimeBindings(

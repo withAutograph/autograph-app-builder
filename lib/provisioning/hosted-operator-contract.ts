@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { generatedAppRoleSchema } from "../repository/generated-app-role";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { hostedPrincipalSchema } from "../eve/hosted-auth";
 import {
@@ -275,7 +276,11 @@ const appPreviewTrustedSource = z.strictObject({
 });
 const hostedOperatorPlanDataSchema = z.strictObject({
   access: z.array(
-    z.strictObject({ actorId: id, organizationId: id, roles: z.array(sqlName).min(1) }),
+    z.strictObject({
+      actorId: id,
+      organizationId: id,
+      roles: z.array(generatedAppRoleSchema).min(1),
+    }),
   ),
   action: z.enum(["prepare", "cleanup"]),
   releaseIntent: z.literal("prepared-preview").optional(),
