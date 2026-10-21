@@ -415,7 +415,9 @@ describe("failed public session native recovery", () => {
       getSession: base.getSession.bind(base),
       getStartOperation: base.getStartOperation.bind(base),
       listSessions: base.listSessions.bind(base),
-      readCheckpointPage: vi.fn(() => Promise.resolve(null)),
+      readCheckpointPage: vi.fn<NonNullable<HostedEveStore["readCheckpointPage"]>>(() =>
+        Promise.reject(new Error("This settlement fixture does not read checkpoint pages.")),
+      ),
       reserveOperation: vi.fn(base.reserveOperation.bind(base)),
       settleSucceeded: base.settleSucceeded.bind(base),
       settleSucceededPaged,
