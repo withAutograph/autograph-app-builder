@@ -1,5 +1,5 @@
 import { defineWorkflowTool } from "eve/tools";
-import { nativeTargetPreparationRequestSchema } from "../../lib/agent/native-target-onboarding-runtime";
+import { nativeTargetPreparationRequestSchema } from "../../lib/agent/native-target-onboarding-input-schema";
 import {
   authorizeNativeTargetApprovalResponseStep,
   prepareNativeTargetStep,

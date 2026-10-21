@@ -649,10 +649,10 @@ index 0000000..019c969
 +}
 diff --git a/dist/src/execution/session/recovery-reconciliation.d.ts b/dist/src/execution/session/recovery-reconciliation.d.ts
 new file mode 100644
-index 0000000..8687b26
+index 0000000..57b2acf
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-reconciliation.d.ts
-@@ -0,0 +1,62 @@
+@@ -0,0 +1,63 @@
 +import type { SessionCheckpoint } from "#execution/session/handoff.js";
 +import type { TurnStepPayload } from "#execution/session/turn-step-types.js";
 +import type {
@@ -714,13 +714,14 @@ index 0000000..8687b26
 +/** Pure native reconciliation. No emitter, authorizer, dispatcher, model, tool or provider execution. */
 +export declare function reconcileTerminalRecoveryCandidate(
 +  handle: PrivateNativeRecoveryCandidate,
++  options?: { readonly repeatableCallIds?: readonly string[] },
 +): Promise<NativeRecoveryReconciliation>;
 diff --git a/dist/src/execution/session/recovery-reconciliation.js b/dist/src/execution/session/recovery-reconciliation.js
 new file mode 100644
-index 0000000..810e909
+index 0000000..5780093
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-reconciliation.js
-@@ -0,0 +1,383 @@
+@@ -0,0 +1,455 @@
 +import { recordRecoveryProtocolDiagnostic } from "#harness/model-protocol-diagnostic.js";
 +import { isDeepStrictEqual } from "node:util";
 +import { readTerminalRecoveryCandidate } from "#execution/session/recovery-candidate.js";
@@ -930,8 +931,77 @@ index 0000000..810e909
 +  }
 +}
 +
++function assessProtocolCompletion(payload, session) {
++  const transcript = parts(session.history);
++  const results = callIds(session.history, "tool-result");
++  const requests = new Map(transcript
++    .filter((part) => part.type === "tool-approval-request")
++    .map((part) => [part.approvalId, part.toolCallId]));
++  const tail = session.history.at(-1);
++  const replayable = new Set((tail?.role === "tool" ? parts([tail]) : [])
++    .filter((part) => part.type === "tool-approval-response")
++    .map((part) => requests.get(part.approvalId)));
++  const pendingInput = new Set(getPendingInputBatches(session.state)
++    .flatMap((batch) => batch.requests.map((request) => request.action?.callId)));
++  const coordination = getPendingCoordinationBatch(session.state);
++  const pendingCoordination = new Set(coordination === undefined ? [] :
++    [...coordination.runtimeActions, ...coordination.tasks].map((action) => action.callId));
++  const emittedResults = new Set(payload.nativeEvents
++    .filter((event) => event.type === "action.result")
++    .map((event) => event.data?.result?.callId));
++  for (const call of transcript) {
++    if (call.type !== "tool-call" || call.providerExecuted === true || results.has(call.toolCallId)) continue;
++    if (pendingInput.has(call.toolCallId) || pendingCoordination.has(call.toolCallId)) continue;
++    // An emitted native result cannot be converted into an authored commit or
++    // permission to reexecute an already completed action.
++    if (emittedResults.has(call.toolCallId)) return uncertain("uncommitted-action-result", call.toolCallId);
++    if (replayable.has(call.toolCallId)) continue;
++    return uncertain("uncommitted-action-dispatch", call.toolCallId);
++  }
++}
++
++// App-owned repeatability authorizes retry of this exact call, not a claim
++// that an earlier attempt had no effects. Genuine results remain authoritative.
++function restoreRepeatableApprovalTail(session, repeatableCallIds, replayInput) {
++  const transcript = parts(session.history);
++  const results = callIds(session.history, "tool-result");
++  const selected = new Set();
++  for (const id of new Set(repeatableCallIds ?? [])) {
++    if (typeof id !== "string" || results.has(id)) continue;
++    const calls = transcript.filter((part) => part.type === "tool-call" && part.toolCallId === id);
++    const requests = transcript.filter((part) => part.type === "tool-approval-request" && part.toolCallId === id);
++    if (calls.length !== 1 || calls[0].providerExecuted === true || requests.length !== 1) continue;
++    const request = requests[0];
++    const responses = transcript.filter((part) => part.type === "tool-approval-response" && part.approvalId === request.approvalId);
++    const bindings = transcript.filter((part) => part.type === "tool-approval-request" && part.approvalId === request.approvalId);
++    if (bindings.length !== 1 || responses.length !== 1 || responses[0].approved !== true) continue;
++    const tail = session.history.at(-1);
++    if (tail?.role === "tool" && tail.content.includes(responses[0])) continue;
++    // Accepted input/pending work must retain the normal settlement owner.
++    if (replayInput !== undefined || getPendingInputBatches(session.state).length > 0 || getPendingCoordinationBatch(session.state) !== undefined) continue;
++    selected.add(responses[0]);
++  }
++  if (selected.size === 0) return session;
++  const retained = [];
++  const moved = [];
++  for (const message of session.history) {
++    if (message.role !== "tool" || !Array.isArray(message.content)) {
++      retained.push(message);
++      continue;
++    }
++    const remaining = message.content.filter((part) => !selected.has(part));
++    const responses = message.content.filter((part) => selected.has(part));
++    if (responses.length === 0) retained.push(message);
++    else {
++      if (remaining.length > 0) retained.push({ ...message, content: remaining });
++      moved.push({ ...message, content: responses });
++    }
++  }
++  return { ...session, history: coalesceApprovalReplayTail([...retained, ...moved]) };
++}
++
 +/** All values remain private. Original native reducers run only after boot. */
-+async function reconcileCandidate(handle) {
++async function reconcileCandidate(handle, options) {
 +  const payload = readTerminalRecoveryCandidate(handle);
 +  const candidates = [...payload.candidates].sort(
 +    (left, right) => right.origin.slot - left.origin.slot,
@@ -1038,6 +1108,9 @@ index 0000000..810e909
 +    incomingSource?.incoming,
 +  );
 +  if (effectUncertainty !== undefined) return effectUncertainty;
++  session = restoreRepeatableApprovalTail(session, options.repeatableCallIds, replayInput);
++  const protocolUncertainty = assessProtocolCompletion(payload, session);
++  if (protocolUncertainty !== undefined) return protocolUncertainty;
 +  const frontier = payload.events.filter(
 +    (event) => Number(event.eventId.slice(5)) > historySource.origin.slot,
 +  );
@@ -1068,8 +1141,8 @@ index 0000000..810e909
 +  };
 +}
 +
-+export async function reconcileTerminalRecoveryCandidate(handle) {
-+  const result = await reconcileCandidate(handle);
++export async function reconcileTerminalRecoveryCandidate(handle, options = {}) {
++  const result = await reconcileCandidate(handle, options);
 +  try {
 +    const payload = readTerminalRecoveryCandidate(handle);
 +    const latest = [...payload.candidates].sort(
@@ -1211,10 +1284,10 @@ index 0000000..ae1eb1e
 +}
 diff --git a/dist/src/execution/session/terminal-recovery.d.ts b/dist/src/execution/session/terminal-recovery.d.ts
 new file mode 100644
-index 0000000..2cfc762
+index 0000000..185e294
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.d.ts
-@@ -0,0 +1,77 @@
+@@ -0,0 +1,97 @@
 +import type { SessionAuthContext } from "#channel/types.js";
 +import type { SessionCheckpoint } from "#execution/session/handoff.js";
 +import type { TerminalRecoveryWorkflowEntryInput } from "#execution/session/entry-input.js";
@@ -1246,9 +1319,28 @@ index 0000000..2cfc762
 +  readonly auth: SessionAuthContext;
 +  readonly descriptor: TerminalRecoveryDescriptor;
 +}
-+/** App-owned canonical reservation ports. No private checkpoint or grant crosses this boundary. */
++/** Trusted app projection; the diagnostic sink validates primitive buckets before logging. */
++export interface TerminalRecoveryCandidateFacts {
++  readonly flags: Readonly<Record<string, boolean | null>>;
++  readonly counts: Readonly<Record<string, number>>;
++  readonly hashes: Readonly<Record<string, string | null>>;
++}
++export interface TerminalRecoveryCandidateFactsInput extends TerminalRecoveryAuthorityInput {
++  readonly binding: { readonly ownerRunId: string; readonly logicalSessionId: string };
++  readonly payload: PrivateNativeRecoveryPayload;
++}
++/** Exact native candidate supplied only to a trusted app-owned repeatability policy. */
++export interface TerminalRecoveryRepeatableCallsInput extends TerminalRecoveryAuthorityInput {
++  readonly binding: { readonly ownerRunId: string; readonly logicalSessionId: string };
++  readonly payload: PrivateNativeRecoveryPayload;
++}
++/** Trusted server-local app ports. Private candidate payloads stay local; only sanitized facts are logged, never raw checkpoints or grants in HTTP/public responses. */
 +export interface TerminalRecoveryPorts {
 +  authorize(input: TerminalRecoveryAuthorityInput): Promise<void>;
++  /** Authorizes exact retained calls using app-owned call-bound repeatability proof; missing or failed decisions grant no calls. */
++  authorizeRepeatableRecoveryCalls?(input: TerminalRecoveryRepeatableCallsInput): Promise<readonly string[] | undefined>;
++  /** Trusted read-only projection, called only inside a currently authorized exact-owner observation. */
++  observeCandidateFacts?(input: TerminalRecoveryCandidateFactsInput): Promise<TerminalRecoveryCandidateFacts | undefined>;
 +  /** Requires the succeeded operation and exact committed public child, with current cancellation fences. */
 +  authorizeActivation(input: TerminalRecoveryAuthorityInput): Promise<void>;
 +  readReceipt(input: TerminalRecoveryAuthorityInput): Promise<TerminalRecoveryBinding | null | undefined>;
@@ -1285,19 +1377,20 @@ index 0000000..2cfc762
 +  readonly outcome: "candidate" | "unavailable";
 +  readonly reason?: string;
 +  readonly payload?: PrivateNativeRecoveryPayload;
++  readonly candidateFacts?: TerminalRecoveryCandidateFacts;
 +}
 +export interface TerminalRecoveryObservationDependencies extends Pick<TerminalRecoveryDependencies, "collect" | "readCandidate" | "now"> {
 +  /** Safe advisory sink; return true only after recording the structural summary. */
 +  recordObservation(input: TerminalRecoveryObservationInput): boolean;
 +}
 +/** Read-only retained native observation; never starts, resumes, reconciles or commits. */
-+export declare function observeTerminalSession(input: TerminalRecoveryAuthorityInput & { readonly ports: Pick<TerminalRecoveryPorts, "authorize" | "readReceipt"> }, dependencies: TerminalRecoveryObservationDependencies): Promise<{ readonly kind: "accepted"; readonly sessionId: string }>;
++export declare function observeTerminalSession(input: TerminalRecoveryAuthorityInput & { readonly ports: Pick<TerminalRecoveryPorts, "authorize" | "readReceipt" | "observeCandidateFacts"> }, dependencies: TerminalRecoveryObservationDependencies): Promise<{ readonly kind: "accepted"; readonly sessionId: string }>;
 diff --git a/dist/src/execution/session/terminal-recovery.js b/dist/src/execution/session/terminal-recovery.js
 new file mode 100644
-index 0000000..3659d6d
+index 0000000..24852a7
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.js
-@@ -0,0 +1,267 @@
+@@ -0,0 +1,295 @@
 +import { createHash } from "node:crypto";
 +import { DEFAULT_SESSION_TIMEOUT_MS } from "#execution/session/timeout.js";
 +import { SESSION_CHECKPOINT_VERSION } from "#execution/session/handoff.js";
@@ -1363,9 +1456,25 @@ index 0000000..3659d6d
 +      },
 +    });
 +    if (collected.kind !== "candidate") return { kind: "unavailable", reason: collected.reason };
-+    const reconciled = await dependencies.reconcile(collected.candidate);
-+    if (reconciled.kind !== "ready") return reconciled;
 +    const payload = dependencies.readCandidate(collected.candidate);
++    let repeatableCallIds;
++    if (ports.authorizeRepeatableRecoveryCalls !== undefined) {
++      const binding = { ownerRunId: descriptor.sourceOwnerRunId, logicalSessionId: descriptor.logicalSessionId };
++      if (payload.binding?.ownerRunId !== binding.ownerRunId || payload.binding?.logicalSessionId !== binding.logicalSessionId) throw new Error("Recovery source binding changed.");
++      const authorizeCandidate = async () => {
++        await ports.authorize(call);
++        if (await ports.readReceipt(call) != null) throw new Error("Recovery receipt changed during candidate authorization.");
++      };
++      await authorizeCandidate();
++      try {
++        const authorized = await ports.authorizeRepeatableRecoveryCalls({ ...call, binding, payload });
++        if (Array.isArray(authorized) && authorized.every((id) => typeof id === "string" && id.length > 0)) repeatableCallIds = [...new Set(authorized)];
++      } catch { /* A failed app decision grants no repeatable calls; strict reconciliation still applies. */ }
++      // Revocation and a concurrently committed owner must never be advisory.
++      await authorizeCandidate();
++    }
++    const reconciled = await dependencies.reconcile(collected.candidate, repeatableCallIds === undefined ? undefined : { repeatableCallIds });
++    if (reconciled.kind !== "ready") return reconciled;
 +    let policy;
 +    try { policy = terminalRecoveryPolicy(await dependencies.readEntry(payload)); }
 +    catch { return { kind: "unavailable", reason: "source-policy-unavailable" }; }
@@ -1480,14 +1589,26 @@ index 0000000..3659d6d
 +      entry.pending = (async () => {
 +        const collected = await dependencies.collect({ binding, authorizeOwner: authorizeSelected });
 +        await authorizeSelected();
++        let payload;
++        try {
++          payload = collected.kind === "candidate" ? dependencies.readCandidate(collected.candidate) : undefined;
++          if (payload !== undefined && (payload.binding.ownerRunId !== ownerRunId || payload.binding.logicalSessionId !== descriptor.logicalSessionId)) throw new Error("Recovery observation payload changed.");
++        } catch { return false; }
++        let candidateFacts;
++        if (payload !== undefined && ports.observeCandidateFacts !== undefined) {
++          await authorizeSelected();
++          try {
++            candidateFacts = await ports.observeCandidateFacts({ ...call, binding, payload });
++          } catch { /* Trusted projection is advisory; no checkpoint or approval is changed. */ }
++          // Authority/receipt failures are not advisory and must prevent stale emission.
++          await authorizeSelected();
++        }
 +        let recorded = false;
 +        try {
-+          const payload = collected.kind === "candidate" ? dependencies.readCandidate(collected.candidate) : undefined;
-+          if (payload !== undefined && (payload.binding.ownerRunId !== ownerRunId || payload.binding.logicalSessionId !== descriptor.logicalSessionId)) throw new Error("Recovery observation payload changed.");
 +          recorded = dependencies.recordObservation({
 +            descriptor, ownerRunId, receiptPresent: receipt != null,
 +            outcome: collected.kind, reason: collected.kind === "unavailable" ? collected.reason : undefined,
-+            payload,
++            payload, candidateFacts,
 +          }) === true;
 +        } catch { /* Advisory summary failures never activate or change a checkpoint. */ }
 +        return recorded;
@@ -1774,11 +1895,12 @@ index 0000000..f3741a9
 +): boolean;
 diff --git a/dist/src/harness/model-protocol-diagnostic.js b/dist/src/harness/model-protocol-diagnostic.js
 new file mode 100644
-index 0000000..80dc80f
+index 0000000..f971f73
 --- /dev/null
 +++ b/dist/src/harness/model-protocol-diagnostic.js
-@@ -0,0 +1,300 @@
+@@ -0,0 +1,633 @@
 +import { createHash } from "node:crypto";
++import { isDeepStrictEqual } from "node:util";
 +import { getStepMetadata, getWorkflowMetadata } from "#compiled/@workflow/core/index.js";
 +import { createLogger } from "#internal/logging.js";
 +
@@ -2005,6 +2127,336 @@ index 0000000..80dc80f
 +  } catch {}
 +}
 +
++// These are observations, never nonexecution certificates. In particular, older
++// harness retries did not retain each attempt, and inline errors can lack an
++// action.result event. Do not use absence in this summary to authorize replay.
++const eventCoordinates = (event) => ({
++  sequence: Number.isSafeInteger(event?.data?.sequence) ? event.data.sequence : undefined,
++  stepIndex: Number.isSafeInteger(event?.data?.stepIndex) ? event.data.stepIndex : undefined,
++  turnHash: protocolIdentityHash(event?.data?.turnId),
++});
++const frameworkKinds = new Set([
++  "user",
++  "context.instruction",
++  "context.state",
++  "context.compaction",
++  "memory.load",
++  "execution.background_task",
++  "execution.continuation",
++  "execution.retry",
++]);
++function tailStructure(messages) {
++  return (messages ?? []).slice(-SAMPLE_LIMIT).map((message, index, rows) => ({
++    index: (messages?.length ?? 0) - rows.length + index,
++    role: ["system", "user", "assistant", "tool"].includes(message?.role)
++      ? message.role
++      : "unknown",
++    kind: frameworkKinds.has(message?.kind) ? message.kind : undefined,
++    kindHash: frameworkKinds.has(message?.kind) ? undefined : protocolIdentityHash(message?.kind),
++    partCount: partsOf(message).length,
++    callCount: partsOf(message).filter((part) => part?.type === "tool-call").length,
++    resultCount: partsOf(message).filter((part) => part?.type === "tool-result").length,
++    approvalResponseCount: partsOf(message).filter(
++      (part) => part?.type === "tool-approval-response",
++    ).length,
++  }));
++}
++function countedHashes(values) {
++  const counts = new Map();
++  for (const value of values) {
++    const hash = protocolIdentityHash(value);
++    if (hash !== undefined) counts.set(hash, (counts.get(hash) ?? 0) + 1);
++  }
++  return {
++    distinctCount: counts.size,
++    sample: [...counts].slice(0, SAMPLE_LIMIT).map(([hash, count]) => ({ hash, count })),
++    omittedCount: Math.max(0, counts.size - SAMPLE_LIMIT),
++  };
++}
++function missingCallFrontier(payload, candidates) {
++  const latest = candidates[0]?.sessionState?.snapshot?.session;
++  const latestParts = (latest?.history ?? []).flatMap(partsOf);
++  const results = new Set(
++    latestParts.filter((part) => part.type === "tool-result").map((part) => part.toolCallId),
++  );
++  const missing = [
++    ...new Map(
++      latestParts
++        .filter(
++          (part) =>
++            part.type === "tool-call" &&
++            part.providerExecuted !== true &&
++            !results.has(part.toolCallId),
++        )
++        .map((part) => [part.toolCallId, part]),
++    ).values(),
++  ];
++  const native = payload?.nativeEvents ?? [];
++  const rows = missing.slice(0, SAMPLE_LIMIT).map((call) => {
++    const callId = call.toolCallId;
++    const bindings = [];
++    const requestIds = new Set();
++    const pendingCoordinates = [];
++    for (const candidate of candidates) {
++      const session = candidate.sessionState?.snapshot?.session;
++      const coordination = getPendingCoordinationBatch(session?.state ?? {});
++      for (const batch of getPendingInputBatches(session?.state ?? {})) {
++        const pendingCall = batch.responseMessages
++          .flatMap(partsOf)
++          .find((part) => part.type === "tool-call" && part.toolCallId === callId);
++        for (const request of batch.requests.filter(
++          (request) => request.action?.callId === callId,
++        )) {
++          requestIds.add(request.requestId);
++          if (batch.event !== undefined) pendingCoordinates.push(batch.event);
++          const responses = (candidate.incoming?.delivery?.payloads ?? [])
++            .flatMap((value) => value.inputResponses ?? [])
++            .filter((value) => value.requestId === request.requestId);
++          const resolutions = native
++            .filter((event) => event.type === "input.resolved")
++            .flatMap((event) =>
++              (event.data?.resolutions ?? [])
++                .filter((value) => value.requestId === request.requestId)
++                .map((value) => ({ event, value })),
++            );
++          bindings.push({
++            slot: candidate.origin.slot,
++            stepHash: protocolIdentityHash(candidate.origin.stepId),
++            requestHash: protocolIdentityHash(request.requestId),
++            requestKindHash: protocolIdentityHash(request.kind),
++            toolNameHash: protocolIdentityHash(request.action.toolName),
++            sameCallBytes: pendingCall !== undefined && isDeepStrictEqual(pendingCall, call),
++            sameActionInput:
++              request.action.toolName === call.toolName &&
++              isDeepStrictEqual(request.action.input, call.input),
++            replayIdentityPresent: batch.toolReplayIdentities?.[request.requestId] !== undefined,
++            responseAuthRequired:
++              batch.responseAuthRequiredRequestIds?.includes(request.requestId) === true,
++            pendingCoordinates: eventCoordinates({ data: batch.event }),
++            incomingResponseCount: responses.length,
++            incomingAuthPresent: candidate.incoming?.delivery?.auth != null,
++            acceptedIncomingResponseMatchCount: resolutions.filter(
++              ({ value }) =>
++                value.response !== undefined &&
++                responses.some((response) => isDeepStrictEqual(response, value.response)),
++            ).length,
++            inputResolutionCount: resolutions.length,
++            inputResolutionSample: resolutions.slice(0, SAMPLE_LIMIT).map(({ event, value }) => ({
++              ...eventCoordinates(event),
++              outcomeHash: protocolIdentityHash(value.outcome),
++              responsePresent: value.response !== undefined,
++            })),
++            inputResolutionOutcomes: countedHashes(resolutions.map(({ value }) => value.outcome)),
++            retainedExecutionClass: coordination?.runtimeActions?.some(
++              (value) => value.callId === callId,
++            )
++              ? "runtime-action"
++              : coordination?.tasks?.some((value) => value.callId === callId)
++                ? "workflow-task"
++                : "approval-without-retained-deferred-dispatch",
++          });
++        }
++      }
++    }
++    const firstSequence = pendingCoordinates.length
++      ? Math.min(...pendingCoordinates.map((value) => value.sequence))
++      : undefined;
++    const acceptedIndex = native.findIndex(
++      (event) =>
++        (event.type === "input.resolved" &&
++          (event.data?.resolutions ?? []).some(
++            (value) => requestIds.has(value.requestId) && value.outcome === "approved",
++          )) ||
++        (event.type === "approval.settled" &&
++          requestIds.has(event.data?.requestId) &&
++          event.data.outcome === "approved"),
++    );
++    const frontier =
++      acceptedIndex >= 0
++        ? native.slice(acceptedIndex)
++        : native.filter(
++            (event) =>
++              firstSequence === undefined ||
++              event.data?.sequence === undefined ||
++              event.data.sequence >= firstSequence,
++          );
++    const failureRows = frontier.filter(
++      (event) => event.type === "step.failed" || event.type === "turn.failed",
++    );
++    const exactMissingMessage = `No tool output found for function call ${callId}`;
++    const matchResult = (event) => event.data?.result?.callId === callId;
++    const accepted = native.filter(
++      (event) => event.type === "approval.settled" && requestIds.has(event.data?.requestId),
++    );
++    const requested = native.filter(
++      (event) =>
++        event.type === "actions.requested" &&
++        event.data?.actions?.some((value) => value.callId === callId),
++    );
++    const nativeSteps = (payload?.steps ?? []).filter(
++      (value) => value.arguments?.args?.[0]?.sessionState !== undefined,
++    );
++    const durableDispatches = nativeSteps.filter((value) => {
++      if (!value.step?.stepName?.includes("dispatchCoordinationStep")) return false;
++      const batch = getPendingCoordinationBatch(
++        value.arguments.args[0].sessionState?.snapshot?.session?.state ?? {},
++      );
++      return [...(batch?.runtimeActions ?? []), ...(batch?.tasks ?? [])].some(
++        (action) => action.callId === callId,
++      );
++    });
++    const durableResults = (payload?.steps ?? []).filter((value) =>
++      (value.output?.results ?? []).some((result) => result.callId === callId),
++    );
++    return {
++      callHash: protocolIdentityHash(callId),
++      toolNameHash: protocolIdentityHash(call.toolName),
++      providerExecuted: call.providerExecuted === true,
++      bindingCount: bindings.length,
++      bindingSample: bindings.slice(0, SAMPLE_LIMIT),
++      omittedBindingCount: Math.max(0, bindings.length - SAMPLE_LIMIT),
++      approvalSettledCount: accepted.length,
++      approvalSettledSample: accepted.slice(0, SAMPLE_LIMIT).map((event) => ({
++        ...eventCoordinates(event),
++        requestHash: protocolIdentityHash(event.data.requestId),
++        responderHash: protocolIdentityHash(event.data.responderPrincipalId),
++        outcomeHash: protocolIdentityHash(event.data.outcome),
++      })),
++      actionRequestedCount: requested.length,
++      actionRequestedSample: requested.slice(0, SAMPLE_LIMIT).map(eventCoordinates),
++      actionResultCount: native.filter(
++        (event) => event.type === "action.result" && matchResult(event),
++      ).length,
++      actionPartialCount: native.filter(
++        (event) => event.type === "action.partial" && matchResult(event),
++      ).length,
++      incomingRuntimeResultCount: candidates.reduce(
++        (count, candidate) =>
++          count +
++          (candidate.incoming?.runtimeResults?.results ?? []).filter(
++            (value) => value.callId === callId,
++          ).length,
++        0,
++      ),
++      frontierUsesWholeStream: acceptedIndex < 0 && firstSequence === undefined,
++      frontierFromAcceptedApproval: acceptedIndex >= 0,
++      approvalResolutionStreamIndex: acceptedIndex < 0 ? undefined : acceptedIndex,
++      frontierEventTypes: countedHashes(frontier.map((event) => event.type)),
++      failedStepOrTurnCount: failureRows.length,
++      exactMissingCallFailureCount: failureRows.filter(
++        (event) =>
++          typeof event.data?.message === "string" &&
++          event.data.message.includes(exactMissingMessage),
++      ).length,
++      failureSample: failureRows.slice(-SAMPLE_LIMIT).map((event) => ({
++        ...eventCoordinates(event),
++        typeHash: protocolIdentityHash(event.type),
++        codeHash: protocolIdentityHash(event.data?.code),
++        exactMissingCall:
++          typeof event.data?.message === "string" &&
++          event.data.message.includes(exactMissingMessage),
++      })),
++      completedStepCount: frontier.filter((event) => event.type === "step.completed").length,
++      cancelledTurnCount: frontier.filter((event) => event.type === "turn.cancelled").length,
++      modelStartedCount: frontier.filter((event) => event.type === "step.started").length,
++      compactionRequestedCount: frontier.filter((event) => event.type === "compaction.requested")
++        .length,
++      compactionCompletedCount: frontier.filter((event) => event.type === "compaction.completed")
++        .length,
++      durableDispatchCount: durableDispatches.length,
++      durableDispatchSample: durableDispatches.slice(0, SAMPLE_LIMIT).map((value) => ({
++        stepHash: protocolIdentityHash(value.step.stepId),
++        statusHash: protocolIdentityHash(value.step.status),
++        resultForCallPresent: (value.output?.results ?? []).some(
++          (result) => result.callId === callId,
++        ),
++      })),
++      durableResultStepCount: durableResults.length,
++      durableResultStepSample: durableResults.slice(0, SAMPLE_LIMIT).map((value) => ({
++        stepHash: protocolIdentityHash(value.step.stepId),
++        statusHash: protocolIdentityHash(value.step.status),
++      })),
++      retainedTurnInputCount: nativeSteps.filter((value) =>
++        value.step?.stepName?.includes("turnStep"),
++      ).length,
++      retainedTurnInputWithStreamCount: nativeSteps.filter(
++        (value) =>
++          value.step?.stepName?.includes("turnStep") &&
++          value.arguments.args[0].sessionWritable !== undefined,
++      ).length,
++      // This runtime did not persist individual old harness attempt outcomes.
++      individualHarnessAttemptEvidenceAvailable: false,
++      registeredToolExecutionClassAvailable: false,
++    };
++  });
++  return {
++    missingCallCount: missing.length,
++    sample: rows,
++    omittedCallCount: Math.max(0, missing.length - SAMPLE_LIMIT),
++  };
++}
++function nativeStepFrontier(payload, candidates) {
++  const inputSlots = candidates
++    .filter((candidate) => candidate.incoming !== undefined)
++    .map((candidate) => candidate.origin.slot);
++  const start = inputSlots.length ? Math.max(...inputSlots) : (candidates[0]?.origin.slot ?? -1);
++  const events = (payload?.events ?? []).filter(
++    (event) => Number(event.eventId?.slice(5)) >= start,
++  );
++  return {
++    fromSlot: start,
++    eventCount: events.length,
++    retainedStepCount: (payload?.steps ?? []).length,
++    retainedStepSample: (payload?.steps ?? [])
++      .filter((value) => events.some((event) => event.correlationId === value.step?.stepId))
++      .slice(0, SAMPLE_LIMIT)
++      .map((value) => ({
++        stepHash: protocolIdentityHash(value.step?.stepId),
++        stepNameHash: protocolIdentityHash(value.step?.stepName),
++        statusHash: protocolIdentityHash(value.step?.status),
++        attempt: Number.isSafeInteger(value.step?.attempt) ? value.step.attempt : undefined,
++        retryAfterPresent: value.step?.retryAfter !== undefined,
++        retainedArgumentsPresent: value.arguments !== undefined,
++        retainedOutputPresent: value.output !== undefined,
++      })),
++    eventTypes: countedHashes(events.map((event) => event.eventType)),
++    stepNames: countedHashes(events.map((event) => event.eventData?.stepName)),
++    sample: events.slice(0, SAMPLE_LIMIT).map((event) => ({
++      slot: Number(event.eventId?.slice(5)),
++      typeHash: protocolIdentityHash(event.eventType),
++      stepHash: protocolIdentityHash(event.correlationId),
++      stepNameHash: protocolIdentityHash(event.eventData?.stepName),
++      attempt: Number.isSafeInteger(event.eventData?.attempt) ? event.eventData.attempt : undefined,
++      retainedInputPresent: event.eventData?.input !== undefined,
++      retainedOutputPresent: event.eventData?.output !== undefined,
++    })),
++    omittedEventCount: Math.max(0, events.length - SAMPLE_LIMIT),
++  };
++}
++
++function safeCandidateFacts(value) {
++  if (value === null || typeof value !== "object") return undefined;
++  const result = {};
++  for (const bucket of ["flags", "counts", "hashes"]) {
++    const entries = value[bucket];
++    if (entries === null || typeof entries !== "object" || Array.isArray(entries)) continue;
++    result[bucket] = Object.fromEntries(
++      Object.entries(entries)
++        .slice(0, 128)
++        .filter(
++          ([key, item]) =>
++            /^[a-zA-Z][a-zA-Z0-9_]{0,79}$/.test(key) &&
++            (bucket === "flags"
++              ? item === null || typeof item === "boolean"
++              : bucket === "counts"
++                ? Number.isSafeInteger(item) && item >= 0
++                : item === null || (typeof item === "string" && /^[a-f0-9]{64}$/.test(item))),
++        ),
++    );
++  }
++  return result;
++}
++
 +/** Read-only native observation. Never treats a saved result event as a committed checkpoint. */
 +export function recordTerminalRecoveryObservation(input) {
 +  try {
@@ -2061,17 +2513,19 @@ index 0000000..80dc80f
 +      nativeStatusHash: protocolIdentityHash(payload?.run?.status),
 +      candidateCount: candidates.length,
 +      candidateSample: sample,
++      latestTailStructure: tailStructure(candidates[0]?.sessionState?.snapshot?.session?.history),
++      missingCallFrontier: missingCallFrontier(payload, candidates),
++      nativeStepFrontier: nativeStepFrontier(payload, candidates),
++      candidateFacts: safeCandidateFacts(input.candidateFacts),
 +      omittedCandidateCount: Math.max(0, candidates.length - SAMPLE_LIMIT),
 +      nativeResults: summarizeNativeResults(payload?.nativeEvents),
 +      nativeEventCount: payload?.events?.length ?? 0,
 +      frontierCount: payload?.frontier?.length ?? 0,
 +      issueCount: payload?.issues?.length ?? 0,
-+      issueSample: (payload?.issues ?? [])
-+        .slice(0, SAMPLE_LIMIT)
-+        .map((issue) => ({
-+          reasonHash: protocolIdentityHash(issue.reason),
-+          stepHash: protocolIdentityHash(issue.stepId),
-+        })),
++      issueSample: (payload?.issues ?? []).slice(0, SAMPLE_LIMIT).map((issue) => ({
++        reasonHash: protocolIdentityHash(issue.reason),
++        stepHash: protocolIdentityHash(issue.stepId),
++      })),
 +    });
 +    return true;
 +  } catch {

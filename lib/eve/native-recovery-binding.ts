@@ -1,3 +1,5 @@
+import { authorizeRepeatablePrivateApplyCalls } from "./native-recovery-repeatable-apply";
+import { observePrivateApplyRecoveryCandidate } from "./native-recovery-apply-observation";
 import { openHostedPostgresDatabase } from "../db/hosted-postgres";
 import {
   exactForwardedSessionAuthority,
@@ -157,6 +159,11 @@ export function createHostedNativeRecoveryBinding(
     return binding;
   };
   return {
+    authorizeRepeatableRecoveryCalls: (
+      input: Parameters<typeof authorizeRepeatablePrivateApplyCalls>[0],
+    ) => Promise.resolve(authorizeRepeatablePrivateApplyCalls(input)),
+    observeCandidateFacts: (input: Parameters<typeof observePrivateApplyRecoveryCandidate>[0]) =>
+      Promise.resolve(observePrivateApplyRecoveryCandidate(input)),
     authorize: (call: RecoveryCall) => get().authorize(call),
     authorizeActivation: (call: RecoveryCall) => get().authorizeActivation(call),
     readReceipt: (call: RecoveryCall) => get().readReceipt(call),

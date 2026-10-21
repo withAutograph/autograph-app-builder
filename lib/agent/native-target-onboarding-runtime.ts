@@ -1,8 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { z } from "zod";
 import type { ApprovalResponseContext } from "eve/tools/approval";
 import type { AppDescription } from "../repository/app-description";
 import type { AppBuilderWorkflowState } from "./workflow-state";
+import {
+  nativeTargetPlanRequestSchema,
+  nativeTargetPreparationRequestSchema,
+} from "./native-target-onboarding-input-schema";
+import type {
+  NativeTargetPlanRequest,
+  NativeTargetPreparationRequest,
+  NativeTargetOnboardingResult,
+} from "./native-target-onboarding-input-schema";
 import {
   nativeTargetOnboardingApprovalSchema,
   nativeTargetOnboardingPlanDigest,
@@ -21,44 +29,16 @@ import type {
   NativeTargetVercelProjectObservation,
 } from "../provisioning/native-target-vercel-provider";
 
-const appId = nativeTargetOnboardingPlanSchema.shape.appId;
-export const nativeTargetPlanRequestSchema = z.strictObject({
-  appId,
-  project: nativeTargetOnboardingPlanSchema.shape.project.omit({ protection: true }),
-  branch: nativeTargetOnboardingPlanSchema.shape.branch,
-  conflictPolicy: nativeTargetOnboardingPlanSchema.shape.conflictPolicy,
-});
-export type NativeTargetPlanRequest = z.infer<typeof nativeTargetPlanRequestSchema>;
-export const nativeTargetPreparationRequestSchema = z.strictObject({
-  appId,
-  operationRef: z.uuid(),
-  planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-  plan: nativeTargetOnboardingPlanSchema,
-});
-export type NativeTargetPreparationRequest = z.infer<typeof nativeTargetPreparationRequestSchema>;
-export const nativeTargetOnboardingResultSchema = nativeTargetPreparationRequestSchema
-  .extend({
-    status: z.enum(["planned", "pending", "ready", "cancelled", "approval-pending", "blocked"]),
-    projectId: z.string().min(1).optional(),
-    reason: z
-      .enum([
-        "authorization_denied",
-        "collision",
-        "permission_denied",
-        "provider_rejected",
-        "rate_limited",
-      ])
-      .optional(),
-  })
-  .superRefine((result, context) => {
-    if (result.status === "ready" && result.projectId === undefined) {
-      context.addIssue({
-        code: "custom",
-        message: "Ready native target requires its verified project ID.",
-      });
-    }
-  });
-export type NativeTargetOnboardingResult = z.infer<typeof nativeTargetOnboardingResultSchema>;
+export {
+  nativeTargetPlanRequestSchema,
+  nativeTargetPreparationRequestSchema,
+  nativeTargetOnboardingResultSchema,
+} from "./native-target-onboarding-input-schema";
+export type {
+  NativeTargetPlanRequest,
+  NativeTargetPreparationRequest,
+  NativeTargetOnboardingResult,
+} from "./native-target-onboarding-input-schema";
 export interface NativeTargetSelectedAppState {
   phase: AppBuilderWorkflowState["phase"];
   appSpec?: { appId: string; digest: string };
