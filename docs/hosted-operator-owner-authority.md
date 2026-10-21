@@ -38,6 +38,25 @@ operations. Preserve the tenant, owner, adapter generation, operation, request,
 call, plan digest and cancellation checks. A recorded response or a tool
 invocation alone cannot substitute for the actual terminal approval receipt.
 
+## Continuity Sandbox ownership
+
+Continuity reuses the fresh canonical realm restriction, tenant and public
+session checks, active membership, and direct or handoff owner identity checks,
+including the current adapter and generation. Its private captured build decision
+and `currentSpec` must both identify the current adapter; the spec must identify
+the selected app and its exact logical execution workspace. The requested Sandbox
+name must match that captured workspace. No private session data is returned.
+
+Compute execution leases describe an optional lifecycle and are not a prerequisite
+for this ownership proof. After adapter restore, the stale prior decision cannot
+authorize the Sandbox. A fresh trusted decision can retain the inherited logical
+Sandbox name from the restored workflow workspace. Ordinary app-spec digest,
+proposal and build-decision state changes do not invalidate that ownership.
+
+Continuity execution still requires its existing approval, actual physical
+provider-session binding, journal authority and resource fences. These source
+semantics and focused tests do not establish successful live continuity execution.
+
 ## Live authority and lease renewal
 
 Inspection observations freshly check canonical owner/session authority, active

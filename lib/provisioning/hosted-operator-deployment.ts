@@ -11,7 +11,6 @@ import { createContinuityCapabilityCustody } from "./hosted-operator-continuity-
 import { createContinuityDispatcher } from "./hosted-operator-continuity-transport";
 import { createPrivateContinuityApprovalCapture } from "../eve/private-continuity-approval";
 import { createHostedManagedRuntimeProjection } from "./hosted-operator-managed-runtime-projection";
-import { parseSandboxExecutionLeaseRow } from "../sandbox/postgres-execution-lease-store";
 import type {
   HostedContinuityPlan,
   ContinuityRuntimeSelection,
@@ -3039,30 +3038,7 @@ export const createHostedOperatorControlPlane = async (input: {
       context: HostedOperatorContext,
       selection: ContinuityRuntimeSelection,
     ) => {
-      await owner.assertArtifactAuthorized(context);
-      const canonical = operatorOwnerContextSchema.parse(context.ownerContext);
-      const rows = await database
-        .select()
-        .from(sandboxExecutionLeases)
-        .where(
-          and(
-            eq(sandboxExecutionLeases.issuer, canonical.principal.issuer),
-            eq(sandboxExecutionLeases.audience, canonical.principal.audience),
-            eq(sandboxExecutionLeases.workspaceId, canonical.principal.workspaceId),
-            eq(sandboxExecutionLeases.ownerUserId, canonical.principal.ownerUserId),
-            eq(sandboxExecutionLeases.adapterSessionId, canonical.adapterSessionId),
-          ),
-        )
-        .limit(1);
-      if (rows[0] === undefined) {
-        throw new HostedOperatorError("authorization_required");
-      }
-      const lease = parseSandboxExecutionLeaseRow(rows[0]);
-      // A human approval normally releases compute. Resume that same owned logical
-      // Sandbox; its physical session is observed and frozen only after approval.
-      if (lease.providerSandboxId !== selection.sandboxId || lease.state === "orphaned") {
-        throw new HostedOperatorError("authorization_required");
-      }
+      await owner.assertSandboxAuthorized(context, selection.sandboxId);
     };
     const continuitySetup = async (context: HostedOperatorContext, plan: HostedContinuityPlan) => {
       const { current, operator } = await preparedForContinuity(context);
