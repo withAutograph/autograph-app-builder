@@ -1,3 +1,4 @@
+import type { APIError, Drive, Sandbox } from "@vercel/sandbox";
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -16,10 +17,27 @@ import {
 
 /* oxlint-disable sonarjs/no-os-command-from-path -- Run real Git only in disposable local repository fixtures. */
 
-const sdk = vi.hoisted(() => ({ create: vi.fn() }));
+const sdk = vi.hoisted(() => ({
+  create:
+    vi.fn<(options: Parameters<typeof Sandbox.create>[0]) => Promise<Pick<Sandbox, "name">>>(),
+}));
+const drives = vi.hoisted(() => ({
+  getOrCreate:
+    vi.fn<
+      (
+        options: Parameters<typeof Drive.getOrCreate>[0],
+      ) => Promise<Pick<Drive, "driveId" | "name" | "projectId" | "region">>
+    >(),
+  list: vi.fn(),
+}));
 const authority = vi.hoisted(() => vi.fn());
 // oxlint-disable-next-line anti-slop/no-module-mocking -- External provider boundary; fixtures never create Vercel resources.
-vi.mock("@vercel/sandbox", () => ({ Sandbox: sdk }));
+vi.mock("@vercel/sandbox", async () => ({
+  ...(await vi.importActual<{ APIError: typeof APIError }>("@vercel/sandbox")),
+  DEFAULT_SANDBOX_REGION: "iad1",
+  Drive: drives,
+  Sandbox: sdk,
+}));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Persistent command authority is the external boundary in this provider fixture.
 vi.mock("./deployment-execution-lease", () => ({ assertHostedSandboxCommandAuthority: authority }));
 
@@ -32,6 +50,8 @@ afterEach(() => {
   }
   authority.mockReset();
   sdk.create.mockReset();
+  drives.getOrCreate.mockReset();
+  drives.list.mockReset();
   clearVercelSessionGitSource("late-source-fixture");
 });
 
@@ -68,6 +88,9 @@ const fixture = () => {
       .replaceAll("/workspace", workspace)
       .replaceAll("/vercel/sandbox", path.join(directory, "missing-provider-root"));
   const native = {
+    delete: vi.fn().mockResolvedValue(null),
+    mounts: { "/workspace": { drive: "source-drive", mode: "read-write" } },
+    stop: vi.fn().mockResolvedValue(null),
     expiresAt: new Date(Date.now() + 30_000),
     extendTimeout: vi.fn(async () => {
       events.push("extend");
@@ -96,6 +119,15 @@ const fixture = () => {
         await Promise.resolve();
         events.push("command");
         const args = options.args.map(translate);
+        if (options.cmd === "printenv") {
+          return {
+            exitCode: 0,
+            kill: vi.fn().mockResolvedValue(null),
+            stderr: () => Promise.resolve(""),
+            stdout: () => Promise.resolve("/home/vercel\n"),
+            wait: () => Promise.resolve({ exitCode: 0 }),
+          };
+        }
         const cloned = options.cmd === "git" && args.includes("clone");
         // The fixture executes real Git and file placement, but substitutes a
         // local origin so no GitHub or Vercel requests can occur.
@@ -141,6 +173,14 @@ fs.renameSync(process.argv[1],process.argv[2]);`;
     ...native,
     runCommand: vi.fn().mockImplementation(native.runCommand),
   } satisfies VercelSdkSessionNative;
+  drives.getOrCreate.mockImplementation((options: { name: string }) =>
+    Promise.resolve({
+      driveId: "source-drive",
+      name: options.name,
+      projectId: "source-project",
+      region: "iad1",
+    }),
+  );
   return { authorize, directory, events, native, sdkNative, sha, tree, workspace };
 };
 
@@ -213,6 +253,224 @@ describe("late source acquisition on an existing Builder VM", () => {
           authorized = false;
         }
       }
+    },
+  );
+
+  it("initializes selected template source inside the mounted workspace before the first callback-free snapshot", async () => {
+    const f = fixture();
+    sdk.create.mockResolvedValue(f.native);
+    configureVercelSessionGitSource({
+      sessionId: "late-source-fixture",
+      source: { revision: f.sha, token, url: remote },
+    });
+    // SAFETY: the provider reads only the supplied native session identity.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Only session.id is consumed by this provider lifecycle fixture.
+    const context = { session: { id: "late-source-fixture" } } as SandboxProviderSessionContext;
+    const started = await createBuilderVercelProvider().start(context, undefined, { files: [] });
+    const snapshot = await readSandboxGitHubSourceSnapshot(started.handle.sandbox, {
+      repository: remote,
+    });
+    expect(snapshot).toMatchObject({
+      sourcePath: "/workspace/repository",
+      sourceSha: f.sha,
+      sourceTree: f.tree,
+    });
+    expect(readFileSync(path.join(f.workspace, "repository", "source.txt"), "utf-8")).toBe(
+      "selected source\n",
+    );
+    expect(sdk.create.mock.calls[0]?.[0]).not.toHaveProperty("source");
+    expect(sdk.create.mock.calls[0]?.[0]?.mounts?.["/workspace"]).toMatchObject({
+      driveId: "source-drive",
+    });
+    expect(drives.getOrCreate).toHaveBeenCalledOnce();
+    const clone = f.native.runCommand.mock.calls.find(
+      ([options]) => options.cmd === "git" && options.args.includes("clone"),
+    )?.[0];
+    expect(clone?.cwd).toBe("/workspace");
+    expect(clone?.args.at(-1)).toMatch(/^\/workspace\/\.app-builder\/source-acquisition\//u);
+    const authorization = Buffer.from(`x-access-token:${token}`).toString("base64");
+    expect(clone?.env?.GIT_CONFIG_VALUE_0).toBe(`Authorization: Basic ${authorization}`);
+    expect(JSON.stringify(started.state)).not.toContain(token);
+    expect(
+      JSON.stringify(
+        f.native.runCommand.mock.calls.map(([options]) => ({
+          cmd: options.cmd,
+          args: options.args,
+        })),
+      ),
+    ).not.toContain(token);
+    expect(
+      readFileSync(path.join(f.workspace, "repository", ".git", "config"), "utf-8"),
+    ).not.toMatch(/credential|Authorization|fixture-read/u);
+    await started.handle.onSessionStop();
+  });
+
+  it("retries partial startup on the same Drive after an unknown placement result without replacing private Git state", async () => {
+    const f = fixture();
+    sdk.create.mockResolvedValue(f.native);
+    configureVercelSessionGitSource({
+      sessionId: "late-source-fixture",
+      source: { revision: f.sha, token, url: remote },
+    });
+    // SAFETY: the provider reads only the supplied native session identity.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Only session.id is consumed by this provider lifecycle fixture.
+    const context = { session: { id: "late-source-fixture" } } as SandboxProviderSessionContext;
+    const run = f.native.runCommand.getMockImplementation();
+    if (run === undefined) {
+      throw new Error("Missing local command implementation");
+    }
+    let losePlacement = true;
+    f.native.runCommand.mockImplementation(async (options) => {
+      const result = await run(options);
+      if (options.cmd === "mv" && losePlacement) {
+        losePlacement = false;
+        throw new Error("placement response lost");
+      }
+      return result;
+    });
+    const provider = createBuilderVercelProvider();
+    await expect(provider.start(context, undefined, { files: [] })).rejects.toThrow(
+      "could not complete",
+    );
+    const root = path.join(f.workspace, "repository");
+    const git = (args: string[]) =>
+      execFileSync("git", ["-C", root, "-c", "commit.gpgsign=false", ...args], {
+        encoding: "utf-8",
+      }).trim();
+    writeFileSync(path.join(root, "source.txt"), "private committed edit\n");
+    git(["add", "source.txt"]);
+    git([
+      "-c",
+      "user.name=Fixture",
+      "-c",
+      "user.email=fixture@example.invalid",
+      "commit",
+      "--quiet",
+      "-m",
+      "private edit",
+    ]);
+    const editedHead = git(["rev-parse", "HEAD"]);
+    writeFileSync(path.join(root, "source.txt"), "private staged edit\n");
+    git(["add", "source.txt"]);
+    writeFileSync(path.join(root, "source.txt"), "private working edit\n");
+    writeFileSync(path.join(root, ".git", "info", "exclude"), "private.env\n");
+    writeFileSync(path.join(root, "private.env"), "private ignored bytes\n");
+    const indexBefore = readFileSync(path.join(root, ".git", "index"));
+    const started = await provider.start(context, undefined, { files: [] });
+    expect(git(["rev-parse", "HEAD"])).toBe(editedHead);
+    expect(readFileSync(path.join(root, ".git", "index"))).toEqual(indexBefore);
+    expect(git(["show", ":source.txt"])).toBe("private staged edit");
+    expect(readFileSync(path.join(root, "source.txt"), "utf-8")).toBe("private working edit\n");
+    expect(readFileSync(path.join(root, "private.env"), "utf-8")).toBe("private ignored bytes\n");
+    expect(
+      f.native.runCommand.mock.calls.filter(([options]) => options.args.includes("clone")),
+    ).toHaveLength(1);
+    expect(drives.getOrCreate.mock.calls[0]?.[0].name).toBe(
+      drives.getOrCreate.mock.calls[1]?.[0].name,
+    );
+    expect(drives.list).not.toHaveBeenCalled();
+    await started.handle.onSessionStop();
+  });
+
+  it("retries interrupted startup clone in a fresh stage while retaining the incomplete stage", async () => {
+    const f = fixture();
+    sdk.create.mockResolvedValue(f.native);
+    configureVercelSessionGitSource({
+      sessionId: "late-source-fixture",
+      source: { token, url: remote },
+    });
+    // SAFETY: the provider reads only the supplied native session identity.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Only session.id is consumed by this provider lifecycle fixture.
+    const context = { session: { id: "late-source-fixture" } } as SandboxProviderSessionContext;
+    const run = f.native.runCommand.getMockImplementation();
+    if (run === undefined) {
+      throw new Error("Missing local command implementation");
+    }
+    let interruptedStage: string | undefined;
+    f.native.runCommand.mockImplementation(async (options) => {
+      if (
+        options.cmd === "git" &&
+        options.args.includes("clone") &&
+        interruptedStage === undefined
+      ) {
+        const stage = options.args.at(-1);
+        if (stage === undefined) {
+          throw new Error("Missing source acquisition destination");
+        }
+        interruptedStage = stage.replace("/workspace", f.workspace);
+        mkdirSync(interruptedStage, { recursive: true });
+        writeFileSync(
+          path.join(interruptedStage, "partial.txt"),
+          "retained incomplete source bytes",
+        );
+        throw new Error("clone response lost");
+      }
+      return await run(options);
+    });
+    const provider = createBuilderVercelProvider();
+    await expect(provider.start(context, undefined, { files: [] })).rejects.toThrow(
+      "could not complete",
+    );
+    if (interruptedStage === undefined) {
+      throw new Error("Interrupted source stage was not created");
+    }
+    const started = await provider.start(context, undefined, { files: [] });
+    expect(readFileSync(path.join(interruptedStage, "partial.txt"), "utf-8")).toBe(
+      "retained incomplete source bytes",
+    );
+    expect(readFileSync(path.join(f.workspace, "repository", "source.txt"), "utf-8")).toBe(
+      "selected source\n",
+    );
+    const clones = f.native.runCommand.mock.calls.filter(([options]) =>
+      options.args.includes("clone"),
+    );
+    expect(clones).toHaveLength(2);
+    expect(clones[0]?.[0].args.at(-1)).not.toBe(clones[1]?.[0].args.at(-1));
+    const snapshot = await readSandboxGitHubSourceSnapshot(started.handle.sandbox, {
+      repository: remote,
+    });
+    expect(snapshot.sourceSha).toBe(f.sha);
+    expect(drives.getOrCreate.mock.calls[0]?.[0].name).toBe(
+      drives.getOrCreate.mock.calls[1]?.[0].name,
+    );
+    expect(drives.list).not.toHaveBeenCalled();
+    await started.handle.onSessionStop();
+  });
+
+  it.each(["non-Git", "foreign repository"])(
+    "preserves an occupied %s workspace during startup retry",
+    async (occupied) => {
+      const f = fixture();
+      const root = path.join(f.workspace, "repository");
+      mkdirSync(root);
+      writeFileSync(path.join(root, "private.txt"), "retained private work");
+      if (occupied === "foreign repository") {
+        execFileSync("git", ["init", "--quiet", root]);
+        execFileSync("git", [
+          "-C",
+          root,
+          "remote",
+          "add",
+          "origin",
+          "https://github.com/acme/other.git",
+        ]);
+      }
+      configureVercelSessionGitSource({
+        sessionId: "late-source-fixture",
+        source: { token, url: remote },
+      });
+      sdk.create.mockResolvedValue(f.native);
+      // SAFETY: the provider reads only the supplied native session identity.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Only session.id is consumed by this provider lifecycle fixture.
+      const context = { session: { id: "late-source-fixture" } } as SandboxProviderSessionContext;
+      await expect(
+        createBuilderVercelProvider().start(context, undefined, { files: [] }),
+      ).rejects.toThrow();
+      expect(readFileSync(path.join(root, "private.txt"), "utf-8")).toBe("retained private work");
+      expect(
+        f.native.runCommand.mock.calls.some(([options]) => options.args.includes("clone")),
+      ).toBe(false);
+      expect(drives.list).not.toHaveBeenCalled();
     },
   );
 
