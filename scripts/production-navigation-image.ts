@@ -67,6 +67,25 @@ const inspectFailureReason = (stderr: string) => {
   return reasons.find(({ pattern }) => pattern.test(stderr))?.reason ?? "unrecognized_diagnostic";
 };
 
+const safeDockerDiagnostic = (stderr: string) =>
+  stderr
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/gu, "")
+    .replace(/\b(Bearer|Basic)\s+\S+/giu, "$1 [redacted]")
+    .replace(
+      /\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})\b/giu,
+      "[redacted token]",
+    )
+    .replace(
+      /\b(password|token|secret|credential|authorization|api[_-]?key)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/giu,
+      "$1$2[redacted]",
+    )
+    .replace(/(https?:\/\/)[^/@\s:]+:[^/@\s]+@/giu, "$1[redacted]@")
+    .replace(/([?&](?:token|password|secret|key|auth)=)[^&\s]+/giu, "$1[redacted]")
+    .replace(/[\u0000-\u001f\u007f]/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim()
+    .slice(0, 320);
+
 const pullFailureReason = (stderr: string) => {
   const reasons = [
     {
@@ -147,8 +166,9 @@ export const ensureProductionNavigationImage = async (
       return image;
     }
     if (!registryThrottled(pulled)) {
+      const detail = safeDockerDiagnostic(pulled.stderr);
       throw new Error(
-        `Production navigation could not pull the pinned PostgreSQL image (${pullFailureReason(pulled.stderr)}; exit ${pulled.exitCode}).`,
+        `Production navigation could not pull the pinned PostgreSQL image (${pullFailureReason(pulled.stderr)}; exit ${pulled.exitCode}; stderr: ${detail || "empty"}).`,
       );
     }
     if (image === PRODUCTION_NAVIGATION_POSTGRES_IMAGE) {
