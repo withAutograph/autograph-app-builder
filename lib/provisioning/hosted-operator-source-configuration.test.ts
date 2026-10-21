@@ -19,6 +19,13 @@ const application = () => ({
 const { applications } = hostedOperatorSourceConfigurationSchema.shape;
 
 describe("deployment-owned app publication configuration", () => {
+  it("accepts an actual generated app with no product roles", () => {
+    expect(
+      applications.parse({
+        actual: { ...application(), accessRoles: [], nativeTargetRegistration: true },
+      }).actual,
+    ).toMatchObject({ accessRoles: [], nativeTargetRegistration: true });
+  });
   const hostProtection = {
     mode: "externally-managed-trusted-sources",
     teamId: "team",

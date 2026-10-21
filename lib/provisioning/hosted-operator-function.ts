@@ -1,11 +1,13 @@
 import { createHostedOperatorNativeHandler } from "./hosted-operator-native";
-import { createDependencies } from "./hosted-operator-composition";
+import { createNativeTargetRequestDependencies } from "./native-target-configuration-resolver";
 import {
   createCustodyPossessionHandler,
   custodyPossessionPath,
 } from "./vercel-token-key-custody-deployment";
 
-const runtime = createHostedOperatorNativeHandler({ createDependencies });
+const runtime = createHostedOperatorNativeHandler({
+  createRequestDependencies: createNativeTargetRequestDependencies(),
+});
 const possession = createCustodyPossessionHandler();
 export default {
   async fetch(request: Request) {

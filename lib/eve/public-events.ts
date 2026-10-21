@@ -1152,6 +1152,7 @@ const inputRequest = (request: {
     apply_app_creation: "Build this app?",
     "cleanup-app-hosted-runtime": "Remove this app's Preview database?",
     "prepare-app-hosted-runtime": "Prepare this app's Preview database?",
+    "prepare-app-native-target": "Create this app's Preview project?",
     "export-app-hosted-data": "Export this customer’s app data privately?",
     "run-app-continuity-tests": "Run this app continuity suite?",
     "publish-github-draft-pr": "Publish the reviewed changes?",

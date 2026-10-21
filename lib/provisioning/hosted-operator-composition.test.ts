@@ -570,6 +570,42 @@ describe("app publication binding at plan renewal", () => {
     expect(f.unexpectedPort).not.toHaveBeenCalled();
   });
 
+  it("uses current captured release roles for a new grant and creates no grant for an empty role list", async () => {
+    const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+    const base = bootstrapWithGatewayOrigin("https://gateway.example");
+    const withRoles = await resolveFullPlan(
+      base,
+      context,
+      f.configuration,
+      f.controlPlane,
+      {},
+      false,
+      false,
+      undefined,
+      undefined,
+      undefined,
+      ["reviewer"],
+    );
+    expect(withRoles.access).toEqual([
+      { actorId: "actual-owner-actor", organizationId: "actual-organization", roles: ["reviewer"] },
+    ]);
+    const withoutRoles = await resolveFullPlan(
+      base,
+      context,
+      f.configuration,
+      f.controlPlane,
+      {},
+      false,
+      false,
+      undefined,
+      undefined,
+      undefined,
+      [],
+    );
+    expect(withoutRoles.access).toEqual([]);
+    expect(f.configuration.applications.actual?.accessRoles).toEqual(["member"]);
+  });
+
   it("adds the app Preview grant without dropping existing Gateway trust sources", async () => {
     const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
     const base = bootstrapWithGatewayOrigin("https://gateway.example");
@@ -1275,6 +1311,24 @@ describe("participant plan resolution", () => {
     expect(result.normalActorPreparation?.accountApprovalId).toBe("first-account-approval");
     expect(f.readCapturedRealmIdentity).not.toHaveBeenCalled();
     expect(JSON.stringify(result)).not.toContain("private-account-state");
+  });
+  it("rejects participant grants outside the current captured release roles", async () => {
+    const f = participantResolutionFixture();
+    await expect(
+      resolveFullPlan(
+        f.base,
+        context,
+        f.configuration,
+        f.ports,
+        {},
+        true,
+        true,
+        undefined,
+        undefined,
+        undefined,
+        [],
+      ),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
   });
 
   it("binds participant signup roles as a subset for one approved organization", async () => {
@@ -2115,6 +2169,29 @@ describe("existing populated Auth workflow planning", () => {
       readOrganizations: f.participant.ports.readNormalActorOrganizationProofs,
     };
   };
+
+  it("binds a registered target's new proposal to captured current roles", async () => {
+    const f = await settledAppPlanningFixture();
+    f.configuration.applications.actual!.nativeTargetRegistration = true;
+    vi.mocked(f.controlPlane.readGeneratedRelease).mockResolvedValue({
+      description: { backend: { kind: "generated-postgres", roles: [] } },
+    } as Awaited<ReturnType<typeof f.controlPlane.readGeneratedRelease>>);
+
+    await expect(f.dependencies.plan({ ...context, action: "prepare" })).rejects.toMatchObject({
+      code: "resource_mismatch",
+    });
+    expect(f.controlPlane.readGeneratedRelease).toHaveBeenCalledOnce();
+  });
+
+  it("requires captured current roles for a registered target's new proposal", async () => {
+    const f = await settledAppPlanningFixture();
+    f.configuration.applications.actual!.nativeTargetRegistration = true;
+
+    await expect(f.dependencies.plan({ ...context, action: "prepare" })).rejects.toMatchObject({
+      code: "resource_mismatch",
+    });
+    expect(f.controlPlane.readGeneratedRelease).toHaveBeenCalledOnce();
+  });
 
   it("composes prepared Preview restoration entirely from the selected frozen release", async () => {
     const f = await settledAppPlanningFixture();

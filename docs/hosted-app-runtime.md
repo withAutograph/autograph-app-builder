@@ -9,6 +9,52 @@ app and shared Auth databases and roles, release, exact effects and access grant
 cost ownership and retention. `get-app-hosted-runtime` reads operator journal
 status. Static apps require no database operation.
 
+## Dedicated native Preview targets
+
+Target onboarding precedes hosted resource preparation when a new generated app has no
+Vercel project. `plan-app-native-target` reads the selected app's captured
+release description, current owner/provider connection and configured shared
+infrastructure. Its proposal names a dedicated project, Preview branch, build
+settings, future database/role names, billing owner and retention. Product roles
+come from that actual app description; an empty role list is valid. Product roles
+follow the repository's declared role contract and do not inherit PostgreSQL
+identifier length limits. Database and SQL role identifiers retain their own
+provider constraints.
+
+The proposal also states Vercel Authentication for All Deployments and enabled
+team-issued OIDC. Creation sends those exact settings, and an independent read of
+the accepted project ID verifies them before the registration becomes ready.
+Trusted caller rules are separate; adding a trusted caller does not enable
+Deployment Protection.
+
+`prepare-app-native-target` uses a separate normal human approval for that exact
+proposal. An approval-response callback is only a candidate authorization check;
+the operator reads the committed native request and terminal settlement before
+creating the project. The existing tenant-scoped provisioning journal records
+the attempt before the provider call and the accepted project ID before its
+independent readback. An uncertain create never becomes an automatic second
+POST or ownership inferred from a matching name. Only a confirmed name conflict
+may use the proposal's approved suffix policy. Technical retries preserve the
+same operation and candidate. Cancellation before any dispatch can be replanned
+with a new approval while retaining its prior cancellation provenance.
+
+A ready registration supplies one immutable per-operation configuration view to
+the operator and Auth consumers. It retains static siblings and shared Neon/Auth
+credentials, and adds only the selected app's project, database names, roles and
+generic installer reference. Later ordinary app/spec/release changes reuse that
+target; initial source provenance is not an ongoing source admission gate. New
+access and signup proposals use the currently selected captured release's actual
+roles, while already approved plans retain their original authority.
+New app database resources, actor grants, trusted Preview callers and delivery
+still require their corresponding concrete approved effects. Project creation
+alone proves no authenticated behavior or deployment.
+
+The dedicated project persists until explicit authorized deletion. A failed
+build or session completion does not delete it; database cleanup is separate.
+Existing manually configured apps remain supported. An explicitly reviewed
+operator-assisted setup can unblock a pilot, but is distinct from proving that
+new-app onboarding works without that assistance.
+
 The consumed HTTP client uses `HOSTED_RUNTIME_OPERATOR_URL` (an HTTPS origin)
 and Builder's workload identity. Missing configuration fails closed with
 `protected_operator_required`. A configured operator must verify the workload's

@@ -140,6 +140,48 @@ const fixture = () => {
     store,
   };
 };
+// Seed retained envelopes directly to exercise historical and integrity boundaries.
+const seedGeneratedEnvelope = (
+  f: ReturnType<typeof fixture>,
+  capturedDescription?: AppDescription,
+  retainedArtifactRef?: string,
+) => {
+  const manifestSha256 = createHash("sha256")
+    .update(f.files["release-manifest.json"])
+    .digest("hex");
+  const content = JSON.stringify({
+    appId: "spend-review",
+    ...(capturedDescription === undefined ? {} : { description: capturedDescription }),
+    files: Object.fromEntries(
+      Object.entries(f.files).map(([name, bytes]) => [name, bytes.toString("base64")]),
+    ),
+    kind: "generated-release",
+    manifestSha256,
+    releaseId: "historical-v12",
+    schemaSha256: schemaHash,
+    version: 1,
+  });
+  const artifactRef =
+    retainedArtifactRef ??
+    `_protected-operator/artifacts/generated-release/spend-review/${createHash("sha256").update(content).digest("hex")}`;
+  const encoded = Buffer.from(content).toString("base64");
+  const chunks = Array.from({ length: Math.ceil(encoded.length / 65_536) }, (_, index) =>
+    encoded.slice(index * 65_536, (index + 1) * 65_536),
+  );
+  for (const [index, chunk] of chunks.entries()) {
+    f.rows.set(f.key(context, artifactRef, index + 1), chunk);
+  }
+  f.rows.set(
+    f.key(context, artifactRef, 0),
+    JSON.stringify({
+      chunkCount: chunks.length,
+      contentBytes: Buffer.byteLength(content),
+      version: 1,
+    }),
+  );
+  return { artifactRef, manifestSha256, releaseId: "historical-v12", schemaSha256: schemaHash };
+};
+
 const legacy = (content: string) => /postgres(?:ql)?:\/\/[^\s"'<>]+:[^\s"'<>]+@/iu.test(content);
 describe("Postgres credential URL scan", () => {
   it("preserves legacy matches across malformed URLs, schemes and delimiters", () => {
@@ -366,7 +408,112 @@ describe("immutable private operator artifacts", () => {
     ).toBe(true);
     const read = await f.publication.readGeneratedRelease(context, published);
     expect(read.files).toEqual(f.files);
+    expect(read.description).toEqual(description);
   });
+  it("captures metadata before a provider target exists and preserves empty declared roles", async () => {
+    const f = fixture();
+    const actual = structuredClone(description);
+    if (actual.backend.kind !== "generated-postgres") {
+      throw new Error("Expected generated fixture backend.");
+    }
+    actual.backend.roles = [];
+    actual.app.workspacePath = "custom/workspaces/spend-review";
+    actual.validation.browser = { task: "app-owned-browser-task" };
+    const ownerOnly: OperatorArtifactContext = {
+      authority: context.authority,
+      target: { appId: context.target.appId, sessionId: context.target.sessionId },
+    };
+    const published = await f.publication.publishGeneratedRelease({
+      context: ownerOnly,
+      description: actual,
+      source: f.source,
+    });
+    const read = await f.publication.readGeneratedRelease(ownerOnly, published);
+    expect(read.description).toEqual(actual);
+    expect(read.description?.backend).toMatchObject({ roles: [] });
+    expect(read.description).not.toHaveProperty("buildCommand");
+    expect(read.description).not.toHaveProperty("framework");
+    expect(read.files).toEqual(f.files);
+  });
+
+  it("keeps metadata changes in a new artifact without rewriting historical source facts", async () => {
+    const f = fixture();
+    const actual = structuredClone(description);
+    const first = await f.publication.publishGeneratedRelease({
+      context,
+      description: actual,
+      source: f.source,
+    });
+    actual.app.workspacePath = "new/workspace";
+    actual.validation.check.task = "new-app-check";
+    const next = await f.publication.publishGeneratedRelease({
+      context,
+      description: actual,
+      source: f.source,
+    });
+    expect(next.artifactRef).not.toBe(first.artifactRef);
+    expect(next.manifestSha256).toBe(first.manifestSha256);
+    expect((await f.publication.readGeneratedRelease(context, first)).description).toEqual(
+      description,
+    );
+    expect((await f.publication.readGeneratedRelease(context, next)).description).toEqual(actual);
+  });
+
+  it("reads legacy captured releases without synthesizing a description", async () => {
+    const f = fixture();
+    const retained = seedGeneratedEnvelope(f);
+    const read = await f.publication.readGeneratedRelease(context, retained);
+    expect(read.files).toEqual(f.files);
+    expect(read).not.toHaveProperty("description");
+  });
+
+  it.each(["app", "backend", "release", "schema"] as const)(
+    "rejects captured metadata with inconsistent %s identity",
+    async (field) => {
+      const f = fixture();
+      const altered = structuredClone(description);
+      if (altered.backend.kind !== "generated-postgres") {
+        throw new Error("Expected generated fixture backend.");
+      }
+      switch (field) {
+        case "app": {
+          altered.app.id = "foreign-app";
+          break;
+        }
+        case "backend": {
+          altered.backend = { kind: "static" };
+          break;
+        }
+        case "release": {
+          altered.backend.release.id = "foreign-release";
+          break;
+        }
+        case "schema": {
+          altered.backend.release.artifactHash = `sha256:${"b".repeat(64)}`;
+          break;
+        }
+        default: {
+          throw new Error("Unexpected metadata mismatch case.");
+        }
+      }
+      const retained = seedGeneratedEnvelope(f, altered);
+      await expect(f.publication.readGeneratedRelease(context, retained)).rejects.toThrow();
+    },
+  );
+
+  it("rejects altered metadata bytes under the original artifact reference", async () => {
+    const f = fixture();
+    const published = await f.publication.publishGeneratedRelease({
+      context,
+      description,
+      source: f.source,
+    });
+    const altered = structuredClone(description);
+    altered.app.workspacePath = "different/workspace";
+    seedGeneratedEnvelope(f, altered, published.artifactRef);
+    await expect(f.publication.readGeneratedRelease(context, published)).rejects.toThrow();
+  });
+
   it("reuses exact publications and preserves historical bytes when ordinary source produces a new reference", async () => {
     const f = fixture();
     const first = await f.publication.publishGeneratedRelease({

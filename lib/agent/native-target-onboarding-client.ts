@@ -1,0 +1,259 @@
+import { z } from "zod";
+import { exactForwardedSessionAuthority } from "../hosted/session-authority";
+import { createVercelWorkloadIdentity } from "../eve/vercel-workload-identity";
+import {
+  HostedOperatorError,
+  operatorOwnerContextSchema,
+} from "../provisioning/hosted-operator-contract";
+import type { OperatorOwnerContext } from "../provisioning/hosted-operator-contract";
+import { resolveHostedOperatorOwnerContext } from "../provisioning/hosted-operator-owner-context";
+import {
+  nativeTargetTransportRequestSchema,
+  nativeTargetTransportResponseSchemas,
+} from "../provisioning/native-target-onboarding-transport";
+import type { NativeTargetTransportRequest } from "../provisioning/native-target-onboarding-transport";
+import { nativeTargetOnboardingPlanDigest } from "../provisioning/native-target-onboarding-contract";
+import type {
+  NativeTargetInvocation,
+  NativeTargetOnboardingRuntime,
+  NativeTargetPreparationRequest,
+  NativeTargetRuntimeResolutionContext,
+} from "./native-target-onboarding-runtime";
+
+const unavailable = () => new HostedOperatorError("operator_unavailable");
+const denied = () => new HostedOperatorError("authorization_required");
+
+export const createNativeTargetOnboardingClient = (options: {
+  endpoint: string;
+  ownerContext: OperatorOwnerContext;
+  token: () => Promise<string>;
+  fetch?: typeof fetch;
+  allowLoopback?: boolean;
+}): NativeTargetOnboardingRuntime => {
+  const owner = operatorOwnerContextSchema.parse(options.ownerContext);
+  const url = new URL(options.endpoint);
+  const loopback =
+    options.allowLoopback === true && url.protocol === "http:" && url.hostname === "127.0.0.1";
+  if (
+    ![
+      url.protocol === "https:" || loopback,
+      url.username === "",
+      url.password === "",
+      url.pathname === "/",
+      url.search === "",
+      url.hash === "",
+    ].every(Boolean)
+  ) {
+    throw new HostedOperatorError("protected_operator_required");
+  }
+  const send = async <Result>(
+    request: NativeTargetTransportRequest,
+    schema: z.ZodType<Result>,
+    signal?: AbortSignal,
+  ): Promise<Result> => {
+    signal?.throwIfAborted();
+    const body = nativeTargetTransportRequestSchema.parse(request);
+    if (body.adapterSessionId !== owner.adapterSessionId) {
+      throw denied();
+    }
+    const token = await options.token();
+    let response: Response;
+    try {
+      response = await (options.fetch ?? fetch)(new URL("/v1/runtime", url), {
+        method: "POST",
+        redirect: "error",
+        signal,
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+          "x-vercel-trusted-oidc-idp-token": token,
+        },
+        body: JSON.stringify(body),
+      });
+    } catch {
+      signal?.throwIfAborted();
+      // Never repeat an uncertain request here. The protected journal owns recovery.
+      throw unavailable();
+    }
+    signal?.throwIfAborted();
+    if (response.status === 401 || response.status === 403) {
+      throw denied();
+    }
+    if (body.action === "native-target-plan" && response.status === 409) {
+      let existingBody: unknown;
+      try {
+        existingBody = await response.json();
+      } catch {
+        throw unavailable();
+      }
+      const existing = z
+        .strictObject({
+          code: z.literal("native_target_existing_configured_target"),
+          nextAction: z.literal("resolve-preview-target"),
+        })
+        .safeParse(existingBody);
+      if (existing.success) {
+        throw new Error(
+          "This app already has a dedicated Preview target. Continue with plan-app-hosted-runtime for that existing target.",
+        );
+      }
+      throw unavailable();
+    }
+    if (!response.ok) {
+      throw unavailable();
+    }
+    let raw: unknown;
+    try {
+      raw = await response.json();
+    } catch {
+      throw unavailable();
+    }
+    const parsed = schema.safeParse(raw);
+    if (!parsed.success) {
+      throw unavailable();
+    }
+    return parsed.data;
+  };
+  const common = (ctx: NativeTargetInvocation) => ({
+    ownerContext: owner,
+    adapterSessionId: ctx.session.id,
+    callId: ctx.callId,
+  });
+  const exactResult = (
+    input: NativeTargetPreparationRequest,
+    output: NativeTargetPreparationRequest,
+  ) => {
+    if (
+      ![
+        input.appId === output.appId,
+        input.operationRef === output.operationRef,
+        input.planDigest === output.planDigest,
+        nativeTargetOnboardingPlanDigest(output.plan) === input.planDigest,
+      ].every(Boolean)
+    ) {
+      throw denied();
+    }
+  };
+  return {
+    async plan(input, ctx, state) {
+      if (state.appSpec === undefined || state.appSpec.appId !== input.appId) {
+        throw denied();
+      }
+      const output = await send(
+        {
+          ...common(ctx),
+          action: "native-target-plan",
+          input,
+          selectedApp: { appId: state.appSpec.appId, appSpecDigest: state.appSpec.digest },
+        },
+        nativeTargetTransportResponseSchemas["native-target-plan"],
+        ctx.abortSignal,
+      );
+      if (
+        output.appId !== input.appId ||
+        nativeTargetOnboardingPlanDigest(output.plan) !== output.planDigest
+      ) {
+        throw denied();
+      }
+      return output;
+    },
+    async prepare(input, ctx) {
+      const output = await send(
+        { ...common(ctx), action: "native-target-prepare", input },
+        nativeTargetTransportResponseSchemas["native-target-prepare"],
+        ctx.abortSignal,
+      );
+      exactResult(input, output);
+      return output;
+    },
+    async hasApproval(input, ctx) {
+      const output = await send(
+        { ...common(ctx), action: "native-target-approval-read", input },
+        nativeTargetTransportResponseSchemas["native-target-approval-read"],
+        ctx.abortSignal,
+      );
+      if (output.status === "pending") {
+        return false;
+      }
+      if (
+        ![
+          output.proof.planDigest === input.planDigest,
+          output.proof.publicSessionId === input.plan.origin.publicSessionId,
+          output.proof.responderPrincipalId === owner.authority.ownerUserId,
+          output.status === "approved",
+        ].every(Boolean)
+      ) {
+        throw denied();
+      }
+      return true;
+    },
+    async authorizeApprovalResponse(ctx) {
+      if (
+        ctx.request.toolInput === undefined ||
+        ctx.request.toolName !== "prepare-app-native-target"
+      ) {
+        throw denied();
+      }
+      const responder = ctx.responder;
+      if (
+        responder.principalId !== owner.authority.ownerUserId ||
+        responder.principalType !== "user"
+      ) {
+        throw denied();
+      }
+      await send(
+        {
+          ownerContext: owner,
+          adapterSessionId: ctx.session.id,
+          callId: ctx.request.callId,
+          action: "native-target-approval-candidate",
+          input: ctx.request.toolInput,
+          candidate: {
+            requestId: ctx.request.requestId,
+            callId: ctx.request.callId,
+            toolName: ctx.request.toolName,
+            responder: {
+              authenticator: responder.authenticator,
+              principalId: responder.principalId,
+              principalType: responder.principalType,
+              ...(responder.issuer === undefined ? {} : { issuer: responder.issuer }),
+              ...(responder.subject === undefined ? {} : { subject: responder.subject }),
+            },
+          },
+        },
+        nativeTargetTransportResponseSchemas["native-target-approval-candidate"],
+      );
+    },
+  };
+};
+
+export const nativeTargetOnboardingClientForContext = async (
+  ctx: NativeTargetRuntimeResolutionContext,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+  dependencies: { resolveOwner?: typeof resolveHostedOperatorOwnerContext } = {},
+): Promise<NativeTargetOnboardingRuntime> => {
+  const endpoint = environment.HOSTED_RUNTIME_OPERATOR_URL;
+  if (endpoint === undefined || endpoint === "") {
+    throw new HostedOperatorError("protected_operator_required");
+  }
+  // Both identities originate in Eve's authenticated callback. Never fill missing owner facts.
+  const sessionAuth =
+    "responder" in ctx
+      ? { current: ctx.responder, initiator: ctx.session.initiator }
+      : ctx.session.auth;
+  const { authority, principal } = exactForwardedSessionAuthority(sessionAuth, {
+    realmContinuation: { adapterSessionId: ctx.session.id },
+  });
+  const ownerContext = await (dependencies.resolveOwner ?? resolveHostedOperatorOwnerContext)({
+    adapterSessionId: ctx.session.id,
+    authority,
+    principal,
+    sessionAuth,
+    environment,
+  });
+  return createNativeTargetOnboardingClient({
+    endpoint,
+    ownerContext,
+    token: createVercelWorkloadIdentity().token,
+  });
+};

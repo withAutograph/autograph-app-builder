@@ -179,6 +179,18 @@ needed to deploy that Preview. Never substitute another app or repository head.
 For hosted Preview persistence, use `plan-app-hosted-runtime` when restoring the
 published version or after the private implementation is ready and the user
 requests connected Preview resources.
+For a new generated app without a dedicated native Preview target, first use
+`plan-app-native-target` with the selected app and its source-derived deployment
+settings. Present the returned project, cost ownership and retention, then pass
+the unchanged operation to `prepare-app-native-target` for ordinary resource
+approval. Resume that same operation after uncertainty; do not start another app,
+copy another app's project/database bindings, or ask the user to repair provider
+configuration. The protected workflow creates and records the dedicated target;
+continue through the normal hosted resource and delivery plan afterward.
+Target onboarding does not authorize database creation, actor grants or app
+publication. Ordinary app changes reuse the recorded target. Product roles come
+from the actual captured app description, including an empty role list; never
+invent roles or app-shape requirements to satisfy a check.
 Present the returned concrete targets, app/Auth roles, access grants,
 effects, cost owner and retention. Pass that unchanged plan, digest and operation
 reference to `prepare-app-hosted-runtime` for separate effect approval. Read

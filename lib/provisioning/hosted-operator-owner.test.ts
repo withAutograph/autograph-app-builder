@@ -33,6 +33,7 @@ import type { OperatorOwnerContext, OperatorSelection } from "./hosted-operator-
 import type { PrivateHostedApprovalReceipt } from "../eve/private-hosted-approval";
 import {
   createHostedOperatorOwnerAuthority,
+  createHostedOperatorAppOwnerAuthority,
   createHostedOperatorReadApproval,
   createHostedOperatorReadApprovedPlan,
 } from "./hosted-operator-owner";
@@ -48,6 +49,12 @@ import type { OperatorWorkloadPolicy } from "./hosted-operator-workload";
 import { normalActorProgramDigest } from "./hosted-operator-normal-actor-program";
 import { createRetentionRenewalPlan } from "./hosted-operator-retention-renewal";
 import { withExternallyManagedHostProtection } from "./hosted-operator-native-preview-recovery";
+import {
+  nativeTargetOnboardingPlanDigest,
+  nativeTargetOnboardingRecordSchema,
+  nativeTargetRequiredProjectProtection,
+} from "./native-target-onboarding-contract";
+import type { NativeTargetReadyRegistration } from "./native-target-onboarding-contract";
 
 import type {
   HostedOperatorConsentDiagnostic,
@@ -202,6 +209,7 @@ const makeFixture = (
     Parameters<typeof createHostedOperatorOwnerAuthority>[0],
     "realmContinuation" | "journal"
   >,
+  readyTarget?: NativeTargetReadyRegistration,
 ) => {
   const currentSession = durableHostedSessionRecordSchema.parse({
     adapterGeneration: 1,
@@ -317,6 +325,10 @@ const makeFixture = (
     await Promise.resolve();
     return [{ active: true, installationId: "icfg_1" }];
   });
+  const readReadyNativeTarget = vi.fn(async () => {
+    await Promise.resolve();
+    return readyTarget;
+  });
   const authority = createHostedOperatorOwnerAuthority({
     ...continuation,
     apiOrigin: "https://vercel.example",
@@ -328,6 +340,7 @@ const makeFixture = (
     listVercelInstallations,
     membership,
     readVercelCredential,
+    readReadyNativeTarget,
     workloadPolicy,
   });
   return {
@@ -339,7 +352,119 @@ const makeFixture = (
     listVercelInstallations,
     membership,
     readVercelCredential,
+    readReadyNativeTarget,
   };
+};
+
+const readyNativeHandoffTarget = (): NativeTargetReadyRegistration => {
+  const at = "2026-10-21T15:00:00.000Z";
+  const attemptId = "11111111-1111-4111-8111-111111111111";
+  const projectSettings = {
+    framework: "nextjs" as const,
+    rootDirectory: "apps/vendor-onboarding",
+    sourceFilesOutsideRootDirectory: true,
+    buildCommand: "bun run build",
+  };
+  const plan = {
+    version: 1 as const,
+    appId: selection.appId,
+    branch: selection.branch,
+    origin: {
+      publicSessionId: "earlier-authorized-session",
+      adapterSessionId: "earlier-adapter",
+      adapterGeneration: 1,
+      appSpecDigest: "a".repeat(64),
+      release: {
+        id: "release-1",
+        artifactRef: "artifact-1",
+        manifestSha256: "b".repeat(64),
+        schemaSha256: "c".repeat(64),
+      },
+    },
+    project: {
+      name: "vendor-onboarding",
+      teamId: "team_1",
+      installationId: "icfg_1",
+      projectSettings,
+      protection: nativeTargetRequiredProjectProtection,
+    },
+    appDatabase: {
+      resourceId: "app-resource",
+      database: "vendor_app",
+      migratorRole: "vendor_migrator",
+      runtimeRole: "vendor_runtime",
+    },
+    productRoles: [],
+    nativeNeon: {
+      nativeStore: {
+        configurationId: "native-store",
+        resourceId: "app-resource",
+        sourceProjectId: "source-project",
+      },
+      scope: {
+        projectId: "neon-project",
+        branchId: "neon-branch",
+        endpointId: "neon-endpoint",
+        hostname: "neon.example",
+        maintenanceDatabase: "neondb",
+        maintenanceRole: "neondb_owner",
+      },
+    },
+    worker: {
+      id: "trusted-installer",
+      executablePath: "/trusted/installer",
+      sha256: "d".repeat(64),
+      operationScope: "generated-app-release-install-v1" as const,
+      subcommand: "protected-generated-app-install" as const,
+    },
+    cost: { ownership: "current-owner" as const, description: "Preview usage" },
+    retention: { policy: "Retain until approved deletion" },
+    conflictPolicy: "stop-on-conflict" as const,
+  };
+  const planDigest = nativeTargetOnboardingPlanDigest(plan);
+  const parsed = nativeTargetOnboardingRecordSchema.parse({
+    kind: "native-target-onboarding",
+    version: 1,
+    stage: "ready",
+    appId: selection.appId,
+    plan,
+    planDigest,
+    previousAttempts: [],
+    approval: {
+      requestId: "request-1",
+      callId: "call-1",
+      planDigest,
+      responderPrincipalId: ownerContext.authority.ownerUserId,
+      publicSessionId: plan.origin.publicSessionId,
+      outcome: "approved",
+      observedAt: at,
+    },
+    attempt: {
+      attemptId,
+      candidateName: plan.project.name,
+      leaseId: attemptId,
+      leaseExpiresAt: at,
+      startedAt: at,
+    },
+    dispatchAuthorizedAt: at,
+    acceptedCreation: { attemptId, projectId: "prj_native", acceptedAt: at },
+    registration: {
+      attemptId,
+      observed: {
+        projectId: "prj_native",
+        name: plan.project.name,
+        teamId: plan.project.teamId,
+        installationId: plan.project.installationId,
+        projectSettings,
+        protection: plan.project.protection,
+      },
+      observedAt: at,
+    },
+  });
+  if (parsed.stage !== "ready") {
+    throw new Error("Expected ready native target fixture");
+  }
+  return parsed;
 };
 
 const plan = hostedOperatorPlanSchema.parse({
@@ -1439,6 +1564,47 @@ describe("recovered operator owner authority", () => {
   });
 });
 
+describe("canonical app ownership before provider target creation", () => {
+  it.each(["direct", "handoff"] as const)(
+    "reuses exact %s ownership without a project or branch",
+    async (kind) => {
+      const fixture = makeFixture(kind === "direct" ? directSessionRecord() : undefined);
+      const owner = kind === "direct" ? directOwnerContext : ownerContext;
+      const context = {
+        authority: owner.authority,
+        ownerContext: owner,
+        target: { appId: selection.appId, sessionId: owner.sessionId },
+      };
+      const reader = createHostedOperatorAppOwnerAuthority({
+        eve: fixture.eve,
+        handoffs: fixture.handoffs,
+        membership: fixture.membership,
+        workloadPolicy,
+        keyResolver,
+      });
+      await reader.verifyWorkload(request());
+      await reader.assertCanonicalAppOwner(context);
+      await fixture.authority.assertCanonicalAppOwner(context);
+      expectNoProviderReads(fixture);
+      await expect(
+        reader.assertCanonicalAppOwner({
+          ...context,
+          target: { ...context.target, appId: "foreign-app" },
+        }),
+      ).rejects.toThrow();
+      await expect(
+        reader.assertCanonicalAppOwner({
+          ...context,
+          ownerContext: { ...owner, adapterGeneration: owner.adapterGeneration + 1 },
+        }),
+      ).rejects.toThrow();
+      vi.mocked(fixture.membership.isMember).mockResolvedValue(false);
+      await expect(reader.assertCanonicalAppOwner(context)).rejects.toThrow();
+      expectNoProviderReads(fixture);
+    },
+  );
+});
+
 describe("hosted operator artifact ownership", () => {
   const contextFor = (owner: OperatorOwnerContext = ownerContext) => ({
     authority: owner.authority,
@@ -2332,6 +2498,108 @@ describe("hosted operator owner authority", () => {
       ),
     ).rejects.toThrow();
     expect(fixture.fetch).not.toHaveBeenCalled();
+  });
+
+  it("authorizes an exact ready native target for the same current handoff app and tenant", async () => {
+    const fixture = makeFixture(
+      undefined,
+      false,
+      true,
+      undefined,
+      undefined,
+      readyNativeHandoffTarget(),
+    );
+    fixture.fetch.mockImplementation(() =>
+      Promise.resolve(
+        Response.json({ accountId: "team_1", id: "prj_native", name: "vendor-onboarding" }),
+      ),
+    );
+    const nativeSelection = { ...selection, projectId: "prj_native" };
+    const context = await fixture.authority.authorize(request(), nativeSelection, ownerContext);
+    expect(context.target).toMatchObject({
+      appId: selection.appId,
+      branch: selection.branch,
+      installationId: "icfg_1",
+      projectId: "prj_native",
+      scopeId: "team_1",
+      scopeType: "team",
+      sessionId: ownerContext.sessionId,
+    });
+    expect(fixture.readReadyNativeTarget).toHaveBeenCalledExactlyOnceWith(
+      ownerContext.authority,
+      selection.appId,
+    );
+    expect(fixture.fetch).toHaveBeenCalledTimes(1);
+    const providerUrl = fixture.fetch.mock.calls[0]?.[0];
+    expect(providerUrl).toBeInstanceOf(URL);
+    if (providerUrl instanceof URL) {
+      expect(providerUrl.pathname).toBe("/v9/projects/prj_native");
+    }
+    await fixture.authority.assertPlanningAuthorized(context);
+  });
+
+  it("rejects a ready target whose approved app, branch, or project differs", async () => {
+    const ready = readyNativeHandoffTarget();
+    const fixture = makeFixture(undefined, false, true, undefined, undefined, ready);
+    await expect(
+      fixture.authority.authorize(
+        request(),
+        { ...selection, projectId: "prj_unregistered" },
+        ownerContext,
+      ),
+    ).rejects.toThrow();
+    await expect(
+      fixture.authority.authorize(
+        request(),
+        { ...selection, projectId: "prj_native", branch: "other" },
+        ownerContext,
+      ),
+    ).rejects.toThrow();
+    await expect(
+      fixture.authority.authorize(
+        request(),
+        { ...selection, projectId: "prj_native", appId: "another-app" },
+        ownerContext,
+      ),
+    ).rejects.toThrow();
+    expect(fixture.fetch).not.toHaveBeenCalled();
+  });
+
+  it("requires current provider readback in the approved team and installation", async () => {
+    const fixture = makeFixture(
+      undefined,
+      false,
+      true,
+      undefined,
+      undefined,
+      readyNativeHandoffTarget(),
+    );
+    const nativeSelection = { ...selection, projectId: "prj_native" };
+    fixture.fetch.mockResolvedValue(
+      Response.json({ accountId: "other-team", id: "prj_native", name: "vendor-onboarding" }),
+    );
+    await expect(
+      fixture.authority.authorize(request(), nativeSelection, ownerContext),
+    ).rejects.toThrow();
+    fixture.fetch.mockResolvedValue(
+      Response.json({ accountId: "team_1", id: "prj_native", name: "vendor-onboarding" }),
+    );
+    fixture.readVercelCredential.mockResolvedValue({
+      binding: {
+        active: true,
+        displayName: "Acme",
+        installationId: "another-installation",
+        plan: "pro",
+        scopeId: "team_1",
+        scopeType: "team",
+        slug: "acme",
+        updatedAt: new Date(),
+      },
+      token: "credential-never-exposed",
+    });
+    await expect(
+      fixture.authority.authorize(request(), nativeSelection, ownerContext),
+    ).rejects.toThrow();
   });
 
   it("plans a direct start only for its durable app and a live owner Vercel grant", async () => {

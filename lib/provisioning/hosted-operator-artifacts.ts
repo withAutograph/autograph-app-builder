@@ -29,6 +29,7 @@ const hash = (content: string | Buffer) => createHash("sha256").update(content).
 const envelopeSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     appId,
+    description: appDescriptionSchema.optional(),
     files: z.record(z.string(), z.string()),
     kind: z.literal(generatedKind),
     manifestSha256: digest,
@@ -341,6 +342,7 @@ export const createOperatorArtifactPublication = (
         const schemaSha256 = manifest.hashes.schema.slice(7);
         const artifactRef = await publish(input.context, {
           appId: description.app.id,
+          description,
           files,
           kind: generatedKind,
           manifestSha256,
@@ -377,6 +379,7 @@ export const createOperatorArtifactPublication = (
         throw operatorArtifactUnavailable();
       }
     },
+    /** Returns captured source metadata when present; historical artifacts retain files-only reads. */
     async readGeneratedRelease(
       context: OperatorArtifactContext,
       expected: {
@@ -400,6 +403,20 @@ export const createOperatorArtifactPublication = (
         if (invalid.some(Boolean)) {
           throw operatorArtifactUnavailable();
         }
+        const description = envelope.description;
+        if (description !== undefined) {
+          if (description.backend.kind !== "generated-postgres") {
+            throw operatorArtifactUnavailable();
+          }
+          const inconsistent = [
+            description.app.id !== envelope.appId,
+            description.backend.release.id !== envelope.releaseId,
+            description.backend.release.artifactHash !== `sha256:${envelope.schemaSha256}`,
+          ];
+          if (inconsistent.some(Boolean)) {
+            throw operatorArtifactUnavailable();
+          }
+        }
         const files = Object.fromEntries(
           GENERATED_RELEASE_MEMBERS.map((member) => {
             const content = envelope.files[member];
@@ -416,9 +433,13 @@ export const createOperatorArtifactPublication = (
         if (hash(requiredMember(files, "release-manifest.json")) !== expected.manifestSha256) {
           throw operatorArtifactUnavailable();
         }
-        // SAFETY: Exactly every member in GeneratedAppReleaseFiles has just been decoded and checked.
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Exactly all closed worker release members have been checked above.
-        return { artifactRef: expected.artifactRef, files: files as GeneratedAppReleaseFiles };
+        return {
+          artifactRef: expected.artifactRef,
+          ...(envelope.description === undefined ? {} : { description: envelope.description }),
+          // SAFETY: Exactly every member has been decoded and checked above.
+          // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- All closed worker release members have been checked.
+          files: files as GeneratedAppReleaseFiles,
+        };
       } catch {
         throw operatorArtifactUnavailable();
       }
