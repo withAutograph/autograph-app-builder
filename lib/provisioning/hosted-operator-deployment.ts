@@ -1371,7 +1371,8 @@ export const createHostedOperatorControlPlane = async (input: {
           if (!sameResources) {
             throw new HostedOperatorError("resource_mismatch");
           }
-          requireFinalResourceBindingPhase(row, { ...context, plan });
+          const bindingInput = structuredClone({ plan, privateState: row.record.privateState });
+          requireFinalResourceBindingPhase(row, bindingInput);
           const bindings = readHostedOperatorResourceBindings({
             ...context,
             config: tokenKeyring,
@@ -1384,6 +1385,7 @@ export const createHostedOperatorControlPlane = async (input: {
             runtimeUrl: bindings.appDatabase.runtimeUrl,
             assertCurrent: async () => {
               await owner.assertPlanningAuthorized(context);
+              requireFinalResourceBindingPhase(await store.read(context), bindingInput);
             },
           });
         },
