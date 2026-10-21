@@ -537,9 +537,9 @@ describe("independent application source review", () => {
         only: ["openai"],
         sessionId: expected,
         tags: [
-          `builder-native-sha256:${createHash("sha256")
+          `builder-native:${createHash("sha256")
             .update(JSON.stringify(["builder-native-session-attribution-v1", sessionId]))
-            .digest("hex")}`,
+            .digest("base64url")}`,
           "builder-callsite:source-review",
         ],
       });

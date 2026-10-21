@@ -12,9 +12,9 @@ import { APP_BUILDER_WORKFLOW_VERSION, appBuilderWorkflowState } from "./workflo
 import type { AppBuilderWorkflowState } from "./workflow-state";
 
 const nativeTagFor = (sessionId: string) =>
-  `builder-native-sha256:${createHash("sha256")
+  `builder-native:${createHash("sha256")
     .update(JSON.stringify(["builder-native-session-attribution-v1", sessionId]))
-    .digest("hex")}`;
+    .digest("base64url")}`;
 
 const discoveryPhases = ["empty", "prepared", "ui_previewed", "ui_accepted"] as const;
 const authoringPhases = [
@@ -271,6 +271,67 @@ describe("native Gateway reporting metadata", () => {
     };
     expect(withBuilderGatewayReporting(hostile, () => "native-one", "main")).toBe(hostile);
     expect(console.info).not.toHaveBeenCalled();
+  });
+
+  it("uses provider-valid tags without reducing the native SHA256 digest", () => {
+    const tagged = withBuilderGatewayReporting({ gateway: {} }, () => "native-private-one", "main");
+    const native = nativeTagFor("native-private-one");
+    expect(native).toHaveLength(58);
+    expect(native).toMatch(/^builder-native:[A-Za-z0-9_-]{43}$/u);
+    expect(Buffer.from(native.slice("builder-native:".length), "base64url")).toEqual(
+      createHash("sha256")
+        .update(JSON.stringify(["builder-native-session-attribution-v1", "native-private-one"]))
+        .digest(),
+    );
+    expect(tagged.gateway.tags).toEqual([native, "builder-callsite:main"]);
+    expect(JSON.stringify(tagged)).not.toContain("native-private-one");
+  });
+
+  it("respects the provider's 10 distinct tag boundary without dropping caller tags or duplicates", () => {
+    const eight = Array.from({ length: 8 }, (_, index) => `caller-${index}`);
+    const options = {
+      gateway: {
+        tags: [...eight, ...eight],
+        sessionId: "retained-affinity",
+        user: "retained-user",
+      },
+    };
+    const tagged = withBuilderGatewayReporting(options, () => "native-one", "main");
+    expect(tagged.gateway.tags).toEqual([
+      ...eight,
+      ...eight,
+      nativeTagFor("native-one"),
+      "builder-callsite:main",
+    ]);
+    const tags = tagged.gateway.tags;
+    if (!Array.isArray(tags)) {
+      throw new TypeError("Missing controlled reporting tags");
+    }
+    expect(new Set(tags).size).toBe(10);
+    expect(options.gateway.tags).toEqual([...eight, ...eight]);
+    const overflow = { gateway: { ...options.gateway, tags: [...eight, "caller-ninth"] } };
+    expect(withBuilderGatewayReporting(overflow, () => "native-one", "main")).toBe(overflow);
+    const alreadyTagged = {
+      gateway: { tags: [...eight, nativeTagFor("native-one"), "builder-callsite:main"] },
+    };
+    expect(withBuilderGatewayReporting(alreadyTagged, () => "native-one", "main")).toEqual(
+      alreadyTagged,
+    );
+  });
+
+  it("keeps unsupported caller tag lengths unchanged and accepts both provider length boundaries", () => {
+    const valid = { gateway: { tags: ["a", "b".repeat(64)] } };
+    expect(withBuilderGatewayReporting(valid, () => "native-one", "main").gateway.tags).toEqual([
+      ...valid.gateway.tags,
+      nativeTagFor("native-one"),
+      "builder-callsite:main",
+    ]);
+    for (const tag of ["", "a".repeat(65)]) {
+      const invalid = {
+        gateway: { tags: [tag], sessionId: "retained-affinity", user: "retained-user" },
+      };
+      expect(withBuilderGatewayReporting(invalid, () => "native-one", "main")).toBe(invalid);
+    }
   });
 
   it("keeps dynamic model selection working when only its reporting context is unavailable", async () => {
