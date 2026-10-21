@@ -362,6 +362,13 @@ const fixture = () => {
       }),
     ),
     readOrganizationProof: vi.fn(async () => retained),
+    readMembershipInspections: vi.fn<
+      NormalActorOrganizationWorkerDependencies["readMembershipInspections"]
+    >(async () => []),
+    readMembershipInspectionProof: vi.fn(async () => ({
+      proof: retained.proof,
+      preparation: retained.preparation,
+    })),
   };
   const worker = createNormalActorOrganizationWorkers(deps, { createLauncher, getOidcToken });
   const effectInput: HostedOperatorWorkerEffectContext = {
@@ -459,6 +466,188 @@ describe("actual selected organization worker adapter", () => {
     f.unknown();
     expect(await f.worker.inspectOrganization(f.input)).toBe("unknown");
     expect(f.execute).not.toHaveBeenCalled();
+  });
+  it("inspects the original full plan and proof with current release, credentials and fence", async () => {
+    const f = fixture();
+    const currentPlan = structuredClone(f.input.effect.plan);
+    const proof = "original-private-proof";
+    const sha256 = createHash("sha256").update(proof).digest("hex");
+    const historicalPlan = hostedOperatorPlanSchema.parse({
+      ...currentPlan,
+      release: { id: "older-release", artifactRef: "older-artifact", sha256: "c".repeat(64) },
+      authMembership: {
+        kind: "create-owned-organizations",
+        organizations: [
+          {
+            ...f.retained.spec,
+            identityProof: {
+              reference: `_protected-operator/artifacts/realm-identity-proof/${target.appId}/${sha256}`,
+              sha256,
+            },
+            identityCapture: {
+              capturedAt: "2026-01-01T00:00:00.000Z",
+              realmSessionId: "original-still-live-session",
+            },
+          },
+          ...(currentPlan.authMembership?.kind === "create-owned-organizations"
+            ? currentPlan.authMembership.organizations.slice(1)
+            : []),
+        ],
+      },
+    });
+    const preparation = structuredClone(f.retained.preparation);
+    const retainedCapture = preparation.organizationProofs?.[0];
+    if (retainedCapture === undefined) {
+      throw new Error("fixture_missing_organization_capture");
+    }
+    const originalCapture = structuredClone(retainedCapture);
+    originalCapture.owner.realmSessionId = "original-still-live-session";
+    originalCapture.link.consumedAt = "2026-01-01T00:00:00.000Z";
+    originalCapture.link.proofRef = `_protected-operator/artifacts/realm-identity-proof/${target.appId}/${sha256}`;
+    originalCapture.link.proofSha256 = sha256;
+    preparation.supersededOrganizationProofs = [originalCapture];
+    const historical = { plan: historicalPlan, effect: f.input.effect.effect, proof, preparation };
+    const frozenHistorical = structuredClone(historical);
+    vi.mocked(f.deps.readMembershipInspections).mockResolvedValue([historical]);
+    vi.mocked(f.deps.readMembershipInspectionProof).mockResolvedValue({
+      proof: historical.proof,
+      preparation: historical.preparation,
+    });
+    expect(await f.worker.inspectOrganization(f.input)).toBe("applied");
+    const launched = f.inspect.mock.calls[0]?.[0];
+    expect(launched?.plan).toEqual(frozenHistorical.plan);
+    expect(launched?.membershipProof).toEqual({
+      proof,
+      oidcToken: "private-fixture-project-oidc",
+      organizationId: "org-one",
+    });
+    expect(launched?.generatedRelease?.artifactRef).toBe(currentPlan.release.artifactRef);
+    expect(launched?.directDatabaseUrl).toBe("private-auth-migration");
+    expect(launched?.operationRef).toBe(f.input.effect.operationRef);
+    expect(launched?.readbackOnly).toBe(true);
+    expect(f.input.effect.plan).toEqual(currentPlan);
+    expect(historical).toEqual(frozenHistorical);
+    f.revoke();
+    await expect(launched?.assertCurrent()).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(f.execute).not.toHaveBeenCalled();
+  });
+  it("does not turn missing historical state or proof into creation authority", async () => {
+    const f = fixture();
+    vi.mocked(f.deps.readMembershipInspections).mockResolvedValue([
+      {
+        plan: structuredClone(f.input.effect.plan),
+        effect: f.input.effect.effect,
+      },
+    ]);
+    f.selectStatus("absent");
+    expect(await f.worker.inspectOrganization(f.input)).toBe("unknown");
+    vi.mocked(f.deps.readMembershipInspections).mockRejectedValueOnce(
+      new HostedOperatorError("reconciliation_required"),
+    );
+    f.inspect.mockClear();
+    expect(await f.worker.inspectOrganization(f.input)).toBe("unknown");
+    expect(f.inspect).not.toHaveBeenCalled();
+    expect(f.execute).not.toHaveBeenCalled();
+  });
+  it.each(["readback", "proof", "capture"] as const)(
+    "finds the matching approved revision after an earlier %s mismatch",
+    async (failure) => {
+      const f = fixture();
+      const first = {
+        plan: structuredClone(f.input.effect.plan),
+        effect: f.input.effect.effect,
+      };
+      first.plan.release.id = "earlier-approved-revision";
+      const matching = {
+        plan: structuredClone(f.input.effect.plan),
+        effect: f.input.effect.effect,
+      };
+      vi.mocked(f.deps.readMembershipInspections).mockResolvedValue([first, matching]);
+      if (failure === "readback") {
+        f.inspect.mockRejectedValueOnce(new HostedOperatorError("reconciliation_required"));
+      } else if (failure === "proof") {
+        vi.mocked(f.deps.readMembershipInspectionProof).mockRejectedValueOnce(
+          new HostedOperatorError("reconciliation_required"),
+        );
+      } else {
+        vi.mocked(f.deps.readMembershipInspectionProof).mockResolvedValueOnce({
+          proof: f.retained.proof,
+          preparation: { ...f.retained.preparation, organizationProofs: [] },
+        });
+      }
+      expect(await f.worker.inspectOrganization(f.input)).toBe("applied");
+      expect(f.inspect.mock.calls.some(([launched]) => launched.plan === matching.plan)).toBe(true);
+      expect(f.execute).not.toHaveBeenCalled();
+    },
+  );
+  it("stops inspecting historical revisions when the current owner fence is revoked", async () => {
+    const f = fixture();
+    const first = { plan: structuredClone(f.input.effect.plan), effect: f.input.effect.effect };
+    const second = { plan: structuredClone(f.input.effect.plan), effect: f.input.effect.effect };
+    second.plan.release.id = "another-approved-revision";
+    vi.mocked(f.deps.readMembershipInspections).mockResolvedValue([first, second]);
+    f.inspect.mockImplementationOnce(async () => {
+      f.revoke();
+      throw new HostedOperatorError("reconciliation_required");
+    });
+    await expect(f.worker.inspectOrganization(f.input)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(f.inspect.mock.calls.some(([launched]) => launched.plan === second.plan)).toBe(false);
+    expect(f.execute).not.toHaveBeenCalled();
+  });
+  it.each(["proof", "actor", "effect", "capture"] as const)(
+    "rejects historical %s substitution without fallback",
+    async (change) => {
+      const f = fixture();
+      const historical = {
+        plan: structuredClone(f.input.effect.plan),
+        effect: { ...f.input.effect.effect },
+        proof: f.retained.proof,
+        preparation: structuredClone(f.retained.preparation),
+      };
+      if (change === "proof") {
+        historical.proof = "substituted-original-proof";
+      }
+      if (change === "effect") {
+        historical.effect.id = "auth-membership:org-two";
+      }
+      if (change === "capture") {
+        historical.preparation.organizationProofs = [];
+      }
+      if (
+        change === "actor" &&
+        historical.plan.authMembership?.kind === "create-owned-organizations"
+      ) {
+        const organization = historical.plan.authMembership.organizations[0];
+        if (organization === undefined) {
+          throw new Error("fixture_missing_organization");
+        }
+        organization.actorId = "unapproved-owner";
+      }
+      vi.mocked(f.deps.readMembershipInspections).mockResolvedValue([historical]);
+      vi.mocked(f.deps.readMembershipInspectionProof).mockResolvedValue({
+        proof: historical.proof,
+        preparation: historical.preparation,
+      });
+      expect(await f.worker.inspectOrganization(f.input)).toBe("unknown");
+      expect(f.inspect).not.toHaveBeenCalled();
+      expect(f.execute).not.toHaveBeenCalled();
+    },
+  );
+  it("requires current authority before historical lookup and never uses history to execute", async () => {
+    const f = fixture();
+    await f.worker.executeOrganization(f.input);
+    expect(f.deps.readMembershipInspections).not.toHaveBeenCalled();
+    expect(f.execute.mock.calls[0]?.[0].plan).toBe(f.input.effect.plan);
+    f.revoke();
+    await expect(f.worker.inspectOrganization(f.input)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(f.deps.readMembershipInspections).not.toHaveBeenCalled();
+    expect(f.inspect).not.toHaveBeenCalled();
   });
   it("rejects substituted proof/session/target and changed first approval before launching", async () => {
     await Promise.all(

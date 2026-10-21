@@ -46,7 +46,10 @@ import { createTenantExportArtifacts } from "./hosted-operator-export-artifacts"
 import { createTenantExportDispatcher } from "./hosted-operator-export-transport";
 import { createPrivateTenantExportApprovalCapture } from "../eve/private-export-approval";
 import { requireFinalResourceBindingPhase } from "./hosted-operator-resource-binding-phase";
-import { readApprovedRetainedMembershipInspection } from "./hosted-operator-membership-inspection";
+import {
+  readApprovedRetainedMembershipInspection,
+  readApprovedRetainedMembershipInspections,
+} from "./hosted-operator-membership-inspection";
 import { nativeObservationStateSchema } from "../eve/native-observation-state";
 import { realmContinuationPendingBaseline } from "./hosted-operator-realm-pending";
 import { createHostedOperatorRealmIdentityWait } from "./hosted-operator-realm-identity-wait";
@@ -2548,6 +2551,52 @@ export const createHostedOperatorControlPlane = async (input: {
       configuration,
       assertAuthorized: owner.assertAuthorized,
       readResourceBindings: async (effect) => await controlPlane.readResourceBindings(effect),
+      readMembershipInspections: async (effect, selected) =>
+        await readApprovedRetainedMembershipInspections({
+          effect,
+          organizationId: selected.organizationId,
+          readApproval,
+          readCurrentRecord: async () =>
+            await readCurrentResourceCredentialRecord({
+              assertAuthorized: owner.assertAuthorized,
+              effect,
+              store,
+            }),
+        }),
+      readMembershipInspectionProof: async (effect, historical, selected) => {
+        if (historical.plan.authMembership === undefined) {
+          throw new HostedOperatorError("reconciliation_required");
+        }
+        const spec = selectHostedOperatorOwnedOrganizationSpec(historical.plan.authMembership, {
+          organizationId: selected.organizationId,
+        });
+        const retained = await normalActorJournal.read(effect);
+        if (retained === undefined) {
+          throw new HostedOperatorError("reconciliation_required");
+        }
+        const expectedRef = `_protected-operator/artifacts/realm-identity-proof/${effect.target.appId}/${spec.identityProof.sha256}`;
+        if (spec.identityProof.reference !== expectedRef) {
+          throw new HostedOperatorError("reconciliation_required");
+        }
+        const artifacts = ownedArtifacts(effect);
+        const content = await artifacts.store.read(artifacts.context, expectedRef, 0);
+        if (content === undefined) {
+          throw new HostedOperatorError("reconciliation_required");
+        }
+        const bytes = Buffer.from(content, "base64");
+        const proof = bytes.toString("utf-8");
+        if (
+          bytes.length > 16_384 ||
+          bytes.toString("base64") !== content ||
+          !Buffer.from(proof, "utf-8").equals(bytes) ||
+          createHash("sha256").update(bytes).digest("hex") !== spec.identityProof.sha256
+        ) {
+          throw new HostedOperatorError("reconciliation_required");
+        }
+        await owner.assertArtifactAuthorized(effect);
+        await effect.assertCurrent();
+        return { proof, preparation: retained.preparation };
+      },
       readGeneratedRelease: async (context, release) => {
         await owner.assertArtifactAuthorized(context);
         const current = await store.read(context);

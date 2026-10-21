@@ -8,6 +8,10 @@ import type {
 } from "./hosted-operator-contract";
 import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
 import {
+  normalActorProgramDigest,
+  normalActorProgramSchema,
+} from "./hosted-operator-normal-actor-program";
+import {
   matchRetainedMembershipInspectionProvenance,
   retainedMembershipInspectionProvenance,
 } from "./hosted-operator-membership-inspection-provenance";
@@ -174,7 +178,182 @@ const fixture = () => {
   return { record, operator, original };
 };
 
+const participantPlan = (plan: HostedOperatorPlan) => {
+  const spec = plan.authMembership;
+  if (spec?.kind !== "create-owned-organization") {
+    throw new Error("Expected original owner specification");
+  }
+  const organizations = [
+    spec,
+    { ...spec, organizationId: "org_second", name: "Second", slug: "second" },
+  ];
+  const program = normalActorProgramSchema.parse({
+    version: 1,
+    appId: plan.selection.appId,
+    origin: plan.publicGateway?.origin,
+    actors: [
+      {
+        actorKey: "owner",
+        email: "owner@example.test",
+        name: "Owner",
+        account: "capture-existing",
+      },
+    ],
+    organizations: organizations.map((organization) => ({
+      organizationId: organization.organizationId,
+      name: organization.name,
+      slug: organization.slug,
+      ownerActorKey: "owner",
+    })),
+    memberships: organizations.map(({ organizationId }) => ({
+      organizationId,
+      actorKey: "owner",
+      role: "owner",
+    })),
+    appAccess: organizations.map(({ organizationId }) => ({
+      organizationId,
+      actorKey: "owner",
+      roles: ["owner"],
+    })),
+  });
+  return hostedOperatorPlanSchema.parse({
+    ...plan,
+    normalActorProgram: program,
+    normalActorPreparation: {
+      accountOperationRef: "33333333-3333-4333-8333-333333333333",
+      accountPlanDigest: "a".repeat(64),
+      accountApprovalId: "account-approval",
+      accountApprovedByCallId: "account-call",
+      programDigest: normalActorProgramDigest(program),
+    },
+    authMembership: { kind: "create-owned-organizations", organizations },
+    effects: plan.effects.flatMap((effect) =>
+      effect.kind === "auth-membership"
+        ? organizations.map(({ organizationId }) => ({
+            ...effect,
+            id: `auth-membership:${organizationId}`,
+          }))
+        : [effect],
+    ),
+  });
+};
+
 describe("retained membership inspection provenance", () => {
+  it("recovers a selected organization created before its receipt, under a different operation", () => {
+    const { record, operator, original } = fixture();
+    const plan = participantPlan(currentPlan);
+    operator.plan = plan;
+    operator.planDigest = operatorPlanDigest(plan);
+    operator.operationRef = "22222222-2222-4222-8222-222222222222";
+    original.operator.receipts = [];
+    const before = structuredClone(record);
+    const candidates = retainedMembershipInspectionProvenance(record, plan, "org_fixture");
+    expect(candidates.map((candidate) => candidate.operator.planDigest)).toEqual([
+      original.operator.planDigest,
+    ]);
+    expect(candidates[0]?.effect.id).toBe("membership");
+    expect(
+      matchRetainedMembershipInspectionProvenance(record, plan, {
+        approvedByCallId: original.approvedByCallId,
+        planDigest: original.operator.planDigest,
+      })?.operator,
+    ).toBe(original.operator);
+    expect(retainedMembershipInspectionProvenance(record, plan, "org_second")).toEqual([]);
+    expect(record).toEqual(before);
+  });
+
+  it("selects the original organization effect from a plural participant plan", () => {
+    const { record, operator, original } = fixture();
+    const prior = participantPlan(originalPlan);
+    const plan = participantPlan(currentPlan);
+    original.operator = {
+      ...original.operator,
+      plan: prior,
+      planDigest: operatorPlanDigest(prior),
+      receipts: [],
+    };
+    operator.plan = plan;
+    operator.planDigest = operatorPlanDigest(plan);
+    const candidate = retainedMembershipInspectionProvenance(record, plan, "org_second")[0];
+    expect(candidate?.effect.id).toBe("auth-membership:org_second");
+    expect(candidate?.operator.plan).toBe(prior);
+  });
+
+  it("keeps the original approved capture when the current owner proof changes", () => {
+    const { record, operator, original } = fixture();
+    const plan = participantPlan(currentPlan);
+    if (plan.authMembership?.kind !== "create-owned-organizations") {
+      throw new Error("Expected participant organizations");
+    }
+    const current = plan.authMembership.organizations[0];
+    if (current === undefined) {
+      throw new Error("Expected owner organization");
+    }
+    current.identityProof = { reference: "fresh-owner-proof", sha256: "8".repeat(64) };
+    current.identityCapture = {
+      capturedAt: "2028-01-02T00:00:00.000Z",
+      realmSessionId: "fresh-realm-session",
+    };
+    operator.plan = hostedOperatorPlanSchema.parse(plan);
+    operator.planDigest = operatorPlanDigest(operator.plan);
+    original.operator.receipts = [];
+    const candidate = retainedMembershipInspectionProvenance(
+      record,
+      operator.plan,
+      "org_fixture",
+    )[0];
+    expect(candidate?.operator.plan.authMembership).toEqual(originalPlan.authMembership);
+  });
+
+  it.each([
+    "organization",
+    "actor",
+    "owner",
+    "Auth resource",
+    "Neon branch",
+    "verification",
+  ] as const)(
+    "rejects selected organization history outside the current %s authority",
+    (mismatch) => {
+      const { record, operator, original } = fixture();
+      const plan = participantPlan(currentPlan);
+      operator.plan = plan;
+      operator.planDigest = operatorPlanDigest(plan);
+      const prior = structuredClone(originalPlan);
+      if (
+        prior.authMembership?.kind !== "create-owned-organization" ||
+        prior.deploymentBoundary === undefined
+      ) {
+        throw new Error("Expected original owner authority");
+      }
+      if (mismatch === "organization") {
+        prior.authMembership.organizationId = "other-org";
+      }
+      if (mismatch === "actor") {
+        prior.authMembership.actorId = "other-actor";
+      }
+      if (mismatch === "owner") {
+        prior.deploymentBoundary.authority.ownerUserId = "other-owner";
+      }
+      if (mismatch === "Auth resource") {
+        prior.authDatabase.resourceId = "other-auth";
+      }
+      if (mismatch === "Neon branch") {
+        prior.neon.branchId = "br_other";
+      }
+      if (mismatch === "verification") {
+        prior.authMembership.identityVerification.transportSource.projectId = "prj_other";
+      }
+      original.operator = {
+        ...original.operator,
+        plan: hostedOperatorPlanSchema.parse(prior),
+        planDigest: operatorPlanDigest(prior),
+        receipts: [],
+      };
+      expect(retainedMembershipInspectionProvenance(record, plan, "org_fixture")).toEqual([]);
+    },
+  );
+
   it("returns no evidence without history and never changes the journal", () => {
     const { record, operator } = fixture();
     delete operator.retainedProjectSettingsOperations;
