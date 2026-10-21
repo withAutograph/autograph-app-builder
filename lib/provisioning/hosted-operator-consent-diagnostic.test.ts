@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { APIError } from "@vercel/sandbox";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { HostedOperatorError, operatorPublicResultSchema } from "./hosted-operator-contract";
@@ -1784,6 +1785,104 @@ describe("continuity planning failure diagnostics", () => {
       expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
     },
   );
+
+  it.each([200, 401, 403, 404, 409, 429, 500, 599])(
+    "reports only the recognized Sandbox SDK HTTP status %s and preserves the rejection",
+    async (httpStatus) => {
+      const error = new APIError(new Response(secret, { status: httpStatus }), {
+        message: secret,
+        json: { error: { code: secret } },
+        text: secret,
+      });
+      const getter = vi.fn(() => {
+        throw new Error(secret);
+      });
+      for (const key of ["message", "name", "code", "json", "text", "cause"]) {
+        Object.defineProperty(error, key, { get: getter });
+      }
+      const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+      const controller = new AbortController();
+      await expect(
+        observeContinuityPlanningStage(
+          secret,
+          "sandbox_resume",
+          () => Promise.reject(error),
+          sink,
+          controller.signal,
+        ),
+      ).rejects.toBe(error);
+      expect(sink.mock.calls[0]?.[0].continuityPlanningFailure).toEqual({
+        stage: "sandbox_resume",
+        errorClass: "sandbox_api_error",
+        httpStatus,
+        signalAborted: false,
+      });
+      expect(getter).not.toHaveBeenCalled();
+      expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+    },
+  );
+
+  it("distinguishes cancellation from an unknown resume failure without changing either rejection", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const error = new DOMException(secret, "AbortError");
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    await expect(
+      observeContinuityPlanningStage(
+        secret,
+        "sandbox_resume",
+        () => Promise.reject(error),
+        sink,
+        controller.signal,
+      ),
+    ).rejects.toBe(error);
+    expect(sink.mock.calls[0]?.[0].continuityPlanningFailure).toEqual({
+      stage: "sandbox_resume",
+      errorClass: "abort_error",
+      signalAborted: true,
+    });
+    const unknown = new Error(secret);
+    await expect(
+      observeContinuityPlanningStage(
+        secret,
+        "sandbox_resume",
+        () => Promise.reject(unknown),
+        sink,
+        controller.signal,
+      ),
+    ).rejects.toBe(unknown);
+    expect(sink.mock.calls[1]?.[0].continuityPlanningFailure).toEqual({
+      stage: "sandbox_resume",
+      errorClass: "unexpected",
+      signalAborted: true,
+    });
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
+
+  it("keeps other planning stages unchanged for SDK errors and cancellation", () => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    const controller = new AbortController();
+    controller.abort();
+    reportContinuityPlanningFailure(
+      secret,
+      "dispatcher_planning",
+      new APIError(new Response(secret, { status: 403 })),
+      sink,
+      controller.signal,
+    );
+    reportContinuityPlanningFailure(
+      secret,
+      "port_observation",
+      new DOMException(secret, "AbortError"),
+      sink,
+      controller.signal,
+    );
+    expect(sink.mock.calls.map(([diagnostic]) => diagnostic.continuityPlanningFailure)).toEqual([
+      { stage: "dispatcher_planning", errorClass: "unexpected" },
+      { stage: "port_observation", errorClass: "unexpected" },
+    ]);
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
 
   it.each(["tool_plan_request", "client_transport"] as const)(
     "reports %s on the builder boundary",
