@@ -38,6 +38,28 @@ operations. Preserve the tenant, owner, adapter generation, operation, request,
 call, plan digest and cancellation checks. A recorded response or a tool
 invocation alone cannot substitute for the actual terminal approval receipt.
 
+## Live authority and lease renewal
+
+Inspection observations freshly check canonical owner/session authority, active
+membership, current operation approval, cancellation and the live physical
+resource fence. They are read-only: they do not renew the journal lease or read
+the provider project unless an existing specialized guard requires that read.
+Membership capture and participant signup-policy checks remain part of their
+observation wrappers. Protected mutations and executing worker authorization
+retain the full fresh provider authorization check.
+
+One service-owned renewal runs every 20 seconds throughout the acquired physical
+lease, including credential preparation and reconciliation before worker launch.
+Each renewal rechecks current observation authority and extends the journal lease
+to expire in 60 seconds; a contended journal update rechecks authority on retry.
+Failure aborts the execution signal. Renewal stops and any pending renewal drains
+before journal lease release, including when physical lease failure returns before
+its callback completes. Physical fence loss denies further guarded work.
+
+Real receipts and checkpoints retain their journal writes and lease renewal.
+There is no positive authority cache. These source semantics do not establish
+hosted call-count, latency or cost savings; those require runtime evidence.
+
 ## Native deployment completion
 
 A known native deployment that is `QUEUED`, `INITIALIZING` or `BUILDING` remains
@@ -101,6 +123,10 @@ source-layout, version, receipt-count, actor-count or regular-app-change gates.
 Legacy plans without a participant program retain their existing path.
 
 Source tests, CI and a READY deployment establish their respective boundaries.
-Authenticated Preview still requires actual sign-in, submission, reviewer
-decision, persistence and the full isolation/recovery acceptance evidence in
+For the Spend Review recovery, the basic Preview milestone is demonstrated by
+fresh sign-in and retained request/data loading after reload. This records delivery
+evidence for this app; it does not impose retained records, task shapes or new CI
+checks on other generated apps. Full qualification and goal closeout still require
+the accepted submission, reviewer decision, persistence, tenant isolation and
+recovery acceptance evidence in
 [the Spend Review qualification plan](plans/2026-10-07-hosted-operator-deployment-and-spend-review-qualification.md).

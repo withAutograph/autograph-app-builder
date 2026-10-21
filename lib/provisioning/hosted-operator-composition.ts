@@ -1867,6 +1867,23 @@ export const composeHostedOperatorDependencies = (
       },
     };
   };
+  const assertSignupPolicyState = async (
+    input: HostedOperatorEffectContext,
+    assertCurrent: () => Promise<void>,
+  ) => {
+    if (input.plan.normalActorProgram === undefined) {
+      // The capture guard already checks the full current execution authority.
+      await controlPlane.assertMembershipCapture(input);
+      return;
+    }
+    await assertCurrent();
+    const prepared = await controlPlane.readNormalActorPreparation(input);
+    if (prepared === undefined) {
+      throw new HostedOperatorError(RECONCILIATION_REQUIRED);
+    }
+    assertParticipantSignupPolicyState(input, prepared.state);
+    await assertCurrent();
+  };
   const reconcileResources = async (
     input: HostedOperatorEffectContext,
   ): ReturnType<ProtectedHostedOperatorDependencies["reconcile"]> => {
@@ -2043,15 +2060,18 @@ export const composeHostedOperatorDependencies = (
     // Keep private reads and live capture authority on the current approved plan.
     // Only SELECT-only worker input may use an approved historical ownership marker.
     const prepared = await membershipInput(input);
-    // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Both readers renew the same live execution lease through journal CAS.
+    // The current capture check must finish before reading historical inspection authority.
+    // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- These reads share live capture authority and intentionally stay ordered.
     const historical = await controlPlane.readMembershipInspectionPlan(input);
+    const assertMembershipCapture = async () => {
+      await controlPlane.assertMembershipCapture(input);
+    };
     const observed = await launcher.inspect({
       ...input,
       ...prepared,
       ...historical,
-      assertCurrent: async () => {
-        await controlPlane.assertMembershipCapture(input);
-      },
+      assertCurrent: assertMembershipCapture,
+      assertCurrentObservation: assertMembershipCapture,
       readbackOnly: true,
     });
     if (observed?.status === "absent") {
@@ -2075,15 +2095,10 @@ export const composeHostedOperatorDependencies = (
     const observed = await launcher.inspect({
       ...input,
       assertCurrent: async () => {
-        if (input.plan.normalActorProgram === undefined) {
-          await controlPlane.assertMembershipCapture(input);
-          return;
-        }
-        const prepared = await controlPlane.readNormalActorPreparation(input);
-        if (prepared === undefined) {
-          throw new HostedOperatorError(RECONCILIATION_REQUIRED);
-        }
-        assertParticipantSignupPolicyState(input, prepared.state);
+        await assertSignupPolicyState(input, input.assertCurrent);
+      },
+      assertCurrentObservation: async () => {
+        await assertSignupPolicyState(input, input.assertCurrentObservation ?? input.assertCurrent);
       },
       ...(await signupPolicyWorkerInput(input)),
       readbackOnly: true,
@@ -2273,15 +2288,7 @@ export const composeHostedOperatorDependencies = (
     await launcher.execute({
       ...input,
       assertCurrent: async () => {
-        if (input.plan.normalActorProgram === undefined) {
-          await controlPlane.assertMembershipCapture(input);
-          return;
-        }
-        const prepared = await controlPlane.readNormalActorPreparation(input);
-        if (prepared === undefined) {
-          throw new HostedOperatorError(RECONCILIATION_REQUIRED);
-        }
-        assertParticipantSignupPolicyState(input, prepared.state);
+        await assertSignupPolicyState(input, input.assertCurrent);
       },
       ...(await signupPolicyWorkerInput(input)),
     });

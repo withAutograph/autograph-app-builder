@@ -22,7 +22,7 @@ import {
 
 const now = Date.parse("2026-10-19T12:00:00Z");
 const operationRef = "801583e6-b763-46eb-b9ca-9ac5a13733c4";
-const fixture = (priorSettled = false) => {
+const fixture = (priorSettled = false, clock: () => number = () => now) => {
   const selection = {
     appId: "reports",
     branch: "review",
@@ -150,19 +150,32 @@ const fixture = (priorSettled = false) => {
       };
     },
   );
+  const assertAuthorized = vi.fn(async () => {});
+  const assertCanonicalOwner = vi.fn(async () => {});
+  let physicalLeaseReleased = false;
   const deps: ProtectedHostedOperatorDependencies = {
     store,
-    now: () => now,
+    now: clock,
     authorize: () => Promise.resolve({ authority, target }),
-    assertAuthorized: () => Promise.resolve(),
+    assertAuthorized,
+    assertCanonicalOwner,
     plan: () => Promise.resolve(plan),
     readApproval: (input) => Promise.resolve({ ...input, approvalId: "approval", approved: true }),
-    withResourceLease: async (_input, run) =>
-      await run(() =>
-        physicalFence
-          ? Promise.resolve()
-          : Promise.reject(new HostedOperatorError("operation_in_progress")),
-      ),
+    withResourceLease: async (_input, run) => {
+      const leaseId = row.record.leaseId;
+      try {
+        return await run(() => {
+          const liveExpiry =
+            row.record.leaseExpiresAt !== undefined &&
+            Date.parse(row.record.leaseExpiresAt) > clock();
+          return physicalFence && row.record.leaseId === leaseId && liveExpiry
+            ? Promise.resolve()
+            : Promise.reject(new HostedOperatorError("operation_in_progress"));
+        });
+      } finally {
+        physicalLeaseReleased = true;
+      }
+    },
     reconcile: () => Promise.resolve({ status: "absent" }),
     executeEffect,
     verify: () =>
@@ -177,10 +190,11 @@ const fixture = (priorSettled = false) => {
     bindings: () => Promise.resolve({}),
   };
   const handler = createProtectedHostedOperatorHandler(deps);
-  const request = (action: "execute" | "status", observe = true) =>
+  const request = (action: "execute" | "status", observe = true, signal?: AbortSignal) =>
     handler(
       new Request("https://operator.example/v1/runtime", {
         method: "POST",
+        signal,
         headers: {
           "content-type": "application/json",
           ...(observe
@@ -204,6 +218,16 @@ const fixture = (priorSettled = false) => {
   return {
     request,
     status,
+    deps,
+    store,
+    assertAuthorized,
+    assertCanonicalOwner,
+    get revision() {
+      return row.revision;
+    },
+    get physicalLeaseReleased() {
+      return physicalLeaseReleased;
+    },
     entered,
     gate,
     executeEffect,
@@ -219,7 +243,253 @@ const fixture = (priorSettled = false) => {
   };
 };
 
+const readExecutingEffect = (f: ReturnType<typeof fixture>) => {
+  const effect = f.executeEffect.mock.calls[0]?.[0];
+  if (effect === undefined || effect.assertCurrentObservation === undefined) {
+    throw new Error("Fixture execution observation is missing");
+  }
+  return { ...effect, assertCurrentObservation: effect.assertCurrentObservation };
+};
+
 describe("canonical execution observation", () => {
+  it("keeps frequent observations read-only while mutations still reauthorize the provider", async () => {
+    const f = fixture();
+    const execution = f.request("execute");
+    await f.entered.promise;
+    const effect = readExecutingEffect(f);
+    const revision = f.revision;
+    const expiresAt = f.record.leaseExpiresAt;
+    const providerReads = f.assertAuthorized.mock.calls.length;
+    await Promise.all(Array.from({ length: 100 }, () => effect.assertCurrentObservation()));
+    expect(f.revision).toBe(revision);
+    expect(f.record.leaseExpiresAt).toBe(expiresAt);
+    expect(f.assertAuthorized).toHaveBeenCalledTimes(providerReads);
+    expect(f.assertCanonicalOwner).toHaveBeenCalledTimes(100);
+    await effect.assertCurrent();
+    expect(f.assertAuthorized).toHaveBeenCalledTimes(providerReads + 1);
+    expect(f.revision).toBe(revision);
+    f.assertAuthorized.mockRejectedValueOnce(new HostedOperatorError("authorization_required"));
+    await expect(effect.assertCurrent()).rejects.toMatchObject({ code: "authorization_required" });
+    f.gate.resolve(undefined);
+    await execution;
+    expect(f.revision).toBeGreaterThan(revision);
+    expect(f.record.operator?.receipts).toHaveLength(4);
+  });
+
+  it("renews during pre-worker reconciliation without provider GETs or post-release writes", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    const f = fixture(false, Date.now);
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    f.deps.reconcile = async () => {
+      entered.resolve(undefined);
+      await release.promise;
+      return { status: "absent" };
+    };
+    f.gate.resolve(undefined);
+    const execution = f.request("execute");
+    try {
+      await entered.promise;
+      const revision = f.revision;
+      const providerReads = f.assertAuthorized.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(61_000);
+      expect(f.revision).toBe(revision + 3);
+      expect(Date.parse(f.record.leaseExpiresAt ?? "")).toBeGreaterThan(Date.now());
+      expect(f.assertAuthorized).toHaveBeenCalledTimes(providerReads);
+      expect(f.executeEffect).not.toHaveBeenCalled();
+      release.resolve(undefined);
+      await execution;
+      expect(f.physicalLeaseReleased).toBe(true);
+      expect(f.record.leaseId).toBeUndefined();
+      const settledRevision = f.revision;
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(f.revision).toBe(settledRevision);
+    } finally {
+      release.resolve(undefined);
+      await execution;
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(["owner", "approval", "fence", "expired", "replaced", "cancel"] as const)(
+    "rejects an observation after %s loss without renewing authority",
+    async (lost) => {
+      const f = fixture();
+      const abort = new AbortController();
+      const execution = f.request("execute", true, abort.signal);
+      await f.entered.promise;
+      const effect = readExecutingEffect(f);
+      const revision = f.revision;
+      if (lost === "owner") {
+        f.assertCanonicalOwner.mockRejectedValue(new HostedOperatorError("authorization_required"));
+      }
+      if (lost === "approval") {
+        f.deps.readApproval = () =>
+          Promise.resolve({
+            approved: false,
+            approvalId: "approval",
+            callId: "approved-call",
+            planDigest: effect.plan.release.sha256,
+            action: "prepare",
+          });
+      }
+      if (lost === "fence") {
+        f.loseFence();
+      }
+      if (lost === "expired") {
+        f.record.leaseExpiresAt = new Date(now - 1).toISOString();
+      }
+      if (lost === "replaced") {
+        f.record.leaseId = "9b7a1463-3626-4730-bcbf-b2c226cc1c45";
+      }
+      if (lost === "cancel") {
+        abort.abort(new HostedOperatorError("authorization_required"));
+      }
+      await expect(effect.assertCurrentObservation()).rejects.toBeInstanceOf(Error);
+      expect(f.revision).toBe(revision);
+      f.gate.resolve(undefined);
+      await execution;
+    },
+  );
+
+  it("aborts the worker when renewal loses owner authority", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    const f = fixture(false, Date.now);
+    const execution = f.request("execute");
+    try {
+      await f.entered.promise;
+      const effect = readExecutingEffect(f);
+      const revision = f.revision;
+      f.assertCanonicalOwner.mockRejectedValue(new HostedOperatorError("authorization_required"));
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(effect.signal?.aborted).toBe(true);
+      expect(f.revision).toBe(revision);
+      f.gate.resolve(undefined);
+      const response = await execution;
+      expect(await response.json()).toMatchObject({
+        status: "blocked",
+        code: "authorization_required",
+      });
+      expect(f.executeEffect).toHaveBeenCalledOnce();
+      expect(f.record.leaseId).toBeUndefined();
+    } finally {
+      f.gate.resolve(undefined);
+      await execution;
+      vi.useRealTimers();
+    }
+  });
+
+  it("rechecks authority after a lost renewal CAS", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    const f = fixture(false, Date.now);
+    const execution = f.request("execute");
+    try {
+      await f.entered.promise;
+      const effect = readExecutingEffect(f);
+      const revision = f.revision;
+      const rechecked = Promise.withResolvers<undefined>();
+      vi.spyOn(f.store, "compareAndSet").mockImplementationOnce(() => {
+        f.assertCanonicalOwner.mockImplementation(() => {
+          rechecked.resolve(undefined);
+          return Promise.reject(new HostedOperatorError("authorization_required"));
+        });
+        return Promise.resolve(undefined);
+      });
+      await vi.advanceTimersByTimeAsync(20_000);
+      await rechecked.promise;
+      await vi.advanceTimersByTimeAsync(0);
+      expect(effect.signal?.aborted).toBe(true);
+      expect(f.revision).toBe(revision);
+      f.gate.resolve(undefined);
+      const response = await execution;
+      expect(await response.json()).toMatchObject({
+        status: "blocked",
+        code: "authorization_required",
+      });
+    } finally {
+      f.gate.resolve(undefined);
+      await execution;
+      vi.useRealTimers();
+    }
+  });
+
+  it("drains an in-flight renewal before releasing the physical and journal leases", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    const f = fixture(false, Date.now);
+    const execution = f.request("execute");
+    const release = Promise.withResolvers<undefined>();
+    try {
+      await f.entered.promise;
+      const compareAndSet = f.store.compareAndSet;
+      vi.spyOn(f.store, "compareAndSet").mockImplementationOnce(async (input) => {
+        await release.promise;
+        return await compareAndSet(input);
+      });
+      await vi.advanceTimersByTimeAsync(20_000);
+      f.fail(new HostedOperatorError("reconciliation_required"));
+      f.gate.resolve(undefined);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(f.physicalLeaseReleased).toBe(false);
+      expect(f.record.leaseId).toBeDefined();
+      release.resolve(undefined);
+      await execution;
+      expect(f.physicalLeaseReleased).toBe(true);
+      expect(f.record.leaseId).toBeUndefined();
+    } finally {
+      release.resolve(undefined);
+      f.gate.resolve(undefined);
+      await execution;
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops renewal when the physical lease fails before its callback returns", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    const f = fixture(false, Date.now);
+    const lost = Promise.withResolvers<never>();
+    const withResourceLease = f.deps.withResourceLease;
+    let callback: Promise<unknown> | undefined;
+    f.deps.withResourceLease = async (input, run) => {
+      const running = withResourceLease(input, run);
+      callback = running;
+      return await Promise.race([running, lost.promise]);
+    };
+    const execution = f.request("execute");
+    try {
+      await f.entered.promise;
+      const effect = readExecutingEffect(f);
+      f.loseFence();
+      lost.reject(new HostedOperatorError("operation_in_progress"));
+      const response = await execution;
+      expect(await response.json()).toMatchObject({ status: "blocked" });
+      expect(effect.signal?.aborted).toBe(true);
+      expect(f.record.leaseId).toBeUndefined();
+      const revision = f.revision;
+      await vi.advanceTimersByTimeAsync(80_000);
+      expect(f.revision).toBe(revision);
+      expect(vi.getTimerCount()).toBe(0);
+      f.gate.resolve(undefined);
+      await expect(callback).rejects.toBeInstanceOf(Error);
+      expect(f.revision).toBe(revision);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      lost.reject(new HostedOperatorError("operation_in_progress"));
+      f.gate.resolve(undefined);
+      await execution;
+      try {
+        await callback;
+      } catch {
+        // The detached callback must reject after the physical fence is lost.
+      }
+      vi.useRealTimers();
+    }
+  });
+
   it("invalidates a prior settled acknowledgement before a legacy technical retry", async () => {
     const f = fixture(true);
     expect(await f.status()).toMatchObject({
