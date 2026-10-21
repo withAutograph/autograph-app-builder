@@ -448,15 +448,15 @@ const { createHash } = require("node:crypto");
 const { closeSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, rmSync, rmdirSync, chmodSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
-const [oldRoot, newRoot, head, base, app, workspace] = process.argv.slice(1);
+const [oldRoot, newRoot, head, base, app, workspace, previousBase] = process.argv.slice(1);
 ${ownedDependencyRootProgram}
-const git = (root, args, input) => {
+const git = (root, args, input, options = {}) => {
   const temporary = mkdtempSync(join(tmpdir(), "builder-candidate-git-"));
   const output = join(temporary, "output");
   const fd = openSync(output, "w");
   try {
-    const result = spawnSync("git", ["--no-optional-locks", "-C", root, ...args], {input, stdio:["pipe",fd,"pipe"], encoding:"utf8", env:{...process.env,GIT_OPTIONAL_LOCKS:"0"}});
-    if(result.status !== 0) throw Error(result.stderr || "Candidate Git read/replay failed");
+    const result = spawnSync("git", ["--no-optional-locks", "-C", root, ...args], {input, stdio:[options.stdin ?? "pipe",options.stdout ?? fd,"pipe"], encoding:"utf8", env:{...process.env,GIT_OPTIONAL_LOCKS:"0",...options.environment}});
+    if(result.status !== 0 && !(options.allowConflict && result.status === 1)) throw Error(result.stderr || "Candidate Git read/replay failed");
     return readFileSync(output);
   } finally {closeSync(fd);rmSync(temporary,{force:true,recursive:true});}
 };
@@ -479,6 +479,115 @@ const hash = path => {
   const fd=openSync(path,"r");const digest=createHash("sha256");const buffer=Buffer.alloc(65536);let position=0;
   try {for(;;){const count=readSync(fd,buffer,0,buffer.length,position);if(!count)break;digest.update(buffer.subarray(0,count));position+=count;}return digest.digest("hex");}finally{closeSync(fd);}
 };
+// Base advancement is a three-way merge, never an overwrite of the new base's app files.
+if (previousBase && previousBase !== base) {
+  const temporary = mkdtempSync(join(tmpdir(), "builder-candidate-merge-"));
+  const indexEnvironment = { GIT_INDEX_FILE: join(temporary, "index") };
+  const scoped = ["--", "apps/" + app];
+  const indexPath = git(oldRoot,["rev-parse","--git-path","index"]).toString("utf8").trim();
+  const oldIndex = hash(indexPath);
+  const oldHead = git(oldRoot,["rev-parse","HEAD"]);
+  const oldUnmerged = git(oldRoot,["ls-files","--unmerged","-z",...scoped]);
+  const entries = revision => new Map(records(git(oldRoot,["ls-tree","-r","-z",revision,...scoped])).map(record => {
+    const match = /^(100644|100755) blob ([a-f0-9]+)\t([\s\S]+)$/.exec(record);
+    if (!match || !appPath(match[3])) throw Error("Cannot merge unsupported candidate app entry");
+    return [match[3], {mode:match[1],object:match[2]}];
+  }));
+  const workingPaths = () => [...new Set(records(git(oldRoot,["ls-files","--cached","--others","--exclude-standard","-z",...scoped])).filter(relative => !ownedDependencyRoot(oldRoot,workspace,relative)))].sort();
+  const originalPaths = workingPaths();
+  const snapshot = new Map(originalPaths.map(path => {
+    const observed = file(oldRoot,path);
+    return [path,observed===null?null:{mode:observed.mode,digest:hash(observed.path)}];
+  }));
+  const unchanged = () => {
+    if (JSON.stringify(workingPaths())!==JSON.stringify(originalPaths) || !git(oldRoot,["rev-parse","HEAD"]).equals(oldHead) || hash(indexPath)!==oldIndex || !git(oldRoot,["ls-files","--unmerged","-z",...scoped]).equals(oldUnmerged)) throw Error("Original candidate changed during three-way replay; old candidate retained");
+    for (const [path,observed] of snapshot) {
+      const current=file(oldRoot,path);
+      if(observed===null?current!==null:current===null||current.mode!==observed.mode||hash(current.path)!==observed.digest) throw Error("Original candidate app changed during three-way replay at " + path);
+    }
+  };
+  const removed = path => "0 " + "0".repeat(40) + "\t" + path;
+  const indexed = (path,entry,stage) => entry.mode + " " + entry.object + (stage===undefined?"":" "+stage) + "\t" + path;
+  const updateIndex = (root,lines,environment) => {
+    if(lines.length) git(root,["update-index","-z","--index-info"],lines.join("\0")+"\0",{environment});
+  };
+  try {
+    const ancestor = entries(previousBase);
+    const incoming = entries(base);
+    git(oldRoot,["read-tree",previousBase],undefined,{environment:indexEnvironment});
+    updateIndex(oldRoot,[...ancestor.keys()].map(removed),indexEnvironment);
+    const authored = new Map();
+    for(const [path,observed] of snapshot) {
+      if(observed===null) continue;
+      const fd=openSync(join(oldRoot,path),"r");
+      let object;
+      try { object=git(oldRoot,["hash-object","-w","--stdin","--no-filters"],undefined,{stdin:fd}).toString("utf8").trim(); }
+      finally {closeSync(fd);}
+      authored.set(path,{mode:observed.mode & 73 ? "100755":"100644",object});
+    }
+    updateIndex(oldRoot,[...authored].map(([path,entry])=>indexed(path,entry)),indexEnvironment);
+    const tree=git(oldRoot,["write-tree"],undefined,{environment:indexEnvironment}).toString("utf8").trim();
+    const privateCommit = (tree,message) => git(oldRoot,["-c","user.name=Autograph App Builder","-c","user.email=builder@autograph.so","-c","commit.gpgsign=false","commit-tree",tree,"-p",previousBase],message).toString("utf8").trim();
+    const commit=privateCommit(tree,"Private candidate app snapshot for base reconciliation\n");
+    // Sibling commits make previousBase the explicit ancestor with the existing merge-tree API,
+    // including when the current base's public history was rewritten. Neither updates a ref.
+    const incomingTree=git(oldRoot,["rev-parse",base+"^{tree}"]).toString("utf8").trim();
+    const incomingCommit=privateCommit(incomingTree,"Current base tree for private candidate reconciliation\n");
+    const output=records(git(oldRoot,["merge-tree","--write-tree","--no-messages","-z",commit,incomingCommit],undefined,{allowConflict:true}));
+    const mergedTree=output.shift();
+    if(!/^[a-f0-9]{40}$/.test(mergedTree ?? "")) throw Error("Git returned no candidate merge tree");
+    const merged=entries(mergedTree);
+    const conflicts=new Map();
+    for(const record of output) {
+      const match=/^(100644|100755) ([a-f0-9]+) ([123])\t([\s\S]+)$/.exec(record);
+      if(!match || !appPath(match[4])) throw Error("Git returned an unsupported candidate conflict");
+      const lines=conflicts.get(match[4]) ?? [];lines.push(record);conflicts.set(match[4],lines);
+    }
+    const priorConflicts=new Map();
+    for(const record of records(oldUnmerged)) {
+      const path=record.slice(record.indexOf("\t")+1);
+      const lines=priorConflicts.get(path) ?? [];lines.push(record);priorConflicts.set(path,lines);
+    }
+    for(const [path,lines] of priorConflicts) {
+      if(JSON.stringify(ancestor.get(path))===JSON.stringify(incoming.get(path))) {
+        conflicts.set(path,lines);
+        if(authored.has(path)) merged.set(path,authored.get(path));else merged.delete(path);
+      } else if(!conflicts.has(path)) {
+        // A formerly unresolved file cannot become resolved merely by checkpointing its bytes.
+        conflicts.set(path,[ancestor.get(path),authored.get(path),incoming.get(path)].flatMap((entry,index)=>entry?[indexed(path,entry,index+1)]:[]));
+      }
+    }
+    unchanged();
+    const currentPaths=[...new Set(records(git(newRoot,["ls-files","--cached","--others","--exclude-standard","-z",...scoped])).filter(relative => !ownedDependencyRoot(newRoot,workspace,relative)))];
+    for(const path of currentPaths.filter(path=>!merged.has(path)).sort((a,b)=>b.split("/").length-a.split("/").length)) {
+      const current=file(newRoot,path);
+      if(current!==null) {
+        rmSync(current.path);
+        const parts=path.split("/");parts.pop();
+        while(parts.length>2) {
+          try {rmdirSync(join(newRoot,...parts));} catch(error) {if(error.code==="ENOTEMPTY"||error.code==="EEXIST")break;if(error.code!=="ENOENT")throw error;}
+          parts.pop();
+        }
+      }
+    }
+    for(const [path,entry] of merged) {
+      file(newRoot,path);
+      const parts=path.split("/");parts.pop();let parent=newRoot;
+      for(const part of parts){parent=join(parent,part);if(!existsSync(parent))mkdirSync(parent);const stat=lstatSync(parent);if(stat.isSymbolicLink()||!stat.isDirectory())throw Error("Candidate replay parent is not an owned directory");}
+      const destination=join(newRoot,path);
+      if(existsSync(destination)&&lstatSync(destination).isDirectory())rmdirSync(destination);
+      const fd=openSync(destination,"w");
+      try {git(oldRoot,["cat-file","blob",entry.object],undefined,{stdout:fd});} finally {closeSync(fd);}
+      chmodSync(destination,entry.mode==="100755"?493:420);
+    }
+    updateIndex(newRoot,[...currentPaths.map(removed),...[...merged].map(([path,entry])=>indexed(path,entry))]);
+    updateIndex(newRoot,[...[...conflicts.keys()].map(removed),...[...conflicts.values()].flat()]);
+    unchanged();
+    console.log("preserved");
+  } finally {rmSync(temporary,{recursive:true,force:true});}
+  process.exit(0);
+}
+
 const scoped=["--","apps/"+app];
 const paths=[...new Set([
   ...records(git(oldRoot,["diff","--no-renames","--name-only","-z",head,...scoped])),
@@ -536,7 +645,7 @@ const replayCandidateApp = async (
     await checked(
       input.sandbox,
       "preserve app repairs in a fresh private candidate",
-      `node -e ${quote(replayCandidateProgram)} ${[oldRoot, newRoot, input.headSha, input.baseSha, input.appId, input.workspaceRoot ?? DEFAULT_WORKSPACE].map(quote).join(" ")}`,
+      `node -e ${quote(replayCandidateProgram)} ${[oldRoot, newRoot, input.headSha, input.baseSha, input.appId, input.workspaceRoot ?? DEFAULT_WORKSPACE, input.previousCandidate?.baseSha ?? input.baseSha].map(quote).join(" ")}`,
     );
   } catch (error) {
     throw new Error(
@@ -588,23 +697,31 @@ const selectCandidateRoot = async (
     [
       previous.appId === input.appId,
       previous.headSha === input.headSha,
-      previous.baseSha === input.baseSha,
       previous.workspaceRoot === workspaceRoot,
       previous.root.startsWith(`${workspaceRoot}/.app-builder/draft-reconcile/`),
       /^[-a-f0-9]+$/u.test(
         previous.root.slice(`${workspaceRoot}/.app-builder/draft-reconcile/`.length),
       ),
     ].every(Boolean);
-  let root = replayEligible ? previous.root : canonicalRoot;
+  const advancedBase = replayEligible && previous.baseSha !== input.baseSha;
+  let root = replayEligible && !advancedBase ? previous.root : canonicalRoot;
   let created = await candidateNeedsCreation(input.sandbox, root);
   let preservedCandidateRoot: string | undefined;
   let replayedAppChanges = false;
   const changedLineage = previous !== undefined && !replayEligible;
-  if (changedLineage || (!created && (await outsideCandidateChanges(input, root)))) {
+  if (
+    advancedBase ||
+    changedLineage ||
+    (!created && (await outsideCandidateChanges(input, root)))
+  ) {
     preservedCandidateRoot = previous?.root ?? root;
     root = `${canonicalRoot}-${randomUUID()}`;
     created = true;
     replayedAppChanges = replayEligible && preservedCandidateRoot === previous.root;
+    if (advancedBase && (await candidateNeedsCreation(input.sandbox, previous.root))) {
+      preservedCandidateRoot = undefined;
+      replayedAppChanges = false;
+    }
   }
   return { root, created, preservedCandidateRoot, replayedAppChanges };
 };

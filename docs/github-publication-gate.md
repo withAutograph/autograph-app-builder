@@ -112,6 +112,14 @@ tree, both diffs, the draft PR, and the tenant-scoped repository. GitHub receive
 a merge commit through an expected-head update without force pushing. A moved
 base or head requires a fresh merge, validation, review, and approval.
 
+When only the base advances, preparation carries the same draft's private app
+repairs into a fresh candidate through a three-way Git merge against the previous
+base. Tracked edits, ordinary untracked app files, and retained release archives
+merge with current upstream app changes; overlaps remain normal conflicts.
+Shared repository files come from the fresh base merge. The old candidate, its
+index and conflict state, and ignored private files remain untouched. No saved
+validation, review, or publication approval transfers to the new candidate.
+
 Later revisions retain the latest provider-proved approved reconciliation as
 their publication baseline, independently of a new unpublished candidate.
 Reuse requires the same owned repository, draft, branch and original publication

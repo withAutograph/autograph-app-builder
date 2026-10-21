@@ -71,7 +71,6 @@ const previousCandidateRequest = (
       previous.githubSourceDigest === current.githubSourceDigest,
       previous.originalReviewDigest === current.originalReviewDigest,
       previous.headSha === current.headSha,
-      previous.baseSha === current.baseSha,
     ].every(Boolean),
   };
 };
@@ -83,7 +82,7 @@ const candidateRecoveryGuidance = (
   const { preservedCandidateRoot, replayedAppChanges } = prepared;
   if (preservedCandidateRoot !== undefined) {
     return replayedAppChanges === true
-      ? `Builder preserved the old candidate at ${preservedCandidateRoot} and copied its app repairs and conflict state into this fresh candidate. Outside-app metadata was not copied. Continue normal conflict resolution and candidate validation; no GitHub update occurred.`
+      ? `Builder preserved the old candidate at ${preservedCandidateRoot} and reconciled its app repairs and conflict state into this fresh candidate, merging an advanced base with those repairs when needed. Outside-app metadata was not copied. Continue normal conflict resolution and candidate validation; no GitHub update occurred.`
       : `Builder left the old candidate at ${preservedCandidateRoot} untouched and prepared the currently verified draft/base lineage. Old resolutions were not copied across changed source/review lineage. Continue normal conflict resolution and validation; nothing was published.`;
   }
   if (prepared.created && previous !== null) {
@@ -150,7 +149,7 @@ const retainedPublishedReconciliation = (
 
 export default defineTool({
   description:
-    "Fetch the live base and existing draft head into an isolated Builder checkout and prepare a non-force merge candidate. This does not update GitHub. It reports exact app-owned conflict paths and refuses platform-owned conflicts. If candidate validation reports outside-app metadata changes, run this tool again: Builder preserves the old checkout, creates a fresh private candidate, and carries app repairs only across the same verified draft/base/review lineage. This technical recovery needs no human lockfile edit or new private-worktree approval.",
+    "Fetch the live base and existing draft head into an isolated Builder checkout and prepare a non-force merge candidate. This does not update GitHub. It reports exact app-owned conflict paths and refuses platform-owned conflicts. If candidate validation reports outside-app metadata changes, run this tool again: Builder preserves the old checkout, creates a fresh private candidate, and carries app repairs across the same verified draft/head/review lineage, merging current base app changes when the base advances. This technical recovery needs no human lockfile edit or new private-worktree approval.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (
