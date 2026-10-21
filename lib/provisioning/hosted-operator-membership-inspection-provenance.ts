@@ -4,6 +4,7 @@ import {
   HostedOperatorError,
   hostedOperatorPlanSchema,
   operatorPlanDigest,
+  retainedOperatorAuthSchema,
 } from "./hosted-operator-contract";
 import type {
   HostedOperatorPlan,
@@ -180,6 +181,23 @@ const retainedOperations = (operator: OperatorHistory): RetainedOperation[] => [
   ...(operator.retainedRenewalOperations ?? []),
 ];
 
+const retainedParticipantMembershipOperations = (
+  record: HostedRuntimeJournalRecord,
+  organizationId?: string,
+): RetainedOperation[] => {
+  if (organizationId === undefined) {
+    return [];
+  }
+  const completion = retainedOperatorAuthSchema.safeParse(
+    record.retainedParticipantGateway?.completion,
+  );
+  if (!completion.success) {
+    return [];
+  }
+  const { approvedByCallId, ...operator } = completion.data;
+  return [{ approvedByCallId, operator: { ...operator, mode: "protected-operator-v1" } }];
+};
+
 const inspectionEffect = (plan: HostedOperatorPlan, organizationId?: string) => {
   if (organizationId === undefined) {
     return membershipEffect(plan);
@@ -264,10 +282,11 @@ export const retainedMembershipInspectionProvenance = (
   if (current.planDigest !== digest || canonicalDigest(current.plan) !== digest) {
     return [];
   }
-  // Archives are structurally finite: ready-delivery snapshots contain these
-  // four histories, whose entries contain only the base operator record.
+  // Enumerate the typed histories and completed participant Gateway authority.
+  // Proof bootstrap copies and unrelated nested objects are not operation history.
   const retained = [
     ...retainedOperations(current),
+    ...retainedParticipantMembershipOperations(record, organizationId),
     ...(current.retainedReadyDeliveryOperations ?? []).flatMap((archive) => [
       archive,
       ...retainedOperations(archive.operator),

@@ -7,6 +7,7 @@ import type {
   HostedOperatorRecordBase,
 } from "./hosted-operator-contract";
 import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
+import { retainedParticipantGatewaySchema } from "./hosted-runtime-journal";
 import {
   normalActorProgramDigest,
   normalActorProgramSchema,
@@ -239,6 +240,96 @@ const participantPlan = (plan: HostedOperatorPlan) => {
 };
 
 describe("retained membership inspection provenance", () => {
+  it("finds each organization's original authority across operation history and participant Gateway completion", () => {
+    const { record, operator, original } = fixture();
+    const plan = participantPlan(currentPlan);
+    operator.plan = plan;
+    operator.planDigest = operatorPlanDigest(plan);
+    operator.operationRef = "22222222-2222-4222-8222-222222222222";
+    delete operator.retainedProjectSettingsOperations;
+    operator.retainedGatewayDeliveries = [original];
+    const membership = originalPlan.authMembership;
+    if (membership?.kind !== "create-owned-organization") {
+      throw new Error("Expected original owner organization");
+    }
+    const completedPlan = hostedOperatorPlanSchema.parse({
+      ...originalPlan,
+      authMembership: {
+        ...membership,
+        organizationId: "org_second",
+        name: "Second",
+        slug: "second",
+      },
+      access: originalPlan.access.map((grant) => ({ ...grant, organizationId: "org_second" })),
+      authSchema: {
+        artifactRef: "completed-auth-artifact",
+        installer: { reference: "auth-worker", sha256: "7".repeat(64) },
+        planDigest: "8".repeat(64),
+        targetDigest: "9".repeat(64),
+      },
+    });
+    const operationRef = "44444444-4444-4444-8444-444444444444";
+    const fenceGeneration = 9;
+    record.retainedParticipantGateway = retainedParticipantGatewaySchema.parse({
+      completion: {
+        approvedByCallId: "completed-participant-call",
+        approvalId: "completed-participant-approval",
+        operationRef,
+        plan: completedPlan,
+        planDigest: operatorPlanDigest(completedPlan),
+        fenceGeneration,
+        authPreparation: {
+          assetSha256: "7".repeat(64),
+          catalogFingerprint: "8".repeat(64),
+          database: completedPlan.authDatabase.database,
+          runtimeRole: completedPlan.authDatabase.runtimeRole,
+          targetDigest: completedPlan.authSchema?.targetDigest,
+          observedAt: "2028-01-01T00:01:00.000Z",
+        },
+        receipts: completedPlan.effects.map((effect) => ({
+          effectId: effect.id,
+          fenceGeneration,
+          observedAt: "2028-01-01T00:01:00.000Z",
+          resourceVersion: "completed-effect-readback",
+        })),
+      },
+      candidate: {
+        branch: completedPlan.selection.branch,
+        deploymentId: "completed-gateway",
+        operationRef,
+        origin: "https://gateway.example.test",
+        projectId: "prj_gateway",
+        readyState: "READY",
+        repoId: "gateway-repository",
+      },
+    });
+    const before = structuredClone(record);
+    expect(
+      retainedMembershipInspectionProvenance(record, plan, membership.organizationId).map(
+        (candidate) => candidate.operator.planDigest,
+      ),
+    ).toContain(original.operator.planDigest);
+    const completed = retainedMembershipInspectionProvenance(record, plan, "org_second");
+    expect(completed.map((candidate) => candidate.operator.planDigest)).toContain(
+      operatorPlanDigest(completedPlan),
+    );
+    expect(
+      matchRetainedMembershipInspectionProvenance(record, plan, {
+        approvedByCallId: "completed-participant-call",
+        planDigest: operatorPlanDigest(completedPlan),
+      }),
+    ).toMatchObject({
+      approvedByCallId: "completed-participant-call",
+      operator: {
+        mode: "protected-operator-v1",
+        operationRef,
+        approvalId: "completed-participant-approval",
+        plan: completedPlan,
+      },
+    });
+    expect(record).toEqual(before);
+  });
+
   it("recovers a selected organization created before its receipt, under a different operation", () => {
     const { record, operator, original } = fixture();
     const plan = participantPlan(currentPlan);
