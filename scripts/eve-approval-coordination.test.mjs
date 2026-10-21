@@ -451,7 +451,6 @@ it.each([
     assert.equal(executions, optionId === "approve" ? 1 : 0);
     assert.equal(requests, 2);
     if (withInput) {
-      assert.ok(completed.next);
       completed = await contextStorage.run(ctx, () => completed.next(completed.session));
       assert.equal(requests, 3);
       assert.equal(executions, 1);
