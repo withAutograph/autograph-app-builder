@@ -11,7 +11,11 @@ import {
 } from "./native-recovery-contract";
 import type { NativeRecoveryBinding, NativeRecoveryDescriptor } from "./native-recovery-contract";
 import { createPostgresHostedEveStore } from "./postgres-hosted-store";
-import { assertNativeRecoverySourceBinding, toDurableHostedSessionRecord } from "./hosted-store";
+import {
+  assertNativeRecoverySourceBinding,
+  assertRecoveredBuildContinuationChild,
+  toDurableHostedSessionRecord,
+} from "./hosted-store";
 import type { HostedEveStore, HostedOperationRecord } from "./hosted-store";
 import type { HostedPrincipal } from "./hosted-auth";
 
@@ -58,6 +62,7 @@ export function createNativeRecoveryBinding(input: {
   ): Promise<{
     principal: HostedPrincipal;
     operation: HostedOperationRecord;
+    source: NonNullable<Awaited<ReturnType<HostedEveStore["getSession"]>>>;
   }> => {
     const descriptor = nativeRecoveryDescriptorSchema.parse(call.descriptor);
     const principal = principalFor(call);
@@ -83,12 +88,36 @@ export function createNativeRecoveryBinding(input: {
     await (input.assertOwner ?? assertHostedBuildDecisionOwner)(
       toDurableHostedSessionRecord(source),
     );
-    return { operation, principal };
+    return { operation, principal, source };
   };
 
   return {
     async authorize(call: RecoveryCall): Promise<void> {
       await authorize(call);
+    },
+    async authorizeActivation(call: RecoveryCall): Promise<void> {
+      const { operation, principal, source } = await authorize(call);
+      if (operation.state !== "succeeded" || operation.kind !== "start") {
+        throw new Error("Recovery public child is not committed.");
+      }
+      const child = await input.store.getSession(principal, operation.sessionId);
+      if (child === null || !samePrincipal(child.principal, principal)) {
+        throw new Error("Recovery public child is unavailable.");
+      }
+      assertRecoveredBuildContinuationChild(
+        call.descriptor.originalAuthoritySessionId,
+        call.descriptor.logicalSessionId,
+        source,
+        child,
+        operation,
+      );
+      const durableChild = toDurableHostedSessionRecord(child);
+      if (
+        child.status === "cancelled" ||
+        (durableChild.cancellationRevision ?? 0) !== (durableChild.resumedCancellationRevision ?? 0)
+      ) {
+        throw new Error("Recovery public child was cancelled.");
+      }
     },
     async readReceipt(call: RecoveryCall): Promise<NativeRecoveryBinding | null> {
       const { operation } = await authorize(call);
@@ -129,6 +158,7 @@ export function createHostedNativeRecoveryBinding(
   };
   return {
     authorize: (call: RecoveryCall) => get().authorize(call),
+    authorizeActivation: (call: RecoveryCall) => get().authorizeActivation(call),
     readReceipt: (call: RecoveryCall) => get().readReceipt(call),
     commitReceipt: (call: RecoveryCall & { recoveryBinding: NativeRecoveryBinding }) =>
       get().commitReceipt(call),

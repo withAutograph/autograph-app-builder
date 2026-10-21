@@ -236,6 +236,12 @@ const recoveryFixture = () => {
         throw new Error("cancelled");
       }
     },
+    async authorizeActivation() {
+      calls.push("authorize-activation");
+      if (!allowed) {
+        throw new Error("cancelled");
+      }
+    },
     async readReceipt() {
       calls.push("receipt-read");
       return receipt;
@@ -320,9 +326,12 @@ it("canonical receipt precedes activation and exact retry after closed inbox nev
   const f = recoveryFixture();
   const first = await native.recoverTerminalSession({ auth, descriptor, ports: f.ports }, f.deps);
   assert.equal(first.kind, "accepted");
+  assert.equal(f.calls.includes("activate"), false);
+  await native.activateTerminalSession({ auth, descriptor, ports: f.ports }, f.deps);
   assert.ok(f.calls.indexOf("receipt-commit") < f.calls.indexOf("activate"));
   const second = await native.recoverTerminalSession({ auth, descriptor, ports: f.ports }, f.deps);
   assert.deepEqual(second, first);
+  await native.activateTerminalSession({ auth, descriptor, ports: f.ports }, f.deps);
   for (const name of ["start", "collect", "activate"]) {
     assert.equal(f.calls.filter((call) => call === name).length, 1);
   }
@@ -512,5 +521,88 @@ it("acceptance observation backs off and a timed-out exact retry adopts the late
   const result = await native.recoverTerminalSession({ auth, descriptor, ports: f.ports }, f.deps);
   assert.equal(result.kind, "accepted");
   assert.equal(f.calls.filter((call) => call === "start").length, 1);
+  assert.equal(f.calls.filter((call) => call === "activate").length, 0);
+  await native.activateTerminalSession({ auth, descriptor, ports: f.ports }, f.deps);
   assert.equal(f.calls.filter((call) => call === "activate").length, 1);
+});
+
+it("activation rejects before canonical child authority and cancellation, without recollecting or starting", async () => {
+  const f = recoveryFixture();
+  await native.recoverTerminalSession({ auth, descriptor, ports: f.ports }, f.deps);
+  f.ports.authorizeActivation = async () => {
+    throw new Error("public child not committed");
+  };
+  await assert.rejects(
+    native.activateTerminalSession({ auth, descriptor, ports: f.ports }, f.deps),
+    /public child not committed/u,
+  );
+  assert.equal(f.calls.includes("activate"), false);
+  f.ports.authorizeActivation = async () => {
+    await f.ports.authorize();
+  };
+  f.revoke();
+  await assert.rejects(
+    native.activateTerminalSession({ auth, descriptor, ports: f.ports }, f.deps),
+    /cancelled/u,
+  );
+  assert.equal(f.calls.filter((call) => call === "collect").length, 1);
+  assert.equal(f.calls.filter((call) => call === "start").length, 1);
+  assert.equal(f.calls.includes("activate"), false);
+});
+it("lost activation ACK reuses only the committed owner and never collects or starts", async () => {
+  const f = recoveryFixture();
+  await native.recoverTerminalSession({ auth, descriptor, ports: f.ports }, f.deps);
+  const resume = f.deps.resumeHook.bind(f.deps);
+  f.deps.resumeHook = async (...args) => {
+    await resume(...args);
+    throw new Error("lost ACK");
+  };
+  await assert.rejects(
+    native.activateTerminalSession({ auth, descriptor, ports: f.ports }, f.deps),
+    /lost ACK/u,
+  );
+  await native.activateTerminalSession({ auth, descriptor, ports: f.ports }, f.deps);
+  assert.equal(f.calls.filter((call) => call === "activate").length, 1);
+  assert.equal(f.calls.filter((call) => call === "collect").length, 1);
+  assert.equal(f.calls.filter((call) => call === "start").length, 1);
+});
+
+it("two-phase preparation parks the actual native boot until canonical child activation", async () => {
+  const f = recoveryFixture();
+  const boot = bootFixture();
+  /** @type {Promise<{session: {sessionId: string, initialTurnInput: unknown}}> | undefined} */
+  let pending;
+  let committedChild = false;
+  const start = f.deps.start.bind(f.deps);
+  f.deps.start = async (input) => {
+    await start(input);
+    pending = bootTerminalRecoveryOwnerWithPorts(
+      { ...input, kind: "terminal-recovery", ownerDeploymentId: "deployment-current" },
+      boot.ports,
+    );
+    await delay(0);
+  };
+  f.ports.authorizeActivation = async () => {
+    assert.equal(committedChild, true, "the canonical public child must precede activation");
+    await f.ports.authorize();
+  };
+  const resume = f.deps.resumeHook.bind(f.deps);
+  f.deps.resumeHook = async (...args) => {
+    assert.equal(committedChild, true);
+    await resume(...args);
+    boot.activate();
+  };
+  await native.recoverTerminalSession({ auth, descriptor, ports: f.ports }, f.deps);
+  assert.equal(
+    boot.calls.some(([name]) => name === "writable"),
+    false,
+  );
+  assert.equal(f.calls.includes("activate"), false);
+  committedChild = true;
+  await native.activateTerminalSession({ auth, descriptor, ports: f.ports }, f.deps);
+  assert.ok(pending !== undefined);
+  const result = await pending;
+  assert.equal(result.session.sessionId, descriptor.logicalSessionId);
+  assert.deepEqual(result.session.initialTurnInput, inputFor().replayInput);
+  assert.equal(boot.calls.filter(([name]) => name === "writable").length, 1);
 });

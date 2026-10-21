@@ -63,6 +63,8 @@ import { reportHostedSubmissionDiagnostic } from "./hosted-submission-diagnostic
 import type { HostedSubmissionDiagnosticSink } from "./hosted-submission-diagnostic";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
+// Native recovery collects retained facts before its existing 30s owner-ready wait.
+const TERMINAL_RECOVERY_TIMEOUT_MS = 120_000;
 const SESSION_READ_TIMEOUT_MS = 30_000;
 const SESSION_SETTLEMENT_POLL_INTERVAL_MS = 200;
 const SESSION_SETTLEMENT_MAX_POLL_INTERVAL_MS = 2000;
@@ -240,7 +242,11 @@ async function postMutation(input: {
       },
       method: "POST",
       redirect: "manual",
-      signal: AbortSignal.timeout(input.config.timeoutMs),
+      signal: AbortSignal.timeout(
+        input.path === "/eve/v1/session" && input.body.recovery !== undefined
+          ? TERMINAL_RECOVERY_TIMEOUT_MS
+          : input.config.timeoutMs,
+      ),
     });
   } catch (error) {
     if (input.startDiagnostic !== undefined) {
@@ -1767,6 +1773,43 @@ export function createSameOriginEveTransport(input: {
         throw new SubmissionOutcomeUnknownError();
       }
       await request.onAccepted?.(accepted.deliveryId);
+    },
+    async observeRecovery(request) {
+      const accepted = await postMutation({
+        ...common,
+        body: {
+          operationId: request.operationId,
+          recovery: request.recovery,
+          recoveryPhase: "observe",
+        },
+        path: "/eve/v1/session",
+        principal: request.principal,
+        sourceHandoffId: request.sourceHandoffId,
+      });
+      if (
+        accepted.sessionId !== request.expectedOwnerRunId ||
+        accepted.recoveryBinding !== undefined
+      ) {
+        throw new SubmissionOutcomeUnknownError();
+      }
+    },
+    async activateRecovery(request) {
+      const accepted = await postMutation({
+        ...common,
+        body: {
+          operationId: request.operationId,
+          recovery: request.recovery,
+          recoveryPhase: "activate",
+        },
+        path: "/eve/v1/session",
+        principal: request.principal,
+        sourceHandoffId: request.sourceHandoffId,
+      });
+      const binding = nativeRecoveryBindingSchema.parse(accepted.recoveryBinding);
+      if (binding.ownerRunId !== accepted.sessionId) {
+        throw new SubmissionOutcomeUnknownError();
+      }
+      return binding;
     },
     async start(request) {
       const accepted = await postMutation({

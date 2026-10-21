@@ -34,6 +34,7 @@ import {
   assertNativeRecoveryReceipt,
 } from "./native-recovery-contract";
 import type { NativeRecoveryDescriptor, NativeRecoveryBinding } from "./native-recovery-contract";
+import { observeNativeRecoveryOperation } from "./native-recovery-observation";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdtemp, open, rm } from "node:fs/promises";
@@ -195,6 +196,21 @@ export interface HostedEveTransport {
     snapshot: HostedEngineSnapshot;
     recoveryBinding?: NativeRecoveryBinding;
   }>;
+  /** Releases a parked recovery only after its canonical public child is committed. */
+  activateRecovery?: (input: {
+    principal: HostedPrincipal;
+    operationId: string;
+    recovery: NativeRecoveryDescriptor;
+    sourceHandoffId?: string;
+  }) => Promise<NativeRecoveryBinding>;
+  /** Reads the existing terminal owner only; never creates, activates or settles recovery. */
+  observeRecovery?: (input: {
+    principal: HostedPrincipal;
+    operationId: string;
+    recovery: NativeRecoveryDescriptor;
+    expectedOwnerRunId: string;
+    sourceHandoffId?: string;
+  }) => Promise<void>;
   get: (input: {
     principal: HostedPrincipal;
     adapterSessionId: string;
@@ -1047,6 +1063,41 @@ export function createHostedEveSessionService(input: {
     }
   }
 
+  // eslint-disable-next-line eslint/func-style -- Called by settlement, exact retry and GET after canonical readback.
+  async function activateCommittedRecovery(operation: HostedOperationRecord): Promise<void> {
+    if (operation.nativeRecovery === undefined) {
+      return;
+    }
+    const child = await requireBoundSucceededStartSession(operation);
+    if (
+      child.version !== 2 ||
+      child.nativeRecoveryBinding === undefined ||
+      input.transport.activateRecovery === undefined
+    ) {
+      throw new HostedSubmissionUnknownError();
+    }
+    if (
+      child.status === "cancelled" ||
+      (child.cancellationRevision ?? 0) !== (child.resumedCancellationRevision ?? 0)
+    ) {
+      return;
+    }
+    try {
+      const binding = await input.transport.activateRecovery({
+        operationId: operation.operationId,
+        principal,
+        recovery: operation.nativeRecovery,
+        sourceHandoffId: child.sourceHandoffId,
+      });
+      if (canonical(binding) !== canonical(child.nativeRecoveryBinding)) {
+        throw new HostedSubmissionUnknownError();
+      }
+    } catch {
+      // The canonical child stays succeeded even if activation or its ACK is lost.
+      throw new HostedSubmissionUnknownError();
+    }
+  }
+
   const assertSessionLimitOwner = async (session: HostedSessionRecord) => {
     await (input.assertSessionLimitOwner ?? assertHostedBuildDecisionOwner)(
       toDurableHostedSessionRecord(session),
@@ -1798,6 +1849,7 @@ export function createHostedEveSessionService(input: {
               const result = eveSessionResultSchema.parse(operation.result);
               if (operation.kind === "start") {
                 await requireBoundSucceededStartSession(operation);
+                await activateCommittedRecovery(operation);
               }
               return result;
             }
@@ -1974,6 +2026,7 @@ export function createHostedEveSessionService(input: {
       return projected.result;
     }
 
+    let activationStarted = false;
     let settlementPhase: HostedSubmissionPhase = "settlement_verification";
     try {
       const dispatchedResult = eveSessionResultSchema.parse(dispatched.result);
@@ -2086,6 +2139,8 @@ export function createHostedEveSessionService(input: {
           throw new HostedSubmissionUnknownError();
         }
       }
+      activationStarted = true;
+      await activateCommittedRecovery(verified);
       return options.sessionId === undefined
         ? verifiedResult
         : await continueApprovedWork(options.sessionId, verifiedResult);
@@ -2096,7 +2151,7 @@ export function createHostedEveSessionService(input: {
         dispatched.newSession?.adapterSessionId ??
           dispatched.newSessionPaged?.session.adapterSessionId,
       );
-      if (recoveringStart) {
+      if (recoveringStart && !activationStarted) {
         try {
           const replayed = reserveOperationResultSchema.parse(
             await input.store.reserveOperation(principal, candidate),
@@ -2112,6 +2167,7 @@ export function createHostedEveSessionService(input: {
             });
             if (winner.state === "succeeded") {
               await requireBoundSucceededStartSession(winner);
+              await activateCommittedRecovery(winner);
               return eveSessionResultSchema.parse(winner.result);
             }
           }
@@ -2387,6 +2443,21 @@ export function createHostedEveSessionService(input: {
   ) {
     const { sessionId, cursor, limit } = inputValue;
     const session = toDurableHostedSessionRecord(await requireSession(sessionId));
+    if (session.nativeRecoveryBinding !== undefined) {
+      const operation = await input.store.getPrivateOperation?.(
+        principal,
+        session.nativeRecoveryBinding.operationId,
+      );
+      if (
+        operation === undefined ||
+        operation === null ||
+        operation.state !== "succeeded" ||
+        operation.sessionId !== sessionId
+      ) {
+        throw new HostedSubmissionUnknownError();
+      }
+      await activateCommittedRecovery(operation);
+    }
     // The recovered child owns its public stream; protected plans retain the original authority.
     const privateApprovalSessionId =
       session.nativeRecoveryBinding?.originalAuthoritySessionId ?? sessionId;
@@ -3469,6 +3540,17 @@ export function createHostedEveSessionService(input: {
         throw new HostedRejectedOperationError(operation.safeErrorCode);
       }
       if (operation.state !== "succeeded") {
+        try {
+          await observeNativeRecoveryOperation({
+            operation,
+            principal,
+            store: input.store,
+            transport: input.transport,
+            assertOwner: input.assertNativeRecoveryOwner ?? assertHostedBuildDecisionOwner,
+          });
+        } catch {
+          // A failed read-only diagnostic never changes the saved public outcome.
+        }
         reportHostedSubmissionDiagnostic({
           clientRequestId,
           operationId: operation.operationId,
@@ -3728,6 +3810,7 @@ export function createHostedEveSessionService(input: {
           await (operation.kind === "start"
             ? requireBoundSucceededStartSession(operation)
             : requireSession(operation.sessionId));
+          await activateCommittedRecovery(operation);
           return operation.result;
         }
       }

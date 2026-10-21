@@ -690,6 +690,7 @@ function pendingApprovalEvents(requestId: string) {
 
 describe("same-origin canonical Eve transport", () => {
   it("bounds both durable session reads and mutation requests", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning fetch test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
       String(url).includes("/stream?") ? stream() : accepted(),
@@ -711,6 +712,8 @@ describe("same-origin canonical Eve transport", () => {
     });
     expect(fetchImplementation.mock.calls[1]?.[1]?.signal).toBeInstanceOf(AbortSignal);
     expect(fetchImplementation.mock.calls[1]?.[1]?.signal?.aborted).toBe(false);
+    expect(timeout).toHaveBeenCalledWith(10_000);
+    timeout.mockRestore();
   });
 
   it("forwards the prepared reference on start and every mutating continuation without putting it in messages", async () => {
@@ -764,6 +767,7 @@ describe("same-origin canonical Eve transport", () => {
   });
 
   it("accepts a typed native recovery receipt and routes later mutation to the retained logical inbox", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
     const recovery = {
       version: 1 as const,
       operationId: "op_recovery",
@@ -811,6 +815,13 @@ describe("same-origin canonical Eve transport", () => {
       recoveryBinding,
     });
     await expect(
+      transport.activateRecovery?.({ operationId: recovery.operationId, principal, recovery }),
+    ).resolves.toEqual(recoveryBinding);
+    expect(JSON.parse(String(fetchImplementation.mock.calls[1]?.[1]?.body))).toMatchObject({
+      recoveryPhase: "activate",
+      recovery,
+    });
+    await expect(
       transport.sendAccepted?.({
         adapterSessionId: "run_child",
         logicalSessionId: "run_parent",
@@ -821,8 +832,17 @@ describe("same-origin canonical Eve transport", () => {
     ).resolves.toBeUndefined();
     expect(fetchImplementation.mock.calls.map(([url]) => String(url))).toEqual([
       "https://builder.example.test/eve/v1/session",
+      "https://builder.example.test/eve/v1/session",
       "https://builder.example.test/eve/v1/session/run_parent",
     ]);
+    expect(timeout.mock.calls.map(([ms]) => ms)).toEqual([120_000, 120_000, 10_000]);
+    fetchImplementation.mockRejectedValueOnce(new DOMException("Timed out", "TimeoutError"));
+    await expect(
+      transport.start({ operationId: recovery.operationId, principal, prompt: "", recovery }),
+    ).rejects.toBeInstanceOf(SubmissionOutcomeUnknownError);
+    expect(timeout).toHaveBeenLastCalledWith(120_000);
+    expect(fetchImplementation).toHaveBeenCalledTimes(4);
+    timeout.mockRestore();
   });
   it("carries verified prototype HTML without projecting raw action events", async () => {
     const content = "<!doctype html><html><body><button>Approve vendor</button></body></html>";
