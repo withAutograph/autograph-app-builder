@@ -211,12 +211,15 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
 8. When the user requests restoration of the currently published app and defers
    unpublished changes, recover the existing hosted Preview before continuing
    private candidate validation or review. Preserve the candidate and its
-   diagnostics for later iteration. Use `plan-app-hosted-runtime` and the
-   existing preparation/recovery path with its normal effect approvals. For
-   source-publication recovery, inspect
-   `inspect_github_draft_pr_reconciliation` with `kind: "publication-recovery"`
-   and follow its returned recovery call. Retained metadata grants no authority;
-   provider verification and equivalent selected-release checks still apply.
+   diagnostics for later iteration. Use `plan-app-hosted-runtime` with
+   `releaseIntent: "prepared-preview"` and normal effect approvals to select the
+   exact frozen prepared release and its matching recorded publication. A newer
+   private capture is not a validation or publication prerequisite for this work.
+   For source-recording recovery when delivering changed source, omit that intent
+   and inspect `inspect_github_draft_pr_reconciliation` with
+   `kind: "publication-recovery"` and follow its returned recovery call. Retained
+   metadata grants no authority; provider verification and equivalent
+   selected-release checks still apply.
    Reuse approval only for the exact unchanged operation; changed plans require
    ordinary approval. Open the protected native route with `start_app_preview`
    before preparing private local data. Keep unavailable native delivery and
