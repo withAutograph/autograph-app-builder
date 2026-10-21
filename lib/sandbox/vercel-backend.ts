@@ -1,4 +1,4 @@
-import { Sandbox } from "@vercel/sandbox";
+import { APIError, DEFAULT_SANDBOX_REGION, Drive, Sandbox } from "@vercel/sandbox";
 import type {
   SandboxProviderHandle,
   SandboxProviderTargetFile,
@@ -14,6 +14,7 @@ import { createAuthorizedSandboxSession } from "./sandbox-command-adapter";
 import { resolveVercelSessionGitSource } from "./vercel-session-source";
 import { registerVercelPreviewProvider } from "./vercel-preview-provider";
 import { createVercelSdkSession } from "./vercel-sdk-session";
+import { materializeVercelGitSource } from "./vercel-git-source";
 
 const PROVIDER_RETRY_DELAY_MS = 250;
 
@@ -96,7 +97,61 @@ type BuilderArtifact = {
 interface BuilderSessionState {
   readonly name: string;
   readonly version: 1;
+  readonly workspaceDrive?: WorkspaceDriveBinding;
 }
+interface WorkspaceDriveBinding {
+  readonly id: string;
+  readonly name: string;
+  readonly projectId: string;
+  readonly region: string;
+  readonly sandboxName: string;
+}
+
+const matchesWorkspaceMount = (
+  native: Sandbox,
+  drive: Pick<WorkspaceDriveBinding, "id" | "name">,
+): boolean => {
+  const mount = native.mounts?.["/workspace"];
+  return mount?.mode === "read-write" && (mount.drive === drive.name || mount.drive === drive.id);
+};
+
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- SDK create can reject with any throw value; reconcile only recognized ambiguous outcomes.
+const ambiguousCreateFailure = (error: unknown): boolean => {
+  try {
+    if (!(error instanceof Error) || error.name === "AbortError") {
+      return false;
+    }
+    if (!(error instanceof APIError)) {
+      return retryableProviderFailure(error);
+    }
+    const status = error.response.status;
+    if (status === 409 || status >= 500) {
+      return true;
+    }
+    return status >= 200 && status < 300;
+  } catch {
+    return false;
+  }
+};
+
+const shouldInitializeSeed = async (
+  native: Sandbox,
+  destination: string,
+  preserveExisting: boolean,
+): Promise<boolean> => {
+  if (!preserveExisting) {
+    return true;
+  }
+  try {
+    await native.fs.lstat(destination);
+    return false;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return true;
+    }
+    throw error;
+  }
+};
 
 export const createBuilderVercelProvider = (
   options?: BuilderVercelEnvironmentOptions,
@@ -107,16 +162,102 @@ export const createBuilderVercelProvider = (
   BuilderSandboxSession
 > => {
   const transport = { fetch: createProviderFetch() };
+  const createOrRecoverSandbox = async (input: {
+    create: () => Promise<Sandbox>;
+    name: string;
+    drive: Drive;
+  }) => {
+    try {
+      return { native: await input.create(), recovered: false };
+    } catch (error) {
+      if (!ambiguousCreateFailure(error)) {
+        throw error;
+      }
+      try {
+        const native = await Sandbox.get({
+          ...transport,
+          name: input.name,
+          projectId: input.drive.projectId,
+          resume: false,
+        });
+        const sameTarget = native.name === input.name && native.region === input.drive.region;
+        const owned = native.persistent && sameTarget;
+        if (
+          !owned ||
+          !matchesWorkspaceMount(native, { id: input.drive.driveId, name: input.drive.name })
+        ) {
+          throw error;
+        }
+        return { native, recovered: true };
+      } catch {
+        // A failed or foreign lookup never authorizes cleanup or hides create's failure.
+        throw error;
+      }
+    }
+  };
+  const deleteWorkspaceDrive = async (binding: WorkspaceDriveBinding, signal?: AbortSignal) => {
+    // The SDK has no get-only Drive method. Listing never creates a missing drive.
+    const drives = await Drive.list({
+      ...transport,
+      namePrefix: binding.name,
+      projectId: binding.projectId,
+      signal,
+    });
+    for await (const drive of drives) {
+      if (drive.driveId !== binding.id && drive.name !== binding.name) {
+        continue;
+      }
+      if (
+        drive.driveId === binding.id &&
+        drive.name === binding.name &&
+        drive.projectId === binding.projectId &&
+        drive.region === binding.region
+      ) {
+        if (drive.currentSandboxName !== undefined || drive.currentSessionId !== undefined) {
+          throw new Error(
+            "Builder workspace storage cleanup is incomplete because the drive is still attached. Retry this session deletion.",
+          );
+        }
+        // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Delete only this exact detached owned drive, then end enumeration.
+        await drive.delete({ signal });
+        return;
+      }
+      throw new Error(
+        "Builder workspace storage cleanup could not verify the saved drive identity. The drive was retained.",
+      );
+    }
+  };
   // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep native handle lifecycle next to its provider environment.
   const handle = (
     native: Sandbox,
     sessionId: string,
+    workspaceDrive?: WorkspaceDriveBinding,
   ): SandboxProviderHandle<BuilderSandboxSession> => {
     const registration = registerVercelPreviewProvider(native.name, native);
+    let deletedSandbox: Sandbox | undefined;
     const close = async (operation: "stop" | "delete", signal?: AbortSignal) => {
       try {
         const current = await registration.currentForCleanup(operation === "delete");
-        await current?.[operation]({ signal });
+        if (current === undefined) {
+          return;
+        }
+        const ownsDrive =
+          workspaceDrive !== undefined &&
+          current.name === workspaceDrive.sandboxName &&
+          matchesWorkspaceMount(current, workspaceDrive);
+        if (operation !== "delete" || deletedSandbox !== current) {
+          await current[operation]({ signal });
+        }
+        if (operation === "delete") {
+          deletedSandbox = current;
+          if (ownsDrive) {
+            await deleteWorkspaceDrive(workspaceDrive, signal);
+          } else if (workspaceDrive !== undefined) {
+            throw new Error(
+              "Builder workspace storage cleanup could not verify the saved attachment. The drive was retained; retry this session deletion.",
+            );
+          }
+        }
       } finally {
         registration.unregister();
       }
@@ -161,32 +302,47 @@ export const createBuilderVercelProvider = (
     async resume(context, _artifact, state) {
       // Reconnect only: do not recreate source selection or initialization.
       const native = await Sandbox.get({ ...transport, name: state.name, resume: true });
-      return handle(native, context.session.id);
+      return handle(native, context.session.id, state.workspaceDrive);
     },
     async start(context, _liveOptions, artifact) {
       const source = await resolveVercelSessionGitSource(context.session.id);
       const name = `app-builder-${createHash("sha256").update(context.session.id).digest("hex").slice(0, 40)}`;
-      const native = await Sandbox.create({
+      const driveName = `${name}-workspace`;
+      const drive = await Drive.getOrCreate({
         ...transport,
-        image: "vcr.vercel.com/vercel/eve/base:0.68.0",
-        name,
-        networkPolicy: "allow-all",
-        persistent: true,
-        ...(options?.sandboxEnvironment === undefined
-          ? {}
-          : { env: { ...options.sandboxEnvironment } }),
-        ...(source === undefined
-          ? {}
-          : {
-              source: {
-                password: source.token,
-                type: "git" as const,
-                url: source.url,
-                username: "x-access-token",
-                ...(source.revision === undefined ? {} : { revision: source.revision }),
-              },
-            }),
+        name: driveName,
+        region: DEFAULT_SANDBOX_REGION,
       });
+      if (
+        drive.name !== driveName ||
+        (drive.currentSandboxName !== undefined && drive.currentSandboxName !== name)
+      ) {
+        throw new Error("The Builder workspace drive belongs to another sandbox.");
+      }
+      const { native, recovered } = await createOrRecoverSandbox({
+        name,
+        drive,
+        create: async () =>
+          await Sandbox.create({
+            ...transport,
+            image: "vcr.vercel.com/vercel/eve/base:0.68.0",
+            name,
+            networkPolicy: "allow-all",
+            persistent: true,
+            region: DEFAULT_SANDBOX_REGION,
+            mounts: { "/workspace": drive },
+            ...(options?.sandboxEnvironment === undefined
+              ? {}
+              : { env: { ...options.sandboxEnvironment } }),
+          }),
+      });
+      const workspaceDrive: WorkspaceDriveBinding = {
+        id: drive.driveId,
+        name: drive.name,
+        projectId: drive.projectId,
+        region: drive.region,
+        sandboxName: native.name,
+      };
       try {
         await native.fs.mkdir("/workspace", { recursive: true });
         const home = await native.runCommand({ args: ["HOME"], cmd: "printenv" });
@@ -196,22 +352,42 @@ export const createBuilderVercelProvider = (
         const homePath = homeOutput.trim();
         const sandbox = createVercelSdkSession(native);
         for (const file of artifact.files) {
+          const destination = sandbox.resolvePath(file.path.replace(/^\$HOME(?=\/|$)/u, homePath));
+          const workspaceSeed =
+            destination === "/workspace" || destination.startsWith("/workspace/");
+          // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Preserve existing files before this seed's sequential upload.
+          if (!(await shouldInitializeSeed(native, destination, recovered || workspaceSeed))) {
+            continue;
+          }
           // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Sequential resource uploads keep provider backpressure for the complete tree.
           await sandbox.writeBinaryFile({
             content: Buffer.from(file.content, "base64"),
-            path: file.path.replace(/^\$HOME(?=\/|$)/u, homePath),
+            path: destination,
+          });
+        }
+        // Last initialization step: source stays on the mounted filesystem and
+        // a retry can recognize its completed checkout without rewriting edits.
+        if (source !== undefined) {
+          await materializeVercelGitSource({
+            current: () => native,
+            source,
+            reuseOwnedCheckout: true,
           });
         }
         return {
-          handle: handle(native, context.session.id),
-          state: { name: native.name, version: 1 as const },
+          handle: handle(native, context.session.id, workspaceDrive),
+          state: { name: native.name, version: 1 as const, workspaceDrive },
         };
       } catch (error) {
-        try {
-          await native.delete();
-        } catch {
-          // Retain the initiating setup failure; provider cleanup may also fail.
+        if (!recovered) {
+          try {
+            await native.delete();
+          } catch {
+            // Retain the initiating setup failure; provider cleanup may also fail.
+          }
         }
+        // Never delete the Drive on partial start: its creation/attachment may
+        // have completed earlier, and a retry must retain the same working bytes.
         throw error;
       }
     },

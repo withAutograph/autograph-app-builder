@@ -93,6 +93,34 @@ Session stop and runtime shutdown stop compute while retaining provider state.
 Explicit Sandbox deletion removes that state. A missing named Sandbox fails
 reattachment rather than creating replacement compute.
 
+New Builder sessions keep their repository, private worktrees, planning inputs,
+and workspace dependency caches on a dedicated Vercel Drive mounted at
+`/workspace`. Its binding is recorded with the server-owned Sandbox state and
+reused across reattachment; startup does not depend on a public session ID that
+has not been assigned yet. Legacy state without a Drive binding continues to
+resume its existing Sandbox. Source acquisition stages and places the repository
+inside the mounted workspace instead of renaming a checkout across filesystems.
+
+Stop and runtime shutdown retain the Drive. Explicit owning-session deletion
+removes workspace storage only after successful deletion of the current owned
+Sandbox; a stale handle or uncertain provider outcome does not delete a Drive.
+Never share writable workspace storage between unrelated sessions. Sandbox
+snapshot restoration is not a rollback of a mounted Drive's contents.
+
+If Sandbox deletion succeeds but Drive cleanup cannot finish, report incomplete
+storage cleanup. The same live handle can retry it. After a complete process
+restart, the missing Sandbox cannot be resumed through this adapter; its retained
+Drive binding remains necessary for operator cleanup. Do not describe that case
+as completed storage deletion or durable automatic cleanup recovery.
+
+The persistent Sandbox still saves the surrounding runtime filesystem, including
+state outside `/workspace`. Its base disk and temporary directories can fill
+independently of the Drive. Keep existing cache reuse and safe unused-worktree
+retirement; additional capacity does not replace lifecycle cleanup. Capacity and
+maintenance results are advisory diagnostics, not admission thresholds or usage
+quotas. See Vercel's [Drive lifecycle](https://vercel.com/docs/sandbox/concepts/drives)
+and [current storage limits and billing](https://vercel.com/docs/sandbox/pricing).
+
 Preview startup can resume a stopped VM through a new SDK handle. The owning
 provider registration retains that current handle for file I/O, commands, and
 cleanup, so stopping the session targets the resumed VM. An old registration

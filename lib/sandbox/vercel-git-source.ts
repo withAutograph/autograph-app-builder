@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Command } from "@vercel/sandbox";
 import { holdActiveCommandLease } from "./active-command-lease";
 import type { VercelSdkSessionNative } from "./vercel-sdk-session";
@@ -35,14 +35,55 @@ const gitOptions = [
   "http.followRedirects=false",
 ];
 const occupiedProgram = `const fs=require("node:fs");
-try { fs.lstatSync(process.argv[1]); process.exit(0); }
+try { const stat=fs.lstatSync(process.argv[1]); process.stdout.write(stat.isDirectory() && !stat.isSymbolicLink() ? "directory" : "other"); process.exit(0); }
 catch(error) { if(error.code === "ENOENT") process.exit(1); process.exit(2); }`;
+
+const recognizesOwnedCheckout = async (input: {
+  allow?: boolean;
+  occupied: { exitCode: number; stdout: string };
+  git: (args: string[]) => Promise<{ exitCode: number; stdout: string }>;
+  repository: string;
+}): Promise<boolean> => {
+  if (
+    input.allow !== true ||
+    input.occupied.exitCode !== 0 ||
+    input.occupied.stdout !== "directory"
+  ) {
+    return false;
+  }
+  const root = await input.git([
+    "-C",
+    target,
+    "rev-parse",
+    "--show-prefix",
+    "--is-inside-work-tree",
+  ]);
+  if (root.exitCode !== 0 || root.stdout.trim() !== "true") {
+    return false;
+  }
+  const remote = await input.git(["-C", target, "remote", "get-url", "origin"]);
+  if (remote.exitCode !== 0 || remote.stdout.trim() !== input.repository) {
+    return false;
+  }
+  const head = await input.git(["-C", target, "rev-parse", "--verify", "HEAD"]);
+  return head.exitCode === 0;
+};
+
+const acquisitionStaging = (source: VercelGitSessionSource, freshAttempt: boolean): string => {
+  const key = createHash("sha256")
+    .update(JSON.stringify([source.url, source.revision ?? null]))
+    .digest("hex");
+  const attempt = freshAttempt ? `-${randomUUID()}` : "";
+  return `/workspace/.app-builder/source-acquisition/${key}${attempt}/repository`;
+};
 
 /** Source acquisition is server-owned SDK I/O, outside model-visible shell logs. */
 export const materializeVercelGitSource = async (input: {
   current: () => VercelSdkSessionNative;
   authorize?: () => Promise<void>;
   source: VercelGitSessionSource;
+  /** Only fresh provider startup on its own derived workspace Drive may reuse this checkout. */
+  reuseOwnedCheckout?: boolean;
 }): Promise<void> => {
   const { source } = input;
   if (!/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\.git$/u.test(source.url)) {
@@ -53,9 +94,7 @@ export const materializeVercelGitSource = async (input: {
   }
   await input.authorize?.();
   const lease = await holdActiveCommandLease(input);
-  const staging = `/workspace/.app-builder/source-acquisition/${createHash("sha256")
-    .update(JSON.stringify([source.url, source.revision ?? null]))
-    .digest("hex")}/repository`;
+  const staging = acquisitionStaging(source, input.reuseOwnedCheckout === true);
   const run = async (cmd: string, args: string[], env: Record<string, string> = gitEnvironment) => {
     await input.authorize?.();
     lease.signal.throwIfAborted();
@@ -104,6 +143,16 @@ export const materializeVercelGitSource = async (input: {
     await run("git", [...gitOptions, ...args], env);
   try {
     const occupied = await run("node", ["-e", occupiedProgram, target]);
+    if (
+      await recognizesOwnedCheckout({
+        allow: input.reuseOwnedCheckout,
+        occupied,
+        git,
+        repository: source.url,
+      })
+    ) {
+      return;
+    }
     if (occupied.exitCode !== 1) {
       throw new Error("Builder will not replace the occupied repository workspace.");
     }
