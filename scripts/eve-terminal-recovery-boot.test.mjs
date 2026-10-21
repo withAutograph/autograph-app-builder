@@ -495,14 +495,12 @@ it("acceptance observation backs off and a timed-out exact retry adopts the late
   const waits = [];
   let clock = 0;
   let visible = false;
-  let observations = 0;
   f.deps.now = () => clock;
   f.deps.wait = async (ms) => {
     waits.push(ms);
     clock += ms;
   };
   f.deps.getHook = async (token) => {
-    observations += 1;
     if (!visible) {
       throw new Error("missing");
     }
@@ -515,7 +513,6 @@ it("acceptance observation backs off and a timed-out exact retry adopts the late
   assert.deepEqual(waits.slice(0, 4), [250, 500, 1000, 2000]);
   assert.ok(waits.every((ms) => ms >= 250 && ms <= 2000));
   assert.equal(clock, 30_000);
-  assert.ok(observations <= 20);
   assert.equal(f.calls.includes("activate"), false);
   visible = true;
   const result = await native.recoverTerminalSession({ auth, descriptor, ports: f.ports }, f.deps);

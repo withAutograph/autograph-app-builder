@@ -8,6 +8,7 @@ import {
 import { assertHostedBuildDecisionOwner } from "./approved-build-owner";
 import { requireHostedOperationScope } from "./hosted-auth";
 import {
+  assertNativeRecoveryReceipt,
   nativeRecoveryBindingSchema,
   nativeRecoveryDescriptorSchema,
   sameNativeRecoveryDescriptor,
@@ -32,6 +33,15 @@ interface RecoveryHolderCall extends RecoveryCall {
   holderDescriptor: NativeRecoveryDescriptor;
 }
 
+interface RecoveryHolderClosureCall extends RecoveryHolderCall {
+  holderHookId: string;
+}
+
+interface RecoveryHolderClosureAuthorization {
+  kind: "immutable-loser";
+  winnerOwnerRunId: string;
+}
+
 interface RecoveryHolderFacts {
   operationFound: boolean | null;
   descriptorMatches: boolean | null;
@@ -54,6 +64,16 @@ const holderCancellationMatches = (
   source.version === 2
     ? (source.cancellationRevision ?? 0) === descriptor.parentCancellationRevision
     : null;
+
+const assertUncancelledRecoveryWinner = (child: HostedSessionRecord): void => {
+  const winner = toDurableHostedSessionRecord(child);
+  if (
+    child.status === "cancelled" ||
+    (winner.cancellationRevision ?? 0) !== (winner.resumedCancellationRevision ?? 0)
+  ) {
+    throw new Error("Recovery holder winner was cancelled.");
+  }
+};
 
 /** The accepted trusted forwarder is the only source of public tenant authority. */
 const principalFor = (call: RecoveryCall): HostedPrincipal => {
@@ -145,7 +165,76 @@ export function createNativeRecoveryBinding(input: {
     return { operation, principal, source };
   };
 
+  const authorizeUncommittedRecovery = async (call: RecoveryCall) => {
+    const current = await authorize(call);
+    if (
+      current.operation.state === "succeeded" ||
+      current.operation.nativeRecoveryReceipt !== undefined
+    ) {
+      throw new Error("Current recovery already has a canonical owner.");
+    }
+    return current;
+  };
+
   return {
+    /** Positive immutable-winner proof, freshly re-read before each native closure effect. */
+    async authorizeRecoveryHolderClosure(
+      call: RecoveryHolderClosureCall,
+    ): Promise<RecoveryHolderClosureAuthorization> {
+      const { principal } = await authorizeUncommittedRecovery(call);
+      const holder = nativeRecoveryDescriptorSchema.parse(call.holderDescriptor);
+      if (
+        holder.logicalSessionId !== call.descriptor.logicalSessionId ||
+        holder.originalAuthoritySessionId !== call.descriptor.originalAuthoritySessionId ||
+        call.holderOwnerRunId.length === 0 ||
+        call.holderHookId.length === 0
+      ) {
+        throw new Error("Recovery holder closure lineage is unavailable.");
+      }
+      const operation = await input.store.getPrivateOperation?.(principal, holder.operationId);
+      if (
+        operation === null ||
+        operation === undefined ||
+        !samePrincipal(operation.principal, principal)
+      ) {
+        throw new Error("Recovery holder has no canonical succeeded operation.");
+      }
+      if (
+        operation.kind !== "start" ||
+        operation.state !== "succeeded" ||
+        operation.nativeRecovery === undefined ||
+        !sameNativeRecoveryDescriptor(operation.nativeRecovery, holder)
+      ) {
+        throw new Error("Recovery holder has no canonical succeeded operation.");
+      }
+      const receipt = nativeRecoveryBindingSchema.parse(operation.nativeRecoveryReceipt);
+      assertNativeRecoveryReceipt(holder, receipt);
+      if (receipt.ownerRunId === call.holderOwnerRunId) {
+        throw new Error("A canonical recovery owner cannot be closed as a contender.");
+      }
+      const [source, child] = await Promise.all([
+        input.store.getSession(principal, holder.sourcePublicSessionId),
+        input.store.getSession(principal, operation.sessionId),
+      ]);
+      if (
+        source === null ||
+        child === null ||
+        !samePrincipal(source.principal, principal) ||
+        !samePrincipal(child.principal, principal)
+      ) {
+        throw new Error("Recovery holder winner lineage is unavailable.");
+      }
+      assertRecoveredBuildContinuationChild(
+        holder.originalAuthoritySessionId,
+        holder.logicalSessionId,
+        source,
+        child,
+        operation,
+      );
+      assertUncancelledRecoveryWinner(child);
+      await authorizeUncommittedRecovery(call);
+      return { kind: "immutable-loser", winnerOwnerRunId: receipt.ownerRunId };
+    },
     /** Retained native entry IDs select only same-principal reads, never recovery authority. */
     async observeRecoveryHolderBinding(call: RecoveryHolderCall): Promise<RecoveryHolderFacts> {
       const { principal } = await authorize(call);
@@ -306,6 +395,8 @@ export function createHostedNativeRecoveryBinding(
     return binding;
   };
   return {
+    authorizeRecoveryHolderClosure: (call: RecoveryHolderClosureCall) =>
+      get().authorizeRecoveryHolderClosure(call),
     observeRecoveryHolderBinding: (call: RecoveryHolderCall) =>
       get().observeRecoveryHolderBinding(call),
     authorizeRepeatableRecoveryCalls: (
