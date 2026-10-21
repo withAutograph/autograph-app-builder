@@ -10,6 +10,7 @@ import { requireHostedOperationScope } from "./hosted-auth";
 import {
   nativeRecoveryBindingSchema,
   nativeRecoveryDescriptorSchema,
+  sameNativeRecoveryDescriptor,
 } from "./native-recovery-contract";
 import type { NativeRecoveryBinding, NativeRecoveryDescriptor } from "./native-recovery-contract";
 import { createPostgresHostedEveStore } from "./postgres-hosted-store";
@@ -18,13 +19,41 @@ import {
   assertRecoveredBuildContinuationChild,
   toDurableHostedSessionRecord,
 } from "./hosted-store";
-import type { HostedEveStore, HostedOperationRecord } from "./hosted-store";
+import type { HostedEveStore, HostedOperationRecord, HostedSessionRecord } from "./hosted-store";
 import type { HostedPrincipal } from "./hosted-auth";
 
 interface RecoveryCall {
   auth: unknown;
   descriptor: NativeRecoveryDescriptor;
 }
+
+interface RecoveryHolderCall extends RecoveryCall {
+  holderOwnerRunId: string;
+  holderDescriptor: NativeRecoveryDescriptor;
+}
+
+interface RecoveryHolderFacts {
+  operationFound: boolean | null;
+  descriptorMatches: boolean | null;
+  sourceBound: boolean | null;
+  operationSucceeded: boolean | null;
+  operationReserved: boolean | null;
+  operationSubmissionUnknown: boolean | null;
+  operationRejected: boolean | null;
+  sourceCancelled: boolean | null;
+  sourceCancellationMatches: boolean | null;
+  receiptPresent: boolean | null;
+  receiptOwnerMatches: boolean | null;
+  committedChildMatches: boolean | null;
+}
+
+const holderCancellationMatches = (
+  source: HostedSessionRecord,
+  descriptor: NativeRecoveryDescriptor,
+): boolean | null =>
+  source.version === 2
+    ? (source.cancellationRevision ?? 0) === descriptor.parentCancellationRevision
+    : null;
 
 /** The accepted trusted forwarder is the only source of public tenant authority. */
 const principalFor = (call: RecoveryCall): HostedPrincipal => {
@@ -117,6 +146,90 @@ export function createNativeRecoveryBinding(input: {
   };
 
   return {
+    /** Retained native entry IDs select only same-principal reads, never recovery authority. */
+    async observeRecoveryHolderBinding(call: RecoveryHolderCall): Promise<RecoveryHolderFacts> {
+      const { principal } = await authorize(call);
+      const holder = nativeRecoveryDescriptorSchema.parse(call.holderDescriptor);
+      if (
+        holder.logicalSessionId !== call.descriptor.logicalSessionId ||
+        holder.originalAuthoritySessionId !== call.descriptor.originalAuthoritySessionId
+      ) {
+        throw new Error("Recovery holder lineage differs from current authority.");
+      }
+      const facts: RecoveryHolderFacts = {
+        operationFound: false,
+        descriptorMatches: null,
+        sourceBound: null,
+        operationSucceeded: null,
+        operationReserved: null,
+        operationSubmissionUnknown: null,
+        operationRejected: null,
+        sourceCancelled: null,
+        sourceCancellationMatches: null,
+        receiptPresent: null,
+        receiptOwnerMatches: null,
+        committedChildMatches: null,
+      };
+      const operation = await input.store.getPrivateOperation?.(principal, holder.operationId);
+      if (
+        operation === null ||
+        operation === undefined ||
+        !samePrincipal(operation.principal, principal)
+      ) {
+        return facts;
+      }
+      facts.operationFound = true;
+      const retained = operation.nativeRecovery;
+      facts.descriptorMatches =
+        retained !== undefined && sameNativeRecoveryDescriptor(holder, retained);
+      facts.operationSucceeded = operation.state === "succeeded";
+      facts.operationReserved = operation.state === "reserved";
+      facts.operationSubmissionUnknown = operation.state === "submission_unknown";
+      facts.operationRejected = operation.state === "rejected";
+      if (!facts.descriptorMatches) {
+        return facts;
+      }
+      const source = await input.store.getSession(principal, holder.sourcePublicSessionId);
+      facts.sourceBound = false;
+      if (source !== null && samePrincipal(source.principal, principal)) {
+        facts.sourceCancelled = source.status === "cancelled";
+        facts.sourceCancellationMatches = holderCancellationMatches(source, holder);
+        try {
+          assertNativeRecoverySourceBinding(operation, source, holder);
+          facts.sourceBound = true;
+        } catch {
+          // A stale holder source is a fact, not permission to cancel or reclaim it.
+        }
+      }
+      const parsedReceipt = nativeRecoveryBindingSchema.safeParse(operation.nativeRecoveryReceipt);
+      facts.receiptPresent = operation.nativeRecoveryReceipt !== undefined;
+      if (parsedReceipt.success) {
+        const { ownerRunId, provenance: _provenance, ...receiptDescriptor } = parsedReceipt.data;
+        void _provenance;
+        facts.receiptOwnerMatches =
+          ownerRunId === call.holderOwnerRunId &&
+          sameNativeRecoveryDescriptor(holder, receiptDescriptor);
+      }
+      if (operation.state === "succeeded" && facts.receiptOwnerMatches === true) {
+        const child = await input.store.getSession(principal, operation.sessionId);
+        facts.committedChildMatches = false;
+        if (child !== null && samePrincipal(child.principal, principal)) {
+          try {
+            assertRecoveredBuildContinuationChild(
+              holder.originalAuthoritySessionId,
+              holder.logicalSessionId,
+              source,
+              child,
+              operation,
+            );
+            facts.committedChildMatches = true;
+          } catch {
+            // A canonical receipt alone does not prove a current committed public child.
+          }
+        }
+      }
+      return facts;
+    },
     async authorize(call: RecoveryCall): Promise<void> {
       await authorize(call);
     },
@@ -193,6 +306,8 @@ export function createHostedNativeRecoveryBinding(
     return binding;
   };
   return {
+    observeRecoveryHolderBinding: (call: RecoveryHolderCall) =>
+      get().observeRecoveryHolderBinding(call),
     authorizeRepeatableRecoveryCalls: (
       input: Parameters<typeof authorizeRepeatablePrivateApplyCalls>[0],
     ) => Promise.resolve(authorizeRepeatablePrivateApplyCalls(input)),
