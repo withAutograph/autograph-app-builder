@@ -228,10 +228,34 @@ paths using source-read credentials. The validated private app and its original
 source and historical-baseline provenance remain intact. The complete resulting
 diff exposes both destination before content and validated after content;
 binary artifacts have explicit metadata and content omissions. Read each side's
-full paged export with `change_set_status`, then accept the fresh change set.
+content with `change_set_status` as needed, then accept the fresh change set.
 Preparation invalidates the previous review and sealed proposal while retaining
 its mutation journal. A pending or potentially partial prior publication must
 be recovered before another destination review.
+
+For a fresh-template app, pass the intended existing repository as
+`destination: { repository: "owner/name", selectedInstallationId? }` to
+`prepare_github_draft_review`. Preparation uses the ordinary session-owned
+GitHub connection flow and observes the actual repository and installation.
+A later refresh can reuse that exact retained destination. It never replaces
+the starter checkout, creates a repository, or fabricates `githubSource`.
+Keep the original source receipt, app files, and validation. An absent
+destination is an internal workflow selection to resolve from the intended
+delivery target; it is not a reason to restart the app or ask the user to
+repair source plumbing.
+
+After accepting the destination diff, fresh-template sealing uses
+`expectedDestinationReviewDigest`; acquired GitHub sources retain
+`expectedGitHubSourceDigest`. The fresh proposal binds the actual destination
+review, source receipt and reviewed changes. Its prepare, seal and publish
+operations select the verified tenant-owned installation explicitly, preserve
+current membership and provider permission checks, and retain separate
+publication approval and mutation reconciliation.
+
+The final independent source review attempt remains advisory. An unavailable
+or interrupted assessment is reported as unassessed and does not block private
+Preview or publication, require another technical validation, or authorize a
+replacement app. See [Product source review](product-source-review.md).
 
 Sealing binds that same reviewed destination commit and tree. It verifies the
 same tenant-selected installation and rebinds a fresh publication permission

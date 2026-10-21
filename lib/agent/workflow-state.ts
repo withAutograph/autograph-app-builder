@@ -233,11 +233,13 @@ interface WorkspacePhase {
 
 type UiPreviewPhase = WorkspacePhase & { uiPreview: UiPreviewRevision };
 
-export interface GitHubDraftProposalBinding {
+export type GitHubDraftProposalBinding = {
   proposal: DraftPullRequestProposal;
   sourceReceiptDigest: string;
-  githubSourceDigest: string;
-}
+} & (
+  | { githubSourceDigest: string; destinationReviewDigest?: never }
+  | { githubSourceDigest?: never; destinationReviewDigest: string }
+);
 
 export interface ExistingDraftUpdateBinding {
   proposal: ExistingDraftUpdateProposal;
@@ -466,13 +468,47 @@ export const assertExactWorkflowState = (
   }
 };
 
+const draftProposalRepositoryMatches = (
+  proposal: DraftPullRequestProposal,
+  repository: ImmutableGitHubSourceReceipt["repository"],
+) =>
+  (["repositoryId", "owner", "name"] as const).every((key) => proposal[key] === repository[key]) &&
+  proposal.baseBranch === repository.defaultBranch;
+
+const draftProposalDestinationMatches = (input: {
+  binding: GitHubDraftProposalBinding;
+  githubSource?: ImmutableGitHubSourceReceipt;
+  destinationReview?: GitHubDestinationReviewBinding;
+}) => {
+  const { binding, githubSource, destinationReview } = input;
+  const { proposal } = binding;
+  if (binding.githubSourceDigest === undefined) {
+    if (githubSource !== undefined || destinationReview === undefined) {
+      return false;
+    }
+    return (
+      binding.destinationReviewDigest === destinationReview.digest &&
+      draftProposalRepositoryMatches(proposal, destinationReview.repository) &&
+      proposal.baseSha === destinationReview.repository.headSha &&
+      proposal.baseTree === destinationReview.repository.headTree
+    );
+  }
+  return (
+    githubSource !== undefined &&
+    binding.destinationReviewDigest === undefined &&
+    binding.githubSourceDigest === githubSource.digest &&
+    draftProposalRepositoryMatches(proposal, githubSource.repository)
+  );
+};
+
 export const assertCurrentGitHubDraftProposal = (input: {
   binding: GitHubDraftProposalBinding | undefined;
   expectedProposalDigest: string;
   reviewDigest: string;
   changeSetDigest: string;
   sourceReceiptDigest: string;
-  githubSource: ImmutableGitHubSourceReceipt;
+  githubSource?: ImmutableGitHubSourceReceipt;
+  destinationReview?: GitHubDestinationReviewBinding;
 }): DraftPullRequestProposal => {
   const { binding } = input;
   const proposal = binding?.proposal;
@@ -483,11 +519,7 @@ export const assertCurrentGitHubDraftProposal = (input: {
     proposal.reviewDigest !== input.reviewDigest ||
     proposal.changeSetDigest !== input.changeSetDigest ||
     binding.sourceReceiptDigest !== input.sourceReceiptDigest ||
-    binding.githubSourceDigest !== input.githubSource.digest ||
-    proposal.repositoryId !== input.githubSource.repository.repositoryId ||
-    proposal.owner !== input.githubSource.repository.owner ||
-    proposal.name !== input.githubSource.repository.name ||
-    proposal.baseBranch !== input.githubSource.repository.defaultBranch
+    !draftProposalDestinationMatches({ ...input, binding })
   ) {
     throw new Error(
       "The draft pull-request proposal is not the exact proposal sealed for this reviewed workflow.",

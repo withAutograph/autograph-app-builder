@@ -256,12 +256,47 @@ export interface GitHubPublicationRuntimeStatus {
   reason: string;
 }
 
+export interface GitHubPublicationDestinationIdentity {
+  repositoryId: string;
+  owner: string;
+  name: string;
+  defaultBranch: string;
+  installationId: string;
+}
+
+type GitHubDraftDestination =
+  | { githubSource: ImmutableGitHubSourceReceipt; destination?: never }
+  | { githubSource?: never; destination: GitHubPublicationDestinationIdentity };
+
+const draftDestinationRepository = (request: GitHubDraftDestination) => {
+  if (request.destination === undefined) {
+    return request.githubSource.repository;
+  }
+  return request.destination;
+};
+
+const assertDraftDestinationRepository = (
+  request: GitHubDraftDestination,
+  repository: GitHubRepositoryObservation,
+) => {
+  const destination = draftDestinationRepository(request);
+  const sameRepository = (["repositoryId", "owner", "name"] as const).every(
+    (key) => repository[key] === destination[key],
+  );
+  const sameBranch =
+    request.destination === undefined || repository.defaultBranch === destination.defaultBranch;
+  if (!sameRepository || !sameBranch) {
+    throw new Error("The publication destination differs from the selected GitHub repository.");
+  }
+};
+
 export interface GitHubPublicationRuntime {
-  inspectDraftDestination?: (input: {
-    existingProposal?: DraftPullRequestProposal;
-    githubSource: ImmutableGitHubSourceReceipt;
-    paths: readonly string[];
-  }) => Promise<{
+  inspectDraftDestination?: (
+    input: GitHubDraftDestination & {
+      existingProposal?: DraftPullRequestProposal;
+      paths: readonly string[];
+    },
+  ) => Promise<{
     repository: GitHubRepositoryObservation;
     installation: GitHubInstallationIdentity;
     preTree: readonly OverlayFile[];
@@ -279,13 +314,24 @@ export interface GitHubPublicationRuntime {
     expectedTree: string;
     approvedByCallId: string;
   }) => Promise<ImmutableGitHubSourceReceipt>;
-  sealDraftPullRequestProposal: (input: {
-    destinationReview?: GitHubDestinationReviewBinding;
-    githubSource: ImmutableGitHubSourceReceipt;
-    source: SourceReceiptEvidence;
-    review: ReviewedChangeSetReceipt;
-    title: string;
-  }) => Promise<DraftPullRequestProposal>;
+  sealDraftPullRequestProposal: (
+    input: (
+      | {
+          githubSource: ImmutableGitHubSourceReceipt;
+          destination?: never;
+          destinationReview?: GitHubDestinationReviewBinding;
+        }
+      | {
+          githubSource?: never;
+          destination: GitHubPublicationDestinationIdentity;
+          destinationReview: GitHubDestinationReviewBinding;
+        }
+    ) & {
+      source: SourceReceiptEvidence;
+      review: ReviewedChangeSetReceipt;
+      title: string;
+    },
+  ) => Promise<DraftPullRequestProposal>;
   createFreshRepository: (input: {
     expectedProposalDigest: string;
     review: ReviewedChangeSetReceipt;
@@ -601,20 +647,24 @@ export function composeGitHubPublicationRuntime(input: {
       if (adapter.inspectDestinationFiles === undefined) {
         throw new Error("The GitHub provider does not support immutable destination review reads.");
       }
+      const destination = draftDestinationRepository(request);
       const repository = await adapter.inspectRepository({
         operation: sourceReadOperation,
-        ref: `refs/heads/${request.githubSource.repository.defaultBranch}`,
-        repositoryId: request.githubSource.repository.repositoryId,
+        ref: `refs/heads/${destination.defaultBranch}`,
+        repositoryId: destination.repositoryId,
       });
+      assertDraftDestinationRepository(request, repository);
+      const installation = await adapter.inspectInstallation(sourceReadOperation);
       if (
-        repository.repositoryId !== request.githubSource.repository.repositoryId ||
-        repository.owner !== request.githubSource.repository.owner ||
-        repository.name !== request.githubSource.repository.name
+        request.destination !== undefined &&
+        installation.installationId !== request.destination.installationId
       ) {
-        throw new Error("The publication destination differs from the selected GitHub repository.");
+        throw new Error(
+          "The publication destination differs from the selected GitHub installation.",
+        );
       }
       return {
-        installation: await adapter.inspectInstallation(sourceReadOperation),
+        installation,
         preTree: await adapter.inspectDestinationFiles({ paths: request.paths, repository }),
         repository,
       };
@@ -802,12 +852,16 @@ export function composeGitHubPublicationRuntime(input: {
       });
     },
     async sealDraftPullRequestProposal(request) {
+      const destination = draftDestinationRepository(request);
+      if (request.githubSource === undefined && request.destinationReview === undefined) {
+        throw new Error("Review the publication destination before sealing its draft proposal.");
+      }
       let repository =
         request.destinationReview?.repository ??
         (await adapter.inspectRepository({
           operation: draftPublicationOperation,
-          ref: `refs/heads/${request.githubSource.repository.defaultBranch}`,
-          repositoryId: request.githubSource.repository.repositoryId,
+          ref: `refs/heads/${destination.defaultBranch}`,
+          repositoryId: destination.repositoryId,
         }));
       const installation = await adapter.inspectInstallation(draftPublicationOperation);
       if (request.destinationReview !== undefined) {
@@ -817,12 +871,16 @@ export function composeGitHubPublicationRuntime(input: {
           validationDigest: request.review.validationDigest,
         });
         const sameRepository = (["repositoryId", "owner", "name"] as const).every(
-          (key) => repository[key] === request.githubSource.repository[key],
+          (key) => repository[key] === destination[key],
         );
         const sameInstallation = (
           ["installationId", "accountId", "accountLogin", "accountType"] as const
         ).every((key) => request.destinationReview?.installation[key] === installation[key]);
-        if (!sameRepository || !sameInstallation) {
+        const sameDestination =
+          request.destination === undefined ||
+          (repository.defaultBranch === destination.defaultBranch &&
+            installation.installationId === request.destination.installationId);
+        if (!sameRepository || !sameInstallation || !sameDestination) {
           throw new Error(
             "The destination review does not match the selected repository and publication installation.",
           );
