@@ -24,6 +24,7 @@ import type {
 import type { TenantExportWorkerInput } from "./hosted-operator-export-contract";
 import { tenantExportWireFixtureSchema } from "./hosted-operator-export-contract";
 import wire from "./fixtures/tenant-export-wire-v1.json";
+import type { ExportPlanningStage } from "./hosted-operator-consent-diagnostic";
 import { HostedOperatorError } from "./hosted-operator-contract";
 
 const fixture = tenantExportWireFixtureSchema.parse(wire);
@@ -646,4 +647,172 @@ describe("existing operator transport export dispatch", () => {
       expect(transport).toHaveBeenCalledTimes(2);
     },
   );
+});
+
+describe("export planning failure boundaries", () => {
+  const ownerContext = {
+    adapterGeneration: 1,
+    adapterSessionId: "adapter",
+    authority,
+    kind: "direct" as const,
+    principal: { ...authority, scopes: ["autograph:send"] },
+    sessionId: context.target.sessionId,
+  };
+  const input = {
+    action: "export-plan" as const,
+    selection: { ...context.target, environment: "preview" as const },
+    customerId: "customer-one",
+    idempotencyKey: "diagnostic-request",
+    ownerContext,
+  };
+  const request = () => new Request("https://operator.test/v1/runtime");
+
+  it.each([
+    "dispatcher_workload_verification",
+    "dispatcher_owner_authorization",
+    "plan_owner_authorization",
+    "plan_prior_read",
+    "release_selection",
+    "release_match",
+    "release_read",
+    "setup_phase_validation",
+    "setup_approval_authorization",
+    "setup_match_resource",
+    "plan_reservation",
+    "plan_reservation_match",
+  ] as const)("reports %s once and preserves the exact rejection", async (stage) => {
+    const f = setup();
+    const failure = new HostedOperatorError("resource_mismatch");
+    const reject = async () => {
+      throw failure;
+    };
+    const reserve = vi.spyOn(f.dependencies.store, "reserve");
+    if (stage === "plan_owner_authorization") {
+      f.dependencies.assertOwner = reject;
+    } else if (stage === "plan_prior_read") {
+      vi.spyOn(f.dependencies.store, "read").mockImplementation(reject);
+    } else if (stage.startsWith("release_")) {
+      f.dependencies.resolvePlan = async (_context, _customer, observe) => {
+        observe?.(stage);
+        throw failure;
+      };
+    } else if (stage.startsWith("setup_")) {
+      f.dependencies.assertSetup = async (_context, _plan, observe) => {
+        observe?.(stage);
+        throw failure;
+      };
+    } else if (stage === "plan_reservation") {
+      reserve.mockImplementation(reject);
+    } else if (stage === "plan_reservation_match") {
+      reserve.mockImplementation(async ({ record }) => ({
+        ...record,
+        journal: { ...record.journal, idempotencyKey: "conflicting-request" },
+      }));
+    }
+    const consoleSink = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const dispatch = createTenantExportDispatcher({
+        store: f.dependencies.store,
+        operations: createHostedTenantExportOperations(f.dependencies),
+        verifyWorkload: stage === "dispatcher_workload_verification" ? reject : async () => {},
+        authorize: stage === "dispatcher_owner_authorization" ? reject : async () => context,
+        authorizeRead: async (_request, selected) => selected,
+      });
+      const outcome = dispatch(request(), input);
+      await (stage === "plan_reservation_match"
+        ? expect(outcome).rejects.toThrow("resource_mismatch")
+        : expect(outcome).rejects.toBe(failure));
+      expect(consoleSink).toHaveBeenCalledOnce();
+      expect(consoleSink.mock.calls[0]?.[1]).toMatchObject({
+        boundary: "operator",
+        exportPlanningFailure: { stage, errorClass: "operator_error" },
+      });
+      expect(JSON.stringify(consoleSink.mock.calls)).not.toContain(context.target.sessionId);
+      expect(f.dependencies.runWorker).not.toHaveBeenCalled();
+      if (!stage.startsWith("plan_reservation")) {
+        expect(reserve).not.toHaveBeenCalled();
+      }
+    } finally {
+      consoleSink.mockRestore();
+    }
+  });
+
+  it("keeps a throwing observer from changing nested plan checks or reservation", async () => {
+    const f = setup();
+    const nested: ExportPlanningStage[] = [];
+    f.dependencies.resolvePlan = async (_context, _customer, observe) => {
+      observe?.("release_selection");
+      nested.push("release_selection");
+      return selection;
+    };
+    f.dependencies.assertSetup = async (_context, _plan, observe) => {
+      observe?.("setup_match");
+      nested.push("setup_match");
+    };
+    const planned = await f.operations.plan(context, "customer-one", "safe-observer", () => {
+      throw new Error("private diagnostic sink failure");
+    });
+    expect(planned.status.state).toBe("planned");
+    expect(nested).toEqual(["release_selection", "setup_match"]);
+    expect(f.read().journal.plan).toEqual(planned.plan);
+    expect(f.dependencies.runWorker).not.toHaveBeenCalled();
+  });
+
+  it("does not emit export-plan diagnostics for a status rejection", async () => {
+    const f = setup();
+    const failure = new HostedOperatorError("resource_mismatch");
+    const consoleSink = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const dispatch = createTenantExportDispatcher({
+        store: {
+          read: async () => {
+            throw failure;
+          },
+        },
+        operations: f.operations,
+        verifyWorkload: async () => {},
+        authorize: async () => context,
+        authorizeRead: async (_request, selected) => selected,
+      });
+      await expect(
+        dispatch(request(), {
+          action: "export-status",
+          ownerContext,
+          exportId: "40000000-0000-4000-8000-000000000004",
+        }),
+      ).rejects.toBe(failure);
+      expect(consoleSink).not.toHaveBeenCalled();
+    } finally {
+      consoleSink.mockRestore();
+    }
+  });
+
+  it("preserves workload failure when the diagnostic context or console sink throws", async () => {
+    const f = setup();
+    const failure = new TypeError("private failure details");
+    const consoleSink = vi.spyOn(console, "info").mockImplementation(() => {
+      throw new Error("sink unavailable");
+    });
+    const dispatch = createTenantExportDispatcher({
+      store: f.dependencies.store,
+      operations: f.operations,
+      verifyWorkload: async () => {
+        throw failure;
+      },
+      authorize: async () => context,
+      authorizeRead: async (_request, selected) => selected,
+    });
+    try {
+      await expect(dispatch(request(), input)).rejects.toBe(failure);
+      const hostileInput = {
+        ...input,
+        get ownerContext(): typeof ownerContext {
+          throw new Error("invalid diagnostic context");
+        },
+      };
+      await expect(dispatch(request(), hostileInput)).rejects.toBe(failure);
+    } finally {
+      consoleSink.mockRestore();
+    }
+  });
 });

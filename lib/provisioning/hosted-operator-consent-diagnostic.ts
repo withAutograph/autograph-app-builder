@@ -195,6 +195,59 @@ const continuityPlanningFailure = z.strictObject({
   signalAborted: z.boolean().optional(),
 });
 
+const exportPlanningStage = z.enum([
+  "dispatcher_workload_verification",
+  "dispatcher_owner_authorization",
+  "plan_owner_authorization",
+  "plan_prior_read",
+  "plan_prior_validation",
+  "plan_input_validation",
+  "worker_configuration",
+  "prepared_owner_authorization",
+  "prepared_journal_read",
+  "prepared_phase_validation",
+  "prepared_approval_authorization",
+  "customer_authorization",
+  "release_selection",
+  "release_match",
+  "release_read",
+  "plan_construction",
+  "plan_validation",
+  "setup_owner_authorization",
+  "setup_journal_read",
+  "setup_phase_validation",
+  "setup_approval_authorization",
+  "setup_customer_authorization",
+  "setup_match",
+  "setup_match_original_setup",
+  "setup_match_resource",
+  "setup_match_release_id",
+  "setup_match_release_manifest",
+  "setup_match_release_ref",
+  "setup_match_app",
+  "plan_reservation",
+  "plan_reservation_match",
+  "plan_response",
+]);
+export type ExportPlanningStage = z.infer<typeof exportPlanningStage>;
+export type ExportPlanningStageObserver = (stage: ExportPlanningStage) => void;
+const exportPlanningFailure = z.strictObject({
+  stage: exportPlanningStage,
+  errorClass: z.enum(["operator_error", "validation_error", "type_error", "unexpected"]),
+});
+
+/** Optional diagnostics cannot alter planning or authorization, including a throwing observer. */
+export const advanceExportPlanningStage = (
+  observer: ExportPlanningStageObserver | undefined,
+  planStage: ExportPlanningStage,
+): void => {
+  try {
+    observer?.(planStage);
+  } catch {
+    /* Planning retains its original behavior when diagnostics are unavailable. */
+  }
+};
+
 const normalActorProofFailure = z.strictObject({
   stage: z.enum([
     "authorization",
@@ -850,6 +903,7 @@ const metadata = z.strictObject({
   phase,
   planningFailure: operatorPlanningFailure.optional(),
   continuityPlanningFailure: continuityPlanningFailure.optional(),
+  exportPlanningFailure: exportPlanningFailure.optional(),
   normalActorProofFailure: normalActorProofFailure.optional(),
   executionFailure: operatorExecutionFailure.optional(),
   hostedEnvironmentBindingFailure: hostedEnvironmentBindingFailure.optional(),
@@ -1065,6 +1119,42 @@ const sandboxResumeFailure = (
     /* Closed SDK classification never changes the original rejection. */
   }
   return failure;
+};
+
+/** Only fixed labels and the hashed session are emitted; exception properties are never read. */
+export const reportExportPlanningFailure = (
+  sessionId: string,
+  planStage: ExportPlanningStage,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A rejection boundary must tolerate arbitrary thrown values without inspecting their properties.
+  error: unknown,
+  sink?: HostedOperatorConsentDiagnosticSink,
+): void => {
+  try {
+    let errorClass: z.infer<typeof exportPlanningFailure>["errorClass"] = "unexpected";
+    try {
+      if (error instanceof HostedOperatorError) {
+        errorClass = "operator_error";
+      } else if (error instanceof z.ZodError) {
+        errorClass = "validation_error";
+      } else if (error instanceof TypeError) {
+        errorClass = "type_error";
+      }
+    } catch {
+      /* Hostile prototypes are unclassified, never traversed. */
+    }
+    createHostedOperatorConsentDiagnostic(
+      sessionId,
+      sink,
+    )({
+      boundary: "operator",
+      phase: "inline",
+      stage: "operator_request",
+      outcome: "setup_unavailable",
+      exportPlanningFailure: { stage: planStage, errorClass },
+    });
+  } catch {
+    /* Diagnostics cannot replace the original rejection. */
+  }
 };
 
 /** Continuity diagnostics retain only fixed stage/class labels, never exception details. */

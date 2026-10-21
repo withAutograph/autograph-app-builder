@@ -16,6 +16,7 @@ import {
   observeOperatorPlanStage,
   observeContinuityPlanningStage,
   reportContinuityPlanningFailure,
+  reportExportPlanningFailure,
   observeOperatorExecutionStage,
   reportOperatorExecutionFailure,
   projectAuthStartupDiagnostic,
@@ -1970,6 +1971,67 @@ describe("continuity planning failure diagnostics", () => {
       secret,
       sink,
     )({ ...value, continuityPlanningFailure: failure });
+    expect(sink).not.toHaveBeenCalled();
+  });
+});
+
+describe("closed export planning diagnostics", () => {
+  it.each([
+    [new HostedOperatorError("resource_mismatch"), "operator_error"],
+    [z.string().safeParse(4).error, "validation_error"],
+    [new TypeError(secret), "type_error"],
+    [new Error(secret), "unexpected"],
+    [
+      new Proxy(
+        {},
+        {
+          getPrototypeOf() {
+            throw new Error(secret);
+          },
+        },
+      ),
+      "unexpected",
+    ],
+  ] as const)("projects only the failure class for %#", (thrown, errorClass) => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    reportExportPlanningFailure(secret, "setup_match_resource", thrown, sink);
+    expect(sink).toHaveBeenCalledOnce();
+    expect(sink.mock.calls[0]?.[0]).toEqual({
+      boundary: "operator",
+      phase: "inline",
+      stage: "operator_request",
+      outcome: "setup_unavailable",
+      event: "builder.hosted_neon_consent",
+      sessionIdHash: `sha256:${createHash("sha256").update(secret).digest("hex")}`,
+      exportPlanningFailure: { stage: "setup_match_resource", errorClass },
+    });
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
+
+  it("swallows synchronous and asynchronous diagnostic sink failures", () => {
+    expect(() => {
+      reportExportPlanningFailure(secret, "release_read", new Error(secret), () => {
+        throw new Error(secret);
+      });
+    }).not.toThrow();
+    expect(() => {
+      reportExportPlanningFailure(secret, "release_read", new Error(secret), () =>
+        Promise.reject(new Error(secret)),
+      );
+    }).not.toThrow();
+  });
+
+  it("rejects extra export failure properties instead of logging them", () => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    const failure = {
+      stage: "release_match" as const,
+      errorClass: "operator_error" as const,
+      details: secret,
+    };
+    createHostedOperatorConsentDiagnostic(
+      secret,
+      sink,
+    )({ ...value, exportPlanningFailure: failure });
     expect(sink).not.toHaveBeenCalled();
   });
 });

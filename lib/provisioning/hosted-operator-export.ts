@@ -1,3 +1,5 @@
+import { advanceExportPlanningStage } from "./hosted-operator-consent-diagnostic";
+import type { ExportPlanningStageObserver } from "./hosted-operator-consent-diagnostic";
 import { hostedRuntimeTargetSchema } from "./hosted-runtime-journal";
 /* oxlint-disable sonarjs/no-nested-functions -- Physical lease and CAS closures retain one claim and attempt through asynchronous recovery. */
 import { createHash, randomUUID } from "node:crypto";
@@ -79,9 +81,14 @@ export interface HostedTenantExportDependencies {
   resolvePlan: (
     context: HostedOperatorContext,
     customerId: string,
+    onPlanStage?: ExportPlanningStageObserver,
   ) => Promise<Omit<HostedTenantExportPlan, "exportId" | "planRef" | "destination">>;
   /** Recheck the current canonical owner and exact original approved preparation together. */
-  assertSetup: (context: HostedOperatorContext, plan: HostedTenantExportPlan) => Promise<void>;
+  assertSetup: (
+    context: HostedOperatorContext,
+    plan: HostedTenantExportPlan,
+    onPlanStage?: ExportPlanningStageObserver,
+  ) => Promise<void>;
   readApproval: (
     context: HostedOperatorContext,
     request: HostedTenantExportRequest,
@@ -274,11 +281,26 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
     });
   };
   return {
-    async plan(context: HostedOperatorContext, customerId: string, idempotencyKey: string) {
+    async plan(
+      context: HostedOperatorContext,
+      customerId: string,
+      idempotencyKey: string,
+      observer?: ExportPlanningStageObserver,
+    ) {
+      const onPlanStage: ExportPlanningStageObserver | undefined =
+        observer === undefined
+          ? undefined
+          : (next) => {
+              advanceExportPlanningStage(observer, next);
+            };
+      advanceExportPlanningStage(onPlanStage, "plan_owner_authorization");
       await deps.assertOwner(context);
+      advanceExportPlanningStage(onPlanStage, "plan_input_validation");
       const exportId = exportIdFor(context, z.string().min(1).parse(idempotencyKey));
+      advanceExportPlanningStage(onPlanStage, "plan_prior_read");
       const prior = await deps.store.read({ authority: context.authority, exportId });
       if (prior !== undefined) {
+        advanceExportPlanningStage(onPlanStage, "plan_prior_validation");
         parseHostedTenantExportPlanForOwner(prior.journal.plan, {
           authority: context.authority,
           target: context.target,
@@ -300,7 +322,13 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
           status: tenantExportStatus(prior.journal),
         };
       }
-      const selection = await deps.resolvePlan(context, z.string().min(1).parse(customerId));
+      advanceExportPlanningStage(onPlanStage, "plan_input_validation");
+      const selection = await deps.resolvePlan(
+        context,
+        z.string().min(1).parse(customerId),
+        onPlanStage,
+      );
+      advanceExportPlanningStage(onPlanStage, "plan_construction");
       const plan = hostedTenantExportPlanSchema.parse({
         ...selection,
         exportId,
@@ -310,11 +338,13 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
           artifactPrefix: `_protected-operator/artifacts/tenant-export/${exportId}`,
         },
       });
+      advanceExportPlanningStage(onPlanStage, "plan_validation");
       parseHostedTenantExportPlanForOwner(plan, {
         authority: context.authority,
         target: context.target,
       });
-      await deps.assertSetup(context, plan);
+      await deps.assertSetup(context, plan, onPlanStage);
+      advanceExportPlanningStage(onPlanStage, "plan_reservation");
       const record = await deps.store.reserve({
         record: {
           kind: "app-export",
@@ -337,6 +367,7 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
         },
         now: now(),
       });
+      advanceExportPlanningStage(onPlanStage, "plan_reservation_match");
       if (
         !isDeepStrictEqual(record.journal.plan, plan) ||
         record.journal.idempotencyKey !== idempotencyKey
