@@ -1496,6 +1496,102 @@ it("keeps a typed framework session limit out of public confirmations", () => {
   );
 });
 
+describe("public draft pull request approval scope", () => {
+  const receipt = (phase = "draft_update") => ({
+    baseRef: "refs/heads/reviewed-change",
+    baseSha: "a".repeat(40),
+    format: "autograph-eve-approval-receipt-v2",
+    outcome: phase === "publication" ? "create-draft-pr" : "update-draft-pr",
+    phase,
+    repository: "example/reviewed-repository",
+    repositoryId: "1234",
+    subjectDigest: "b".repeat(64),
+  });
+  const requested = (toolName: string, approvalReceipt: unknown) =>
+    installedEvent({
+      data: {
+        requests: [
+          {
+            action: {
+              input: {
+                approvalReceipt,
+                path: "/private/workspace",
+                token: "private-token",
+              },
+              kind: "tool-call",
+              toolName,
+            },
+            kind: "tool-approval",
+            prompt: `Approve tool call: ${toolName}`,
+            requestId: "req_draft_review",
+          },
+        ],
+      },
+      type: "input.requested",
+    });
+
+  it.each([
+    ["publish-github-draft-pr", "publication", "Publish the reviewed changes?"],
+    ["publish_github_draft_pr", "publication", "Publish the reviewed changes?"],
+    ["update_github_draft_pr", "draft_update", "Update the draft pull request?"],
+    ["reconcile_github_draft_pr", "draft_update", "Update the draft pull request?"],
+  ])("presents the receipt scope for %s", (toolName, phase, title) => {
+    const event = requested(toolName, receipt(phase));
+    const projected = projectInstalledEveEvent(event, 4).map(toPublicEvent);
+    const pending = outstandingInstalledEveRequests([event]);
+    const publicRequest = projected.find((item) => item?.type === "input_required");
+    expect(publicRequest?.type).toBe("input_required");
+    if (publicRequest?.type !== "input_required") {
+      throw new Error("Expected the draft approval request.");
+    }
+    expect(publicRequest.request).toMatchObject({
+      allowFreeform: false,
+      kind: "approval",
+      requestId: "req_draft_review",
+      title,
+    });
+    expect(publicRequest.request.description).toContain("example/reviewed-repository");
+    expect(pending).toMatchObject([{ requestId: "req_draft_review", title }]);
+    expect(pending[0]?.description).toContain("reviewed-change");
+    expect(JSON.stringify({ pending, projected })).not.toContain("private-token");
+    expect(JSON.stringify({ pending, projected })).not.toContain("/private/workspace");
+    expect(JSON.stringify({ pending, projected })).not.toContain("Approve tool call:");
+  });
+
+  it("reprojects the same retained reconciliation request with its exact reviewed scope", () => {
+    const event = requested("reconcile_github_draft_pr", receipt());
+    const [pending] = outstandingInstalledEveRequests([event]);
+    expect(pending).toMatchObject({
+      description: `This will update the existing draft branch refs/heads/reviewed-change in example/reviewed-repository from commit ${"a".repeat(40)} using reviewed reconciliation ${"b".repeat(64)}. The pull request will remain a draft; this will not merge or deploy it.`,
+      requestId: "req_draft_review",
+      title: "Update the draft pull request?",
+    });
+  });
+
+  it.each([
+    "publish-github-draft-pr",
+    "publish_github_draft_pr",
+    "update_github_draft_pr",
+    "reconcile_github_draft_pr",
+  ])("fails closed for malformed or wrong-phase %s receipts", (toolName) => {
+    for (const approvalReceipt of [
+      { format: "unsupported" },
+      { ...receipt(), outcome: "accept-appspec", phase: "appspec" },
+    ]) {
+      const event = requested(toolName, approvalReceipt);
+      const projected = projectInstalledEveEvent(event, 4);
+      expect(projected).toMatchObject([
+        { code: "confirmation_unavailable", type: "error.public" },
+        { status: "failed", type: "status" },
+      ]);
+      expect(outstandingInstalledEveRequests([event])).toEqual([]);
+      expect(deriveInstalledEveStatus([event])).toBe("failed");
+      expect(JSON.stringify(projected)).not.toContain("private-token");
+      expect(JSON.stringify(projected)).not.toContain("/private/workspace");
+    }
+  });
+});
+
 describe("suspended hosted identity invitation", () => {
   const link = "https://auth.example.com/api/auth/platform/operator-link?nonce=ordinary-link-nonce";
   const partial = (output: unknown, toolName = "prepare-app-hosted-runtime") =>

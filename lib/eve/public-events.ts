@@ -1155,6 +1155,9 @@ const inputRequest = (request: {
     "export-app-hosted-data": "Export this customer’s app data privately?",
     "run-app-continuity-tests": "Run this app continuity suite?",
     "publish-github-draft-pr": "Publish the reviewed changes?",
+    publish_github_draft_pr: "Publish the reviewed changes?",
+    update_github_draft_pr: "Update the draft pull request?",
+    reconcile_github_draft_pr: "Update the draft pull request?",
   } as const;
   const toolName = request.action?.toolName;
   if (
