@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v3
         with:
-          version: ${{ env.CI_MISE_VERSION }}
+          version: "2026.9.2"
       - uses: actions/setup-node@v4
         with:
           node-version: 24.18.0
@@ -46,7 +46,6 @@ jobs:
           name: protected-operator-recovery-${{ github.sha }}
           path: .artifacts/protected-operator-recovery
           if-no-files-found: warn
-
 
   repository:
     runs-on: ubuntu-26.04
