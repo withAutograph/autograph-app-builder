@@ -158,6 +158,33 @@ const operatorPlanningFailure = z.strictObject({
 });
 type OperatorPlanningFailure = z.infer<typeof operatorPlanningFailure>;
 
+const continuityPlanningStage = z.enum([
+  "tool_client_resolution",
+  "tool_preview_target",
+  "tool_local_sandbox",
+  "tool_selected_app",
+  "tool_sandbox_identity",
+  "tool_plan_request",
+  "client_request_validation",
+  "client_token_resolution",
+  "client_transport",
+  "client_response_status",
+  "client_response_decode",
+  "client_response_validation",
+  "dispatcher_workload_verification",
+  "dispatcher_owner_authorization",
+  "dispatcher_planning",
+  "prepared_runtime",
+  "sandbox_authorization",
+  "sandbox_resume",
+  "port_observation",
+]);
+export type ContinuityPlanningStage = z.infer<typeof continuityPlanningStage>;
+const continuityPlanningFailure = z.strictObject({
+  stage: continuityPlanningStage,
+  errorClass: z.enum(["operator_error", "validation_error", "type_error", "unexpected"]),
+});
+
 const normalActorProofFailure = z.strictObject({
   stage: z.enum([
     "authorization",
@@ -812,6 +839,7 @@ const metadata = z.strictObject({
   preparationFailure: runtimePreparationFailure.optional(),
   phase,
   planningFailure: operatorPlanningFailure.optional(),
+  continuityPlanningFailure: continuityPlanningFailure.optional(),
   normalActorProofFailure: normalActorProofFailure.optional(),
   executionFailure: operatorExecutionFailure.optional(),
   hostedEnvironmentBindingFailure: hostedEnvironmentBindingFailure.optional(),
@@ -993,6 +1021,61 @@ export const reportOperatorPlanningMismatch = (
     });
   } catch {
     /* Diagnostics never change planning or authorization behavior. */
+  }
+};
+
+/** Continuity diagnostics retain only fixed stage/class labels, never exception details. */
+export const reportContinuityPlanningFailure = (
+  sessionId: string,
+  planStage: ContinuityPlanningStage,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This rejection boundary classifies arbitrary thrown values without reading their properties.
+  error: unknown,
+  sink?: HostedOperatorConsentDiagnosticSink,
+): void => {
+  const failure: z.infer<typeof continuityPlanningFailure> = {
+    stage: planStage,
+    errorClass: "unexpected",
+  };
+  try {
+    if (error instanceof HostedOperatorError) {
+      failure.errorClass = "operator_error";
+    } else if (error instanceof z.ZodError) {
+      failure.errorClass = "validation_error";
+    } else if (error instanceof TypeError) {
+      failure.errorClass = "type_error";
+    }
+  } catch {
+    /* Hostile prototypes cannot change the original rejection. */
+  }
+  try {
+    createHostedOperatorConsentDiagnostic(
+      sessionId,
+      sink,
+    )({
+      boundary:
+        planStage.startsWith("tool_") || planStage.startsWith("client_") ? "builder" : "operator",
+      phase: "inline",
+      stage: "operator_request",
+      outcome: "setup_unavailable",
+      continuityPlanningFailure: failure,
+    });
+  } catch {
+    /* Diagnostics never change continuity planning. */
+  }
+};
+
+/** Observe an existing planning call exactly once, preserving its value or rejection. */
+export const observeContinuityPlanningStage = async <T>(
+  sessionId: string,
+  planStage: ContinuityPlanningStage,
+  run: () => T | Promise<T>,
+  sink?: HostedOperatorConsentDiagnosticSink,
+): Promise<T> => {
+  try {
+    return await run();
+  } catch (error) {
+    reportContinuityPlanningFailure(sessionId, planStage, error, sink);
+    throw error;
   }
 };
 
