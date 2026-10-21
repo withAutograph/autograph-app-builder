@@ -8,6 +8,7 @@ import {
   mkdtemp,
   readFile,
   realpath,
+  readlink,
   rm,
   symlink,
   writeFile,
@@ -39,6 +40,7 @@ import {
   bootstrapLiveTemplateDependencies,
   dependencyTargetForWorkspace,
   executionDependencyViewScript,
+  checkoutDependencyViewScript,
   inspectDependencyCache,
   materializedDependencyNodeModulesRoot,
   materializeOfflineDependencies,
@@ -1172,4 +1174,227 @@ describe("offline dependency cache", () => {
     );
     expect(dockerfile).toContain("RUN --network=none");
   });
+});
+
+describe("linked package dependency views", () => {
+  const linkedFixture = async () => {
+    const createdRoot = await mkdtemp(join(tmpdir(), "builder-linked-dependencies-"));
+    const root = await realpath(createdRoot);
+    const workspace = join(root, "workspace");
+    const source = join(workspace, "repository");
+    const candidate = join(workspace, "candidate");
+    const view = join(workspace, ".app-builder", "dependency-views", "linked");
+    const rootModules = join(source, "node_modules");
+    const appModules = join(source, "apps", "example", "node_modules");
+    const physicalPackage = join(
+      rootModules,
+      ".bun",
+      "linked-runtime@fixture",
+      "node_modules",
+      "linked-runtime",
+    );
+    for (const directory of [
+      physicalPackage,
+      join(rootModules, "@fixture"),
+      join(appModules, "@fixture"),
+      join(source, "packages", "local"),
+      join(candidate, "packages", "local"),
+      join(candidate, "apps", "example"),
+    ]) {
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Build the owned fixture directories before writing their contents.
+      await mkdir(directory, { recursive: true });
+    }
+    const rootManifest = '{"workspaces":["apps/*","packages/*"]}';
+    const localManifest = '{"name":"@fixture/local","main":"index.cjs"}';
+    await Promise.all([
+      writeFile(join(source, "package.json"), rootManifest),
+      writeFile(join(candidate, "package.json"), rootManifest),
+      writeFile(join(source, "apps", "example", "package.json"), '{"name":"example"}'),
+      writeFile(join(candidate, "apps", "example", "package.json"), '{"name":"example"}'),
+      writeFile(join(source, "packages", "local", "package.json"), localManifest),
+      writeFile(join(candidate, "packages", "local", "package.json"), localManifest),
+      writeFile(
+        join(source, "packages", "local", "index.cjs"),
+        'module.exports="source-workspace";',
+      ),
+      writeFile(
+        join(candidate, "packages", "local", "index.cjs"),
+        'module.exports="candidate-workspace";',
+      ),
+      writeFile(
+        join(physicalPackage, "package.json"),
+        '{"name":"linked-runtime","main":"index.cjs"}',
+      ),
+      writeFile(join(physicalPackage, "index.cjs"), 'module.exports="cached-package";'),
+      symlink(nodePath.relative(rootModules, physicalPackage), join(rootModules, "linked-runtime")),
+      symlink(
+        nodePath.relative(appModules, join(rootModules, "linked-runtime")),
+        join(appModules, "linked-runtime"),
+      ),
+      symlink(".bun/missing/node_modules/optional-package", join(rootModules, "optional-package")),
+      symlink("../../packages/local", join(rootModules, "@fixture", "local")),
+      symlink("../../../../packages/local", join(appModules, "@fixture", "local")),
+    ]);
+    const packageBytes = await readFile(join(physicalPackage, "index.cjs"));
+    const sourceBytes = await readFile(join(source, "packages", "local", "index.cjs"));
+    const packageStat = await lstat(join(physicalPackage, "index.cjs"));
+    const packageMode = packageStat.mode;
+    const run = async (kind: "checkout" | "execution") => {
+      if (kind === "checkout") {
+        await executeFile(process.execPath, [
+          "-e",
+          checkoutDependencyViewScript,
+          source,
+          candidate,
+          view,
+          workspace,
+        ]);
+        return;
+      }
+      const layout = {
+        kind: "cache",
+        version: 1,
+        roots: [
+          { path: "node_modules", cachePath: rootModules },
+          { path: "apps/example/node_modules", cachePath: appModules },
+        ],
+        workspaceLinks: [
+          {
+            path: "node_modules/@fixture/local",
+            target: "../../packages/local",
+            sourcePath: "packages/local",
+          },
+          {
+            path: "apps/example/node_modules/@fixture/local",
+            target: "../../../../packages/local",
+            sourcePath: "packages/local",
+          },
+        ],
+      };
+      const layoutPath = join(root, "layout.json");
+      const scriptPath = join(root, "view.cjs");
+      await Promise.all([
+        writeFile(layoutPath, JSON.stringify(layout)),
+        writeFile(scriptPath, executionDependencyViewScript),
+      ]);
+      await executeFile(process.execPath, [
+        scriptPath,
+        layoutPath,
+        candidate,
+        view,
+        workspace,
+        "1",
+      ]);
+    };
+    return {
+      root,
+      workspace,
+      source,
+      candidate,
+      view,
+      rootModules,
+      appModules,
+      physicalPackage,
+      packageBytes,
+      sourceBytes,
+      packageMode,
+      run,
+    };
+  };
+
+  const consume = async (directory: string) => {
+    const result = await executeFile(
+      process.execPath,
+      [
+        "-e",
+        'console.log(JSON.stringify([require("linked-runtime"),require("linked-runtime/package.json").name,require("@fixture/local")]))',
+      ],
+      { cwd: directory },
+    );
+    return result.stdout.trim();
+  };
+
+  it.each(["checkout", "execution"] as const)(
+    "keeps linked packages directly resolvable when creating and rebuilding the %s view",
+    async (kind) => {
+      const fixture = await linkedFixture();
+      try {
+        const sourceLink = await lstat(join(fixture.rootModules, "linked-runtime"));
+        expect(sourceLink.isSymbolicLink()).toBe(true);
+        await fixture.run(kind);
+        const targets = await Promise.all(
+          ["node_modules", "apps/example/node_modules"].map(async (dependencyRoot) => {
+            const link = join(fixture.view, dependencyRoot, "linked-runtime");
+            const target = await readlink(link);
+            return await lstat(target);
+          }),
+        );
+        // The package bootstrap resolver classifies each immediate target as a directory.
+        expect(targets.every((target) => target.isDirectory())).toBe(true);
+        await expect(consume(join(fixture.candidate, "apps", "example"))).resolves.toBe(
+          JSON.stringify(["cached-package", "linked-runtime", "candidate-workspace"]),
+        );
+        expect(await readlink(join(fixture.view, "node_modules", "optional-package"))).toBe(
+          join(fixture.rootModules, "optional-package"),
+        );
+        await writeFile(
+          join(fixture.candidate, "packages", "local", "index.cjs"),
+          'module.exports="candidate-revised";',
+        );
+        await fixture.run(kind);
+        await expect(consume(join(fixture.candidate, "apps", "example"))).resolves.toBe(
+          JSON.stringify(["cached-package", "linked-runtime", "candidate-revised"]),
+        );
+        const rebuiltTarget = await readlink(
+          join(fixture.view, "apps", "example", "node_modules", "linked-runtime"),
+        );
+        const rebuiltStat = await lstat(rebuiltTarget);
+        expect(rebuiltStat.isDirectory()).toBe(true);
+        expect(await readFile(join(fixture.physicalPackage, "index.cjs"))).toEqual(
+          fixture.packageBytes,
+        );
+        const packageStat = await lstat(join(fixture.physicalPackage, "index.cjs"));
+        expect(packageStat.mode).toBe(fixture.packageMode);
+        expect(await readFile(join(fixture.source, "packages", "local", "index.cjs"))).toEqual(
+          fixture.sourceBytes,
+        );
+      } finally {
+        await rm(fixture.root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.each(["real install", "foreign symlink"])(
+    "preserves a candidate-owned %s when attaching checkout dependencies",
+    async (kind) => {
+      const fixture = await linkedFixture();
+      try {
+        const destination = join(fixture.candidate, "apps", "example", "node_modules");
+        const installed =
+          kind === "real install" ? destination : join(fixture.root, "separate-install");
+        await mkdir(join(installed, "candidate-package"), { recursive: true });
+        await writeFile(
+          join(installed, "candidate-package", "index.cjs"),
+          'module.exports="candidate-install";',
+        );
+        if (kind === "foreign symlink") {
+          await symlink(installed, destination);
+        }
+        await fixture.run("checkout");
+        const result = await executeFile(
+          process.execPath,
+          ["-e", 'console.log(require("candidate-package/index.cjs"))'],
+          { cwd: join(fixture.candidate, "apps", "example") },
+        );
+        expect(result.stdout.trim()).toBe("candidate-install");
+        expect(await realpath(destination)).toBe(installed);
+        await fixture.run("checkout");
+        expect(await readFile(join(installed, "candidate-package", "index.cjs"), "utf-8")).toBe(
+          'module.exports="candidate-install";',
+        );
+      } finally {
+        await rm(fixture.root, { recursive: true, force: true });
+      }
+    },
+  );
 });

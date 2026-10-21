@@ -528,7 +528,13 @@ const populate = (cacheDirectory, viewDirectory, relativeDirectory) => {
       populate(cached, viewed, relative);
       continue;
     }
-    fs.symlinkSync(cached, viewed);
+    let target = cached;
+    if (entry.isSymbolicLink()) {
+      try { target = fs.realpathSync(cached); }
+      catch { /* Preserve unresolved optional links without blocking dependency attachment. */ }
+    }
+    // Package resolvers may classify the immediate target without following another link.
+    fs.symlinkSync(target, viewed);
   }
 };
 `;
