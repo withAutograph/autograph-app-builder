@@ -208,8 +208,24 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    Preserve unrelated changes. Repair actual reported technical failures
    through the supported tools when safe, without requesting the same approval
    again. If recovery is unavailable, explain the incomplete product outcome.
-8. After apply succeeds, continue with `validate_app_creation`. It runs the
-   repository's normal commands against the current applied app. When it
+8. When the user requests restoration of the currently published app and defers
+   unpublished changes, recover the existing hosted Preview before continuing
+   private candidate validation or review. Preserve the candidate and its
+   diagnostics for later iteration. Use `plan-app-hosted-runtime` and the
+   existing preparation/recovery path with its normal effect approvals. For
+   source-publication recovery, inspect
+   `inspect_github_draft_pr_reconciliation` with `kind: "publication-recovery"`
+   and follow its returned recovery call. Retained metadata grants no authority;
+   provider verification and equivalent selected-release checks still apply.
+   Reuse approval only for the exact unchanged operation; changed plans require
+   ordinary approval. Open the protected native route with `start_app_preview`
+   before preparing private local data. Keep unavailable native delivery and
+   unassessed authenticated behavior explicit. Resume the candidate's full
+   validation, review and separate publication approval when delivering its
+   changes; do not reset it or pin ongoing revision work to published source.
+   For delivery of applied changes, after apply succeeds continue with
+   `validate_app_creation`. It runs the repository's normal commands against
+   the current applied app. When it
    reports a repairable failure, provide corrected `implementationFiles` to
    `validate_app_creation` and retry in the same approved checkout. Use the
    returned diagnostics and status; do not invent extra validation capabilities
@@ -242,8 +258,9 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    walkthrough or truncated tool history is not a reason to discard the finding
    or start another paid review; the saved assessment remains readable.
    A review interruption alone does not require another technical validation.
-   For requested hosted generated-app delivery, technical validation and source
-   review precede publication of the source needed to deploy the app. Keep hosted
+   For requested hosted delivery of changed generated-app source, technical
+   validation and source review precede publication of the source needed to
+   deploy the app. Keep hosted
    behavior unassessed while completing that publication; exercise the pending
    hosted checks after delivery instead of waiting for a Preview before reviewing
    and publishing its source.
@@ -300,15 +317,19 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    receipt names the existing PR branch head, not the PR's base branch. Ask
    for a separate update approval before moving the branch. If the
    base or PR head moves, prepare, validate, and review the new result again.
-9. Use the implemented app's private preview with `start_app_preview` for
+9. For published-version restoration, use `start_app_preview` to open the
+   protected native app route first; its existing hosted runtime supplies data.
+   Use the implemented app's private preview with `start_app_preview` for
    requested local delivery or uncovered behavioral checks. For requested
-   hosted delivery, publish technically validated and reviewed source through the
+   hosted delivery of changed source, publish technically validated and reviewed
+   source through the
    existing publication approval flow without waiting for successful private UI
    startup. Report actual startup failures and claim a working local or hosted
    Preview only after exercising that actual app.
-   If the repository defines `app:local` for the selected app and the preview
-   needs local data, use `prepare-app-local-preview` first in the approved
-   sandbox. Report its exact task failure rather than treating an HTTP-ready
+   For private local preview or candidate checks, if the repository defines
+   `app:local` for the selected app and needs local data, use
+   `prepare-app-local-preview` first in the approved sandbox.
+   Report its exact task failure rather than treating an HTTP-ready
    error page as working product behavior.
    Discover the repository's actual development command and supply its
    executable and argument array without shell wrappers. For a nested app

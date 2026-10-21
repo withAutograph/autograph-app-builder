@@ -149,8 +149,25 @@ not write the checkout. Submit the complete `implementationFiles` and product
 summary together so its approval card covers the actual build; do not send an
 empty apply merely to obtain approval and then request another apply for the
 implementation. The tool writes the private checkout only after approval.
-For requested hosted generated-app delivery, technically validate and independently
-review the private implementation, then complete the normal destination diff
+When the user requests restoration of the currently published app and defers
+unpublished changes, recover that app's existing hosted Preview first. Preserve
+the private candidate and its diagnostics for later iteration. Use
+`plan-app-hosted-runtime` and the existing approved preparation/recovery path;
+validation or review of the unpublished candidate is not a prerequisite for
+restoring the published version. If planning requires source-publication
+recovery, use `inspect_github_draft_pr_reconciliation` with
+`kind: "publication-recovery"` and follow its returned recovery call through
+normal approval, provider verification and equivalent selected-release checks.
+Retained metadata grants no authority. Reuse approval only for the exact
+unchanged operation; changed plans require ordinary approval. Open the protected
+native app route with `start_app_preview` before preparing private local data.
+Keep unavailable native delivery and unassessed authenticated behavior explicit.
+Resume the candidate's full validation, review and separate publication approval
+when delivering its changes; do not reset the candidate or pin ongoing revision
+work to the published source.
+For requested hosted delivery of changed generated-app source, technically
+validate and independently review the private implementation, then complete the
+normal destination diff
 review, seal its proposal, and obtain separate publication approval. Use
 `publish_github_draft_pr`, or the existing draft update/reconciliation path, to
 publish the reviewed source. Verify `appSourceRecording` is `recorded`; if it is
@@ -159,8 +176,9 @@ Do this before full app preparation and delivery. Initial Auth/resource bootstra
 may happen first. Keep hosted behavior unassessed until the actual app runs;
 do not wait for authenticated Preview acceptance before publishing the source
 needed to deploy that Preview. Never substitute another app or repository head.
-For hosted Preview persistence, use `plan-app-hosted-runtime` after the private
-implementation is ready and the user requests connected Preview resources.
+For hosted Preview persistence, use `plan-app-hosted-runtime` when restoring the
+published version or after the private implementation is ready and the user
+requests connected Preview resources.
 Present the returned concrete targets, app/Auth roles, access grants,
 effects, cost owner and retention. Pass that unchanged plan, digest and operation
 reference to `prepare-app-hosted-runtime` for separate effect approval. Read
@@ -186,9 +204,11 @@ change acceptance.
 Preserve separate effect approvals and report unavailable deployment/submission
 capabilities as delivery work still required.
 
-After a successful apply, call `validate_app_creation` in the approved private
-checkout. Applied files are not validated files. Successful repository commands
-establish technical validation, not proof that the accepted product behaviors
+For delivery of applied changes, call `validate_app_creation` in the approved
+private checkout after apply succeeds. Published-version restoration may proceed
+first while that candidate's work remains deferred. Applied files are not
+validated files. Successful repository commands establish technical validation,
+not proof that the accepted product behaviors
 work. Exercise those outcomes against the actual implementation and preserve
 honest distinctions between verified behavior and behavior still unassessed.
 A deferred or unassessed source assessment from validation is expected; do not
@@ -244,16 +264,19 @@ Production readiness. Do not restore a retired demo authentication bypass to
 make a walkthrough pass.
 Use `start_app_preview` for requested local delivery or to exercise
 uncovered behavior, with the repository's actual development command and the
-implemented app's route. For requested hosted delivery, technically validated
+implemented app's route. For requested hosted delivery of changed source,
+technically validated
 and reviewed source may proceed through the existing publication approval flow
 without successful private UI startup. Report an actual startup failure; claim
 a working local or hosted Preview only after exercising that actual app.
 The tool returns a private, expiring browser URL only after the running app
 answers an HTTP readiness check.
-If the selected app has a repository-owned `app:local` task and its preview
-requires local data, call `prepare-app-local-preview` in the same private sandbox
-before checking product behavior. Match the development server's listening port
-to the port supplied to `start_app_preview`; a package script may choose another
+For a private local preview or candidate checks, if the selected app has a
+repository-owned `app:local` task and requires local data, call
+`prepare-app-local-preview` in the same private sandbox before checking product
+behavior. Protected native Preview recovery uses its existing hosted runtime.
+Match the development server's listening port to the port supplied to
+`start_app_preview`; a package script may choose another
 port. A page that responds with HTTP 200 can still contain an application error.
 Give that URL to the user, including its expiry. Reopen it with the same supported
 tool when asked after expiry or a runtime restart. A reachable page is delivery
