@@ -36,7 +36,10 @@ export type HostedGitHubPublicationProviderFactory = (input: {
 }) => GitHubPublicationAdapter | Promise<GitHubPublicationAdapter>;
 
 export interface HostedGitHubPublicationRuntimeResolver {
-  resolve: (sessionAuth: unknown) => Promise<GitHubPublicationRuntime>;
+  resolve: (
+    sessionAuth: unknown,
+    selection?: { selectedInstallationId: string },
+  ) => Promise<GitHubPublicationRuntime>;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -90,6 +93,26 @@ const defaultDependencies: HostedGitHubPublicationRuntimeResolverDependencies = 
   },
 };
 
+const selectedPublicationInstallation = async (
+  selection: { selectedInstallationId: string } | undefined,
+  readPrepared: () => ReturnType<
+    HostedGitHubPublicationRuntimeResolverDependencies["readPreparedHandoff"]
+  >,
+) => {
+  if (selection !== undefined) {
+    return hostedGitHubInstallationBindingSchema.shape.installationId.parse(
+      selection.selectedInstallationId,
+    );
+  }
+  const prepared = await readPrepared();
+  return (
+    prepared?.providers?.githubInstallationId ??
+    (prepared?.provisioning?.github.status === "succeeded"
+      ? prepared.provisioning.github.installationId
+      : undefined)
+  );
+};
+
 /**
  * Resolves a fresh tenant-bound runtime for one Eve session authority. Only the
  * injected database pool is cached. Membership, installation binding, stores,
@@ -127,7 +150,7 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
   }
 
   return {
-    async resolve(sessionAuth) {
+    async resolve(sessionAuth, selection) {
       if (!input.enabled) {
         return composeGitHubPublicationRuntime({ enabled: false });
       }
@@ -136,13 +159,12 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
       }
 
       const { authority, principal } = exactGitHubPublicationAuthority(sessionAuth);
-      const prepared = await dependencies.readPreparedHandoff(sessionAuth);
-      const selectedInstallationId =
-        prepared?.providers?.githubInstallationId ??
-        (prepared?.provisioning?.github.status === "succeeded"
-          ? prepared.provisioning.github.installationId
-          : undefined);
-      const pool = await database();
+      const [selectedInstallationId, pool] = await Promise.all([
+        selectedPublicationInstallation(selection, () =>
+          dependencies.readPreparedHandoff(sessionAuth),
+        ),
+        database(),
+      ]);
       const membership = dependencies.membership(pool);
       if (
         !(await membership.isMember({
