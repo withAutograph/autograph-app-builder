@@ -21,17 +21,23 @@ export const withBuilderGatewayReporting = (
     if (
       !Array.isArray(existingTags) ||
       // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve unsupported caller metadata unchanged rather than repairing or discarding its tags.
-      !existingTags.every((tag): tag is string => typeof tag === "string")
+      !existingTags.every(
+        (tag): tag is string => typeof tag === "string" && tag.length >= 1 && tag.length <= 64,
+      )
     ) {
       return options;
     }
     const nativeHash = createHash("sha256")
       .update(JSON.stringify(["builder-native-session-attribution-v1", sessionId]))
-      .digest("hex");
-    const additions = [
-      `builder-native-sha256:${nativeHash}`,
-      `builder-callsite:${callsite}`,
-    ].filter((tag) => !existingTags.includes(tag));
+      .digest("base64url");
+    const additions = [`builder-native:${nativeHash}`, `builder-callsite:${callsite}`].filter(
+      (tag) => !existingTags.includes(tag),
+    );
+    // Gateway Custom Reporting accepts at most 10 distinct tags, each 1–64 characters.
+    // https://vercel.com/docs/ai-gateway/observability-and-spend/custom-reporting
+    if (new Set([...existingTags, ...additions]).size > 10) {
+      return options;
+    }
     return {
       ...options,
       gateway: { ...gateway, tags: [...existingTags, ...additions] },

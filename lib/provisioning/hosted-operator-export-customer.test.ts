@@ -294,6 +294,36 @@ describe("original owner organization export selection", () => {
     expect(await resolveExportOwnerOrganization(f.input)).toBe("original-org");
     expect(f.input.verifyProof).toHaveBeenCalledOnce();
   });
+  it("verifies one approved witness across distinct historical versions of the same organization", async () => {
+    const f = await fixture();
+    const later = structuredClone(f.historical);
+    later.approvedByCallId = "later-approved-call";
+    later.operator.operationRef = "00000000-0000-4000-8000-000000000003";
+    later.operator.approvalId = "later-approval";
+    f.record.operator?.retainedGatewayDeliveries?.push(later);
+    expect(await resolveExportOwnerOrganization(f.input)).toBe("original-org");
+    expect(f.input.readApproval).toHaveBeenCalledOnce();
+    expect(f.input.verifyProof).toHaveBeenCalledOnce();
+  });
+  it.each(["approval", "proof"] as const)(
+    "tries a later same-organization witness after an invalid first %s",
+    async (invalid) => {
+      const f = await fixture();
+      const later = structuredClone(f.historical);
+      later.approvedByCallId = "later-approved-call";
+      later.operator.operationRef = "00000000-0000-4000-8000-000000000003";
+      later.operator.approvalId = "later-approval";
+      f.record.operator?.retainedGatewayDeliveries?.push(later);
+      if (invalid === "approval") {
+        f.input.readApproval.mockResolvedValueOnce(false);
+      } else {
+        f.input.verifyProof.mockRejectedValueOnce(new Error("Historical proof unavailable"));
+      }
+      expect(await resolveExportOwnerOrganization(f.input)).toBe("original-org");
+      expect(f.input.readApproval).toHaveBeenCalledTimes(2);
+      expect(f.input.verifyProof).toHaveBeenCalledTimes(invalid === "approval" ? 1 : 2);
+    },
+  );
   it.each(["ownerSessionId", "nonceSha256", "proofSha256", "authResourceId"] as const)(
     "ignores a foreign captured %s",
     async (field) => {

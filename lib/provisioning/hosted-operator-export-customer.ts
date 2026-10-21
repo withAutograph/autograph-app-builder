@@ -100,7 +100,9 @@ export const resolveExportOwnerOrganization = async (input: {
   const organizations = new Set<string>();
   for (const candidate of candidates) {
     const identity = witnessIdentity(candidate);
-    if (seen.has(identity)) {
+    // Selection is by organization; one fully verified witness establishes it.
+    // Distinct organizations still require verification to detect ambiguity.
+    if (organizations.has(candidate.membership.organizationId) || seen.has(identity)) {
       continue;
     }
     seen.add(identity);
