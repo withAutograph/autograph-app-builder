@@ -239,6 +239,9 @@ const dispatch = async (
     }
     const request: Parameters<NonNullable<HostedEveTransport["sendAccepted"]>>[0] = {
       adapterSessionId: session.adapterSessionId,
+      ...(session.nativeRecoveryBinding === undefined
+        ? {}
+        : { logicalSessionId: session.nativeRecoveryBinding.logicalSessionId }),
       message,
       operationId: candidate.operationId,
       principal: session.principal,

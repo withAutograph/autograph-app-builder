@@ -61,7 +61,8 @@ export const assertHostedBuildDecisionOwner = async (
     throw error;
   }
   if (
-    owner.sessionId !== session.sessionId ||
+    owner.sessionId !==
+      (session.nativeRecoveryBinding?.originalAuthoritySessionId ?? session.sessionId) ||
     owner.adapterGeneration !== session.adapterGeneration
   ) {
     throw new Error("Approved build continuation ownership changed.");

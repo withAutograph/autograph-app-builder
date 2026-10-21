@@ -3,12 +3,17 @@ import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { EveSessionService } from "../eve/service";
-import { createDeploymentPrototypePreviewRequestHandler } from "./browser-preview-deployment";
+import {
+  createDeploymentPrototypePreviewRequestHandler,
+  createOwnedSessionStreamedPrototypePreviewResolver,
+} from "./browser-preview-deployment";
+import { createPrototypePreviewRequestHandler } from "./browser-preview";
 import { hostedPrincipalSchema, tenantKeyFor } from "../eve/hosted-auth";
 import { durableHostedSessionRecordSchema, InMemoryHostedEveStore } from "../eve/hosted-store";
 import type { HostedEveStore, HostedPagedCheckpointMetadata } from "../eve/hosted-store";
 import { HostedAdapterSessionUnavailableError } from "../eve/hosted-service";
 import type { HostedEveTransport } from "../eve/hosted-service";
+import type { NativeRecoveryBinding } from "../eve/native-recovery-contract";
 import type { getPrototypeChunk, PrototypeChunkKey } from "../agent/postgres-prototype-chunks";
 import type { ResumeRealmContinuation } from "./realm-continuation-read";
 
@@ -64,6 +69,7 @@ const ownedFixture = (
     missingManifest?: boolean;
     lostAdapter?: boolean;
     resumeRealmContinuation?: ResumeRealmContinuation;
+    nativeRecoveryBinding?: NativeRecoveryBinding;
   } = {},
 ) => {
   const publicId = "ses_public";
@@ -89,29 +95,34 @@ const ownedFixture = (
     sessionId: options.artifactSessionId ?? current,
     version: 2 as const,
   };
-  const record = durableHostedSessionRecordSchema.parse({
-    adapterGeneration: origin === current ? 1 : 2,
-    adapterSessionId: current,
-    checkpointDigest: `sha256:${"c".repeat(64)}`,
-    checkpointProgressDigest: `sha256:${"d".repeat(64)}`,
-    checkpointRef: {
-      digest: `sha256:${"c".repeat(64)}`,
-      eventCount: 0,
-      id: "00000000-0000-4000-8000-000000000001",
-    },
-    createdAtEpochMs: 1000,
-    lastProgressAtEpochMs: 1000,
-    originAdapterSessionId: origin,
-    parentSessionId: "ses_parent",
-    principal: owner,
-    resumability: "terminal",
-    sessionId: publicId,
-    stage: "complete",
-    status: "completed",
-    title: "Vendor queue",
-    updatedAtEpochMs: 1000,
-    version: 2,
-  });
+  const record = {
+    ...durableHostedSessionRecordSchema.parse({
+      adapterGeneration: origin === current ? 1 : 2,
+      adapterSessionId: current,
+      checkpointDigest: `sha256:${"c".repeat(64)}`,
+      checkpointProgressDigest: `sha256:${"d".repeat(64)}`,
+      checkpointRef: {
+        digest: `sha256:${"c".repeat(64)}`,
+        eventCount: 0,
+        id: "00000000-0000-4000-8000-000000000001",
+      },
+      createdAtEpochMs: 1000,
+      lastProgressAtEpochMs: 1000,
+      originAdapterSessionId: origin,
+      parentSessionId: "ses_parent",
+      principal: owner,
+      resumability: "terminal",
+      sessionId: publicId,
+      stage: "complete",
+      status: "completed",
+      title: "Vendor queue",
+      updatedAtEpochMs: 1000,
+      version: 2,
+    }),
+    ...(options.nativeRecoveryBinding === undefined
+      ? {}
+      : { nativeRecoveryBinding: options.nativeRecoveryBinding }),
+  };
   const metadata: HostedPagedCheckpointMetadata = {
     capturedAtEpochMs: 1000,
     status: "completed",
@@ -326,6 +337,90 @@ describe("deployment Browser preview route", () => {
           transferDigest: digest,
         });
       }
+    },
+  );
+
+  const recoveryBinding: NativeRecoveryBinding = {
+    version: 1,
+    operationId: "recovery-operation",
+    sourcePublicSessionId: "ses_parent",
+    sourceOwnerRunId: "wrun_original",
+    sourceAdapterGeneration: 1,
+    logicalSessionId: "wrun_original",
+    originalAuthoritySessionId: "ses_parent",
+    parentCancellationRevision: 0,
+    ownerRunId: "wrun_recovered",
+    provenance: {
+      kind: "committed-turn-output",
+      sourceStepId: "original-step",
+      sourceEventId: "original-event",
+      sourceSlot: 1,
+      checkpointVersion: 1,
+    },
+  };
+  const recoveredArtifact = (binding: NativeRecoveryBinding) => {
+    const f = ownedFixture({
+      artifactSessionId: "wrun_original",
+      current: "wrun_recovered",
+      nativeRecoveryBinding: binding,
+    });
+    const get = vi.fn<EveSessionService["get"]>().mockResolvedValue({
+      cursor: 0,
+      events: [],
+      prototypeRef: f.artifact,
+      sessionId: f.publicId,
+      status: "completed",
+    });
+    const chunks = [content.slice(0, 19), content.slice(19)];
+    const readChunk = vi.fn<(key: PrototypeChunkKey) => Promise<string | undefined>>(
+      async (key) => await Promise.resolve(chunks[key.chunkIndex]),
+    );
+    const resolveStreamedPrototype = createOwnedSessionStreamedPrototypePreviewResolver({
+      contextForRequest: async () =>
+        await Promise.resolve({
+          principal: owner,
+          readChunk,
+          service: { get },
+          store: { getSession: f.getSession },
+        }),
+    });
+    const handler = createPrototypePreviewRequestHandler({
+      resolvePrototype: async () => {
+        await Promise.resolve();
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- This streamed-only fixture has no inline prototype.
+        return undefined;
+      },
+      resolveStreamedPrototype,
+    });
+    return { ...f, get, handler, readChunk };
+  };
+
+  it("streams the original logical artifact through its owned recovery child", async () => {
+    const f = recoveredArtifact(recoveryBinding);
+    const original = JSON.stringify(f.artifact);
+    const response = await f.handler(f.request, { digest, sessionId: f.publicId });
+    expect(response.status).toBe(200);
+    await expect(response.text()).resolves.toBe(content);
+    expect(JSON.stringify(f.artifact)).toBe(original);
+    expect(f.getSession).toHaveBeenCalledWith(owner, f.publicId);
+    expect(f.readChunk).toHaveBeenCalledTimes(4);
+    for (const [key] of f.readChunk.mock.calls) {
+      expect(key).toMatchObject({
+        path: f.artifact.path,
+        principal: owner,
+        sessionId: recoveryBinding.logicalSessionId,
+        transferDigest: digest,
+      });
+    }
+  });
+
+  it.each(["ownerRunId", "sourcePublicSessionId", "logicalSessionId"] as const)(
+    "denies a recovery artifact with another %s before reading chunks",
+    async (field) => {
+      const f = recoveredArtifact({ ...recoveryBinding, [field]: "other" });
+      const response = await f.handler(f.request, { digest, sessionId: f.publicId });
+      expect(response.status).toBe(404);
+      expect(f.readChunk).not.toHaveBeenCalled();
     },
   );
 

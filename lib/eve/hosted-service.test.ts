@@ -18,7 +18,11 @@ import {
 } from "./hosted-service";
 import type { HostedEngineSnapshot, HostedEveTransport } from "./hosted-service";
 import { HostedSessionReadTimeoutError } from "./hosted-session-read-timeout-error";
-import { hostedOperationRecordSchema, InMemoryHostedEveStore } from "./hosted-store";
+import {
+  durableHostedSessionRecordSchema,
+  hostedOperationRecordSchema,
+  InMemoryHostedEveStore,
+} from "./hosted-store";
 import type {
   HostedCheckpointPage,
   HostedEveStore,
@@ -98,6 +102,87 @@ const approvalSnapshot = function approvalSnapshot(requestIds: string[]): Hosted
     status: "input_required",
   };
 };
+
+describe("failed public session native recovery", () => {
+  it("dispatches typed recovery when only native history retains the checkpoint", async () => {
+    const store = new InMemoryHostedEveStore();
+    const adapter = transport({
+      start: vi
+        .fn<HostedEveTransport["start"]>()
+        .mockResolvedValueOnce({
+          adapterSessionId: "run_parent",
+          snapshot: { events: [], status: "failed" },
+        })
+        .mockImplementationOnce(async (request) => {
+          const recovery = request.recovery;
+          if (recovery === undefined) {
+            throw new Error("Expected typed native recovery.");
+          }
+          const recoveryBinding = {
+            ...recovery,
+            ownerRunId: "run_child",
+            provenance: {
+              kind: "failed-turn-input" as const,
+              sourceStepId: "step_1",
+              sourceEventId: "event_1",
+              sourceSlot: 1,
+              checkpointVersion: 1 as const,
+            },
+          };
+          await store.commitNativeRecoveryReceipt({
+            principal,
+            descriptor: recovery,
+            recoveryBinding,
+            nowEpochMs: 4,
+          });
+          return {
+            adapterSessionId: "run_child",
+            recoveryBinding,
+            snapshot: { events: [], status: "working" },
+          };
+        }),
+    });
+    const service = createHostedEveSessionService({
+      assertNativeRecoveryOwner: async () => await Promise.resolve(),
+      principal,
+      store,
+      transport: adapter,
+    });
+    const first = await service.start({ clientRequestId: "initial", prompt: "Build" });
+    const readOriginal = store.getSession.bind(store);
+    vi.spyOn(store, "getSession").mockImplementation(async (requestPrincipal, sessionId) => {
+      const record = await readOriginal(requestPrincipal, sessionId);
+      return record?.version !== 2 || record.sessionId !== first.sessionId
+        ? record
+        : durableHostedSessionRecordSchema.parse({
+            ...record,
+            checkpoint: undefined,
+            checkpointDigest: undefined,
+            checkpointProgressDigest: undefined,
+          });
+    });
+    const resumed = await service.start({
+      clientRequestId: "recover",
+      resumeSessionId: first.sessionId,
+    });
+    expect(resumed.sessionId).not.toBe(first.sessionId);
+    expect(adapter.start).toHaveBeenCalledTimes(2);
+    expect(adapter.start).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        prompt: "",
+        recovery: expect.objectContaining({
+          sourcePublicSessionId: first.sessionId,
+          sourceOwnerRunId: "run_parent",
+        }),
+      }),
+    );
+    expect(await readOriginal(principal, resumed.sessionId)).toMatchObject({
+      adapterSessionId: "run_child",
+      nativeRecoveryBinding: { sourcePublicSessionId: first.sessionId },
+      parentSessionId: first.sessionId,
+    });
+  });
+});
 
 describe("prepared handoff session continuity", () => {
   const sourceHandoffId = "123e4567-e89b-42d3-a456-426614174001";
@@ -553,7 +638,7 @@ describe("delayed durable session reads", () => {
 });
 
 describe("hosted Eve service core", () => {
-  it("resumes a failed session whose checkpoint history is stored in pages", async () => {
+  it("resumes a failed session with paged public history through typed native recovery", async () => {
     const baseStore = new InMemoryHostedEveStore();
     const terminal: HostedEngineSnapshot = {
       events: [
@@ -565,7 +650,30 @@ describe("hosted Eve service core", () => {
       start: vi
         .fn()
         .mockResolvedValueOnce({ adapterSessionId: "eve_failed", snapshot: terminal })
-        .mockResolvedValueOnce({ adapterSessionId: "eve_recovered", snapshot }),
+        .mockImplementationOnce(async (request: Parameters<HostedEveTransport["start"]>[0]) => {
+          const recovery = request.recovery;
+          if (recovery === undefined) {
+            throw new Error("Expected typed native recovery.");
+          }
+          const recoveryBinding = {
+            ...recovery,
+            ownerRunId: "eve_recovered",
+            provenance: {
+              kind: "failed-turn-input" as const,
+              sourceStepId: "step_paged",
+              sourceEventId: "event_paged",
+              sourceSlot: 1,
+              checkpointVersion: 1 as const,
+            },
+          };
+          await baseStore.commitNativeRecoveryReceipt({
+            principal,
+            descriptor: recovery,
+            recoveryBinding,
+            nowEpochMs: 2000,
+          });
+          return { adapterSessionId: "eve_recovered", recoveryBinding, snapshot };
+        }),
     });
     const first = await started({ store: baseStore, transport: adapter });
     const saved = await baseStore.getSession(principal, first.result.sessionId);
@@ -613,7 +721,9 @@ describe("hosted Eve service core", () => {
       settleSucceeded: (input) => baseStore.settleSucceeded(input),
       settleUnsuccessful: (input) => baseStore.settleUnsuccessful(input),
     };
+    const assertNativeRecoveryOwner = vi.fn(async () => await Promise.resolve());
     const service = createHostedEveSessionService({
+      assertNativeRecoveryOwner,
       now: () => 2000,
       principal,
       store: pagedStore,
@@ -626,17 +736,22 @@ describe("hosted Eve service core", () => {
     });
 
     expect(recovered.sessionId).not.toBe(first.result.sessionId);
-    expect(readCheckpointPage).toHaveBeenCalledTimes(2);
+    expect(assertNativeRecoveryOwner).toHaveBeenCalledTimes(2);
+    expect(readCheckpointPage).not.toHaveBeenCalled();
     expect(adapter.start).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        prompt: expect.stringContaining("Earlier decision"),
+        prompt: "",
+        recovery: expect.objectContaining({
+          sourcePublicSessionId: first.result.sessionId,
+          sourceOwnerRunId: "eve_failed",
+        }),
       }),
     );
-    expect(adapter.start).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        prompt: expect.stringContaining("Latest failure"),
-      }),
-    );
+    expect(await baseStore.getSession(principal, recovered.sessionId)).toMatchObject({
+      adapterSessionId: "eve_recovered",
+      nativeRecoveryBinding: { sourcePublicSessionId: first.result.sessionId },
+      parentSessionId: first.result.sessionId,
+    });
   });
 
   it("runs the repository-access recovery seam before reading Eve", async () => {

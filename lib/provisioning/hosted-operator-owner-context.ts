@@ -50,6 +50,50 @@ const samePrincipal = (left: HostedPrincipal, right: HostedPrincipal) =>
   sameAuthority(left, right) &&
   JSON.stringify([...left.scopes].toSorted()) === JSON.stringify([...right.scopes].toSorted());
 
+/** A recovered physical worker retains the original public grant authority. */
+// oxlint-disable-next-line eslint/complexity -- Each parent, original authority, and current physical binding must match.
+const recoveryAuthoritySessionId = async (
+  session: ReturnType<typeof toDurableHostedSessionRecord>,
+  sessions: OwnerContextResolverDependencies["sessions"],
+  principal: HostedPrincipal,
+): Promise<string> => {
+  const binding = session.nativeRecoveryBinding;
+  if (binding === undefined) {
+    return session.sessionId;
+  }
+  if (
+    binding.ownerRunId !== session.adapterSessionId ||
+    binding.sourcePublicSessionId !== session.parentSessionId ||
+    binding.sourceHandoffId !== session.sourceHandoffId ||
+    !samePrincipal(session.principal, principal)
+  ) {
+    throw new HostedOperatorError("authorization_required");
+  }
+  const [sourceRecord, authorityRecord] = await Promise.all([
+    sessions.getSession(principal, binding.sourcePublicSessionId),
+    sessions.getSession(principal, binding.originalAuthoritySessionId),
+  ]);
+  if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- All identity comparisons are required for this one recovered owner proof.
+    sourceRecord?.version !== 2 ||
+    authorityRecord?.version !== 2 ||
+    sourceRecord.adapterSessionId !== binding.sourceOwnerRunId ||
+    sourceRecord.adapterGeneration !== binding.sourceAdapterGeneration ||
+    (sourceRecord.cancellationRevision ?? 0) !== binding.parentCancellationRevision ||
+    (sourceRecord.nativeRecoveryBinding?.logicalSessionId ?? sourceRecord.adapterSessionId) !==
+      binding.logicalSessionId ||
+    (sourceRecord.nativeRecoveryBinding?.originalAuthoritySessionId ?? sourceRecord.sessionId) !==
+      binding.originalAuthoritySessionId ||
+    authorityRecord.sessionId !== binding.originalAuthoritySessionId ||
+    authorityRecord.sourceHandoffId !== session.sourceHandoffId ||
+    !samePrincipal(sourceRecord.principal, principal) ||
+    !samePrincipal(authorityRecord.principal, principal)
+  ) {
+    throw new HostedOperatorError("authorization_required");
+  }
+  return binding.originalAuthoritySessionId;
+};
+
 const resolveDirectOwnerContext = async (input: {
   adapterSessionId: string;
   authority: HostedSessionTenantAuthority;
@@ -77,13 +121,18 @@ const resolveDirectOwnerContext = async (input: {
   ) {
     throw new HostedOperatorError("authorization_required");
   }
+  const authoritySessionId = await recoveryAuthoritySessionId(
+    session,
+    input.sessions,
+    input.principal,
+  );
   return {
     adapterGeneration: session.adapterGeneration,
     adapterSessionId: session.adapterSessionId,
     authority: hostedTenantAuthoritySchema.parse(input.authority),
     kind: "direct",
     principal: hostedPrincipalSchema.parse(input.principal),
-    sessionId: session.sessionId,
+    sessionId: authoritySessionId,
   };
 };
 
@@ -124,6 +173,7 @@ const restrictRealmContinuationOwner = (
 /** Resolves only through exact tenant-scoped durable handoff or adapter bindings. */
 export const createHostedOperatorOwnerContextResolver =
   (dependencies: OwnerContextResolverDependencies) =>
+  // oxlint-disable-next-line eslint/complexity -- The resolver retains existing handoff and membership checks with exact recovery lineage.
   async (input: {
     adapterSessionId: string;
     authority: HostedSessionTenantAuthority;
@@ -219,22 +269,44 @@ export const createHostedOperatorOwnerContextResolver =
       ) {
         throw new HostedOperatorError("authorization_required");
       }
-      if (session.adapterSessionId !== input.adapterSessionId) {
+      const physicalSession =
+        session.adapterSessionId === input.adapterSessionId
+          ? session
+          : await (async () => {
+              const byAdapter = await dependencies.sessions.getSessionByAdapterSessionId?.(
+                input.principal,
+                input.adapterSessionId,
+              );
+              if (
+                byAdapter?.version !== 2 ||
+                byAdapter.nativeRecoveryBinding?.originalAuthoritySessionId !== session.sessionId ||
+                byAdapter.sourceHandoffId !== handoffId
+              ) {
+                throw new HostedOperatorError("authorization_required");
+              }
+              return byAdapter;
+            })();
+      if (!samePrincipal(physicalSession.principal, input.principal)) {
         throw new HostedOperatorError("authorization_required");
       }
-      if (!samePrincipal(session.principal, input.principal)) {
+      const authoritySessionId = await recoveryAuthoritySessionId(
+        physicalSession,
+        dependencies.sessions,
+        input.principal,
+      );
+      if (authoritySessionId !== handoff.data.sessionId) {
         throw new HostedOperatorError("authorization_required");
       }
 
       emit("verified");
       return restrictRealmContinuationOwner(
         {
-          adapterGeneration: session.adapterGeneration,
-          adapterSessionId: session.adapterSessionId,
+          adapterGeneration: physicalSession.adapterGeneration,
+          adapterSessionId: physicalSession.adapterSessionId,
           authority: hostedTenantAuthoritySchema.parse(input.authority),
           kind: "handoff",
           principal: hostedPrincipalSchema.parse(input.principal),
-          sessionId: session.sessionId,
+          sessionId: authoritySessionId,
           sourceHandoffId: handoffId,
         },
         delegation,

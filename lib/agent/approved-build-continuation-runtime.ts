@@ -8,6 +8,8 @@ import {
   readInternalBuildMarker,
 } from "./approved-build-continuation";
 import type { ApprovedBuildDecision } from "./approved-build-continuation";
+import type { HostedEveStore } from "../eve/hosted-store";
+import type { HostedPrincipal } from "../eve/hosted-auth";
 
 /** Structural evaluations retain their actual private Eve projection without claiming a public hosted session. */
 export const diagnosticBuildDecisionState = defineState<ApprovedBuildDecision | null>(
@@ -41,6 +43,43 @@ const ownerStore = async (ctx: Pick<HookContext, "session">) => {
   const store = createPostgresHostedEveStore(openHostedPostgresDatabase(config.databaseUrl));
   return { owner, principal, store };
 };
+
+/** The store binds the logical owner's projection to the exact committed current child. */
+export const persistHostedBuildDecision = async (input: {
+  decision: ApprovedBuildDecision;
+  ownerSessionId: string;
+  principal: HostedPrincipal;
+  store: HostedEveStore;
+}): Promise<void> => {
+  await input.store.recordPrivateBuildDecision?.({
+    decision: approvedBuildDecisionSchema.parse(input.decision),
+    principal: input.principal,
+    sessionId: input.ownerSessionId,
+  });
+};
+
+/** A marker remains ordinary text unless the exact canonical child operation claims it. */
+export const claimHostedBuildMessage = async (input: {
+  logicalSessionId: string;
+  messageSequence: number;
+  nonce: string;
+  operationId: string;
+  ownerSessionId: string;
+  principal: HostedPrincipal;
+  store: HostedEveStore;
+  turnId: string;
+  turnSequence: number;
+}): Promise<boolean> =>
+  (await input.store.claimInternalBuildMessage?.({
+    logicalSessionId: input.logicalSessionId,
+    messageSequence: input.messageSequence,
+    nonce: input.nonce,
+    operationId: input.operationId,
+    principal: input.principal,
+    sessionId: input.ownerSessionId,
+    turnId: input.turnId,
+    turnSequence: input.turnSequence,
+  })) ?? false;
 export const recordApprovedBuildDecision = async (
   ctx: Pick<HookContext, "session">,
   decision: ApprovedBuildDecision,
@@ -56,10 +95,11 @@ export const recordApprovedBuildDecision = async (
     return;
   }
   const { owner, principal, store } = await ownerStore(ctx);
-  await store.recordPrivateBuildDecision?.({
+  await persistHostedBuildDecision({
     decision: parsed,
+    ownerSessionId: owner.sessionId,
     principal,
-    sessionId: owner.sessionId,
+    store,
   });
 };
 /** A marker is internal only after its private canonical reservation accepts this exact delivered event. */
@@ -80,17 +120,17 @@ const verifyInternalBuildMessage = async (
     });
   }
   const { owner, principal, store } = await ownerStore(ctx);
-  return (
-    (await store.claimInternalBuildMessage?.({
-      messageSequence: input.messageSequence,
-      nonce: marker.nonce,
-      operationId: marker.operationId,
-      principal,
-      sessionId: owner.sessionId,
-      turnId: input.turnId,
-      turnSequence: ctx.session.turn.sequence,
-    })) ?? false
-  );
+  return await claimHostedBuildMessage({
+    logicalSessionId: ctx.session.id,
+    messageSequence: input.messageSequence,
+    nonce: marker.nonce,
+    operationId: marker.operationId,
+    ownerSessionId: owner.sessionId,
+    principal,
+    store,
+    turnId: input.turnId,
+    turnSequence: ctx.session.turn.sequence,
+  });
 };
 
 export const emitCurrentBuildWorkflowProjection = async (

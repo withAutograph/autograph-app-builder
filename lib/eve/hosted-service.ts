@@ -28,6 +28,12 @@ import type {
 import { HostedCheckpointObservationConflictError } from "./hosted-checkpoint-observation-conflict-error";
 import { continueApprovedHostedBuild } from "./approved-build-controller";
 import { assertHostedBuildDecisionOwner } from "./approved-build-owner";
+import {
+  nativeRecoveryDescriptorSchema,
+  nativeRecoveryBindingSchema,
+  assertNativeRecoveryReceipt,
+} from "./native-recovery-contract";
+import type { NativeRecoveryDescriptor, NativeRecoveryBinding } from "./native-recovery-contract";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdtemp, open, rm } from "node:fs/promises";
@@ -182,10 +188,12 @@ export interface HostedEveTransport {
     principal: HostedPrincipal;
     operationId: string;
     prompt: string;
+    recovery?: NativeRecoveryDescriptor;
     sourceHandoffId?: string;
   }) => Promise<{
     adapterSessionId: string;
     snapshot: HostedEngineSnapshot;
+    recoveryBinding?: NativeRecoveryBinding;
   }>;
   get: (input: {
     principal: HostedPrincipal;
@@ -195,6 +203,7 @@ export interface HostedEveTransport {
     principal: HostedPrincipal;
     operationId: string;
     adapterSessionId: string;
+    logicalSessionId?: string;
     message: string;
     onAccepted?: (deliveryId: string) => Promise<void>;
     sourceHandoffId?: string;
@@ -207,6 +216,7 @@ export interface HostedEveTransport {
     principal: HostedPrincipal;
     operationId: string;
     adapterSessionId: string;
+    logicalSessionId?: string;
     responses: {
       requestId: string;
       response:
@@ -230,6 +240,7 @@ export interface HostedEveTransport {
     nativeObservationState?: NativeObservationState;
     principal: HostedPrincipal;
     adapterSessionId: string;
+    logicalSessionId?: string;
     turnId?: string;
   }) => Promise<HostedEngineSnapshot>;
   /** Resolves only after the requested cancellation is observed without exporting full history. */
@@ -742,6 +753,7 @@ async function spoolObservedSession(input: {
   adapterSessionId: string;
   nativeObservationState?: NativeObservationState;
   privateApprovalCaptureState?: PrivateHostedApprovalCaptureState;
+  privateApprovalSessionId: string;
   allowPartialObservation?: boolean;
 }): Promise<PagedObservationSpool> {
   let directory: string;
@@ -756,7 +768,7 @@ async function spoolObservedSession(input: {
   const path = nodePath.join(directory, "events.ndjson");
   const privateApprovals = createPrivateHostedApprovalRecorder({
     principal: input.principal,
-    sessionId: input.sessionId,
+    sessionId: input.privateApprovalSessionId,
     store: input.store,
     ...(input.privateApprovalCaptureState === undefined
       ? {}
@@ -892,6 +904,7 @@ export function createHostedEveSessionService(input: {
   }) => Promise<void>;
   assertSendDeliveryOwner?: typeof assertHostedBuildDecisionOwner;
   assertSessionLimitOwner?: typeof assertHostedBuildDecisionOwner;
+  assertNativeRecoveryOwner?: typeof assertHostedBuildDecisionOwner;
   now?: () => number;
   onSubmissionDiagnostic?: HostedSubmissionDiagnosticSink;
   sessionTimeoutPolicy?: HostedSessionTimeoutPolicy;
@@ -1667,6 +1680,7 @@ export function createHostedEveSessionService(input: {
     request: T;
     sessionId?: string;
     resumeSessionId?: string;
+    nativeRecovery?: Omit<NativeRecoveryDescriptor, "operationId">;
     internalSessionLimitResponse?: InternalSessionLimitResponse;
     resourceApprovalResponse?: ResourceApprovalResponseMarker;
     dispatch: (operationId: string) => Promise<{
@@ -1711,6 +1725,9 @@ export function createHostedEveSessionService(input: {
         : { resourceApprovalResponse: options.resourceApprovalResponse }),
       operationId,
       principal,
+      ...(options.nativeRecovery === undefined
+        ? {}
+        : { nativeRecovery: { ...options.nativeRecovery, operationId } }),
       requestDigest,
       ...(options.sessionId === undefined ? {} : { sessionId: options.sessionId }),
       ...(options.resumeSessionId === undefined
@@ -2370,6 +2387,9 @@ export function createHostedEveSessionService(input: {
   ) {
     const { sessionId, cursor, limit } = inputValue;
     const session = toDurableHostedSessionRecord(await requireSession(sessionId));
+    // The recovered child owns its public stream; protected plans retain the original authority.
+    const privateApprovalSessionId =
+      session.nativeRecoveryBinding?.originalAuthoritySessionId ?? sessionId;
     await input.beforeRead?.({
       adapterSessionId: session.adapterSessionId,
       principal,
@@ -2401,7 +2421,7 @@ export function createHostedEveSessionService(input: {
           (coldReadProgress.events.length !==
             coldReadProgress.nativeObservationState.publicEventCount ||
             coldReadProgress.events.some((event, index) => event.index !== index) ||
-            coldReadProgress.privateApprovalCaptureState.sessionId !== sessionId)
+            coldReadProgress.privateApprovalCaptureState.sessionId !== privateApprovalSessionId)
         ) {
           throw new HostedSessionRecoveryUnavailableError();
         }
@@ -2436,7 +2456,7 @@ export function createHostedEveSessionService(input: {
               );
         if (
           storedPrivateApprovalCaptureState !== undefined &&
-          storedPrivateApprovalCaptureState.sessionId !== sessionId
+          storedPrivateApprovalCaptureState.sessionId !== privateApprovalSessionId
         ) {
           throw new HostedSessionRecoveryUnavailableError();
         }
@@ -2480,6 +2500,7 @@ export function createHostedEveSessionService(input: {
             coldReadProgress !== undefined,
           ...(nativeObservationState === undefined ? {} : { nativeObservationState }),
           ...(privateApprovalCaptureState === undefined ? {} : { privateApprovalCaptureState }),
+          privateApprovalSessionId,
           principal,
           sessionId,
           store: input.store,
@@ -3156,6 +3177,9 @@ export function createHostedEveSessionService(input: {
           before === undefined ? mutationEventCursor(session) : publicSnapshotEventCount(before);
         const responseInput = {
           adapterSessionId: session.adapterSessionId,
+          ...(session.version === 2 && session.nativeRecoveryBinding !== undefined
+            ? { logicalSessionId: session.nativeRecoveryBinding.logicalSessionId }
+            : {}),
           ...(marker === undefined ? {} : { internalSessionLimitResponse: marker }),
           ...(preflight?.nativeObservationState === undefined
             ? {}
@@ -3366,6 +3390,9 @@ export function createHostedEveSessionService(input: {
           }
           await input.transport.cancelAccepted?.({
             adapterSessionId: session.adapterSessionId,
+            ...(session.version === 2 && session.nativeRecoveryBinding !== undefined
+              ? { logicalSessionId: session.nativeRecoveryBinding.logicalSessionId }
+              : {}),
             nativeObservationState: preflight.nativeObservationState,
             principal,
             ...(turnId === undefined ? {} : { turnId }),
@@ -3374,6 +3401,9 @@ export function createHostedEveSessionService(input: {
         }
         snapshot = await input.transport.cancel({
           adapterSessionId: session.adapterSessionId,
+          ...(session.version === 2 && session.nativeRecoveryBinding !== undefined
+            ? { logicalSessionId: session.nativeRecoveryBinding.logicalSessionId }
+            : {}),
           principal,
           ...(turnId === undefined ? {} : { turnId }),
         });
@@ -3541,6 +3571,9 @@ export function createHostedEveSessionService(input: {
           let sendDelivery: SendDelivery | undefined;
           const sendInput = {
             adapterSessionId: session.adapterSessionId,
+            ...(session.version === 2 && session.nativeRecoveryBinding !== undefined
+              ? { logicalSessionId: session.nativeRecoveryBinding.logicalSessionId }
+              : {}),
             message: request.message,
             onAccepted: async (deliveryId: string) => {
               const marker: SendDelivery = {
@@ -3714,17 +3747,71 @@ export function createHostedEveSessionService(input: {
         const terminal = ["completed", "failed", "cancelled"].includes(existing.status);
         const interrupted = existing.status === "working" && existing.resumability === "checkpoint";
         if (terminal || interrupted) {
-          if (existing.checkpoint === undefined && existing.checkpointRef === undefined) {
+          const recoverySource =
+            existing.status === "failed"
+              ? {
+                  version: 1 as const,
+                  sourcePublicSessionId: existing.sessionId,
+                  sourceOwnerRunId: existing.adapterSessionId,
+                  sourceAdapterGeneration: existing.adapterGeneration,
+                  logicalSessionId:
+                    existing.nativeRecoveryBinding?.logicalSessionId ?? existing.adapterSessionId,
+                  originalAuthoritySessionId:
+                    existing.nativeRecoveryBinding?.originalAuthoritySessionId ??
+                    existing.sessionId,
+                  parentCancellationRevision: existing.cancellationRevision ?? 0,
+                  ...(existing.sourceHandoffId === undefined
+                    ? {}
+                    : { sourceHandoffId: existing.sourceHandoffId }),
+                }
+              : undefined;
+          if (recoverySource !== undefined) {
+            await (input.assertNativeRecoveryOwner ?? assertHostedBuildDecisionOwner)(existing);
+          }
+          if (
+            recoverySource === undefined &&
+            existing.checkpoint === undefined &&
+            existing.checkpointRef === undefined
+          ) {
             throw new HostedSessionRecoveryUnavailableError();
           }
           return mutate({
             async dispatch(operationId) {
+              const recovery =
+                recoverySource === undefined
+                  ? undefined
+                  : nativeRecoveryDescriptorSchema.parse({ ...recoverySource, operationId });
+              if (recovery !== undefined) {
+                const current = toDurableHostedSessionRecord(
+                  await requireSession(existing.sessionId),
+                );
+                if (
+                  (current.cancellationRevision ?? 0) !== recovery.parentCancellationRevision ||
+                  current.adapterSessionId !== recovery.sourceOwnerRunId ||
+                  current.adapterGeneration !== recovery.sourceAdapterGeneration
+                ) {
+                  throw new HostedSessionRecoveryUnavailableError();
+                }
+                await (input.assertNativeRecoveryOwner ?? assertHostedBuildDecisionOwner)(current);
+              }
               const response = await input.transport.start({
                 operationId,
                 principal,
-                prompt: await recoveryPrompt({ principal, record: existing, store: input.store }),
+                prompt:
+                  recovery === undefined
+                    ? await recoveryPrompt({ principal, record: existing, store: input.store })
+                    : "",
+                ...(recovery === undefined ? {} : { recovery }),
                 ...(existing.sourceHandoffId ? { sourceHandoffId: existing.sourceHandoffId } : {}),
               });
+              let recoveryBinding: NativeRecoveryBinding | undefined;
+              if (recovery !== undefined) {
+                recoveryBinding = nativeRecoveryBindingSchema.parse(response.recoveryBinding);
+                assertNativeRecoveryReceipt(recovery, recoveryBinding);
+                if (recoveryBinding.ownerRunId !== response.adapterSessionId) {
+                  throw new HostedSubmissionUnknownError();
+                }
+              }
               const sessionId = stableId(
                 "ses",
                 Object.fromEntries([
@@ -3743,6 +3830,9 @@ export function createHostedEveSessionService(input: {
                 createdAtEpochMs: timestamp,
                 lastProgressAtEpochMs: timestamp,
                 originAdapterSessionId: response.adapterSessionId,
+                ...(recoveryBinding === undefined
+                  ? {}
+                  : { nativeRecoveryBinding: recoveryBinding }),
                 parentSessionId: existing.sessionId,
                 principal,
                 resumability: ["completed", "failed", "cancelled"].includes(result.status)
@@ -3787,6 +3877,7 @@ export function createHostedEveSessionService(input: {
               };
             },
             kind: "start",
+            ...(recoverySource === undefined ? {} : { nativeRecovery: recoverySource }),
             request,
             resumeSessionId: existing.sessionId,
           });
@@ -3873,6 +3964,11 @@ export function createHostedEveSessionService(input: {
                 adapterSessionId: response.adapterSessionId,
                 principal,
                 sessionId: existing.sessionId,
+                privateApprovalSessionId:
+                  existing.version === 2
+                    ? (existing.nativeRecoveryBinding?.originalAuthoritySessionId ??
+                      existing.sessionId)
+                    : existing.sessionId,
                 store: input.store,
                 transport: input.transport.observeStarted,
               });

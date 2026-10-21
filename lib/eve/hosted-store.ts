@@ -1,5 +1,12 @@
 import type { NativeSendReadObservation } from "./hosted-submission-diagnostic";
 import {
+  nativeRecoveryDescriptorSchema,
+  nativeRecoveryBindingSchema,
+  sameNativeRecoveryDescriptor,
+  assertNativeRecoveryReceipt,
+} from "./native-recovery-contract";
+import type { NativeRecoveryDescriptor, NativeRecoveryBinding } from "./native-recovery-contract";
+import {
   resourceApprovalResponseMarkerSchema,
   resourceApprovalResponseProofSchema,
   provesResourceApprovalResponse,
@@ -270,6 +277,7 @@ export const durableHostedSessionRecordSchema = z
     // Private Eve authority facts live beside the session record, outside its public checkpoint.
     privateApprovalReceipts: z.array(privateHostedApprovalReceiptSchema).optional(),
     privateBuildDecision: approvedBuildDecisionSchema.optional(),
+    nativeRecoveryBinding: nativeRecoveryBindingSchema.optional(),
     resumability: publicSessionResumabilitySchema,
     sessionId: z.string().min(1).max(200),
     sourceHandoffId: z.string().uuid().optional(),
@@ -486,6 +494,8 @@ const hostedOperationCommonShape = {
   clientRequestId: z.string().min(1).max(200),
   createdAtEpochMs: z.number().int().nonnegative(),
   internalBuildContinuation: internalBuildContinuationSchema.optional(),
+  nativeRecovery: nativeRecoveryDescriptorSchema.optional(),
+  nativeRecoveryReceipt: nativeRecoveryBindingSchema.optional(),
   internalSessionLimitResponse: internalSessionLimitResponseSchema.optional(),
   kind: hostedOperationKindSchema,
   operationId: z.string().min(1).max(200),
@@ -537,8 +547,31 @@ export const hostedOperationRecordSchema = z
       })
       .strict(),
   ])
+  // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Operation parsing checks each durable recovery identity alongside the existing state machine.
   .superRefine((record, context) => {
     reportInvalidStartAlias(record, context);
+    if (
+      record.nativeRecovery !== undefined &&
+      (record.kind !== "start" ||
+        record.resumeSessionId !== record.nativeRecovery.sourcePublicSessionId ||
+        record.operationId !== record.nativeRecovery.operationId)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Native recovery must bind its canonical parent start reservation.",
+      });
+    }
+    if (record.nativeRecoveryReceipt !== undefined) {
+      try {
+        if (record.nativeRecovery === undefined) throw new Error("Recovery reservation absent.");
+        assertNativeRecoveryReceipt(record.nativeRecovery, record.nativeRecoveryReceipt);
+      } catch {
+        context.addIssue({
+          code: "custom",
+          message: "Native recovery receipt must preserve its source reservation.",
+        });
+      }
+    }
     if (record.state === "succeeded" && record.result.sessionId !== record.sessionId) {
       context.addIssue({
         code: "custom",
@@ -609,6 +642,120 @@ export const hostedOperationRecordSchema = z
   );
 
 export type HostedOperationRecord = z.infer<typeof hostedOperationRecordSchema>;
+
+/** Current canonical source identity, never checkpoint/model prose, authorizes native access. */
+// oxlint-disable-next-line eslint/complexity -- Every canonical source identity and cancellation fence is mandatory.
+export const assertNativeRecoverySourceBinding = (
+  operation: HostedOperationRecord,
+  source: HostedSessionRecord | null,
+  descriptor: NativeRecoveryDescriptor,
+): void => {
+  if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- These comparisons form one authorization boundary.
+    source === null ||
+    source.version !== 2 ||
+    source.status !== "failed" ||
+    operation.kind !== "start" ||
+    operation.resumeSessionId !== descriptor.sourcePublicSessionId ||
+    operation.operationId !== descriptor.operationId ||
+    operation.nativeRecovery === undefined ||
+    !sameNativeRecoveryDescriptor(operation.nativeRecovery, descriptor) ||
+    !["reserved", "submission_unknown", "succeeded"].includes(operation.state) ||
+    tenantKeyFor(source.principal) !== tenantKeyFor(operation.principal) ||
+    source.sessionId !== descriptor.sourcePublicSessionId ||
+    source.adapterSessionId !== descriptor.sourceOwnerRunId ||
+    source.adapterGeneration !== descriptor.sourceAdapterGeneration ||
+    (source.cancellationRevision ?? 0) !== descriptor.parentCancellationRevision ||
+    source.sourceHandoffId !== descriptor.sourceHandoffId ||
+    (source.nativeRecoveryBinding?.logicalSessionId ?? source.adapterSessionId) !==
+      descriptor.logicalSessionId ||
+    (source.nativeRecoveryBinding?.originalAuthoritySessionId ?? source.sessionId) !==
+      descriptor.originalAuthoritySessionId
+  ) {
+    throw new Error("Native recovery source ownership changed.");
+  }
+};
+
+export const assertNativeRecoverySessionReceipt = (
+  operation: HostedOperationRecord,
+  session: HostedSessionRecord,
+): void => {
+  if (operation.nativeRecovery === undefined) return;
+  const receipt = operation.nativeRecoveryReceipt;
+  if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- Child creation requires its exact committed native receipt.
+    receipt === undefined ||
+    session.version !== 2 ||
+    session.nativeRecoveryBinding === undefined ||
+    JSON.stringify(receipt) !== JSON.stringify(session.nativeRecoveryBinding) ||
+    session.adapterSessionId !== receipt.ownerRunId ||
+    session.parentSessionId !== receipt.sourcePublicSessionId
+  ) {
+    throw new Error("Recovered child lacks its canonical native owner receipt.");
+  }
+};
+
+/** A recovered public child may receive build state only through its committed native owner receipt. */
+export const assertRecoveredBuildContinuationChild = (
+  authoritySessionId: string,
+  logicalSessionId: string,
+  source: HostedSessionRecord | null,
+  child: HostedSessionRecord,
+  operation: HostedOperationRecord | null,
+): void => {
+  if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- The exact child, original authority, and committed receipt are one proof.
+    child.version !== 2 ||
+    source === null ||
+    operation === null ||
+    child.nativeRecoveryBinding === undefined ||
+    child.nativeRecoveryBinding.originalAuthoritySessionId !== authoritySessionId ||
+    child.nativeRecoveryBinding.logicalSessionId !== logicalSessionId ||
+    child.parentSessionId !== source.sessionId ||
+    operation.state !== "succeeded" ||
+    operation.sessionId !== child.sessionId ||
+    operation.nativeRecovery === undefined
+  ) {
+    throw new Error("Recovered build continuation owner changed.");
+  }
+  assertNativeRecoverySourceBinding(operation, source, operation.nativeRecovery);
+  assertNativeRecoverySessionReceipt(operation, child);
+};
+
+/** Keep the original logical approval scope while binding a private decision to its current physical owner. */
+export const recoveredBuildDecision = (
+  decision: ApprovedBuildDecision | undefined,
+  child: HostedSessionRecord,
+): ApprovedBuildDecision | undefined =>
+  decision === undefined
+    ? undefined
+    : approvedBuildDecisionSchema.parse({
+        ...decision,
+        adapterSessionId: child.adapterSessionId,
+      });
+
+export const inheritRecoveryBuildDecision = (
+  source: HostedSessionRecord,
+  authority: HostedSessionRecord,
+  child: HostedSessionRecord,
+): HostedSessionRecord => {
+  const sourceDecision = toDurableHostedSessionRecord(source).privateBuildDecision;
+  const authorityDecision = toDurableHostedSessionRecord(authority).privateBuildDecision;
+  const sourceSequence = sourceDecision?.turnSequence ?? -1;
+  const authoritySequence = authorityDecision?.turnSequence ?? -1;
+  const sourceIsCurrentChild = source.version === 2 && source.nativeRecoveryBinding !== undefined;
+  const latestDecision =
+    sourceSequence > authoritySequence ||
+    (sourceSequence === authoritySequence && sourceIsCurrentChild)
+      ? sourceDecision
+      : authorityDecision;
+  return latestDecision === undefined
+    ? child
+    : durableHostedSessionRecordSchema.parse({
+        ...toDurableHostedSessionRecord(child),
+        privateBuildDecision: recoveredBuildDecision(latestDecision, child),
+      });
+};
 export const unsettledSendAcknowledgementSchema = z.strictObject({
   operation: hostedOperationRecordSchema,
   cancellationRevisionAtDispatch: z.number().int().nonnegative().nullable(),
@@ -957,6 +1104,7 @@ export interface HostedEveStore {
   claimInternalBuildMessage?: (input: {
     principal: HostedPrincipal;
     sessionId: string;
+    logicalSessionId?: string;
     operationId: string;
     nonce: string;
     turnId: string;
@@ -993,6 +1141,12 @@ export interface HostedEveStore {
     principal: z.infer<typeof hostedPrincipalSchema>,
     candidate: HostedOperationRecord,
   ) => Promise<ReserveOperationResult>;
+  commitNativeRecoveryReceipt?: (input: {
+    principal: HostedPrincipal;
+    descriptor: NativeRecoveryDescriptor;
+    recoveryBinding: NativeRecoveryBinding;
+    nowEpochMs: number;
+  }) => Promise<NativeRecoveryBinding>;
   recordCancellationIntent?: (input: {
     principal: HostedPrincipal;
     sessionId: string;
@@ -1123,6 +1277,52 @@ export class InMemoryHostedEveStore implements HostedEveStore {
   private readonly sendCancellationRevisions = new Map<string, number>();
   private readonly sessions = new Map<string, HostedSessionRecord>();
 
+  private currentBuildSession(
+    principal: HostedPrincipal,
+    authoritySessionId: string,
+    logicalSessionId: string,
+  ): DurableHostedSessionRecord {
+    const authority = this.sessions.get(
+      InMemoryHostedEveStore.sessionKey(principal, authoritySessionId),
+    );
+    if (authority === undefined) throw new Error(SESSION_NOT_FOUND);
+    const tenant = tenantKeyFor(principal);
+    const children = [...this.sessions.values()].filter(
+      (candidate) =>
+        tenantKeyFor(candidate.principal) === tenant &&
+        candidate.version === 2 &&
+        candidate.nativeRecoveryBinding?.originalAuthoritySessionId === authoritySessionId &&
+        candidate.nativeRecoveryBinding.logicalSessionId === logicalSessionId,
+    );
+    for (const child of children) {
+      if (child.version !== 2 || child.nativeRecoveryBinding === undefined)
+        throw new Error(SESSION_NOT_FOUND);
+      assertRecoveredBuildContinuationChild(
+        authoritySessionId,
+        logicalSessionId,
+        this.sessions.get(
+          InMemoryHostedEveStore.sessionKey(principal, child.parentSessionId ?? ""),
+        ) ?? null,
+        child,
+        this.operations.get(
+          InMemoryHostedEveStore.operationKey(principal, child.nativeRecoveryBinding.operationId),
+        ) ?? null,
+      );
+    }
+    const leaves = children.filter(
+      (candidate) =>
+        !children.some(
+          (child) => child.version === 2 && child.parentSessionId === candidate.sessionId,
+        ),
+    );
+    if (leaves.length > 1) throw new Error("Recovered build continuation owner is ambiguous.");
+    const current = leaves[0] ?? authority;
+    if (leaves.length === 0 && current.adapterSessionId !== logicalSessionId) {
+      throw new Error(SESSION_NOT_FOUND);
+    }
+    return toDurableHostedSessionRecord(current);
+  }
+
   async bindExistingStart(
     principal: z.infer<typeof hostedPrincipalSchema>,
     candidateInput: HostedOperationRecord,
@@ -1182,7 +1382,8 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       const sameRequest =
         existing.requestDigest === parsed.requestDigest &&
         existing.kind === parsed.kind &&
-        existing.clientRequestId === parsed.clientRequestId;
+        existing.clientRequestId === parsed.clientRequestId &&
+        JSON.stringify(existing.nativeRecovery) === JSON.stringify(parsed.nativeRecovery);
       return sameRequest &&
         existing.startAlias?.canonicalClientRequestId ===
           parsed.startAlias?.canonicalClientRequestId &&
@@ -1206,7 +1407,10 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       parsed.resumeSessionId !== undefined &&
       [...this.operations.values()].some(
         (record) =>
-          record.state === "reserved" &&
+          // oxlint-disable-next-line sonarjs/expression-complexity -- Unknown and receipt-bearing recovery reserve the same failed source.
+          (record.state === "reserved" ||
+            record.state === "submission_unknown" ||
+            (parsed.nativeRecovery !== undefined && record.nativeRecoveryReceipt !== undefined)) &&
           record.kind === "start" &&
           record.resumeSessionId === parsed.resumeSessionId &&
           tenantKeyFor(record.principal) === tenantKeyFor(principal),
@@ -1214,8 +1418,50 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     ) {
       return { disposition: "rejected", reason: "session_busy" };
     }
+    if (parsed.nativeRecovery !== undefined) {
+      assertNativeRecoverySourceBinding(
+        parsed,
+        this.sessions.get(
+          InMemoryHostedEveStore.sessionKey(principal, parsed.nativeRecovery.sourcePublicSessionId),
+        ) ?? null,
+        parsed.nativeRecovery,
+      );
+    }
     this.operations.set(key, structuredClone(parsed));
     return { disposition: "reserved", operation: structuredClone(parsed) };
+  }
+
+  // oxlint-disable-next-line eslint/require-await -- In-memory storage preserves the async durable-store contract.
+  async commitNativeRecoveryReceipt(
+    input: Parameters<NonNullable<HostedEveStore["commitNativeRecoveryReceipt"]>>[0],
+  ): Promise<NativeRecoveryBinding> {
+    const descriptor = nativeRecoveryDescriptorSchema.parse(input.descriptor);
+    const receipt = nativeRecoveryBindingSchema.parse(input.recoveryBinding);
+    assertNativeRecoveryReceipt(descriptor, receipt);
+    const key = InMemoryHostedEveStore.operationKey(input.principal, descriptor.operationId);
+    const operation = this.operations.get(key);
+    if (operation === undefined) throw new Error("Native recovery reservation is unavailable.");
+    const source =
+      this.sessions.get(
+        InMemoryHostedEveStore.sessionKey(input.principal, descriptor.sourcePublicSessionId),
+      ) ?? null;
+    assertNativeRecoverySourceBinding(operation, source, descriptor);
+    if (operation.nativeRecoveryReceipt !== undefined) {
+      if (JSON.stringify(operation.nativeRecoveryReceipt) !== JSON.stringify(receipt))
+        throw new Error("Native recovery owner receipt conflicts.");
+      return structuredClone(operation.nativeRecoveryReceipt);
+    }
+    if (operation.state === "succeeded")
+      throw new Error("Native recovery receipt was not committed before activation.");
+    this.operations.set(
+      key,
+      hostedOperationRecordSchema.parse({
+        ...operation,
+        nativeRecoveryReceipt: receipt,
+        updatedAtEpochMs: Math.max(operation.updatedAtEpochMs, input.nowEpochMs),
+      }),
+    );
+    return structuredClone(receipt);
   }
 
   async settleStartAlias(
@@ -1356,6 +1602,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     );
   };
 
+  // oxlint-disable-next-line eslint/complexity -- Settlement now checks the native recovery receipt alongside existing operation guards.
   async settleSucceeded(
     input: Parameters<HostedEveStore["settleSucceeded"]>[0],
   ): Promise<HostedOperationRecord> {
@@ -1379,7 +1626,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       throw new Error("Hosted operation cannot settle at this digest.");
     }
     const result = eveSessionResultSchema.parse(input.result);
-    const session =
+    let session =
       input.session === undefined ? undefined : hostedSessionRecordSchema.parse(input.session);
     if (
       session !== undefined &&
@@ -1389,6 +1636,27 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     }
     if (operation.kind === "start" && session === undefined) {
       throw new Error("A successful start must atomically persist its session.");
+    }
+    if (session !== undefined && operation.nativeRecovery !== undefined) {
+      const source =
+        this.sessions.get(
+          InMemoryHostedEveStore.sessionKey(
+            input.principal,
+            operation.nativeRecovery.sourcePublicSessionId,
+          ),
+        ) ?? null;
+      assertNativeRecoverySourceBinding(operation, source, operation.nativeRecovery);
+      assertNativeRecoverySessionReceipt(operation, session);
+      const authority = this.sessions.get(
+        InMemoryHostedEveStore.sessionKey(
+          input.principal,
+          operation.nativeRecovery.originalAuthoritySessionId,
+        ),
+      );
+      if (source === null || authority === undefined) {
+        throw new Error(SESSION_NOT_FOUND);
+      }
+      session = inheritRecoveryBuildDecision(source, authority, session);
     }
     if (operation.kind !== "start" && session !== undefined) {
       throw new Error("Only start may create a hosted session.");
@@ -1512,28 +1780,28 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     sessionId: string;
     decision: ApprovedBuildDecision;
   }): Promise<void> {
-    const key = InMemoryHostedEveStore.sessionKey(input.principal, input.sessionId);
-    const stored = this.sessions.get(key);
-    if (stored === undefined) {
-      throw new Error(SESSION_NOT_FOUND);
-    }
-    const current = toDurableHostedSessionRecord(stored);
     const decision = approvedBuildDecisionSchema.parse(input.decision);
-    if (decision.adapterSessionId !== current.adapterSessionId) {
-      throw new Error(SESSION_NOT_FOUND);
-    }
+    const current = this.currentBuildSession(
+      input.principal,
+      input.sessionId,
+      decision.adapterSessionId,
+    );
+    const key = InMemoryHostedEveStore.sessionKey(input.principal, current.sessionId);
+    const boundDecision = recoveredBuildDecision(decision, current);
+    if (boundDecision === undefined) throw new Error(SESSION_NOT_FOUND);
     if ((current.privateBuildDecision?.turnSequence ?? -1) > decision.turnSequence) {
       return;
     }
     this.sessions.set(
       key,
-      durableHostedSessionRecordSchema.parse({ ...current, privateBuildDecision: decision }),
+      durableHostedSessionRecordSchema.parse({ ...current, privateBuildDecision: boundDecision }),
     );
   }
   // oxlint-disable-next-line eslint/require-await -- The in-memory implementation preserves the asynchronous canonical store contract.
   async claimInternalBuildMessage(input: {
     principal: HostedPrincipal;
     sessionId: string;
+    logicalSessionId?: string;
     operationId: string;
     nonce: string;
     turnId: string;
@@ -1546,7 +1814,15 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     if (operation === undefined || marker === undefined || operation.state === "rejected") {
       return false;
     }
-    const wrongIdentity = operation.sessionId !== input.sessionId || marker.nonce !== input.nonce;
+    const current = this.currentBuildSession(
+      input.principal,
+      input.sessionId,
+      input.logicalSessionId ?? marker.decision.adapterSessionId,
+    );
+    const wrongIdentity =
+      operation.sessionId !== current.sessionId ||
+      marker.decision.adapterSessionId !== current.adapterSessionId ||
+      marker.nonce !== input.nonce;
     if (wrongIdentity || input.turnSequence <= marker.decision.turnSequence) {
       return false;
     }

@@ -59,15 +59,25 @@ export const createOwnedSessionStreamedPrototypePreviewResolver =
       // oxlint-disable-next-line unicorn/no-useless-undefined -- Keep the optional resolver result explicit.
       return undefined;
     }
+    const recovery = stored.version === 2 ? stored.nativeRecoveryBinding : undefined;
+    const recoveredLogicalArtifact =
+      // oxlint-disable-next-line sonarjs/expression-complexity -- Retain every owner and logical artifact comparison.
+      stored.version === 2 &&
+      recovery !== undefined &&
+      recovery.ownerRunId === stored.adapterSessionId &&
+      recovery.sourcePublicSessionId === stored.parentSessionId &&
+      artifact.sessionId === recovery.logicalSessionId;
     const adapterBound =
       artifact.sessionId === stored.adapterSessionId ||
-      (stored.version === 2 && artifact.sessionId === stored.originAdapterSessionId);
+      (stored.version === 2 && artifact.sessionId === stored.originAdapterSessionId) ||
+      recoveredLogicalArtifact;
     if (!adapterBound) {
       // oxlint-disable-next-line unicorn/no-useless-undefined -- Keep the optional resolver result explicit.
       return undefined;
     }
     // Keep the original manifest immutable. Same-handle adapter recovery may
-    // retain artifacts from its recorded origin, never from a parent session.
+    // retain artifacts from its recorded origin. A recovery child's canonical
+    // binding also retains its original logical owner; parent IDs alone do not.
     return {
       artifact,
       authorizedSessionAlias: { artifactSessionId: artifact.sessionId, publicSessionId: sessionId },

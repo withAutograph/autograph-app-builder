@@ -40,6 +40,8 @@ import {
   SubmissionRejectedBeforeDispatchError,
 } from "./hosted-service";
 import type { HostedEngineSnapshot, HostedEveTransport } from "./hosted-service";
+import { nativeRecoveryBindingSchema } from "./native-recovery-contract";
+import type { NativeRecoveryBinding } from "./native-recovery-contract";
 import {
   nativeObservationStateSchema,
   artifactReadbackStateSchema,
@@ -99,6 +101,7 @@ const acceptedTurnSchema = z
     ok: z.literal(true),
     sessionId: z.string().min(1).max(500),
     status: z.literal("accepted"),
+    recoveryBinding: nativeRecoveryBindingSchema.optional(),
   })
   .strict();
 
@@ -252,7 +255,12 @@ async function postMutation(input: {
   }
 
   try {
-    const body = await readJson(response);
+    // Only this private recovery response carries a structured receipt. The
+    // ordinary session response remains on the bounded streaming reader.
+    const body: unknown =
+      input.body.recovery !== undefined && response.status === 202
+        ? await response.json()
+        : await readJson(response);
     if (response.status >= 400 && response.status < 500) {
       const parsed = errorResponseSchema.safeParse(body);
       throw new SubmissionRejectedBeforeDispatchError(
@@ -1500,7 +1508,7 @@ export function createSameOriginEveTransport(input: {
           },
           method: "POST",
         },
-        path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}/cancel`,
+        path: `/eve/v1/session/${encodeURIComponent(request.logicalSessionId ?? request.adapterSessionId)}/cancel`,
       });
       if (response.status !== 200 && response.status !== 202) {
         throw new Error("Canonical Eve cancellation failed.");
@@ -1512,7 +1520,10 @@ export function createSameOriginEveTransport(input: {
       ) {
         throw new Error("Canonical Eve cancellation status was inconsistent.");
       }
-      if (cancelled.status === "accepted" && cancelled.sessionId !== request.adapterSessionId) {
+      if (
+        cancelled.status === "accepted" &&
+        cancelled.sessionId !== (request.logicalSessionId ?? request.adapterSessionId)
+      ) {
         throw new Error("Canonical Eve cancellation changed the session.");
       }
       if (cancelled.status === "no_active_turn") {
@@ -1574,7 +1585,7 @@ export function createSameOriginEveTransport(input: {
             headers: { Accept: "application/json", "Content-Type": "application/json" },
             method: "POST",
           },
-          path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}/cancel`,
+          path: `/eve/v1/session/${encodeURIComponent(request.logicalSessionId ?? request.adapterSessionId)}/cancel`,
         });
       } catch {
         throw new SubmissionOutcomeUnknownError();
@@ -1586,7 +1597,8 @@ export function createSameOriginEveTransport(input: {
       if (
         (response.status === 202 && cancelled.status !== "accepted") ||
         (response.status === 200 && cancelled.status !== "no_active_turn") ||
-        (cancelled.status === "accepted" && cancelled.sessionId !== request.adapterSessionId)
+        (cancelled.status === "accepted" &&
+          cancelled.sessionId !== (request.logicalSessionId ?? request.adapterSessionId))
       ) {
         throw new SubmissionOutcomeUnknownError();
       }
@@ -1635,11 +1647,11 @@ export function createSameOriginEveTransport(input: {
       const accepted = await postMutation({
         ...common,
         body: { inputResponses: responsePayload(request.responses) },
-        path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}`,
+        path: `/eve/v1/session/${encodeURIComponent(request.logicalSessionId ?? request.adapterSessionId)}`,
         principal: request.principal,
         sourceHandoffId: request.sourceHandoffId,
       });
-      if (accepted.sessionId !== request.adapterSessionId) {
+      if (accepted.sessionId !== (request.logicalSessionId ?? request.adapterSessionId)) {
         throw new SubmissionOutcomeUnknownError();
       }
       return readRespondSettlement({
@@ -1690,11 +1702,11 @@ export function createSameOriginEveTransport(input: {
       const accepted = await postMutation({
         ...common,
         body: { inputResponses: responsePayload(request.responses) },
-        path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}`,
+        path: `/eve/v1/session/${encodeURIComponent(request.logicalSessionId ?? request.adapterSessionId)}`,
         principal: request.principal,
         sourceHandoffId: request.sourceHandoffId,
       });
-      if (accepted.sessionId !== request.adapterSessionId) {
+      if (accepted.sessionId !== (request.logicalSessionId ?? request.adapterSessionId)) {
         throw new SubmissionOutcomeUnknownError();
       }
       await readRespondSettlementIncremental({
@@ -1711,11 +1723,11 @@ export function createSameOriginEveTransport(input: {
       const accepted = await postMutation({
         ...common,
         body: { message: request.message, turnPolicy: "queue" },
-        path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}`,
+        path: `/eve/v1/session/${encodeURIComponent(request.logicalSessionId ?? request.adapterSessionId)}`,
         principal: request.principal,
         sourceHandoffId: request.sourceHandoffId,
       });
-      if (accepted.sessionId !== request.adapterSessionId) {
+      if (accepted.sessionId !== (request.logicalSessionId ?? request.adapterSessionId)) {
         throw new SubmissionOutcomeUnknownError();
       }
       if (accepted.deliveryId === undefined) {
@@ -1744,11 +1756,11 @@ export function createSameOriginEveTransport(input: {
       const accepted = await postMutation({
         ...common,
         body: { message: request.message, turnPolicy: "queue" },
-        path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}`,
+        path: `/eve/v1/session/${encodeURIComponent(request.logicalSessionId ?? request.adapterSessionId)}`,
         principal: request.principal,
         sourceHandoffId: request.sourceHandoffId,
       });
-      if (accepted.sessionId !== request.adapterSessionId) {
+      if (accepted.sessionId !== (request.logicalSessionId ?? request.adapterSessionId)) {
         throw new SubmissionOutcomeUnknownError();
       }
       if (accepted.deliveryId === undefined) {
@@ -1759,7 +1771,10 @@ export function createSameOriginEveTransport(input: {
     async start(request) {
       const accepted = await postMutation({
         ...common,
-        body: { message: request.prompt, operationId: request.operationId },
+        body:
+          request.recovery === undefined
+            ? { message: request.prompt, operationId: request.operationId }
+            : { operationId: request.operationId, recovery: request.recovery },
         path: "/eve/v1/session",
         principal: request.principal,
         sourceHandoffId: request.sourceHandoffId,
@@ -1768,24 +1783,31 @@ export function createSameOriginEveTransport(input: {
           sink: input.onSubmissionDiagnostic,
         },
       });
-      try {
-        await confirmStartedSession({ ...common, sessionId: accepted.sessionId });
-      } catch (error) {
-        reportHostedSubmissionDiagnostic({
-          adapterSessionId: accepted.sessionId,
-          error,
-          operationId: request.operationId,
-          operationKind: "start",
-          phase: "transport_start_confirmation",
-          sink: input.onSubmissionDiagnostic,
-        });
-        // The create was dispatched, but a candidate ID alone does not prove
-        // it claimed the authenticated operation. Keep the reserved operation
-        // uncertain so an exact later retry can resolve its canonical owner.
-        throw new SubmissionOutcomeUnknownError();
+      const recoveryBinding: NativeRecoveryBinding | undefined =
+        request.recovery === undefined
+          ? undefined
+          : nativeRecoveryBindingSchema.parse(accepted.recoveryBinding);
+      if (request.recovery === undefined) {
+        try {
+          await confirmStartedSession({ ...common, sessionId: accepted.sessionId });
+        } catch (error) {
+          reportHostedSubmissionDiagnostic({
+            adapterSessionId: accepted.sessionId,
+            error,
+            operationId: request.operationId,
+            operationKind: "start",
+            phase: "transport_start_confirmation",
+            sink: input.onSubmissionDiagnostic,
+          });
+          // The create was dispatched, but a candidate ID alone does not prove
+          // it claimed the authenticated operation. Keep the reserved operation
+          // uncertain so an exact later retry can resolve its canonical owner.
+          throw new SubmissionOutcomeUnknownError();
+        }
       }
       return {
         adapterSessionId: accepted.sessionId,
+        ...(recoveryBinding === undefined ? {} : { recoveryBinding }),
         // Ownership is established; the model may still be running. Persist
         // the provisional public session and observe the turn on autograph_get.
         snapshot: { events: [], status: "working" },

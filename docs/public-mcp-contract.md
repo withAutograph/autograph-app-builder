@@ -84,6 +84,30 @@ missing adapter for otherwise-active work is fenced by adapter generation before
 the same public handle continues. User-visible sessions do not expire with
 their short-lived compute leases.
 
+Failed hosted builds recover from authoritative native checkpoints and their
+actual retained delivery and tool results. Public conversation excerpts do not
+restore private workflow state or authorize a replacement build. Recovery keeps
+the original app, private workspace, logical native identity, and exact approval
+scope. A child has its own public handle and physical execution stream; those
+new transport addresses do not rewrite the original grant or source ownership.
+
+Builder rechecks current ownership, membership, and cancellation before reading
+private checkpoints and before activating recovered work. The existing resume
+operation reserves one recovery, and its durable child receipt is saved before
+the child can run tools or a model. An exact retry reads that receipt even after
+the child's inbox closes. An unknown submission remains reserved until its
+outcome is resolved; a new request ID must not start a second recovery.
+
+Reconciliation uses genuine committed state and retained inputs and outcomes.
+A handled model failure can leave a native step marked completed, so a native
+failure flag alone cannot locate the recoverable input. An emitted tool result
+does not by itself prove that corresponding authored state committed. If an
+effect's outcome cannot be reconciled, recovery preserves the evidence and
+reports uncertainty without replaying that effect or silently starting from a
+text summary. Ordinary app edits, layouts, roles, and dependency changes are
+not recovery admission criteria. Focused fixtures exercise Builder ownership,
+approval, result retention, cancellation, and retry behavior.
+
 Local development has a narrower recovery boundary. A missing local stream or
 Eve's explicit inactive-session rejection returns `session_recovery_unavailable`,
 preserves the original public identity and any buffered progress, and removes
