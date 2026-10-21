@@ -296,6 +296,66 @@ const setup = () => {
 };
 
 describe("approved managed app continuity service", () => {
+  it("returns the original saved plan and request without consulting newer setup or executing work", async () => {
+    const f = setup();
+    const planned = await f.operations.plan(context, selection.runtime, "saved-original-request");
+    const original = f.read();
+    vi.mocked(f.deps.resolvePlan).mockClear().mockRejectedValue(new Error("No replanning"));
+    vi.mocked(f.deps.assertSetup).mockClear().mockRejectedValue(new Error("New setup differs"));
+    const reserve = vi.spyOn(f.deps.store, "reserve");
+    const cas = vi.spyOn(f.deps.store, "compareAndSet");
+    f.invalidateSetup();
+    const saved = await f.operations.readPlan(context, planned.plan.intentId);
+    expect(saved).toEqual(planned);
+    expect(saved.request.idempotencyKey).toBe("saved-original-request");
+    expect(f.read()).toEqual(original);
+    expect(f.deps.resolvePlan).not.toHaveBeenCalled();
+    expect(f.deps.assertSetup).not.toHaveBeenCalled();
+    expect(f.deps.readApproval).not.toHaveBeenCalled();
+    expect(reserve).not.toHaveBeenCalled();
+    expect(cas).not.toHaveBeenCalled();
+    expect(f.events).toEqual([]);
+  });
+  it("denies foreign owner and session reads while keeping the saved continuity record unchanged", async () => {
+    const f = setup();
+    const planned = await f.operations.plan(context, selection.runtime, "saved-request");
+    const original = f.read();
+    await expect(
+      f.operations.readPlan(
+        {
+          ...context,
+          authority: { ...authority, ownerUserId: "foreign-owner" },
+        },
+        planned.plan.intentId,
+      ),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
+    await expect(
+      f.operations.readPlan(
+        {
+          ...context,
+          target: { ...context.target, sessionId: "foreign-session" },
+        },
+        planned.plan.intentId,
+      ),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    f.revokeOwner();
+    await expect(f.operations.readPlan(context, planned.plan.intentId)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(f.read()).toEqual(original);
+    expect(f.events).toEqual([]);
+  });
+  it("rejects a saved continuity plan whose recorded digest no longer binds its request", async () => {
+    const f = setup();
+    const planned = await f.operations.plan(context, selection.runtime, "saved-request");
+    const original = f.read();
+    vi.spyOn(f.deps.store, "read").mockResolvedValue({ ...original, planDigest: "f".repeat(64) });
+    await expect(f.operations.readPlan(context, planned.plan.intentId)).rejects.toMatchObject({
+      code: "resource_mismatch",
+    });
+    expect(f.read()).toEqual(original);
+    expect(f.events).toEqual([]);
+  });
   it("reserves a positive first database revision and preserves idempotence and CAS recovery", async () => {
     const f = setup();
     const values = vi.fn((value: { revision: number; record: ContinuityRecord }) => {

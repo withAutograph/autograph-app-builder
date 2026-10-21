@@ -14,6 +14,7 @@ const hooks = vi.hoisted(() => ({
   request: vi.fn(),
   export: vi.fn(),
   readExport: vi.fn(),
+  readContinuity: vi.fn(),
   resolve: vi.fn(),
 }));
 vi.mock("eve/tools", () => ({ defineTool: <T>(tool: T) => tool }));
@@ -378,5 +379,47 @@ describe("saved export lookup tool", () => {
     });
     expect(hooks.request).not.toHaveBeenCalled();
     expect(hooks.export).not.toHaveBeenCalled();
+  });
+});
+
+describe("saved continuity lookup tool", () => {
+  const intentId = "50000000-0000-4000-8000-000000000005";
+  beforeEach(() => {
+    vi.clearAllMocks();
+    hooks.client.mockResolvedValue({
+      request: hooks.request,
+      readContinuity: hooks.readContinuity,
+      readTenantExport: hooks.readExport,
+      resolvePreviewTarget: hooks.resolve,
+      sessionId: selection.sessionId,
+    });
+  });
+  it("returns the saved continuity intent without resolving or planning a replacement", async () => {
+    const saved = {
+      plan: { frozen: "original-continuity-plan" },
+      request: { idempotencyKey: "original-continuity-call" },
+      status: { state: "planned" },
+    };
+    hooks.readContinuity.mockResolvedValueOnce(saved);
+    await expect(getTool.execute({ operation: "continuity", intentId }, toolCtx)).resolves.toBe(
+      saved,
+    );
+    expect(hooks.client).toHaveBeenCalledWith(ctx.session.auth, ctx.session.id);
+    expect(hooks.readContinuity).toHaveBeenCalledWith(intentId, ctx.abortSignal);
+    expect(hooks.request).not.toHaveBeenCalled();
+    expect(hooks.resolve).not.toHaveBeenCalled();
+    expect(hooks.readExport).not.toHaveBeenCalled();
+    expect(hooks.authorize).not.toHaveBeenCalled();
+  });
+  it("returns an ownership refusal without exposing a saved continuity intent", async () => {
+    hooks.readContinuity.mockRejectedValueOnce(new HostedOperatorError("authorization_required"));
+    await expect(getTool.execute({ operation: "continuity", intentId }, toolCtx)).resolves.toEqual({
+      intentId,
+      authenticatedBehavior: "unassessed",
+      code: "authorization_required",
+      status: "blocked",
+    });
+    expect(hooks.request).not.toHaveBeenCalled();
+    expect(hooks.resolve).not.toHaveBeenCalled();
   });
 });

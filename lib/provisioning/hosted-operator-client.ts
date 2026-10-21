@@ -6,6 +6,7 @@ import {
   hostedContinuityRequestSchema,
   continuityStatusSchema,
   parseContinuityRequestForPlan,
+  parseContinuityPlanForOwner,
 } from "./hosted-operator-continuity-contract";
 import type {
   HostedContinuityRequest,
@@ -436,6 +437,30 @@ export const createHostedOperatorClient = (input: {
         result.status.planRef === result.plan.planRef,
       ].every(Boolean);
       if (!matchesRequestedRuntime) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+      return result;
+    },
+    async readContinuity(intentId: string, signal?: AbortSignal) {
+      const ownerContext = exportOwner();
+      const result = await sendContinuity(
+        { action: "continuity-read", intentId, ownerContext },
+        continuityPlannedSchema,
+        signal,
+      );
+      parseContinuityRequestForPlan(result.request, result.plan);
+      parseContinuityPlanForOwner(result.plan, {
+        authority: ownerContext.authority,
+        target: result.plan.target,
+      });
+      const matchesSavedIntent = [
+        result.plan.intentId === intentId,
+        result.plan.planRef === `_protected-operator/continuity-plans/${intentId}`,
+        result.status.intentId === intentId,
+        result.status.planRef === result.plan.planRef,
+        result.plan.target.sessionId === ownerContext.sessionId,
+      ].every(Boolean);
+      if (!matchesSavedIntent) {
         throw new HostedOperatorError("resource_mismatch");
       }
       return result;

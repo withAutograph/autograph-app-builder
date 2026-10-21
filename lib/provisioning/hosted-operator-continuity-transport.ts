@@ -23,6 +23,11 @@ import type {
 
 export const continuityTransportRequestSchema = z.discriminatedUnion("action", [
   z.strictObject({
+    action: z.literal("continuity-read"),
+    intentId: z.uuid(),
+    ownerContext: operatorOwnerContextSchema,
+  }),
+  z.strictObject({
     ...hostedContinuityRequestSchema.shape,
     action: z.literal("continuity-approval"),
     ownerContext: operatorOwnerContextSchema,
@@ -84,7 +89,7 @@ export const createContinuityDispatcher =
         selected = parsed.selection;
       } else {
         const intentId =
-          parsed.action === "continuity-status"
+          parsed.action === "continuity-status" || parsed.action === "continuity-read"
             ? parsed.intentId
             : z.uuid().parse(parsed.planRef.split("/").at(-1));
         const saved = await dependencies.store.read({
@@ -102,9 +107,11 @@ export const createContinuityDispatcher =
         };
       }
       stage = "dispatcher_owner_authorization";
+      const artifactRead = ["continuity-status", "continuity-read", "continuity-approval"].includes(
+        parsed.action,
+      );
       const context =
-        (parsed.action === "continuity-status" || parsed.action === "continuity-approval") &&
-        savedContext !== undefined
+        artifactRead && savedContext !== undefined
           ? await dependencies.authorizeRead(frozenWorkloadRequest, savedContext)
           : await dependencies.authorize(frozenWorkloadRequest, selected, parsed.ownerContext);
       if (workloadCarrier === null || !workloadCarrier.startsWith("Bearer ")) {
@@ -117,6 +124,10 @@ export const createContinuityDispatcher =
       switch (parsed.action) {
         case "continuity-plan": {
           result = await operations.plan(context, parsed.runtime, parsed.idempotencyKey);
+          break;
+        }
+        case "continuity-read": {
+          result = await operations.readPlan(context, parsed.intentId);
           break;
         }
         case "continuity-status": {
