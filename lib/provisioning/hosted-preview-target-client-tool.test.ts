@@ -6,12 +6,14 @@ import { z } from "zod";
 import type { OperatorSelection } from "./hosted-operator-contract";
 import { HostedOperatorError } from "./hosted-operator-contract";
 import planTool from "../../agent/tools/plan-app-hosted-runtime";
+import getTool from "../../agent/tools/get-app-hosted-runtime";
 
 const hooks = vi.hoisted(() => ({
   authorize: vi.fn(),
   client: vi.fn(),
   request: vi.fn(),
   export: vi.fn(),
+  readExport: vi.fn(),
   resolve: vi.fn(),
 }));
 vi.mock("eve/tools", () => ({ defineTool: <T>(tool: T) => tool }));
@@ -312,6 +314,69 @@ describe("closed export tool pre-dispatch diagnostics", () => {
       approvedPreviewTarget: selection,
     });
     expect(console.info).not.toHaveBeenCalled();
+    expect(hooks.export).not.toHaveBeenCalled();
+  });
+});
+
+describe("saved export lookup tool", () => {
+  const exportId = "40000000-0000-4000-8000-000000000004";
+  beforeEach(() => {
+    vi.clearAllMocks();
+    hooks.client.mockResolvedValue({
+      request: hooks.request,
+      readTenantExport: hooks.readExport,
+      planTenantExport: hooks.export,
+      resolvePreviewTarget: hooks.resolve,
+      sessionId: selection.sessionId,
+    });
+  });
+  it("routes an export ID to the saved intent read without preparation lookup or replanning", async () => {
+    const saved = {
+      plan: { frozen: "selected-plan" },
+      request: { idempotencyKey: "original-call" },
+      status: { state: "planned" },
+    };
+    hooks.readExport.mockResolvedValueOnce(saved);
+    await expect(getTool.execute({ operation: "export", exportId }, toolCtx)).resolves.toEqual(
+      saved,
+    );
+    expect(hooks.client).toHaveBeenCalledWith(ctx.session.auth, ctx.session.id);
+    expect(hooks.readExport).toHaveBeenCalledWith(exportId, ctx.abortSignal);
+    expect(hooks.request).not.toHaveBeenCalled();
+    expect(hooks.export).not.toHaveBeenCalled();
+    expect(hooks.resolve).not.toHaveBeenCalled();
+  });
+  it("keeps the existing preparation lookup input and request unchanged", async () => {
+    const oldInput = {
+      appId: selection.appId,
+      branch: selection.branch,
+      environment: "preview" as const,
+      operationRef: exportId,
+      projectId: selection.projectId,
+    };
+    const status = { status: "pending" };
+    hooks.request.mockResolvedValueOnce(status);
+    await expect(getTool.execute(oldInput, toolCtx)).resolves.toEqual(status);
+    const { operationRef, ...selected } = oldInput;
+    expect(hooks.request).toHaveBeenCalledWith(
+      {
+        action: "status",
+        operationRef,
+        selection: { ...selected, sessionId: selection.sessionId },
+      },
+      ctx.abortSignal,
+    );
+    expect(hooks.readExport).not.toHaveBeenCalled();
+  });
+  it("preserves a saved export ownership refusal without returning an intent or replanning", async () => {
+    hooks.readExport.mockRejectedValueOnce(new HostedOperatorError("authorization_required"));
+    await expect(getTool.execute({ operation: "export", exportId }, toolCtx)).resolves.toEqual({
+      exportId,
+      authenticatedBehavior: "unassessed",
+      code: "authorization_required",
+      status: "blocked",
+    });
+    expect(hooks.request).not.toHaveBeenCalled();
     expect(hooks.export).not.toHaveBeenCalled();
   });
 });

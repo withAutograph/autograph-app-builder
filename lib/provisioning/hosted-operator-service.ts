@@ -1539,7 +1539,15 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
         return await deps.continuityRequest(request, continuityTransportRequestSchema.parse(body));
       }
       const exportAction = z
-        .object({ action: z.enum(["export-plan", "export-status", "export-approval", "export"]) })
+        .object({
+          action: z.enum([
+            "export-plan",
+            "export-read",
+            "export-status",
+            "export-approval",
+            "export",
+          ]),
+        })
         .safeParse(body);
       if (exportAction.success) {
         if (deps.exportRequest === undefined) {

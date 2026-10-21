@@ -222,6 +222,57 @@ describe("protected tenant export orchestration", () => {
       "resource_mismatch",
     );
   });
+  it("recovers only the frozen owned export intent after ordinary current source/target changes", async () => {
+    const f = setup();
+    const planned = await f.operations.plan(context, "customer-one", "original-request");
+    const before = f.read();
+    const reserve = vi.spyOn(f.dependencies.store, "reserve");
+    const write = vi.spyOn(f.dependencies.store, "compareAndSet");
+    vi.mocked(f.dependencies.resolvePlan).mockClear();
+    vi.mocked(f.dependencies.assertSetup).mockClear();
+    const changed = {
+      ...context,
+      target: { ...context.target, branch: "new-private-draft", projectId: "new-project" },
+    };
+    expect(await f.operations.readPlan(changed, planned.plan.exportId)).toEqual(planned);
+    expect(f.read()).toEqual(before);
+    expect(reserve).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+    expect(f.dependencies.resolvePlan).not.toHaveBeenCalled();
+    expect(f.dependencies.assertSetup).not.toHaveBeenCalled();
+    expect(f.dependencies.readApproval).not.toHaveBeenCalled();
+    expect(f.dependencies.prepareWorker).not.toHaveBeenCalled();
+    expect(f.dependencies.runWorker).not.toHaveBeenCalled();
+    expect(f.dependencies.publish).not.toHaveBeenCalled();
+    f.revoke();
+    await expect(f.operations.readPlan(context, planned.plan.exportId)).rejects.toThrow(
+      "authorization_required",
+    );
+  });
+
+  it.each(["owner", "app", "session"])(
+    "rejects a different %s when reading a saved export",
+    async (changed) => {
+      const f = setup();
+      const planned = await f.operations.plan(context, "customer-one", "original-request");
+      const foreign = {
+        ...context,
+        authority:
+          changed === "owner"
+            ? { ...context.authority, ownerUserId: "another-owner" }
+            : context.authority,
+        target: {
+          ...context.target,
+          ...(changed === "app" ? { appId: "another-app" } : {}),
+          ...(changed === "session" ? { sessionId: "another-session" } : {}),
+        },
+      };
+      await expect(f.operations.readPlan(foreign, planned.plan.exportId)).rejects.toThrow();
+      expect(f.dependencies.readApproval).not.toHaveBeenCalled();
+      expect(f.dependencies.runWorker).not.toHaveBeenCalled();
+    },
+  );
+
   it("requires exact independent data approval and refuses changed intent before dispatch", async () => {
     const f = setup();
     const planned = await f.operations.plan(context, "customer-one", "ordinary-request");
@@ -464,6 +515,11 @@ describe("existing operator transport export dispatch", () => {
       },
     });
     const planned = await client.planTenantExport(selected, "customer-one", "original-request");
+    const savedBeforeRead = f.read();
+    const mutationAuthorizationsBeforeRead = authorize.mock.calls.length;
+    expect(await client.readTenantExport(planned.plan.exportId)).toEqual(planned);
+    expect(authorize.mock.calls.length).toBe(mutationAuthorizationsBeforeRead);
+    expect(f.read()).toEqual(savedBeforeRead);
     expect(await client.tenantExportApproval(planned.request)).toEqual({ approved: false });
     f.approve();
     expect(await client.tenantExportApproval(planned.request)).toEqual({ approved: true });
@@ -486,7 +542,7 @@ describe("existing operator transport export dispatch", () => {
     expect(complete.state).toBe("complete");
     expect(prepare).not.toHaveBeenCalled();
     expect(authorize).toHaveBeenCalledTimes(providerChecksBeforeExecution + 1);
-    expect(authorizeRead).toHaveBeenCalledTimes(3);
+    expect(authorizeRead).toHaveBeenCalledTimes(4);
     expect(bindWorkload).toHaveBeenCalledTimes(
       authorize.mock.calls.length + authorizeRead.mock.calls.length,
     );

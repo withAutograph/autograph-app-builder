@@ -410,6 +410,15 @@ export const createHostedTenantExportOperations = (deps: HostedTenantExportDepen
       }
       return { approved: approval !== null };
     },
+    async readPlan(context: HostedOperatorContext, exportId: string) {
+      const current = await read(context, z.uuid().parse(exportId));
+      const { plan, planDigest, idempotencyKey } = current.journal;
+      const request = parseHostedTenantExportRequestForPlan(
+        { action: "export", planRef: plan.planRef, planDigest, idempotencyKey },
+        plan,
+      );
+      return { plan, request, status: tenantExportStatus(current.journal) };
+    },
     async status(context: HostedOperatorContext, exportId: string) {
       const current = await read(context, z.uuid().parse(exportId));
       return tenantExportStatus(current.journal);
