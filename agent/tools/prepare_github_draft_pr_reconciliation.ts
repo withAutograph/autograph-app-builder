@@ -24,6 +24,7 @@ import { readPublishedOperatorSourceForSession } from "@/lib/agent/compiled-oper
 import { resolveAcceptedAppSpecContent } from "@/lib/agent/accepted-app-spec-content";
 import { recoverLegacyAppSpecTransport } from "@/lib/repository/legacy-app-spec-recovery";
 import { compactAcceptedPlanningInput } from "@/lib/repository/compact-accepted-planning-input";
+import { retireUnusedDraftWorktrees } from "@/lib/repository/retire-unused-draft-worktrees";
 import { appBaselineState } from "@/lib/agent/app-baseline-state";
 import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-set";
 import { prepareDraftReconciliation } from "@/lib/repository/sandbox-draft-reconciliation";
@@ -193,19 +194,21 @@ export default defineTool({
         sessionId: ctx.session.id,
       }));
     const retainedCandidate = draftReconciliationState.get();
+    const retainedRoots = [
+      state.workspace.workspacePath,
+      state.applyReceipt.applyRoot,
+      ...state.validationReceipt.commands.map((command) => command.validationRoot),
+      ...(retainedCandidate === null ? [] : [retainedCandidate.root]),
+      ...draftReconciliationCompletions.get().map((completion) => completion.root),
+    ];
+    await retireUnusedDraftWorktrees({ sandbox, retainedRoots, signal: ctx.abortSignal });
     await compactAcceptedPlanningInput({
       sandbox,
       appId: state.appSpec.appId,
       artifactRevision: state.appSpec.artifactRevision,
       appSpecDigest: state.appSpec.digest,
       proposalAppSpec: state.proposal.target.contract.appSpec,
-      retainedRoots: [
-        state.workspace.workspacePath,
-        state.applyReceipt.applyRoot,
-        ...state.validationReceipt.commands.map((command) => command.validationRoot),
-        ...(retainedCandidate === null ? [] : [retainedCandidate.root]),
-        ...draftReconciliationCompletions.get().map((completion) => completion.root),
-      ],
+      retainedRoots,
       readAcceptedContent,
     });
     const transport = await recoverLegacyAppSpecTransport({
