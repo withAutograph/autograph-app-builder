@@ -25,6 +25,7 @@ export interface DraftReconciliationCompletion {
   preparation: "sealed-before-approval" | "legacy-recording-only";
   proposal: ExistingDraftReconciliationProposal;
   review: ReconciliationReviewReceipt;
+  /** Original applied change-set lineage, not an independent assessment of the merged candidate. */
   appReview: PublishedAppSourceReview;
   appId: string;
   githubSourceDigest: string;
