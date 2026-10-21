@@ -335,10 +335,10 @@ it.each([
       ],
     ]);
     const model = new MockLanguageModelV4({
-      doGenerate: async ({ prompt }) => {
+      doGenerate: ({ prompt }) => {
         requests += 1;
-        if (requests === 1)
-          return {
+        if (requests === 1) {
+          return Promise.resolve({
             content: ["native", "deferred"].map((name) => ({
               type: "tool-call",
               toolCallId: `mixed-${name}`,
@@ -348,7 +348,8 @@ it.each([
             finishReason: { unified: "tool-calls", raw: "tool_calls" },
             usage: { inputTokens: { total: 10 }, outputTokens: { total: 5 } },
             warnings: [],
-          };
+          });
+        }
         const parts = prompt.flatMap((message) =>
           Array.isArray(message.content) ? message.content : [],
         );
@@ -360,7 +361,7 @@ it.each([
             1,
           );
         }
-        if (optionId === "approve")
+        if (optionId === "approve") {
           assert.ok(
             parts.some(
               (part) =>
@@ -369,17 +370,18 @@ it.each([
                 part.output.value === "native-result:retained-native-input",
             ),
           );
+        }
         assert.equal(JSON.stringify(prompt).includes("new product reply"), requests > 2);
         assert.ok(JSON.stringify(prompt).includes("retained client context"));
-        return {
+        return Promise.resolve({
           content: [{ type: "text", text: "complete" }],
           finishReason: { unified: "stop", raw: "stop" },
           usage: { inputTokens: { total: 10 }, outputTokens: { total: 5 } },
           warnings: [],
-        };
+        });
       },
     });
-    const run = createToolLoopHarness({ tools, resolveModel: async () => model });
+    const run = createToolLoopHarness({ tools, resolveModel: () => Promise.resolve(model) });
     const invoke = (session, input) => contextStorage.run(ctx, () => run(session, input));
     const initial = {
       agent: { system: "", tools: [], modelReference: { id: "model", provider: "test" } },
@@ -408,13 +410,13 @@ it.each([
       })),
     });
     assert.equal(executions, 0);
-    if (cancelBeforeReplay) {
+    if (cancelBeforeReplay === true) {
       const abort = new AbortController();
       abort.abort(new Error("cancelled before replay"));
       const cancelled = createToolLoopHarness({
         tools,
         abortSignal: abort.signal,
-        resolveModel: async () => model,
+        resolveModel: () => Promise.resolve(model),
       });
       await assert.rejects(
         contextStorage.run(ctx, () =>
@@ -449,7 +451,7 @@ it.each([
     assert.equal(executions, optionId === "approve" ? 1 : 0);
     assert.equal(requests, 2);
     if (withInput) {
-      assert.equal(typeof completed.next, "function");
+      assert.ok(completed.next);
       completed = await contextStorage.run(ctx, () => completed.next(completed.session));
       assert.equal(requests, 3);
       assert.equal(executions, 1);
@@ -545,27 +547,28 @@ it.each([400, 503])(
       ],
     ]);
     const model = new MockLanguageModelV4({
-      doGenerate: async ({ prompt }) => {
+      doGenerate: ({ prompt }) => {
         generatedRequests += 1;
         if (generatedRequests > 1) {
           const parts = prompt.flatMap((message) =>
             Array.isArray(message.content) ? message.content : [],
           );
-          for (const name of ["native", "deferred"])
+          for (const name of ["native", "deferred"]) {
             assert.equal(
               parts.filter(
                 (part) => part.type === "tool-result" && part.toolCallId === `failed-${name}`,
               ).length,
               1,
             );
-          return {
+          }
+          return Promise.resolve({
             content: [{ type: "text", text: "continued" }],
             finishReason: { unified: "stop", raw: "stop" },
             usage: { inputTokens: { total: 10 }, outputTokens: { total: 5 } },
             warnings: [],
-          };
+          });
         }
-        return {
+        return Promise.resolve({
           content: ["native", "deferred"].map((name) => ({
             type: "tool-call",
             toolCallId: `failed-${name}`,
@@ -575,30 +578,33 @@ it.each([400, 503])(
           finishReason: { unified: "tool-calls", raw: "tool_calls" },
           usage: { inputTokens: { total: 10 }, outputTokens: { total: 5 } },
           warnings: [],
-        };
-      },
-      doStream: async () => {
-        providerRequests += 1;
-        throw new APICallError({
-          message: "Synthetic nonretryable provider rejection",
-          url: "https://synthetic.invalid/model",
-          requestBodyValues: {},
-          statusCode,
-          responseBody: "synthetic rejection",
-          isRetryable: false,
         });
+      },
+      doStream: () => {
+        providerRequests += 1;
+        return Promise.reject(
+          new APICallError({
+            message: "Synthetic nonretryable provider rejection",
+            url: "https://synthetic.invalid/model",
+            requestBodyValues: {},
+            statusCode,
+            responseBody: "synthetic rejection",
+            isRetryable: false,
+          }),
+        );
       },
     });
     const invoke = (session, input, events) =>
       contextStorage.run(ctx, () =>
         createToolLoopHarness({
           tools,
-          resolveModel: async () => model,
+          resolveModel: () => Promise.resolve(model),
           ...(events === undefined
             ? {}
             : {
-                handleEvent: async (event) => {
+                handleEvent: (event) => {
                   events.push(event);
+                  return Promise.resolve();
                 },
               }),
         })(session, input),
