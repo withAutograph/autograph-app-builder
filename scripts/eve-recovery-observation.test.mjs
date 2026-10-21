@@ -24,8 +24,13 @@ const serialization = await load("compiled/@workflow/core/serialization.js");
 const { setLogRecordSubscriber } = await load("internal/logging.js");
 const records = [];
 setLogRecordSubscriber((record) => {
-  if (record.message === "terminal-recovery-observation") {
-    records.push(record);
+  const prefix = "terminal-recovery-observation ";
+  if (record.message.startsWith(prefix) === true) {
+    records.push({
+      ...record,
+      message: "terminal-recovery-observation",
+      fields: JSON.parse(record.message.slice(prefix.length)),
+    });
   }
 });
 afterAll(() => setLogRecordSubscriber());
@@ -92,7 +97,7 @@ const setup = () => {
     collect: async ({ binding, authorizeOwner }) => {
       state.collects += 1;
       await authorizeOwner(binding);
-      return { kind: "candidate", candidate: payload };
+      return { kind: "candidate", candidate: { ...payload, binding } };
     },
     readCandidate: (candidate) => candidate,
     recordObservation: (value) => {
@@ -125,8 +130,11 @@ test("receipt observation selects failed physical child and cannot activate, rec
     sessionId: "physical-failed-child",
   });
   assert.equal(state.effects, 0);
-  assert.equal(state.collects, 1);
-  assert.equal(state.reports[0].ownerRunId, "physical-failed-child");
+  assert.equal(state.collects, 2);
+  assert.deepEqual(
+    state.reports.map((report) => report.ownerRunId),
+    ["physical-original", "physical-failed-child"],
+  );
   assert.equal(JSON.stringify(payload), before);
 });
 
@@ -145,21 +153,21 @@ test("successful repeat suppresses reads briefly but reauthorizes every request"
   await observeTerminalSession(input, deps);
   const firstAuth = state.authorized;
   await observeTerminalSession(input, deps);
-  assert.equal(state.collects, 1);
+  assert.equal(state.collects, 2);
   assert.ok(state.authorized > firstAuth);
   state.now = 15_001;
   await observeTerminalSession(input, deps);
-  assert.equal(state.collects, 2);
+  assert.equal(state.collects, 4);
   state.denied = true;
   await assert.rejects(observeTerminalSession(input, deps), /denied/u);
-  assert.equal(state.collects, 2);
+  assert.equal(state.collects, 4);
 });
 
 test("concurrent observations share reads and independently reauthorize", async () => {
   const { state, deps, input } = setup();
   await Promise.all([observeTerminalSession(input, deps), observeTerminalSession(input, deps)]);
-  assert.equal(state.collects, 1);
-  assert.equal(state.reports.length, 1);
+  assert.equal(state.collects, 2);
+  assert.equal(state.reports.length, 2);
   assert.ok(state.authorized >= 7);
 });
 
@@ -203,7 +211,7 @@ test("advisory sink failure has no effects, does not cache a successful observat
   const observed = await observeTerminalSession(input, deps);
   assert.equal(observed.kind, "accepted");
   await observeTerminalSession(input, deps);
-  assert.equal(state.collects, 2);
+  assert.equal(state.collects, 4);
   assert.equal(state.effects, 0);
 });
 
@@ -298,15 +306,28 @@ test("actual native collector and serialization retain mixed orphan history and 
     correlationId: stepId,
     eventData: { stepName: step.stepName },
   };
+  const sourceOwner = input.descriptor.sourceOwnerRunId;
+  const sourceStep = {
+    ...step,
+    runId: sourceOwner,
+    input: await serialization.dehydrateStepArguments(
+      { args: [pair], closureVars: [] },
+      sourceOwner,
+    ),
+  };
+  const readOwners = [];
   const world = {
     runs: {
       get: (id) => {
-        assert.equal(id, owner);
-        return Promise.resolve({ runId: owner, status: "failed" });
+        assert.ok([owner, sourceOwner].includes(id));
+        readOwners.push(id);
+        return Promise.resolve({ runId: id, status: "failed" });
       },
     },
-    events: { list: () => Promise.resolve({ data: [event], hasMore: false }) },
-    steps: { get: () => Promise.resolve(step) },
+    events: {
+      list: ({ runId }) => Promise.resolve({ data: [{ ...event, runId }], hasMore: false }),
+    },
+    steps: { get: (runId) => Promise.resolve(runId === sourceOwner ? sourceStep : step) },
   };
   const realResult = {
     type: "action.result",
@@ -328,8 +349,14 @@ test("actual native collector and serialization retain mixed orphan history and 
       serialization.hydrateStepReturnValue(value, runId, key),
     readDurableSession,
     requireEventSlot: (id) => Number(id.slice(5)),
-    async *readNativeEvents() {
+    async *readNativeEvents(runId) {
       yield realResult;
+      if (runId === sourceOwner) {
+        yield {
+          ...realResult,
+          data: { result: { ...realResult.data.result, callId: nativeCall } },
+        };
+      }
     },
     now: () => 0,
   });
@@ -338,7 +365,7 @@ test("actual native collector and serialization retain mixed orphan history and 
   const before = JSON.stringify(pair);
   await observeTerminalSession(input, deps);
   const logged = records.at(-1);
-  assert.ok(logged);
+  assert.ok(logged !== undefined);
   const text = JSON.stringify(logged);
   for (const privateValue of [
     nativeCall,
@@ -366,6 +393,44 @@ test("actual native collector and serialization retain mixed orphan history and 
     { idHash: protocolIdentityHash(nativeCall), resultEventCount: 0 },
   );
   assert.equal(data.observedOwnerRunHash, protocolIdentityHash(owner));
+  const originalLog = records.at(-2);
+  assert.ok(originalLog !== undefined);
+  assert.equal(originalLog.fields.observedOwnerRunHash, protocolIdentityHash(sourceOwner));
+  assert.equal(originalLog.fields.nativeResults.resultEventCount, 2);
+  assert.deepEqual(
+    originalLog.fields.candidateSample[0].historySampleNativeResults.find(
+      (value) => value.idHash === protocolIdentityHash(nativeCall),
+    ),
+    { idHash: protocolIdentityHash(nativeCall), resultEventCount: 1 },
+  );
+  assert.deepEqual(readOwners, [sourceOwner, owner]);
+  await observeTerminalSession(input, deps);
+  assert.deepEqual(readOwners, [sourceOwner, owner]);
   assert.equal(JSON.stringify(pair), before);
+  assert.equal(state.effects, 0);
+});
+
+test("source owner equals receipt owner is observed only once", async () => {
+  const { state, deps, input } = setup();
+  state.receipt = { ...state.receipt, ownerRunId: input.descriptor.sourceOwnerRunId };
+  const observed = await observeTerminalSession(input, deps);
+  assert.equal(observed.sessionId, input.descriptor.sourceOwnerRunId);
+  assert.equal(state.collects, 1);
+  assert.equal(state.reports.length, 1);
+});
+
+test("receipt change after original summary rejects child observation", async () => {
+  const { state, deps, input } = setup();
+  deps.recordObservation = (value) => {
+    state.reports.push(value);
+    state.receipt = { ...state.receipt, ownerRunId: "changed-child" };
+    return true;
+  };
+  await assert.rejects(observeTerminalSession(input, deps), /receipt changed/u);
+  assert.equal(state.collects, 1);
+  assert.deepEqual(
+    state.reports.map((report) => report.ownerRunId),
+    [input.descriptor.sourceOwnerRunId],
+  );
   assert.equal(state.effects, 0);
 });

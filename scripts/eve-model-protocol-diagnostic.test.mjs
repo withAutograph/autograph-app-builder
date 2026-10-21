@@ -33,7 +33,13 @@ const diagnosticRecords = [];
 afterAll(() => setLogRecordSubscriber());
 setLogRecordSubscriber((record) => {
   if (record.namespace === "harness.model-protocol") {
-    diagnosticRecords.push(record);
+    const separator = record.message.indexOf(" ");
+    assert.ok(separator > 0);
+    diagnosticRecords.push({
+      ...record,
+      message: record.message.slice(0, separator),
+      fields: JSON.parse(record.message.slice(separator + 1)),
+    });
   }
 });
 const ownerRunId = "wrun_physical_original";
@@ -447,7 +453,7 @@ const resumeSynthetic = async (ready, denied) => {
   const diagnostic = diagnosticRecords.findLast(
     (record) => record.message === "before-model-protocol",
   );
-  assert.ok(diagnostic);
+  assert.ok(diagnostic !== undefined);
   assert.equal(diagnostic.fields.sdkBeforeProvider.missingResultCount, 0);
   assert.equal(diagnostic.fields.sdkBeforeProvider.resultParts, 2);
   assert.match(diagnostic.fields.sdkCallHash, /^[a-f0-9]{64}$/u);
@@ -474,7 +480,7 @@ test("completed handled400 uses exact terminal input, latest typed state, origin
   assert.equal(ready.provenance.logicalSessionId, logicalSessionId);
   assert.equal(ready.provenance.sourceOwnerRunId, ownerRunId);
   assert.equal(ready.provenance.historySourceOrigin.kind, "completed-terminal-turn-input");
-  assert.ok(ready.provenance.frontierEventIds.includes(eventId(11)));
+  assert.equal(ready.provenance.frontierEventIds.includes(eventId(11)), true);
   assert.deepEqual(privateBefore.candidates, snapshots);
   await resumeSynthetic(ready, false);
 });
@@ -512,7 +518,7 @@ test("historical failed step covered by a later committed turn does not block kn
   const f = await fixture({ historicalFailure: true });
   const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
   assert.equal(result.kind, "ready");
-  assert.ok(result.provenance.coveredNativeEventIds.includes(eventId(2)));
+  assert.equal(result.provenance.coveredNativeEventIds.includes(eventId(2)), true);
 });
 
 test("diagnostic never serializes prompts, tool names, arguments, outputs or provider metadata", () => {

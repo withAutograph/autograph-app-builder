@@ -1294,10 +1294,10 @@ index 0000000..2cfc762
 +export declare function observeTerminalSession(input: TerminalRecoveryAuthorityInput & { readonly ports: Pick<TerminalRecoveryPorts, "authorize" | "readReceipt"> }, dependencies: TerminalRecoveryObservationDependencies): Promise<{ readonly kind: "accepted"; readonly sessionId: string }>;
 diff --git a/dist/src/execution/session/terminal-recovery.js b/dist/src/execution/session/terminal-recovery.js
 new file mode 100644
-index 0000000..40c28f8
+index 0000000..3659d6d
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.js
-@@ -0,0 +1,260 @@
+@@ -0,0 +1,267 @@
 +import { createHash } from "node:crypto";
 +import { DEFAULT_SESSION_TIMEOUT_MS } from "#execution/session/timeout.js";
 +import { SESSION_CHECKPOINT_VERSION } from "#execution/session/handoff.js";
@@ -1443,59 +1443,66 @@ index 0000000..40c28f8
 +const OBSERVATION_TTL_MS = 15_000;
 +const OBSERVATION_CACHE_ENTRIES = 256;
 +
-+/** Inspect the canonical retained physical owner without starting or activating anything. */
++/** Inspect original and receipt physical owners without starting or activating anything. */
 +export async function observeTerminalSession(input, dependencies) {
 +  const { auth, descriptor, ports } = input;
 +  const call = { auth, descriptor };
 +  await ports.authorize(call);
 +  const receipt = await ports.readReceipt(call);
 +  if (receipt != null && !matchesDescriptor(receipt, descriptor)) throw new Error("Recovery observation receipt changed.");
-+  const ownerRunId = receipt?.ownerRunId ?? descriptor.sourceOwnerRunId;
-+  const key = createHash("sha256").update("eve.terminal-observation.v1\0").update(JSON.stringify([
-+    terminalRecoveryActivationToken(auth, descriptor), ownerRunId,
-+    receipt == null ? null : provenanceKeys.map((field) => receipt.provenance[field]),
-+  ])).digest("hex");
-+  const binding = { ownerRunId, logicalSessionId: descriptor.logicalSessionId };
-+  async function authorizeSelected(selected = binding) {
-+    if (selected.ownerRunId !== binding.ownerRunId || selected.logicalSessionId !== binding.logicalSessionId) throw new Error("Recovery observation owner changed.");
-+    await ports.authorize(call);
-+    const current = await ports.readReceipt(call);
-+    if (receipt == null ? current != null : !matchesDescriptor(current, descriptor) || !sameReceipt(current, receipt)) throw new Error("Recovery observation receipt changed.");
++  // The recovered checkpoint cannot establish whether the original owner retained a
++  // genuine result. Observe each exact authorized physical owner independently.
++  const acceptedOwnerRunId = receipt?.ownerRunId ?? descriptor.sourceOwnerRunId;
++  await observeOwner(descriptor.sourceOwnerRunId);
++  if (acceptedOwnerRunId !== descriptor.sourceOwnerRunId) await observeOwner(acceptedOwnerRunId);
++  return { kind: "accepted", sessionId: acceptedOwnerRunId };
++
++  async function observeOwner(ownerRunId) {
++    const key = createHash("sha256").update("eve.terminal-observation.v1\0").update(JSON.stringify([
++      terminalRecoveryActivationToken(auth, descriptor), ownerRunId,
++      receipt == null ? null : provenanceKeys.map((field) => receipt.provenance[field]),
++    ])).digest("hex");
++    const binding = { ownerRunId, logicalSessionId: descriptor.logicalSessionId };
++    async function authorizeSelected(selected = binding) {
++      if (selected.ownerRunId !== binding.ownerRunId || selected.logicalSessionId !== binding.logicalSessionId) throw new Error("Recovery observation owner changed.");
++      await ports.authorize(call);
++      const current = await ports.readReceipt(call);
++      if (receipt == null ? current != null : !matchesDescriptor(current, descriptor) || !sameReceipt(current, receipt)) throw new Error("Recovery observation receipt changed.");
++    }
++    await authorizeSelected();
++    let cached = observations.get(key);
++    if (cached !== undefined && cached.completedAt !== undefined && dependencies.now() - cached.completedAt >= OBSERVATION_TTL_MS) {
++      observations.delete(key);
++      cached = undefined;
++    }
++    if (cached === undefined) {
++      const entry = {};
++      entry.pending = (async () => {
++        const collected = await dependencies.collect({ binding, authorizeOwner: authorizeSelected });
++        await authorizeSelected();
++        let recorded = false;
++        try {
++          const payload = collected.kind === "candidate" ? dependencies.readCandidate(collected.candidate) : undefined;
++          if (payload !== undefined && (payload.binding.ownerRunId !== ownerRunId || payload.binding.logicalSessionId !== descriptor.logicalSessionId)) throw new Error("Recovery observation payload changed.");
++          recorded = dependencies.recordObservation({
++            descriptor, ownerRunId, receiptPresent: receipt != null,
++            outcome: collected.kind, reason: collected.kind === "unavailable" ? collected.reason : undefined,
++            payload,
++          }) === true;
++        } catch { /* Advisory summary failures never activate or change a checkpoint. */ }
++        return recorded;
++      })();
++      observations.set(key, entry);
++      while (observations.size > OBSERVATION_CACHE_ENTRIES) observations.delete(observations.keys().next().value);
++      cached = entry;
++      entry.pending.then((recorded) => {
++        if (recorded) entry.completedAt = dependencies.now();
++        else if (observations.get(key) === entry) observations.delete(key);
++      }, () => { if (observations.get(key) === entry) observations.delete(key); });
++    }
++    await cached.pending;
++    await authorizeSelected();
 +  }
-+  await authorizeSelected();
-+  let cached = observations.get(key);
-+  if (cached !== undefined && cached.completedAt !== undefined && dependencies.now() - cached.completedAt >= OBSERVATION_TTL_MS) {
-+    observations.delete(key);
-+    cached = undefined;
-+  }
-+  if (cached === undefined) {
-+    const entry = {};
-+    entry.pending = (async () => {
-+      const collected = await dependencies.collect({ binding, authorizeOwner: authorizeSelected });
-+      await authorizeSelected();
-+      let recorded = false;
-+      try {
-+        const payload = collected.kind === "candidate" ? dependencies.readCandidate(collected.candidate) : undefined;
-+        if (payload !== undefined && (payload.binding.ownerRunId !== ownerRunId || payload.binding.logicalSessionId !== descriptor.logicalSessionId)) throw new Error("Recovery observation payload changed.");
-+        recorded = dependencies.recordObservation({
-+          descriptor, ownerRunId, receiptPresent: receipt != null,
-+          outcome: collected.kind, reason: collected.kind === "unavailable" ? collected.reason : undefined,
-+          payload,
-+        }) === true;
-+      } catch { /* Advisory summary failures never activate or change a checkpoint. */ }
-+      return recorded;
-+    })();
-+    observations.set(key, entry);
-+    while (observations.size > OBSERVATION_CACHE_ENTRIES) observations.delete(observations.keys().next().value);
-+    cached = entry;
-+    entry.pending.then((recorded) => {
-+      if (recorded) entry.completedAt = dependencies.now();
-+      else if (observations.get(key) === entry) observations.delete(key);
-+    }, () => { if (observations.get(key) === entry) observations.delete(key); });
-+  }
-+  await cached.pending;
-+  await authorizeSelected();
-+  return { kind: "accepted", sessionId: ownerRunId };
 +}
 +
 +async function nativeObservationDependencies() {
@@ -1767,10 +1774,10 @@ index 0000000..f3741a9
 +): boolean;
 diff --git a/dist/src/harness/model-protocol-diagnostic.js b/dist/src/harness/model-protocol-diagnostic.js
 new file mode 100644
-index 0000000..0239eb9
+index 0000000..80dc80f
 --- /dev/null
 +++ b/dist/src/harness/model-protocol-diagnostic.js
-@@ -0,0 +1,296 @@
+@@ -0,0 +1,300 @@
 +import { createHash } from "node:crypto";
 +import { getStepMetadata, getWorkflowMetadata } from "#compiled/@workflow/core/index.js";
 +import { createLogger } from "#internal/logging.js";
@@ -1780,6 +1787,10 @@ index 0000000..0239eb9
 +
 +const log = createLogger("harness.model-protocol");
 +const SAMPLE_LIMIT = 12;
++// One string keeps the sanitized nested summary intact in Production console sinks.
++// Passing an object as a second console argument lets Node elide it as [Object]/[Array].
++const emitProtocolDiagnostic = (marker, summary) =>
++  log.info(`${marker} ${JSON.stringify(summary)}`);
 +export const protocolIdentityHash = (value) =>
 +  typeof value === "string"
 +    ? createHash("sha256").update("eve.model-protocol.id.v1\0").update(value).digest("hex")
@@ -1937,7 +1948,7 @@ index 0000000..0239eb9
 +export function recordModelProtocolDiagnostic(input) {
 +  try {
 +    const identity = workflowIdentity(input.logicalSessionId);
-+    log.info("before-model-protocol", {
++    emitProtocolDiagnostic("before-model-protocol", {
 +      version: 1,
 +      ...identity,
 +      turnHash: protocolIdentityHash(input.turnId),
@@ -1975,7 +1986,7 @@ index 0000000..0239eb9
 +
 +export function recordRecoveryProtocolDiagnostic(input) {
 +  try {
-+    log.info("recovery-protocol", {
++    emitProtocolDiagnostic("recovery-protocol", {
 +      version: 1,
 +      sourceOwnerRunHash: protocolIdentityHash(input.sourceOwnerRunId),
 +      logicalSessionHash: protocolIdentityHash(input.logicalSessionId),
@@ -2035,7 +2046,7 @@ index 0000000..0239eb9
 +        incomingDeliveryPresent: candidate.incoming?.delivery !== undefined,
 +      };
 +    });
-+    log.info("terminal-recovery-observation", {
++    emitProtocolDiagnostic("terminal-recovery-observation", {
 +      version: 1,
 +      operationHash: protocolIdentityHash(input.descriptor.operationId),
 +      sourceOwnerRunHash: protocolIdentityHash(input.descriptor.sourceOwnerRunId),
