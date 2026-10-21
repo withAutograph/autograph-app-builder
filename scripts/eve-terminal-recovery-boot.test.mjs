@@ -294,7 +294,7 @@ const recoveryFixture = () => {
     },
     async resumeHook(_token, input) {
       calls.push("activate");
-      assert.ok(receipt);
+      assert.ok(receipt !== null && receipt !== undefined);
       assert.equal(input.ownerRunId, receipt.ownerRunId);
       hook = undefined;
     },

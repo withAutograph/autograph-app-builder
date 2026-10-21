@@ -442,7 +442,7 @@ test("completed handled400 uses exact terminal input, latest typed state, origin
   assert.equal(ready.provenance.logicalSessionId, logicalSessionId);
   assert.equal(ready.provenance.sourceOwnerRunId, ownerRunId);
   assert.equal(ready.provenance.historySourceOrigin.kind, "completed-terminal-turn-input");
-  assert.ok(ready.provenance.frontierEventIds.includes(eventId(11)));
+  assert.equal(ready.provenance.frontierEventIds.includes(eventId(11)), true);
   assert.deepEqual(privateBefore.candidates, snapshots);
   await resumeSynthetic(ready, false);
 });
@@ -480,5 +480,5 @@ test("historical failed step covered by a later committed turn does not block kn
   const f = await fixture({ historicalFailure: true });
   const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
   assert.equal(result.kind, "ready");
-  assert.ok(result.provenance.coveredNativeEventIds.includes(eventId(2)));
+  assert.equal(result.provenance.coveredNativeEventIds.includes(eventId(2)), true);
 });

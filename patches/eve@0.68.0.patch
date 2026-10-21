@@ -1086,10 +1086,10 @@ index 0000000..c7f0dc2
 +}): Promise<{ inbox: SessionInboxHandle; session: SessionBoot } | undefined>;
 diff --git a/dist/src/execution/session/terminal-recovery-boot.js b/dist/src/execution/session/terminal-recovery-boot.js
 new file mode 100644
-index 0000000..cd96ce2
+index 0000000..ae1eb1e
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery-boot.js
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,81 @@
 +import { createHook, getWorkflowMetadata, getWritable } from "#compiled/@workflow/core/index.js";
 +import { createSessionInbox } from "#execution/session-inbox/inbox.js";
 +import { sessionHookTokens } from "#execution/session/hook-tokens.js";
@@ -1113,7 +1113,8 @@ index 0000000..cd96ce2
 +      checkpoint.serializedContext["eve.sessionId"] !== descriptor.logicalSessionId) {
 +    throw new Error("Terminal recovery checkpoint identity changed.");
 +  }
-+  await ports.validateCheckpoint({ checkpoint });
++  const validateCheckpoint = ports.validateCheckpoint;
++  await validateCheckpoint({ checkpoint });
 +  const ownerRunId = ports.getWorkflowMetadata().workflowRunId;
 +  const inbox = ports.createSessionInbox(descriptor.logicalSessionId);
 +  let activation;
