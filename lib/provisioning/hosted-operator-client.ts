@@ -26,8 +26,14 @@ import {
   reportHostedOperatorHeaderProbes,
 } from "./hosted-operator-header-probes";
 import { reportHostedOperatorCallerWorkload } from "./hosted-operator-caller-workload";
-import { createHostedOperatorConsentDiagnostic } from "./hosted-operator-consent-diagnostic";
-import type { HostedOperatorConsentMetadata } from "./hosted-operator-consent-diagnostic";
+import {
+  createHostedOperatorConsentDiagnostic,
+  reportContinuityPlanningFailure,
+} from "./hosted-operator-consent-diagnostic";
+import type {
+  ContinuityPlanningStage,
+  HostedOperatorConsentMetadata,
+} from "./hosted-operator-consent-diagnostic";
 import { neonAuthorizationResultSchema } from "./hosted-operator-neon-authorization";
 import { z } from "zod";
 import { normalActorIdentityManifestSchema } from "./hosted-operator-normal-actor-program";
@@ -323,57 +329,75 @@ export const createHostedOperatorClient = (input: {
     request: z.input<typeof continuityTransportRequestSchema>,
     resultSchema: z.ZodType<T>,
     signal?: AbortSignal,
+    // oxlint-disable-next-line sonarjs/cognitive-complexity -- Failure-only diagnostics retain the existing cancellation, transport-unknown, and response-validation branches.
   ): Promise<T> => {
-    const body = continuityTransportRequestSchema.parse(request);
-    const token = await input.token();
-    const options: RequestInit & { dispatcher: Agent } = {
-      dispatcher: operatorDispatcher,
-      method: "POST",
-      body: JSON.stringify(body),
-      redirect: "error",
-      signal,
-      headers: {
-        authorization: `Bearer ${token}`,
-        "content-type": "application/json",
-        "x-vercel-trusted-oidc-idp-token": token,
-      },
-    };
-    let result: Response;
+    let stage: ContinuityPlanningStage = "client_request_validation";
     try {
-      result = await (input.fetch ?? fetch)(new URL("/v1/runtime", url), options);
+      const body = continuityTransportRequestSchema.parse(request);
+      stage = "client_token_resolution";
+      const token = await input.token();
+      const options: RequestInit & { dispatcher: Agent } = {
+        dispatcher: operatorDispatcher,
+        method: "POST",
+        body: JSON.stringify(body),
+        redirect: "error",
+        signal,
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+          "x-vercel-trusted-oidc-idp-token": token,
+        },
+      };
+      let result: Response;
+      stage = "client_transport";
+      try {
+        result = await (input.fetch ?? fetch)(new URL("/v1/runtime", url), options);
+      } catch (error) {
+        if (body.action === "continuity" && !isCancellation(error, signal)) {
+          throw new HostedOperatorTransportUnknown(error);
+        }
+        throw error;
+      }
+      stage = "client_response_status";
+      if (!result.ok) {
+        if (result.status === 401 || result.status === 403) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        if (body.action === "continuity") {
+          throw new HostedOperatorTransportUnknown(new HostedOperatorError("operator_unavailable"));
+        }
+        throw new HostedOperatorError("operator_unavailable");
+      }
+      stage = "client_response_decode";
+      let value: unknown;
+      try {
+        value = await result.json();
+      } catch (error) {
+        if (body.action === "continuity" && !isCancellation(error, signal)) {
+          throw new HostedOperatorTransportUnknown(error);
+        }
+        throw error;
+      }
+      stage = "client_response_validation";
+      const blocked = operatorPublicResultSchema.safeParse(value);
+      if (blocked.success) {
+        throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable");
+      }
+      try {
+        return resultSchema.parse(value);
+      } catch (error) {
+        if (body.action === "continuity" && !isCancellation(error, signal)) {
+          throw new HostedOperatorTransportUnknown(error);
+        }
+        throw error;
+      }
     } catch (error) {
-      if (body.action === "continuity" && !isCancellation(error, signal)) {
-        throw new HostedOperatorTransportUnknown(error);
-      }
-      throw error;
-    }
-    if (!result.ok) {
-      if (result.status === 401 || result.status === 403) {
-        throw new HostedOperatorError("authorization_required");
-      }
-      if (body.action === "continuity") {
-        throw new HostedOperatorTransportUnknown(new HostedOperatorError("operator_unavailable"));
-      }
-      throw new HostedOperatorError("operator_unavailable");
-    }
-    let value: unknown;
-    try {
-      value = await result.json();
-    } catch (error) {
-      if (body.action === "continuity" && !isCancellation(error, signal)) {
-        throw new HostedOperatorTransportUnknown(error);
-      }
-      throw error;
-    }
-    const blocked = operatorPublicResultSchema.safeParse(value);
-    if (blocked.success) {
-      throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable");
-    }
-    try {
-      return resultSchema.parse(value);
-    } catch (error) {
-      if (body.action === "continuity" && !isCancellation(error, signal)) {
-        throw new HostedOperatorTransportUnknown(error);
+      try {
+        if (request.action === "continuity-plan") {
+          reportContinuityPlanningFailure(request.selection.sessionId, stage, error);
+        }
+      } catch {
+        /* Diagnostic context lookup must preserve the original failure. */
       }
       throw error;
     }

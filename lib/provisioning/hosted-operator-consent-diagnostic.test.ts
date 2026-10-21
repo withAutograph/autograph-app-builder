@@ -13,6 +13,8 @@ import {
   operatorOwnerStoreImportErrorCodeSchema,
   reportOperatorPlanningMismatch,
   observeOperatorPlanStage,
+  observeContinuityPlanningStage,
+  reportContinuityPlanningFailure,
   observeOperatorExecutionStage,
   reportOperatorExecutionFailure,
   projectAuthStartupDiagnostic,
@@ -1741,5 +1743,134 @@ describe("closed normal actor journal-change execution marker", () => {
         });
       }).not.toThrow();
     }
+  });
+});
+
+describe("continuity planning failure diagnostics", () => {
+  it("preserves successful values and invokes the existing call once without logging", async () => {
+    const result = { private: secret };
+    const run = vi.fn(() => Promise.resolve(result));
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    await expect(observeContinuityPlanningStage(secret, "sandbox_resume", run, sink)).resolves.toBe(
+      result,
+    );
+    expect(run).toHaveBeenCalledOnce();
+    expect(sink).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { error: new HostedOperatorError("operator_unavailable"), errorClass: "operator_error" },
+    { error: new z.ZodError([]), errorClass: "validation_error" },
+    { error: new TypeError(secret), errorClass: "type_error" },
+    { error: new Error(secret), errorClass: "unexpected" },
+  ])(
+    "retains the original $errorClass rejection with only closed metadata",
+    async ({ error, errorClass }) => {
+      const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+      const run = vi.fn(() => Promise.reject(error));
+      await expect(
+        observeContinuityPlanningStage(secret, "port_observation", run, sink),
+      ).rejects.toBe(error);
+      expect(run).toHaveBeenCalledOnce();
+      const diagnostic = sink.mock.calls[0]?.[0];
+      expect(diagnostic?.continuityPlanningFailure).toEqual({
+        stage: "port_observation",
+        errorClass,
+      });
+      expect(diagnostic?.sessionIdHash).toBe(
+        `sha256:${createHash("sha256").update(secret).digest("hex")}`,
+      );
+      expect(diagnostic?.boundary).toBe("operator");
+      expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+    },
+  );
+
+  it.each(["tool_plan_request", "client_transport"] as const)(
+    "reports %s on the builder boundary",
+    (stage) => {
+      const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+      reportContinuityPlanningFailure(secret, stage, new Error(secret), sink);
+      expect(sink.mock.calls[0]?.[0].boundary).toBe("builder");
+      expect(sink.mock.calls[0]?.[0].continuityPlanningFailure).toEqual({
+        stage,
+        errorClass: "unexpected",
+      });
+      expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+    },
+  );
+
+  it("does not read error messages, names, codes, causes or private details", async () => {
+    const getter = vi.fn(() => {
+      throw new Error(secret);
+    });
+    const error = new Error(secret);
+    for (const key of ["name", "message", "code", "cause", "url", "headers", "body"]) {
+      Object.defineProperty(error, key, { get: getter });
+    }
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    await expect(
+      observeContinuityPlanningStage(
+        secret,
+        "prepared_runtime",
+        () => {
+          throw error;
+        },
+        sink,
+      ),
+    ).rejects.toBe(error);
+    expect(getter).not.toHaveBeenCalled();
+    expect(sink.mock.calls[0]?.[0].continuityPlanningFailure).toEqual({
+      stage: "prepared_runtime",
+      errorClass: "unexpected",
+    });
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
+
+  it("preserves hostile rejections and ignores a failing diagnostic sink", async () => {
+    const revoked = Proxy.revocable(new Error(secret), {});
+    revoked.revoke();
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    await expect(
+      observeContinuityPlanningStage(
+        secret,
+        "dispatcher_planning",
+        () => {
+          throw revoked.proxy;
+        },
+        sink,
+      ),
+    ).rejects.toBe(revoked.proxy);
+    expect(sink.mock.calls[0]?.[0].continuityPlanningFailure).toEqual({
+      stage: "dispatcher_planning",
+      errorClass: "unexpected",
+    });
+    const error = new Error(secret);
+    await expect(
+      observeContinuityPlanningStage(
+        secret,
+        "sandbox_resume",
+        () => {
+          throw error;
+        },
+        () => {
+          throw new Error(secret);
+        },
+      ),
+    ).rejects.toBe(error);
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
+
+  it("rejects extra error details at the closed diagnostic sink", () => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    const failure = {
+      stage: "port_observation" as const,
+      errorClass: "unexpected" as const,
+      details: secret,
+    };
+    createHostedOperatorConsentDiagnostic(
+      secret,
+      sink,
+    )({ ...value, continuityPlanningFailure: failure });
+    expect(sink).not.toHaveBeenCalled();
   });
 });

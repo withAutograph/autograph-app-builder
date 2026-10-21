@@ -1,3 +1,4 @@
+import { continuityTransportRequestSchema } from "./hosted-operator-continuity-transport";
 import { Agent, MockAgent } from "undici";
 import { z } from "zod";
 import { describe, expect, it, vi } from "vitest";
@@ -480,6 +481,63 @@ describe("operator request transport", () => {
       expect(JSON.stringify(logs.mock.calls)).not.toContain("private");
     } finally {
       logs.mockRestore();
+    }
+  });
+});
+
+describe("continuity planning failure diagnostics", () => {
+  it("preserves malformed request validation without fetching or resolving a token", async () => {
+    const authority = {
+      issuer: "https://builder.fixture.test",
+      audience: "https://builder.fixture.test/mcp",
+      workspaceId: "workspace",
+      ownerUserId: "owner",
+    };
+    const token = vi.fn<() => Promise<string>>().mockResolvedValue("private-bearer");
+    const transport = vi.fn<typeof fetch>();
+    const client = createHostedOperatorClient({
+      endpoint: "https://operator.example",
+      ownerContext: {
+        adapterGeneration: 1,
+        adapterSessionId: "adapter",
+        authority,
+        kind: "direct",
+        principal: { ...authority, scopes: ["autograph:send"] },
+        sessionId: selection.sessionId,
+      },
+      token,
+      fetch: transport,
+    });
+    const originalParse = continuityTransportRequestSchema.parse.bind(
+      continuityTransportRequestSchema,
+    );
+    let originalError: z.ZodError | undefined;
+    const parse = vi
+      .spyOn(continuityTransportRequestSchema, "parse")
+      .mockImplementation((input) => {
+        try {
+          return originalParse(input);
+        } catch (error) {
+          if (error instanceof z.ZodError) {
+            originalError = error;
+          }
+          throw error;
+        }
+      });
+    try {
+      const pending = client.planContinuity(
+        // @ts-expect-error -- Exercise the malformed runtime boundary while preserving its public TypeScript contract.
+        undefined,
+        { sandboxId: "sandbox", root: "/owned/source" },
+        "continuity-call",
+      );
+      await expect(pending).rejects.toBeInstanceOf(z.ZodError);
+      expect(originalError).toBeDefined();
+      await expect(pending).rejects.toBe(originalError);
+      expect(token).not.toHaveBeenCalled();
+      expect(transport).not.toHaveBeenCalled();
+    } finally {
+      parse.mockRestore();
     }
   });
 });

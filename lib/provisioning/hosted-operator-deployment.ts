@@ -1,3 +1,4 @@
+import { observeContinuityPlanningStage } from "./hosted-operator-consent-diagnostic";
 import { createManagedRuntimeWorkerAsset } from "../agent/managed-runtime-worker-asset";
 import { Sandbox } from "@vercel/sandbox";
 import {
@@ -3173,12 +3174,24 @@ export const createHostedOperatorControlPlane = async (input: {
           throw new HostedOperatorError("protected_operator_required");
         }
         const [{ current, operator }] = await Promise.all([
-          preparedForContinuity(context, true),
-          assertSelectedSandbox(context, runtime),
+          observeContinuityPlanningStage(context.target.sessionId, "prepared_runtime", () =>
+            preparedForContinuity(context, true),
+          ),
+          observeContinuityPlanningStage(context.target.sessionId, "sandbox_authorization", () =>
+            assertSelectedSandbox(context, runtime),
+          ),
         ]);
         // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Verify canonical VM ownership and completed setup before resuming it for planning.
-        const selectedSandbox = await getContinuitySandbox(context, runtime);
-        const observedPorts = await observeManagedRuntimePorts(selectedSandbox);
+        const selectedSandbox = await observeContinuityPlanningStage(
+          context.target.sessionId,
+          "sandbox_resume",
+          () => getContinuitySandbox(context, runtime),
+        );
+        const observedPorts = await observeContinuityPlanningStage(
+          context.target.sessionId,
+          "port_observation",
+          () => observeManagedRuntimePorts(selectedSandbox),
+        );
         if (operator.approvalId === undefined) {
           throw new HostedOperatorError("authorization_required");
         }
