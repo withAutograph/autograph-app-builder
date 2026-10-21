@@ -127,7 +127,7 @@ const incremental = async (expectedCommand: string) => {
 describe("draft reconciliation command progress", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.retire.mockResolvedValue();
+    mocks.retire.mockResolvedValue({ status: "unavailable", retired: 0, retained: 0, reasons: {} });
     mocks.completions = [];
     mocks.publish.mockResolvedValue({
       status: "published",
@@ -243,6 +243,7 @@ describe("draft reconciliation command progress", () => {
       });
       expect(input.sandbox.run).toBeTypeOf("function");
       events.push("retire");
+      return { status: "complete", retired: 0, retained: 0, reasons: {} };
     });
     mocks.run.mockImplementation(async () => {
       events.push("attach");

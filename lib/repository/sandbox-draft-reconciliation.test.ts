@@ -18,7 +18,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import type { SandboxSession } from "eve/sandbox";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   inspectDraftReconciliation,
@@ -1713,13 +1713,12 @@ describe("unused draft worktree retirement", () => {
     git(checkout, "worktree", "add", "--detach", root, f.headSha);
     return { ...f, workspaceRoot, checkout, retiredRoot: root };
   };
-  const retire = async (f: ReturnType<typeof registeredFixture>, retainedRoots: string[] = []) => {
+  const retire = async (f: ReturnType<typeof registeredFixture>, retainedRoots: string[] = []) =>
     await retireUnusedDraftWorktrees({
       sandbox: f.sandbox,
       workspaceRoot: f.workspaceRoot,
       retainedRoots,
     });
-  };
   const attachDependencies = async (f: ReturnType<typeof registeredFixture>, ignored = false) => {
     git(f.checkout, "config", "core.excludesFile", "/dev/null");
     if (ignored) {
@@ -1761,7 +1760,7 @@ cp.spawn = (command, args, options) => {
   return original(command, args, options);
 };`,
     );
-    await retireUnusedDraftWorktrees({
+    return await retireUnusedDraftWorktrees({
       workspaceRoot: f.workspaceRoot,
       retainedRoots: [],
       sandbox: {
@@ -1787,6 +1786,126 @@ cp.spawn = (command, args, options) => {
       },
     });
   };
+
+  it("reports clean retirement and known private or referenced retention without changing eligibility", async () => {
+    const f = registeredFixture();
+    const referenced = path.join(path.dirname(f.retiredRoot), "referenced");
+    const privateRoot = path.join(path.dirname(f.retiredRoot), "private");
+    git(f.checkout, "worktree", "add", "--detach", referenced, f.headSha);
+    git(f.checkout, "worktree", "add", "--detach", privateRoot, f.headSha);
+    writeFileSync(path.join(privateRoot, "owner-record"), "private retained bytes\n");
+    const result = await retire(f, [referenced]);
+    expect(result).toMatchObject({
+      status: "complete",
+      retired: 1,
+      retained: 2,
+      reasons: { referenced: 1, private_state: 1 },
+    });
+    expect(existsSync(f.retiredRoot)).toBe(false);
+    expect(existsSync(referenced)).toBe(true);
+    expect(readFileSync(path.join(privateRoot, "owner-record"), "utf-8")).toBe(
+      "private retained bytes\n",
+    );
+    expect(JSON.stringify(result)).not.toContain(f.workspaceRoot);
+    expect(JSON.stringify(result)).not.toContain("owner-record");
+    expect(JSON.stringify(result)).not.toContain("private retained bytes");
+  });
+
+  it("reports known zero free bytes and inodes as decimal capacity rather than unknown", async () => {
+    const f = registeredFixture();
+    const result = await retireWithFault(
+      f,
+      "",
+      `fs.statfsSync = () => ({ bsize: 4096n, blocks: 1024n, bavail: 0n, files: 512n, ffree: 0n });`,
+    );
+    expect(result).toMatchObject({ status: "complete", retired: 1, retained: 0 });
+    expect(result.capacity?.before).toEqual({
+      bytes: { total: "4194304", available: "0" },
+      inodes: { total: "512", free: "0" },
+    });
+    expect(result.capacity?.after).toEqual(result.capacity?.before);
+  });
+
+  it.each(["unsupported inodes", "statfs unavailable"])(
+    "keeps cleanup usable with %s",
+    async (kind) => {
+      const f = registeredFixture();
+      const result = await retireWithFault(
+        f,
+        "",
+        kind === "unsupported inodes"
+          ? `fs.statfsSync = () => ({ bsize: 4096n, blocks: 1024n, bavail: 7n, files: 0n, ffree: 0n });`
+          : `fs.statfsSync = () => { throw Error("private statfs details"); };`,
+      );
+      expect(result).toMatchObject({ status: "complete", retired: 1, retained: 0 });
+      expect(result.capacity?.before?.inodes).toBeUndefined();
+      if (kind === "unsupported inodes") {
+        expect(result.capacity?.before?.bytes).toEqual({ total: "4194304", available: "28672" });
+      } else {
+        expect(result.capacity?.before?.bytes).toBeUndefined();
+      }
+      expect(existsSync(f.retiredRoot)).toBe(false);
+      expect(JSON.stringify(result)).not.toContain("private statfs details");
+    },
+  );
+
+  it("reports unknown Git inspection as partial and preserves the exact worktree", async () => {
+    const f = registeredFixture();
+    const result = await retireWithFault(
+      f,
+      `if (args.includes("status")) return original(process.execPath, ["-e", "process.exit(1)"], options);`,
+    );
+    expect(result).toMatchObject({
+      status: "partial",
+      retired: 0,
+      retained: 1,
+      reasons: { inspection_unavailable: 1 },
+    });
+    expect(existsSync(f.retiredRoot)).toBe(true);
+    expect(git(f.retiredRoot, "rev-parse", "HEAD")).toBe(f.headSha);
+  });
+
+  it.each([
+    { exitCode: 1, stdout: "private command output", stderr: "private failure" },
+    { exitCode: 0, stdout: "not JSON private payload", stderr: "" },
+    {
+      exitCode: 0,
+      stdout: JSON.stringify({ status: "complete", retired: -1, retained: 0, reasons: {} }),
+      stderr: "",
+    },
+    {
+      exitCode: 0,
+      stdout: JSON.stringify({
+        status: "complete",
+        retired: 0,
+        retained: 0,
+        reasons: { "private path": 1 },
+      }),
+      stderr: "",
+    },
+  ])(
+    "returns unavailable for an untrusted cleanup response %# without exposing command details",
+    async (response) => {
+      const run = vi.fn<SandboxSession["run"]>().mockResolvedValue(response);
+      const result = await retireUnusedDraftWorktrees({ sandbox: { run }, retainedRoots: [] });
+      expect(result).toEqual({ status: "unavailable", retired: 0, retained: 0, reasons: {} });
+      expect(run).toHaveBeenCalledOnce();
+      expect(JSON.stringify(result)).not.toContain("private");
+    },
+  );
+
+  it("preserves cancellation instead of replacing it with an unavailable advisory", async () => {
+    const controller = new AbortController();
+    const cancellation = new DOMException("Controlled stop", "AbortError");
+    controller.abort(cancellation);
+    await expect(
+      retireUnusedDraftWorktrees({
+        sandbox: { run: () => Promise.reject(cancellation) },
+        retainedRoots: [],
+        signal: controller.signal,
+      }),
+    ).rejects.toBe(cancellation);
+  });
 
   it.each([false, true])(
     "retires attached dependency links (ignored=%s) without touching their external bytes",

@@ -1,5 +1,71 @@
 import path from "node:path";
 import type { SandboxSession } from "eve/sandbox";
+import { z } from "zod";
+
+const countSchema = z.number().int().nonnegative();
+const decimalSchema = z.string().regex(/^\d+$/u);
+const capacitySnapshotSchema = z.strictObject({
+  bytes: z.strictObject({ total: decimalSchema, available: decimalSchema }).optional(),
+  inodes: z.strictObject({ total: decimalSchema, free: decimalSchema }).optional(),
+});
+const retirementAdvisorySchema = z.strictObject({
+  status: z.enum(["complete", "partial", "unavailable"]),
+  retired: countSchema,
+  retained: countSchema,
+  reasons: z.partialRecord(
+    z.enum([
+      "referenced",
+      "private_state",
+      "ownership_or_registration",
+      "changed_during_inspection",
+      "retention_ref",
+      "removal_refused",
+      "inspection_unavailable",
+    ]),
+    countSchema,
+  ),
+  capacity: z
+    .strictObject({
+      before: capacitySnapshotSchema.optional(),
+      after: capacitySnapshotSchema.optional(),
+    })
+    .optional(),
+});
+
+export type DraftWorktreeRetirementAdvisory = z.infer<typeof retirementAdvisorySchema>;
+
+const unavailableAdvisory = (): DraftWorktreeRetirementAdvisory => ({
+  status: "unavailable",
+  retired: 0,
+  retained: 0,
+  reasons: {},
+});
+
+/** Preserve the same failure and cause; reporting must never mask it or change cancellation. */
+export const annotateDraftWorktreeRetirementError = (
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- JavaScript throw values are untrusted; preserve them and annotate only verified Error instances.
+  error: unknown,
+  advisory: DraftWorktreeRetirementAdvisory,
+  signal?: AbortSignal,
+): void => {
+  try {
+    if (signal?.aborted === true || !(error instanceof Error) || error.name === "AbortError") {
+      return;
+    }
+    const message = Object.getOwnPropertyDescriptor(error, "message");
+    const originalMessage = z.string().safeParse(message?.value);
+    const parsed = retirementAdvisorySchema.safeParse(advisory);
+    if (message?.writable !== true || !originalMessage.success || !parsed.success) {
+      return;
+    }
+    Object.defineProperty(error, "message", {
+      ...message,
+      value: `${originalMessage.data}\nWorkspace maintenance advisory: ${JSON.stringify(parsed.data)}`,
+    });
+  } catch {
+    // Frozen/custom errors and unavailable diagnostic serialization retain the original failure.
+  }
+};
 
 // All filesystem changes below use Git's exact worktree/ref APIs. Unknown state
 // is retained; this maintenance must never become preparation admission policy.
@@ -29,6 +95,32 @@ const read = async (root, args, input) => {
   return result.stdout;
 };
 const records = text => text.split("\0").filter(Boolean);
+const sampleCapacity = workspace => {
+  try {
+    const observed = fs.statfsSync(workspace, { bigint: true });
+    const snapshot = {};
+    const unavailable = 2n ** 64n - 1n;
+    if (typeof observed.bsize === "bigint" && observed.bsize > 0n && observed.bsize !== unavailable && typeof observed.blocks === "bigint" && observed.blocks > 0n && observed.blocks !== unavailable && typeof observed.bavail === "bigint" && observed.bavail >= 0n && observed.bavail !== unavailable && observed.bavail <= observed.blocks) {
+      snapshot.bytes = { total: String(observed.blocks * observed.bsize), available: String(observed.bavail * observed.bsize) };
+    }
+    if (typeof observed.files === "bigint" && observed.files > 0n && observed.files !== unavailable && typeof observed.ffree === "bigint" && observed.ffree >= 0n && observed.ffree !== unavailable && observed.ffree <= observed.files) {
+      snapshot.inodes = { total: String(observed.files), free: String(observed.ffree) };
+    }
+    return Object.keys(snapshot).length ? snapshot : undefined;
+  } catch { return undefined; }
+};
+const reasonByMessage = new Map([
+  ["Referenced worktree", "referenced"],
+  ...["Private files remain", "Ambiguous index flags", "Index differs from HEAD", "Private staged or unresolved changes remain", "Untracked directory remains", "Untracked or ignored bytes remain", "Private symlink change remains", "Private mode change remains", "Tracked file is missing", "Private tracked bytes remain"].map(message => [message, "private_state"]),
+  ...["Referenced or ambiguous worktree", "Unowned worktree", "Worktree ownership changed", "Worktree is not detached", "Unsupported tracked entry", "Ambiguous tracked path", "Ambiguous Git registration"].map(message => [message, "ownership_or_registration"]),
+  ...["Worktree HEAD changed", "Dependency parent changed", "Dependency link changed", "Dependency links changed", "Dependency link changed before removal", "Dependency links reappeared"].map(message => [message, "changed_during_inspection"]),
+  ...["Symbolic retention ref", "Retention ref unavailable", "Retention ref names different history", "Retention ref changed"].map(message => [message, "retention_ref"]),
+  ["Worktree removal refused", "removal_refused"],
+]);
+const retentionReason = error => {
+  try { return error instanceof Error ? reasonByMessage.get(error.message) ?? "inspection_unavailable" : "inspection_unavailable"; }
+  catch { return "inspection_unavailable"; }
+};
 const registered = async checkout => (await read(checkout, ["worktree", "list", "--porcelain", "-z"]))
   .split("\0\0").filter(Boolean).map(block => records(block));
 const entry = fields => {
@@ -77,7 +169,8 @@ const restoreLinks = (root, links) => {
 };
 const inspect = async (checkout, candidate, commonDirectory, retainedRoots, directory, workspace) => {
   const root = candidate.root;
-  if (path.dirname(root) !== directory || fs.realpathSync(root) !== root || retainedRoots.some(retained => overlap(root, retained))) throw Error("Referenced or ambiguous worktree");
+  if (path.dirname(root) !== directory || fs.realpathSync(root) !== root) throw Error("Referenced or ambiguous worktree");
+  if (retainedRoots.some(retained => overlap(root, retained))) throw Error("Referenced worktree");
   const stat = fs.lstatSync(root);
   if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid()) throw Error("Unowned worktree");
   const current = (await registered(checkout)).map(entry).filter(Boolean).filter(item => item.root === root);
@@ -147,8 +240,13 @@ const inspect = async (checkout, candidate, commonDirectory, retainedRoots, dire
 async function main() {
 let retired = 0;
 let retained = 0;
+let status = "complete";
+const reasons = {};
+let workspace;
+let before;
 try {
-  const workspace = fs.realpathSync(request.workspaceRoot);
+  workspace = fs.realpathSync(request.workspaceRoot);
+  before = sampleCapacity(workspace);
   const checkout = fs.realpathSync(path.join(workspace, "repository"));
   const directory = path.join(workspace, ".app-builder", "draft-reconcile");
   if (fs.realpathSync(directory) !== directory || !fs.lstatSync(directory).isDirectory()) throw Error("No owned worktree directory");
@@ -194,12 +292,19 @@ try {
       if (detachedLinks.length && (await inspect(checkout, candidate, commonDirectory, retainedRoots, directory, workspace)).length) throw Error("Dependency links reappeared");
       if ((await git(checkout, ["worktree", "remove", "--", candidate.root])).status !== 0) throw Error("Worktree removal refused");
       retired += 1;
-    } catch { restoreLinks(candidate.root, detachedLinks); retained += 1; }
+    } catch (error) {
+      restoreLinks(candidate.root, detachedLinks);
+      retained += 1;
+      const reason = retentionReason(error);
+      reasons[reason] = (reasons[reason] ?? 0) + 1;
+      if (reason === "inspection_unavailable") status = "partial";
+    }
   }
-} catch { /* Unknown scope/transport is a maintenance no-op. */ }
-console.log(JSON.stringify({ retired, retained }));
+} catch { status = retired || retained ? "partial" : "unavailable"; }
+const after = workspace === undefined ? undefined : sampleCapacity(workspace);
+console.log(JSON.stringify({ status, retired, retained, reasons, ...(before || after ? { capacity: { before, after } } : {}) }));
 }
-main().catch(() => { console.log(JSON.stringify({ retired: 0, retained: 0 })); });
+main().catch(() => { console.log(JSON.stringify({ status: "unavailable", retired: 0, retained: 0, reasons: {} })); });
 `;
 
 /** Retire only unreferenced, byte-clean registered worktrees; preserve their HEADs. */
@@ -208,10 +313,10 @@ export const retireUnusedDraftWorktrees = async (input: {
   retainedRoots: readonly string[];
   workspaceRoot?: string;
   signal?: AbortSignal;
-}): Promise<void> => {
+}): Promise<DraftWorktreeRetirementAdvisory> => {
   const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
   try {
-    await input.sandbox.run({
+    const result = await input.sandbox.run({
       abortSignal: input.signal,
       command: `node -e ${quote(retirementProgram)} ${quote(
         JSON.stringify({
@@ -221,8 +326,15 @@ export const retireUnusedDraftWorktrees = async (input: {
       )}`,
       workingDirectory: input.workspaceRoot ?? "/workspace",
     });
+    if (result.exitCode === 0) {
+      const parsed = retirementAdvisorySchema.safeParse(JSON.parse(result.stdout));
+      if (parsed.success) {
+        return parsed.data;
+      }
+    }
   } catch {
     // No cleanup retry or inferred success after an unknown provider outcome.
     input.signal?.throwIfAborted();
   }
+  return unavailableAdvisory();
 };
