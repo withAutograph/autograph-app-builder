@@ -103,85 +103,194 @@ const approvalSnapshot = function approvalSnapshot(requestIds: string[]): Hosted
   };
 };
 
+interface RecoveryLifecycle {
+  service?: EveSessionService;
+}
+
 describe("failed public session native recovery", () => {
-  it("dispatches typed recovery when only native history retains the checkpoint", async () => {
-    const store = new InMemoryHostedEveStore();
-    const adapter = transport({
-      start: vi
-        .fn<HostedEveTransport["start"]>()
-        .mockResolvedValueOnce({
-          adapterSessionId: "run_parent",
-          snapshot: { events: [], status: "failed" },
-        })
-        .mockImplementationOnce(async (request) => {
-          const recovery = request.recovery;
-          if (recovery === undefined) {
-            throw new Error("Expected typed native recovery.");
+  it.each(["none", "exact-CID", "GET", "stop-before-activation"] as const)(
+    "commits the child before activation and retries lost activation through %s",
+    async (retry) => {
+      const store = new InMemoryHostedEveStore();
+      const lifecycle: RecoveryLifecycle = {};
+      let preparedOperationId = "";
+      let activationFailed = false;
+      const activatedReceipts = new Set<string>();
+      let ownerEffects = 0;
+      const activateRecovery = vi.fn<NonNullable<HostedEveTransport["activateRecovery"]>>(
+        async ({ operationId }) => {
+          preparedOperationId = operationId;
+          const operation = await store.getPrivateOperation(principal, operationId);
+          if (operation?.state !== "succeeded") throw new Error("Public operation not committed.");
+          const child = await store.getSession(principal, operation.sessionId);
+          if (child?.version !== 2 || child.nativeRecoveryBinding === undefined)
+            throw new Error("Public child not committed.");
+          if (retry === "stop-before-activation" && !activationFailed) {
+            activationFailed = true;
+            if (lifecycle.service === undefined)
+              throw new Error("Expected public lifecycle service.");
+            await lifecycle.service.cancel({ sessionId: child.sessionId });
+            throw new Error("Stopped before activation.");
           }
-          const recoveryBinding = {
-            ...recovery,
-            ownerRunId: "run_child",
-            provenance: {
-              kind: "failed-turn-input" as const,
-              sourceStepId: "step_1",
-              sourceEventId: "event_1",
-              sourceSlot: 1,
-              checkpointVersion: 1 as const,
-            },
-          };
-          await store.commitNativeRecoveryReceipt({
-            principal,
-            descriptor: recovery,
-            recoveryBinding,
-            nowEpochMs: 4,
+          if (
+            child.status === "cancelled" ||
+            (child.cancellationRevision ?? 0) !== (child.resumedCancellationRevision ?? 0)
+          ) {
+            throw new Error("Current Stop denies activation.");
+          }
+          const receiptKey = JSON.stringify(child.nativeRecoveryBinding);
+          if (!activatedReceipts.has(receiptKey)) {
+            activatedReceipts.add(receiptKey);
+            ownerEffects += 1;
+          }
+          if (retry !== "none" && !activationFailed) {
+            activationFailed = true;
+            throw new Error("Lost activation ACK.");
+          }
+          return child.nativeRecoveryBinding;
+        },
+      );
+      const adapter = transport({
+        activateRecovery,
+        cancel: () => Promise.resolve({ events: [], status: "cancelled" }),
+        start: vi
+          .fn<HostedEveTransport["start"]>()
+          .mockResolvedValueOnce({
+            adapterSessionId: "run_parent",
+            snapshot: { events: [], status: "failed" },
+          })
+          .mockImplementationOnce(async (request) => {
+            const recovery = request.recovery;
+            if (recovery === undefined) {
+              throw new Error("Expected typed native recovery.");
+            }
+            const recoveryBinding = {
+              ...recovery,
+              ownerRunId: "run_child",
+              provenance: {
+                kind: "failed-turn-input" as const,
+                sourceStepId: "step_1",
+                sourceEventId: "event_1",
+                sourceSlot: 1,
+                checkpointVersion: 1 as const,
+              },
+            };
+            await store.commitNativeRecoveryReceipt({
+              principal,
+              descriptor: recovery,
+              recoveryBinding,
+              nowEpochMs: 4,
+            });
+            return {
+              adapterSessionId: "run_child",
+              recoveryBinding,
+              snapshot: { events: [], status: "working" },
+            };
+          }),
+      });
+      const service = createHostedEveSessionService({
+        assertNativeRecoveryOwner: async () => await Promise.resolve(),
+        principal,
+        store,
+        transport: adapter,
+      });
+      lifecycle.service = service;
+      const first = await service.start({ clientRequestId: "initial", prompt: "Build" });
+      const readOriginal = store.getSession.bind(store);
+      vi.spyOn(store, "getSession").mockImplementation(async (requestPrincipal, sessionId) => {
+        const record = await readOriginal(requestPrincipal, sessionId);
+        return record?.version !== 2 || record.sessionId !== first.sessionId
+          ? record
+          : durableHostedSessionRecordSchema.parse({
+              ...record,
+              checkpoint: undefined,
+              checkpointDigest: undefined,
+              checkpointProgressDigest: undefined,
+            });
+      });
+      const request = { clientRequestId: "recover", resumeSessionId: first.sessionId };
+      if (retry !== "none") {
+        await expect(service.start(request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+        const committed = await store.getPrivateOperation(principal, preparedOperationId);
+        expect(committed?.state).toBe("succeeded");
+        if (committed?.state !== "succeeded")
+          throw new Error("Expected durable succeeded operation.");
+        expect(await store.getSession(principal, committed.sessionId)).toMatchObject({
+          adapterSessionId: "run_child",
+        });
+        if (retry === "GET")
+          await service.get({ sessionId: committed.sessionId, cursor: 0, limit: 100 });
+        if (retry === "stop-before-activation") {
+          expect(
+            await service.get({ sessionId: committed.sessionId, cursor: 0, limit: 100 }),
+          ).toMatchObject({ status: "cancelled" });
+          expect(await service.start(request)).toEqual(committed.result);
+          expect(ownerEffects).toBe(0);
+          expect(activatedReceipts.size).toBe(0);
+          expect(adapter.start).toHaveBeenCalledTimes(2);
+          expect(await readOriginal(principal, committed.sessionId)).toMatchObject({
+            status: "cancelled",
+            cancellationRevision: 1,
           });
-          return {
-            adapterSessionId: "run_child",
-            recoveryBinding,
-            snapshot: { events: [], status: "working" },
-          };
+          return;
+        }
+      }
+      const resumed = await service.start(request);
+      expect(activatedReceipts.size).toBe(1);
+      expect(ownerEffects).toBe(1);
+      expect(
+        await service.start({ clientRequestId: "recover", resumeSessionId: first.sessionId }),
+      ).toEqual(resumed);
+      await service.get({ sessionId: resumed.sessionId, cursor: 0, limit: 100 });
+      expect(activatedReceipts.size).toBe(1);
+      expect(ownerEffects).toBe(1);
+      expect(resumed.sessionId).not.toBe(first.sessionId);
+      expect(adapter.start).toHaveBeenCalledTimes(2);
+      expect(adapter.start).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          prompt: "",
+          recovery: expect.objectContaining({
+            sourcePublicSessionId: first.sessionId,
+            sourceOwnerRunId: "run_parent",
+          }),
         }),
-    });
-    const service = createHostedEveSessionService({
-      assertNativeRecoveryOwner: async () => await Promise.resolve(),
-      principal,
-      store,
-      transport: adapter,
-    });
-    const first = await service.start({ clientRequestId: "initial", prompt: "Build" });
-    const readOriginal = store.getSession.bind(store);
-    vi.spyOn(store, "getSession").mockImplementation(async (requestPrincipal, sessionId) => {
-      const record = await readOriginal(requestPrincipal, sessionId);
-      return record?.version !== 2 || record.sessionId !== first.sessionId
-        ? record
-        : durableHostedSessionRecordSchema.parse({
-            ...record,
-            checkpoint: undefined,
-            checkpointDigest: undefined,
-            checkpointProgressDigest: undefined,
-          });
-    });
-    const resumed = await service.start({
-      clientRequestId: "recover",
-      resumeSessionId: first.sessionId,
-    });
-    expect(resumed.sessionId).not.toBe(first.sessionId);
-    expect(adapter.start).toHaveBeenCalledTimes(2);
-    expect(adapter.start).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        prompt: "",
-        recovery: expect.objectContaining({
-          sourcePublicSessionId: first.sessionId,
-          sourceOwnerRunId: "run_parent",
-        }),
-      }),
-    );
-    expect(await readOriginal(principal, resumed.sessionId)).toMatchObject({
-      adapterSessionId: "run_child",
-      nativeRecoveryBinding: { sourcePublicSessionId: first.sessionId },
-      parentSessionId: first.sessionId,
-    });
-  });
+      );
+      expect(await readOriginal(principal, resumed.sessionId)).toMatchObject({
+        adapterSessionId: "run_child",
+        nativeRecoveryBinding: { sourcePublicSessionId: first.sessionId },
+        parentSessionId: first.sessionId,
+      });
+      if (retry === "none") {
+        const stopped = await service.cancel({ sessionId: resumed.sessionId });
+        expect(stopped.status).toBe("cancelled");
+        const resumedSend = await service.send({
+          clientRequestId: "proved-resume",
+          sessionId: resumed.sessionId,
+          message: "Continue",
+        });
+        expect(resumedSend.status).not.toBe("cancelled");
+        expect(await readOriginal(principal, resumed.sessionId)).toMatchObject({
+          cancellationRevision: 1,
+          resumedCancellationRevision: 1,
+        });
+        const observed = await service.get({ sessionId: resumed.sessionId, cursor: 0, limit: 100 });
+        expect(observed.status).not.toBe("cancelled");
+        expect(await service.start(request)).toEqual(resumed);
+        expect(activatedReceipts.size).toBe(1);
+        expect(ownerEffects).toBe(1);
+        expect(adapter.start).toHaveBeenCalledTimes(2);
+        await service.cancel({ sessionId: resumed.sessionId });
+        expect(
+          await service.get({ sessionId: resumed.sessionId, cursor: 0, limit: 100 }),
+        ).toMatchObject({ status: "cancelled" });
+        expect(await readOriginal(principal, resumed.sessionId)).toMatchObject({
+          cancellationRevision: 2,
+          resumedCancellationRevision: 1,
+        });
+        expect(ownerEffects).toBe(1);
+      }
+    },
+  );
 });
 
 describe("prepared handoff session continuity", () => {
@@ -647,6 +756,13 @@ describe("hosted Eve service core", () => {
       status: "failed",
     };
     const adapter = transport({
+      activateRecovery: async ({ operationId }) => {
+        const operation = await baseStore.getPrivateOperation(principal, operationId);
+        if (operation?.nativeRecoveryReceipt === undefined)
+          throw new Error("Expected recovery receipt.");
+        expect(operation.state).toBe("succeeded");
+        return operation.nativeRecoveryReceipt;
+      },
       start: vi
         .fn()
         .mockResolvedValueOnce({ adapterSessionId: "eve_failed", snapshot: terminal })

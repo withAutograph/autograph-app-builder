@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createNativeRecoveryBinding } from "./native-recovery-binding";
 import { hostedEveOperationScopes } from "./hosted-auth";
-import { durableHostedSessionRecordSchema, hostedOperationRecordSchema } from "./hosted-store";
+import {
+  durableHostedSessionRecordSchema,
+  hostedOperationRecordSchema,
+  hostedSessionCreationDigest,
+} from "./hosted-store";
 import type { NativeRecoveryBinding, NativeRecoveryDescriptor } from "./native-recovery-contract";
 
 const principal = {
@@ -77,6 +81,8 @@ describe("native recovery authority", () => {
       version: 1,
     });
     let current = source;
+    let currentOperation = operation;
+    let child: typeof source | null = null;
     let savedReceipt: NativeRecoveryBinding | undefined;
     // oxlint-disable-next-line eslint/require-await -- The test double follows the async store contract.
     const commitNativeRecoveryReceipt = vi.fn(async () => {
@@ -91,11 +97,11 @@ describe("native recovery authority", () => {
         commitNativeRecoveryReceipt,
         // oxlint-disable-next-line eslint/require-await -- The test double follows the async store contract.
         getPrivateOperation: async () => ({
-          ...operation,
+          ...currentOperation,
           ...(savedReceipt === undefined ? {} : { nativeRecoveryReceipt: savedReceipt }),
         }),
         // oxlint-disable-next-line eslint/require-await -- The test double follows the async store contract.
-        getSession: async () => current,
+        getSession: async (_principal, id) => (id === source.sessionId ? current : child),
       },
     });
     const call = { auth, descriptor };
@@ -107,7 +113,45 @@ describe("native recovery authority", () => {
     expect(commitNativeRecoveryReceipt).toHaveBeenCalledTimes(1);
     expect(assertOwner).toHaveBeenCalledTimes(3);
 
+    await expect(binding.authorizeActivation(call)).rejects.toThrow("not committed");
+    child = durableHostedSessionRecordSchema.parse({
+      ...source,
+      adapterSessionId: receipt.ownerRunId,
+      originAdapterSessionId: receipt.ownerRunId,
+      nativeRecoveryBinding: receipt,
+      parentSessionId: source.sessionId,
+      sessionId: "ses_child",
+      status: "working",
+      resumability: "live",
+      stage: "planning",
+    });
+    currentOperation = hostedOperationRecordSchema.parse({
+      ...operation,
+      state: "succeeded",
+      nativeRecoveryReceipt: receipt,
+      sessionId: child.sessionId,
+      sessionRecordDigest: hostedSessionCreationDigest(child),
+      result: { sessionId: child.sessionId, cursor: 0, events: [], status: "working" },
+    });
+    await expect(binding.authorizeActivation(call)).resolves.toBeUndefined();
+    const originalChild = child;
+    child = durableHostedSessionRecordSchema.parse({
+      ...originalChild,
+      cancellationRevision: 1,
+      status: "cancelled",
+    });
+    await expect(binding.authorizeActivation(call)).rejects.toThrow("cancelled");
+    child = durableHostedSessionRecordSchema.parse({
+      ...originalChild,
+      cancellationRevision: 1,
+      resumedCancellationRevision: 1,
+    });
+    await expect(binding.authorizeActivation(call)).resolves.toBeUndefined();
+    child = durableHostedSessionRecordSchema.parse({ ...child, cancellationRevision: 2 });
+    await expect(binding.authorizeActivation(call)).rejects.toThrow("cancelled");
+    child = originalChild;
     current = durableHostedSessionRecordSchema.parse({ ...source, cancellationRevision: 1 });
     await expect(binding.authorize(call)).rejects.toThrow("ownership changed");
+    await expect(binding.authorizeActivation(call)).rejects.toThrow("ownership changed");
   });
 });
