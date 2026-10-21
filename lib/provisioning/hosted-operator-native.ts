@@ -1,5 +1,7 @@
 import { createProtectedHostedOperatorHandler } from "./hosted-operator-service";
 import type { ProtectedHostedOperatorDependencies } from "./hosted-operator-service";
+import { reportHostedOperatorNativeFailure } from "./hosted-operator-native-diagnostic";
+import type { HostedOperatorNativeFailureStage } from "./hosted-operator-native-diagnostic";
 
 export interface HostedOperatorRequestDependencies {
   dependencies: ProtectedHostedOperatorDependencies;
@@ -53,10 +55,13 @@ export const createHostedOperatorNativeHandler = (
     }
     if (input.createRequestDependencies !== undefined) {
       let scoped: HostedOperatorRequestDependencies | undefined;
+      let stage: HostedOperatorNativeFailureStage = "native_request_dependencies";
       try {
         scoped = await input.createRequestDependencies(request);
+        stage = "native_handler_dispatch";
         return await createProtectedHostedOperatorHandler(scoped.dependencies)(request);
-      } catch {
+      } catch (error) {
+        reportHostedOperatorNativeFailure(stage, error);
         return unavailable();
       } finally {
         // Releasing this request's connection pool cannot turn a committed effect into a retry.
@@ -70,7 +75,8 @@ export const createHostedOperatorNativeHandler = (
     let handler: Handler;
     try {
       handler = await initialize();
-    } catch {
+    } catch (error) {
+      reportHostedOperatorNativeFailure("native_fallback_initialize", error);
       return unavailable();
     }
     // The existing operator owns workload/owner authorization, approval, leases,

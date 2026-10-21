@@ -29,6 +29,7 @@ import {
 } from "./hosted-operator-neon-authorization";
 import { createHostedOperatorControlPlane } from "./hosted-operator-deployment";
 import type { HostedOperatorRequestDependencyLoader } from "./hosted-operator-native";
+import { reportHostedOperatorNativeFailure } from "./hosted-operator-native-diagnostic";
 import { createHash } from "node:crypto";
 import postgres from "postgres";
 import { getVercelOidcToken } from "@vercel/oidc";
@@ -2720,17 +2721,24 @@ export const createRequestScopedHostedOperatorDependencies =
   }): HostedOperatorRequestDependencyLoader =>
   async (request) => {
     const configuration = await input.resolveConfiguration(request.clone());
-    const controlPlane = await (input.openControlPlane ?? createHostedOperatorControlPlane)({
-      environment: input.environment,
-      sourceConfiguration: configuration,
-      workloadPolicy: configuration.workloadPolicy,
-    });
+    let controlPlane: Awaited<ReturnType<typeof createHostedOperatorControlPlane>>;
+    try {
+      controlPlane = await (input.openControlPlane ?? createHostedOperatorControlPlane)({
+        environment: input.environment,
+        sourceConfiguration: configuration,
+        workloadPolicy: configuration.workloadPolicy,
+      });
+    } catch (error) {
+      reportHostedOperatorNativeFailure("control_plane", error);
+      throw error;
+    }
     try {
       return {
         dependencies: composeHostedOperatorDependencies(configuration, controlPlane),
         close: () => controlPlane.close(),
       };
     } catch (error) {
+      reportHostedOperatorNativeFailure("composition", error);
       try {
         await controlPlane.close();
       } catch {
