@@ -288,3 +288,386 @@ it("settles native approval before dispatch, preserves results and authorizers, 
     "response policy: actual deferred model request retains and runs normal response authorizer",
   );
 });
+
+it.each([
+  { withInput: false, optionId: "approve" },
+  { withInput: true, optionId: "approve" },
+  { withInput: false, optionId: "cancel" },
+  { withInput: false, optionId: "approve", cancelBeforeReplay: true },
+])(
+  "replays native decisions with coordinated results (%o)",
+  async ({ withInput, optionId, cancelBeforeReplay }) => {
+    const { createToolLoopHarness } = await import(`${sdk}harness/tool-loop.js`);
+    const { getPendingInputBatches } = await import(`${sdk}harness/pending-input-batches.js`);
+    const { ContextContainer, contextStorage } = await import(`${sdk}context/container.js`);
+    const { SessionKey } = await import(`${sdk}context/keys.js`);
+    const { MockLanguageModelV4 } = await import("ai/test");
+    const { z } = await import("zod");
+    const auth = { authenticator: "test", principalId: "owner", principalType: "user" };
+    const ctx = new ContextContainer();
+    ctx.set(SessionKey, {
+      sessionId: "mixed-session",
+      auth: { current: auth, initiator: auth },
+      turn: { id: "mixed-turn" },
+    });
+    let executions = 0;
+    let requests = 0;
+    const tools = new Map([
+      [
+        "native",
+        {
+          name: "native",
+          inputSchema: z.object({ value: z.string() }),
+          approval: () => "user-approval",
+          execute: (input) => {
+            executions += 1;
+            return `native-result:${input.value}`;
+          },
+        },
+      ],
+      [
+        "deferred",
+        {
+          name: "deferred",
+          inputSchema: z.object({}),
+          workflowId: "workflow:deferred",
+        },
+      ],
+    ]);
+    const model = new MockLanguageModelV4({
+      doGenerate: async ({ prompt }) => {
+        requests += 1;
+        if (requests === 1)
+          return {
+            content: ["native", "deferred"].map((name) => ({
+              type: "tool-call",
+              toolCallId: `mixed-${name}`,
+              toolName: name,
+              input: name === "native" ? JSON.stringify({ value: "retained-native-input" }) : "{}",
+            })),
+            finishReason: { unified: "tool-calls", raw: "tool_calls" },
+            usage: { inputTokens: { total: 10 }, outputTokens: { total: 5 } },
+            warnings: [],
+          };
+        const parts = prompt.flatMap((message) =>
+          Array.isArray(message.content) ? message.content : [],
+        );
+        for (const name of ["native", "deferred"]) {
+          assert.equal(
+            parts.filter(
+              (part) => part.type === "tool-result" && part.toolCallId === `mixed-${name}`,
+            ).length,
+            1,
+          );
+        }
+        if (optionId === "approve")
+          assert.ok(
+            parts.some(
+              (part) =>
+                part.type === "tool-result" &&
+                part.toolCallId === "mixed-native" &&
+                part.output.value === "native-result:retained-native-input",
+            ),
+          );
+        assert.equal(JSON.stringify(prompt).includes("new product reply"), requests > 2);
+        assert.ok(JSON.stringify(prompt).includes("retained client context"));
+        return {
+          content: [{ type: "text", text: "complete" }],
+          finishReason: { unified: "stop", raw: "stop" },
+          usage: { inputTokens: { total: 10 }, outputTokens: { total: 5 } },
+          warnings: [],
+        };
+      },
+    });
+    const run = createToolLoopHarness({ tools, resolveModel: async () => model });
+    const invoke = (session, input) => contextStorage.run(ctx, () => run(session, input));
+    const initial = {
+      agent: { system: "", tools: [], modelReference: { id: "model", provider: "test" } },
+      sessionId: "mixed-session",
+      continuationToken: "token",
+      history: [],
+      state: {
+        "eve.harness.emission": {
+          sessionStarted: true,
+          sequence: 1,
+          stepIndex: 0,
+          turnId: "mixed-turn",
+        },
+      },
+      compaction: { threshold: 1e6, recentWindowSize: 10 },
+    };
+    const { attachClientContext } = await import(`${sdk}internal/client-context.js`);
+    const firstInput = { message: "do work" };
+    attachClientContext(firstInput, ["retained client context"]);
+    const generated = await invoke(initial, firstInput);
+    const [pending] = getPendingInputBatches(generated.session.state);
+    const approved = await invoke(generated.session, {
+      attributedInputResponses: pending.requests.map((request) => ({
+        auth,
+        response: { requestId: request.requestId, optionId },
+      })),
+    });
+    assert.equal(executions, 0);
+    if (cancelBeforeReplay) {
+      const abort = new AbortController();
+      abort.abort(new Error("cancelled before replay"));
+      const cancelled = createToolLoopHarness({
+        tools,
+        abortSignal: abort.signal,
+        resolveModel: async () => model,
+      });
+      await assert.rejects(
+        contextStorage.run(ctx, () =>
+          cancelled(approved.session, {
+            runtimeActionResults: [
+              {
+                kind: "tool-result",
+                callId: "mixed-deferred",
+                toolName: "deferred",
+                output: "deferred-result",
+              },
+            ],
+          }),
+        ),
+        { name: "TurnCancelledError" },
+      );
+      assert.equal(executions, 0);
+      assert.equal(requests, 1);
+      return;
+    }
+    let completed = await invoke(approved.session, {
+      ...(withInput ? { message: "new product reply", context: ["new product context"] } : {}),
+      runtimeActionResults: [
+        {
+          kind: "tool-result",
+          callId: "mixed-deferred",
+          toolName: "deferred",
+          output: "deferred-result",
+        },
+      ],
+    });
+    assert.equal(executions, optionId === "approve" ? 1 : 0);
+    assert.equal(requests, 2);
+    if (withInput) {
+      assert.equal(typeof completed.next, "function");
+      completed = await contextStorage.run(ctx, () => completed.next(completed.session));
+      assert.equal(requests, 3);
+      assert.equal(executions, 1);
+      assert.ok(JSON.stringify(completed.session.history).includes("new product context"));
+    }
+  },
+);
+
+it("preserves approval tail metadata without changing original message parts", async () => {
+  const { coalesceApprovalReplayTail } = await import(`${sdk}harness/approval-coordination.js`);
+  const messages = [
+    { role: "assistant", content: "prefix" },
+    {
+      role: "tool",
+      providerOptions: { test: { message: true, precedence: "message" } },
+      content: [
+        {
+          type: "tool-approval-response",
+          approvalId: "first",
+          approved: true,
+          providerOptions: { test: { part: true, precedence: "part" } },
+        },
+      ],
+    },
+    {
+      role: "tool",
+      content: [{ type: "tool-approval-response", approvalId: "second", approved: false }],
+    },
+    {
+      role: "tool",
+      providerOptions: { test: { final: true } },
+      content: [
+        {
+          type: "tool-result",
+          toolCallId: "completed",
+          toolName: "deferred",
+          output: { type: "text", value: "actual-result" },
+        },
+      ],
+    },
+  ];
+  const before = structuredClone(messages);
+  const merged = coalesceApprovalReplayTail(messages);
+  assert.equal(merged.length, 2);
+  assert.deepEqual(merged[1].content[0].providerOptions, {
+    test: { message: true, part: true, precedence: "part" },
+  });
+  assert.deepEqual(merged[1].providerOptions, { test: { final: true } });
+  assert.deepEqual(
+    merged[1].content.map((part) => part.type),
+    ["tool-approval-response", "tool-approval-response", "tool-result"],
+  );
+  assert.deepEqual(messages, before);
+});
+
+it.each([400, 503])(
+  "retains actual coordinated and SDK replay outputs on provider failure %s",
+  async (statusCode) => {
+    const { createToolLoopHarness } = await import(`${sdk}harness/tool-loop.js`);
+    const { getPendingInputBatches } = await import(`${sdk}harness/pending-input-batches.js`);
+    const { getPendingCoordinationBatch } = await import(`${sdk}harness/coordination.js`);
+    const { ContextContainer, contextStorage } = await import(`${sdk}context/container.js`);
+    const { SessionKey } = await import(`${sdk}context/keys.js`);
+    const { MockLanguageModelV4 } = await import("ai/test");
+    const { APICallError } = await import("ai");
+    const { z } = await import("zod");
+    const auth = { authenticator: "test", principalId: "owner", principalType: "user" };
+    const ctx = new ContextContainer();
+    ctx.set(SessionKey, {
+      sessionId: "failed-session",
+      auth: { current: auth, initiator: auth },
+      turn: { id: "failed-turn" },
+    });
+    let executions = 0;
+    let providerRequests = 0;
+    let generatedRequests = 0;
+    const tools = new Map([
+      [
+        "native",
+        {
+          name: "native",
+          inputSchema: z.object({}),
+          approval: () => "user-approval",
+          execute: () => {
+            executions += 1;
+            return "native-completed";
+          },
+        },
+      ],
+      [
+        "deferred",
+        { name: "deferred", inputSchema: z.object({}), workflowId: "workflow:deferred" },
+      ],
+    ]);
+    const model = new MockLanguageModelV4({
+      doGenerate: async ({ prompt }) => {
+        generatedRequests += 1;
+        if (generatedRequests > 1) {
+          const parts = prompt.flatMap((message) =>
+            Array.isArray(message.content) ? message.content : [],
+          );
+          for (const name of ["native", "deferred"])
+            assert.equal(
+              parts.filter(
+                (part) => part.type === "tool-result" && part.toolCallId === `failed-${name}`,
+              ).length,
+              1,
+            );
+          return {
+            content: [{ type: "text", text: "continued" }],
+            finishReason: { unified: "stop", raw: "stop" },
+            usage: { inputTokens: { total: 10 }, outputTokens: { total: 5 } },
+            warnings: [],
+          };
+        }
+        return {
+          content: ["native", "deferred"].map((name) => ({
+            type: "tool-call",
+            toolCallId: `failed-${name}`,
+            toolName: name,
+            input: "{}",
+          })),
+          finishReason: { unified: "tool-calls", raw: "tool_calls" },
+          usage: { inputTokens: { total: 10 }, outputTokens: { total: 5 } },
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        providerRequests += 1;
+        throw new APICallError({
+          message: "Synthetic nonretryable provider rejection",
+          url: "https://synthetic.invalid/model",
+          requestBodyValues: {},
+          statusCode,
+          responseBody: "synthetic rejection",
+          isRetryable: false,
+        });
+      },
+    });
+    const invoke = (session, input, events) =>
+      contextStorage.run(ctx, () =>
+        createToolLoopHarness({
+          tools,
+          resolveModel: async () => model,
+          ...(events === undefined
+            ? {}
+            : {
+                handleEvent: async (event) => {
+                  events.push(event);
+                },
+              }),
+        })(session, input),
+      );
+    const generated = await invoke(
+      {
+        agent: { system: "", tools: [], modelReference: { id: "model", provider: "test" } },
+        sessionId: "failed-session",
+        continuationToken: "token",
+        history: [],
+        compaction: { threshold: 1e6, recentWindowSize: 10 },
+      },
+      { message: "do work" },
+    );
+    const [pending] = getPendingInputBatches(generated.session.state);
+    const approved = await invoke(generated.session, {
+      attributedInputResponses: pending.requests.map((request) => ({
+        auth,
+        response: { requestId: request.requestId, optionId: "approve" },
+      })),
+    });
+    const events = [];
+    const failed = await invoke(
+      approved.session,
+      {
+        runtimeActionResults: [
+          {
+            kind: "tool-result",
+            callId: "failed-deferred",
+            toolName: "deferred",
+            output: "deferred-completed",
+          },
+        ],
+      },
+      events,
+    );
+    const parts = failed.session.history.flatMap((message) =>
+      Array.isArray(message.content) ? message.content : [],
+    );
+    const summary = {
+      nativeExecutions: executions,
+      callCount: parts.filter((part) => part.type === "tool-call").length,
+      resultCount: parts.filter((part) => part.type === "tool-result").length,
+      pendingInputs: getPendingInputBatches(failed.session.state).length,
+      pendingCoordination: getPendingCoordinationBatch(failed.session.state) !== undefined,
+      terminal: failed.next?.done === true,
+    };
+    console.log("provider rejection retained state", summary);
+    assert.ok(
+      events.some(
+        (event) => event.type === "step.failed" && event.data.code === "MODEL_CALL_FAILED",
+      ),
+    );
+    assert.deepEqual(summary, {
+      nativeExecutions: 1,
+      callCount: 2,
+      resultCount: 2,
+      pendingInputs: 0,
+      pendingCoordination: false,
+      terminal: statusCode === 400,
+    });
+    assert.equal(providerRequests, statusCode === 400 ? 1 : 3);
+    assert.ok(JSON.stringify(parts).includes("native-completed"));
+    assert.ok(JSON.stringify(parts).includes("deferred-completed"));
+    if (statusCode === 503) {
+      const continued = await invoke(failed.session, { message: "continue" });
+      assert.equal(executions, 1);
+      assert.equal(generatedRequests, 2);
+      assert.ok(JSON.stringify(continued.session.history).includes("continued"));
+    }
+  },
+);
