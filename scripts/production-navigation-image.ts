@@ -67,6 +67,32 @@ const inspectFailureReason = (stderr: string) => {
   return reasons.find(({ pattern }) => pattern.test(stderr))?.reason ?? "unrecognized_diagnostic";
 };
 
+const pullFailureReason = (stderr: string) => {
+  const reasons = [
+    {
+      reason: "authorization_failed",
+      pattern: /unauthorized|authentication required|permission denied|forbidden/iu,
+    },
+    {
+      reason: "manifest_unavailable",
+      pattern: /manifest unknown|name unknown|repository does not exist|not found/iu,
+    },
+    {
+      reason: "daemon_unavailable",
+      pattern:
+        /cannot connect to the docker daemon|is the docker daemon running|connection refused|error during connect/iu,
+    },
+    {
+      reason: "transport_failed",
+      pattern:
+        /x509|certificate|tls handshake|network is unreachable|i[/]o timeout|context deadline exceeded|no such host|connection reset|unexpected eof/iu,
+    },
+    { reason: "storage_exhausted", pattern: /no space left on device/iu },
+    { reason: "platform_mismatch", pattern: /no matching manifest for/iu },
+  ];
+  return reasons.find(({ pattern }) => pattern.test(stderr))?.reason ?? "unrecognized_diagnostic";
+};
+
 const registryThrottled = (result: ImageCommandResult): boolean =>
   /\btoomanyrequests\b|\bHTTP(?:\/\d(?:\.\d)?)?\s+429\b|\b429\s+Too Many Requests\b|\bstatus code\s*:?\s*429\b/iu.test(
     result.stderr,
@@ -121,7 +147,7 @@ export const ensureProductionNavigationImage = async (
       return image;
     }
     if (!registryThrottled(pulled)) {
-      throw new Error("Production navigation could not pull the pinned PostgreSQL image.");
+      throw new Error(`Production navigation could not pull the pinned PostgreSQL image (${pullFailureReason(pulled.stderr)}; exit ${pulled.exitCode}).`);
     }
     if (image === PRODUCTION_NAVIGATION_POSTGRES_IMAGE) {
       // The canonical registry supplies the identical digest when the public mirror is throttled.

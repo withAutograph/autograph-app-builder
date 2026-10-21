@@ -262,6 +262,26 @@ describe("production navigation pinned image preparation", () => {
   });
 
   it.each([
+    ["authorization_failed", "unauthorized: private-sensitive-credential"],
+    ["manifest_unavailable", "manifest unknown: private-sensitive-reference"],
+    ["daemon_unavailable", "Cannot connect to the Docker daemon at private-sensitive-endpoint"],
+    ["transport_failed", "Get https://private-sensitive-endpoint: no such host"],
+    ["storage_exhausted", "no space left on device"],
+    ["platform_mismatch", "no matching manifest for linux/amd64"],
+    ["unrecognized_diagnostic", "private-sensitive-command-failure"],
+  ])("reports a bounded, secret-free pinned-image pull failure: %s", async (reason, stderr) => {
+    const f = fixture();
+    f.runCommand
+      .mockResolvedValueOnce(missing)
+      .mockResolvedValueOnce({ exitCode: 1, stderr });
+    const failure = ensureProductionNavigationImage(f.input);
+    await expect(failure).rejects.toThrow(`(${reason}; exit 1)`);
+    await expect(failure).rejects.not.toThrow("private-sensitive");
+    expect(f.wait).not.toHaveBeenCalled();
+    expect(f.runCommand).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
     "unauthorized: authentication required",
     "x509: certificate signed by unknown authority",
     "Cannot connect to the Docker daemon",

@@ -38,6 +38,7 @@ export default defineConfig({
         plugins: [storybookTest({ configDir: path.join(dirname, ".storybook") })],
         test: {
           browser: {
+            api: { host: "127.0.0.1" },
             enabled: true,
             headless: true,
             instances: [{ browser: "chromium" }],
