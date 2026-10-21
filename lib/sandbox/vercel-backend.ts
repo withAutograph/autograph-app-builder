@@ -201,6 +201,7 @@ export const createBuilderVercelProvider = (
       ...transport,
       namePrefix: binding.name,
       projectId: binding.projectId,
+      sortBy: "name",
       signal,
     });
     for await (const drive of drives) {

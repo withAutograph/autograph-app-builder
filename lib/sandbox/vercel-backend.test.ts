@@ -387,6 +387,7 @@ describe("Builder Vercel provider", () => {
       expect.objectContaining({
         namePrefix: driveState.name,
         projectId: driveState.projectId,
+        sortBy: "name",
         signal,
       }),
     );
