@@ -9,7 +9,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import nodePath from "node:path";
 
@@ -18,6 +18,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AppBaselineReceipt, AppBaselineSelection } from "./app-baseline";
 import { recoverLegacyAppSpecTransport } from "./legacy-app-spec-recovery";
+import { compactAcceptedPlanningInput } from "./compact-accepted-planning-input";
+import { planningOverlayRoot } from "./dependency-cache";
+import { streamVerifiedPrototypeArtifact } from "../agent/prototype-artifact-stream";
+import type { PrototypeArtifactV2 } from "../agent/workflow-state";
 import type { TargetApplyReceipt } from "./target-apply";
 
 const roots: string[] = [];
@@ -164,9 +168,15 @@ const fixture = (original?: string) => {
     readFile: vi.fn(),
     writeFile: vi.fn(),
     spawn: vi.fn(),
-    writeTextFile: vi.fn(),
-    removePath: vi.fn(),
-    resolvePath: (path) => nodePath.join(root, path),
+    async writeTextFile({ path, content }) {
+      const file = nodePath.join(root, path);
+      await mkdir(nodePath.dirname(file), { recursive: true });
+      await writeFile(file, content);
+    },
+    async removePath({ path, force, recursive }) {
+      await rm(nodePath.join(root, path), { force, recursive });
+    },
+    resolvePath: (path) => nodePath.resolve(root, path),
     async readTextFile({ path }) {
       return await readFile(nodePath.join(root, path), "utf-8");
     },
@@ -290,5 +300,155 @@ describe("legacy accepted AppSpec transport recovery", () => {
       }),
     ).resolves.toEqual({ status: "preserved" });
     expect(readFileSync(nodePath.join(f.checkout, specPath), "utf-8")).toBe(accepted);
+  });
+});
+
+const compactionFixture = (transportPath = "prototype/demo/app-spec.md") => {
+  const f = fixture();
+  const planningRoot = planningOverlayRoot(digest);
+  const absoluteRoot = nodePath.join(f.root, planningRoot);
+  const staleFile = nodePath.join(absoluteRoot, "old-copy/source.ts");
+  mkdirSync(nodePath.dirname(staleFile), { recursive: true });
+  writeFileSync(staleFile, "derived source copy");
+  const otherRevision = nodePath.join(f.root, planningOverlayRoot("c".repeat(64)), "retained");
+  mkdirSync(nodePath.dirname(otherRevision), { recursive: true });
+  writeFileSync(otherRevision, "other accepted revision");
+  const candidate = nodePath.join(f.root, ".app-builder/draft-reconcile/retained");
+  mkdirSync(candidate, { recursive: true });
+  writeFileSync(nodePath.join(candidate, "repair"), "unpublished app repair");
+  const workflow = {
+    phase: "reviewed",
+    proposal: {
+      digest: "proposal",
+      contract: { appSpec: { path: transportPath, sha256: hash(accepted) } },
+    },
+    approval: { proposalDigest: "proposal" },
+    appSpec: { appId: "demo", artifactRevision: digest, digest: hash(accepted) },
+    applyRoot: f.checkout,
+    candidateRoot: candidate,
+  };
+  const input = {
+    sandbox: f.input.sandbox,
+    appId: workflow.appSpec.appId,
+    artifactRevision: workflow.appSpec.artifactRevision,
+    appSpecDigest: workflow.appSpec.digest,
+    proposalAppSpec: workflow.proposal.contract.appSpec,
+    retainedRoots: [workflow.applyRoot, workflow.candidateRoot],
+    readAcceptedContent: () => Promise.resolve(accepted),
+  };
+  return { ...f, absoluteRoot, candidate, input, otherRevision, planningRoot, staleFile, workflow };
+};
+
+describe("current accepted planning input compaction", () => {
+  it.each(["prototype/demo/app-spec.md", ".config/app-specs/demo.md"])(
+    "recreates exact accepted bytes at %s without changing working source or workflow authority",
+    async (transportPath) => {
+      const f = compactionFixture(transportPath);
+      const before = structuredClone(f.workflow);
+      await expect(compactAcceptedPlanningInput(f.input)).resolves.toEqual({ status: "compacted" });
+      expect(existsSync(f.staleFile)).toBe(false);
+      expect(readFileSync(nodePath.join(f.absoluteRoot, transportPath), "utf-8")).toBe(accepted);
+      expect(
+        readFileSync(nodePath.join(f.absoluteRoot, "prototype/demo/app-spec.md"), "utf-8"),
+      ).toBe(accepted);
+      expect(readFileSync(nodePath.join(f.checkout, "apps/demo/main.ts"), "utf-8")).toBe(
+        "authored app\n",
+      );
+      expect(readFileSync(nodePath.join(f.candidate, "repair"), "utf-8")).toBe(
+        "unpublished app repair",
+      );
+      expect(readFileSync(f.otherRevision, "utf-8")).toBe("other accepted revision");
+      expect(f.workflow).toEqual(before);
+    },
+  );
+
+  it("retains the original input if accepted inline content is unavailable or changed", async () => {
+    const f = compactionFixture();
+    const failure = new Error("accepted content unavailable");
+    await expect(
+      compactAcceptedPlanningInput({
+        ...f.input,
+        readAcceptedContent: () => Promise.reject(failure),
+      }),
+    ).rejects.toBe(failure);
+    expect(readFileSync(f.staleFile, "utf-8")).toBe("derived source copy");
+    await expect(
+      compactAcceptedPlanningInput({
+        ...f.input,
+        readAcceptedContent: () => Promise.resolve("different content"),
+      }),
+    ).rejects.toThrow("planning input was retained");
+    expect(readFileSync(f.staleFile, "utf-8")).toBe("derived source copy");
+  });
+
+  it.each([false, true])(
+    "verifies all durable chunks before removal (missing final chunk: %s)",
+    async (missing) => {
+      const f = compactionFixture();
+      const path = "prototype/demo/app-spec.md";
+      const artifact: PrototypeArtifactV2 = {
+        version: 2,
+        appId: "demo",
+        path,
+        digest: hash(accepted),
+        revision: hash(
+          JSON.stringify({ digest: hash(accepted), mediaType: "text/markdown", path }),
+        ),
+        mediaType: "text/markdown",
+        chunkCount: 2,
+        contentBytes: Buffer.byteLength(accepted),
+        sessionId: "session",
+        recordedByCallId: "record",
+      };
+      const split = 10;
+      const chunks = [accepted.slice(0, split), accepted.slice(split)];
+      const readAcceptedContent = async () => {
+        const parts: Buffer[] = [];
+        for await (const chunk of streamVerifiedPrototypeArtifact({
+          artifact,
+          readChunk: (index) => {
+            expect(existsSync(f.staleFile)).toBe(true);
+            return Promise.resolve(missing && index === 1 ? undefined : chunks[index]);
+          },
+        })) {
+          parts.push(Buffer.from(chunk));
+        }
+        return Buffer.concat(parts).toString("utf-8");
+      };
+      const compact = compactAcceptedPlanningInput({ ...f.input, readAcceptedContent });
+      if (missing) {
+        await expect(compact).rejects.toThrow("missing chunk 1");
+        expect(existsSync(f.staleFile)).toBe(true);
+      } else {
+        await expect(compact).resolves.toEqual({ status: "compacted" });
+        expect(readFileSync(nodePath.join(f.absoluteRoot, path), "utf-8")).toBe(accepted);
+      }
+    },
+  );
+
+  it.each(["apply", "candidate", "validation", "completion"])(
+    "retains a current planning root containing referenced %s working output",
+    async () => {
+      const f = compactionFixture();
+      const readAcceptedContent = vi.fn(() => Promise.resolve(accepted));
+      await expect(
+        compactAcceptedPlanningInput({
+          ...f.input,
+          retainedRoots: [...f.input.retainedRoots, nodePath.join(f.absoluteRoot, "active-output")],
+          readAcceptedContent,
+        }),
+      ).resolves.toEqual({ status: "retained" });
+      expect(readAcceptedContent).not.toHaveBeenCalled();
+      expect(readFileSync(f.staleFile, "utf-8")).toBe("derived source copy");
+    },
+  );
+
+  it("reports a failed exact restoration before continuing preparation", async () => {
+    const f = compactionFixture();
+    vi.spyOn(f.input.sandbox, "readBinaryFile").mockResolvedValue(Buffer.from("incomplete write"));
+    await expect(compactAcceptedPlanningInput(f.input)).rejects.toThrow("not restored exactly");
+    expect(readFileSync(nodePath.join(f.candidate, "repair"), "utf-8")).toBe(
+      "unpublished app repair",
+    );
   });
 });
