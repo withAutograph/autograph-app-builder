@@ -11,6 +11,7 @@ import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-githu
 import { repositoryAccessRuntimeForSession } from "@/lib/agent/deployment-repository-access-runtime";
 import { publicationContentSourceForReviewedWorkflow } from "@/lib/agent/github-publication-content-source";
 import {
+  draftReconciliationCompletions,
   draftReconciliationState,
   updateExactDraftReconciliation,
 } from "@/lib/agent/draft-reconciliation-state";
@@ -22,6 +23,7 @@ import { prepareWithVerifiedGitHubFetchRecovery } from "@/lib/agent/verified-git
 import { readPublishedOperatorSourceForSession } from "@/lib/agent/compiled-operator-artifacts";
 import { resolveAcceptedAppSpecContent } from "@/lib/agent/accepted-app-spec-content";
 import { recoverLegacyAppSpecTransport } from "@/lib/repository/legacy-app-spec-recovery";
+import { compactAcceptedPlanningInput } from "@/lib/repository/compact-accepted-planning-input";
 import { appBaselineState } from "@/lib/agent/app-baseline-state";
 import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-set";
 import { prepareDraftReconciliation } from "@/lib/repository/sandbox-draft-reconciliation";
@@ -182,6 +184,30 @@ export default defineTool({
         "Builder cannot fetch the current draft and base: the selected repository no longer matches its verified GitHub access. Reconnect this repository, then retry reconciliation.",
       );
     }
+    let acceptedContent: Promise<string> | undefined;
+    const readAcceptedContent = () =>
+      (acceptedContent ??= resolveAcceptedAppSpecContent({
+        accepted: state.appSpec,
+        artifacts: state.artifacts,
+        sessionAuth: ctx.session.auth,
+        sessionId: ctx.session.id,
+      }));
+    const retainedCandidate = draftReconciliationState.get();
+    await compactAcceptedPlanningInput({
+      sandbox,
+      appId: state.appSpec.appId,
+      artifactRevision: state.appSpec.artifactRevision,
+      appSpecDigest: state.appSpec.digest,
+      proposalAppSpec: state.proposal.target.contract.appSpec,
+      retainedRoots: [
+        state.workspace.workspacePath,
+        state.applyReceipt.applyRoot,
+        ...state.validationReceipt.commands.map((command) => command.validationRoot),
+        ...(retainedCandidate === null ? [] : [retainedCandidate.root]),
+        ...draftReconciliationCompletions.get().map((completion) => completion.root),
+      ],
+      readAcceptedContent,
+    });
     const transport = await recoverLegacyAppSpecTransport({
       sandbox,
       sessionId: ctx.session.id,
@@ -191,13 +217,7 @@ export default defineTool({
       appSpecDigest: state.appSpec.digest,
       apply: state.applyReceipt,
       baseline: appBaselineState.get(),
-      readAcceptedContent: async () =>
-        await resolveAcceptedAppSpecContent({
-          accepted: state.appSpec,
-          artifacts: state.artifacts,
-          sessionAuth: ctx.session.auth,
-          sessionId: ctx.session.id,
-        }),
+      readAcceptedContent,
     });
     const legacyTransportPath = `.config/app-specs/${state.appSpec.appId}.md`;
     const reviewedTransport = state.reviewReceipt.changes.some(
