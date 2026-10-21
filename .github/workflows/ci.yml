@@ -220,6 +220,9 @@ jobs:
 
   vercel-preview:
     name: Vercel deployment proof
+    # GitHub's deployment inventory is delivery evidence after merge, not a
+    # prerequisite for accepting an otherwise-valid PR head.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     steps:
       - name: Require exact Vercel Git deployment
@@ -305,7 +308,9 @@ jobs:
           test "${{ needs.package-build.result }}" = success
           test "${{ needs.auth-e2e-emulated.result }}" = success
           test "${{ needs.production-navigation.result }}" = success
-          test "${{ needs.vercel-preview.result }}" = success
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            test "${{ needs.vercel-preview.result }}" = success
+          fi
 
   promote:
     name: Publish exact main package
