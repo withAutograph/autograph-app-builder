@@ -213,7 +213,7 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
         record: continuityRecordSchema.parse({
           kind: "app-continuity",
           requestId: intentId,
-          revision: 0,
+          revision: 1,
           idempotencyKey: key,
           plan,
           planDigest: continuityPlanDigest(plan),
