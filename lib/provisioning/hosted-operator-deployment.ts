@@ -1,3 +1,4 @@
+import { createHostedOperatorSandboxFetch } from "./hosted-operator-sandbox-fetch";
 import {
   observeContinuityPlanningStage,
   advanceExportPlanningStage,
@@ -3151,6 +3152,7 @@ export const createHostedOperatorControlPlane = async (input: {
         name: selected.sandboxId,
         resume: true,
         token: workload.token(),
+        fetch: createHostedOperatorSandboxFetch(workload.token),
         projectId: configuration.workloadPolicy.projectId,
         teamId: configuration.workloadPolicy.ownerId,
         signal: workload.signal,
