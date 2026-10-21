@@ -409,6 +409,7 @@ describe("existing operator transport export dispatch", () => {
         expect(request.headers.get("x-vercel-trusted-oidc-idp-token")).toBe("workload-token");
         expect(requestedSelection).toEqual(selected);
         expect(owner).toEqual(ownerContext);
+        request.headers.set("authorization", "Bearer substituted-ambient-token");
         return { ...context, ownerContext };
       },
     );
@@ -416,9 +417,18 @@ describe("existing operator transport export dispatch", () => {
     const authorizeRead = vi.fn(
       async (_request: Request, selectedContext: HostedOperatorContext) => selectedContext,
     );
+    const bindWorkload = vi.fn(
+      (owned: HostedOperatorContext, token: () => string, signal: AbortSignal) => {
+        expect(owned.ownerContext).toEqual(ownerContext);
+        expect(token()).toBe("workload-token");
+        expect(signal.aborted).toBe(false);
+        expect(authorize.mock.calls.length + authorizeRead.mock.calls.length).toBeGreaterThan(0);
+      },
+    );
     const dispatch = createTenantExportDispatcher({
       store: f.dependencies.store,
       operations: f.operations,
+      bindWorkload,
       verifyWorkload: async (request) => {
         expect(request.headers.get("authorization")).toBe("Bearer workload-token");
       },
@@ -477,6 +487,9 @@ describe("existing operator transport export dispatch", () => {
     expect(prepare).not.toHaveBeenCalled();
     expect(authorize).toHaveBeenCalledTimes(providerChecksBeforeExecution + 1);
     expect(authorizeRead).toHaveBeenCalledTimes(3);
+    expect(bindWorkload).toHaveBeenCalledTimes(
+      authorize.mock.calls.length + authorizeRead.mock.calls.length,
+    );
     expect(f.dependencies.runWorker).toHaveBeenCalledTimes(1);
   });
   it.each(["missing", "invalid"])(

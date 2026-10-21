@@ -61,6 +61,13 @@ export const tenantExportPlannedSchema = z.strictObject({
 
 export type TenantExportTransportRequest = z.infer<typeof tenantExportTransportRequestSchema>;
 
+const verifiedWorkloadToken = (carrier: string | null) => {
+  if (carrier === null || !carrier.startsWith("Bearer ")) {
+    throw new HostedOperatorError("authorization_required");
+  }
+  return () => carrier.slice(7);
+};
+
 /** The hint locates only a row. Workload and fresh canonical owner verification precede all operations. */
 export const createTenantExportDispatcher =
   (dependencies: {
@@ -68,6 +75,11 @@ export const createTenantExportDispatcher =
     operations: ReturnType<typeof createHostedTenantExportOperations>;
     resolveOwnerOrganization?: (context: HostedOperatorContext) => Promise<string>;
     verifyWorkload: (request: Request) => Promise<void>;
+    bindWorkload?: (
+      context: HostedOperatorContext,
+      token: () => string,
+      signal: AbortSignal,
+    ) => void;
     authorize: ProtectedHostedOperatorDependencies["authorize"];
     authorizeRead: (
       request: Request,
@@ -80,7 +92,11 @@ export const createTenantExportDispatcher =
       planStage = next;
     };
     try {
-      await dependencies.verifyWorkload(request);
+      const workloadCarrier = request.headers.get("authorization");
+      const frozenWorkloadRequest = new Request(request.url, {
+        headers: new Headers(request.headers),
+      });
+      await dependencies.verifyWorkload(frozenWorkloadRequest);
       let selected: z.infer<typeof operatorSelectionSchema>;
       let savedContext: HostedOperatorContext | undefined;
       if (parsed.action === "export-plan") {
@@ -108,8 +124,11 @@ export const createTenantExportDispatcher =
       const context =
         (parsed.action === "export-status" || parsed.action === "export-approval") &&
         savedContext !== undefined
-          ? await dependencies.authorizeRead(request, savedContext)
-          : await dependencies.authorize(request, selected, parsed.ownerContext);
+          ? await dependencies.authorizeRead(frozenWorkloadRequest, savedContext)
+          : await dependencies.authorize(frozenWorkloadRequest, selected, parsed.ownerContext);
+      if (dependencies.bindWorkload !== undefined) {
+        dependencies.bindWorkload(context, verifiedWorkloadToken(workloadCarrier), request.signal);
+      }
       const { operations } = dependencies;
       let result;
       switch (parsed.action) {

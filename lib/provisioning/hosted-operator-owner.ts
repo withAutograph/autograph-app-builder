@@ -787,9 +787,11 @@ export const createHostedOperatorReadApproval =
     eve: Pick<HostedEveStore, "getSession" | "recordPrivateApprovalReceipts">;
     journal: Pick<HostedRuntimeJournalStore, "read">;
     /**
-     * Operator-owned read-only Eve transport. Configure its own project-scoped
-     * workload identity with explicit GET access to the canonical session stream;
-     * never borrow a Builder bearer or infer access when this capability is absent.
+     * Owner-authorized read-only Eve transport. A verified incoming Builder
+     * workload may be bound to this request-private observer after workload and
+     * owner authorization; arbitrary bearers/global credential substitution are
+     * not authority. Unbound background observers retain their own ambient
+     * project identity and require legitimate canonical stream access.
      */
     observe: NonNullable<HostedEveTransport["observe"]>;
   }) =>

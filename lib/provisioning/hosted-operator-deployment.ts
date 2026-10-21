@@ -116,7 +116,7 @@ import {
 import { parseProtectedResourceLockDatabaseUrl } from "../db/protected-resource-lock-database-url";
 import { createVercelWorkloadIdentity } from "../eve/vercel-workload-identity";
 import { parseHostedSessionRow, createPostgresHostedEveStore } from "../eve/postgres-hosted-store";
-import { createSameOriginEveTransport } from "../eve/same-origin-http";
+import { createHostedOperatorApprovalObserver } from "./hosted-operator-approval-observer";
 import {
   account,
   agentOperations,
@@ -791,8 +791,8 @@ export const createHostedOperatorControlPlane = async (input: {
     };
 
     const operatorIdentity = createVercelWorkloadIdentity();
-    const eveObserver = createSameOriginEveTransport({
-      config: { baseUrl: new URL(config.resource).origin },
+    const approvalObserver = createHostedOperatorApprovalObserver({
+      builderOrigin: new URL(config.resource).origin,
       verifyReadAuthority: async ({ adapterSessionId, principal, sessionId }) => {
         try {
           const rawSession = await eve.getSessionByAdapterSessionId?.(principal, adapterSessionId);
@@ -828,14 +828,14 @@ export const createHostedOperatorControlPlane = async (input: {
       },
       workloadIdentity: operatorIdentity,
     });
-    if (eveObserver.observe === undefined) {
-      throw new Error("Protected operator approval observation is unavailable.");
-    }
-    const readApproval = createHostedOperatorReadApproval({
-      eve,
-      journal: store,
-      observe: eveObserver.observe,
-    });
+    const readApproval = (
+      context: Parameters<ReturnType<typeof createHostedOperatorReadApproval>>[0],
+    ) =>
+      createHostedOperatorReadApproval({
+        eve,
+        journal: store,
+        observe: approvalObserver.forContext(context),
+      })(context);
     const readApprovedPlan = createHostedOperatorReadApprovedPlan({
       eve,
       assertCanonicalOwner: owner.assertArtifactAuthorized,
@@ -2976,10 +2976,6 @@ export const createHostedOperatorControlPlane = async (input: {
         }),
       };
     };
-    const observeExportApproval = eveObserver.observe;
-    if (observeExportApproval === undefined) {
-      throw new HostedOperatorError("operator_unavailable");
-    }
     const exports = createHostedTenantExportOperations({
       store: exportStore,
       assertOwner: owner.assertArtifactAuthorized,
@@ -3003,7 +2999,7 @@ export const createHostedOperatorControlPlane = async (input: {
           ...(callId === undefined ? {} : { callId }),
         });
         let publicCount = 0;
-        const observed = await observeExportApproval({
+        const observed = await approvalObserver.forContext(context)({
           adapterSessionId: ownerContext.adapterSessionId,
           sessionId: ownerContext.sessionId,
           principal: ownerContext.principal,
@@ -3083,6 +3079,7 @@ export const createHostedOperatorControlPlane = async (input: {
     const exportRequest = createTenantExportDispatcher({
       store: exportStore,
       operations: exports,
+      bindWorkload: approvalObserver.bindWorkload,
       verifyWorkload: owner.verifyWorkload,
       authorize: owner.authorize,
       authorizeRead: owner.authorizeArtifactRead,
@@ -3444,7 +3441,7 @@ export const createHostedOperatorControlPlane = async (input: {
           ...(callId === undefined ? {} : { callId }),
         });
         let count = 0;
-        const observed = await observeExportApproval({
+        const observed = await approvalObserver.forContext(context)({
           adapterSessionId: canonical.adapterSessionId,
           sessionId: canonical.sessionId,
           principal: canonical.principal,
@@ -3479,6 +3476,7 @@ export const createHostedOperatorControlPlane = async (input: {
       authorizeRead: owner.authorizeArtifactRead,
       bindWorkload: (context, token, signal) => {
         continuityWorkloads.set(context, { token, signal });
+        approvalObserver.bindWorkload(context, token, signal);
       },
     });
     return {
