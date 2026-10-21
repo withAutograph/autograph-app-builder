@@ -89,7 +89,15 @@ describe("native recovery authority", () => {
       savedReceipt = receipt;
       return receipt;
     });
-    const assertOwner = vi.fn(async () => {});
+    const canary = "private-auth-error-canary";
+    let ownerError: Error | null = null;
+    const assertOwner = vi.fn(() => {
+      if (ownerError !== null) {
+        throw ownerError;
+      }
+      return Promise.resolve();
+    });
+    const activationLog = vi.spyOn(console, "info").mockImplementation(() => {});
     const binding = createNativeRecoveryBinding({
       assertOwner,
       now: () => 4,
@@ -133,6 +141,21 @@ describe("native recovery authority", () => {
       sessionRecordDigest: hostedSessionCreationDigest(child),
       result: { sessionId: child.sessionId, cursor: 0, events: [], status: "working" },
     });
+    child = null;
+    await expect(binding.authorizeActivation(call)).rejects.toThrow("unavailable");
+    child = durableHostedSessionRecordSchema.parse({
+      ...source,
+      adapterSessionId: receipt.ownerRunId,
+      originAdapterSessionId: receipt.ownerRunId,
+      nativeRecoveryBinding: receipt,
+      parentSessionId: "ses_other",
+      sessionId: "ses_child",
+      status: "working",
+      resumability: "live",
+      stage: "planning",
+    });
+    await expect(binding.authorizeActivation(call)).rejects.toThrow();
+    child = durableHostedSessionRecordSchema.parse({ ...child, parentSessionId: source.sessionId });
     await expect(binding.authorizeActivation(call)).resolves.toBeUndefined();
     const originalChild = child;
     child = durableHostedSessionRecordSchema.parse({
@@ -153,5 +176,37 @@ describe("native recovery authority", () => {
     current = durableHostedSessionRecordSchema.parse({ ...source, cancellationRevision: 1 });
     await expect(binding.authorize(call)).rejects.toThrow("ownership changed");
     await expect(binding.authorizeActivation(call)).rejects.toThrow("ownership changed");
+    current = source;
+    activationLog.mockImplementationOnce(() => {
+      throw new Error(canary);
+    });
+    await expect(binding.authorizeActivation(call)).resolves.toBeUndefined();
+    ownerError = new Error(canary);
+    await expect(binding.authorizeActivation(call)).rejects.toThrow(canary);
+
+    const stages = [
+      "committed_operation",
+      "child_lookup_principal",
+      "child_receipt_authority",
+      "authorized",
+      "child_cancellation",
+      "authorized",
+      "child_cancellation",
+      "source_authorization",
+      "authorized",
+      "source_authorization",
+    ];
+    expect(activationLog.mock.calls).toEqual(
+      stages.map((stage) => [
+        JSON.stringify({
+          event: "builder.native_recovery_activation",
+          outcome: stage === "authorized" ? "authorized" : "failed",
+          stage,
+        }),
+      ]),
+    );
+    expect(JSON.stringify(activationLog.mock.calls)).not.toContain(canary);
+    expect(JSON.stringify(activationLog.mock.calls)).not.toContain(descriptor.operationId);
+    activationLog.mockRestore();
   });
 });

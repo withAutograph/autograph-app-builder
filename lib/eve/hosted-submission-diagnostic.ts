@@ -3,6 +3,12 @@ import { createHash } from "node:crypto";
 
 import { z } from "zod";
 
+import {
+  HostedSubmissionUnknownError,
+  hostedSubmissionVerificationSteps,
+} from "./hosted-submission-unknown-error";
+import type { HostedSubmissionVerificationStep } from "./hosted-submission-unknown-error";
+
 import { SubmissionRejectedBeforeDispatchError } from "./submission-rejected-before-dispatch-error";
 import type { HostedOperationKind } from "./hosted-store";
 
@@ -15,6 +21,7 @@ export type HostedSubmissionPhase =
   | "unsuccessful_settlement"
   | "settlement"
   | "settlement_verification"
+  | "recovery_activation"
   | "recovery"
   | "checkpoint_cleanup"
   | "transport_dispatch"
@@ -167,6 +174,7 @@ export const sendDeliveryObservationDiagnostic = (input: {
 export interface HostedSubmissionDiagnostic {
   event: "builder.hosted_submission_uncertain" | "builder.hosted_submission_rejected";
   phase: HostedSubmissionPhase;
+  verificationStep?: HostedSubmissionVerificationStep;
   operationKind: HostedOperationKind;
   clientRequestIdHash?: string;
   operationIdHash?: string;
@@ -211,6 +219,19 @@ const discardDiagnosticRejection = async (delivery: Promise<void>): Promise<void
   }
 };
 
+const verificationDiagnosticFor = (
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Caught exceptions are untrusted; inspect only a data property on the internal error type.
+  error: unknown,
+): Pick<HostedSubmissionDiagnostic, "verificationStep"> => {
+  if (!(error instanceof HostedSubmissionUnknownError)) {
+    return {};
+  }
+  const step = z
+    .enum(hostedSubmissionVerificationSteps)
+    .safeParse(Object.getOwnPropertyDescriptor(error, "verificationStep")?.value);
+  return step.success ? { verificationStep: step.data } : {};
+};
+
 /** This is server observability, never an operation receipt or a recovery authority. */
 export const reportHostedSubmissionDiagnostic = (input: {
   phase: HostedSubmissionPhase;
@@ -241,6 +262,7 @@ export const reportHostedSubmissionDiagnostic = (input: {
         : "builder.hosted_submission_uncertain",
       operationKind: input.operationKind,
       phase: input.phase,
+      ...verificationDiagnosticFor(input.error),
     };
     if (input.sendDeliveryObservation !== undefined) {
       const observed = sendDeliveryObservationSchema.safeParse(input.sendDeliveryObservation);

@@ -1,3 +1,4 @@
+import type { HostedSubmissionDiagnosticSink } from "./hosted-submission-diagnostic";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { once } from "node:events";
@@ -2610,3 +2611,139 @@ it.each(["preguard", "accepted-settlement"] as const)(
     expect(fetchImplementation).toHaveBeenCalledTimes(stage === "preguard" ? 1 : 3);
   },
 );
+
+describe("activation transport diagnostics", () => {
+  const recovery = {
+    version: 1 as const,
+    operationId: "private-recovery-operation",
+    sourcePublicSessionId: "private-source",
+    sourceOwnerRunId: "private-owner",
+    sourceAdapterGeneration: 1,
+    logicalSessionId: "private-logical",
+    originalAuthoritySessionId: "private-authority",
+    parentCancellationRevision: 0,
+  };
+  const binding = {
+    ...recovery,
+    ownerRunId: "private-child",
+    provenance: {
+      kind: "committed-turn-output" as const,
+      sourceStepId: "private-step",
+      sourceEventId: "private-event",
+      sourceSlot: 1,
+      checkpointVersion: 1 as const,
+    },
+  };
+  const secret = "never-log-private-activation-body";
+  it.each([
+    {
+      name: "dispatch failure",
+      response: () => Promise.reject(new Error(secret)),
+      phase: "transport_dispatch",
+      category: "unclassified_failure",
+      rejected: false,
+      malformed: false,
+    },
+    {
+      name: "HTTP403",
+      response: () =>
+        Promise.resolve(
+          Response.json(
+            { ok: false, code: "session_access_denied", private: secret },
+            { status: 403 },
+          ),
+        ),
+      phase: "transport_acceptance",
+      category: "rejected_before_dispatch",
+      rejected: true,
+      malformed: false,
+    },
+    {
+      name: "HTTP503",
+      response: () =>
+        Promise.resolve(
+          Response.json(
+            { ok: false, code: "terminal_recovery_submission_unknown", private: secret },
+            { status: 503 },
+          ),
+        ),
+      phase: "transport_acceptance",
+      category: "unclassified_failure",
+      rejected: false,
+      malformed: false,
+    },
+    {
+      name: "accepted missing receipt",
+      response: () =>
+        Promise.resolve(
+          Response.json(
+            {
+              ok: true,
+              status: "accepted",
+              sessionId: binding.ownerRunId,
+            },
+            { status: 202 },
+          ),
+        ),
+      phase: "transport_acceptance",
+      category: "unclassified_failure",
+      rejected: false,
+      malformed: true,
+    },
+    {
+      name: "accepted owner mismatch",
+      response: () =>
+        Promise.resolve(
+          Response.json(
+            {
+              ok: true,
+              status: "accepted",
+              sessionId: "different-private-child",
+              recoveryBinding: binding,
+            },
+            { status: 202 },
+          ),
+        ),
+      phase: "transport_acceptance",
+      category: "unclassified_failure",
+      rejected: false,
+      malformed: false,
+    },
+  ])(
+    "reports $name without changing transport errors or retrying",
+    async ({ response, phase, category, rejected, malformed }) => {
+      const sink = vi.fn<HostedSubmissionDiagnosticSink>();
+      const fetchImplementation = vi.fn<typeof fetch>(() => response());
+      const transport = createSameOriginEveTransport({
+        config,
+        fetchImplementation,
+        workloadIdentity: identity(),
+        onSubmissionDiagnostic: sink,
+      });
+      const unknownError = malformed ? z.ZodError : SubmissionOutcomeUnknownError;
+      await expect(
+        transport.activateRecovery?.({ operationId: recovery.operationId, recovery, principal }),
+      ).rejects.toBeInstanceOf(rejected ? SubmissionRejectedBeforeDispatchError : unknownError);
+      expect(sink).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          phase,
+          category,
+          operationKind: "start",
+          operationIdHash: `sha256:${createHash("sha256").update(recovery.operationId).digest("hex")}`,
+        }),
+      );
+      expect(fetchImplementation).toHaveBeenCalledOnce();
+      const logged = JSON.stringify(sink.mock.calls);
+      for (const privateValue of [
+        secret,
+        recovery.operationId,
+        recovery.sourceOwnerRunId,
+        recovery.sourcePublicSessionId,
+        recovery.logicalSessionId,
+        binding.ownerRunId,
+      ]) {
+        expect(logged).not.toContain(privateValue);
+      }
+    },
+  );
+});

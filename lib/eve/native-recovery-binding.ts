@@ -52,6 +52,29 @@ const samePrincipal = (left: HostedPrincipal, right: HostedPrincipal): boolean =
     [...right.scopes].toSorted(),
   ]);
 
+type NativeRecoveryActivationStage =
+  | "source_authorization"
+  | "committed_operation"
+  | "child_lookup_principal"
+  | "child_receipt_authority"
+  | "child_cancellation"
+  | "authorized";
+
+/** Fixed labels only: never log recovery inputs, identities, records, or thrown errors. */
+const reportNativeRecoveryActivation = (stage: NativeRecoveryActivationStage): void => {
+  try {
+    console.info(
+      JSON.stringify({
+        event: "builder.native_recovery_activation",
+        outcome: stage === "authorized" ? "authorized" : "failed",
+        stage,
+      }),
+    );
+  } catch {
+    // Observation cannot change recovery authorization or activation.
+  }
+};
+
 /** The native collector calls this before reading any private history. */
 // eslint-disable-next-line eslint/func-style -- Preserve a named factory for the private channel composition boundary.
 export function createNativeRecoveryBinding(input: {
@@ -98,27 +121,38 @@ export function createNativeRecoveryBinding(input: {
       await authorize(call);
     },
     async authorizeActivation(call: RecoveryCall): Promise<void> {
-      const { operation, principal, source } = await authorize(call);
-      if (operation.state !== "succeeded" || operation.kind !== "start") {
-        throw new Error("Recovery public child is not committed.");
-      }
-      const child = await input.store.getSession(principal, operation.sessionId);
-      if (child === null || !samePrincipal(child.principal, principal)) {
-        throw new Error("Recovery public child is unavailable.");
-      }
-      assertRecoveredBuildContinuationChild(
-        call.descriptor.originalAuthoritySessionId,
-        call.descriptor.logicalSessionId,
-        source,
-        child,
-        operation,
-      );
-      const durableChild = toDurableHostedSessionRecord(child);
-      if (
-        child.status === "cancelled" ||
-        (durableChild.cancellationRevision ?? 0) !== (durableChild.resumedCancellationRevision ?? 0)
-      ) {
-        throw new Error("Recovery public child was cancelled.");
+      let stage: NativeRecoveryActivationStage = "source_authorization";
+      try {
+        const { operation, principal, source } = await authorize(call);
+        stage = "committed_operation";
+        if (operation.state !== "succeeded" || operation.kind !== "start") {
+          throw new Error("Recovery public child is not committed.");
+        }
+        stage = "child_lookup_principal";
+        const child = await input.store.getSession(principal, operation.sessionId);
+        if (child === null || !samePrincipal(child.principal, principal)) {
+          throw new Error("Recovery public child is unavailable.");
+        }
+        stage = "child_receipt_authority";
+        assertRecoveredBuildContinuationChild(
+          call.descriptor.originalAuthoritySessionId,
+          call.descriptor.logicalSessionId,
+          source,
+          child,
+          operation,
+        );
+        stage = "child_cancellation";
+        const durableChild = toDurableHostedSessionRecord(child);
+        if (
+          child.status === "cancelled" ||
+          (durableChild.cancellationRevision ?? 0) !==
+            (durableChild.resumedCancellationRevision ?? 0)
+        ) {
+          throw new Error("Recovery public child was cancelled.");
+        }
+        stage = "authorized";
+      } finally {
+        reportNativeRecoveryActivation(stage);
       }
     },
     async readReceipt(call: RecoveryCall): Promise<NativeRecoveryBinding | null> {

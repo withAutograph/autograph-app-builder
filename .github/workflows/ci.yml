@@ -248,7 +248,12 @@ jobs:
                   deployment_url="$(printf '%s' "$status" | jq -r '.environment_url // empty')"
                   [ -n "$deployment_url" ] && break
                   ;;
-                failure|error|inactive)
+                inactive)
+                  # A canceled duplicate may mark this exact-source record inactive
+                  # before the automatic deployment reports its current success.
+                  # Keep the existing bounded wait; never reuse an older success.
+                  ;;
+                failure|error)
                   echo "Exact deployment $deployment_id ended with status $state; no current deployment proof."
                   exit 1
                   ;;

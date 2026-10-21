@@ -635,7 +635,13 @@ describe("image lifecycle", () => {
           },
           input: "ghcr.io\n",
         });
-        expect(result.status, result.stderr).toBe(0);
+        const spawnFailure = JSON.stringify({
+          errorCode:
+            result.error !== undefined && "code" in result.error ? result.error.code : undefined,
+          errorName: result.error?.name,
+          signal: result.signal,
+        });
+        expect(result.status, spawnFailure).toBe(0);
       });
       expect(
         execFileSync(
