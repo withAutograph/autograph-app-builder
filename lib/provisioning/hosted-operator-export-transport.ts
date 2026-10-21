@@ -43,6 +43,11 @@ export const tenantExportTransportRequestSchema = z.discriminatedUnion("action",
       "Select one export customer scope.",
     ),
   z.strictObject({
+    action: z.literal("export-read"),
+    exportId: z.uuid(),
+    ownerContext: operatorOwnerContextSchema,
+  }),
+  z.strictObject({
     action: z.literal("export-status"),
     exportId: z.uuid(),
     ownerContext: operatorOwnerContextSchema,
@@ -60,6 +65,9 @@ export const tenantExportPlannedSchema = z.strictObject({
 });
 
 export type TenantExportTransportRequest = z.infer<typeof tenantExportTransportRequestSchema>;
+
+const isArtifactReadAction = (action: TenantExportTransportRequest["action"]) =>
+  action === "export-status" || action === "export-read" || action === "export-approval";
 
 const verifiedWorkloadToken = (carrier: string | null) => {
   if (carrier === null || !carrier.startsWith("Bearer ")) {
@@ -103,7 +111,7 @@ export const createTenantExportDispatcher =
         selected = parsed.selection;
       } else {
         const exportId =
-          parsed.action === "export-status"
+          parsed.action === "export-status" || parsed.action === "export-read"
             ? parsed.exportId
             : z.uuid().parse(parsed.planRef.split("/").at(-1));
         const saved = await dependencies.store.read({
@@ -122,8 +130,7 @@ export const createTenantExportDispatcher =
       }
       planStage = "dispatcher_owner_authorization";
       const context =
-        (parsed.action === "export-status" || parsed.action === "export-approval") &&
-        savedContext !== undefined
+        isArtifactReadAction(parsed.action) && savedContext !== undefined
           ? await dependencies.authorizeRead(frozenWorkloadRequest, savedContext)
           : await dependencies.authorize(frozenWorkloadRequest, selected, parsed.ownerContext);
       if (dependencies.bindWorkload !== undefined) {
@@ -141,6 +148,10 @@ export const createTenantExportDispatcher =
             throw new HostedOperatorError("export_customer_selection_required");
           }
           result = await operations.plan(context, customerId, parsed.idempotencyKey, onPlanStage);
+          break;
+        }
+        case "export-read": {
+          result = await operations.readPlan(context, parsed.exportId);
           break;
         }
         case "export-status": {

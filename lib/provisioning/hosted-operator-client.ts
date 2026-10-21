@@ -501,6 +501,11 @@ export const createHostedOperatorClient = (input: {
         ),
       );
     },
+    async readTenantExport(exportId: string, signal?: AbortSignal) {
+      return tenantExportPlannedSchema.parse(
+        await sendExport({ action: "export-read", exportId, ownerContext: exportOwner() }, signal),
+      );
+    },
     async tenantExportStatus(exportId: string, signal?: AbortSignal) {
       return tenantExportStatusSchema.parse(
         await sendExport(
