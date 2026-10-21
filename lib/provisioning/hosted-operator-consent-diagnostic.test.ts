@@ -1977,6 +1977,23 @@ describe("continuity planning failure diagnostics", () => {
 
 describe("closed export planning diagnostics", () => {
   it.each([
+    "tool_client_resolution",
+    "tool_preview_target",
+    "tool_project_mismatch",
+    "tool_branch_mismatch",
+    "tool_missing_customer",
+    "tool_plan_request",
+  ] as const)("labels %s as a sanitized Builder boundary", (stage) => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    reportExportPlanningFailure(secret, stage, new Error(secret), sink);
+    expect(sink.mock.calls[0]?.[0]).toMatchObject({
+      boundary: "builder",
+      exportPlanningFailure: { stage, errorClass: "unexpected" },
+    });
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
+
+  it.each([
     [new HostedOperatorError("resource_mismatch"), "operator_error"],
     [z.string().safeParse(4).error, "validation_error"],
     [new TypeError(secret), "type_error"],

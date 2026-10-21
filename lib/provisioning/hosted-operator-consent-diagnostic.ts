@@ -196,6 +196,12 @@ const continuityPlanningFailure = z.strictObject({
 });
 
 const exportPlanningStage = z.enum([
+  "tool_client_resolution",
+  "tool_preview_target",
+  "tool_project_mismatch",
+  "tool_branch_mismatch",
+  "tool_missing_customer",
+  "tool_plan_request",
   "dispatcher_workload_verification",
   "dispatcher_owner_authorization",
   "plan_owner_authorization",
@@ -1146,7 +1152,7 @@ export const reportExportPlanningFailure = (
       sessionId,
       sink,
     )({
-      boundary: "operator",
+      boundary: planStage.startsWith("tool_") ? "builder" : "operator",
       phase: "inline",
       stage: "operator_request",
       outcome: "setup_unavailable",

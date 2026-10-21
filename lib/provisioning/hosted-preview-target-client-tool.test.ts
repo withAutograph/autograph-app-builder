@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
 /* oxlint-disable anti-slop/no-module-mocking -- Isolate private operator transport and Eve authorization while exercising the production client and tool. */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHostedOperatorClient } from "./hosted-operator-client";
 import { z } from "zod";
 import type { OperatorSelection } from "./hosted-operator-contract";
@@ -10,6 +11,7 @@ const hooks = vi.hoisted(() => ({
   authorize: vi.fn(),
   client: vi.fn(),
   request: vi.fn(),
+  export: vi.fn(),
   resolve: vi.fn(),
 }));
 vi.mock("eve/tools", () => ({ defineTool: <T>(tool: T) => tool }));
@@ -39,6 +41,7 @@ const request = {
   sessionId: selection.sessionId,
 };
 const ctx = {
+  callId: "owned-tool-call",
   abortSignal: new AbortController().signal,
   session: { auth: { owner: true }, id: "adapter-session" },
 };
@@ -159,5 +162,128 @@ describe("private hosted runtime planning target", () => {
       { ...request, sessionId: ctx.session.id },
       ctx.abortSignal,
     );
+  });
+});
+
+describe("closed export tool pre-dispatch diagnostics", () => {
+  const customerId = "private-customer";
+  const exportInput = { ...input, operation: "export" as const };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    hooks.resolve.mockResolvedValue(selection);
+    hooks.export.mockResolvedValue({ status: "planned" });
+    hooks.client.mockResolvedValue({
+      request: hooks.request,
+      resolvePreviewTarget: hooks.resolve,
+      planTenantExport: hooks.export,
+      sessionId: selection.sessionId,
+    });
+  });
+  afterEach(() => vi.restoreAllMocks());
+  const expectFailure = (
+    stage: string,
+    errorClass = "operator_error",
+    sessionId = selection.sessionId,
+  ) => {
+    expect(console.info).toHaveBeenCalledWith("[builder:hosted-neon-consent]", {
+      boundary: "builder",
+      phase: "inline",
+      stage: "operator_request",
+      outcome: "setup_unavailable",
+      event: "builder.hosted_neon_consent",
+      sessionIdHash: `sha256:${createHash("sha256").update(sessionId).digest("hex")}`,
+      exportPlanningFailure: { stage, errorClass },
+    });
+    expect(JSON.stringify(vi.mocked(console.info).mock.calls)).not.toContain(customerId);
+    expect(JSON.stringify(vi.mocked(console.info).mock.calls)).not.toContain(selection.sessionId);
+    expect(JSON.stringify(vi.mocked(console.info).mock.calls)).not.toContain(selection.projectId);
+  };
+  it.each([
+    [{ projectId: "private-other-project", customerId }, "tool_project_mismatch"],
+    [{ branch: "private-other-branch", customerId }, "tool_branch_mismatch"],
+    [{}, "tool_missing_customer"],
+  ] as const)("identifies the existing local guard %# without dispatch", async (hints, stage) => {
+    expect(await planTool.execute({ ...exportInput, ...hints }, toolCtx)).toEqual({
+      ...blocked,
+      approvedPreviewTarget: selection,
+    });
+    expectFailure(stage);
+    expect(hooks.resolve).toHaveBeenCalledOnce();
+    expect(hooks.export).not.toHaveBeenCalled();
+    expect(hooks.request).not.toHaveBeenCalled();
+    expect(hooks.authorize).not.toHaveBeenCalled();
+  });
+  it("identifies target resolution failure using the canonical session", async () => {
+    hooks.resolve.mockRejectedValueOnce(new HostedOperatorError("resource_mismatch"));
+    expect(await planTool.execute({ ...exportInput, customerId }, toolCtx)).toEqual(blocked);
+    expectFailure("tool_preview_target");
+    expect(hooks.export).not.toHaveBeenCalled();
+  });
+  it("identifies client construction failure before canonical identity is available", async () => {
+    hooks.client.mockRejectedValueOnce(new HostedOperatorError("resource_mismatch"));
+    expect(await planTool.execute({ ...exportInput, customerId }, toolCtx)).toEqual(blocked);
+    expectFailure("tool_client_resolution", "operator_error", ctx.session.id);
+    expect(hooks.resolve).not.toHaveBeenCalled();
+  });
+  it.each([
+    [new HostedOperatorError("resource_mismatch"), "operator_error", "resource_mismatch"],
+    [
+      new TypeError("private-token https://private.example/export"),
+      "type_error",
+      "operator_unavailable",
+    ],
+  ] as const)(
+    "identifies export client request failure %# without exposing exception details",
+    async (failure, errorClass, code) => {
+      hooks.export.mockRejectedValueOnce(failure);
+      expect(await planTool.execute({ ...exportInput, customerId }, toolCtx)).toEqual({
+        ...blocked,
+        code,
+      });
+      expectFailure("tool_plan_request", errorClass);
+      expect(hooks.export).toHaveBeenCalledWith(selection, customerId, ctx.callId, ctx.abortSignal);
+      expect(JSON.stringify(vi.mocked(console.info).mock.calls)).not.toContain("private-token");
+      expect(JSON.stringify(vi.mocked(console.info).mock.calls)).not.toContain("private.example");
+    },
+  );
+  it("preserves successful dispatch and produces no failure diagnostic", async () => {
+    const result = { status: "planned", retained: true };
+    hooks.export.mockResolvedValueOnce(result);
+    expect(await planTool.execute({ ...exportInput, customerId }, toolCtx)).toBe(result);
+    expect(hooks.resolve).toHaveBeenCalledOnce();
+    expect(hooks.export).toHaveBeenCalledOnce();
+    expect(hooks.request).not.toHaveBeenCalled();
+    expect(console.info).not.toHaveBeenCalled();
+  });
+  it("preserves the existing blocked result when the diagnostic sink throws", async () => {
+    vi.mocked(console.info).mockImplementation(() => {
+      throw new Error("private-sink");
+    });
+    expect(await planTool.execute(exportInput, toolCtx)).toEqual({
+      ...blocked,
+      approvedPreviewTarget: selection,
+    });
+    expect(hooks.export).not.toHaveBeenCalled();
+  });
+  it("preserves the existing blocked result when diagnostic context lookup throws", async () => {
+    let reads = 0;
+    hooks.client.mockResolvedValueOnce({
+      resolvePreviewTarget: hooks.resolve,
+      planTenantExport: hooks.export,
+      get sessionId() {
+        reads += 1;
+        if (reads > 1) {
+          throw new Error("private-context");
+        }
+        return selection.sessionId;
+      },
+    });
+    expect(await planTool.execute(exportInput, toolCtx)).toEqual({
+      ...blocked,
+      approvedPreviewTarget: selection,
+    });
+    expect(console.info).not.toHaveBeenCalled();
+    expect(hooks.export).not.toHaveBeenCalled();
   });
 });
