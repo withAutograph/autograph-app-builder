@@ -74,6 +74,8 @@ import * as deploymentDelivery from "./hosted-operator-deployment-delivery";
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Inspect the environment verification context without a provider request.
 import * as gatewayBindingAdapter from "./hosted-operator-gateway-bindings";
 import type { HostedOperatorNormalActorPlanningPorts } from "./hosted-operator-composition";
+import type { CompiledOperatorReleaseSelection } from "./hosted-operator-artifact-selection";
+import { appDescriptionSchema } from "../repository/app-description";
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy only on the independent verified identity boundary.
 import * as realmIdentity from "./hosted-operator-auth-identity";
 
@@ -125,6 +127,30 @@ const resource = (name: string) => ({
   resourceId: `${name}-resource`,
   runtimeRole: `${name}_runtime`,
 });
+const currentSourceDescription = appDescriptionSchema.parse({
+  app: { id: "actual", routes: ["/"], workspacePath: "apps/current-source" },
+  backend: { kind: "static" },
+  deployment: { framework: "nextjs", sourceFilesOutsideRootDirectory: true },
+  validation: { browser: null, check: { task: "check" }, test: { shards: 1, task: "test" } },
+  version: 1,
+});
+const currentPublishedSelection = {
+  appId: "actual",
+  appSpecDigest: "a".repeat(64),
+  artifactRef: "current-source",
+  manifestSha256: "b".repeat(64),
+  releaseId: "current-release",
+  schemaSha256: "c".repeat(64),
+  version: 1,
+  publishedSource: {
+    branch: "current-branch",
+    changeSetDigest: "d".repeat(64),
+    gitSha: "e".repeat(40),
+    gitTree: "f".repeat(40),
+    repositoryId: "current-repository",
+    reviewDigest: "b".repeat(64),
+  },
+} satisfies CompiledOperatorReleaseSelection;
 const authority = {
   audience: "https://builder.example/mcp",
   issuer: "https://builder.example/api/auth",
@@ -504,6 +530,64 @@ describe("final verifier entry diagnostics", () => {
 });
 
 describe("app publication binding at plan renewal", () => {
+  it("plans the actual described root for an older selected source with no target profile", async () => {
+    const f = publicationFixture({ repoId: "initial-repository", gitSha: "c".repeat(40) });
+    const legacyDescription = appDescriptionSchema.parse({
+      ...currentSourceDescription,
+      deployment: undefined,
+    });
+    const plan = await resolveFullPlan(
+      bootstrapWithGatewayOrigin("https://gateway.example"),
+      context,
+      f.configuration,
+      f.controlPlane,
+      {},
+      false,
+      false,
+      currentPublishedSelection,
+      undefined,
+      undefined,
+      undefined,
+      legacyDescription,
+    );
+    expect(plan.delivery?.projectSettings).toEqual({ rootDirectory: "apps/current-source" });
+    expect(f.configuration.applications.actual?.projectSettings).toBeUndefined();
+  });
+  it("freezes the selected source profile into a new app plan without changing configured settings", async () => {
+    const f = publicationFixture({ repoId: "initial-repository", gitSha: "c".repeat(40) });
+    const application = f.configuration.applications.actual;
+    if (application === undefined) {
+      throw new Error("Fixture app is missing");
+    }
+    application.projectSettings = {
+      framework: "vite",
+      rootDirectory: "apps/initial-registration",
+      sourceFilesOutsideRootDirectory: false,
+    };
+    const plan = await resolveFullPlan(
+      bootstrapWithGatewayOrigin("https://gateway.example"),
+      context,
+      f.configuration,
+      f.controlPlane,
+      {},
+      false,
+      false,
+      currentPublishedSelection,
+      undefined,
+      undefined,
+      undefined,
+      currentSourceDescription,
+    );
+    expect(plan.delivery?.projectSettings).toEqual({
+      framework: "nextjs",
+      rootDirectory: "apps/current-source",
+      sourceFilesOutsideRootDirectory: true,
+    });
+    expect(plan.delivery?.gitSha).toBe(currentPublishedSelection.publishedSource.gitSha);
+    expect(f.configuration.applications.actual?.projectSettings?.rootDirectory).toBe(
+      "apps/initial-registration",
+    );
+  });
   it("keeps Auth bootstrap available without app publication fields before identity capture", async () => {
     const f = publicationFixture();
     f.readCapturedRealmIdentity.mockResolvedValue(null);
@@ -1311,6 +1395,29 @@ describe("participant plan resolution", () => {
     expect(result.normalActorPreparation?.accountApprovalId).toBe("first-account-approval");
     expect(f.readCapturedRealmIdentity).not.toHaveBeenCalled();
     expect(JSON.stringify(result)).not.toContain("private-account-state");
+  });
+  it("uses the selected source profile in a new participant app plan", async () => {
+    const f = participantResolutionFixture();
+    const result = await resolveFullPlan(
+      f.base,
+      context,
+      f.configuration,
+      f.ports,
+      {},
+      true,
+      true,
+      currentPublishedSelection,
+      undefined,
+      undefined,
+      undefined,
+      currentSourceDescription,
+    );
+    expect(result.delivery?.projectSettings).toEqual({
+      framework: "nextjs",
+      rootDirectory: "apps/current-source",
+      sourceFilesOutsideRootDirectory: true,
+    });
+    expect(result.delivery?.repoId).toBe(currentPublishedSelection.publishedSource.repositoryId);
   });
   it("rejects participant grants outside the current captured release roles", async () => {
     const f = participantResolutionFixture();
@@ -2195,6 +2302,27 @@ describe("existing populated Auth workflow planning", () => {
 
   it("composes prepared Preview restoration entirely from the selected frozen release", async () => {
     const f = await settledAppPlanningFixture();
+    const application = f.configuration.applications.actual;
+    if (application === undefined) {
+      throw new Error("Fixture app is missing");
+    }
+    application.projectSettings = {
+      framework: "vite",
+      rootDirectory: "apps/initial-registration",
+      sourceFilesOutsideRootDirectory: false,
+    };
+    vi.mocked(f.controlPlane.readGeneratedRelease).mockResolvedValue({
+      description: appDescriptionSchema.parse({
+        ...currentSourceDescription,
+        backend: {
+          authorization: "app-owned",
+          kind: "generated-postgres",
+          release: { artifactHash: "sha256:source", directory: "release", id: "current-release" },
+          roles: ["member"],
+          runtime: { databaseEnvironment: "APP_DATABASE_URL" },
+        },
+      }),
+    } as Awaited<ReturnType<typeof f.controlPlane.readGeneratedRelease>>);
     const readSelection = vi.mocked(planningAuthority.readOwnedOperatorPlanningSelection);
     const frozenSelection = {
       appId: context.target.appId,
@@ -2244,6 +2372,14 @@ describe("existing populated Auth workflow planning", () => {
       sha256: frozenSelection.manifestSha256,
     });
     expect(result.delivery?.gitSha).toBe(frozenSelection.publishedSource?.gitSha);
+    expect(result.delivery?.projectSettings).toEqual({
+      framework: "nextjs",
+      rootDirectory: "apps/current-source",
+      sourceFilesOutsideRootDirectory: true,
+    });
+    expect(f.configuration.applications.actual?.projectSettings?.rootDirectory).toBe(
+      "apps/initial-registration",
+    );
     expect(f.controlPlane.readGeneratedRelease).toHaveBeenCalledWith(
       expect.objectContaining(context),
       frozenSelection,

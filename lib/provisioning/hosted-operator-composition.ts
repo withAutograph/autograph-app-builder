@@ -98,6 +98,7 @@ import {
 import { createHostedOperatorPublicGateway } from "./hosted-operator-public-gateway";
 import { resolvePublishedAppDelivery } from "./hosted-operator-published-app-delivery";
 import type { CompiledOperatorReleaseSelection } from "./hosted-operator-artifact-selection";
+import type { AppDescription } from "../repository/app-description";
 import { createHostedOperatorEnvironmentBindings } from "./hosted-operator-environment-bindings";
 import { createHostedOperatorAppReadiness } from "./hosted-operator-app-readiness";
 import {
@@ -758,6 +759,7 @@ const resolveParticipantPlan = async (
     assertCurrent: () => Promise<void>;
   },
   currentAppRoles?: readonly string[],
+  sourceDescription?: AppDescription,
 ): Promise<HostedOperatorPlan> => {
   if (!participantsBootstrapPrepared) {
     return base;
@@ -806,7 +808,7 @@ const resolveParticipantPlan = async (
   const proposedAccess = proposedAccessWithinCurrentRoles(program, state, allowedAppRoles);
   const appTrustedSources = appTrustedSourcesForNewPlan(base, configuration);
   const gatewayBindings = gatewayBindingsForNewAppPlan(base);
-  const delivery = resolvePublishedAppDelivery(application, selectedRelease);
+  const delivery = resolvePublishedAppDelivery(application, selectedRelease, sourceDescription);
   const organizations = await controlPlane.readNormalActorOrganizationProofs({
     ...context,
     plan: base,
@@ -921,6 +923,7 @@ export const resolveFullPlan = async (
     assertCurrent: () => Promise<void>;
   },
   currentAppRoles?: readonly string[],
+  sourceDescription?: AppDescription,
 ): Promise<HostedOperatorPlan> => {
   if (base.normalActorProgram !== undefined) {
     return await resolveParticipantPlan(
@@ -935,6 +938,7 @@ export const resolveFullPlan = async (
       selectedRelease,
       completedBootstrap,
       currentAppRoles,
+      sourceDescription,
     );
   }
 
@@ -948,7 +952,7 @@ export const resolveFullPlan = async (
   // Only the app delivery plan needs the actual published Git source.
   const appTrustedSources = appTrustedSourcesForNewPlan(base, configuration);
   const gatewayBindings = gatewayBindingsForNewAppPlan(base);
-  const delivery = resolvePublishedAppDelivery(application, selectedRelease);
+  const delivery = resolvePublishedAppDelivery(application, selectedRelease, sourceDescription);
   const privateProof = await controlPlane.readCapturedRealmIdentityProof(context);
   const transportOrigin =
     base.deploymentBoundary?.verification.gatewayOrigin ?? captured.endpointOrigin;
@@ -1730,6 +1734,7 @@ export const composeHostedOperatorDependencies = (
           context.authSignupPolicy,
           completedBootstrap,
           currentAppRoles,
+          generatedRelease?.description,
         ),
     );
     return withExternallyManagedHostProtection(resolved, application.hostProtection);

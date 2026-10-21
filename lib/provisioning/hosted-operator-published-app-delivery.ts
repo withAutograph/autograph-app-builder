@@ -1,6 +1,7 @@
 import { HostedOperatorError } from "./hosted-operator-contract";
 import type { HostedOperatorPlan, OperatorPublicResult } from "./hosted-operator-contract";
 import type { CompiledOperatorReleaseSelection } from "./hosted-operator-artifact-selection";
+import type { AppDescription } from "../repository/app-description";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
 
 /** Hosted generated releases deploy their own published source, never a configured sample SHA. */
@@ -10,19 +11,25 @@ export const resolvePublishedAppDelivery = (
     "branch" | "gitSha" | "projectId" | "projectSettings" | "repoId"
   >,
   selectedRelease?: CompiledOperatorReleaseSelection,
+  sourceDescription?: AppDescription,
 ): NonNullable<HostedOperatorPlan["delivery"]> => {
   if (selectedRelease !== undefined) {
     const source = selectedRelease.publishedSource;
     if (source === undefined) {
       throw new HostedOperatorError("app_source_publication_required");
     }
+    const projectSettings =
+      sourceDescription === undefined
+        ? application.projectSettings
+        : {
+            ...(sourceDescription.deployment ?? application.projectSettings),
+            rootDirectory: sourceDescription.app.workspacePath,
+          };
     return {
       branch: source.branch,
       gitSha: source.gitSha,
       projectId: application.projectId,
-      ...(application.projectSettings === undefined
-        ? {}
-        : { projectSettings: application.projectSettings }),
+      ...(projectSettings === undefined ? {} : { projectSettings }),
       repoId: source.repositoryId,
     };
   }

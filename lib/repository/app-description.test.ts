@@ -28,6 +28,16 @@ describe("repository app description", () => {
   it("accepts the repository's absent optional authenticated schema receipt without inventing proof", async () => {
     const result = await runDescription(0, JSON.stringify(descriptor));
     expect(result.backend).toMatchObject({ kind: "generated-postgres", schemaReceipt: null });
+    expect(result.deployment).toBeUndefined();
+  });
+  it("retains a declared source build profile with an explicit nullable command", async () => {
+    const deployment = {
+      buildCommand: null,
+      framework: "nextjs",
+      sourceFilesOutsideRootDirectory: true,
+    };
+    const result = await runDescription(0, JSON.stringify({ ...descriptor, deployment }));
+    expect(result.deployment).toEqual(deployment);
   });
   it("retains exit status and repository diagnostic while redacting credentials", async () => {
     await expect(

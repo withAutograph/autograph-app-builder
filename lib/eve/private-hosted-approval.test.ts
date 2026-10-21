@@ -771,9 +771,66 @@ describe("private approval delta checkpoints", () => {
 
 const recoveredApprovalFixture = async (outcome: "approved" | "cancelled", cold: boolean) => {
   const original = await startedStore();
-  const child = await startedStore();
-  const childId = child.sessionId;
   const originalId = original.sessionId;
+  await original.store.observeSession({
+    checkpoint: { capturedAtEpochMs: 10, events: [], status: "failed", version: 1 },
+    nowEpochMs: 10,
+    principal,
+    resumability: "terminal",
+    sessionId: originalId,
+    stage: "needs_attention",
+  });
+  // oxlint-disable-next-line eslint/require-await -- The recovery test transport has no model or provider.
+  const emptyRecovery = async () => ({ events: [], status: "waiting" as const });
+  const recoveryTransport: HostedEveTransport = {
+    cancel: emptyRecovery,
+    get: emptyRecovery,
+    respond: emptyRecovery,
+    send: emptyRecovery,
+    start: async (request) => {
+      if (request.recovery === undefined) {
+        throw new Error("Expected native recovery descriptor.");
+      }
+      const recoveryBinding = {
+        ...request.recovery,
+        ownerRunId: "child_physical",
+        provenance: {
+          kind: "completed-terminal-turn-input" as const,
+          sourceStepId: "source_step",
+          sourceEventId: "source_event",
+          sourceSlot: 1,
+          checkpointVersion: 1 as const,
+        },
+      };
+      await original.store.commitNativeRecoveryReceipt({
+        descriptor: request.recovery,
+        nowEpochMs: 10,
+        principal,
+        recoveryBinding,
+      });
+      return {
+        adapterSessionId: "child_physical",
+        recoveryBinding,
+        snapshot: await emptyRecovery(),
+      };
+    },
+    activateRecovery: async ({ operationId }) => {
+      const operation = await original.store.getPrivateOperation(principal, operationId);
+      if (operation?.state !== "succeeded" || operation.nativeRecoveryReceipt === undefined) {
+        throw new Error("Expected committed canonical recovery child and receipt.");
+      }
+      return operation.nativeRecoveryReceipt;
+    },
+  };
+  const recovered = await createHostedEveSessionService({
+    assertNativeRecoveryOwner: () => Promise.resolve(),
+    now: () => 10,
+    principal,
+    store: original.store,
+    transport: recoveryTransport,
+  }).start({ clientRequestId: randomUUID(), resumeSessionId: originalId });
+  const child = { sessionId: recovered.sessionId, store: original.store };
+  const childId = child.sessionId;
   const initial = await child.store.getSession(principal, childId);
   if (initial?.version !== 2) {
     throw new Error("Expected durable child fixture.");
@@ -792,24 +849,6 @@ const recoveredApprovalFixture = async (outcome: "approved" | "cancelled", cold:
     originAdapterSessionId: "child_physical",
     checkpointDigest: digest,
     checkpointRef: { digest, eventCount: 0, id: randomUUID() },
-    nativeRecoveryBinding: {
-      version: 1,
-      operationId: "recovery_operation",
-      sourcePublicSessionId: originalId,
-      sourceOwnerRunId: "original_physical",
-      sourceAdapterGeneration: 1,
-      logicalSessionId: "original_logical",
-      originalAuthoritySessionId: originalId,
-      parentCancellationRevision: 0,
-      ownerRunId: "child_physical",
-      provenance: {
-        kind: "completed-terminal-turn-input",
-        sourceStepId: "source_step",
-        sourceEventId: "source_event",
-        sourceSlot: 1,
-        checkpointVersion: 1,
-      },
-    },
   });
   const requestedPlan = hostedOperatorPlanSchema.parse({
     ...plan,
@@ -831,6 +870,7 @@ const recoveredApprovalFixture = async (outcome: "approved" | "cancelled", cold:
       const current = await child.store.getSession(candidate, id);
       return current === null ? null : storedChild;
     },
+    getPrivateOperation: child.store.getPrivateOperation.bind(child.store),
     listSessions: child.store.listSessions.bind(child.store),
     reserveOperation: child.store.reserveOperation.bind(child.store),
     settleSucceeded: child.store.settleSucceeded.bind(child.store),
@@ -860,6 +900,7 @@ const recoveredApprovalFixture = async (outcome: "approved" | "cancelled", cold:
   // oxlint-disable-next-line eslint/require-await -- Match asynchronous transport ports.
   const empty = async () => ({ events: [], status: "waiting" as const });
   const transport: HostedEveTransport = {
+    activateRecovery: recoveryTransport.activateRecovery,
     cancel: empty,
     get: empty,
     respond: empty,

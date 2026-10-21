@@ -191,6 +191,13 @@ Target onboarding does not authorize database creation, actor grants or app
 publication. Ordinary app changes reuse the recorded target. Product roles come
 from the actual captured app description, including an empty role list; never
 invent roles or app-shape requirements to satisfy a check.
+When authoring or revising generated app source, declare its current Vercel build
+profile in the app package's `autograph.deployment` metadata when the source
+supports one: explicit `framework`, `sourceFilesOutsideRootDirectory`, and an
+optional `buildCommand`. The repository's `app:describe` supplies this metadata
+for the selected release; its `app.workspacePath` supplies `rootDirectory`.
+Update the declaration when the build profile changes. Do not infer a command
+from package scripts or reuse the initial target profile as current source proof.
 Present the returned concrete targets, app/Auth roles, access grants,
 effects, cost owner and retention. Pass that unchanged plan, digest and operation
 reference to `prepare-app-hosted-runtime` for separate effect approval. Read

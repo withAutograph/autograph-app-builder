@@ -6,6 +6,13 @@ import { generatedAppRoleSchema } from "./generated-app-role";
 const appId = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 export const appDescriptionSchema = z.object({
   app: z.object({ id: appId, routes: z.array(z.string()), workspacePath: z.string() }),
+  deployment: z
+    .object({
+      buildCommand: z.string().nullable().optional(),
+      framework: z.string().nullable(),
+      sourceFilesOutsideRootDirectory: z.boolean(),
+    })
+    .optional(),
   backend: z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("static") }),
     z.object({
