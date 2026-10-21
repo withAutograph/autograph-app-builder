@@ -502,8 +502,8 @@ export const createHostedOperatorOwnerAuthority = (deps: HostedOperatorOwnerDepe
     }
     return current;
   };
-  /** Recheck canonical artifact ownership without borrowing deployment authority. */
-  const assertArtifactAuthorized = async (input: HostedOperatorContext): Promise<void> => {
+  /** Read canonical artifact ownership without borrowing deployment authority. */
+  const readArtifactAuthorizedSession = async (input: HostedOperatorContext) => {
     const { owner, principal } = ownerContextFromHint(input.ownerContext);
     readRealmOwnerRestriction(deps, owner, input.target.appId);
     if (
@@ -522,6 +522,32 @@ export const createHostedOperatorOwnerAuthority = (deps: HostedOperatorOwnerDepe
       assertDirectOwnerIdentity(owner, principal, input.target, session, sessionVersion);
     } else {
       await readHandoffOwnerIdentity(deps, owner, principal, input.target, session, sessionVersion);
+    }
+    return session;
+  };
+  /** Recheck canonical artifact ownership without exposing the private session. */
+  const assertArtifactAuthorized = async (input: HostedOperatorContext): Promise<void> => {
+    await readArtifactAuthorizedSession(input);
+  };
+  /** Bind the selected logical Sandbox to current source-owned execution state. */
+  const assertSandboxAuthorized = async (
+    input: HostedOperatorContext,
+    sandboxId: string,
+  ): Promise<void> => {
+    const session = await readArtifactAuthorizedSession(input);
+    const decision = session.privateBuildDecision;
+    const currentSpec = decision?.currentSpec;
+    if (decision === undefined || currentSpec === undefined) {
+      throw unavailable();
+    }
+    const matchesOwnedSandbox = [
+      decision.adapterSessionId === session.adapterSessionId,
+      currentSpec.sessionId === session.adapterSessionId,
+      currentSpec.appId === input.target.appId,
+      currentSpec.workspaceId === sandboxId,
+    ].every(Boolean);
+    if (!matchesOwnedSandbox) {
+      throw unavailable();
     }
   };
   /** Workload plus canonical artifact ownership, without borrowing provider mutation authority. */
@@ -559,6 +585,7 @@ export const createHostedOperatorOwnerAuthority = (deps: HostedOperatorOwnerDepe
   return {
     verifyWorkload,
     assertArtifactAuthorized,
+    assertSandboxAuthorized,
     authorizeArtifactRead,
     assertAuthorized,
     assertPlanningAuthorized,

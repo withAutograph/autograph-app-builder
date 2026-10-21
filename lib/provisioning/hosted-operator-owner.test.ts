@@ -1,3 +1,4 @@
+import type { ApprovedBuildDecision } from "../agent/approved-build-continuation";
 import { createAppGatewaySourceSuccessorPlan } from "./hosted-operator-app-gateway-source-successor";
 import {
   mintRealmContinuationAuthority,
@@ -2552,6 +2553,180 @@ describe("Realm delegation at operator effect boundaries", () => {
       await expect(f.authority.assertAuthorized(f.context)).rejects.toMatchObject({
         code: "authorization_required",
       });
+    },
+  );
+});
+
+describe("hosted operator Sandbox ownership", () => {
+  const sandboxId = "owned-logical-sandbox";
+  const ownedFixture = (kind: "direct" | "handoff" = "direct") => {
+    const direct = kind === "direct" ? directSessionRecord() : undefined;
+    const fixture = makeFixture(direct);
+    const session = direct ?? fixture.currentSession;
+    const decision: ApprovedBuildDecision = {
+      adapterSessionId: session.adapterSessionId,
+      currentSpec: {
+        appId: selection.appId,
+        appSpecDigest: "a".repeat(64),
+        sessionId: session.adapterSessionId,
+        workspaceId: sandboxId,
+      },
+      decision: "working",
+      turnId: "current-turn",
+      turnSequence: 1,
+      version: 1,
+      workflowPhase: "reviewed",
+    };
+    session.privateBuildDecision = decision;
+    const owner = structuredClone(kind === "direct" ? directOwnerContext : ownerContext);
+    const context = {
+      authority: owner.authority,
+      ownerContext: owner,
+      target: hostedRuntimeTargetSchema.parse({
+        ...selection,
+        installationId: "icfg_1",
+        scopeId: "team_1",
+        scopeType: "team",
+      }),
+    };
+    return { ...fixture, session, decision, context };
+  };
+
+  it.each(["direct", "handoff"] as const)(
+    "authorizes the exact current %s Sandbox without an execution lease or provider read",
+    async (kind) => {
+      const fixture = ownedFixture(kind);
+      await expect(
+        fixture.authority.assertSandboxAuthorized(fixture.context, sandboxId),
+      ).resolves.toBeUndefined();
+      expect(fixture.eve.getSession).toHaveBeenCalledWith(principal, ownerContext.sessionId);
+      expectNoProviderReads(fixture);
+    },
+  );
+
+  it("rejects another logical Sandbox", async () => {
+    const fixture = ownedFixture();
+    await expect(
+      fixture.authority.assertSandboxAuthorized(fixture.context, "foreign-sandbox"),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    expectNoProviderReads(fixture);
+  });
+
+  it.each(["decision adapter", "spec adapter", "app", "missing decision", "missing spec"])(
+    "rejects %s state that cannot bind the current Sandbox",
+    async (mismatch) => {
+      const fixture = ownedFixture();
+      const spec = fixture.decision.currentSpec;
+      if (spec === undefined) {
+        throw new Error("Fixture has no current spec");
+      }
+      switch (mismatch) {
+        case "decision adapter": {
+          fixture.decision.adapterSessionId = "foreign-adapter";
+          break;
+        }
+        case "spec adapter": {
+          spec.sessionId = "foreign-adapter";
+          break;
+        }
+        case "app": {
+          spec.appId = "another-app";
+          break;
+        }
+        case "missing decision": {
+          Reflect.deleteProperty(fixture.session, "privateBuildDecision");
+          break;
+        }
+        case "missing spec": {
+          Reflect.deleteProperty(fixture.decision, "currentSpec");
+          break;
+        }
+        default: {
+          throw new Error("Unknown ownership fixture mismatch");
+        }
+      }
+      await expect(
+        fixture.authority.assertSandboxAuthorized(fixture.context, sandboxId),
+      ).rejects.toMatchObject({ code: "authorization_required" });
+      expectNoProviderReads(fixture);
+    },
+  );
+
+  it.each(["membership", "generation", "owner", "tenant", "public session"])(
+    "retains canonical %s denial before authorizing a Sandbox",
+    async (mismatch) => {
+      const fixture = ownedFixture();
+      switch (mismatch) {
+        case "membership": {
+          vi.mocked(fixture.membership.isMember).mockResolvedValue(false);
+          break;
+        }
+        case "generation": {
+          fixture.context.ownerContext.adapterGeneration += 1;
+          break;
+        }
+        case "owner": {
+          fixture.context.ownerContext.principal.ownerUserId = "another-owner";
+          break;
+        }
+        case "tenant": {
+          fixture.context.authority.workspaceId = "another-tenant";
+          break;
+        }
+        case "public session": {
+          fixture.context.target.sessionId = "another-public-session";
+          break;
+        }
+        default: {
+          throw new Error("Unknown ownership fixture mismatch");
+        }
+      }
+      await expect(
+        fixture.authority.assertSandboxAuthorized(fixture.context, sandboxId),
+      ).rejects.toMatchObject({ code: "authorization_required" });
+      expectNoProviderReads(fixture);
+    },
+  );
+
+  it("requires a fresh current-adapter decision after restore while preserving the inherited logical Sandbox", async () => {
+    const fixture = ownedFixture();
+    const spec = fixture.decision.currentSpec;
+    if (spec === undefined) {
+      throw new Error("Fixture has no current spec");
+    }
+    fixture.session.adapterGeneration += 1;
+    fixture.session.adapterSessionId = "restored-adapter";
+    fixture.context.ownerContext.adapterGeneration = fixture.session.adapterGeneration;
+    fixture.context.ownerContext.adapterSessionId = fixture.session.adapterSessionId;
+    await expect(
+      fixture.authority.assertSandboxAuthorized(fixture.context, sandboxId),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    fixture.decision.adapterSessionId = fixture.session.adapterSessionId;
+    spec.sessionId = fixture.session.adapterSessionId;
+    await expect(
+      fixture.authority.assertSandboxAuthorized(fixture.context, sandboxId),
+    ).resolves.toBeUndefined();
+    await expect(
+      fixture.authority.assertSandboxAuthorized(fixture.context, "replacement-sandbox"),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    expectNoProviderReads(fixture);
+  });
+
+  it.each(["working", "runnable", "waiting-input", "blocked", "settled"] as const)(
+    "preserves Sandbox ownership across ordinary spec changes and %s state",
+    async (state) => {
+      const fixture = ownedFixture();
+      fixture.decision.decision = state;
+      const spec = fixture.decision.currentSpec;
+      if (spec === undefined) {
+        throw new Error("Fixture has no current spec");
+      }
+      spec.appSpecDigest = "b".repeat(64);
+      spec.proposalDigest = "c".repeat(64);
+      await expect(
+        fixture.authority.assertSandboxAuthorized(fixture.context, sandboxId),
+      ).resolves.toBeUndefined();
+      expectNoProviderReads(fixture);
     },
   );
 });
