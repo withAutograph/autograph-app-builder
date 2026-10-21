@@ -159,12 +159,11 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
       }
 
       const { authority, principal } = exactGitHubPublicationAuthority(sessionAuth);
-      const [selectedInstallationId, pool] = await Promise.all([
-        selectedPublicationInstallation(selection, () =>
-          dependencies.readPreparedHandoff(sessionAuth),
-        ),
-        database(),
-      ]);
+      const selectedInstallationId = await selectedPublicationInstallation(selection, () =>
+        dependencies.readPreparedHandoff(sessionAuth),
+      );
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Reject unavailable handoff authority before opening the database pool.
+      const pool = await database();
       const membership = dependencies.membership(pool);
       if (
         !(await membership.isMember({
