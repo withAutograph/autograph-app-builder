@@ -12,8 +12,14 @@ import {
 } from "@/lib/provisioning/hosted-operator-contract";
 import { withAppPublicationGuidance } from "@/lib/provisioning/hosted-operator-published-app-delivery";
 import { normalActorProgramSchema } from "@/lib/provisioning/hosted-operator-normal-actor-program";
-import { reportContinuityPlanningFailure } from "@/lib/provisioning/hosted-operator-consent-diagnostic";
-import type { ContinuityPlanningStage } from "@/lib/provisioning/hosted-operator-consent-diagnostic";
+import {
+  reportContinuityPlanningFailure,
+  reportExportPlanningFailure,
+} from "@/lib/provisioning/hosted-operator-consent-diagnostic";
+import type {
+  ContinuityPlanningStage,
+  ExportPlanningStage,
+} from "@/lib/provisioning/hosted-operator-consent-diagnostic";
 
 export default defineTool({
   description:
@@ -35,6 +41,8 @@ export default defineTool({
       try {
         if (input.operation === "continuity") {
           reportContinuityPlanningFailure(ctx.session.id, "tool_client_resolution", error);
+        } else if (input.operation === "export") {
+          reportExportPlanningFailure(ctx.session.id, "tool_client_resolution", error);
         }
       } catch {
         /* Diagnostic context lookup must preserve the original failure. */
@@ -42,6 +50,19 @@ export default defineTool({
       return blocked(error instanceof HostedOperatorError ? error.code : "operator_unavailable");
     }
     const { operation } = input;
+    const reportExportFailure = (
+      stage: ExportPlanningStage,
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Diagnostic rejection boundaries classify arbitrary thrown values without exposing them.
+      error: unknown,
+    ) => {
+      try {
+        if (operation === "export") {
+          reportExportPlanningFailure(operator.sessionId ?? ctx.session.id, stage, error);
+        }
+      } catch {
+        /* Diagnostic context lookup must preserve the original blocked result. */
+      }
+    };
     if (operation === "prepare") {
       // Leave Eve's authorization control flow outside the ordinary blocked-result catch.
       const authorizationFailure = await authorizeHostedNeonForTool(ctx, operator);
@@ -50,6 +71,7 @@ export default defineTool({
       }
     }
     let continuityStage: ContinuityPlanningStage = "tool_preview_target";
+    let exportStage: ExportPlanningStage = "tool_preview_target";
     try {
       const selection = await operator.resolvePreviewTarget(
         {
@@ -63,6 +85,15 @@ export default defineTool({
         (input.projectId !== undefined && input.projectId !== selection.projectId) ||
         (input.branch !== undefined && input.branch !== selection.branch)
       ) {
+        try {
+          const mismatchStage =
+            input.projectId !== undefined && input.projectId !== selection.projectId
+              ? "tool_project_mismatch"
+              : "tool_branch_mismatch";
+          reportExportFailure(mismatchStage, new HostedOperatorError("resource_mismatch"));
+        } catch {
+          /* Diagnostic context lookup must preserve the original blocked result. */
+        }
         return blocked("resource_mismatch", selection);
       }
       if (operation === "continuity") {
@@ -81,8 +112,13 @@ export default defineTool({
       }
       if (operation === "export") {
         if (input.customerId === undefined) {
+          reportExportFailure(
+            "tool_missing_customer",
+            new HostedOperatorError("resource_mismatch"),
+          );
           return blocked("resource_mismatch", selection);
         }
+        exportStage = "tool_plan_request";
         return await operator.planTenantExport(
           selection,
           input.customerId,
@@ -110,6 +146,8 @@ export default defineTool({
       try {
         if (operation === "continuity") {
           reportContinuityPlanningFailure(ctx.session.id, continuityStage, error);
+        } else if (operation === "export") {
+          reportExportFailure(exportStage, error);
         }
       } catch {
         /* Diagnostic context lookup must preserve the original failure. */
