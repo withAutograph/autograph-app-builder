@@ -40,6 +40,71 @@ const value: HostedOperatorConsentMetadata = {
 };
 
 describe("closed Neon consent diagnostics", () => {
+  it("keeps routine owner reauthorization progress out of the default console", () => {
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const report = createHostedOperatorConsentDiagnostic(secret);
+      for (const stage of [
+        "owner_configuration",
+        "owner_authority",
+        "owner_membership",
+        "owner_session_binding",
+      ] as const) {
+        for (const outcome of ["started", "verified"] as const) {
+          report({ boundary: "builder", phase: "inline", stage, outcome });
+        }
+      }
+      expect(log).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("retains owner failures and other progress on the default console", () => {
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const report = createHostedOperatorConsentDiagnostic(secret);
+      for (const stage of [
+        "owner_configuration",
+        "owner_authority",
+        "owner_membership",
+        "owner_session_binding",
+      ] as const) {
+        report({ boundary: "builder", phase: "inline", stage, outcome: "operator_access_denied" });
+        expect(log.mock.calls.at(-1)?.[1]).toMatchObject({
+          stage,
+          outcome: "operator_access_denied",
+        });
+      }
+      report(value);
+      expect(log.mock.calls.at(-1)?.[1]).toMatchObject(value);
+      report({
+        boundary: "operator",
+        phase: "inline",
+        stage: "owner_authority",
+        outcome: "verified",
+      });
+      expect(log.mock.calls.at(-1)?.[1]).toMatchObject({
+        boundary: "operator",
+        outcome: "verified",
+      });
+      expect(JSON.stringify(log.mock.calls)).not.toContain(secret);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("preserves explicit owner diagnostic sinks during reauthorization", async () => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    const report = createHostedOperatorConsentDiagnostic(secret, sink);
+    for (const outcome of ["started", "verified"] as const) {
+      report({ boundary: "builder", phase: "inline", stage: "owner_membership", outcome });
+      expect(sink.mock.calls.at(-1)?.[0]).toMatchObject({ stage: "owner_membership", outcome });
+    }
+    await Promise.resolve();
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
+
   it("projects only closed operator response distinctions and result codes", () => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     const report = createHostedOperatorConsentDiagnostic(secret, sink);
