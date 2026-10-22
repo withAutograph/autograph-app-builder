@@ -16,6 +16,8 @@ import type {
 import { isSharedHostProtectionDeliveryProvenance } from "./hosted-operator-shared-host-protection-successor";
 import { isRetentionRenewalDeliveryProvenance } from "./hosted-operator-retention-renewal";
 import type { RetentionRenewalDeliveryProvenance } from "./hosted-operator-retention-renewal";
+import { createHostedOperatorConsentDiagnostic } from "./hosted-operator-consent-diagnostic";
+import type { OperatorGatewayDeliveryDiagnostic } from "./hosted-operator-consent-diagnostic";
 
 interface DeploymentListQuery {
   branch: string;
@@ -247,6 +249,46 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     selected: OperatorDeploymentCandidate,
   ) => Promise<"write" | "applied" | "unknown">;
 }) => {
+  const deliveryDiagnostic = (input: HostedOperatorDeploymentContext) => {
+    let stage: OperatorGatewayDeliveryDiagnostic["stage"] = "context";
+    let phase: OperatorGatewayDeliveryDiagnostic["phase"];
+    let method: OperatorGatewayDeliveryDiagnostic["method"];
+    let httpStatus: OperatorGatewayDeliveryDiagnostic["httpStatus"];
+    return {
+      at(value: OperatorGatewayDeliveryDiagnostic["stage"]) {
+        stage = value;
+        phase = undefined;
+        method = undefined;
+        httpStatus = undefined;
+      },
+      phase(value: OperatorGatewayDeliveryDiagnostic["phase"]) {
+        phase = value;
+      },
+      request(value: OperatorGatewayDeliveryDiagnostic["method"]) {
+        method = value;
+        httpStatus = undefined;
+      },
+      response(value: number) {
+        httpStatus = value;
+      },
+      finish(result: OperatorGatewayDeliveryDiagnostic["result"]) {
+        if (deps.target !== "gateway") {
+          return;
+        }
+        try {
+          createHostedOperatorConsentDiagnostic(input.target.sessionId)({
+            boundary: "operator",
+            phase: "inline",
+            stage: "operator_request",
+            outcome: result === "applied" ? "verified" : "setup_unavailable",
+            gatewayDelivery: { stage, phase, method, httpStatus, result },
+          });
+        } catch {
+          /* Advisory metadata never changes delivery or its original exception. */
+        }
+      },
+    };
+  };
   const observeAlias = (diagnostic: GatewayAliasDiagnostic) => {
     try {
       if (deps.observeAlias === undefined) {
@@ -296,7 +338,10 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     observeAlias({ stage, method, httpStatus: response.status, category });
     return { response, rejectedAssignment };
   };
-  const io = (input: HostedOperatorDeploymentContext) => {
+  const io = (
+    input: HostedOperatorDeploymentContext,
+    observation?: ReturnType<typeof deliveryDiagnostic>,
+  ) => {
     const deliveryKind = deps.target === "gateway" ? "gateway-delivery" : "delivery";
     const delivery = deps.target === "gateway" ? input.plan.gatewayDelivery : input.plan.delivery;
     if (delivery === undefined) {
@@ -356,6 +401,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       await input.assertCurrent();
       await deps.assertAuthorized(input);
     };
+    // oxlint-disable-next-line eslint/complexity -- Preserve provider request order and add only optional diagnostic observations.
     const request = async (
       pathname: string,
       query: Record<string, string> = {},
@@ -372,7 +418,10 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       allowNotFound = false,
       aliasStage?: GatewayAliasDiagnostic["stage"],
     ) => {
+      observation?.request(body === undefined ? "GET" : "POST");
+      observation?.phase("authority");
       await assertCurrent();
+      observation?.phase("credential");
       const credential = await deps.readCredential(input.authority, input.target.installationId);
       if (
         credential?.binding.active !== true ||
@@ -382,6 +431,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       ) {
         throw new HostedOperatorError("authorization_required");
       }
+      observation?.phase("authority");
       await assertCurrent();
       const url = new URL(pathname, "https://api.vercel.com");
       if (input.target.scopeType === "team") {
@@ -406,12 +456,15 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
             ...(input.signal === undefined ? [] : [input.signal]),
           ]),
         });
+      observation?.phase("fetch");
       const { response, rejectedAssignment } = await sendObserved(
         send,
         aliasStage,
         body === undefined ? "GET" : "POST",
         allowNotFound,
       );
+      observation?.phase("http_response");
+      observation?.response(response.status);
       try {
         if (rejectedAssignment) {
           throw new RejectedAliasAssignmentError();
@@ -422,8 +475,11 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         if (!response.ok) {
           throw new HostedOperatorError("operator_unavailable");
         }
+        observation?.phase("json_decode");
         const value = z.json().parse(await response.json());
+        observation?.phase("authority");
         await assertCurrent();
+        observation?.phase("response_schema");
         return value;
       } finally {
         if (!response.bodyUsed) {
@@ -665,9 +721,12 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       request,
     };
   };
-  const reconcile = async (input: HostedOperatorDeploymentContext) => {
+  const reconcile = async (
+    input: HostedOperatorDeploymentContext,
+    observation?: ReturnType<typeof deliveryDiagnostic>,
+  ) => {
     try {
-      const reader = io(input);
+      const reader = io(input, observation);
       let candidates = await reader.readCandidates();
       let waitedForBuild = false;
       let waitMilliseconds = 5000;
@@ -981,100 +1040,131 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     }
   };
   return {
-    // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Preserve ordered reconciliation, durable correction claim and provider creation within the same lease.
     async deliver(input: HostedOperatorDeploymentContext) {
-      const reader = io(input);
-      await reader.assertCurrent();
-      const prior = await reconcile(input);
-      if (prior.status === "applied" || prior.status === "unknown") {
-        return prior;
-      }
-      if (deps.target === "gateway") {
-        const selected = prior.candidates?.find((candidate) => candidate.readyState === "READY");
-        if (selected !== undefined) {
-          return await assignGatewayAlias(input, prior.candidates, selected);
+      const observation = deliveryDiagnostic(input);
+      // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Preserve ordered reconciliation, durable correction claim and provider creation within the same lease.
+      const run = async () => {
+        observation.at("context");
+        const reader = io(input, observation);
+        observation.at("authority");
+        await reader.assertCurrent();
+        observation.at("reconciliation");
+        const prior = await reconcile(input, observation);
+        if (prior.status === "applied" || prior.status === "unknown") {
+          return prior;
         }
-      }
-      // A complete no-match listing is still uncertain; this approved retry is at-least-once and may create another scoped Preview.
-      await deps.assertEnvironment(input);
-      await reader.assertCurrent();
-      if (!(await priorAttemptIsProven(input, reader))) {
-        return { candidates: prior.candidates ?? [], status: "unknown" as const };
-      }
-      const project = projectSchema.parse(
-        await reader.request(`/v9/projects/${encodeURIComponent(reader.delivery.projectId)}`),
-      );
-      const { gitSha } = reader.delivery;
-      if (gitSha === undefined) {
-        throw new HostedOperatorError("resource_mismatch");
-      }
-      const exactProject = [
-        project.id === reader.delivery.projectId,
-        project.accountId === input.target.scopeId,
-        projectLinkMatchesDelivery(project, reader.delivery.repoId, deps.target !== "gateway"),
-        reader.delivery.gitSha !== undefined,
-      ].every(Boolean);
-      if (!exactProject) {
-        throw new HostedOperatorError("resource_mismatch");
-      }
-      await reader.assertCurrent();
-      await deps.beforeCreate?.(input);
-      await reader.assertCurrent();
-      const correction: OperatorDeliveryCorrection | undefined =
-        "correction" in prior ? prior.correction : undefined;
-      if (correction !== undefined) {
-        if (input.checkpointDeliveryCorrection === undefined) {
+        if (deps.target === "gateway") {
+          const selected = prior.candidates?.find((candidate) => candidate.readyState === "READY");
+          if (selected !== undefined) {
+            observation.at("alias_assignment");
+            return await assignGatewayAlias(input, prior.candidates, selected);
+          }
+        }
+        // A complete no-match listing is still uncertain; this approved retry is at-least-once and may create another scoped Preview.
+        observation.at("environment");
+        await deps.assertEnvironment(input);
+        observation.at("authority");
+        await reader.assertCurrent();
+        observation.at("prior_attempt");
+        if (!(await priorAttemptIsProven(input, reader))) {
           return { candidates: prior.candidates ?? [], status: "unknown" as const };
         }
-        // Claim this correction before POST. A lost response may be observed, never blindly repeated.
-        await input.checkpointDeliveryCorrection({ ...correction, createAttempted: true });
+        observation.at("project_read");
+        const project = projectSchema.parse(
+          await reader.request(`/v9/projects/${encodeURIComponent(reader.delivery.projectId)}`),
+        );
+        observation.at("project_assertion");
+        const { gitSha } = reader.delivery;
+        if (gitSha === undefined) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        const exactProject = [
+          project.id === reader.delivery.projectId,
+          project.accountId === input.target.scopeId,
+          projectLinkMatchesDelivery(project, reader.delivery.repoId, deps.target !== "gateway"),
+          reader.delivery.gitSha !== undefined,
+        ].every(Boolean);
+        if (!exactProject) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        observation.at("authority");
         await reader.assertCurrent();
-      }
-      const response = z.object({ id }).parse(
-        await reader.request(
-          "/v13/deployments",
-          {},
-          {
-            gitSource: {
-              ref: reader.delivery.branch,
-              repoId: reader.delivery.repoId,
-              sha: gitSha,
-              type: "github",
+        observation.at("before_create");
+        await deps.beforeCreate?.(input);
+        observation.at("authority");
+        await reader.assertCurrent();
+        const correction: OperatorDeliveryCorrection | undefined =
+          "correction" in prior ? prior.correction : undefined;
+        if (correction !== undefined) {
+          if (input.checkpointDeliveryCorrection === undefined) {
+            return { candidates: prior.candidates ?? [], status: "unknown" as const };
+          }
+          // Claim this correction before POST. A lost response may be observed, never blindly repeated.
+          observation.at("correction_intent");
+          await input.checkpointDeliveryCorrection({ ...correction, createAttempted: true });
+          observation.at("authority");
+          await reader.assertCurrent();
+        }
+        observation.at("deployment_create");
+        const response = z.object({ id }).parse(
+          await reader.request(
+            "/v13/deployments",
+            {},
+            {
+              gitSource: {
+                ref: reader.delivery.branch,
+                repoId: reader.delivery.repoId,
+                sha: gitSha,
+                type: "github",
+              },
+              meta: reader.expectedMeta,
+              name: project.name,
+              project: project.id,
+              target: "staging",
+              ...((deps.target ?? "app") === "app" &&
+              input.plan.delivery?.projectSettings !== undefined
+                ? { projectSettings: input.plan.delivery.projectSettings }
+                : {}),
             },
-            meta: reader.expectedMeta,
-            name: project.name,
-            project: project.id,
-            target: "staging",
-            ...((deps.target ?? "app") === "app" &&
-            input.plan.delivery?.projectSettings !== undefined
-              ? { projectSettings: input.plan.delivery.projectSettings }
-              : {}),
-          },
-        ),
-      );
-      const candidate = await reader.readCandidateOrRejection(response.id);
-      if (candidate === undefined) {
-        const rejected = reader.deliveryCorrection();
-        if (rejected !== undefined && !rejected.createAttempted) {
-          await input.checkpointDeliveryCorrection?.({ ...rejected, createAttempted: true });
+          ),
+        );
+        observation.at("deployment_readback");
+        const candidate = await reader.readCandidateOrRejection(response.id);
+        if (candidate === undefined) {
+          const rejected = reader.deliveryCorrection();
+          if (rejected !== undefined && !rejected.createAttempted) {
+            observation.at("correction_intent");
+            await input.checkpointDeliveryCorrection?.({ ...rejected, createAttempted: true });
+          }
+          return { candidates: prior.candidates ?? [], status: "unknown" as const };
         }
-        return { candidates: prior.candidates ?? [], status: "unknown" as const };
-      }
-      const candidates = [
-        ...(prior.candidates ?? []).filter(
-          (value) => value.deploymentId !== candidate.deploymentId,
-        ),
-        candidate,
-      ];
-      await input.checkpointDelivery(candidates);
-      const observed = await reconcile({ ...input, deliveryCandidates: candidates });
-      if (deps.target === "gateway" && observed.status === "retryable") {
-        const selected = observed.candidates.find((value) => value.readyState === "READY");
-        if (selected !== undefined) {
-          return await assignGatewayAlias(input, observed.candidates, selected);
+        const candidates = [
+          ...(prior.candidates ?? []).filter(
+            (value) => value.deploymentId !== candidate.deploymentId,
+          ),
+          candidate,
+        ];
+        observation.at("checkpoint");
+        await input.checkpointDelivery(candidates);
+        observation.at("reconciliation");
+        const observed = await reconcile({ ...input, deliveryCandidates: candidates }, observation);
+        if (deps.target === "gateway" && observed.status === "retryable") {
+          const selected = observed.candidates.find((value) => value.readyState === "READY");
+          if (selected !== undefined) {
+            observation.at("alias_assignment");
+            return await assignGatewayAlias(input, observed.candidates, selected);
+          }
         }
+        return observed;
+      };
+      try {
+        const result = await run();
+        observation.finish(result.status);
+        return result;
+      } catch (error) {
+        observation.finish("unknown");
+        throw error;
       }
-      return observed;
     },
     reconcile,
   };
