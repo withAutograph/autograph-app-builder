@@ -287,7 +287,9 @@ describe("production navigation pinned image preparation", () => {
       const f = fixture();
       f.runCommand.mockResolvedValueOnce(missing).mockResolvedValueOnce({ exitCode: 1, stderr });
       const failure = ensureProductionNavigationImage(f.input);
-      await expect(failure).rejects.toThrow(`(${reason}; exit 1)`);
+      await expect(failure).rejects.toThrow(
+        `(${reason}; registry=public-mirror; platform=${process.platform}/${process.arch}; exit 1)`,
+      );
       await expect(failure).rejects.not.toThrow("fixture-secret");
       await expect(failure).rejects.not.toThrow("token=");
       expect(f.wait).not.toHaveBeenCalled();
@@ -295,6 +297,27 @@ describe("production navigation pinned image preparation", () => {
     },
   );
 
+  it("reports the fallback registry path without exposing Docker output", async () => {
+    const f = fixture();
+    f.runCommand
+      .mockResolvedValueOnce(missing)
+      .mockResolvedValueOnce(throttled)
+      .mockResolvedValueOnce({
+        exitCode: 1,
+        stderr: `Error response from daemon: No such image: ${fallbackImage}`,
+      })
+      .mockResolvedValueOnce({
+        exitCode: 1,
+        stderr: "unclassified Docker failure token=fixture-secret",
+      });
+    const failure = ensureProductionNavigationImage(f.input);
+    await expect(failure).rejects.toThrow(
+      `(unrecognized_diagnostic; registry=fallback; platform=${process.platform}/${process.arch}; exit 1)`,
+    );
+    await expect(failure).rejects.not.toThrow("fixture-secret");
+    await expect(failure).rejects.not.toThrow("token=");
+    expect(f.runCommand).toHaveBeenCalledTimes(4);
+  });
   it.each([
     "unauthorized: authentication required",
     "x509: certificate signed by unknown authority",

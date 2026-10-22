@@ -102,6 +102,12 @@ const pullFailureReason = (stderr: string) => {
   return reasons.find(({ pattern }) => pattern.test(stderr))?.reason ?? "unrecognized_diagnostic";
 };
 
+const pullFailureMetadata = (image: string) => {
+  const registry =
+    image === PRODUCTION_NAVIGATION_POSTGRES_IMAGE ? "public-mirror" : "fallback";
+  return `registry=${registry}; platform=${process.platform}/${process.arch}`;
+};
+
 const registryThrottled = (result: ImageCommandResult): boolean =>
   /\btoomanyrequests\b|\bHTTP(?:\/\d(?:\.\d)?)?\s+429\b|\b429\s+Too Many Requests\b|\bstatus code\s*:?\s*429\b/iu.test(
     result.stderr,
@@ -157,7 +163,7 @@ export const ensureProductionNavigationImage = async (
     }
     if (!registryThrottled(pulled)) {
       throw new Error(
-        `Production navigation could not pull the pinned PostgreSQL image (${pullFailureReason(pulled.stderr)}; exit ${pulled.exitCode}).`,
+        `Production navigation could not pull the pinned PostgreSQL image (${pullFailureReason(pulled.stderr)}; ${pullFailureMetadata(image)}; exit ${pulled.exitCode}).`,
       );
     }
     if (image === PRODUCTION_NAVIGATION_POSTGRES_IMAGE) {
