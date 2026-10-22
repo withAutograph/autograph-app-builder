@@ -735,6 +735,29 @@ export const createHostedOperatorControlPlane = async (input: {
       sessions: eve,
     });
 
+    /** Keep original authority keys while reading the receipt-verified current recovery owner. */
+    const readCurrentRealmSession = async (saved: HostedSessionRecord) => {
+      const original = toDurableHostedSessionRecord(saved);
+      const authoritySessionId =
+        original.nativeRecoveryBinding?.originalAuthoritySessionId ?? original.sessionId;
+      const logicalSessionId =
+        original.nativeRecoveryBinding?.logicalSessionId ?? original.adapterSessionId;
+      const current =
+        (await eve.readCurrentBuildSession?.({
+          principal: original.principal,
+          authoritySessionId,
+          logicalSessionId,
+        })) ?? original;
+      if (
+        !samePrincipal(current.principal, original.principal) ||
+        current.sourceHandoffId !== original.sourceHandoffId ||
+        current.appId !== original.appId
+      ) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      return { authoritySessionId, current };
+    };
+
     const readCredential = async (
       authority: HostedOperatorContext["authority"],
       installationId: string,
@@ -1158,17 +1181,15 @@ export const createHostedOperatorControlPlane = async (input: {
       }
       const parsedSession = parseHostedSessionRow(row);
       const durable = toDurableHostedSessionRecord(parsedSession);
-      if (["cancelled", "completed"].includes(durable.status)) {
+      const { current: currentSession } = await readCurrentRealmSession(parsedSession);
+      if (["cancelled", "completed"].includes(currentSession.status)) {
         throw new HostedOperatorError("authorization_required");
       }
       const ownerContext = await ownerContextResolver({
-        adapterSessionId: durable.adapterSessionId,
+        adapterSessionId: currentSession.adapterSessionId,
         authority,
-        principal: durable.principal,
-        sessionAuth: forwardedSessionAuth(
-          durable.principal,
-          parsedSession.version === 2 ? parsedSession.sourceHandoffId : undefined,
-        ),
+        principal: currentSession.principal,
+        sessionAuth: forwardedSessionAuth(currentSession.principal, currentSession.sourceHandoffId),
       });
       const record = hostedRuntimeJournalRecordSchema.parse(saved.record);
       const context = { authority, ownerContext, target: record.request };
@@ -1234,7 +1255,13 @@ export const createHostedOperatorControlPlane = async (input: {
       if (savedSession === null) {
         throw new HostedOperatorError("authorization_required");
       }
-      const ownedSession = toDurableHostedSessionRecord(savedSession);
+      const { current: ownedSession } = await readCurrentRealmSession(savedSession);
+      if (
+        ownedSession.adapterSessionId !== ownerContext.adapterSessionId ||
+        ownedSession.adapterGeneration !== ownerContext.adapterGeneration
+      ) {
+        throw new HostedOperatorError("authorization_required");
+      }
       if (["cancelled", "completed"].includes(ownedSession.status)) {
         return undefined;
       }
@@ -1441,8 +1468,9 @@ export const createHostedOperatorControlPlane = async (input: {
           return undefined;
         }
         const durable = toDurableHostedSessionRecord(parsed.data);
+        const { authoritySessionId, current } = await readCurrentRealmSession(parsed.data);
         if (
-          durable.adapterSessionId !== request.adapterSessionId ||
+          current.adapterSessionId !== request.adapterSessionId ||
           parsed.data.sourceHandoffId !== request.sourceHandoffId ||
           !isDeepStrictEqual(
             hostedTenantAuthoritySchema.parse({
@@ -1477,7 +1505,7 @@ export const createHostedOperatorControlPlane = async (input: {
               eq(builderProvisioningJournals.workspaceId, authority.workspaceId),
               eq(builderProvisioningJournals.ownerUserId, authority.ownerUserId),
               sql`${builderProvisioningJournals.record}->>'kind' = 'app-runtime'`,
-              sql`${builderProvisioningJournals.record}->'request'->>'sessionId' = ${request.sessionId}`,
+              sql`${builderProvisioningJournals.record}->'request'->>'sessionId' = ${authoritySessionId}`,
             ),
           )
           .limit(2);
@@ -1489,12 +1517,17 @@ export const createHostedOperatorControlPlane = async (input: {
         }
         const record = hostedRuntimeJournalRecordSchema.parse(rows[0]?.record);
         const ownerContext = await ownerContextResolver({
-          adapterSessionId: durable.adapterSessionId,
+          adapterSessionId: current.adapterSessionId,
           authority,
-          principal: durable.principal,
-          sessionAuth: forwardedSessionAuth(durable.principal, parsed.data.sourceHandoffId),
+          principal: current.principal,
+          sessionAuth: forwardedSessionAuth(current.principal, current.sourceHandoffId),
         });
-        return { authority, ownerContext, target: record.request };
+        if (ownerContext.sessionId !== authoritySessionId) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        const context = { authority, ownerContext, target: record.request };
+        await owner.assertArtifactAuthorized(context);
+        return context;
       },
       reconcileOwnerRealmContinuation,
       async readRealmContinuationPendingBaseline(claim: RealmContinuationAuthority) {
@@ -1507,7 +1540,7 @@ export const createHostedOperatorControlPlane = async (input: {
         if (ownedSession === null) {
           throw new HostedOperatorError("authorization_required");
         }
-        const durable = toDurableHostedSessionRecord(ownedSession);
+        const { current: durable } = await readCurrentRealmSession(ownedSession);
         if (
           durable.adapterSessionId !== claim.adapterSessionId ||
           durable.checkpointRef === undefined
@@ -1516,11 +1549,12 @@ export const createHostedOperatorControlPlane = async (input: {
         }
         const page = await eve.readCheckpointPage({
           principal,
-          sessionId: claim.ownerSessionId,
+          sessionId: durable.sessionId,
           checkpointRef: durable.checkpointRef,
           cursor: 0,
           limit: 1,
         });
+        await owner.assertArtifactAuthorized(context);
         const state = nativeObservationStateSchema.parse(page.metadata.nativeObservationState);
         if (
           state.adapterSessionId !== claim.adapterSessionId ||
