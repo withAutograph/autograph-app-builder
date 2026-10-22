@@ -262,6 +262,63 @@ describe("production navigation pinned image preparation", () => {
   });
 
   it.each([
+    { reason: "authorization_failed", stderr: "pull access denied token=fixture-secret" },
+    { reason: "manifest_unavailable", stderr: "manifest unknown token=fixture-secret" },
+    { reason: "registry_client_error", stderr: "HTTP status 403 token=fixture-secret" },
+    { reason: "registry_server_error", stderr: "HTTP status 503 token=fixture-secret" },
+    {
+      reason: "daemon_unavailable",
+      stderr: "Cannot connect to Docker daemon token=fixture-secret",
+    },
+    { reason: "transport_failed", stderr: "no such host token=fixture-secret" },
+    { reason: "storage_exhausted", stderr: "no space left on device" },
+    { reason: "platform_mismatch", stderr: "no matching manifest for linux/amd64" },
+    { reason: "docker_configuration_invalid", stderr: "error parsing config file" },
+    {
+      reason: "docker_configuration_invalid",
+      stderr: "credential helper fixture-helper not found",
+    },
+    { reason: "invalid_reference", stderr: "invalid reference format" },
+    { reason: "unrecognized_diagnostic", stderr: "registry resource not found" },
+    { reason: "unrecognized_diagnostic", stderr: "Docker pull failure token=fixture-secret" },
+  ])(
+    "reports an allowlisted, secret-free pinned-image pull reason: $reason",
+    async ({ reason, stderr }) => {
+      const f = fixture();
+      f.runCommand.mockResolvedValueOnce(missing).mockResolvedValueOnce({ exitCode: 1, stderr });
+      const failure = ensureProductionNavigationImage(f.input);
+      await expect(failure).rejects.toThrow(
+        `(${reason}; registry=public-mirror; platform=${process.platform}/${process.arch}; exit 1)`,
+      );
+      await expect(failure).rejects.not.toThrow("fixture-secret");
+      await expect(failure).rejects.not.toThrow("token=");
+      expect(f.wait).not.toHaveBeenCalled();
+      expect(f.runCommand).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("reports the fallback registry path without exposing Docker output", async () => {
+    const f = fixture();
+    f.runCommand
+      .mockResolvedValueOnce(missing)
+      .mockResolvedValueOnce(throttled)
+      .mockResolvedValueOnce({
+        exitCode: 1,
+        stderr: `Error response from daemon: No such image: ${fallbackImage}`,
+      })
+      .mockResolvedValueOnce({
+        exitCode: 1,
+        stderr: "unclassified Docker failure token=fixture-secret",
+      });
+    const failure = ensureProductionNavigationImage(f.input);
+    await expect(failure).rejects.toThrow(
+      `(unrecognized_diagnostic; registry=fallback; platform=${process.platform}/${process.arch}; exit 1)`,
+    );
+    await expect(failure).rejects.not.toThrow("fixture-secret");
+    await expect(failure).rejects.not.toThrow("token=");
+    expect(f.runCommand).toHaveBeenCalledTimes(4);
+  });
+  it.each([
     "unauthorized: authentication required",
     "x509: certificate signed by unknown authority",
     "Cannot connect to the Docker daemon",
