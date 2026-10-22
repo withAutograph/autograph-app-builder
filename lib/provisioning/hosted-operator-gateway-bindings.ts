@@ -931,13 +931,19 @@ export const createHostedOperatorGatewayBindings = (deps: {
       if (
         observed !== undefined &&
         canonical?.valueSha256 === valueDigest(observed) &&
-        isDeepStrictEqual(JSON.parse(observed), {
-          ...realmLinkConfig,
-          browserSessionCapture: {
-            path: "/api/hosted-operator/realm-browser-session",
-            sender: realmLinkConfig.identityHandoff.sender,
-          },
-        })
+        isDeepStrictEqual(
+          JSON.parse(observed),
+          // oxlint-disable-next-line unicorn/prefer-structured-clone, react-doctor/no-json-parse-stringify-clone -- Project the exact provider JSON wire representation, omitting absent optional fields.
+          JSON.parse(
+            JSON.stringify({
+              ...realmLinkConfig,
+              browserSessionCapture: {
+                path: "/api/hosted-operator/realm-browser-session",
+                sender: realmLinkConfig.identityHandoff.sender,
+              },
+            }),
+          ),
+        )
       ) {
         return observed;
       }
