@@ -809,6 +809,7 @@ export const createGitHubAppHttpProvider = (input: {
     owner: string;
     name: string;
     number: number;
+    reconciliation?: ExistingDraftReconciliationProposal;
   }) => {
     if (!Number.isSafeInteger(draftRequest.number) || draftRequest.number < 1) {
       throw new Error("invalid-pull-request-number");
@@ -825,14 +826,52 @@ export const createGitHubAppHttpProvider = (input: {
     const head = property(pull.body, "head");
     const base = property(pull.body, "base");
     const headBranch = stringProperty(head, "ref");
-    const headSha = objectId.parse(stringProperty(head, "sha"));
+    let headSha = objectId.parse(stringProperty(head, "sha"));
     const reference = await github({
       authorization: repository.accessToken,
       expected: [200],
       path: `/repos/${encodeURIComponent(draftRequest.owner)}/${encodeURIComponent(draftRequest.name)}/git/ref/heads/${encodePath(headBranch)}`,
     });
-    if (objectId.parse(stringProperty(property(reference.body, "object"), "sha")) !== headSha) {
-      throw new Error("pull-request-head-out-of-date");
+    const referenceSha = objectId.parse(stringProperty(property(reference.body, "object"), "sha"));
+    const stalePull = referenceSha !== headSha;
+    const reconciliation = draftRequest.reconciliation;
+    if (stalePull) {
+      // Only the exact sealed merge can recover an accepted write ahead of GitHub's PR snapshot.
+      if (
+        reconciliation === undefined ||
+        reconciliation.repositoryId !== draftRequest.repositoryId ||
+        reconciliation.owner !== draftRequest.owner ||
+        reconciliation.name !== draftRequest.name ||
+        reconciliation.pullRequestNumber !== draftRequest.number ||
+        decimalProperty(pull.body, "id") !== reconciliation.pullRequestId ||
+        Number(decimalProperty(pull.body, "number")) !== reconciliation.pullRequestNumber ||
+        !booleanProperty(pull.body, "draft") ||
+        stringProperty(pull.body, "state") !== "open" ||
+        decimalProperty(property(head, "repo"), "id") !== reconciliation.repositoryId ||
+        decimalProperty(property(base, "repo"), "id") !== reconciliation.repositoryId ||
+        headBranch !== reconciliation.branchName ||
+        stringProperty(base, "ref") !== reconciliation.baseBranch ||
+        headSha !== reconciliation.expectedHeadSha
+      ) {
+        throw new Error("pull-request-head-out-of-date");
+      }
+      const applied = await github({
+        authorization: repository.accessToken,
+        expected: [200],
+        path: `/repos/${encodeURIComponent(draftRequest.owner)}/${encodeURIComponent(draftRequest.name)}/git/commits/${referenceSha}`,
+      });
+      const parents = property(applied.body, "parents");
+      if (
+        !Array.isArray(parents) ||
+        parents.length !== 2 ||
+        stringProperty(parents[0], "sha") !== reconciliation.expectedHeadSha ||
+        stringProperty(parents[1], "sha") !== reconciliation.expectedBaseSha ||
+        stringProperty(property(applied.body, "tree"), "sha") !== reconciliation.resolvedTree ||
+        stringProperty(applied.body, "message") !== reconciliationCommitMessage(reconciliation)
+      ) {
+        throw new Error("pull-request-head-out-of-date");
+      }
+      headSha = referenceSha;
     }
     const commit = await github({
       authorization: repository.accessToken,
@@ -862,6 +901,27 @@ export const createGitHubAppHttpProvider = (input: {
           authorId: decimalProperty(author, "id"),
           marker: markerMatch.groups?.marker ?? "",
         };
+      }
+    }
+    if (stalePull) {
+      if (
+        reconciliation === undefined ||
+        verifiedBuilderOrigin === undefined ||
+        verifiedBuilderOrigin.marker !== reconciliation.originMarker ||
+        stringProperty(property(property(commit.body, "commit"), "tree"), "sha") !==
+          reconciliation.resolvedTree ||
+        stringProperty(property(commit.body, "commit"), "message") !==
+          reconciliationCommitMessage(reconciliation)
+      ) {
+        throw new Error("pull-request-head-out-of-date");
+      }
+      const confirmed = await github({
+        authorization: repository.accessToken,
+        expected: [200],
+        path: `/repos/${encodeURIComponent(draftRequest.owner)}/${encodeURIComponent(draftRequest.name)}/git/ref/heads/${encodePath(headBranch)}`,
+      });
+      if (objectId.parse(stringProperty(property(confirmed.body, "object"), "sha")) !== headSha) {
+        throw new Error("pull-request-head-out-of-date");
       }
     }
     return {
@@ -1097,6 +1157,7 @@ export const createGitHubAppHttpProvider = (input: {
         number: proposal.pullRequestNumber,
         owner: proposal.owner,
         repositoryId: proposal.repositoryId,
+        reconciliation: proposal,
       });
       if (current.headSha !== observed.headSha || current.headTree !== observed.headTree) {
         return false;

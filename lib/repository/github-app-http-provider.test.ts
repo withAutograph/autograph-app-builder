@@ -1588,7 +1588,9 @@ describe("existing draft reconciliation provider", () => {
       version: 1,
     };
     const calls: { url: string; body: unknown }[] = [];
-    let observedHead = head;
+    const observedHead = head;
+    let liveRef = head;
+    let liveMessage = `Reconcile draft pull request #1500 with main\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}\nApp-Builder-Origin: ${proposal.originMarker}`;
     // oxlint-disable-next-line eslint/complexity, eslint/require-await, sonarjs/cognitive-complexity -- focused GitHub HTTP double
     const implementation: typeof fetch = async (request, init = {}) => {
       const url = String(request);
@@ -1626,7 +1628,7 @@ describe("existing draft reconciliation provider", () => {
           user: { id: 900, login: "autograph-app-builder[bot]", type: "Bot" },
         });
       if (url.endsWith(`/git/ref/heads/${branchName}`))
-        return json({ node_id: "REF_NODE", object: { sha: observedHead } });
+        return json({ node_id: "REF_NODE", object: { sha: liveRef } });
       if (url.endsWith(`/commits/${head}`))
         return json({
           commit: {
@@ -1639,19 +1641,19 @@ describe("existing draft reconciliation provider", () => {
         return json({ commit: { tree: { sha: baseTree } }, sha: base });
       if (url.endsWith(`/commits/${base}`) || url.endsWith("/commits/refs/heads/main"))
         return json({ commit: { tree: { sha: baseTree } }, sha: base });
-      if (url.endsWith(`/git/commits/${mergeCommit}`))
+      if (url.endsWith(`/git/commits/${liveRef}`))
         return json({
-          message: `Reconcile draft pull request #1500 with main\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}\nApp-Builder-Origin: ${proposal.originMarker}`,
+          message: liveMessage,
           parents: [{ sha: head }, { sha: base }],
           tree: { sha: resolvedTree },
         });
-      if (url.endsWith(`/commits/${mergeCommit}`))
+      if (url.endsWith(`/commits/${liveRef}`))
         return json({
           commit: {
-            message: `Reconcile draft pull request #1500 with main\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}\nApp-Builder-Origin: ${proposal.originMarker}`,
+            message: liveMessage,
             tree: { sha: resolvedTree },
           },
-          sha: mergeCommit,
+          sha: liveRef,
         });
       if (url.endsWith(`/git/trees/${baseTree}`) && method === "GET")
         return json({ tree: [], truncated: false });
@@ -1662,7 +1664,7 @@ describe("existing draft reconciliation provider", () => {
       if (url.endsWith("/repos/withAutograph/example-app") && method === "GET")
         return json({ id: 100, node_id: "REPO_NODE" });
       if (url.endsWith("/graphql") && method === "POST") {
-        observedHead = mergeCommit;
+        liveRef = mergeCommit;
         return json({ data: { updateRefs: { clientMutationId: null } } });
       }
       throw new Error(`Unexpected URL: ${url}`);
@@ -1687,14 +1689,32 @@ describe("existing draft reconciliation provider", () => {
       beforeOid: head,
       name: `refs/heads/${branchName}`,
     });
-    const observed = (await provider.inspectExistingDraft({
+    const writePaths = ["/git/blobs", "/git/trees", "/git/commits", "/graphql"];
+    const writes = () =>
+      calls.filter(({ url }) => writePaths.some((suffix) => url.endsWith(suffix)));
+    const completedWrites = writes();
+    const inspection = {
       name: proposal.name,
       number: proposal.pullRequestNumber,
       owner: proposal.owner,
       repositoryId: proposal.repositoryId,
+    };
+    await expect(provider.inspectExistingDraft(inspection)).rejects.toThrow(
+      "pull-request-head-out-of-date",
+    );
+    const observed = (await provider.inspectExistingDraft({
+      ...inspection,
+      reconciliation: proposal,
     })) as ExistingDraftObservation;
+    expect(observed).toMatchObject({ headSha: mergeCommit, headTree: resolvedTree });
     await expect(provider.inspectAppliedDraftReconciliation(proposal, observed)).resolves.toBe(
       true,
     );
+    liveRef = "2".repeat(40);
+    liveMessage = `A different operation\n\nApp-Builder-Origin: ${proposal.originMarker}`;
+    await expect(
+      provider.inspectExistingDraft({ ...inspection, reconciliation: proposal }),
+    ).rejects.toThrow("pull-request-head-out-of-date");
+    expect(writes()).toEqual(completedWrites);
   });
 });
