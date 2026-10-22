@@ -892,16 +892,18 @@ describe("draft reconciliation command progress", () => {
       const actual = await vi.importActual<{ runAppBrowserTests: typeof runAppBrowserTestsPort }>(
         "../../agent/tools/run-app-browser-tests",
       );
-      mocks.browser.mockImplementationOnce(actual.runAppBrowserTests);
       const requestAbort = new AbortController();
       if (cancelled) {
         requestAbort.abort();
       }
       const requestedSignal = cancelled ? requestAbort.signal : abortSignal;
-      mocks.resolveRuntime.mockImplementationOnce((execution) => {
-        execution.signal?.throwIfAborted();
-        return Promise.reject(new Error("Approved HTTPS binding unavailable"));
-      });
+      if (!cancelled) {
+        mocks.browser.mockImplementationOnce(actual.runAppBrowserTests);
+        mocks.resolveRuntime.mockImplementationOnce((execution) => {
+          execution.signal?.throwIfAborted();
+          return Promise.reject(new Error("Approved HTTPS binding unavailable"));
+        });
+      }
       // Synthetic Eve context supplies only the same consumed request/session fields as the shared fixture.
       const callContext = {
         abortSignal: requestedSignal,
@@ -922,20 +924,26 @@ describe("draft reconciliation command progress", () => {
           { kind: "browser", command: "mise run --no-deps app:runtime run spend-review test-e2e" },
         ],
       };
-      const result = await validateReconciliation.execute(
+      const result = validateReconciliation.execute(
         { additionalCheckTasks: [], incremental: isIncremental, runBrowserTests: true },
         callContext,
       );
-      expect(result).toMatchObject({ status: "needs_repair" });
-      expect(mocks.resolveRuntime).toHaveBeenCalledWith({
-        appId: "spend-review",
-        root: "/workspace/candidate",
-        sandboxId: "owned-provider-sandbox",
-        sessionAuth: { owned: "auth" },
-        sessionId: "adapter",
-        signal: requestedSignal,
-        state: mocks.workflow,
-      });
+      if (cancelled) {
+        await expect(result).rejects.toMatchObject({ name: "AbortError" });
+        expect(mocks.resolveRuntime).not.toHaveBeenCalled();
+        expect(mocks.browser).not.toHaveBeenCalled();
+      } else {
+        await expect(result).resolves.toMatchObject({ status: "needs_repair" });
+        expect(mocks.resolveRuntime).toHaveBeenCalledWith({
+          appId: "spend-review",
+          root: "/workspace/candidate",
+          sandboxId: "owned-provider-sandbox",
+          sessionAuth: { owned: "auth" },
+          sessionId: "adapter",
+          signal: requestedSignal,
+          state: mocks.workflow,
+        });
+      }
       expect(mocks.run).not.toHaveBeenCalledWith(
         expect.objectContaining({
           command: "mise run --no-deps app:runtime run spend-review test-e2e",
@@ -1131,11 +1139,13 @@ describe("draft reconciliation command progress", () => {
   });
 
   it("does not infer an installation repair from missing declaration evidence", async () => {
-    mocks.readText.mockRejectedValue(new Error("dependency metadata unavailable"));
-    mocks.check.mockResolvedValueOnce({
-      exitCode: 1,
-      stderr: "error: Cannot find package 'vitest' from '/workspace/candidate/task.ts'",
-      stdout: "",
+    mocks.check.mockImplementationOnce(() => {
+      mocks.readText.mockRejectedValue(new Error("dependency metadata unavailable"));
+      return Promise.resolve({
+        exitCode: 1,
+        stderr: "error: Cannot find package 'vitest' from '/workspace/candidate/task.ts'",
+        stdout: "",
+      });
     });
     await expect(incremental(checkCommand)).resolves.toMatchObject({
       status: "needs_repair",

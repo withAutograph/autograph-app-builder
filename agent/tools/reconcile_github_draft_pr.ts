@@ -1,5 +1,9 @@
 import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { updatePublishedDraftRepair } from "@/lib/agent/published-draft-repair-publication";
+import {
+  currentDraftCandidateSource,
+  draftCompletionInstallation,
+} from "@/lib/agent/published-draft-repair";
 import { createHash } from "node:crypto";
 
 import { defineTool } from "eve/tools";
@@ -62,14 +66,16 @@ export default defineTool({
       .find((entry) => entry.proposal.digest === input.expectedProposalDigest);
     const sealedBeforeApproval = completion?.preparation === "sealed-before-approval";
     if (completion === undefined) {
+      const githubSource = currentDraftCandidateSource(state, candidate);
       // Legacy recovery uses only canonical retained metadata, never "latest" or a Git-derived approval.
       if (
         // oxlint-disable-next-line sonarjs/expression-complexity -- Every retained legacy source, review and capture must name the same approved result.
         candidate?.proposal?.digest !== input.expectedProposalDigest ||
+        candidate.kind === "published-draft-repair" ||
         candidate.review === undefined ||
         candidate.validation?.compilation === undefined ||
         state.phase !== "reviewed" ||
-        state.githubSource?.digest !== candidate.githubSourceDigest ||
+        githubSource === undefined ||
         state.reviewReceipt.digest !== candidate.originalReviewDigest ||
         state.appSpec.appId !== candidate.appId ||
         state.reviewReceipt.appSpecDigest !== state.appSpec.digest ||
@@ -91,6 +97,12 @@ export default defineTool({
         root: candidate.root,
         githubSourceDigest: candidate.githubSourceDigest,
         compilation: candidate.validation.compilation,
+        ...(candidate.publishedOrigin === undefined
+          ? {}
+          : { publishedOrigin: candidate.publishedOrigin }),
+        ...(candidate.publicationScope === undefined
+          ? {}
+          : { publicationScope: candidate.publicationScope }),
       };
     }
     const { proposal, review } = completion;
@@ -111,7 +123,10 @@ export default defineTool({
       sessionAuth: ctx.session.auth,
     };
     await assertReconciliationCompletionOwnerForSession(session);
-    const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
+    const runtime = await githubPublicationRuntimeForSession(
+      ctx.session.auth,
+      draftCompletionInstallation(completion),
+    );
     const inspected = await runtime.inspectAppliedExistingDraftReconciliation({ proposal, review });
     const finish = async (
       publication: Parameters<typeof recordPublishedReconciliationForSession>[0]["publication"],
@@ -163,18 +178,20 @@ export default defineTool({
       return missingCompletion();
     }
     // Fresh publication retains every mutable candidate/review check after the read-only recovery decision.
+    const githubSource = currentDraftCandidateSource(state, candidate);
     if (
       // oxlint-disable-next-line sonarjs/expression-complexity -- Fresh writes retain the complete sealed candidate and current workflow authority binding.
       candidate === null ||
+      candidate.kind === "published-draft-repair" ||
       candidate.proposal?.digest !== proposal.digest ||
       candidate.review?.digest !== review.digest ||
       candidate.validation === undefined ||
       state.phase !== "reviewed" ||
-      state.githubSource?.digest !== candidate.githubSourceDigest ||
+      githubSource === undefined ||
       state.reviewReceipt.digest !== candidate.originalReviewDigest ||
       state.appSpec.appId !== completion.appId ||
       state.appSpec.digest !== completion.appReview.appSpecDigest ||
-      state.githubSource.repository.repositoryId !== proposal.repositoryId ||
+      githubSource.repository.repositoryId !== proposal.repositoryId ||
       candidate.githubSourceDigest !== completion.githubSourceDigest ||
       candidate.root !== completion.root ||
       state.reviewReceipt.digest !== completion.appReview.digest

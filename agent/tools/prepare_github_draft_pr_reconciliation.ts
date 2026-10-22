@@ -1,7 +1,7 @@
 import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { setBuilderSandboxNetworkPolicy } from "../../lib/sandbox/builder-sandbox";
 import { defineTool } from "eve/tools";
-import { preparePublishedDraftRepair } from "@/lib/agent/prepare-published-draft-repair";
+import { preparePublishedDraftReconciliation } from "@/lib/agent/prepare-published-draft-repair";
 import {
   draftPreparationPrerequisiteDiagnostic,
   draftPrerequisiteMessage,
@@ -164,12 +164,12 @@ const freshPublishedRepair = (state: AppBuilderWorkflowState): ReviewedWorkflow 
 
 export default defineTool({
   description:
-    "Fetch the live base and existing draft head into an isolated Builder checkout and prepare a non-force merge candidate. For a fresh-template build that already published its own draft, open a separate owned repair candidate against that recorded draft head and preserve the original starter source; follow its returned repair nextAction instead of replacing the occupied source through resolve_github_source. This does not update GitHub. It reports exact app-owned conflict paths and refuses platform-owned conflicts. If candidate validation reports outside-app metadata changes, run this tool again: Builder preserves the old checkout, creates a fresh private candidate, and carries app repairs across the same verified draft/head/review lineage, merging current base app changes when the base advances. This technical recovery needs no human lockfile edit or new private-worktree approval.",
+    "Fetch the live base and existing draft head into an isolated Builder checkout and prepare a non-force merge candidate. A fresh-template build that already published its own draft uses that verified owned publication and preserves its original starter source; it does not replace the occupied source through resolve_github_source. This does not update GitHub. It reports exact app-owned conflict paths and refuses platform-owned conflicts. Builder preserves original approved root registration through the repository's automatic merge result. If candidate validation reports outside-app metadata changes, run this tool again: Builder preserves the old checkout, creates a fresh private candidate, and carries app repairs across the same verified draft/head/review lineage, merging current base app changes when the base advances. This technical recovery needs no human lockfile edit or new private-worktree approval.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     const repairOrigin = freshPublishedRepair(state);
     if (repairOrigin !== null) {
-      return await preparePublishedDraftRepair({
+      return await preparePublishedDraftReconciliation({
         state: repairOrigin,
         ctx,
         pullRequestNumber: input.pullRequestNumber,

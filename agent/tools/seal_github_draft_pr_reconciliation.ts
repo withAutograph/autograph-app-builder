@@ -1,4 +1,8 @@
 import { sealPublishedDraftRepair } from "@/lib/agent/published-draft-repair-publication";
+import {
+  currentDraftCandidateSource,
+  draftCandidateInstallation,
+} from "@/lib/agent/published-draft-repair";
 import { defineTool } from "eve/tools";
 import {
   draftPrerequisiteMessage,
@@ -22,6 +26,7 @@ const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 export default defineTool({
   description:
     "Seal a proposal for the exact validated reconciliation of an existing draft PR. The result includes the exact approvalReceipt for the draft branch head; pass it verbatim to reconcile_github_draft_pr after separate approval. The proposal binds the live base, old head, resolved tree, both reviewed diffs, and selected repository.",
+  // oxlint-disable-next-line eslint/complexity -- Keep exact source, review, validation and retained publication authority in the same sealing boundary.
   async execute(input, ctx) {
     const candidate = draftReconciliationState.get();
     if (candidate?.kind === "published-draft-repair") {
@@ -32,6 +37,7 @@ export default defineTool({
     }
 
     const state = appBuilderWorkflowState.get();
+    const githubSource = currentDraftCandidateSource(state, candidate);
     // oxlint-disable-next-line sonarjs/expression-complexity -- exact review, diff reads, validation, and source must all match.
     if (
       // oxlint-disable-next-line sonarjs/expression-complexity -- one exact candidate precondition.
@@ -39,8 +45,7 @@ export default defineTool({
       candidate.review === undefined ||
       candidate.validation === undefined ||
       state.phase !== "reviewed" ||
-      state.githubSource === undefined ||
-      state.githubSource.digest !== candidate.githubSourceDigest ||
+      githubSource === undefined ||
       state.reviewReceipt.digest !== candidate.originalReviewDigest ||
       candidate.review.digest !== input.expectedReviewDigest
     ) {
@@ -50,6 +55,7 @@ export default defineTool({
             candidate,
             state,
             expectedReviewDigest: input.expectedReviewDigest,
+            ...(githubSource === undefined ? {} : { resolvedSourceDigest: githubSource.digest }),
           }),
           "The selected app or resolved merge changed. Validate the candidate and review both current diffs before sealing.",
         ),
@@ -74,11 +80,16 @@ export default defineTool({
         "completion_context_missing: Revalidate this candidate to retain its actual compiled release before sealing publication.",
       );
     }
-    const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
+    const runtime = await githubPublicationRuntimeForSession(
+      ctx.session.auth,
+      draftCandidateInstallation(candidate),
+    );
     const priorPublishedProposalDigest =
-      state.publishedGitHubDraftProposalDigest ?? state.githubDraftProposal?.proposal.digest;
+      candidate.publishedOrigin?.publicationProposalDigest ??
+      state.publishedGitHubDraftProposalDigest ??
+      state.githubDraftProposal?.proposal.digest;
     const request = {
-      githubSource: state.githubSource,
+      githubSource,
       pullRequestNumber: candidate.pullRequestNumber,
       review: candidate.review,
       selectedCheckoutHeadSha: candidate.headSha,
@@ -111,6 +122,12 @@ export default defineTool({
       githubSourceDigest: candidate.githubSourceDigest,
       root: candidate.root,
       compilation,
+      ...(candidate.publishedOrigin === undefined
+        ? {}
+        : { publishedOrigin: candidate.publishedOrigin }),
+      ...(candidate.publicationScope === undefined
+        ? {}
+        : { publicationScope: candidate.publicationScope }),
     });
     return { ...proposal, approvalReceipt: approvalReceiptForExistingDraftUpdate(proposal) };
   },

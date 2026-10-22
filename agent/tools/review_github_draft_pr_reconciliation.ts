@@ -88,6 +88,9 @@ export default defineTool({
     }
     const review = createReconciliationReviewReceipt({
       appId: candidate.appId,
+      ...(candidate.publicationScope === undefined
+        ? {}
+        : { publicationScope: candidate.publicationScope }),
       baseChanges: observed.baseChanges,
       baseSha: candidate.baseSha,
       baseTree: candidate.baseTree,

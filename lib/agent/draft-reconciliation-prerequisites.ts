@@ -91,6 +91,8 @@ export const draftSealPrerequisiteDiagnostic = (input: {
   candidate: ReconciliationCandidatePrerequisites | null;
   state: ReconciliationWorkflowPrerequisites;
   expectedReviewDigest: string;
+  /** Diagnostic projection from the caller's existing verified candidate-source authority. */
+  resolvedSourceDigest?: string;
 }): PrerequisiteDiagnostic | null => {
   const { candidate, state } = input;
   if (candidate === null) {
@@ -114,10 +116,11 @@ export const draftSealPrerequisiteDiagnostic = (input: {
       "The candidate has no completed validation receipt. Resume validate_github_draft_pr_reconciliation using its returned nextCommand until it reports validated, then review the current merge. Individual passed commands do not establish that the sequence finished.",
     );
   }
-  if (state.phase !== "reviewed" || state.githubSource === undefined) {
+  const sourceDigest = input.resolvedSourceDigest ?? state.githubSource?.digest;
+  if (state.phase !== "reviewed" || sourceDigest === undefined) {
     return draftPreparationPrerequisiteDiagnostic(state);
   }
-  if (state.githubSource.digest !== candidate.githubSourceDigest) {
+  if (sourceDigest !== candidate.githubSourceDigest) {
     return diagnostic(
       "source_binding_changed",
       prepareReconciliation,
