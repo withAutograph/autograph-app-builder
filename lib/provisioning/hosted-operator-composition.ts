@@ -42,6 +42,7 @@ import { createHostedOperatorRealmHttpTransport } from "./hosted-operator-realm-
 import {
   HostedOperatorError,
   hostedOperatorPlanSchema,
+  nativeDeliveryGitRef,
   hostedOperatorAuthSignupPolicyInputSchema,
   operatorReceiptSchema,
   restrictedOperatorEnvironment,
@@ -156,12 +157,40 @@ const gatewayDeliverySourceForPlan = (
     currentPlan?.stage === "app" && currentPlan.delivery?.repoId === configuration.gateway.repoId
       ? currentPlan.delivery.gitSha
       : undefined;
+  const frozenBootstrapSource =
+    currentPlan?.stage !== "app" && currentPlan?.gatewayDelivery?.gitRef !== undefined
+      ? currentPlan.gatewayDelivery
+      : undefined;
   return {
     branch: configuration.gateway.branch,
-    gitSha: publishedSha ?? configuration.gateway.gitSha,
+    ...(frozenBootstrapSource === undefined ? {} : { gitRef: frozenBootstrapSource.gitRef }),
+    gitSha: publishedSha ?? frozenBootstrapSource?.gitSha ?? configuration.gateway.gitSha,
     projectId: configuration.gateway.projectId,
     repoId: configuration.gateway.repoId,
   };
+};
+const publishedGatewayDeliverySource = (
+  configuration: HostedOperatorSourceConfiguration,
+  selection: CompiledOperatorReleaseSelection | undefined,
+): AppGatewayDeliverySource | undefined => {
+  const published = selection?.publishedSource;
+  if (published?.repositoryId !== configuration.gateway.repoId) {
+    return undefined;
+  }
+  return {
+    branch: configuration.gateway.branch,
+    gitRef: published.branch,
+    gitSha: published.gitSha,
+    projectId: configuration.gateway.projectId,
+    repoId: configuration.gateway.repoId,
+  };
+};
+const frozenGatewayDeliverySource = (
+  plan: HostedOperatorPlan,
+  source: AppGatewayDeliverySource,
+): AppGatewayDeliverySource => {
+  const gitRef = nativeDeliveryGitRef(plan, source, "gateway");
+  return source.gitRef !== undefined || gitRef === source.branch ? source : { ...source, gitRef };
 };
 const appTrustedSourcesForNewPlan = (
   base: HostedOperatorPlan,
@@ -1432,6 +1461,42 @@ export const composeHostedOperatorDependencies = (
     if (sharedHostPrerequisite !== undefined) {
       return sharedHostPrerequisite;
     }
+    const readPlanningSelection = async () =>
+      await observe(
+        "accepted_spec",
+        async () =>
+          await readOwnedOperatorPlanningSelection({
+            context,
+            controlPlane,
+            ...(context.releaseIntent === undefined
+              ? {}
+              : { releaseIntent: context.releaseIntent }),
+          }),
+      );
+    // Prepared restoration first resumes the frozen prerequisite, without requiring
+    // a completed app journal. Changed-source planning may use a recorded publication
+    // before identity capture; missing publication is allowed, failed authority is not.
+    const owned =
+      context.releaseIntent === "prepared-preview"
+        ? undefined
+        : await controlPlane.readCurrentPlanningOwner(context);
+    const selectedForGateway =
+      owned?.session.privateBuildDecision?.currentSpec === undefined
+        ? undefined
+        : await readPlanningSelection();
+    const currentPlan = current?.record.operator?.plan;
+    const frozenGatewaySource = currentPlan?.gatewayDelivery;
+    const publishedGatewaySource = publishedGatewayDeliverySource(
+      configuration,
+      selectedForGateway?.selection,
+    );
+    const prerequisiteGatewaySource =
+      context.releaseIntent === "prepared-preview" &&
+      currentPlan !== undefined &&
+      frozenGatewaySource !== undefined
+        ? frozenGatewayDeliverySource(currentPlan, frozenGatewaySource)
+        : publishedGatewaySource;
+    await selectedForGateway?.assertCurrent?.();
     const existingBootstrap = await readExistingAuthBootstrapPrerequisite(
       current,
       context,
@@ -1439,19 +1504,12 @@ export const composeHostedOperatorDependencies = (
       application.appDatabase,
       controlPlane,
       Date.now(),
+      prerequisiteGatewaySource,
     );
     if (existingBootstrap !== undefined) {
       return existingBootstrap;
     }
-    const selected = await observe(
-      "accepted_spec",
-      async () =>
-        await readOwnedOperatorPlanningSelection({
-          context,
-          controlPlane,
-          ...(context.releaseIntent === undefined ? {} : { releaseIntent: context.releaseIntent }),
-        }),
-    );
+    const selected = selectedForGateway ?? (await readPlanningSelection());
     const selection = await observe("release_selection", () => {
       if (selected.selection === undefined) {
         throw new HostedOperatorError("operator_unavailable");
@@ -1755,12 +1813,10 @@ export const composeHostedOperatorDependencies = (
         },
       ],
       gatewayBindings: configuredBootstrapGatewayBindings(configuration),
-      gatewayDelivery: {
-        branch: configuration.gateway.branch,
-        gitSha: configuration.gateway.gitSha,
-        projectId: configuration.gateway.projectId,
-        repoId: configuration.gateway.repoId,
-      },
+      gatewayDelivery:
+        prerequisiteGatewaySource ??
+        publishedGatewayDeliverySource(configuration, selection) ??
+        gatewayDeliverySourceForPlan(configuration),
     });
     let participantsBootstrapPrepared = false;
     const bootstrapPreparation =

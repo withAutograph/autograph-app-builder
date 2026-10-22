@@ -410,6 +410,8 @@ const hostedOperatorPlanDataSchema = z.strictObject({
   gatewayDelivery: z
     .strictObject({
       branch: id,
+      /** Approved native source ref; branch retains the Gateway environment and alias namespace. */
+      gitRef: id.optional(),
       gitSha: z
         .string()
         .regex(/^[a-f0-9]{40}$/u)
@@ -943,14 +945,20 @@ export const nativeDeliveryGitRef = (
   plan: HostedOperatorPlan,
   delivery: NonNullable<HostedOperatorPlan["delivery"]>,
   target: "app" | "gateway",
-): string =>
-  target === "gateway" &&
-  plan.stage === "app" &&
-  delivery.gitSha !== undefined &&
-  plan.delivery?.repoId === delivery.repoId &&
-  plan.delivery.gitSha === delivery.gitSha
+): string => {
+  if (target !== "gateway") {
+    return delivery.branch;
+  }
+  if (plan.gatewayDelivery?.gitRef !== undefined) {
+    return plan.gatewayDelivery.gitRef;
+  }
+  return plan.stage === "app" &&
+    delivery.gitSha !== undefined &&
+    plan.delivery?.repoId === delivery.repoId &&
+    plan.delivery.gitSha === delivery.gitSha
     ? plan.delivery.branch
     : delivery.branch;
+};
 
 /** Legacy plans install only their grant tenants; explicit plans retain owned installation tenants. */
 export const hostedOperatorInstallationCustomerIds = (

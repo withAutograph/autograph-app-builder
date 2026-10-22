@@ -388,9 +388,29 @@ const publicationFixture = (binding: { repoId?: string; gitSha?: string } = {}) 
   const unexpectedPort = vi.fn(async (): Promise<never> => {
     throw new Error("Unexpected provider or effect port during planning");
   });
+  const planningSession = durableHostedSessionRecordSchema.parse({
+    adapterGeneration: 1,
+    adapterSessionId: "adapter",
+    appId: context.target.appId,
+    createdAtEpochMs: 100,
+    lastProgressAtEpochMs: 100,
+    originAdapterSessionId: "adapter",
+    principal: operatorOwnerContextSchema.parse(context.ownerContext).principal,
+    resumability: "live",
+    sessionId: context.target.sessionId,
+    stage: "ready",
+    status: "waiting",
+    title: "Controlled planning owner",
+    updatedAtEpochMs: 100,
+    version: 2,
+  });
+  const readCurrentPlanningOwner = vi.fn<
+    Awaited<ReturnType<typeof createHostedOperatorControlPlane>>["readCurrentPlanningOwner"]
+  >(() => Promise.resolve({ session: structuredClone(planningSession), target: context.target }));
   const controlPlane = {
     readCapturedRealmIdentity,
     readCapturedRealmIdentityProof,
+    readCurrentPlanningOwner,
     assertPlanningAuthorized: unexpectedPort,
   };
   const verifiedIdentity = vi.spyOn(realmIdentity, "readVerifiedRealmAccess").mockResolvedValue({
@@ -431,6 +451,7 @@ const publicationFixture = (binding: { repoId?: string; gitSha?: string } = {}) 
     controlPlane,
     readCapturedRealmIdentity,
     readCapturedRealmIdentityProof,
+    planningSession,
     unexpectedPort,
     verifiedIdentity,
   };
@@ -2158,6 +2179,20 @@ describe("existing populated Auth workflow planning", () => {
 
   const settledAppPlanningFixture = async () => {
     const f = await retainedAuthReadinessFixture();
+    f.planningSession.privateBuildDecision = {
+      adapterSessionId: f.planningSession.adapterSessionId,
+      currentSpec: {
+        appId: context.target.appId,
+        appSpecDigest: "new-spec",
+        sessionId: f.planningSession.adapterSessionId,
+        workspaceId: "current-source-workspace",
+      },
+      decision: "blocked",
+      turnId: "accepted-turn",
+      turnSequence: 1,
+      version: 1,
+      workflowPhase: "applied",
+    };
     const record = f.row.record;
     const operator = record.operator!;
     f.configuration.applications.actual!.repoId = "actual-repository-id";

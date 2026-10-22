@@ -494,10 +494,15 @@ const isGatewaySourceSuccessor = (
     prior.approvalId !== undefined,
     record.approvedByCallId !== UNAPPROVED_PLAN,
     prior.plan.stage === AUTH_BOOTSTRAP_STAGE,
-    prior.plan.gatewayDelivery.gitSha !== plan.gatewayDelivery.gitSha,
+    prior.plan.gatewayDelivery.gitSha !== plan.gatewayDelivery.gitSha ||
+      prior.plan.gatewayDelivery.gitRef !== plan.gatewayDelivery.gitRef,
     sameOperatorPlanExceptExpiry(prior.plan, {
       ...plan,
-      gatewayDelivery: { ...plan.gatewayDelivery, gitSha: prior.plan.gatewayDelivery.gitSha },
+      gatewayDelivery: {
+        ...plan.gatewayDelivery,
+        gitSha: prior.plan.gatewayDelivery.gitSha,
+        gitRef: prior.plan.gatewayDelivery.gitRef,
+      },
     }),
     record.leaseId === undefined ||
       (record.leaseExpiresAt !== undefined && Date.parse(record.leaseExpiresAt) <= now),
