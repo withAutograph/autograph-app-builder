@@ -195,7 +195,7 @@ describe("durable handoff controls", () => {
       "Before sending, make sure your client uses this address.",
     );
     expect(container.textContent).toContain(
-      "Local and Preview handoffs need a matching configured Builder connection.",
+      "The release plugin may use Production; local and Preview handoffs need a connection configured for that environment.",
     );
   });
   it("never reports a launch as continuation, and only polls while visible", async () => {

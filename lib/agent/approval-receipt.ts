@@ -317,6 +317,16 @@ const operatorOwnedOrganizations = (plan: HostedOperatorPlan) => {
   if (!planHasEffect(plan, "auth-membership") || membership === undefined) return [];
   return membership.kind === "create-owned-organization" ? [membership] : membership.organizations;
 };
+const operatorInstallationScopeSummary = (plan: HostedOperatorPlan) => {
+  const organizationIds = plan.appInstallation?.customerIds ?? [];
+  if (organizationIds.length === 0) return "";
+  return `App schema installation tenant references (provider organization identifiers):\n${organizationIds
+    .map(
+      (organizationId) =>
+        `- Organization ${organizationId}: included in the approved app schema installation scope; access roles and memberships are described separately.`,
+    )
+    .join("\n")}`;
+};
 const operatorMembershipSummary = (plan: HostedOperatorPlan) => {
   const program = plan.normalActorProgram;
   const membershipNames = operatorMembershipNames(plan);
@@ -455,6 +465,7 @@ const operatorApprovalDescription = (record: Record<string, unknown>, toolName: 
       : "Deployment usage:\n- A new Preview delivery will replace an existing ready delivery. Both may incur deployment usage until replacement finishes.";
   const { membershipSummary, organizationReferenceSummary } = operatorMembershipSummary(plan);
   const { accessSummary, unresolvedAccessSummary } = operatorAccessDescriptions(plan);
+  const installationScopeSummary = operatorInstallationScopeSummary(plan);
   const accountSummary = operatorAccountSummary(plan);
   const costOwnerReferenceSummary = `Billing details (provider owner reference):\n- ${plan.cost.owner}`;
   const resourceSentence =
@@ -472,6 +483,7 @@ const operatorApprovalDescription = (record: Record<string, unknown>, toolName: 
     ...(membershipSummary ? [membershipSummary] : []),
     `Access and cost:\n- ${accessSummary}${accountSummary}\n- ${plan.cost.description} Billing responsibility follows ${costOwner}. Check the provider's billing page for amounts.`,
     ...(unresolvedAccessSummary ? [unresolvedAccessSummary] : []),
+    installationScopeSummary,
     ...(organizationReferenceSummary ? [organizationReferenceSummary] : []),
     costOwnerReferenceSummary,
     ...(signupApproval ? [signupApproval] : []),

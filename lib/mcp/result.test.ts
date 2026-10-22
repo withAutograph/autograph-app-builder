@@ -142,7 +142,7 @@ describe("safe MCP tool errors", () => {
 
   it("gives same-account guidance without disclosing handoff ownership", () => {
     const result = safeToolError(new BuilderHandoffUnavailableError());
-    expect(result.structuredContent.error?.message).toContain("same account you used on the web");
+    expect(result.structuredContent.error?.message).toContain("same account used on the web");
     expect(result.structuredContent.error?.code).toBe("not_found");
   });
 

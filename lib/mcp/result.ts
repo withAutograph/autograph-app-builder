@@ -160,10 +160,7 @@ export function safeToolError(
   const localRecoveryUnavailable = error instanceof LocalSessionRecoveryUnavailableError;
   const cancellationUnsettled = error instanceof HostedCancellationUnsettledError;
   let code = "internal_error";
-  const safeCause = safeUnexpectedCause(error);
-  let message = rejected
-    ? "The service rejected this operation before saving a result."
-    : genericUnexpectedMessage(safeCause);
+  let message: string;
   if (authenticationRequired) {
     code = "authentication_required";
     message = "Sign in to Autograph App Builder to continue.";
@@ -203,6 +200,8 @@ export function safeToolError(
       "Builder can’t continue from the last saved point. Start again from the latest result.";
   } else if (rejected) {
     ({ code, message } = rejectedToolError(error, operation));
+  } else {
+    message = genericUnexpectedMessage(safeUnexpectedCause(error));
   }
 
   const result: EveSessionResult = {

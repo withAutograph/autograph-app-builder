@@ -1556,7 +1556,7 @@ describe("public draft pull request approval scope", () => {
     });
     expect(publicRequest.request.description).toContain("example/reviewed-repository");
     expect(pending).toMatchObject([{ requestId: "req_draft_review", title }]);
-    expect(pending[0]?.description).toContain("reviewed-change");
+    expect(pending[0]?.description).toContain("reviewed changes");
     expect(JSON.stringify({ pending, projected })).not.toContain("private-token");
     expect(JSON.stringify({ pending, projected })).not.toContain("/private/workspace");
     expect(JSON.stringify({ pending, projected })).not.toContain("Approve tool call:");

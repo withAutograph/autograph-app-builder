@@ -161,7 +161,7 @@ describe("approval receipt", () => {
     expect(
       publicApprovalDescription({ approvalReceipt: publicationReceipt }, "publish_github_draft_pr"),
     ).toBe(
-      "This will publish the reviewed changes to a draft pull request in withAutograph/arrusted-development on main. The pull request will remain a draft; this will not merge or deploy it.",
+      "Publish the reviewed changes to a draft pull request in withAutograph/arrusted-development on main. It will remain a draft; this will not merge or deploy it.",
     );
     expect(
       publicApprovalDescription({ approvalReceipt: receipt }, "publish_github_draft_pr"),
@@ -194,14 +194,14 @@ describe("approval receipt", () => {
     ).toThrow("does not match");
   });
 
-  it("projects only the canonical receipt field", () => {
+  it("does not project a receipt without a matching public tool", () => {
     expect(
       publicApprovalDescription({
         appSpec: "private",
         approvalReceipt: receipt,
         path: "/private/workspace",
       }),
-    ).toBe(JSON.stringify(receipt));
+    ).toBeUndefined();
     expect(
       publicApprovalDescription({
         approvalReceipt: { ...receipt, token: "secret" },
@@ -211,51 +211,35 @@ describe("approval receipt", () => {
 
   it("projects closed local AppSpec and change-set approval subjects", () => {
     expect(
-      JSON.parse(
-        publicApprovalDescription(
-          {
-            appId: "billing-console",
-            expectedArtifactDigest: "1".repeat(64),
-            expectedArtifactRevision: "2".repeat(64),
-            expectedEligibilityDigest: "3".repeat(64),
-            expectedSourceSha: "a".repeat(40),
-            expectedSourceTree: "b".repeat(40),
-            expectedWorkspaceDigest: "4".repeat(64),
-            privateContent: "not projected",
-          },
-          "accept_app_spec",
-        ) ?? "null",
+      publicApprovalDescription(
+        {
+          appId: "billing-console",
+          expectedArtifactDigest: "1".repeat(64),
+          expectedArtifactRevision: "2".repeat(64),
+          expectedEligibilityDigest: "3".repeat(64),
+          expectedSourceSha: "a".repeat(40),
+          expectedSourceTree: "b".repeat(40),
+          expectedWorkspaceDigest: "4".repeat(64),
+          privateContent: "not projected",
+        },
+        "accept_app_spec",
       ),
-    ).toEqual({
-      appId: "billing-console",
-      artifactRevision: "2".repeat(64),
-      eligibilityDigest: "3".repeat(64),
-      format: "autograph-local-approval-subject-v1",
-      outcome: "accept-appspec",
-      phase: "appspec",
-      sourceSha: "a".repeat(40),
-      sourceTree: "b".repeat(40),
-      subjectDigest: "1".repeat(64),
-      workspaceDigest: "4".repeat(64),
-    });
+    ).toBe(
+      "Accept the reviewed AppSpec for billing-console and continue with its implementation plan.",
+    );
     expect(
-      JSON.parse(
-        publicApprovalDescription(
-          {
-            changeSet: {
-              changes: [{ path: "private" }],
-              digest: "5".repeat(64),
-            },
+      publicApprovalDescription(
+        {
+          changeSet: {
+            changes: [{ path: "private" }],
+            digest: "5".repeat(64),
           },
-          "accept_change_set",
-        ) ?? "null",
+        },
+        "accept_change_set",
       ),
-    ).toEqual({
-      format: "autograph-local-approval-subject-v1",
-      outcome: "accept_change_set",
-      phase: "change_set",
-      subjectDigest: "5".repeat(64),
-    });
+    ).toBe(
+      "Accept the reviewed change set after its final source assessment. This records review in the Builder session; it does not publish or change an external repository.",
+    );
   });
 
   it("denies missing and wrong-phase GitHub receipts before approval", () => {
