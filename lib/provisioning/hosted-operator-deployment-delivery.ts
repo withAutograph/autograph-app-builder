@@ -18,6 +18,7 @@ import { isRetentionRenewalDeliveryProvenance } from "./hosted-operator-retentio
 import type { RetentionRenewalDeliveryProvenance } from "./hosted-operator-retention-renewal";
 import { createHostedOperatorConsentDiagnostic } from "./hosted-operator-consent-diagnostic";
 import type { OperatorGatewayDeliveryDiagnostic } from "./hosted-operator-consent-diagnostic";
+import { readOperatorGatewayProviderFailure } from "./hosted-operator-gateway-bindings";
 
 interface DeploymentListQuery {
   branch: string;
@@ -254,12 +255,19 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     let phase: OperatorGatewayDeliveryDiagnostic["phase"];
     let method: OperatorGatewayDeliveryDiagnostic["method"];
     let httpStatus: OperatorGatewayDeliveryDiagnostic["httpStatus"];
+    let providerFailure:
+      | Pick<
+          OperatorGatewayDeliveryDiagnostic,
+          "providerCode" | "providerTerms" | "validationFields"
+        >
+      | undefined;
     return {
       at(value: OperatorGatewayDeliveryDiagnostic["stage"]) {
         stage = value;
         phase = undefined;
         method = undefined;
         httpStatus = undefined;
+        providerFailure = undefined;
       },
       phase(value: OperatorGatewayDeliveryDiagnostic["phase"]) {
         phase = value;
@@ -267,9 +275,13 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       request(value: OperatorGatewayDeliveryDiagnostic["method"]) {
         method = value;
         httpStatus = undefined;
+        providerFailure = undefined;
       },
       response(value: number) {
         httpStatus = value;
+      },
+      providerFailure(value: NonNullable<typeof providerFailure>) {
+        providerFailure = value;
       },
       finish(result: OperatorGatewayDeliveryDiagnostic["result"]) {
         if (deps.target !== "gateway") {
@@ -281,7 +293,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
             phase: "inline",
             stage: "operator_request",
             outcome: result === "applied" ? "verified" : "setup_unavailable",
-            gatewayDelivery: { stage, phase, method, httpStatus, result },
+            gatewayDelivery: { stage, phase, method, httpStatus, result, ...providerFailure },
           });
         } catch {
           /* Advisory metadata never changes delivery or its original exception. */
@@ -440,6 +452,10 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       for (const [key, value] of Object.entries(query)) {
         url.searchParams.set(key, value);
       }
+      const signal = AbortSignal.any([
+        AbortSignal.timeout(20_000),
+        ...(input.signal === undefined ? [] : [input.signal]),
+      ]);
       const send = async () =>
         await (deps.fetch ?? fetch)(url, {
           body: body === undefined ? undefined : JSON.stringify(body),
@@ -451,10 +467,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
           },
           method: body === undefined ? "GET" : "POST",
           redirect: "error",
-          signal: AbortSignal.any([
-            AbortSignal.timeout(20_000),
-            ...(input.signal === undefined ? [] : [input.signal]),
-          ]),
+          signal,
         });
       observation?.phase("fetch");
       const { response, rejectedAssignment } = await sendObserved(
@@ -473,6 +486,9 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
           return null;
         }
         if (!response.ok) {
+          if (deps.target === "gateway" && observation !== undefined) {
+            observation.providerFailure(await readOperatorGatewayProviderFailure(response, signal));
+          }
           throw new HostedOperatorError("operator_unavailable");
         }
         observation?.phase("json_decode");

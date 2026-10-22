@@ -798,8 +798,33 @@ const gatewayProviderTerm = z.enum([
   "size",
   "update",
   "length",
+  "repository",
+  "commit",
+  "framework",
+  "author",
+  "build",
+  "source",
+  "sha",
+  "ref",
+  "repoId",
+  "gitSource",
+  "projectSettings",
 ]);
-const gatewayValidationField = z.enum(["gitBranch", "target", "type", "key", "value", "comment"]);
+const gatewayValidationField = z.enum([
+  "gitBranch",
+  "target",
+  "type",
+  "key",
+  "value",
+  "comment",
+  "gitSource",
+  "ref",
+  "sha",
+  "repoId",
+  "name",
+  "project",
+  "projectSettings",
+]);
 
 /** Literal observations only: labels are neither provider causes nor permission to retry. */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the parser for untrusted advisory provider metadata; only closed fields are returned.
@@ -930,6 +955,9 @@ const gatewayDeliveryDiagnostic = z.strictObject({
   method: z.enum(["GET", "POST"]).optional(),
   httpStatus: z.number().int().min(100).max(599).optional(),
   result: z.enum(["applied", "retryable", "unknown"]),
+  providerCode: gatewayProviderCode.optional(),
+  providerTerms: z.array(gatewayProviderTerm).optional(),
+  validationFields: z.array(gatewayValidationField).optional(),
 });
 export type OperatorGatewayDeliveryDiagnostic = z.infer<typeof gatewayDeliveryDiagnostic>;
 
