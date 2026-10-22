@@ -129,7 +129,14 @@ const sharedHostProtectionPrerequisite = (
       plan.deploymentBoundary?.gateway.projectId === configuration.gateway.projectId,
       plan.deploymentBoundary?.teamId === configuration.teamId,
     ].every(Boolean);
-  return configuredHost ? createSharedHostProtectionSuccessorPlan(record, Date.now()) : undefined;
+  return configuredHost
+    ? createSharedHostProtectionSuccessorPlan(
+        record,
+        Date.now(),
+        // oxlint-disable-next-line eslint/no-use-before-define -- Called after module initialization; retain canonical application-selection validation.
+        selectedApplication(configuration, context).hostProtection,
+      )
+    : undefined;
 };
 
 const GATEWAY_DELIVERY = "gateway-delivery";

@@ -968,6 +968,7 @@ const handlePlanOperation = async (
           if (
             installerSuccessor ||
             appGatewaySuccessor ||
+            sharedHostSuccessor ||
             settingsSuccessor ||
             retentionRenewal ||
             readySuccessor
@@ -1281,6 +1282,8 @@ const handlePlanOperation = async (
           }
           if (sharedHostProtectionSuccessor) {
             nextOperator.operationRef = record.operator.operationRef;
+            // Keep completed access receipts in their original fence while narrowing only policy writes.
+            nextOperator.fenceGeneration = record.operator.fenceGeneration;
             nextOperator.pendingEffectId = record.operator.pendingEffectId;
             nextOperator.pendingEffectAttempt = record.operator.pendingEffectAttempt;
             nextOperator.workerCheckpoints = record.operator.workerCheckpoints;
@@ -1316,6 +1319,7 @@ const handlePlanOperation = async (
           if (
             !retainedRenewalSuccessor &&
             !readyDeliverySuccessor &&
+            !sharedHostProtectionSuccessor &&
             authStageCompleted &&
             record.operator.plan.authSchema?.targetDigest === plan.authSchema?.targetDigest
           ) {
