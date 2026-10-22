@@ -274,6 +274,7 @@ export interface GitHubAppInstallationProvider {
     owner: string;
     name: string;
     number: number;
+    reconciliation?: ExistingDraftReconciliationProposal;
   }) => Promise<unknown>;
   updateExistingDraft: (
     proposal: ExistingDraftUpdateProposal,

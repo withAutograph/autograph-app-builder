@@ -256,6 +256,7 @@ export interface ExistingDraftReconciliationAdapter {
     owner: string;
     name: string;
     number: number;
+    reconciliation?: ExistingDraftReconciliationProposal;
   }) => Promise<ExistingDraftObservation>;
   inspectRepository: (input: {
     operation: typeof draftPublicationOperation;
@@ -439,6 +440,7 @@ const inspectDraftAfterWrite = async (input: {
       number: input.proposal.pullRequestNumber,
       owner: input.proposal.owner,
       repositoryId: input.proposal.repositoryId,
+      reconciliation: input.proposal,
     });
   } catch (readbackError) {
     const prefix =
@@ -496,6 +498,7 @@ export const inspectAppliedExistingDraftReconciliation = async (input: {
     number: proposal.pullRequestNumber,
     owner: proposal.owner,
     repositoryId: proposal.repositoryId,
+    reconciliation: proposal,
   });
   if (!sameDraft(proposal, current)) {
     throw new Error(

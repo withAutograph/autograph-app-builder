@@ -383,6 +383,7 @@ export interface GitHubPublicationAdapter extends GitHubSourceResolutionAdapter 
     owner: string;
     name: string;
     number: number;
+    reconciliation?: ExistingDraftReconciliationProposal;
   }) => Promise<ExistingDraftObservation>;
   updateExistingDraft: (
     proposal: ExistingDraftUpdateProposal,
