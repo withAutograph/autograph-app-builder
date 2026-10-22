@@ -1,5 +1,8 @@
 import type { HostedEveStore } from "../eve/hosted-store";
-import { hostedSessionRecordSchema, toDurableHostedSessionRecord } from "../eve/hosted-store";
+import {
+  hostedOperatorCallbackExecution,
+  readHostedOperatorCallbackOwner,
+} from "../provisioning/hosted-operator-callback-owner";
 import {
   HostedOperatorError,
   operatorOwnerContextSchema,
@@ -25,14 +28,20 @@ export interface HostedRuntimeResumeSnapshot {
 }
 interface Context {
   abortSignal: AbortSignal;
-  session: { id: string; auth: unknown };
+  session: {
+    id: string;
+    auth: unknown;
+    readonly ownerRunId?: string;
+    readonly ownerAnchorRunId?: string;
+  };
 }
 type Operator = Pick<
   Awaited<ReturnType<typeof hostedOperatorClientForSession>>,
   "ownerContext" | "request" | "sessionId"
 >;
 interface ReferencePorts {
-  store: Pick<HostedEveStore, "getSession">;
+  store: Pick<HostedEveStore, "getSession"> &
+    Partial<Pick<HostedEveStore, "readCurrentBuildSession">>;
   readPrior: (
     input: HostedRuntimeApprovalEnvelope,
     ctx: Context,
@@ -48,35 +57,34 @@ export const createHostedRuntimeApprovedReferenceReader = (ports: ReferencePorts
     expected?: HostedRuntimeResumeSnapshot,
   ) => {
     ctx.abortSignal.throwIfAborted();
-    const raw = await ports.store.getSession(owner.principal, owner.sessionId);
+    const { authoritySession: session, currentSession } = await readHostedOperatorCallbackOwner({
+      store: ports.store,
+      owner,
+      execution: hostedOperatorCallbackExecution(ctx.session),
+    });
     ctx.abortSignal.throwIfAborted();
-    if (raw === null) {
-      throw denied();
-    }
-    const session = toDurableHostedSessionRecord(hostedSessionRecordSchema.parse(raw));
     const matches = [
       session.sessionId === owner.sessionId,
-      session.adapterSessionId === ctx.session.id,
-      session.adapterSessionId === owner.adapterSessionId,
-      session.adapterGeneration === owner.adapterGeneration,
+      currentSession.adapterSessionId === owner.adapterSessionId,
+      currentSession.adapterGeneration === owner.adapterGeneration,
       ...(["audience", "issuer", "ownerUserId", "workspaceId"] as const).map(
         (key) => session.principal[key] === owner.principal[key],
       ),
-      session.status !== "cancelled",
-      session.status !== "completed",
+      currentSession.status !== "cancelled",
+      currentSession.status !== "completed",
     ].every(Boolean);
     const snapshotMatches =
       expected === undefined ||
       [
         expected.sessionId === session.sessionId,
-        expected.adapterSessionId === session.adapterSessionId,
-        expected.adapterGeneration === session.adapterGeneration,
-        expected.cancellationRevision === (session.cancellationRevision ?? 0),
+        expected.adapterSessionId === currentSession.adapterSessionId,
+        expected.adapterGeneration === currentSession.adapterGeneration,
+        expected.cancellationRevision === (currentSession.cancellationRevision ?? 0),
       ].every(Boolean);
     if (!matches || !snapshotMatches) {
       throw denied();
     }
-    return session;
+    return { session, currentSession };
   };
   const assertCurrent = async (
     snapshot: HostedRuntimeResumeSnapshot,
@@ -98,12 +106,12 @@ export const createHostedRuntimeApprovedReferenceReader = (ports: ReferencePorts
     if (operator.sessionId !== owner.sessionId) {
       throw denied();
     }
-    const session = await readOwned(ctx, owner);
+    const { session, currentSession } = await readOwned(ctx, owner);
     const snapshot: HostedRuntimeResumeSnapshot = {
       sessionId: session.sessionId,
-      adapterSessionId: session.adapterSessionId,
-      adapterGeneration: session.adapterGeneration,
-      cancellationRevision: session.cancellationRevision ?? 0,
+      adapterSessionId: currentSession.adapterSessionId,
+      adapterGeneration: currentSession.adapterGeneration,
+      cancellationRevision: currentSession.cancellationRevision ?? 0,
     };
     const matching = (session.privateApprovalReceipts ?? [])
       .filter(
@@ -161,7 +169,12 @@ const deployedReferenceReader = async (ctx: Context) => {
     import("../provisioning/hosted-operator-client"),
   ]);
   ctx.abortSignal.throwIfAborted();
-  const operator = await client.hostedOperatorClientForSession(ctx.session.auth, ctx.session.id);
+  const operator = await client.hostedOperatorClientForSession(
+    ctx.session.auth,
+    ctx.session.id,
+    process.env,
+    hostedOperatorCallbackExecution(ctx.session),
+  );
   ctx.abortSignal.throwIfAborted();
   const store = await approval.openHostedRuntimeApprovalStore();
   ctx.abortSignal.throwIfAborted();

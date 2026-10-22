@@ -1,3 +1,4 @@
+import type { HostedOperatorCallbackExecution } from "./hosted-operator-callback-owner";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { realmIdentityNonceSha256 } from "./hosted-operator-auth-identity";
@@ -324,10 +325,18 @@ export const reconcileHostedOperatorRealmContinuation = async (input: {
 
 const identityWaitContext = async (
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The existing operator client parses native auth before resolving owner context.
-  input: HostedRuntimeIdentityWaitInvocation & { sessionAuth: unknown },
+  input: HostedRuntimeIdentityWaitInvocation & {
+    sessionAuth: unknown;
+    callbackExecution?: HostedOperatorCallbackExecution;
+  },
 ) => {
   const { hostedOperatorClientForSession } = await import("./hosted-operator-client");
-  const client = await hostedOperatorClientForSession(input.sessionAuth, input.adapterSessionId);
+  const client = await hostedOperatorClientForSession(
+    input.sessionAuth,
+    input.adapterSessionId,
+    process.env,
+    input.callbackExecution,
+  );
   const owner = client.ownerContext;
   if (owner === undefined || owner === null) {
     throw new HostedOperatorError("authorization_required");
@@ -339,13 +348,13 @@ const identityWaitContext = async (
     const context = await resources.controlPlane.resolveOwnerRealmContinuationContext({
       principal: owner.principal,
       sessionId: owner.sessionId,
-      adapterSessionId: input.adapterSessionId,
+      adapterSessionId: owner.adapterSessionId,
       ...(owner.kind === "handoff" ? { sourceHandoffId: owner.sourceHandoffId } : {}),
     });
     if (context === undefined) {
       throw new HostedOperatorError("authorization_required");
     }
-    return { context, resources };
+    return { context, resources, adapterSessionId: owner.adapterSessionId };
   } catch (error) {
     await resources.controlPlane.close();
     throw error;
@@ -355,11 +364,17 @@ const identityWaitContext = async (
 /** Called only by the authored tool's private step after its hook registration commits. */
 export const registerHostedRuntimeIdentityWait = async (
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Native auth is parsed by identityWaitContext's existing owner client.
-  input: HostedRuntimeIdentityWaitRegistration & { sessionAuth: unknown },
+  input: HostedRuntimeIdentityWaitRegistration & {
+    sessionAuth: unknown;
+    callbackExecution?: HostedOperatorCallbackExecution;
+  },
 ) => {
-  const { context, resources } = await identityWaitContext(input);
+  const { context, resources, adapterSessionId } = await identityWaitContext(input);
   try {
-    return await resources.controlPlane.registerOwnerRealmIdentityWait(context, input);
+    return await resources.controlPlane.registerOwnerRealmIdentityWait(context, {
+      ...input,
+      adapterSessionId,
+    });
   } finally {
     await resources.controlPlane.close();
   }
@@ -368,11 +383,18 @@ export const registerHostedRuntimeIdentityWait = async (
 /** A hook payload is a wakeup only; current owner and canonical proof/expiry establish its meaning. */
 export const acknowledgeHostedRuntimeIdentityWait = async (
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Native auth is parsed by identityWaitContext's existing owner client.
-  input: HostedRuntimeIdentityWaitInvocation & { sessionAuth: unknown; eventId: string },
+  input: HostedRuntimeIdentityWaitInvocation & {
+    sessionAuth: unknown;
+    eventId: string;
+    callbackExecution?: HostedOperatorCallbackExecution;
+  },
 ) => {
-  const { context, resources } = await identityWaitContext(input);
+  const { context, resources, adapterSessionId } = await identityWaitContext(input);
   try {
-    return await resources.controlPlane.acknowledgeOwnerRealmIdentityWait(context, input);
+    return await resources.controlPlane.acknowledgeOwnerRealmIdentityWait(context, {
+      ...input,
+      adapterSessionId,
+    });
   } finally {
     await resources.controlPlane.close();
   }

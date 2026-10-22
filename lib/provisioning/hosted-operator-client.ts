@@ -1,3 +1,4 @@
+import type { HostedOperatorCallbackExecution } from "./hosted-operator-callback-owner";
 import {
   continuityTransportRequestSchema,
   continuityPlannedSchema,
@@ -670,6 +671,7 @@ export const hostedOperatorClientForSession = async (
   sessionAuth: unknown,
   adapterSessionId: string,
   environment: Readonly<Record<string, string | undefined>> = process.env,
+  execution?: HostedOperatorCallbackExecution,
 ) => {
   const report = createHostedOperatorConsentDiagnostic(adapterSessionId);
   let stage: HostedOperatorConsentMetadata["stage"] = "configuration";
@@ -686,7 +688,7 @@ export const hostedOperatorClientForSession = async (
     stage = "owner_authority";
     emit("started");
     const { authority, principal } = exactForwardedSessionAuthority(sessionAuth, {
-      realmContinuation: { adapterSessionId },
+      realmContinuation: { adapterSessionId: execution?.ownerAnchorRunId ?? adapterSessionId },
     });
     emit("verified");
     stage = "owner_context";
@@ -697,6 +699,7 @@ export const hostedOperatorClientForSession = async (
       environment,
       principal,
       sessionAuth,
+      execution,
     });
     emit("verified");
     stage = "client_construction";

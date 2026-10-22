@@ -1,3 +1,4 @@
+import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import {
@@ -13,7 +14,12 @@ export default defineTool({
   async execute(_input, ctx) {
     let operator;
     try {
-      operator = await hostedOperatorClientForSession(ctx.session.auth, ctx.session.id);
+      operator = await hostedOperatorClientForSession(
+        ctx.session.auth,
+        ctx.session.id,
+        process.env,
+        hostedOperatorCallbackExecution(ctx.session),
+      );
     } catch (error) {
       return hostedNeonBlockedResult(
         error instanceof HostedOperatorError ? error.code : "operator_unavailable",

@@ -1,3 +1,4 @@
+import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { defineTool } from "eve/tools";
 import type { SandboxSession } from "eve/sandbox";
 import { publishCompiledOperatorArtifactsForSession } from "@/lib/agent/compiled-operator-artifacts";
@@ -148,6 +149,7 @@ export default defineTool({
       appId: refreshed.appSpec.appId,
       appSpecDigest: refreshed.appSpec.digest,
       callId: ctx.callId,
+      callbackExecution: hostedOperatorCallbackExecution(ctx.session),
       root: refreshed.applyReceipt.applyRoot,
       sessionAuth: ctx.session.auth,
       signal: ctx.abortSignal,

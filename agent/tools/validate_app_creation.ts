@@ -1,3 +1,4 @@
+import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { validationLogsWithReadInputs } from "@/lib/agent/validation-log-read-input";
 import { publishCompiledOperatorArtifactsForSession } from "@/lib/agent/compiled-operator-artifacts";
 import {
@@ -294,6 +295,7 @@ export const createAppValidationTool = (
         fixture,
         parameters: {
           adapterSessionId: ctx.session.id,
+          callbackExecution: hostedOperatorCallbackExecution(ctx.session),
           appId: current.appSpec.appId,
           callId: ctx.callId,
           root: current.applyReceipt.applyRoot,
@@ -397,6 +399,7 @@ export const createAppValidationTool = (
       validationPhase(ctx.callId, "capturing_validated_release");
       const captureFailure = await executionPorts.captureRelease(description, {
         adapterSessionId: ctx.session.id,
+        callbackExecution: hostedOperatorCallbackExecution(ctx.session),
         appId: current.appSpec.appId,
         appSpecDigest: current.appSpec.digest,
         callId: ctx.callId,
@@ -427,6 +430,7 @@ export const createAppValidationTool = (
           appId: current.appSpec.appId,
           root: current.applyReceipt.applyRoot,
           sandboxId: getBuilderSandboxId(sandbox),
+          callbackExecution: hostedOperatorCallbackExecution(ctx.session),
           sessionAuth: ctx.session.auth,
           sessionId: ctx.session.id,
           signal: ctx.abortSignal,

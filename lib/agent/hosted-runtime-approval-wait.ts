@@ -1,3 +1,4 @@
+import { hostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 import type { WorkflowStepToolContext, WorkflowToolContext } from "eve/tools";
 import type { HostedRuntimeApprovalEnvelope } from "./prepare-app-hosted-runtime-step";
 import type {
@@ -52,7 +53,12 @@ export async function readHostedRuntimeApprovalReceiptStep(
   ]);
   ctx.abortSignal.throwIfAborted();
   const [operator, store] = await Promise.all([
-    client.hostedOperatorClientForSession(ctx.session.auth, ctx.session.id),
+    client.hostedOperatorClientForSession(
+      ctx.session.auth,
+      ctx.session.id,
+      process.env,
+      hostedOperatorCallbackExecution(ctx.session),
+    ),
     approval.openHostedRuntimeApprovalStore(),
   ]);
   const read = receipt.createHostedRuntimeApprovalReceiptReader({ store, now: Date.now });

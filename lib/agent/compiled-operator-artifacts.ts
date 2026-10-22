@@ -1,6 +1,7 @@
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import type { SandboxSession } from "eve/sandbox";
+import type { HostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 import { appBuilderWorkflowState } from "./workflow-state";
 import { assertApprovedPrivateApplySession } from "./private-apply-authority";
 import {
@@ -101,6 +102,7 @@ export interface CompiledOperatorArtifactSessionInput {
   sessionAuth: unknown;
   adapterSessionId: string;
   signal?: AbortSignal;
+  callbackExecution?: HostedOperatorCallbackExecution;
 }
 
 const resolveCompiledArtifactSession = async (
@@ -134,6 +136,7 @@ const resolveCompiledArtifactSession = async (
         environment: process.env,
         principal,
         sessionAuth: input.sessionAuth,
+        execution: input.callbackExecution,
       });
     const owner = await resolve();
     context = {
@@ -275,6 +278,7 @@ export const assertReconciliationCompletionOwnerForSession = async (input: {
   completion: DraftReconciliationCompletion;
   adapterSessionId: string;
   sessionAuth: unknown;
+  callbackExecution?: HostedOperatorCallbackExecution;
 }) => {
   await resolveCompiledArtifactSession(
     {
@@ -299,6 +303,7 @@ export const recordPublishedReconciliationSourceForSession = async (input: {
   sessionAuth: unknown;
   publishedSource: PublishedAppSource;
   recordCurrentEquivalentRelease?: true;
+  callbackExecution?: HostedOperatorCallbackExecution;
 }) => {
   const { completion } = input;
   const resolvedBinding = await resolveCompiledArtifactSession(

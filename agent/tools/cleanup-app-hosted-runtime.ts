@@ -1,3 +1,4 @@
+import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { defineTool } from "eve/tools";
 import { always } from "eve/tools/approval";
 import { z } from "zod";
@@ -35,7 +36,12 @@ export default defineTool({
   async execute(input, ctx) {
     try {
       const plan = hostedOperatorPlanSchema.parse(input.plan);
-      const operator = await hostedOperatorClientForSession(ctx.session.auth, ctx.session.id);
+      const operator = await hostedOperatorClientForSession(
+        ctx.session.auth,
+        ctx.session.id,
+        process.env,
+        hostedOperatorCallbackExecution(ctx.session),
+      );
       const selection = {
         appId: input.appId,
         branch: input.branch,
