@@ -1,4 +1,7 @@
 import { defineState } from "eve/context";
+import type { PublishedDraftRepairSource } from "./published-draft-repair";
+import type { PublishedDraftRepairReview } from "../repository/published-draft-repair-review";
+import type { ExistingDraftUpdateProposal } from "../repository/github-draft-update";
 import { isDeepStrictEqual } from "node:util";
 import type { OperatorArtifactContext } from "../provisioning/hosted-operator-artifact-store";
 import type { CompiledOperatorReleaseSelection } from "../provisioning/hosted-operator-artifact-selection";
@@ -67,7 +70,7 @@ export const assertRetainedDraftReconciliationCompletion = (
   }
 };
 
-export interface DraftReconciliationCandidate {
+interface DraftCandidateFields {
   version: 1;
   appId: string;
   githubSourceDigest: string;
@@ -114,6 +117,58 @@ export interface DraftReconciliationCandidate {
   /** Last provider-proved approved merge, independent of the current unpublished candidate. */
   publishedReconciliation?: ExistingDraftReconciliationProposal;
 }
+
+/** Repair comparison base is its draft head; it is never represented as live main. */
+export type DraftReconciliationCandidate = DraftCandidateFields &
+  (
+    | { kind?: "reconciliation"; repair?: never; repairReview?: never }
+    | {
+        kind: "published-draft-repair";
+        repair: PublishedDraftRepairSource;
+        repairReview?: PublishedDraftRepairReview;
+      }
+  );
+
+export interface PublishedDraftRepairCompletion {
+  kind: "published-draft-repair";
+  proposal: ExistingDraftUpdateProposal;
+  review: PublishedDraftRepairReview;
+  appReview: PublishedAppSourceReview;
+  appId: string;
+  root: string;
+  repair: PublishedDraftRepairSource;
+  compilation: ReconciliationCompilation;
+}
+
+export const publishedDraftRepairCompletions = defineState<PublishedDraftRepairCompletion[]>(
+  "autograph-app-builder.published-draft-repair-completions.v1",
+  () => [],
+);
+export const retainPublishedDraftRepairCompletion = (
+  completion: PublishedDraftRepairCompletion,
+): void => {
+  publishedDraftRepairCompletions.update((current) => {
+    const prior = current.find((entry) => entry.proposal.digest === completion.proposal.digest);
+    if (prior !== undefined && !isDeepStrictEqual(prior, completion)) {
+      throw new Error(
+        "The retained draft repair completion belongs to different approved context.",
+      );
+    }
+    return prior === undefined ? [...current, completion] : current;
+  });
+};
+export const assertRetainedPublishedDraftRepairCompletion = (
+  completion: PublishedDraftRepairCompletion,
+): void => {
+  if (
+    !publishedDraftRepairCompletions.get().some((entry) => isDeepStrictEqual(entry, completion))
+  ) {
+    throw new Error("The exact retained draft repair completion is unavailable.");
+  }
+};
+export type DraftPublicationCompletion =
+  | DraftReconciliationCompletion
+  | PublishedDraftRepairCompletion;
 
 export interface CandidateValidationAttempt {
   attemptDigest: string;

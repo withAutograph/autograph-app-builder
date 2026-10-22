@@ -1,3 +1,4 @@
+import { currentDraftCandidateSource } from "@/lib/agent/published-draft-repair";
 import { defineTool } from "eve/tools";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import { withCandidateCommandEnvironment } from "@/lib/agent/candidate-command-environment";
@@ -15,7 +16,7 @@ import {
   validationOutputExcerpt,
 } from "@/lib/repository/target-validation";
 
-const command = "mise run --no-deps --skip-tools format:app";
+const legacyCommand = "mise run --no-deps --skip-tools format:app";
 
 export default defineTool({
   description:
@@ -26,13 +27,17 @@ export default defineTool({
     if (
       candidate === null ||
       state.phase !== "reviewed" ||
-      state.githubSource?.digest !== candidate.githubSourceDigest ||
+      currentDraftCandidateSource(state, candidate) === undefined ||
       state.reviewReceipt.digest !== candidate.originalReviewDigest
     ) {
       throw new Error(
         "The prepared draft candidate no longer matches the selected app and source review. Prepare reconciliation again before formatting.",
       );
     }
+    const command =
+      candidate.kind === "published-draft-repair"
+        ? `mise run --no-deps --skip-tools //apps/${candidate.appId}:format`
+        : legacyCommand;
     const sandbox = withCandidateCommandEnvironment(await getSourceBoundSandbox(ctx));
     await attachCheckoutDependencyView({
       sandbox,
@@ -56,6 +61,7 @@ export default defineTool({
         delete next.validationRun;
         delete next.validation;
         delete next.review;
+        delete next.repairReview;
         delete next.reviewReadProgress;
         delete next.proposal;
         return next;

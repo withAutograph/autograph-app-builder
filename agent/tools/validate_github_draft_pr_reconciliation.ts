@@ -1,3 +1,5 @@
+import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
+import { currentDraftCandidateSource } from "@/lib/agent/published-draft-repair";
 import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
 import { defineTool } from "eve/tools";
 import { createHash, randomUUID } from "node:crypto";
@@ -49,6 +51,7 @@ const publishCandidateArtifacts = async (
   }
   return await publishCompiledOperatorArtifactsForSession({
     adapterSessionId: ctx.session.id,
+    callbackExecution: hostedOperatorCallbackExecution(ctx.session),
     appId: candidate.appId,
     appSpecDigest: state.appSpec.digest,
     callId: ctx.callId,
@@ -435,6 +438,7 @@ const runIncrementalValidation = async (
         delete next.validation;
         delete next.proposal;
         delete next.review;
+        delete next.repairReview;
         delete next.reviewReadProgress;
         return next;
       },
@@ -757,7 +761,7 @@ export default defineTool({
     if (
       candidate === null ||
       state.phase !== "reviewed" ||
-      state.githubSource?.digest !== candidate.githubSourceDigest ||
+      currentDraftCandidateSource(state, candidate) === undefined ||
       state.reviewReceipt.digest !== candidate.originalReviewDigest
     ) {
       throw new Error(

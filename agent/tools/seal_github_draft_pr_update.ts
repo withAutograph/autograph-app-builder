@@ -1,3 +1,5 @@
+import { draftReconciliationState } from "@/lib/agent/draft-reconciliation-state";
+import { sealPublishedDraftRepair } from "@/lib/agent/published-draft-repair-publication";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
@@ -15,6 +17,10 @@ export default defineTool({
     "Inspect an existing open draft pull request in the selected GitHub repository and seal a proposal to update its current head with the reviewed app-owned change set. The result includes the exact approvalReceipt for the draft branch head; pass it verbatim to update_github_draft_pr after separate approval. This is read-only.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
+    if (draftReconciliationState.get()?.kind === "published-draft-repair") {
+      return await sealPublishedDraftRepair({ ctx, ...input });
+    }
+
     if (state.phase !== "reviewed" || state.githubSource === undefined) {
       throw new Error(
         "Review the current app changes in the selected GitHub repository before proposing a draft PR update.",

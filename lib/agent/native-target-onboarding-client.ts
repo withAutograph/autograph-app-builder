@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { hostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
+import type { HostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 import { exactForwardedSessionAuthority } from "../hosted/session-authority";
 import { createVercelWorkloadIdentity } from "../eve/vercel-workload-identity";
 import {
@@ -29,8 +31,10 @@ export const createNativeTargetOnboardingClient = (options: {
   token: () => Promise<string>;
   fetch?: typeof fetch;
   allowLoopback?: boolean;
+  execution?: HostedOperatorCallbackExecution;
 }): NativeTargetOnboardingRuntime => {
   const owner = operatorOwnerContextSchema.parse(options.ownerContext);
+  const execution = options.execution === undefined ? undefined : { ...options.execution };
   const url = new URL(options.endpoint);
   const loopback =
     options.allowLoopback === true && url.protocol === "http:" && url.hostname === "127.0.0.1";
@@ -114,11 +118,26 @@ export const createNativeTargetOnboardingClient = (options: {
     }
     return parsed.data;
   };
-  const common = (ctx: NativeTargetInvocation) => ({
-    ownerContext: owner,
-    adapterSessionId: ctx.session.id,
-    callId: ctx.callId,
-  });
+  const assertInvocation = (session: Parameters<typeof hostedOperatorCallbackExecution>[0]) => {
+    const observed = hostedOperatorCallbackExecution(session);
+    const matches =
+      execution === undefined
+        ? session.id === owner.adapterSessionId
+        : (["logicalSessionId", "ownerRunId", "ownerAnchorRunId"] as const).every(
+            (key) => observed[key] === execution[key],
+          );
+    if (!matches) {
+      throw denied();
+    }
+  };
+  const common = (ctx: NativeTargetInvocation) => {
+    assertInvocation(ctx.session);
+    return {
+      ownerContext: owner,
+      adapterSessionId: owner.adapterSessionId,
+      callId: ctx.callId,
+    };
+  };
   const exactResult = (
     input: NativeTargetPreparationRequest,
     output: NativeTargetPreparationRequest,
@@ -188,6 +207,7 @@ export const createNativeTargetOnboardingClient = (options: {
       return true;
     },
     async authorizeApprovalResponse(ctx) {
+      assertInvocation(ctx.session);
       if (
         ctx.request.toolInput === undefined ||
         ctx.request.toolName !== "prepare-app-native-target"
@@ -204,7 +224,7 @@ export const createNativeTargetOnboardingClient = (options: {
       await send(
         {
           ownerContext: owner,
-          adapterSessionId: ctx.session.id,
+          adapterSessionId: owner.adapterSessionId,
           callId: ctx.request.callId,
           action: "native-target-approval-candidate",
           input: ctx.request.toolInput,
@@ -241,8 +261,9 @@ export const nativeTargetOnboardingClientForContext = async (
     "responder" in ctx
       ? { current: ctx.responder, initiator: ctx.session.initiator }
       : ctx.session.auth;
+  const execution = hostedOperatorCallbackExecution(ctx.session);
   const { authority, principal } = exactForwardedSessionAuthority(sessionAuth, {
-    realmContinuation: { adapterSessionId: ctx.session.id },
+    realmContinuation: { adapterSessionId: execution.ownerAnchorRunId ?? ctx.session.id },
   });
   const ownerContext = await (dependencies.resolveOwner ?? resolveHostedOperatorOwnerContext)({
     adapterSessionId: ctx.session.id,
@@ -250,10 +271,12 @@ export const nativeTargetOnboardingClientForContext = async (
     principal,
     sessionAuth,
     environment,
+    execution,
   });
   return createNativeTargetOnboardingClient({
     endpoint,
     ownerContext,
+    execution,
     token: createVercelWorkloadIdentity().token,
   });
 };

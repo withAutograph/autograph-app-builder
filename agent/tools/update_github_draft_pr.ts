@@ -1,3 +1,5 @@
+import { publishedDraftRepairCompletions } from "@/lib/agent/draft-reconciliation-state";
+import { updatePublishedDraftRepair } from "@/lib/agent/published-draft-repair-publication";
 import { defineTool } from "eve/tools";
 import { always } from "eve/tools/approval";
 import { z } from "zod";
@@ -20,6 +22,14 @@ export default defineTool({
     "After separate approval, update the existing open draft PR branch with only the current reviewed app-owned diff. Reject a moved PR branch, changed reviewed files, different repository, or a PR that is no longer an open draft.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
+    if (
+      publishedDraftRepairCompletions
+        .get()
+        .some((entry) => entry.proposal.digest === input.expectedProposalDigest)
+    ) {
+      return await updatePublishedDraftRepair({ ctx, ...input });
+    }
+
     if (
       state.phase !== "reviewed" ||
       state.githubSource === undefined ||

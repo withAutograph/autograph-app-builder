@@ -1,3 +1,8 @@
+import { createPublishedDraftRepairReview } from "@/lib/repository/published-draft-repair-review";
+import {
+  draftCandidateValidationDigest,
+  currentDraftCandidateSource,
+} from "@/lib/agent/published-draft-repair";
 import { defineTool } from "eve/tools";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import { z } from "zod";
@@ -23,7 +28,7 @@ export default defineTool({
       candidate === null ||
       candidate.validation === undefined ||
       state.phase !== "reviewed" ||
-      state.githubSource?.digest !== candidate.githubSourceDigest ||
+      currentDraftCandidateSource(state, candidate) === undefined ||
       state.reviewReceipt.digest !== candidate.originalReviewDigest
     ) {
       throw new Error(
@@ -41,6 +46,45 @@ export default defineTool({
       throw new Error(
         "The merged files changed after validation or still contain conflicts. Resolve them, rerun all candidate checks, and review the current diffs.",
       );
+    }
+    if (candidate.kind === "published-draft-repair") {
+      const repairReview = createPublishedDraftRepairReview({
+        appId: candidate.appId,
+        appSpecDigest: state.appSpec.digest,
+        originSourceReceiptDigest: candidate.repair.originSourceReceiptDigest,
+        originReviewDigest: candidate.originalReviewDigest,
+        publicationDigest: candidate.repair.publicationDigest,
+        repairSourceDigest: candidate.repair.source.digest,
+        headSha: candidate.headSha,
+        headTree: candidate.headTree,
+        resolvedTree: observed.resolvedTree,
+        validationDigest: draftCandidateValidationDigest(candidate.validation),
+        changes: [...observed.headChanges],
+        reviewedByCallId: ctx.callId,
+      });
+      updateExactDraftReconciliation({
+        expected: candidate,
+        operation: "reviewing the app-only draft-head repair",
+        transition: () => ({ ...candidate, repairReview }),
+      });
+      return {
+        status: "reviewed" as const,
+        kind: "published-draft-repair" as const,
+        baseline: "draft-head" as const,
+        reviewDigest: repairReview.digest,
+        headSha: repairReview.headSha,
+        resolvedTree: repairReview.resolvedTree,
+        changes: repairReview.changes,
+        validation: candidate.validation,
+        nextCall: {
+          tool: "seal_github_draft_pr_update",
+          arguments: {
+            expectedGitHubSourceDigest: candidate.repair.source.digest,
+            expectedReviewDigest: repairReview.digest,
+            pullRequestNumber: candidate.pullRequestNumber,
+          },
+        },
+      };
     }
     const review = createReconciliationReviewReceipt({
       appId: candidate.appId,

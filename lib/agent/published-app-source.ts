@@ -1,4 +1,7 @@
-import type { DraftReconciliationCompletion } from "./draft-reconciliation-state";
+import type {
+  PublishedDraftRepairCompletion,
+  DraftReconciliationCompletion,
+} from "./draft-reconciliation-state";
 import type { AppDescription } from "../repository/app-description";
 import type { ReconciliationReviewReceipt } from "../repository/github-draft-reconciliation";
 import type { ExistingDraftObservation } from "../repository/github-draft-update";
@@ -88,5 +91,28 @@ export const recordPublishedReconciliationForSession = async (input: {
       ...publishedAppSourceFromResult(completion.appReview, publication),
       reviewDigest: completion.review.digest,
     },
+  });
+};
+
+/** Record the provider-proved repair against its retained actual compiled candidate release. */
+export const recordPublishedDraftRepairForSession = async (input: {
+  completion: PublishedDraftRepairCompletion;
+  publication: ExistingDraftObservation;
+  sessionAuth: unknown;
+  adapterSessionId: string;
+  callbackExecution?: CompiledOperatorArtifactSessionInput["callbackExecution"];
+}) => {
+  const { completion, publication } = input;
+  if (
+    publication.repositoryId !== completion.proposal.repositoryId ||
+    publication.pullRequestId !== completion.proposal.pullRequestId ||
+    publication.headBranch !== completion.proposal.branchName ||
+    publication.headTree !== completion.review.resolvedTree
+  ) {
+    throw operatorArtifactUnavailable();
+  }
+  return await recordPublishedReconciliationSourceForSession({
+    ...input,
+    publishedSource: publishedAppSourceFromResult(completion.appReview, publication),
   });
 };
