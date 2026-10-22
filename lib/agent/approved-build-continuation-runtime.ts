@@ -1,4 +1,5 @@
 import { defineState } from "eve/context";
+import { hostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 import { hasTestCapability } from "../testing/test-capability";
 import type { HookContext } from "eve/hooks";
 import { exactForwardedSessionAuthority } from "../hosted/session-authority";
@@ -28,6 +29,7 @@ const ownerStore = async (ctx: Pick<HookContext, "session">) => {
     environment: process.env,
     principal,
     sessionAuth: ctx.session.auth,
+    execution: hostedOperatorCallbackExecution(ctx.session),
   });
   // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Establish current owner authority before opening the private persistence adapter.
   const [

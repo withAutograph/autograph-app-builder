@@ -137,7 +137,8 @@ export const readOwnedOperatorPlanningSelection = async (input: {
   // comes from the canonical owner principal and authority, not that Sandbox identity.
   const matchesOwner = [
     decision.adapterSessionId === owned.session.adapterSessionId,
-    currentSpec.sessionId === owned.session.adapterSessionId,
+    currentSpec.sessionId ===
+      (owned.session.nativeRecoveryBinding?.logicalSessionId ?? owned.session.adapterSessionId),
     owned.session.principal.workspaceId === context.authority.workspaceId,
     currentSpec.appId === context.target.appId,
   ].every(Boolean);

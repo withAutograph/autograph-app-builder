@@ -1,3 +1,4 @@
+import { sealPublishedDraftRepair } from "@/lib/agent/published-draft-repair-publication";
 import { defineTool } from "eve/tools";
 import {
   draftPrerequisiteMessage,
@@ -23,6 +24,13 @@ export default defineTool({
     "Seal a proposal for the exact validated reconciliation of an existing draft PR. The result includes the exact approvalReceipt for the draft branch head; pass it verbatim to reconcile_github_draft_pr after separate approval. The proposal binds the live base, old head, resolved tree, both reviewed diffs, and selected repository.",
   async execute(input, ctx) {
     const candidate = draftReconciliationState.get();
+    if (candidate?.kind === "published-draft-repair") {
+      return await sealPublishedDraftRepair({
+        ctx,
+        expectedReviewDigest: input.expectedReviewDigest,
+      });
+    }
+
     const state = appBuilderWorkflowState.get();
     // oxlint-disable-next-line sonarjs/expression-complexity -- exact review, diff reads, validation, and source must all match.
     if (

@@ -498,7 +498,7 @@ describe("private Neon reader failure diagnostics", () => {
     );
     f.planning.mockRejectedValue(new HostedOperatorError("authorization_required"));
     await expect(f.reader.inspectPlanningTarget(context, scope)).rejects.toThrow(
-      /^Protected Preview Neon MCP credential is unavailable\.$/u,
+      /^authorization_required$/u,
     );
     expect(diagnostics).toEqual(
       expect.arrayContaining([
@@ -557,7 +557,7 @@ describe("private Neon reader failure diagnostics", () => {
       sink,
     );
     await expect(denied.reader.inspectPlanningTarget(context, scope)).rejects.toThrow(
-      /^Protected Preview Neon MCP credential is unavailable\.$/u,
+      /^authorization_required$/u,
     );
     expect(diagnostics).toEqual(
       expect.arrayContaining([

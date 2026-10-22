@@ -205,6 +205,7 @@ const readCurrentOwnedSession = async (
       ...original,
       adapterGeneration: current.adapterGeneration,
       adapterSessionId: current.adapterSessionId,
+      nativeRecoveryBinding: currentBinding,
       privateBuildDecision: current.privateBuildDecision,
       resumability: current.resumability,
       stage: current.stage,
@@ -708,7 +709,8 @@ export const createHostedOperatorOwnerAuthority = (deps: HostedOperatorOwnerDepe
     }
     const matchesOwnedSandbox = [
       decision.adapterSessionId === session.adapterSessionId,
-      currentSpec.sessionId === session.adapterSessionId,
+      currentSpec.sessionId ===
+        (session.nativeRecoveryBinding?.logicalSessionId ?? session.adapterSessionId),
       currentSpec.appId === input.target.appId,
       currentSpec.workspaceId === sandboxId,
     ].every(Boolean);

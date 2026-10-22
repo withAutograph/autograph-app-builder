@@ -1,5 +1,7 @@
+import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { setBuilderSandboxNetworkPolicy } from "../../lib/sandbox/builder-sandbox";
 import { defineTool } from "eve/tools";
+import { preparePublishedDraftRepair } from "@/lib/agent/prepare-published-draft-repair";
 import {
   draftPreparationPrerequisiteDiagnostic,
   draftPrerequisiteMessage,
@@ -150,11 +152,29 @@ const retainedPublishedReconciliation = (
   return retained === undefined ? {} : { publishedReconciliation: retained };
 };
 
+const freshPublishedRepair = (state: AppBuilderWorkflowState): ReviewedWorkflow | null => {
+  if (state.phase !== "reviewed") {
+    return null;
+  }
+  if (state.sourceReceipt.sourceKind === "fresh-template" && state.githubSource === undefined) {
+    return state;
+  }
+  return null;
+};
+
 export default defineTool({
   description:
-    "Fetch the live base and existing draft head into an isolated Builder checkout and prepare a non-force merge candidate. This does not update GitHub. It reports exact app-owned conflict paths and refuses platform-owned conflicts. If candidate validation reports outside-app metadata changes, run this tool again: Builder preserves the old checkout, creates a fresh private candidate, and carries app repairs across the same verified draft/head/review lineage, merging current base app changes when the base advances. This technical recovery needs no human lockfile edit or new private-worktree approval.",
+    "Fetch the live base and existing draft head into an isolated Builder checkout and prepare a non-force merge candidate. For a fresh-template build that already published its own draft, open a separate owned repair candidate against that recorded draft head and preserve the original starter source; follow its returned repair nextAction instead of replacing the occupied source through resolve_github_source. This does not update GitHub. It reports exact app-owned conflict paths and refuses platform-owned conflicts. If candidate validation reports outside-app metadata changes, run this tool again: Builder preserves the old checkout, creates a fresh private candidate, and carries app repairs across the same verified draft/head/review lineage, merging current base app changes when the base advances. This technical recovery needs no human lockfile edit or new private-worktree approval.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
+    const repairOrigin = freshPublishedRepair(state);
+    if (repairOrigin !== null) {
+      return await preparePublishedDraftRepair({
+        state: repairOrigin,
+        ctx,
+        pullRequestNumber: input.pullRequestNumber,
+      });
+    }
     if (
       state.phase !== "reviewed" ||
       state.githubSource === undefined ||
@@ -251,6 +271,7 @@ export default defineTool({
             callId: ctx.callId,
             sessionAuth: ctx.session.auth,
             adapterSessionId: ctx.session.id,
+            callbackExecution: hostedOperatorCallbackExecution(ctx.session),
             signal: ctx.abortSignal,
             lookup: {
               repositoryId: draft.repositoryId,

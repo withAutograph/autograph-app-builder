@@ -1,3 +1,4 @@
+import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
 import { getBuilderSandboxId } from "@/lib/sandbox/builder-sandbox";
@@ -42,7 +43,12 @@ export default defineTool({
       });
     let operator;
     try {
-      operator = await hostedOperatorClientForSession(ctx.session.auth, ctx.session.id);
+      operator = await hostedOperatorClientForSession(
+        ctx.session.auth,
+        ctx.session.id,
+        process.env,
+        hostedOperatorCallbackExecution(ctx.session),
+      );
     } catch (error) {
       try {
         if (input.operation === "continuity") {

@@ -1,3 +1,4 @@
+import { hostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 import type { WorkflowStepToolContext } from "eve/tools";
 
 import type { TenantExportApprovalInput } from "../eve/private-export-approval";
@@ -17,7 +18,12 @@ export async function exportHostedTenantDataStep(
     ]);
   const parsed = tenantExportApprovalInputSchema.parse(input);
   ctx.abortSignal.throwIfAborted();
-  const operator = await hostedOperatorClientForSession(ctx.session.auth, ctx.session.id);
+  const operator = await hostedOperatorClientForSession(
+    ctx.session.auth,
+    ctx.session.id,
+    process.env,
+    hostedOperatorCallbackExecution(ctx.session),
+  );
   const { plan, ...request } = parsed;
   if (plan.target.sessionId !== operator.sessionId) {
     throw new Error("Export session differs.");
@@ -38,7 +44,12 @@ export async function readHostedTenantExportApprovalStep(
       import("../provisioning/hosted-operator-client"),
     ]);
   const { plan, ...request } = tenantExportApprovalInputSchema.parse(input);
-  const operator = await hostedOperatorClientForSession(ctx.session.auth, ctx.session.id);
+  const operator = await hostedOperatorClientForSession(
+    ctx.session.auth,
+    ctx.session.id,
+    process.env,
+    hostedOperatorCallbackExecution(ctx.session),
+  );
   if (plan.target.sessionId !== operator.sessionId) {
     throw new Error("Export session differs.");
   }

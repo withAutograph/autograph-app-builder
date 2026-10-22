@@ -487,6 +487,19 @@ describe("owned hosted runtime prior approval", () => {
   });
 });
 
+// These fixtures replace the observed session; keep its canonical owner read on the same record.
+const mirrorObservedCurrentSession = (f: Awaited<ReturnType<typeof fixture>>) => {
+  vi.spyOn(f.store, "readCurrentBuildSession").mockImplementation(async (input) => {
+    expect(input.authoritySessionId).toBe(f.saved.sessionId);
+    expect(input.logicalSessionId).toBe(f.saved.adapterSessionId);
+    const current = await f.store.getSession(input.principal, input.authoritySessionId);
+    if (current === null) {
+      throw new Error("Missing owned session");
+    }
+    return toDurableHostedSessionRecord(current);
+  });
+};
+
 const nativeApprovalCapture = (
   f: Awaited<ReturnType<typeof fixture>>,
   events: MessageStreamEvent[],
@@ -579,6 +592,7 @@ const retainedApprovalCapture = async (
       return { ...paged, checkpointRef: ref, checkpointDigest: ref.digest };
     });
   const checkpointDigest = ref.digest;
+  mirrorObservedCurrentSession(f);
   f.store.readCheckpointPage = vi.fn<NonNullable<HostedEveStore["readCheckpointPage"]>>(() =>
     Promise.resolve({
       checkpointDigest,
@@ -685,23 +699,12 @@ describe("Builder-local approval capture before execution", () => {
       seed.ref.digest = `sha256:${"b".repeat(64)}`;
     }
     if (failure === "replaced-generation") {
-      let reads = 0;
-      seed.read.mockImplementation(async (candidatePrincipal, sessionId) => {
-        const stored = await seed.getSession(candidatePrincipal, sessionId);
-        if (stored === null) {
-          return null;
-        }
-        reads += 1;
-        const { checkpoint, ...paged } = toDurableHostedSessionRecord(stored);
-        void checkpoint;
-        return {
-          ...paged,
-          checkpointRef: seed.ref,
-          checkpointDigest: seed.ref.digest,
-          ...(reads === 1 && failure === "replaced-generation"
-            ? { adapterGeneration: f.saved.adapterGeneration + 1 }
-            : {}),
-        };
+      // Checkpoint reuse reads the canonical execution owner, separately from receipt authority.
+      vi.spyOn(f.store, "readCurrentBuildSession").mockResolvedValueOnce({
+        ...toDurableHostedSessionRecord(f.saved),
+        adapterGeneration: f.saved.adapterGeneration + 1,
+        checkpointRef: seed.ref,
+        checkpointDigest: seed.ref.digest,
       });
     }
     const local = nativeApprovalCapture(f, events);
@@ -771,6 +774,7 @@ describe("Builder-local approval capture before execution", () => {
       ...f.saved,
       adapterGeneration: f.saved.adapterGeneration + 1,
     });
+    mirrorObservedCurrentSession(f);
     await expect(local.capture(f.context)).rejects.toThrow();
     expect(local.fetchImplementation).not.toHaveBeenCalled();
   });
@@ -1011,6 +1015,7 @@ describe("owned approved operation reference", () => {
       ...current,
       adapterGeneration: current.adapterGeneration + 1,
     });
+    mirrorObservedCurrentSession(f);
     await expect(
       reader.assertCurrent(loaded.snapshot, f.context, f.operator),
     ).rejects.toMatchObject({

@@ -1,3 +1,4 @@
+import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
 import { defineTool } from "eve/tools";
 import type { SandboxSession } from "eve/sandbox";
@@ -178,6 +179,7 @@ export default defineTool({
         sandboxId: getBuilderSandboxId(sandbox),
         sessionAuth: ctx.session.auth,
         sessionId: ctx.session.id,
+        callbackExecution: hostedOperatorCallbackExecution(ctx.session),
         signal: ctx.abortSignal,
         state,
       },

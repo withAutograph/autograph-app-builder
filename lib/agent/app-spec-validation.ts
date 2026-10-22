@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+/** Suggested authoring outline; section names and order are not acceptance requirements. */
 export const REQUIRED_APP_SPEC_HEADINGS = [
   "Status and prototype",
   "User and outcome",
@@ -17,126 +18,95 @@ export const REQUIRED_APP_SPEC_HEADINGS = [
   "Build handoff",
 ] as const;
 
-export const BUILD_READY_HANDOFF_EXAMPLE = {
-  status: "build-ready",
-} as const;
+export const BUILD_READY_HANDOFF_EXAMPLE = { status: "build-ready" } as const;
 
-export const buildReadyHandoffSchema = z
-  .object({
-    status: z.literal("build-ready"),
-  })
-  .strict();
+// Extra prose metadata is not execution authority and is not consumed.
+export const buildReadyHandoffSchema = z.object({ status: z.literal("build-ready") });
 
 export interface AppSpecValidationIssue {
-  code:
-    | "missing_heading"
-    | "duplicate_heading"
-    | "build_handoff_format"
-    | "build_handoff_json"
-    | "build_handoff_shape";
+  code: "build_ready_intent";
   message: string;
-  path?: string;
 }
-
 export type AppSpecValidationResult =
   | { valid: true }
   | { valid: false; issues: AppSpecValidationIssue[] };
 
-/**
- * Canonicalizes a new draft's readiness marker before acceptance computes its
- * digest. Accepted snapshots retain their recorded bytes and are never migrated
- * through this function during a resume.
- */
+const declaredReadiness = (lines: readonly string[]): boolean | undefined => {
+  try {
+    const parsed: unknown = JSON.parse(lines.join("\n"));
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      !Array.isArray(parsed) &&
+      Object.hasOwn(parsed, "status")
+    ) {
+      return buildReadyHandoffSchema.safeParse(parsed).success;
+    }
+  } catch {
+    // Unparseable prose is not an explicit typed readiness declaration.
+  }
+  return undefined;
+};
+
+/** Share explicit intent recognition between inline and streamed artifacts. */
+export const createBuildReadyAppSpecScanner = () => {
+  let fence: { marker: string; json: boolean } | undefined;
+  let body: string[] = [];
+  let ready = false;
+  return {
+    consumeLine(rawLine: string) {
+      const line = rawLine.replace(/\r$/u, "");
+      const marker = /^[ \t]*(?<marker>`{3,}|~{3,})(?<info>.*)$/u.exec(line)?.groups;
+      if (fence === undefined) {
+        if (marker?.marker !== undefined) {
+          fence = { marker: marker.marker, json: marker.info?.trim().toLowerCase() === "json" };
+        }
+        return;
+      }
+      if (
+        marker?.marker !== undefined &&
+        marker.info?.trim() === "" &&
+        marker.marker.startsWith(fence.marker.charAt(0)) &&
+        marker.marker.length >= fence.marker.length
+      ) {
+        if (fence.json) {
+          // A later draft/other explicit status supersedes an earlier ready example.
+          ready = declaredReadiness(body) ?? ready;
+        }
+        body = [];
+        fence = undefined;
+        return;
+      }
+      if (fence.json) body.push(line);
+    },
+    result(): AppSpecValidationResult {
+      return ready
+        ? { valid: true }
+        : {
+            valid: false,
+            issues: [
+              {
+                code: "build_ready_intent",
+                message:
+                  "Declare explicit build-ready intent in a JSON fenced block with status build-ready. A later draft status keeps the artifact in planning.",
+              },
+            ],
+          };
+    },
+  };
+};
+
+/** Keep authored bytes and product requirements intact; accepted snapshots are never rewritten. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function normalizeBuildReadyAppSpec(content: string): string {
-  const normalizedContent = content.replaceAll(/\r\n?/gu, "\n");
-  const heading = /^## Build handoff[ \t]*$/mu.exec(normalizedContent);
-  if (heading === null) {
-    return normalizedContent;
-  }
-  const section = normalizedContent.slice(heading.index + heading[0].length);
-  const block = /```json[ \t]*\n(?<content>[\s\S]*?)\n[ \t]*```/iu.exec(section);
-  if (block?.[1] === undefined) {
-    return normalizedContent;
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(block[1]);
-  } catch {
-    return normalizedContent;
-  }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    return normalizedContent;
-  }
-  const canonical = BUILD_READY_HANDOFF_EXAMPLE;
-  const prefix = normalizedContent.slice(0, heading.index).trimEnd();
-  return `${prefix}\n\n## Build handoff\n\n\`\`\`json\n${JSON.stringify(canonical, null, 2)}\n\`\`\``;
+  return content;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function validateBuildReadyAppSpec(content: string): AppSpecValidationResult {
-  const normalizedContent = content.replaceAll(/\r\n?/gu, "\n");
-  const issues: AppSpecValidationIssue[] = [];
-  for (const heading of REQUIRED_APP_SPEC_HEADINGS) {
-    const count = normalizedContent.match(new RegExp(`^## ${heading}$`, "gmu"))?.length ?? 0;
-    if (count === 0) {
-      issues.push({
-        code: "missing_heading",
-        message: `Add exactly one "## ${heading}" section.`,
-        path: heading,
-      });
-    } else if (count > 1) {
-      issues.push({
-        code: "duplicate_heading",
-        message: `Keep exactly one "## ${heading}" section.`,
-        path: heading,
-      });
-    }
-  }
-
-  const handoffHeading = /(?:^|\n)## Build handoff[ \t]*(?:\r?\n)/u.exec(normalizedContent);
-  const handoffSection =
-    handoffHeading === null
-      ? undefined
-      : normalizedContent.slice(handoffHeading.index + handoffHeading[0].length).trim();
-  const block =
-    handoffSection === undefined
-      ? null
-      : /^[ \t]*```json[ \t]*\r?\n(?<content>[\s\S]*?)\r?\n[ \t]*```[ \t]*$/iu.exec(handoffSection);
-  if (block?.[1] === undefined) {
-    issues.push({
-      code: "build_handoff_format",
-      message:
-        "End the document with the exact Build handoff heading, one blank line, and one json fenced block.",
-      path: "Build handoff",
-    });
-    return { issues, valid: false };
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(block[1]);
-  } catch {
-    issues.push({
-      code: "build_handoff_json",
-      message: "Make the Build handoff fenced block valid JSON.",
-      path: "Build handoff",
-    });
-    return { issues, valid: false };
-  }
-  const handoff = buildReadyHandoffSchema.safeParse(parsed);
-  if (!handoff.success) {
-    for (const issue of handoff.error.issues) {
-      issues.push({
-        code: "build_handoff_shape",
-        message: issue.message,
-        path: ["Build handoff", ...issue.path].join("."),
-      });
-    }
-  }
-
-  return issues.length === 0 ? { valid: true } : { issues, valid: false };
+  const scanner = createBuildReadyAppSpecScanner();
+  for (const line of content.split(/\r\n?|\n/u)) scanner.consumeLine(line);
+  return scanner.result();
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -147,8 +117,7 @@ export function appSpecRepairDiagnostic(
     buildHandoffExample: BUILD_READY_HANDOFF_EXAMPLE,
     code: "app_spec_invalid",
     instruction:
-      "Repair and replace the complete Markdown artifact, then retry accept_app_spec without asking the user.",
+      "Record the intended readiness in the complete Markdown artifact, then retry accept_app_spec without asking the user. Section names and formatting are advisory.",
     issues: result.issues,
-    requiredHeadings: REQUIRED_APP_SPEC_HEADINGS.map((heading) => `## ${heading}`),
   });
 }

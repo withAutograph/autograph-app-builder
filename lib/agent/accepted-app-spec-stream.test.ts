@@ -119,14 +119,16 @@ describe("streamed AppSpec acceptance", () => {
     await expect(inspectCanonicalAppSpec({ artifact, readChunk })).rejects.toThrow("missing chunk");
   });
 
-  it("rejects noncanonical handoff bytes rather than accepting a mismatched normalized digest", async () => {
-    const { artifact, readChunk } = await fixture(`${BUILD_READY_APP_SPEC}\n`);
-    await expect(inspectCanonicalAppSpec({ artifact, readChunk })).rejects.toThrow(
-      '"canonicalBuildHandoff":"## Build handoff\\n\\n```json',
-    );
+  it("accepts trailing whitespace with its exact raw artifact digest", async () => {
+    const content = `${BUILD_READY_APP_SPEC}\n`;
+    const { artifact, readChunk } = await fixture(content);
+    await expect(inspectCanonicalAppSpec({ artifact, readChunk })).resolves.toEqual({
+      digest: digest(content),
+      walkthrough: "User accepted this AppSpec.",
+    });
   });
 
-  it("reports the handoff field and exact canonical block without normalizing streamed bytes", async () => {
+  it("reports missing typed readiness without normalizing streamed bytes", async () => {
     const content = BUILD_READY_APP_SPEC.replace('"status": "build-ready"', '"status": "ready"');
     const { artifact, readChunk } = await fixture(content);
     let message = "";
@@ -135,37 +137,32 @@ describe("streamed AppSpec acceptance", () => {
     } catch (error) {
       message = error instanceof Error ? error.message : String(error);
     }
-    expect(message).toContain(
-      '"canonicalBuildHandoff":"## Build handoff\\n\\n```json\\n{\\n  \\"status\\": \\"build-ready\\"\\n}\\n```"',
-    );
-    expect(message).toContain('"path":"Build handoff.status"');
+    expect(message).toContain('"code":"build_ready_intent"');
     expect(message).not.toContain('"status": "ready"');
   });
 
-  it("distinguishes malformed spacing, trailing content, and CRLF in streamed handoffs", async () => {
+  it("preserves readiness across prose headings, spacing, trailing content, and CRLF", async () => {
     const cases = [
       {
-        content: BUILD_READY_APP_SPEC.replace(
+        content: BUILD_READY_APP_SPEC.replace("## User and outcome", "## Product goal").replace(
           "## Build handoff\n\n```json",
           "## Build handoff\n```json",
         ),
-        message: "one blank line",
       },
       {
         content: `${BUILD_READY_APP_SPEC}\nNotes after handoff.`,
-        message: "Remove all content after",
       },
       {
         content: BUILD_READY_APP_SPEC.replaceAll("\n", "\r\n"),
-        message: "carriage returns",
       },
     ];
     await Promise.all(
       cases.map(async (testCase) => {
         const { artifact, readChunk } = await fixture(testCase.content);
-        await expect(inspectCanonicalAppSpec({ artifact, readChunk })).rejects.toThrow(
-          testCase.message,
-        );
+        await expect(inspectCanonicalAppSpec({ artifact, readChunk })).resolves.toEqual({
+          digest: digest(testCase.content),
+          walkthrough: "User accepted this AppSpec.",
+        });
       }),
     );
   });

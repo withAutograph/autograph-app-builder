@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import nodePath from "node:path";
 
 import { z } from "zod";
 import { EVE_MAX_PAYLOAD_BYTES, serializedPayloadBytes } from "@/lib/eve/payload-envelope";
@@ -11,17 +12,15 @@ export const uiPreviewFileSchema = z.strictObject({
   path: previewPath,
 });
 export const uiPreviewGapSchema = z.strictObject({
-  composes: z
-    .array(
-      z.strictObject({
-        name: z.string().regex(/^[A-Z][A-Za-z0-9]*$/u),
-        source: z.enum(["@autograph/components", "@autograph/icons"]),
-      }),
-    )
-    .min(1),
-  path: z.string().regex(/^src\/components\/[A-Za-z0-9_-]+\.tsx$/u),
-  reason: z.string().min(8).max(500),
-  tokens: z.array(z.string().regex(/^--[a-z][a-z0-9-]*$/u)).min(1),
+  composes: z.array(
+    z.strictObject({
+      name: z.string().min(1),
+      source: z.enum(["@autograph/components", "@autograph/icons"]),
+    }),
+  ),
+  path: previewPath,
+  reason: z.string().min(1).max(500),
+  tokens: z.array(z.string().regex(/^--[a-z][a-z0-9-]*$/u)),
 });
 
 const manifestItem = z.strictObject({
@@ -31,7 +30,7 @@ const manifestItem = z.strictObject({
 });
 const catalogElement = (source: z.ZodType<string>) =>
   z.strictObject({
-    name: z.string().regex(/^[A-Z][A-Za-z0-9]*$/u),
+    name: z.string().min(1),
     source,
   });
 
@@ -148,43 +147,6 @@ export interface UiPreviewTransfer {
   };
 }
 
-export const publicPreviewIcons = [
-  "ArrowRight",
-  "ArrowUp",
-  "ArrowsPointingIn",
-  "Bolt",
-  "Calendar",
-  "Check",
-  "CheckCircle",
-  "CheckCircleSolid",
-  "ChevronDown",
-  "ChevronLeft",
-  "ChevronRight",
-  "ChevronUp",
-  "ClipboardDocumentList",
-  "Close",
-  "CurrencyDollar",
-  "FingerPrint",
-  "Inbox",
-  "ListBullet",
-  "Minus",
-  "NoSymbol",
-  "Plus",
-  "Refresh",
-  "Search",
-  "Sparkles",
-  "SparklesSolid",
-  "Spinner",
-  "Stop",
-  "TableCells",
-  "Tag",
-  "Trash",
-  "Undo",
-  "User",
-] as const;
-
-const publicPreviewIconSet = new Set<string>(publicPreviewIcons);
-
 const publicImports = new Set([
   "@autograph/components",
   "@autograph/compositions",
@@ -207,38 +169,6 @@ function imports(content: string) {
     .toSorted();
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function namedImports(content: string, source: string): string[] {
-  const names = new Set<string>();
-  const pattern = new RegExp(
-    `import\\s+(type\\s+)?\\{([^}]*)\\}\\s+from\\s+["']${source.replace("/", "\\/")}["']`,
-    "gu",
-  );
-  for (const match of content.matchAll(pattern)) {
-    if (match[1]) {
-      continue;
-    }
-    for (const item of (match[2] ?? "").split(",")) {
-      if (/^type\s/u.test(item.trim())) {
-        continue;
-      }
-      const name = item
-        .trim()
-        .split(/\s+as\s+/u)[0]
-        ?.trim();
-      if (name) {
-        names.add(name);
-      }
-    }
-  }
-  return [...names].toSorted();
-}
-
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function manifestNames(values: readonly { name: string; source: string }[], source: string) {
-  return new Set(values.filter((value) => value.source === source).map(({ name }) => name));
-}
-
 /**
  * Preview code intentionally has a much smaller authority surface than an
  * application.  It can compose visuals and local fixture state only.
@@ -256,11 +186,6 @@ export function validateUiPreview(input: UiPreviewInput): void {
   if (new Set(parsed.routes).size !== parsed.routes.length) {
     throw new Error("UI preview routes must be unique.");
   }
-  if (parsed.catalogGaps.length > 0) {
-    throw new Error(
-      "Adapt the design using existing Arrusted components instead of defining a catalog-gap component.",
-    );
-  }
   const screenRoutes = new Set(
     parsed.manifest.screens.map(({ route: screenRoute }) => screenRoute),
   );
@@ -272,92 +197,25 @@ export function validateUiPreview(input: UiPreviewInput): void {
   ) {
     throw new Error("UI preview screens, routes, and entries must agree.");
   }
-  const componentNames = manifestNames(
-    parsed.manifest.productionComponents,
-    "@autograph/components",
-  );
-  const compositionNames = manifestNames(
-    parsed.manifest.productionCompositions,
-    "@autograph/compositions",
-  );
-  const iconNames = manifestNames(parsed.manifest.productionIcons, "@autograph/icons");
-  for (const name of iconNames) {
-    if (!publicPreviewIconSet.has(name)) {
-      throw new Error(
-        `UI preview icon is not a public @autograph/icons export: ${name}. Available icons: ${publicPreviewIcons.join(", ")}`,
-      );
-    }
-  }
-
   for (const file of parsed.files) {
-    if (/\/(?:api|schema|server)\//u.test(file.path) || /(?:^|\/)route\.ts$/u.test(file.path)) {
-      throw new Error("UI previews cannot contain backend, schema, or API files.");
-    }
     if (/\b(?:fetch|XMLHttpRequest|WebSocket|EventSource)\b/u.test(file.content)) {
       throw new Error("UI previews cannot contact a network service.");
     }
     if (/\b(?:use server|server action|next\/server)\b/u.test(file.content)) {
       throw new Error("UI previews cannot define server behavior.");
     }
-    if (/--[A-Za-z][A-Za-z0-9-]*\s*:/u.test(file.content)) {
-      throw new Error("UI previews cannot define replacement design tokens.");
-    }
-    if (/\b(?:linear|radial|conic)-gradient\s*\(/u.test(file.content)) {
-      throw new Error("UI previews cannot invent decorative gradients.");
-    }
-    if (file.path.startsWith("src/components/")) {
-      throw new Error(
-        "Compose screens from existing Arrusted components; do not define replacement components.",
-      );
-    }
-    if (/<(?:button|input|select|textarea|dialog|table)\b/u.test(file.content)) {
-      throw new Error("Local workflow components must compose public Arrusted primitives.");
-    }
     for (const specifier of imports(file.content)) {
       if (specifier.startsWith("@autograph/") && !publicImports.has(specifier)) {
         throw new Error(`UI preview import is not public: ${specifier}`);
       }
-      if (specifier.startsWith("../") || specifier.startsWith("../../")) {
+      if (specifier.includes("\\") || /^(?:\/|file:|[a-z]:\/)/iu.test(specifier)) {
         throw new Error("UI preview imports must remain inside its source bundle.");
       }
-    }
-    for (const [source, inventory] of [
-      ["@autograph/components", componentNames],
-      ["@autograph/compositions", compositionNames],
-      ["@autograph/icons", iconNames],
-    ] as const) {
-      for (const name of namedImports(file.content, source)) {
-        if (!inventory.has(name)) {
-          throw new Error(
-            `UI preview catalog import is missing from its manifest: ${source}#${name}`,
-          );
+      if (/^\.{1,2}(?:\/|$)/u.test(specifier)) {
+        const target = nodePath.posix.resolve("/", nodePath.posix.dirname(file.path), specifier);
+        if (target !== "/src" && !target.startsWith("/src/")) {
+          throw new Error("UI preview imports must remain inside its source bundle.");
         }
-      }
-    }
-  }
-  for (const gap of parsed.catalogGaps) {
-    if (!paths.has(gap.path)) {
-      throw new Error("A UI catalog gap refers to a missing local component.");
-    }
-  }
-  for (const collection of [
-    parsed.manifest.fixtureFacts,
-    parsed.manifest.decisions,
-    parsed.manifest.assumptions,
-    parsed.manifest.openQuestions,
-    parsed.manifest.implementationNotes,
-  ]) {
-    for (const item of collection) {
-      if (item.routes.some((value) => !screenRoutes.has(value))) {
-        throw new Error("UI preview manifest metadata refers to an unknown route.");
-      }
-    }
-  }
-  for (const gap of parsed.catalogGaps) {
-    for (const item of gap.composes) {
-      const inventory = item.source === "@autograph/components" ? componentNames : iconNames;
-      if (!inventory.has(item.name)) {
-        throw new Error("Each catalog gap must compose inventoried public primitives.");
       }
     }
   }

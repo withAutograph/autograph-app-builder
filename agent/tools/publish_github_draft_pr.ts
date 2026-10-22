@@ -1,3 +1,4 @@
+import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { defineTool } from "eve/tools";
 import { always } from "eve/tools/approval";
 import { z } from "zod";
@@ -86,6 +87,7 @@ export default defineTool({
         backendKind: state.appBackendKind,
         root: state.applyReceipt.applyRoot,
         adapterSessionId: ctx.session.id,
+        callbackExecution: hostedOperatorCallbackExecution(ctx.session),
         sessionAuth: ctx.session.auth,
         callId: ctx.callId,
         review: state.reviewReceipt,

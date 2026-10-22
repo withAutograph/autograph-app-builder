@@ -1356,3 +1356,82 @@ export const inspectDraftReconciliation = async (input: {
   }
   return { ...parsed, unresolvedConflicts: [] };
 };
+
+/** A second private worktree whose comparison baseline is the owned PR head, never main. */
+export const preparePublishedDraftRepairCandidate = async (
+  request: Omit<DraftReconciliationInput, "baseSha" | "baseBranch">,
+): Promise<PreparedDraftReconciliation> => {
+  const input = { ...request, baseSha: request.headSha, baseBranch: request.headBranch };
+  verifyInputs(input);
+  const { sandbox } = input;
+  const workspaceRoot = input.workspaceRoot ?? DEFAULT_WORKSPACE;
+  const checkout = `${workspaceRoot}/repository`;
+  const remote = await checked(
+    sandbox,
+    "inspect the owned repair Git remote",
+    git(checkout, ["remote", "get-url", "origin"]),
+  );
+  if (remote !== `https://github.com/${input.repository.owner}/${input.repository.name}.git`) {
+    throw new Error(
+      "The existing checkout is not this owned publication repository; its files have been preserved.",
+    );
+  }
+  await checked(
+    sandbox,
+    "fetch the current draft head",
+    git(checkout, ["fetch", "--no-tags", "origin", `refs/heads/${input.headBranch}`]),
+  );
+  const fetchedHead = await checked(
+    sandbox,
+    "verify the owned repair head",
+    git(checkout, ["rev-parse", "FETCH_HEAD"]),
+  );
+  if (fetchedHead !== input.headSha) {
+    throw new Error(
+      "The owned draft moved during private repair preparation; inspect its current source again.",
+    );
+  }
+  const key = createHash("sha256")
+    .update(
+      JSON.stringify([
+        "published-draft-repair",
+        input.repository,
+        input.appId,
+        input.headSha,
+        input.unpublished?.reviewDigest,
+      ]),
+    )
+    .digest("hex");
+  const canonicalRoot = `${workspaceRoot}/.app-builder/draft-reconcile/${key}`;
+  const { root, created } = await selectCandidateRoot(input, workspaceRoot, canonicalRoot);
+  if (created) {
+    await checked(
+      sandbox,
+      "create the private repair directory",
+      `mkdir -p ${quote(root.slice(0, root.lastIndexOf("/")))}`,
+    );
+    await checked(
+      sandbox,
+      "create the owned draft repair checkout",
+      git(checkout, ["worktree", "add", "--detach", root, input.headSha]),
+    );
+    await stageUnpublished(input, root, workspaceRoot);
+  }
+  await attachCheckoutDependencyView({
+    sandbox,
+    checkoutRoot: checkout,
+    candidateRoot: root,
+    workspaceRoot,
+  });
+  const headTree = await inspectRevision(sandbox, checkout, input.headSha);
+  return {
+    appId: input.appId,
+    workspaceRoot,
+    root,
+    headSha: input.headSha,
+    headTree,
+    baseSha: input.headSha,
+    baseTree: headTree,
+    conflicts: await readCandidateConflicts(input, root),
+  };
+};

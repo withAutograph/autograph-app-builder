@@ -162,11 +162,12 @@ preflight steps or approval gates:
 
 Show the UI early and continue internal design recording and planning from the
 brief and safe revisable defaults. Before recording the first AppSpec artifact,
-read `references/app-spec.md` with `read-skill-reference` and copy its complete
-canonical Markdown skeleton. Fill every required section, including explicit
-deferrals where appropriate, and end with its exact Build handoff. Keep GitHub,
-Vercel, and other provider names in product prose; use only provider-neutral
-capability identifiers in the handoff. Validate the complete authored document
+read `references/app-spec.md` with `read-skill-reference` for product coverage
+guidance. Use the outline where helpful; section names, order, and formatting
+are advisory. Preserve actual requirements and explicit deferrals, and declare
+readiness with JSON status `build-ready` only when ready. Keep GitHub, Vercel,
+and other provider choices in product prose; handoff metadata grants no authority.
+Review the complete authored product intent
 before the first `accept_app_spec` attempt. Do not ask for formal UI finalization,
 artifact acceptance, or planning approval. Ask a product question only when no safe revisable default
 can resolve a material ambiguity.

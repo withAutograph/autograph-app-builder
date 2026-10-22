@@ -60,6 +60,24 @@ HTTP 429 failures. Authority is not retained between observations; credential
 acquisition and approved effects keep their existing approval, fence and current
 provider checks.
 
+Recovery keeps three identities distinct: the original public/authority session
+owns human receipts, grants and artifacts; `currentSpec.sessionId` stays the
+logical Eve workflow/session ID; the canonical recovered child's adapter is the
+physical stream anchor. A deployment successor may differ from that anchor; the
+SDK supplies distinct trusted execution and stream-anchor identities. The current
+canonical child's top-level decision, adapter and generation fences govern physical
+execution. Derive mappings only from a verified recovery binding; never rewrite
+saved approvals or session IDs, or map a logical session to “latest”. Apply
+`resumedCancellationRevision` equality only to recovered-only continuation, not
+ordinary active sessions. A completed session may permit cached terminal receipt
+readback; keep effect-specific current, Stop and tenant checks. Fixtures should
+reflect original/current canonical records and assert behavior and security rather
+than incidental argument counts or app shape. Source evidence is in
+`lib/provisioning/hosted-operator-owner.ts`,
+`lib/provisioning/hosted-operator-planning-authority.ts` and
+`lib/provisioning/hosted-operator-callback-owner.ts`; this does not establish a
+usable hosted Preview.
+
 Private planning failures report only a closed stage, error class, known code,
 and hashed session identity. They preserve the original result or error and never
 log error messages, stacks, provider responses, credentials, or app content.

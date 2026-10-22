@@ -2,6 +2,7 @@ import {
   createDraftPullRequestProposal,
   createRepositoryObservation,
   assertCanonicalGitHubMutationReceipt,
+  assertExactDraftPullRequestProposal,
   createApprovedFreshRepository,
   publishApprovedDraftPullRequest,
   resolveImmutableExistingSource,
@@ -19,12 +20,17 @@ import type {
   GitHubInstallationIdentity,
   ImmutableGitHubSourceReceipt,
 } from "../repository/github-publication";
+import type { DraftUpdateReview } from "../repository/published-draft-repair-review";
 import type { ReviewedChangeSetReceipt } from "../repository/reviewed-change-set";
 import type { SourceReceiptEvidence } from "../repository/source-receipt";
 import type { GitHubPublicationProposalStore } from "../repository/postgres-github-publication-store";
 import type { GitHubDraftAdoptionStore } from "../repository/postgres-github-draft-adoption-store";
 import { isDeepStrictEqual } from "node:util";
-import { sealExistingDraftUpdate, updateExistingDraft } from "../repository/github-draft-update";
+import {
+  inspectAppliedExistingDraftUpdate,
+  sealExistingDraftUpdate,
+  updateExistingDraft,
+} from "../repository/github-draft-update";
 import type {
   ExistingDraftObservation,
   ExistingDraftUpdateAdapter,
@@ -291,6 +297,27 @@ const assertDraftDestinationRepository = (
 };
 
 export interface GitHubPublicationRuntime {
+  inspectOwnedPublishedDraftRepairSource?: (input: {
+    publishedProposalDigest: string;
+    appId: string;
+    expectedInstallationId: string;
+    resolvedByCallId: string;
+    readPublishedSource: (lookup: {
+      repositoryId: string;
+      branch: string;
+      gitSha: string;
+      gitTree: string;
+    }) => Promise<PublishedAppSource | undefined>;
+  }) => Promise<{
+    proposal: DraftPullRequestProposal;
+    publication: DraftPullRequestSuccessReceipt;
+    draft: ExistingDraftObservation;
+    source: ImmutableGitHubSourceReceipt;
+  }>;
+  inspectAppliedExistingDraftUpdate?: (input: {
+    proposal: ExistingDraftUpdateProposal;
+    review: DraftUpdateReview;
+  }) => ReturnType<typeof inspectAppliedExistingDraftUpdate>;
   inspectDraftDestination?: (
     input: GitHubDraftDestination & {
       existingProposal?: DraftPullRequestProposal;
@@ -347,7 +374,7 @@ export interface GitHubPublicationRuntime {
   }) => Promise<DraftPullRequestSuccessReceipt>;
   sealExistingDraftUpdate: (input: {
     githubSource: ImmutableGitHubSourceReceipt;
-    review: ReviewedChangeSetReceipt;
+    review: DraftUpdateReview;
     pullRequestNumber: number;
     priorPublishedProposalDigest?: string;
     selectedCheckoutHeadSha: string;
@@ -355,7 +382,7 @@ export interface GitHubPublicationRuntime {
   }) => Promise<ExistingDraftUpdateProposal>;
   updateExistingDraft: (input: {
     proposal: ExistingDraftUpdateProposal;
-    review: ReviewedChangeSetReceipt;
+    review: DraftUpdateReview;
     contentSource: GitHubDraftPullRequestContentSource;
   }) => Promise<ExistingDraftObservation>;
   inspectExistingDraftSource: (input: {
@@ -548,6 +575,14 @@ export function composeGitHubPublicationRuntime(input: {
   const { receipts } = input;
   const { adoptions } = input;
   const draftUpdateAdapter: ExistingDraftUpdateAdapter = {
+    async inspectAppliedRepair(proposal, resolvedTree, observed) {
+      if (adapter.inspectAppliedDraftRepair === undefined) {
+        throw new Error(
+          "The GitHub provider cannot read back an exact draft repair without source bytes.",
+        );
+      }
+      return await adapter.inspectAppliedDraftRepair(proposal, resolvedTree, observed);
+    },
     async inspectAppliedUpdate(proposal, content, observed) {
       if (adapter.inspectAppliedDraftUpdate === undefined) {
         throw new Error(
@@ -748,6 +783,123 @@ export function composeGitHubPublicationRuntime(input: {
         );
       }
       return observed;
+    },
+    async inspectAppliedExistingDraftUpdate(request) {
+      return await inspectAppliedExistingDraftUpdate({ adapter: draftUpdateAdapter, ...request });
+    },
+    async inspectOwnedPublishedDraftRepairSource(request) {
+      const proposal = await proposals.read(request.publishedProposalDigest);
+      if (
+        proposal === undefined ||
+        proposal.intendedOutcome !== "publish-reviewed-change-set-as-draft-pull-request"
+      ) {
+        throw new Error("The original published draft proposal is unavailable in this tenant.");
+      }
+      assertExactDraftPullRequestProposal(proposal);
+      const prior = await receipts.read(proposal.digest);
+      if (prior === undefined)
+        throw new Error("The original published draft receipt is unavailable.");
+      assertCanonicalGitHubMutationReceipt(prior);
+      if (
+        prior.kind !== "draft-pull-request" ||
+        prior.status !== "succeeded" ||
+        !isDeepStrictEqual(
+          [
+            prior.proposalDigest,
+            prior.repositoryId,
+            prior.branchName,
+            prior.changeSetDigest,
+            prior.changedContentDigest,
+            prior.normalizedChangedPaths,
+          ],
+          [
+            proposal.digest,
+            proposal.repositoryId,
+            proposal.branchName,
+            proposal.changeSetDigest,
+            proposal.changedContentDigest,
+            proposal.approvedPaths,
+          ],
+        )
+      ) {
+        throw new Error("The original draft journal does not match this publication.");
+      }
+      const recorded = await request.readPublishedSource({
+        repositoryId: prior.repositoryId,
+        branch: prior.branchName,
+        gitSha: prior.branchSha,
+        gitTree: prior.branchTree,
+      });
+      if (
+        recorded === undefined ||
+        !isDeepStrictEqual(
+          [
+            recorded.repositoryId,
+            recorded.branch,
+            recorded.gitSha,
+            recorded.gitTree,
+            recorded.reviewDigest,
+            recorded.changeSetDigest,
+          ],
+          [
+            prior.repositoryId,
+            prior.branchName,
+            prior.branchSha,
+            prior.branchTree,
+            proposal.reviewDigest,
+            proposal.changeSetDigest,
+          ],
+        )
+      ) {
+        throw new Error(
+          "The published source is not recorded for this owned app and accepted specification.",
+        );
+      }
+      const draft = await this.inspectExistingDraftSource({
+        repositoryId: proposal.repositoryId,
+        owner: proposal.owner,
+        name: proposal.name,
+        pullRequestNumber: prior.pullRequestNumber,
+      });
+      await readOwnedDraftPublication({ receipts, proposalDigest: proposal.digest, draft });
+      // verifiedBuilderOrigin.appId identifies the configured GitHub App. The generated
+      // app is bound by its recorded source above and this publication's origin marker.
+      if (
+        draft.verifiedBuilderOrigin === undefined ||
+        draft.verifiedBuilderOrigin.marker !== prior.idempotencyKey
+      ) {
+        throw new Error("The current draft does not prove this app's Builder publication origin.");
+      }
+      if (draft.headSha !== prior.branchSha || draft.headTree !== prior.branchTree) {
+        const current = await request.readPublishedSource({
+          repositoryId: draft.repositoryId,
+          branch: draft.headBranch,
+          gitSha: draft.headSha,
+          gitTree: draft.headTree,
+        });
+        const matches =
+          current !== undefined &&
+          [
+            current.repositoryId === draft.repositoryId,
+            current.branch === draft.headBranch,
+            current.gitSha === draft.headSha,
+            current.gitTree === draft.headTree,
+          ].every(Boolean);
+        if (!matches) {
+          throw new Error(
+            "The draft advanced beyond the recorded owned source. Recover its exact approved update first.",
+          );
+        }
+      }
+      const source = await this.resolveImmutableSource({
+        expectedInstallationId: request.expectedInstallationId,
+        repositoryId: draft.repositoryId,
+        ref: `refs/heads/${draft.headBranch}`,
+        expectedSha: draft.headSha,
+        expectedTree: draft.headTree,
+        approvedByCallId: request.resolvedByCallId,
+      });
+      return { proposal, publication: prior, draft, source };
     },
     async inspectExistingDraftReconciliationSource(request) {
       const diagnostic: ReconciliationBaselineDiagnostic = {

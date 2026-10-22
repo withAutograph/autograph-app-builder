@@ -1158,6 +1158,37 @@ export const createGitHubAppHttpProvider = (input: {
         stringProperty(response.body, "message") === expectedMessage
       );
     },
+    async inspectAppliedDraftRepair(proposal, resolvedTree, observed) {
+      if (
+        observed.headSha === proposal.expectedHeadSha ||
+        observed.headTree !== resolvedTree ||
+        observed.headRepositoryId !== proposal.repositoryId
+      )
+        return false;
+      const current = await inspectExistingDraft({
+        repositoryId: proposal.repositoryId,
+        owner: proposal.owner,
+        name: proposal.name,
+        number: proposal.pullRequestNumber,
+      });
+      if (current.headSha !== observed.headSha || current.headTree !== observed.headTree)
+        return false;
+      const accessToken = await token(draftPermissions, [proposal.repositoryId]);
+      const response = await github({
+        authorization: accessToken,
+        expected: [200],
+        path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/git/commits/${observed.headSha}`,
+      });
+      const parents = property(response.body, "parents");
+      const message = `Update draft pull request #${proposal.pullRequestNumber}\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}\nApp-Builder-Origin: ${proposal.originMarker}`;
+      return (
+        Array.isArray(parents) &&
+        parents.length === 1 &&
+        stringProperty(parents[0], "sha") === proposal.expectedHeadSha &&
+        stringProperty(property(response.body, "tree"), "sha") === resolvedTree &&
+        stringProperty(response.body, "message") === message
+      );
+    },
     async inspectDestination({ owner, name: repositoryName }) {
       const permissions: PermissionSnapshot = {
         administration: "write",

@@ -30,13 +30,15 @@ import type { BuilderHandoffStore } from "../handoff/service";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { HostedOperatorError } from "./hosted-operator-contract";
 import type { OperatorOwnerContext } from "./hosted-operator-contract";
+import { readHostedOperatorCallbackSessions } from "./hosted-operator-callback-owner";
+import type { HostedOperatorCallbackExecution } from "./hosted-operator-callback-owner";
 
 interface OwnerContextResolverDependencies {
   realmContinuation?: RealmContinuationVerificationOptions;
   diagnosticSink?: HostedOperatorConsentDiagnosticSink;
   handoffs: Pick<BuilderHandoffStore, "read">;
   sessions: Pick<HostedEveStore, "getSession"> &
-    Partial<Pick<HostedEveStore, "getSessionByAdapterSessionId">>;
+    Partial<Pick<HostedEveStore, "getSessionByAdapterSessionId" | "readCurrentBuildSession">>;
   isActiveMember: (authority: HostedSessionTenantAuthority) => Promise<boolean>;
   issuer: string;
   audience: string;
@@ -170,6 +172,26 @@ const restrictRealmContinuationOwner = (
   return { ...owner, realmContinuation: { sealedAuthority } };
 };
 
+const resolveCallbackOwner = async (
+  owner: OperatorOwnerContext,
+  execution: HostedOperatorCallbackExecution | undefined,
+  sessions: OwnerContextResolverDependencies["sessions"],
+): Promise<OperatorOwnerContext> => {
+  if (execution === undefined) {
+    return owner;
+  }
+  const { currentSession } = await readHostedOperatorCallbackSessions({
+    store: sessions,
+    owner,
+    execution,
+  });
+  return {
+    ...owner,
+    adapterSessionId: currentSession.adapterSessionId,
+    adapterGeneration: currentSession.adapterGeneration,
+  };
+};
+
 /** Resolves only through exact tenant-scoped durable handoff or adapter bindings. */
 export const createHostedOperatorOwnerContextResolver =
   (dependencies: OwnerContextResolverDependencies) =>
@@ -179,6 +201,7 @@ export const createHostedOperatorOwnerContextResolver =
     authority: HostedSessionTenantAuthority;
     principal: HostedPrincipal;
     sessionAuth: unknown;
+    execution?: HostedOperatorCallbackExecution;
   }): Promise<OperatorOwnerContext> => {
     const report = createHostedOperatorConsentDiagnostic(
       input.adapterSessionId,
@@ -197,7 +220,7 @@ export const createHostedOperatorOwnerContextResolver =
     try {
       const continuationOptions = {
         realmContinuation: {
-          adapterSessionId: input.adapterSessionId,
+          adapterSessionId: input.execution?.ownerAnchorRunId ?? input.adapterSessionId,
           verification: dependencies.realmContinuation,
         },
       };
@@ -205,7 +228,10 @@ export const createHostedOperatorOwnerContextResolver =
         input.sessionAuth,
         dependencies.realmContinuation,
       );
-      assertRealmAdapterBinding(delegation, input.adapterSessionId);
+      assertRealmAdapterBinding(
+        delegation,
+        input.execution?.ownerAnchorRunId ?? input.adapterSessionId,
+      );
       const handoffId = sourceHandoffIdForSessionAuth(input.sessionAuth, continuationOptions);
       const forwarded = exactForwardedSessionAuthority(input.sessionAuth, continuationOptions);
       if (
@@ -233,7 +259,8 @@ export const createHostedOperatorOwnerContextResolver =
           principal: input.principal,
           sessions: dependencies.sessions,
         });
-        const restricted = restrictRealmContinuationOwner(result, delegation, input.sessionAuth);
+        const current = await resolveCallbackOwner(result, input.execution, dependencies.sessions);
+        const restricted = restrictRealmContinuationOwner(current, delegation, input.sessionAuth);
         emit("verified");
         return restricted;
       }
@@ -299,7 +326,7 @@ export const createHostedOperatorOwnerContextResolver =
       }
 
       emit("verified");
-      return restrictRealmContinuationOwner(
+      const current = await resolveCallbackOwner(
         {
           adapterGeneration: physicalSession.adapterGeneration,
           adapterSessionId: physicalSession.adapterSessionId,
@@ -309,9 +336,10 @@ export const createHostedOperatorOwnerContextResolver =
           sessionId: authoritySessionId,
           sourceHandoffId: handoffId,
         },
-        delegation,
-        input.sessionAuth,
+        input.execution,
+        dependencies.sessions,
       );
+      return restrictRealmContinuationOwner(current, delegation, input.sessionAuth);
     } catch (error) {
       emit(
         error instanceof HostedOperatorError && error.code === "authorization_required"
@@ -541,6 +569,7 @@ export const resolveHostedOperatorOwnerContext = async (input: {
   authority: HostedSessionTenantAuthority;
   principal: HostedPrincipal;
   sessionAuth: unknown;
+  execution?: HostedOperatorCallbackExecution;
   environment: Readonly<Record<string, string | undefined>>;
 }): Promise<OperatorOwnerContext> => {
   const report = createHostedOperatorConsentDiagnostic(input.adapterSessionId);

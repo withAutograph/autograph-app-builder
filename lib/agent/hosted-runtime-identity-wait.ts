@@ -1,3 +1,4 @@
+import { hostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 import { continueHostedRuntimeExecutionObservation } from "./hosted-runtime-execution-wait";
 import type { HostedRuntimeExecutionWaitPorts } from "./hosted-runtime-execution-wait";
 import type { WorkflowStepToolContext, WorkflowToolContext } from "eve/tools";
@@ -162,6 +163,7 @@ export async function registerHostedRuntimeIdentityWaitStep(
     input,
     sessionAuth: ctx.session.auth,
     adapterSessionId: ctx.session.id,
+    callbackExecution: hostedOperatorCallbackExecution(ctx.session),
     callId: ctx.callId,
   });
 }
@@ -179,6 +181,7 @@ export async function acknowledgeHostedRuntimeIdentityWaitStep(
     input,
     sessionAuth: ctx.session.auth,
     adapterSessionId: ctx.session.id,
+    callbackExecution: hostedOperatorCallbackExecution(ctx.session),
     callId: ctx.callId,
   });
 }

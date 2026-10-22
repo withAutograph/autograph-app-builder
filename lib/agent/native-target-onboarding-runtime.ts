@@ -44,7 +44,12 @@ export interface NativeTargetSelectedAppState {
   appSpec?: { appId: string; digest: string };
 }
 export interface NativeTargetInvocation {
-  session: { id: string; auth: unknown };
+  session: {
+    id: string;
+    auth: unknown;
+    readonly ownerRunId?: string;
+    readonly ownerAnchorRunId?: string;
+  };
   callId: string;
   abortSignal: AbortSignal;
 }
