@@ -2363,6 +2363,7 @@ export const createHostedOperatorControlPlane = async (input: {
         const source = structuredClone(adoptionInput.source);
         const target = await readCurrentResourceCredentialRecord({
           assertAuthorized: owner.assertAuthorized,
+          completedGatewayBindingObservation: true,
           effect,
           store,
         });
@@ -2378,6 +2379,7 @@ export const createHostedOperatorControlPlane = async (input: {
           }
           const current = await readCurrentResourceCredentialRecord({
             assertAuthorized: owner.assertAuthorized,
+            completedGatewayBindingObservation: true,
             effect,
             store,
           });
@@ -2404,6 +2406,7 @@ export const createHostedOperatorControlPlane = async (input: {
         );
         const current = await readCurrentResourceCredentialRecord({
           assertAuthorized: owner.assertAuthorized,
+          completedGatewayBindingObservation: true,
           effect,
           store,
         });
