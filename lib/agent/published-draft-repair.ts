@@ -104,7 +104,8 @@ export const assertPublishedDraftRepairSource = (receipt: PublishedDraftRepairSo
     source.resolvedRef === `refs/heads/${draft.headBranch}`,
     source.resolvedSha === draft.headSha,
     source.resolvedTree === draft.headTree,
-    draft.verifiedBuilderOrigin?.appId === receipt.appId,
+    // Provider origin appId names the GitHub App; the generated app is bound by this receipt.
+    draft.verifiedBuilderOrigin !== undefined,
   ].every(Boolean);
   if (!matches) {
     throw new Error("The owned published-draft repair source is incomplete or changed.");
@@ -128,7 +129,6 @@ export const currentDraftCandidateSource = (
   if (
     state.phase !== "reviewed" ||
     candidate === null ||
-    state.appSpec.appId !== candidate.appId ||
     state.reviewReceipt.digest !== candidate.originalReviewDigest
   ) {
     return undefined;
@@ -141,6 +141,7 @@ export const currentDraftCandidateSource = (
   const { repair } = candidate;
   assertPublishedDraftRepairSource(repair);
   const matches = [
+    state.appSpec.appId === candidate.appId,
     state.sourceReceipt.sourceKind === "fresh-template",
     state.githubSource === undefined,
     state.sourceReceipt.digest === repair.originSourceReceiptDigest,

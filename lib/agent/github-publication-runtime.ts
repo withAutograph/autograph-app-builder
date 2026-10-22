@@ -862,7 +862,12 @@ export function composeGitHubPublicationRuntime(input: {
         pullRequestNumber: prior.pullRequestNumber,
       });
       await readOwnedDraftPublication({ receipts, proposalDigest: proposal.digest, draft });
-      if (draft.verifiedBuilderOrigin?.appId !== request.appId) {
+      // verifiedBuilderOrigin.appId identifies the configured GitHub App. The generated
+      // app is bound by its recorded source above and this publication's origin marker.
+      if (
+        draft.verifiedBuilderOrigin === undefined ||
+        draft.verifiedBuilderOrigin.marker !== prior.idempotencyKey
+      ) {
         throw new Error("The current draft does not prove this app's Builder publication origin.");
       }
       if (draft.headSha !== prior.branchSha || draft.headTree !== prior.branchTree) {

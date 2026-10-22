@@ -133,6 +133,7 @@ vi.mock("../repository/reviewed-change-set", () => ({ assertExistingAppReviewSco
 vi.mock("./draft-reconciliation-state", () => ({
   draftReconciliationState: { get: () => hooks.candidate },
   draftReconciliationCompletions: { get: () => hooks.completions },
+  publishedDraftRepairCompletions: { get: () => [] },
   retainDraftReconciliationCompletion: (completion: DraftReconciliationCompletion) => {
     hooks.completions.push(completion);
   },

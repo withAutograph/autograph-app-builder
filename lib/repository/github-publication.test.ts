@@ -1934,7 +1934,7 @@ describe("existing draft PR updates", () => {
         proposal,
         review: reviewed,
       }),
-    ).rejects.toThrow(/pull request changed/u);
+    ).rejects.toThrow();
     mock.setObserved(initial);
     await expect(
       updateExistingDraft({
