@@ -202,6 +202,20 @@ work without moving focus.
 - The delivery area links to the provider result only after a provider readback
   proves the expected repository/ref or deployment identity and outcome.
 
+### Preview project configuration recovery
+
+- Treat an omitted source-setting field in a native integration read as
+  unknown, not as an empty project setting. When using an administrative
+  provider view, bind recovery to the exact Preview project and target pair
+  that was independently read back; do not infer a broader source policy.
+- If a prior app-binding operation is still pending or failed, reconcile that
+  operation before writing again. A successor proposal may preserve already
+  approved Preview resources and access while proposing only the unresolved
+  app bindings, then request normal approval for that concrete proposal.
+- Report only the provider settings actually read back. Preserving an existing
+  resource, retaining access, or leaving an omitted binding untouched is not
+  proof that the provider applied or verified the missing setting.
+
 ### Resume and recovery
 
 - Authenticated sessions are listed newest-first with title, app identity,
