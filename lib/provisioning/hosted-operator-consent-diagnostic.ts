@@ -908,6 +908,31 @@ const gatewayBindingsDiagnostic = z.strictObject({
 });
 export type OperatorGatewayBindingsDiagnostic = z.infer<typeof gatewayBindingsDiagnostic>;
 
+const gatewayDeliveryDiagnostic = z.strictObject({
+  stage: z.enum([
+    "context",
+    "reconciliation",
+    "alias_assignment",
+    "environment",
+    "authority",
+    "prior_attempt",
+    "project_read",
+    "project_assertion",
+    "before_create",
+    "correction_intent",
+    "deployment_create",
+    "deployment_readback",
+    "checkpoint",
+  ]),
+  phase: z
+    .enum(["authority", "credential", "fetch", "http_response", "json_decode", "response_schema"])
+    .optional(),
+  method: z.enum(["GET", "POST"]).optional(),
+  httpStatus: z.number().int().min(100).max(599).optional(),
+  result: z.enum(["applied", "retryable", "unknown"]),
+});
+export type OperatorGatewayDeliveryDiagnostic = z.infer<typeof gatewayDeliveryDiagnostic>;
+
 const inventoryReadFailure = z.strictObject({
   target: z.enum(["inventory", "app", "gateway", "operator"]),
   operation: z.enum([
@@ -995,6 +1020,7 @@ const metadata = z.strictObject({
   executionFailure: operatorExecutionFailure.optional(),
   hostedEnvironmentBindingFailure: hostedEnvironmentBindingFailure.optional(),
   gatewayBindings: gatewayBindingsDiagnostic.optional(),
+  gatewayDelivery: gatewayDeliveryDiagnostic.optional(),
   inventoryReadFailure: inventoryReadFailure.optional(),
   planningMismatch: z
     .strictObject({
