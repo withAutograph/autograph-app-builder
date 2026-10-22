@@ -474,7 +474,10 @@ export const createHostedOperatorGatewayBindings = (deps: {
   fetch?: typeof fetch;
   diagnosticSink?: HostedOperatorConsentDiagnosticSink;
 }) => {
-  const diagnostic = (input: GatewayManagedEnvironmentContext, mode: "bind" | "reconcile") => {
+  const diagnostic = (
+    input: GatewayManagedEnvironmentContext,
+    mode: OperatorGatewayBindingsDiagnostic["mode"],
+  ) => {
     let report: ReturnType<typeof createHostedOperatorConsentDiagnostic> | undefined;
     try {
       report = createHostedOperatorConsentDiagnostic(input.target.sessionId, deps.diagnosticSink);
@@ -1605,23 +1608,31 @@ export const createHostedOperatorGatewayBindings = (deps: {
       }
     },
     async verifyForDelivery(input: GatewayManagedEnvironmentContext) {
-      if (input.effect.kind !== "gateway-delivery") {
-        throw unavailable();
+      const observation = diagnostic(input, "verify");
+      try {
+        if (input.effect.kind !== "gateway-delivery") {
+          throw unavailable();
+        }
+        const io = open(input, false, observation);
+        await io.fullGuard();
+        const { rows, known, expected, values } = await io.inspect(true);
+        if (rows.length !== Object.keys(expected).length) {
+          throw unavailable();
+        }
+        const protection = await io.observeTrustedSources();
+        if (protection !== undefined && protection.missing.length !== 0) {
+          throw unavailable();
+        }
+        await io.fullGuard();
+        const result = {
+          rows: io.referenceRows(rows, known, values),
+        };
+        observation.finish("applied");
+        return result;
+      } catch (error) {
+        observation.finish("unknown");
+        throw error;
       }
-      const io = open(input);
-      await io.fullGuard();
-      const { rows, known, expected, values } = await io.inspect(true);
-      if (rows.length !== Object.keys(expected).length) {
-        throw unavailable();
-      }
-      const protection = await io.observeTrustedSources();
-      if (protection !== undefined && protection.missing.length !== 0) {
-        throw unavailable();
-      }
-      await io.fullGuard();
-      return {
-        rows: io.referenceRows(rows, known, values),
-      };
     },
   };
 };

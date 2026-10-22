@@ -861,7 +861,7 @@ export const projectOperatorGatewayProviderFailure = (payload: unknown) => {
 };
 
 const gatewayBindingsDiagnostic = z.strictObject({
-  mode: z.enum(["bind", "reconcile"]),
+  mode: z.enum(["bind", "reconcile", "verify"]),
   stage: z.enum([
     "context",
     "authority",
