@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { EventEmitter } from "node:events";
-import type { connect } from "node:net";
 
+import type { BrowserProvider } from "vitest/node";
 import { describe, it } from "vitest";
+import type { BrowserFailureDiagnostic } from "./vitest-browser-diagnostics";
 import {
+  attachVitestBrowserFailureDiagnostics,
   classifyBrowserNetworkFailure,
   probeVitestApiListener,
-  withVitestBrowserFailureDiagnostics,
 } from "./vitest-browser-diagnostics";
 
 describe("Vitest browser failure diagnostics", () => {
@@ -20,22 +20,55 @@ describe("Vitest browser failure diagnostics", () => {
   });
 
   it("classifies loopback listener outcomes using only fixed statuses", async () => {
-    const connectSocket = (outcome: "connect" | "refused"): typeof connect =>
-      ((options: { host: string; port: number }) => {
-        assert.deepEqual(options, { host: "127.0.0.1", port: 63315 });
-        const socket = Object.assign(new EventEmitter(), { destroy() {} });
+    class FakeSocket {
+      private connectListener: (() => void) | undefined;
+      private errorListener: ((error: Error & { code?: string }) => void) | undefined;
+
+      destroy(): void {
+        this.connectListener = undefined;
+        this.errorListener = undefined;
+      }
+
+      once(event: "connect", listener: () => void): this;
+      once(event: "error", listener: (error: Error & { code?: string }) => void): this;
+      once(
+        event: "connect" | "error",
+        listener: (() => void) | ((error: Error & { code?: string }) => void),
+      ): this {
+        if (event === "connect") {
+          // SAFETY: The overload above pairs "connect" only with a zero-argument listener.
+          // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- overload correlation is not retained in the implementation signature.
+          this.connectListener = listener as () => void;
+        } else {
+          this.errorListener = listener;
+        }
+        return this;
+      }
+
+      emitConnect(): void {
+        this.connectListener?.();
+      }
+
+      emitRefused(): void {
+        this.errorListener?.(
+          Object.assign(new Error("private-sensitive"), { code: "ECONNREFUSED" }),
+        );
+      }
+    }
+
+    const connectSocket =
+      (outcome: "connect" | "refused") => (options: { host: string; port: number }) => {
+        assert.deepEqual(options, { host: "127.0.0.1", port: 63_315 });
+        const socket = new FakeSocket();
         queueMicrotask(() => {
           if (outcome === "connect") {
-            socket.emit("connect");
+            socket.emitConnect();
           } else {
-            socket.emit(
-              "error",
-              Object.assign(new Error("private-sensitive"), { code: "ECONNREFUSED" }),
-            );
+            socket.emitRefused();
           }
         });
-        return socket as unknown as ReturnType<typeof connect>;
-      }) as unknown as typeof connect;
+        return socket;
+      };
     assert.equal(
       await probeVitestApiListener("127.0.0.1", 63_315, connectSocket("connect")),
       "listening",
@@ -47,55 +80,59 @@ describe("Vitest browser failure diagnostics", () => {
   });
 
   it("reports only allowlisted failures for the Vitest loopback API", async () => {
-    type FakeRequest = { failure: () => { errorText: string }; url: () => string };
-    type FakePage = {
-      listener?: (request: FakeRequest) => void;
-      on: (_event: "requestfailed", listener: (request: FakeRequest) => void) => void;
-    };
+    interface FakeRequest {
+      failure: () => { errorText: string };
+      url: () => string;
+    }
+    interface FakePage {
+      listener?: (request: FakeRequest) => void | Promise<void>;
+      on: (
+        _event: "requestfailed",
+        listener: (request: FakeRequest) => void | Promise<void>,
+      ) => void;
+    }
     const page: FakePage = {
       on(_event, listener) {
         this.listener = listener;
       },
     };
     let originalOpenCalls = 0;
-    const option = {
-      providerFactory: (_project: {
-        config: { browser: { api: { host?: string | boolean; port?: number } } };
-      }) => ({
-        async openPage(_sessionId: string, _url: string, _options: { parallel: boolean }) {
-          originalOpenCalls += 1;
-        },
-        getCommandsContext(_sessionId: string) {
-          return { page };
-        },
-      }),
+    const provider: BrowserProvider = {
+      name: "playwright",
+      supportsParallelism: false,
+      openPage() {
+        originalOpenCalls += 1;
+        return Promise.resolve();
+      },
+      getCommandsContext() {
+        return { page };
+      },
+      close() {
+        return Promise.resolve();
+      },
     };
-    const reports: unknown[] = [];
-    const probes: Array<[string, number]> = [];
-    const instrumented = withVitestBrowserFailureDiagnostics(option, {
-      async probe(host, port) {
+    const reports: BrowserFailureDiagnostic[] = [];
+    const probes: [string, number][] = [];
+    const instrumented = attachVitestBrowserFailureDiagnostics(provider, 63_315, {
+      probe(host, port) {
         probes.push([host, port]);
-        return "connection_refused";
+        return Promise.resolve("connection_refused");
       },
       report(diagnostic) {
         reports.push(diagnostic);
       },
     });
-    const provider = instrumented.providerFactory({
-      config: { browser: { api: { host: "127.0.0.1", port: 63_315 } } },
-    });
-    await provider.openPage("test-session", "http://127.0.0.1:63315/", { parallel: false });
+    await instrumented.openPage("test-session", "http://127.0.0.1:63315/", { parallel: false });
     assert.equal(originalOpenCalls, 1);
     assert.ok(page.listener);
-    page.listener({
+    await page.listener({
       failure: () => ({ errorText: "net::ERR_CONNECTION_REFUSED" }),
       url: () => "http://127.0.0.1:63315/private/path?token=fixture-secret",
     });
-    page.listener({
+    await page.listener({
       failure: () => ({ errorText: "net::ERR_CONNECTION_RESET" }),
       url: () => "https://external.example/private/path?token=fixture-secret",
     });
-    await new Promise((resolve) => setTimeout(resolve, 0));
     assert.deepEqual(probes, [["127.0.0.1", 63_315]]);
     assert.deepEqual(reports, [
       {
