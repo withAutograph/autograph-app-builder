@@ -107,7 +107,7 @@ const pullFailureSource = (stderr: string) => {
     .split(/\r?\n/u)
     .map((line) => line.trim())
     .find(Boolean);
-  if (!firstLine) {
+  if (firstLine === undefined) {
     return "empty_stderr";
   }
   if (/^Error response from daemon:/iu.test(firstLine)) {
