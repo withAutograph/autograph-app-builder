@@ -4,7 +4,11 @@ import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import type { createHostedOperatorControlPlane } from "./hosted-operator-deployment";
 import { HostedOperatorError, operatorPlanDigest } from "./hosted-operator-contract";
-import type { HostedOperatorPlan, OperatorDeploymentCandidate } from "./hosted-operator-contract";
+import type {
+  HostedOperatorPlan,
+  OperatorDeliveryCorrection,
+  OperatorDeploymentCandidate,
+} from "./hosted-operator-contract";
 import type {
   HostedOperatorDeploymentContext,
   HostedOperatorEffectContext,
@@ -140,6 +144,12 @@ const blockedProductionSchema = z.object({
   readyState: z.literal("BLOCKED"),
   target: z.literal("production"),
 });
+const rejectedProductionSchema = blockedProductionSchema
+  .omit({ buildSkipped: true, builds: true })
+  .extend({
+    customEnvironment: z.null().optional(),
+    readyState: id,
+  });
 const failedNativePreviewSchema = z.object({
   customEnvironment: z.null().optional(),
   gitSource: z.object({
@@ -312,6 +322,9 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       autograph_operator_operation: input.operationRef,
       autograph_operator_plan: planDigest,
     };
+    let deliveryCorrection = input.deliveryCorrections?.find(
+      (correction) => correction.effectId === input.effect.id,
+    );
     const gatewayProvenance =
       deps.target === "gateway"
         ? (input.gatewayDeliveryProvenance ?? []).filter((provenance) =>
@@ -418,15 +431,18 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         }
       }
     };
+    // oxlint-disable-next-line eslint/complexity -- Keep native source, owner, environment and operation checks in one authoritative readback.
     const readDeployment = async (
       deploymentId: string,
       verifyProject: boolean,
       requireOperatorMetadata: boolean,
+      supplied?: z.infer<typeof deploymentSchema>,
     ): Promise<OperatorDeploymentCandidate> => {
       const observed = deploymentSchema.parse(
-        await request(`/v13/deployments/${encodeURIComponent(deploymentId)}`, {
-          withGitRepoInfo: "true",
-        }),
+        supplied ??
+          (await request(`/v13/deployments/${encodeURIComponent(deploymentId)}`, {
+            withGitRepoInfo: "true",
+          })),
       );
       const matches = [
         observed.id === deploymentId,
@@ -501,6 +517,39 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     };
     const readCandidate = async (deploymentId: string, verifyProject = true) =>
       await readDeployment(deploymentId, verifyProject, true);
+    const readCandidateOrRejection = async (deploymentId: string) => {
+      const raw = await request(`/v13/deployments/${encodeURIComponent(deploymentId)}`, {
+        withGitRepoInfo: "true",
+      });
+      const rejected = rejectedProductionSchema.safeParse(raw);
+      if (!rejected.success) {
+        return await readDeployment(deploymentId, true, true, deploymentSchema.parse(raw));
+      }
+      const observed = rejected.data;
+      const exactRejectedIdentity = [
+        observed.id === deploymentId,
+        observed.projectId === delivery.projectId,
+        observed.ownerId === input.target.scopeId,
+        observed.oidcTokenClaims.owner_id === input.target.scopeId,
+        observed.oidcTokenClaims.project_id === delivery.projectId,
+        String(observed.gitSource.repoId) === delivery.repoId,
+        observed.gitSource.ref === delivery.branch,
+        delivery.gitSha !== undefined && observed.gitSource.sha === delivery.gitSha,
+        matchesMetadataIdentity(expectedMeta, observed.meta),
+      ].every(Boolean);
+      if (!exactRejectedIdentity || input.checkpointDeliveryCorrection === undefined) {
+        throw new HostedOperatorError("reconciliation_required");
+      }
+      await assertCurrent();
+      deliveryCorrection = await input.checkpointDeliveryCorrection({
+        effectId: input.effect.id,
+        rejectedDeploymentIds: [deploymentId],
+        createAttempted: false,
+      });
+      // This observed Production result never enters the Preview candidate collection.
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- A rejected deployment explicitly has no Preview candidate.
+      return undefined;
+    };
     const provesDifferentGatewayAliasTarget = async (deploymentId: string | null) => {
       if (gatewayProvenance.length === 0 || deploymentId === null) {
         return false;
@@ -509,12 +558,16 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       const observed = await readDeployment(deploymentId, true, false);
       return observed.readyState === "READY";
     };
+    // oxlint-disable-next-line sonarjs/cognitive-complexity -- Complete ordered inventory and journal observations before deciding whether another create is safe.
     const readCandidates = async () => {
       const ids = new Set<string>();
       for (const candidate of input.deliveryCandidates ?? []) {
         if (candidate.operationRef === input.operationRef) {
           ids.add(candidate.deploymentId);
         }
+      }
+      for (const deploymentId of deliveryCorrection?.rejectedDeploymentIds ?? []) {
+        ids.add(deploymentId);
       }
       // Candidate IDs are observation hints only. Even rejected provenance must be read
       // rather than mistaken for absence that could authorize another create.
@@ -550,9 +603,14 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         seen.add(next);
         cursor = next;
       }
-      const candidates = await Promise.all(
-        [...ids].map((deploymentId) => readCandidate(deploymentId)),
-      );
+      const candidates: OperatorDeploymentCandidate[] = [];
+      for (const deploymentId of ids) {
+        // oxlint-disable-next-line react-doctor/async-await-in-loop -- Rejection observations update one journal CAS and must remain sequential.
+        const candidate = await readCandidateOrRejection(deploymentId);
+        if (candidate !== undefined) {
+          candidates.push(candidate);
+        }
+      }
       if (candidates.length !== 0) {
         await input.checkpointDelivery(candidates);
       }
@@ -599,7 +657,9 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       delivery,
       expectedMeta,
       readCandidate,
+      readCandidateOrRejection,
       readCandidates,
+      deliveryCorrection: () => deliveryCorrection,
       readGatewayAlias,
       provesDifferentGatewayAliasTarget,
       request,
@@ -637,6 +697,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       let selected = candidates.find((value) => value.readyState === "READY");
       if (selected === undefined) {
         if (
+          reader.deliveryCorrection()?.createAttempted === true ||
           waitedForBuild ||
           candidates.some(
             (candidate) => deps.target === "gateway" && candidate.gatewayAliasAttempted === true,
@@ -646,8 +707,15 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         }
         return {
           candidates,
+          correction: reader.deliveryCorrection(),
           resourceVersion: createHash("sha256")
-            .update(JSON.stringify({ candidates, scope: reader.delivery }))
+            .update(
+              JSON.stringify({
+                candidates,
+                correction: reader.deliveryCorrection(),
+                scope: reader.delivery,
+              }),
+            )
             .digest("hex"),
           status: "retryable" as const,
         };
@@ -913,6 +981,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     }
   };
   return {
+    // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Preserve ordered reconciliation, durable correction claim and provider creation within the same lease.
     async deliver(input: HostedOperatorDeploymentContext) {
       const reader = io(input);
       await reader.assertCurrent();
@@ -951,6 +1020,16 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       await reader.assertCurrent();
       await deps.beforeCreate?.(input);
       await reader.assertCurrent();
+      const correction: OperatorDeliveryCorrection | undefined =
+        "correction" in prior ? prior.correction : undefined;
+      if (correction !== undefined) {
+        if (input.checkpointDeliveryCorrection === undefined) {
+          return { candidates: prior.candidates ?? [], status: "unknown" as const };
+        }
+        // Claim this correction before POST. A lost response may be observed, never blindly repeated.
+        await input.checkpointDeliveryCorrection({ ...correction, createAttempted: true });
+        await reader.assertCurrent();
+      }
       const response = z.object({ id }).parse(
         await reader.request(
           "/v13/deployments",
@@ -965,6 +1044,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
             meta: reader.expectedMeta,
             name: project.name,
             project: project.id,
+            target: "staging",
             ...((deps.target ?? "app") === "app" &&
             input.plan.delivery?.projectSettings !== undefined
               ? { projectSettings: input.plan.delivery.projectSettings }
@@ -972,7 +1052,14 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
           },
         ),
       );
-      const candidate = await reader.readCandidate(response.id);
+      const candidate = await reader.readCandidateOrRejection(response.id);
+      if (candidate === undefined) {
+        const rejected = reader.deliveryCorrection();
+        if (rejected !== undefined && !rejected.createAttempted) {
+          await input.checkpointDeliveryCorrection?.({ ...rejected, createAttempted: true });
+        }
+        return { candidates: prior.candidates ?? [], status: "unknown" as const };
+      }
       const candidates = [
         ...(prior.candidates ?? []).filter(
           (value) => value.deploymentId !== candidate.deploymentId,

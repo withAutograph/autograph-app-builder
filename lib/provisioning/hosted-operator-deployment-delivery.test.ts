@@ -323,7 +323,7 @@ const fixture = (deliveryPlan = plan, deploymentTarget: string | null = null, ga
     });
   };
   const createDeploymentResponse = (body: FixtureJsonObject) => {
-    expect(body).not.toHaveProperty("target");
+    expect(body).toHaveProperty("target", "staging");
     count += 1;
     return Response.json({ id: "dpl_new" });
   };
@@ -491,7 +491,7 @@ it("requests standard Preview delivery from approved Git source and observes rea
   expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({
     projectSettings: appProjectSettings,
   });
-  expect(f.calls.find((call) => call.method === "POST")?.body).not.toHaveProperty("target");
+  expect(f.calls.find((call) => call.method === "POST")?.body).toHaveProperty("target", "staging");
   expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({
     projectSettings: { buildCommand: "bun run build" },
   });
