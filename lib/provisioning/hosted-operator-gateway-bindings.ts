@@ -21,6 +21,7 @@ import { isRetentionRenewalBindingProvenance } from "./hosted-operator-retention
 import {
   canonicalGatewayEnvironmentRowsSchema,
   HostedOperatorError,
+  nativeDeliveryGitRef,
   plannedAppBranch,
 } from "./hosted-operator-contract";
 import type {
@@ -591,6 +592,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
     liveInput: GatewayManagedEnvironmentContext,
     readonlyCanonical = false,
     observation = silentObservation,
+    environmentGitRef = liveInput.gateway.branch,
   ) => {
     const input = {
       ...liveInput,
@@ -845,7 +847,9 @@ export const createHostedOperatorGatewayBindings = (deps: {
     };
     const isBranchPreview = (row: ProviderRow) =>
       row.target.includes("preview") &&
-      (row.gitBranch === null || row.gitBranch === undefined || row.gitBranch === branch);
+      (row.gitBranch === null ||
+        row.gitBranch === undefined ||
+        row.gitBranch === environmentGitRef);
     const requiredEnvironment = async (rows: ProviderRow[]) => {
       observation.at("required_environment");
       const byKey = (key: string) =>
@@ -854,7 +858,9 @@ export const createHostedOperatorGatewayBindings = (deps: {
             row.key === key &&
             row.target.length === 1 &&
             row.target[0] === "preview" &&
-            (row.gitBranch === null || row.gitBranch === undefined || row.gitBranch === branch),
+            (row.gitBranch === null ||
+              row.gitBranch === undefined ||
+              row.gitBranch === environmentGitRef),
         );
       for (const key of requiredSecretKeys) {
         if (byKey(key).length !== 1) {
@@ -1616,7 +1622,12 @@ export const createHostedOperatorGatewayBindings = (deps: {
         if (input.effect.kind !== "gateway-delivery") {
           throw unavailable();
         }
-        const io = open(input, false, observation);
+        const delivery = input.plan.gatewayDelivery;
+        const environmentGitRef =
+          delivery === undefined
+            ? input.gateway.branch
+            : nativeDeliveryGitRef(input.plan, delivery, "gateway");
+        const io = open(input, false, observation, environmentGitRef);
         await io.fullGuard();
         const { rows, known, expected, values } = await io.inspect(true);
         if (rows.length !== Object.keys(expected).length) {

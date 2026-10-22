@@ -3,7 +3,11 @@ import { z } from "zod";
 import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import type { createHostedOperatorControlPlane } from "./hosted-operator-deployment";
-import { HostedOperatorError, operatorPlanDigest } from "./hosted-operator-contract";
+import {
+  HostedOperatorError,
+  nativeDeliveryGitRef,
+  operatorPlanDigest,
+} from "./hosted-operator-contract";
 import type {
   HostedOperatorPlan,
   OperatorDeliveryCorrection,
@@ -373,6 +377,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     if (!validScope) {
       throw new HostedOperatorError("resource_mismatch");
     }
+    const gitRef = nativeDeliveryGitRef(input.plan, delivery, deps.target ?? "app");
     const planDigest = operatorPlanDigest(input.plan);
     const expectedMeta = {
       autograph_operator_effect: input.effect.id,
@@ -521,7 +526,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         observed.projectId === delivery.projectId,
         observed.ownerId === undefined || observed.ownerId === input.target.scopeId,
         String(observed.gitSource.repoId) === delivery.repoId,
-        observed.gitSource.ref === delivery.branch,
+        observed.gitSource.ref === gitRef,
         delivery.gitSha !== undefined && observed.gitSource.sha === delivery.gitSha,
         !requireOperatorMetadata || matchesMetadata(observed.meta),
       ].every(Boolean);
@@ -605,7 +610,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         observed.oidcTokenClaims.owner_id === input.target.scopeId,
         observed.oidcTokenClaims.project_id === delivery.projectId,
         String(observed.gitSource.repoId) === delivery.repoId,
-        observed.gitSource.ref === delivery.branch,
+        observed.gitSource.ref === gitRef,
         delivery.gitSha !== undefined && observed.gitSource.sha === delivery.gitSha,
         matchesMetadataIdentity(expectedMeta, observed.meta),
       ].every(Boolean);
@@ -652,7 +657,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       const seen = new Set<number>();
       for (;;) {
         const query: DeploymentListQuery = {
-          branch: delivery.branch,
+          branch: gitRef,
           limit: "100",
           projectId: delivery.projectId,
         };
@@ -727,6 +732,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     return {
       assertCurrent,
       delivery,
+      gitRef,
       expectedMeta,
       readCandidate,
       readCandidateOrRejection,
@@ -872,7 +878,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     const seen = new Set<number>();
     for (;;) {
       const query: DeploymentListQuery = {
-        branch: priorDelivery.branch,
+        branch: nativeDeliveryGitRef(prior.plan, priorDelivery, "app"),
         limit: "100",
         projectId: priorDelivery.projectId,
       };
@@ -914,7 +920,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
             observed.oidcTokenClaims.owner_id === input.target.scopeId,
             observed.oidcTokenClaims.project_id === priorDelivery.projectId,
             String(observed.gitSource.repoId) === priorDelivery.repoId,
-            observed.gitSource.ref === priorDelivery.branch,
+            observed.gitSource.ref === nativeDeliveryGitRef(prior.plan, priorDelivery, "app"),
             priorDelivery.gitSha !== undefined && observed.gitSource.sha === priorDelivery.gitSha,
             matchesMetadataIdentity(oldMeta, observed.meta),
             observed.builds.length === 0,
@@ -932,7 +938,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
           observed.oidcTokenClaims.owner_id === input.target.scopeId,
           observed.oidcTokenClaims.project_id === priorDelivery.projectId,
           String(observed.gitSource.repoId) === priorDelivery.repoId,
-          observed.gitSource.ref === priorDelivery.branch,
+          observed.gitSource.ref === nativeDeliveryGitRef(prior.plan, priorDelivery, "app"),
           priorDelivery.gitSha !== undefined && observed.gitSource.sha === priorDelivery.gitSha,
           matchesMetadataIdentity(oldMeta, observed.meta),
         ].every(Boolean);
@@ -1128,7 +1134,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
             {},
             {
               gitSource: {
-                ref: reader.delivery.branch,
+                ref: reader.gitRef,
                 repoId: reader.delivery.repoId,
                 sha: gitSha,
                 type: "github",

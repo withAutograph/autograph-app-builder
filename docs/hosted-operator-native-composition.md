@@ -111,6 +111,15 @@ association; it never substitutes configured starter source, a baseline commit,
 or a latest-repository guess. An update records its newly observed head, while
 replaying the original publication retains its original completion marker.
 
+The Gateway's configured branch remains its environment, alias, and saved
+candidate namespace. When an approved app plan delivers the Gateway from the
+same repository and exact commit as its published app, native Git creation,
+listing, and readback use that app's approved source branch. The commit, project,
+owner, and operation checks remain exact. Bootstrap and other repository or
+commit combinations retain the Gateway's configured source reference. This
+source projection does not change environment rows, approval digests, or pending
+delivery attempts.
+
 For a new selected release, optional `deployment` metadata in the captured
 repository `app:describe` result supplies the provider framework, outside-root
 source inclusion, and any explicitly configured build command. Builder uses the

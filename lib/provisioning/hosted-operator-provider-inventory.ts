@@ -226,6 +226,7 @@ const readPublicKeyIds = async (input: PublicKeyReadbackInput): Promise<string[]
 };
 
 /** Concrete GET-only owner-bound Vercel inventory. This is not an operational-ready factory. */
+// oxlint-disable-next-line eslint/complexity -- Preserve ordered inventory and exact native-ref checks in the existing coordinator.
 export const readHostedOperatorProviderInventory = async (input: {
   assertCurrentOwner: () => Promise<void>;
   configuration: OperatorInventoryConfiguration;
@@ -237,6 +238,8 @@ export const readHostedOperatorProviderInventory = async (input: {
   resolveOperatorByConfiguredOrigin?: true;
   /** The app ref from the already approved delivery plan; resource identity stays unchanged. */
   approvedAppBranch?: string;
+  /** Trusted native Gateway ref; environment and alias namespace retain their logical branch. */
+  approvedGatewayGitRef?: string;
   context: HostedOperatorContext;
   fetch?: typeof fetch;
   readVercelCredential: CredentialReader;
@@ -430,12 +433,14 @@ export const readHostedOperatorProviderInventory = async (input: {
         throw error;
       }
     };
+    // oxlint-disable-next-line eslint/complexity -- Preserve the existing ordered project, deployment, environment and ownership checks.
     const observe = async (
       targetName: "app" | "gateway" | "operator",
       reference: OperatorDeploymentReference,
       branch?: string,
       allowUndelivered = false,
       planningAlias?: string,
+      // oxlint-disable-next-line sonarjs/cognitive-complexity -- Keep exact native-ref comparison beside the existing provider identity checks.
     ) => {
       const projectPayload = await request(
         `/v9/projects/${encodeURIComponent(reference.projectId)}`,
@@ -481,7 +486,7 @@ export const readHostedOperatorProviderInventory = async (input: {
           reference,
           projectId: project.id,
           scopeId: target.scopeId,
-          branch,
+          branch: targetName === "gateway" ? (input.approvedGatewayGitRef ?? branch) : branch,
           resolveAlias: planningAlias !== undefined,
         });
         if (Object.values(invalidDeployment).some(Boolean)) {
@@ -599,7 +604,7 @@ export const readHostedOperatorProviderInventory = async (input: {
           reference: config.gateway,
           projectId: gateway.summary.projectId,
           scopeId: target.scopeId,
-          branch: config.gateway.branch,
+          branch: input.approvedGatewayGitRef ?? config.gateway.branch,
           resolveAlias: true,
         });
         ownsPublicOrigin = !Object.values(invalidPublicDeployment).some(Boolean);
