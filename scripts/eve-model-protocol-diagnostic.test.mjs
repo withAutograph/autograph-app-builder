@@ -344,7 +344,7 @@ const fixture = async (options = {}) => {
       },
     },
   };
-  let authorized = 0;
+  let authorized = false;
   const collect = createTerminalRecoveryCandidateCollector({
     getWorld: async () => await Promise.resolve(world),
     resolveRunEncryptionKey: async () => {
@@ -361,13 +361,15 @@ const fixture = async (options = {}) => {
   });
   const collected = await collect({
     binding: { ownerRunId, logicalSessionId },
-    authorizeOwner: async () => {
-      authorized += 1;
+    authorizeOwner: async (currentBinding) => {
+      assert.deepEqual(currentBinding, { ownerRunId, logicalSessionId });
+      assert.ok(Object.isFrozen(currentBinding));
+      authorized = true;
       await Promise.resolve();
     },
   });
   assert.equal(collected.kind, "candidate");
-  assert.equal(authorized, 1);
+  assert.equal(authorized, true);
   return {
     collected,
     source,

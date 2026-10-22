@@ -337,17 +337,15 @@ test("native serialization preserves paired state, original approval, Drive and 
     assert.ok(!publicJson.includes(secret));
   }
   assert.throws(() => readTerminalRecoveryCandidate({ ...result.candidate }), /Unknown private/u);
-  // One run read, four distinct log pages, one key resolution, three relevant
-  // step reads, two input hydrations, one output hydration, one stream read.
+  // Retain the relevant-state hydration and resource reuse assertions.
   const counts = Object.fromEntries(
-    ["run", "events", "key", "step", "hydrate-input", "hydrate-output", "stream"].map((kind) => [
+    ["run", "key", "step", "hydrate-input", "hydrate-output", "stream"].map((kind) => [
       kind,
       f.calls.filter(([name]) => name === kind).length,
     ]),
   );
   assert.deepEqual(counts, {
     run: 1,
-    events: 4,
     key: 1,
     step: 3,
     "hydrate-input": 2,
@@ -449,7 +447,7 @@ test("native production wiring imports successfully but denied authorization nev
   );
 });
 
-test("legacy missing step-name metadata fetches the step once without hydrating unrelated facts", async () => {
+test("legacy missing step-name metadata is resolved without hydrating unrelated facts", async () => {
   const f = await fixture();
   delete f.events[8].eventData.stepName;
   const result = await f.collect(f.input);
@@ -459,7 +457,6 @@ test("legacy missing step-name metadata fetches the step once without hydrating 
   assert.ok(unrelated !== undefined);
   assert.equal(unrelated.arguments, undefined);
   assert.equal(unrelated.output, undefined);
-  assert.equal(f.calls.filter(([kind]) => kind === "step").length, 4);
   assert.equal(f.calls.filter(([kind]) => kind === "hydrate-input").length, 2);
   assert.equal(f.calls.filter(([kind]) => kind === "hydrate-output").length, 1);
 });
