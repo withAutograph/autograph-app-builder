@@ -32,6 +32,7 @@ import type { HostedSessionRecord } from "../eve/hosted-store";
 import {
   operatorOwnerContextSchema,
   HostedOperatorError,
+  nativeDeliveryGitRef,
   operatorPlanDigest,
   restrictedOperatorEnvironment,
   operatorRealmIdentityLinkSchema,
@@ -1976,6 +1977,10 @@ export const createHostedOperatorControlPlane = async (input: {
           },
           context: captureInput,
           phase: "bootstrap-planning",
+          approvedGatewayGitRef:
+            operator.plan.gatewayDelivery === undefined
+              ? undefined
+              : nativeDeliveryGitRef(operator.plan, operator.plan.gatewayDelivery, "gateway"),
           readVercelCredential: async ({ authority, installationId }) =>
             await readCredential(authority, installationId),
           fetch: input.fetch,

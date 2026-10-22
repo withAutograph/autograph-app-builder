@@ -41,6 +41,7 @@ import {
 import { createHostedOperatorRealmHttpTransport } from "./hosted-operator-realm-http-transport";
 import {
   HostedOperatorError,
+  nativeDeliveryGitRef,
   hostedOperatorPlanSchema,
   hostedOperatorAuthSignupPolicyInputSchema,
   operatorReceiptSchema,
@@ -107,6 +108,33 @@ import {
   withExternallyManagedHostProtection,
 } from "./hosted-operator-native-preview-recovery";
 import { createReadyReplacementNativeReader } from "./hosted-operator-ready-replacement-native";
+
+const gatewayNativeGitRefForPlan = (plan?: HostedOperatorPlan): string | undefined =>
+  plan?.gatewayDelivery === undefined
+    ? undefined
+    : nativeDeliveryGitRef(plan, plan.gatewayDelivery, "gateway");
+
+const planningGatewayNativeGitRef = (record?: HostedRuntimeJournalRecord): string | undefined => {
+  const current = record?.operator;
+  const operators = [
+    current,
+    ...(current?.retainedGatewayDeliveries ?? []).map((entry) => entry.operator).toReversed(),
+  ];
+  for (const operator of operators) {
+    const selectedReady = operator?.gatewayDeliveryCandidates?.some(
+      (candidate) =>
+        candidate.deploymentId === operator.deliveredGatewayDeploymentId &&
+        candidate.readyState === "READY",
+    );
+    if (selectedReady === true) {
+      const ref = gatewayNativeGitRefForPlan(operator?.plan);
+      if (ref !== undefined) {
+        return ref;
+      }
+    }
+  }
+  return undefined;
+};
 
 const sharedHostProtectionPrerequisite = (
   record: HostedRuntimeJournalRecord | undefined,
@@ -1498,6 +1526,7 @@ export const composeHostedOperatorDependencies = (
           },
           context,
           phase: "bootstrap-planning",
+          approvedGatewayGitRef: planningGatewayNativeGitRef(current?.record),
           resolveGatewayByPublicOrigin: true,
           resolveOperatorByConfiguredOrigin: true,
           readVercelCredential: async ({ authority, installationId }) =>
@@ -2567,6 +2596,7 @@ export const composeHostedOperatorDependencies = (
       context: input,
       phase: "bootstrap-planning",
       approvedAppBranch: boundary.app.branch,
+      approvedGatewayGitRef: gatewayNativeGitRefForPlan(operator.plan),
       readVercelCredential: async ({ authority, installationId }) =>
         await controlPlane.readCredential(authority, installationId),
     });
@@ -2711,6 +2741,7 @@ export const composeHostedOperatorDependencies = (
             },
             context: input,
             approvedAppBranch: deploymentBoundary.app.branch,
+            approvedGatewayGitRef: gatewayNativeGitRefForPlan(input.plan),
             readVercelCredential: async ({ authority, installationId }) =>
               await controlPlane.readCredential(authority, installationId),
           }),

@@ -937,6 +937,21 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
   }
 });
 export type HostedOperatorPlan = z.infer<typeof hostedOperatorPlanSchema>;
+
+/** Provider source ref is separate from the Gateway environment and alias namespace. */
+export const nativeDeliveryGitRef = (
+  plan: HostedOperatorPlan,
+  delivery: NonNullable<HostedOperatorPlan["delivery"]>,
+  target: "app" | "gateway",
+): string =>
+  target === "gateway" &&
+  plan.stage === "app" &&
+  delivery.gitSha !== undefined &&
+  plan.delivery?.repoId === delivery.repoId &&
+  plan.delivery.gitSha === delivery.gitSha
+    ? plan.delivery.branch
+    : delivery.branch;
+
 /** Legacy plans install only their grant tenants; explicit plans retain owned installation tenants. */
 export const hostedOperatorInstallationCustomerIds = (
   plan: Pick<HostedOperatorPlan, "access" | "appInstallation">,
