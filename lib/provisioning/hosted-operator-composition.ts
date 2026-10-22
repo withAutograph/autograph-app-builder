@@ -185,6 +185,13 @@ const publishedGatewayDeliverySource = (
     repoId: configuration.gateway.repoId,
   };
 };
+const frozenGatewayDeliverySource = (
+  plan: HostedOperatorPlan,
+  source: AppGatewayDeliverySource,
+): AppGatewayDeliverySource => {
+  const gitRef = nativeDeliveryGitRef(plan, source, "gateway");
+  return source.gitRef !== undefined || gitRef === source.branch ? source : { ...source, gitRef };
+};
 const appTrustedSourcesForNewPlan = (
   base: HostedOperatorPlan,
   configuration: HostedOperatorSourceConfiguration,
@@ -1487,10 +1494,7 @@ export const composeHostedOperatorDependencies = (
       context.releaseIntent === "prepared-preview" &&
       currentPlan !== undefined &&
       frozenGatewaySource !== undefined
-        ? {
-            ...frozenGatewaySource,
-            gitRef: nativeDeliveryGitRef(currentPlan, frozenGatewaySource, "gateway"),
-          }
+        ? frozenGatewayDeliverySource(currentPlan, frozenGatewaySource)
         : publishedGatewaySource;
     await selectedForGateway?.assertCurrent?.();
     const existingBootstrap = await readExistingAuthBootstrapPrerequisite(
