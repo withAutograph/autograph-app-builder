@@ -699,23 +699,12 @@ describe("Builder-local approval capture before execution", () => {
       seed.ref.digest = `sha256:${"b".repeat(64)}`;
     }
     if (failure === "replaced-generation") {
-      let reads = 0;
-      seed.read.mockImplementation(async (candidatePrincipal, sessionId) => {
-        const stored = await seed.getSession(candidatePrincipal, sessionId);
-        if (stored === null) {
-          return null;
-        }
-        reads += 1;
-        const { checkpoint, ...paged } = toDurableHostedSessionRecord(stored);
-        void checkpoint;
-        return {
-          ...paged,
-          checkpointRef: seed.ref,
-          checkpointDigest: seed.ref.digest,
-          ...(reads === 1 && failure === "replaced-generation"
-            ? { adapterGeneration: f.saved.adapterGeneration + 1 }
-            : {}),
-        };
+      // Checkpoint reuse reads the canonical execution owner, separately from receipt authority.
+      vi.spyOn(f.store, "readCurrentBuildSession").mockResolvedValueOnce({
+        ...toDurableHostedSessionRecord(f.saved),
+        adapterGeneration: f.saved.adapterGeneration + 1,
+        checkpointRef: seed.ref,
+        checkpointDigest: seed.ref.digest,
       });
     }
     const local = nativeApprovalCapture(f, events);
