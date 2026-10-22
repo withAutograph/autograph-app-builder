@@ -65,6 +65,7 @@ const progressStates = new Set(["started", "completed", "failed"]);
 const visibleOperations = new Map([
   ["apply_app_creation", "Building the app in its private workspace"],
   ["compile-app-schema-release", "Compiling the app schema release"],
+  ["install-app-integrations", "Installing the app's requested integrations"],
   ["prepare-app-local-preview", "Preparing the app's local preview dependencies"],
   ["prepare-app-hosted-runtime", "Preparing the app's hosted database"],
   ["cleanup-app-hosted-runtime", "Removing the app's Preview database"],
@@ -1319,8 +1320,9 @@ export const projectInstalledEveEvent = (
       );
       const returnedStatus = recordStringField(event.data.result.output, "status");
       const commandFailed =
-        event.data.result.toolName === "validate_github_draft_pr_reconciliation" &&
-        (returnedStatus === "needs_repair" || returnedStatus === "needs_resolution");
+        (event.data.result.toolName === "validate_github_draft_pr_reconciliation" &&
+          (returnedStatus === "needs_repair" || returnedStatus === "needs_resolution")) ||
+        (event.data.result.toolName === "install-app-integrations" && returnedStatus === "failed");
       const progress: InternalEveEvent[] =
         label === undefined
           ? []

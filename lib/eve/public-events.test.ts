@@ -396,6 +396,34 @@ describe("installed Eve 0.68 projection", () => {
     ]);
     expect(pendingBuilderOperation(events)).toBe("Validating the app changes");
   });
+  it.each([
+    ["failed", "failed"],
+    ["installed", "completed"],
+    ["omitted", "completed"],
+  ])("projects an integration installation result %s as %s", (status, state) => {
+    const events = projectInstalledEveEvents([
+      installedEvent({
+        data: {
+          result: {
+            callId: "integration_install_1",
+            kind: "tool-result",
+            toolName: "install-app-integrations",
+            output: { status, problem: "private installer diagnosis" },
+          },
+          status: "completed",
+        },
+        type: "action.result",
+      }),
+    ]);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "progress",
+        label: "Installing the app's requested integrations",
+        state,
+      }),
+    );
+    expect(JSON.stringify(events)).not.toContain("private installer diagnosis");
+  });
   it("names browser verification while it is running", () => {
     const events = projectInstalledEveEvents([
       installedEvent({

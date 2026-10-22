@@ -65,6 +65,17 @@ approval decisions throughout these phases.
 
 ## Existing app revisions
 
+Optional provider integrations use the same app-owned composition for new and
+existing apps. Follow the [optional integration authoring reference](../agent/skills/create-app/references/optional-integrations.md)
+to discover actual provider recipes, bind generated schema fields, and run
+`install-app-integrations` after private build approval. Its fixed repository
+operation installs only opted-in provider ingress and an optional shared
+integrations surface. The app DAL supplies real central connection/binding
+authority and safe presentation data; a generated page or passing install is
+not a connected or activated provider. AppSpec integration prose carries product
+intent; executable app definitions carry recipe selection and target bindings.
+Existing navigation composes the generated navigation entry explicitly.
+
 Inspect the selected app's actual CUE and checked release before changing it.
 `existingAppChanges` and `implementationFiles` accept legacy `{path, content}`
 upserts, explicit `{path, operation: "upsert", content}`, and
