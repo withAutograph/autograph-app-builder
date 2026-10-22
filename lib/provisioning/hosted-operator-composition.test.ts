@@ -406,7 +406,7 @@ const publicationFixture = (binding: { repoId?: string; gitSha?: string } = {}) 
   });
   const readCurrentPlanningOwner = vi.fn<
     Awaited<ReturnType<typeof createHostedOperatorControlPlane>>["readCurrentPlanningOwner"]
-  >(async () => ({ session: structuredClone(planningSession), target: context.target }));
+  >(() => Promise.resolve({ session: structuredClone(planningSession), target: context.target }));
   const controlPlane = {
     readCapturedRealmIdentity,
     readCapturedRealmIdentityProof,
