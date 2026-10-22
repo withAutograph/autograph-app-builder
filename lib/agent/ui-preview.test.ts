@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 
 import {
-  publicPreviewIcons,
   uiPreviewInputSchema,
   uiPreviewSourceDigest,
   stageUiPreviewSourceChunk,
@@ -237,7 +236,11 @@ describe("component-backed UI preview policy", () => {
       'export default function Page() { fetch("https://example.test"); return null; }',
       /network/u,
     ],
-    ["replacement token", ":root { --new-token: red; }", /replacement design tokens/u],
+    [
+      "escaping source import",
+      'import Hidden from "../../../private"; export default function Page() { return <Hidden />; }',
+      /inside its source bundle/u,
+    ],
   ])("rejects %s", (_name, content, message) => {
     expect(() =>
       validateUiPreview({
@@ -247,23 +250,29 @@ describe("component-backed UI preview policy", () => {
     ).toThrow(message);
   });
 
-  it("rejects replacement workflow components", () => {
+  it("accepts contained parent imports, frontend module paths, and CSS declarations", () => {
     expect(() =>
       validateUiPreview({
         ...preview,
         files: [
-          ...preview.files,
+          {
+            content:
+              'import { ReviewRail } from "../components/ReviewRail"; import { label } from "../schema/view"; export default function Page() { return <main>{label}<ReviewRail /></main>; }',
+            path: "src/routes/index.tsx",
+          },
           {
             content: "export const ReviewRail = () => null;",
             path: "src/components/ReviewRail.tsx",
           },
+          { content: ":root { --new-token: red; }", path: "src/styles.css" },
+          { content: 'export const label = "Review";', path: "src/schema/view.ts" },
         ],
       }),
-    ).toThrow(/do not define replacement components/u);
+    ).not.toThrow();
   });
 
   it.each(["button", "input", "select", "textarea", "dialog", "table"])(
-    "rejects a raw %s control even when defined directly in a route",
+    "does not use raw %s controls as an admission gate",
     (tag) => {
       expect(() =>
         validateUiPreview({
@@ -275,11 +284,11 @@ describe("component-backed UI preview policy", () => {
             },
           ],
         }),
-      ).toThrow(new Error("Local workflow components must compose public Arrusted primitives."));
+      ).not.toThrow();
     },
   );
 
-  it("rejects buttonClassName as an unlisted public catalog import", () => {
+  it("allows public helper names with an advisory usage inventory", () => {
     const helperPreview = {
       ...preview,
       files: [
@@ -291,11 +300,7 @@ describe("component-backed UI preview policy", () => {
       ],
     };
 
-    expect(() => validateUiPreview(helperPreview)).toThrow(
-      new Error(
-        "UI preview catalog import is missing from its manifest: @autograph/components#buttonClassName",
-      ),
-    );
+    expect(() => validateUiPreview(helperPreview)).not.toThrow();
 
     const result = uiPreviewInputSchema.safeParse({
       ...helperPreview,
@@ -307,15 +312,7 @@ describe("component-backed UI preview policy", () => {
         ],
       },
     });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues).toEqual([
-        expect.objectContaining({
-          code: "invalid_format",
-          path: ["manifest", "productionComponents", 1, "name"],
-        }),
-      ]);
-    }
+    expect(result.success).toBe(true);
   });
 
   it("accepts route composition using a public Button and local fixture state", () => {
@@ -340,7 +337,7 @@ export default function Page() {
     ).not.toThrow();
   });
 
-  it("requires every public component and composition import in the manifest", () => {
+  it("does not require imports to match an advisory manifest inventory", () => {
     expect(() =>
       validateUiPreview({
         ...preview,
@@ -352,12 +349,10 @@ export default function Page() {
           },
         ],
       }),
-    ).toThrow(/missing from its manifest/u);
+    ).not.toThrow();
   });
 
-  it("rejects invented icons with the exact public inventory", () => {
-    expect(publicPreviewIcons).toContain("ChevronLeft");
-    expect(publicPreviewIcons).not.toContain("ArrowLeft");
+  it("leaves actual public icon export validation to the renderer compiler", () => {
     expect(() =>
       validateUiPreview({
         ...preview,
@@ -374,7 +369,7 @@ export default function Page() {
           productionIcons: [{ name: "ArrowLeft", source: "@autograph/icons" }],
         },
       }),
-    ).toThrow(/not a public @autograph\/icons export.*ChevronLeft/u);
+    ).not.toThrow();
   });
 
   it("accepts valid single-line JSX regardless of formatting", () => {
@@ -392,7 +387,7 @@ export default function Page() {
     ).not.toThrow();
   });
 
-  it("still rejects forbidden controls in long-line JSX", () => {
+  it("does not make controls or long-line JSX a visual admission gate", () => {
     expect(() =>
       validateUiPreview({
         ...preview,
@@ -404,7 +399,7 @@ export default function Page() {
         ],
         manifest: { ...preview.manifest, productionComponents: [] },
       }),
-    ).toThrow(/public Arrusted primitives/u);
+    ).not.toThrow();
   });
 
   it("binds manifest decisions and assumptions into the immutable revision", () => {
@@ -415,13 +410,14 @@ export default function Page() {
         assumptions: [
           {
             id: "queue-first",
-            routes: ["/"],
+            routes: ["/planned-route"],
             statement: "Reviewers start from an exceptions-only queue",
           },
         ],
       },
     };
     expect(uiPreviewSourceDigest(changed)).not.toBe(uiPreviewSourceDigest(preview));
+    expect(() => validateUiPreview(changed)).not.toThrow();
   });
 
   it("keeps internal context and draft behavior out of Browser transport", () => {
@@ -433,7 +429,7 @@ export default function Page() {
     expect(html).not.toContain("queue-first");
   });
 
-  it("does not make documented catalog gaps a custom-component escape hatch", () => {
+  it("retains advisory gaps without requiring a component or primitive inventory", () => {
     const local = {
       content:
         'import { Button } from "@autograph/components"; export const ReviewRail = () => <Button>Review</Button>;',
@@ -444,29 +440,24 @@ export default function Page() {
         ...preview,
         catalogGaps: [
           {
-            composes: [{ name: "Button", source: "@autograph/components" }],
-            path: local.path,
-            reason: "No public review-rail composition supports this workflow.",
-            tokens: ["--color-background", "--space-4"],
+            composes: [],
+            path: "src/features/future.tsx",
+            reason: "x",
+            tokens: [],
           },
         ],
         files: [...preview.files, local],
       }),
-    ).toThrow(/existing Arrusted components/u);
+    ).not.toThrow();
   });
 
   it.each([
     [
       "decorative gradient",
       'export default function Page() { return <div className="bg-[linear-gradient(red,blue)]" />; }',
-      /existing Arrusted components/u,
     ],
-    [
-      "raw replacement control",
-      "export const ReviewRail = () => <button>Review</button>;",
-      /existing Arrusted components/u,
-    ],
-  ])("rejects %s in component-backed previews", (_name, content, message) => {
+    ["raw replacement control", "export const ReviewRail = () => <button>Review</button>;"],
+  ])("does not gate %s in component-backed previews", (_name, content) => {
     expect(() =>
       validateUiPreview({
         ...preview,
@@ -480,6 +471,6 @@ export default function Page() {
         ],
         files: [...preview.files, { content, path: "src/components/ReviewRail.tsx" }],
       }),
-    ).toThrow(message);
+    ).not.toThrow();
   });
 });

@@ -13,30 +13,37 @@ relevant stories for actual props and usage.
 Read only the components needed for the workflow; a directory or a barrel with
 `export *` alone does not establish a symbol's API.
 
-The preview manifest is a usage inventory, not the package export list. An
-import must both exist in the prepared repository and fit the preview contract:
+The preview manifest is an advisory usage inventory, not the package export
+list or an admission checklist. The renderer compiles the actual public exports
+from the prepared repository:
 
-- `productionComponents`: exact capitalized names from `@autograph/components`.
-- `productionCompositions`: exact capitalized names from `@autograph/compositions`.
-- `productionIcons`: exact capitalized names from `@autograph/icons`.
+- `productionComponents`: components or helpers from `@autograph/components`.
+- `productionCompositions`: compositions or helpers from `@autograph/compositions`.
+- `productionIcons`: icons or helpers from `@autograph/icons`.
 
-Use named component imports with their original spelling. Do not import helpers
-such as `buttonClassName`, `cn`, or `buttonVariants`; the preview schema cannot
-inventory lowercase names, even if a production consumer uses the helper.
-Adding a made-up name to the manifest cannot make it a package export. Select
-an existing public component or simplify the design when an API is unavailable.
-For icons, use only the exact names exported by the inspected icon barrel. For
-example, a left-pointing navigation icon is `ChevronLeft`; `ArrowLeft` is not an
-export. Do not infer a symmetric icon name from another export.
+Use actual exported names and observed APIs. Public helpers may have lowercase
+names; inventory names need not start with a capital letter. Adding a name to
+the manifest does not make it a package export, and an omitted inventory entry
+does not prevent compilation. Resolve concrete missing-export errors against
+the current public source rather than a fixed preview symbol or icon list.
 
-Raw `button`, `input`, `select`, `textarea`, `dialog`, and `table` JSX is rejected
-in every submitted file. A route function, local wrapper, or styled HTML control
-does not bypass that rule. Use public components and pass local fixture state
-and handlers through their observed APIs. Layout and text HTML can arrange them.
-Do not submit `src/components/` implementations or catalog-gap components.
-Keep TSX formatted with normal line breaks. Do not compress a screen into a
-single line or a giant JSX expression: preview source must remain readable so a
-compiler error can be located and repaired.
+Prefer reusable public Arrusted controls and compositions, with local fixture
+state and handlers through their observed APIs. Local workflow components,
+HTML controls, and CSS are not source-admission failures. Catalog gaps may be
+recorded as advisory design notes without claiming they are implemented or
+forcing a component, primitive, or token inventory. Keep the Arrusted palette
+verbatim through semantic tokens and supported variants; style guidance does
+not create a replacement source validator. Readable formatting helps diagnose
+real compiler errors but does not gate a preview.
+
+Preview authority is still limited to contained source and local fixtures:
+no backend/server behavior, network services, or private package exports.
+Directory names such as `schema` or `api` do not create server authority in a
+browser bundle. Relative imports, including parent imports, may resolve within
+the submitted `src` tree; rooted, file-URL, ambiguous backslash, and escaping
+source imports are rejected. Missing files remain concrete compiler errors.
+Actual screen routes and source entry files must agree. Advisory decisions,
+assumptions, and gap metadata do not create routes or execution authority.
 
 If `record_ui_preview` reports an import, syntax, or compilation error, repair
 the reported source and call `record_ui_preview` again. Call `accept-ui-preview`
@@ -54,7 +61,7 @@ Markdown documents and targeted raw diagnostics remain readable through the
 artifact tool. Local inline output and oversized local/legacy chunk readback
 retain their existing delivery behavior.
 
-## Minimal source and matching manifest
+## Minimal source and advisory manifest
 
 After confirming that the current `Button` supports `onClick` and `children`,
 this route demonstrates fixture-only interaction. Adapt the workflow and props
@@ -79,7 +86,7 @@ export default function Page() {
 ```
 
 Pass `appId: "request-review"`, `routes: ["/"]`, this source in `files`, and
-`catalogGaps: []`, with the following `manifest`:
+an empty advisory `catalogGaps` list for this example, with this `manifest`:
 
 ```json
 {
@@ -122,6 +129,7 @@ Pass `appId: "request-review"`, `routes: ["/"]`, this source in `files`, and
 ```
 
 The renderer supplies the target theme. Read semantic tokens for layout choices;
-do not invent a stylesheet export or copy a palette. Before submitting, compare
-every named public import with its matching manifest collection, check every
-screen entry and route, and remove raw controls and unsupported helpers.
+do not invent a stylesheet export or copy a palette. Check actual public APIs,
+screen entries, and routes; use the renderer's concrete compiler diagnostics
+when source fails. Inventories remain useful review notes, not authority to
+accept an unavailable export or reject an otherwise valid source bundle.

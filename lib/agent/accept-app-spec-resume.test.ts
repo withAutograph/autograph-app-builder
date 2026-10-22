@@ -105,7 +105,7 @@ describe("accepted AppSpec resume", () => {
     "published_local",
   ] as const)("reuses the exact legacy snapshot and receipts in %s", async (phase) => {
     const before = seed(phase);
-    expect(sha256(normalizeBuildReadyAppSpec(legacyContent))).not.toBe(accepted.digest);
+    expect(sha256(normalizeBuildReadyAppSpec(legacyContent))).toBe(accepted.digest);
     const result = await acceptAppSpec.execute(
       {
         appId: artifact.appId,
@@ -144,7 +144,7 @@ describe("accepted AppSpec resume", () => {
     },
   );
 
-  it("normalizes a newly recorded revision instead of reusing an older acceptance", async () => {
+  it("accepts a newly recorded raw revision instead of reusing an older acceptance", async () => {
     const state = seed("planned");
     if (!("artifacts" in state)) {
       throw new Error("Expected a prepared workspace.");
