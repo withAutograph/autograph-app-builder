@@ -25,9 +25,13 @@ const runDescription = async (exitCode: number, stdout: string, stderr = "") =>
   });
 
 describe("repository app description", () => {
-  it("accepts the repository's absent optional authenticated schema receipt without inventing proof", async () => {
-    const result = await runDescription(0, JSON.stringify(descriptor));
+  it("accepts absent optional tests and authenticated schema receipt without inventing proof", async () => {
+    const result = await runDescription(
+      0,
+      JSON.stringify({ ...descriptor, validation: { ...descriptor.validation, test: null } }),
+    );
     expect(result.backend).toMatchObject({ kind: "generated-postgres", schemaReceipt: null });
+    expect(result.validation.test).toBeNull();
     expect(result.deployment).toBeUndefined();
   });
   it("retains a declared source build profile with an explicit nullable command", async () => {
