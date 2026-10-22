@@ -1320,8 +1320,9 @@ export const projectInstalledEveEvent = (
       );
       const returnedStatus = recordStringField(event.data.result.output, "status");
       const commandFailed =
-        event.data.result.toolName === "validate_github_draft_pr_reconciliation" &&
-        (returnedStatus === "needs_repair" || returnedStatus === "needs_resolution");
+        (event.data.result.toolName === "validate_github_draft_pr_reconciliation" &&
+          (returnedStatus === "needs_repair" || returnedStatus === "needs_resolution")) ||
+        (event.data.result.toolName === "install-app-integrations" && returnedStatus === "failed");
       const progress: InternalEveEvent[] =
         label === undefined
           ? []

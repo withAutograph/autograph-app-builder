@@ -132,6 +132,51 @@ describe("private app integrations installation", () => {
     });
   });
 
+  it("reports the app-bound capability problem from the repository's JSON failure receipt", async () => {
+    hooks.sandbox.run.mockResolvedValueOnce({
+      exitCode: 2,
+      stderr: "",
+      stdout: JSON.stringify({
+        appId: "spend-review",
+        status: "capability-gap",
+        files: [],
+        providers: [],
+        problem: "Integration server host is unavailable; token=secret-access-token",
+        internal: "private-source-payload",
+      }),
+    });
+    const failed = await installAppIntegrations({
+      appId: "spend-review",
+      root: "/private/approved-checkout",
+      sandbox: hooks.sandbox,
+    });
+    expect(failed).toMatchObject({ status: "failed", exitCode: 2, stderr: "" });
+    expect(failed.problem).toContain("Integration server host is unavailable");
+    expect(JSON.stringify(failed)).not.toContain("secret-access-token");
+    expect(JSON.stringify(failed)).not.toContain("private-source-payload");
+  });
+
+  it.each([
+    "not-json",
+    JSON.stringify({
+      appId: "another-app",
+      status: "capability-gap",
+      problem: "foreign diagnosis",
+    }),
+    JSON.stringify({ appId: "spend-review", status: "installed", problem: "false success" }),
+  ])("keeps malformed or unrelated failure receipts generic: %s", async (stdout) => {
+    hooks.sandbox.run.mockResolvedValueOnce({ exitCode: 2, stderr: "", stdout });
+    const failed = await installAppIntegrations({
+      appId: "spend-review",
+      root: "/private/approved-checkout",
+      sandbox: hooks.sandbox,
+    });
+    expect(failed).toMatchObject({ status: "failed", exitCode: 2 });
+    expect(failed.problem).toContain("The app integration installer failed");
+    expect(failed.problem).not.toContain("foreign diagnosis");
+    expect(failed.problem).not.toContain("false success");
+  });
+
   it("rejects a receipt for another app and redacts credential-bearing command errors", async () => {
     hooks.sandbox.run.mockResolvedValueOnce({
       exitCode: 0,

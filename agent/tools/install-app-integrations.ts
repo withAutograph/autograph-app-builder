@@ -11,6 +11,21 @@ const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 export const appIntegrationsInstallCommand = (appId: string): string =>
   `mise run integrations:install ${appIdSchema.parse(appId)}`;
 
+const installationFailureProblem = (stdout: string, appId: string): string | undefined => {
+  try {
+    const receipt = z
+      .object({
+        appId: z.literal(appId),
+        status: z.literal("capability-gap"),
+        problem: z.string(),
+      })
+      .safeParse(JSON.parse(stdout));
+    return receipt.success ? safeCommandOutput(receipt.data.problem) : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 /** Fixed repository operation; neither input nor product prose can supply a command. */
 export const installAppIntegrations = async (input: {
   appId: string;
@@ -32,6 +47,9 @@ export const installAppIntegrations = async (input: {
         exitCode: result.exitCode,
         status: "failed" as const,
         problem:
+          (result.exitCode === 2
+            ? installationFailureProblem(result.stdout, input.appId)
+            : undefined) ??
           "The app integration installer failed or reported an unavailable provider/server binding. Inspect the selected checkout's executable integration definition and repair the reported repository failure before retrying. No provider connection or activation is established by installation.",
         stderr,
         stdout: safeCommandOutput(result.stdout),
