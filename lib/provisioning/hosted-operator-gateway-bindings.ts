@@ -201,7 +201,10 @@ const ignoreDiagnostic = () => {
   /* Unobserved read-only helpers keep their existing behavior. */
 };
 // Bound untrusted error-body buffering only; oversized or unreadable diagnostics stay unclassified.
-const readProviderFailure = async (response: Response, signal: AbortSignal) => {
+export const readOperatorGatewayProviderFailure = async (
+  response: Response,
+  signal: AbortSignal,
+) => {
   try {
     const reader = response.body?.getReader();
     if (reader === undefined) {
@@ -705,7 +708,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
       try {
         await requestGuard();
         if (!response.ok) {
-          observation.providerFailure(await readProviderFailure(response, signal));
+          observation.providerFailure(await readOperatorGatewayProviderFailure(response, signal));
           throw unavailable();
         }
         if (response.status === 204) {
