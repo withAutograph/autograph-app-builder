@@ -3743,7 +3743,10 @@ export function createHostedEveSessionService(input: {
       let session = await requireSession(request.sessionId);
       const initialBinding = toDurableHostedSessionRecord(session);
       const resumeCancellationRevision =
-        session.status === "cancelled" && input.store.recordCancellationIntent !== undefined
+        (session.status === "cancelled" ||
+          (initialBinding.cancellationRevision ?? 0) >
+            (initialBinding.resumedCancellationRevision ?? 0)) &&
+        input.store.recordCancellationIntent !== undefined
           ? (initialBinding.cancellationRevision ?? 0)
           : undefined;
       const settledResult = await mutate({
