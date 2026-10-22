@@ -69,7 +69,6 @@ const inspectFailureReason = (stderr: string) => {
 
 const pullFailureReason = (stderr: string) => {
   const reasons: { pattern: RegExp; reason: string }[] = [
-    { reason: "registry_rate_limited", pattern: /\btoomanyrequests\b|\b429\b|too many requests/iu },
     {
       reason: "authorization_failed",
       pattern:

@@ -262,7 +262,6 @@ describe("production navigation pinned image preparation", () => {
   });
 
   it.each([
-    { reason: "registry_rate_limited", stderr: "registry HTTP 429 token=fixture-secret" },
     { reason: "authorization_failed", stderr: "pull access denied token=fixture-secret" },
     { reason: "manifest_unavailable", stderr: "manifest unknown token=fixture-secret" },
     { reason: "registry_client_error", stderr: "HTTP status 403 token=fixture-secret" },
