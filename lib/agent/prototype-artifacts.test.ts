@@ -437,8 +437,7 @@ describe("prototype artifact receipts", () => {
     }
     expect(diagnostic).toMatchObject({
       code: "app_spec_invalid",
-      instruction: expect.stringContaining("replace the complete Markdown artifact"),
-      issues: expect.arrayContaining([expect.objectContaining({ code: "missing_heading" })]),
+      issues: expect.arrayContaining([expect.objectContaining({ code: "build_ready_intent" })]),
     });
   });
 });

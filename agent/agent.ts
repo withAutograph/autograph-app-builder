@@ -342,7 +342,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       latestAcceptance?.isError === true &&
       repairDiagnostic?.code === "app_spec_invalid" &&
       repairDiagnostic.issues?.some(
-        ({ code }) => code === "missing_heading" || code === "build_handoff_format",
+        ({ code }) =>
+          code === "build_ready_intent" ||
+          code === "missing_heading" ||
+          code === "build_handoff_format",
       ) === true &&
       appSpecArtifacts.length === 1 &&
       acceptanceResults.length === 1
