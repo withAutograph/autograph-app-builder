@@ -288,7 +288,7 @@ describe("production navigation pinned image preparation", () => {
       f.runCommand.mockResolvedValueOnce(missing).mockResolvedValueOnce({ exitCode: 1, stderr });
       const failure = ensureProductionNavigationImage(f.input);
       await expect(failure).rejects.toThrow(
-        `(${reason}; registry=public-mirror; platform=${process.platform}/${process.arch}; exit 1)`,
+        `(${reason}; source=other_stderr; registry=public-mirror; platform=${process.platform}/${process.arch}; exit 1)`,
       );
       await expect(failure).rejects.not.toThrow("fixture-secret");
       await expect(failure).rejects.not.toThrow("token=");
@@ -312,11 +312,28 @@ describe("production navigation pinned image preparation", () => {
       });
     const failure = ensureProductionNavigationImage(f.input);
     await expect(failure).rejects.toThrow(
-      `(unrecognized_diagnostic; registry=fallback; platform=${process.platform}/${process.arch}; exit 1)`,
+      `(unrecognized_diagnostic; source=other_stderr; registry=fallback; platform=${process.platform}/${process.arch}; exit 1)`,
     );
     await expect(failure).rejects.not.toThrow("fixture-secret");
     await expect(failure).rejects.not.toThrow("token=");
     expect(f.runCommand).toHaveBeenCalledTimes(4);
+  });
+  it.each([
+    [
+      "daemon response",
+      "Error response from daemon: unavailable token=fixture-secret",
+      "daemon_response",
+    ],
+    ["CLI error", "docker: unavailable token=fixture-secret", "docker_cli"],
+    ["empty stderr", "", "empty_stderr"],
+  ])("reports only the allowlisted Docker failure source: %s", async (_label, stderr, source) => {
+    const f = fixture();
+    f.runCommand.mockResolvedValueOnce(missing).mockResolvedValueOnce({ exitCode: 1, stderr });
+    const failure = ensureProductionNavigationImage(f.input);
+    await expect(failure).rejects.toThrow(`source=${source}`);
+    await expect(failure).rejects.not.toThrow("fixture-secret");
+    await expect(failure).rejects.not.toThrow("unavailable");
+    expect(f.runCommand).toHaveBeenCalledTimes(2);
   });
   it.each([
     "unauthorized: authentication required",
