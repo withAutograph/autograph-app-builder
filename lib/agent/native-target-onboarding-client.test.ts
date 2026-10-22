@@ -230,8 +230,8 @@ describe("native target protected client", () => {
     expect(description).toContain(f.plan.project.name);
     expect(description).toContain(f.plan.cost.description);
     expect(description).toContain(f.plan.retention.policy);
-    expect(description).toContain("Vercel Authentication for All Deployments");
-    expect(description).toContain("team-issued OIDC tokens");
+    expect(description).toContain("Require Vercel sign-in for deployments");
+    expect(description).toContain("workload identity");
     expect(
       publicApprovalDescription(
         { ...f.input, planDigest: "0".repeat(64) },

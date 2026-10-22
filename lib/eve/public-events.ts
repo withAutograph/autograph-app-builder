@@ -64,48 +64,64 @@ const authorizationRequestId = (data: unknown): string | undefined => {
 const progressStates = new Set(["started", "completed", "failed"]);
 const visibleOperations = new Map([
   ["apply_app_creation", "Building the app in its private workspace"],
-  ["compile-app-schema-release", "Compiling the app schema release"],
+  ["compile-app-schema-release", "Preparing the app's data model"],
   ["prepare-app-local-preview", "Preparing the app's local preview dependencies"],
-  ["prepare-app-hosted-runtime", "Preparing the app's hosted database"],
-  ["cleanup-app-hosted-runtime", "Removing the app's Preview database"],
+  ["prepare-app-hosted-runtime", "Setting up the app's Preview resources"],
+  ["cleanup-app-hosted-runtime", "Removing the app's Preview resources"],
   ["export-app-hosted-data", "Exporting approved app data privately"],
-  ["run-app-continuity-tests", "Running the approved app continuity suite"],
+  ["run-app-continuity-tests", "Checking that the app stays connected after restart"],
   ["run-app-browser-tests", "Running the app's browser tests"],
   ["start_app_preview", "Starting the app preview"],
   ["validate_app_creation", "Validating the app changes"],
   ["validate-app-creation", "Validating the app changes"],
-  ["validate_github_draft_pr_reconciliation", "Validating the draft PR candidate"],
+  ["validate_github_draft_pr_reconciliation", "Checking changes proposed for the draft PR"],
+  ["reconcile_github_draft_pr", "Updating the draft pull request"],
 ]);
-const visibleOperationLabels = new Set(visibleOperations.values());
+const visibleOperationLabels = new Set([
+  ...visibleOperations.values(),
+  "Preparing the app's dependencies",
+  "Preparing the app's data model",
+  "Checking the app's data model",
+  "Running app tests",
+  "Checking the app's workflow",
+  "Preparing local app data",
+]);
 
 const draftValidationCommandLabel = (value: unknown): string | undefined => {
   if (typeof value !== "string") {
     return undefined;
   }
   if (/^mise exec (?:--no-deps )?-- bun install --frozen-lockfile$/u.test(value)) {
-    return "Installing the candidate's locked dependencies";
+    return "Preparing the app's dependencies";
+  }
+  if (/^mise run (?:--no-deps )?app:compile [a-z][a-z0-9-]*$/u.test(value)) {
+    return "Preparing the app's data model";
   }
   if (
-    /^mise run (?:--no-deps )?(?:app:compile [a-z][a-z0-9-]*|--skip-tools schema:release -- compile --app [a-z][a-z0-9-]*)$/u.test(
+    /^mise run (?:--no-deps )?--skip-tools schema:release -- compile --app [a-z][a-z0-9-]*$/u.test(
       value,
     )
   ) {
-    return `Running ${value}`;
+    return "Preparing the app's data model";
+  }
+  if (/^mise run (?:--no-deps )?--skip-tools app:check [a-z][a-z0-9-]*$/u.test(value)) {
+    return "Checking the app's data model";
   }
   if (
-    /^mise run (?:--no-deps )?--skip-tools (?:app:check [a-z][a-z0-9-]*|app:test [a-z][a-z0-9-]* [1-9][0-9]*\/[1-9][0-9]*|\/\/apps\/[a-z][a-z0-9-]*:test-e2e|check:[A-Za-z0-9:_-]+)$/u.test(
+    /^mise run (?:--no-deps )?--skip-tools app:test [a-z][a-z0-9-]* [1-9][0-9]*\/[1-9][0-9]*$/u.test(
       value,
     )
   ) {
-    return `Running ${value}`;
+    return "Running app tests";
+  }
+  if (/^mise run (?:--no-deps )?--skip-tools \/\/apps\/[a-z][a-z0-9-]*:test-e2e$/u.test(value)) {
+    return "Checking the app's workflow";
   }
   const local =
     /mise run (?:--no-deps )?(?:app:local -- |app:runtime prepare )(?<appId>[a-z][a-z0-9-]*)(?: setup| local)/u.exec(
       value,
     );
-  return local?.groups?.appId === undefined
-    ? undefined
-    : `Preparing ${local.groups.appId} local validation data`;
+  return local?.groups?.appId === undefined ? undefined : "Preparing local app data";
 };
 
 const recordStringField = (value: unknown, key: string): string | undefined => {
@@ -135,13 +151,7 @@ export const pendingBuilderOperation = (events: Iterable<PublicEveEvent>): strin
       pending.clear();
       continue;
     }
-    if (
-      event.type !== "progress" ||
-      (!visibleOperationLabels.has(event.label) &&
-        !event.label.startsWith("Running mise ") &&
-        !event.label.startsWith("Installing the candidate's ") &&
-        !event.label.startsWith("Preparing "))
-    ) {
+    if (event.type !== "progress" || !visibleOperationLabels.has(event.label)) {
       continue;
     }
     if (event.state === "started") {
@@ -183,7 +193,22 @@ const publicFailureDetail = (value: string) =>
     .slice(0, publicFailureLimit);
 
 const publicBuilderFailure = (failure: { code: string; message: string }, operation?: string) => {
-  const name = operation === undefined ? "the current Builder operation" : `\`${operation}\``;
+  const operationLabels = {
+    apply_app_creation: "the private build",
+    "prepare-app-hosted-runtime": "Preview setup",
+    "cleanup-app-hosted-runtime": "Preview cleanup",
+    validate_app_creation: "app validation",
+    "validate-app-creation": "app validation",
+    start_app_preview: "the app preview",
+    publish_github_draft_pr: "draft pull request publication",
+    "publish-github-draft-pr": "draft pull request publication",
+    reconcile_github_draft_pr: "draft pull request update",
+    validate_github_draft_pr_reconciliation: "draft pull request checks",
+  } as const satisfies Record<string, string>;
+  const name =
+    operation !== undefined && Object.hasOwn(operationLabels, operation)
+      ? operationLabels[operation as keyof typeof operationLabels]
+      : "this Builder step";
   const size =
     /Chunk size (?<actual>\d+) exceeds maximum allowed size of (?<maximum>\d+) bytes/u.exec(
       failure.message,
@@ -191,7 +216,7 @@ const publicBuilderFailure = (failure: { code: string; message: string }, operat
   if (size?.groups !== undefined) {
     return {
       code: "result_too_large",
-      message: `Builder could not complete ${name}: the serialized Eve event was ${size.groups.actual} bytes, above Eve's ${size.groups.maximum}-byte event envelope. For prototype or UI-preview content, retry with smaller UTF-8-safe chunks using the chunked read/write path, then resume this saved session.`,
+      message: `Builder could not finish ${name} because it could not transfer the preview content. Your progress is saved; resume this same session to continue.`,
     };
   }
   const code = publicErrorCode(failure.code);
@@ -199,16 +224,12 @@ const publicBuilderFailure = (failure: { code: string; message: string }, operat
   if (detail.length === 0) {
     return {
       code,
-      message: `Builder could not complete ${name} (${code}). The provider returned no diagnostic cause, so Builder cannot identify a file or setting to change. Retry this saved session once; if it repeats, report this operation, error code, and session ID as a missing-provider-diagnostic defect.`,
+      message: `Builder could not finish ${name}. No further detail was provided. Retry this saved session once; if the problem continues, contact support with the session ID and error code.`,
     };
-  }
-  let cause = `Cause: ${detail}`;
-  if (!/[.!?]$/u.test(detail)) {
-    cause += ".";
   }
   return {
     code,
-    message: `Builder could not complete ${name} (${code}). ${cause} Your progress is saved; correct the cause and resume this session.`,
+    message: `Builder could not finish ${name}. Your progress is saved; resume this same session to continue.\n\nDetails: ${detail}`,
   };
 };
 // Browser projection accepts only HTML; Markdown AppSpec/decision artifacts never become previews.
@@ -1150,8 +1171,8 @@ const inputRequest = (request: {
 }): PublicInputRequest | undefined => {
   const approvalTitles = {
     apply_app_creation: "Build this app?",
-    "cleanup-app-hosted-runtime": "Remove this app's Preview database?",
-    "prepare-app-hosted-runtime": "Prepare this app's Preview database?",
+    "cleanup-app-hosted-runtime": "Remove this app's Preview resources?",
+    "prepare-app-hosted-runtime": "Prepare this app's Preview resources?",
     "prepare-app-native-target": "Create this app's Preview project?",
     "export-app-hosted-data": "Export this customer’s app data privately?",
     "run-app-continuity-tests": "Run this app continuity suite?",
@@ -1178,7 +1199,7 @@ const inputRequest = (request: {
       z
         .object({ productSummary: z.string().trim().min(1).max(600) })
         .safeParse(request.action?.input).data?.productSummary ??
-      "Build and validate the preview shown above. This changes only the private App Builder workspace.";
+      "Build and validate the app shown above in your private workspace. This does not publish or deploy it.";
   } else if (
     request.kind === "tool-approval" &&
     toolName !== undefined &&

@@ -46,12 +46,12 @@ describe("safe MCP tool errors", () => {
     const result = safeToolError(new AdapterNotConfiguredError());
     expect(result.content).toEqual([
       {
-        text: "Autograph App Builder's session service is not configured. An operator must connect the hosted session adapter before this action can run.",
+        text: "Builder’s session service is not available yet. Try again later or contact support.",
         type: "text",
       },
     ]);
     expect(result.structuredContent.error?.message).toBe(
-      "Autograph App Builder's session service is not configured. An operator must connect the hosted session adapter before this action can run.",
+      "Builder’s session service is not available yet. Try again later or contact support.",
     );
   });
 
@@ -66,11 +66,8 @@ describe("safe MCP tool errors", () => {
       sessionId: "original-local-session",
       status: "failed",
     });
-    expect(result.structuredContent.error?.message).toContain(
-      "original sessionId, clientRequestId",
-    );
-    expect(result.structuredContent.error?.message).toContain("An operator must restore");
-    expect(result.structuredContent.error?.message).toContain("do not start a replacement request");
+    expect(result.structuredContent.error?.message).toContain("original session open");
+    expect(result.structuredContent.error?.message).toContain("contact your administrator");
     expect(result.isError).toBe(true);
     expect(result._meta).toBeUndefined();
   });
@@ -82,33 +79,34 @@ describe("safe MCP tool errors", () => {
       "autograph_get",
     );
     expect(result.structuredContent.error?.code).toBe("internal_error");
-    expect(result.structuredContent.error?.message).toContain("autograph_get");
+    expect(result.structuredContent.error?.message).toContain(
+      "Builder could not complete this request",
+    );
     expect(result.structuredContent.error?.message).toContain("Stream write failed");
     expect(JSON.stringify(result)).not.toContain("provider.example");
     expect(JSON.stringify(result)).not.toContain("private");
   });
 
-  it("preserves full sanitized diagnostics longer than 700 characters", () => {
+  it("redacts credentials in sanitized diagnostics", () => {
     const detail = `provider diagnostic ${"x".repeat(1200)} token=private`;
     const result = safeToolError(new Error(detail), "session-one", "autograph_get");
     const message = result.structuredContent.error?.message ?? "";
 
-    expect(message).toContain("x".repeat(1200));
     expect(message).toContain("token=[REDACTED]");
     expect(message).not.toContain("token=private");
   });
 
   it("still identifies a failure when the provider returned no message", () => {
     const result = safeToolError(null, "session-one", "autograph_send");
-    expect(result.structuredContent.error?.message).toContain("autograph_send");
-    expect(result.structuredContent.error?.message).toContain("no error detail");
+    expect(result.structuredContent.error?.message).toContain("No further detail was provided");
+    expect(result.structuredContent.error?.message).toContain("session ID and error code");
   });
 
   it.each([
     [new HostedSessionNotFoundError(), "Check the session ID"],
     [new HostedAuthorizationError("insufficient_scope"), "Sign in with the account"],
     [new HostedIdempotencyConflictError(), "new clientRequestId"],
-    [new HostedSubmissionUnknownError(), "original start clientRequestId"],
+    [new HostedSubmissionUnknownError(), "original clientRequestId"],
     [new HostedRejectedOperationError(), "retry only if the action was not applied"],
     // Vitest's table test API is callback-based.
     // oxlint-disable-next-line promise/prefer-await-to-callbacks
@@ -123,31 +121,28 @@ describe("safe MCP tool errors", () => {
       "autograph_respond",
     );
     expect(result.structuredContent.error?.code).toBe("submission_unknown");
-    expect(result.structuredContent.error?.message).toContain("Do not submit the response again");
+    expect(result.structuredContent.error?.message).toContain("Don’t send it again yet");
     expect(result.structuredContent.error?.message).toContain("same session with autograph_get");
   });
 
   it("gives a recoverable lookup when a start has no session ID", () => {
     const result = safeToolError(new HostedSubmissionUnknownError(), "", "autograph_start");
     expect(result.structuredContent.error?.message).toContain(
-      "autograph_get with the original start clientRequestId",
+      "autograph_get with the original clientRequestId",
     );
-    expect(result.structuredContent.error?.message).toContain("same ID and original start input");
-    expect(result.structuredContent.error?.message).toContain(
-      "do not create a replacement request",
-    );
+    expect(result.structuredContent.error?.message).toContain("same ID and request");
   });
 
   it("makes a provider outage retryable without a new OAuth challenge", () => {
     const result = safeToolError(new McpProviderUnavailableError());
-    expect(result.structuredContent.error?.message).toContain("Retry this same handoff");
-    expect(result.structuredContent.error?.message).toContain("No provider login");
+    expect(result.structuredContent.error?.message).toContain("same handoff again shortly");
+    expect(result.structuredContent.error?.message).toContain("don’t need to sign in again");
     expect(result._meta).toBeUndefined();
   });
 
   it("gives same-account guidance without disclosing handoff ownership", () => {
     const result = safeToolError(new BuilderHandoffUnavailableError());
-    expect(result.structuredContent.error?.message).toContain("same account used on the web");
+    expect(result.structuredContent.error?.message).toContain("same account you used on the web");
     expect(result.structuredContent.error?.code).toBe("not_found");
   });
 
@@ -232,7 +227,7 @@ describe("verified send preflight public rejection", () => {
     );
     expect(result.structuredContent.error?.code).toBe("send_preflight_unavailable");
     expect(result.structuredContent.sessionId).toBe("saved-session");
-    expect(result.structuredContent.error?.message).toContain("before the message was dispatched");
+    expect(result.structuredContent.error?.message).toContain("your message was not sent");
     expect(result.structuredContent.error?.message).toContain("new clientRequestId");
     expect(result.structuredContent.error?.message).toContain("Retry autograph_get");
   });

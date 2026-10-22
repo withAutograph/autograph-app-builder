@@ -327,7 +327,7 @@ describe("installed Eve 0.68 projection", () => {
         code: "execution-error",
         index: 2,
         message:
-          "Builder could not complete `apply_app_creation` (execution-error). Cause: Private build failed: missing proposal. token=[REDACTED]. Your progress is saved; correct the cause and resume this session.",
+          "Builder could not finish the private build. Your progress is saved; resume this same session to continue.\n\nDetails: Private build failed: missing proposal. token=[REDACTED]",
         type: "error",
       },
     ]);
@@ -408,46 +408,49 @@ describe("installed Eve 0.68 projection", () => {
     expect(pendingBuilderOperation(events)).toBe("Running the app's browser tests");
   });
   it.each([
-    "mise run --skip-tools app:test spend-review 1/1",
-    "mise run --no-deps --skip-tools app:test spend-review 1/1",
-    "mise run app:compile spend-review",
-    "mise run --no-deps app:compile spend-review",
-  ])("names draft reconciliation command %s and clears it on completion", (command) => {
-    const events = projectInstalledEveEvents([
-      installedEvent({
-        data: {
-          actions: [
-            {
+    ["mise run --skip-tools app:test spend-review 1/1", "Running app tests"],
+    ["mise run --no-deps --skip-tools app:test spend-review 1/1", "Running app tests"],
+    ["mise run app:compile spend-review", "Preparing the app's data model"],
+    ["mise run --no-deps app:compile spend-review", "Preparing the app's data model"],
+  ])(
+    "uses a plain progress label for draft command %s and clears it on completion",
+    (command, label) => {
+      const events = projectInstalledEveEvents([
+        installedEvent({
+          data: {
+            actions: [
+              {
+                callId: "draft_validation_1",
+                input: { expectedCommand: command, incremental: true, token: "private" },
+                kind: "tool-call",
+                toolName: "validate_github_draft_pr_reconciliation",
+              },
+            ],
+          },
+          type: "actions.requested",
+        }),
+        installedEvent({
+          data: {
+            result: {
               callId: "draft_validation_1",
-              input: { expectedCommand: command, incremental: true, token: "private" },
-              kind: "tool-call",
+              kind: "tool-result",
+              output: {
+                command,
+                nextCommand: "mise run --skip-tools check:vercel-services",
+                status: "in_progress",
+              },
               toolName: "validate_github_draft_pr_reconciliation",
             },
-          ],
-        },
-        type: "actions.requested",
-      }),
-      installedEvent({
-        data: {
-          result: {
-            callId: "draft_validation_1",
-            kind: "tool-result",
-            output: {
-              command,
-              nextCommand: "mise run --skip-tools check:vercel-services",
-              status: "in_progress",
-            },
-            toolName: "validate_github_draft_pr_reconciliation",
+            status: "completed",
           },
-          status: "completed",
-        },
-        type: "action.result",
-      }),
-    ]);
-    expect(pendingBuilderOperation(events.slice(0, 1))).toBe(`Running ${command}`);
-    expect(pendingBuilderOperation(events)).toBe("the current Builder step");
-    expect(JSON.stringify(events)).not.toContain("private");
-  });
+          type: "action.result",
+        }),
+      ]);
+      expect(pendingBuilderOperation(events.slice(0, 1))).toBe(label);
+      expect(pendingBuilderOperation(events)).toBe("the current Builder step");
+      expect(JSON.stringify(events)).not.toContain("private");
+    },
+  );
   it("clears an active draft command when its tool fails without command output", () => {
     const events = projectInstalledEveEvents([
       installedEvent({
@@ -479,9 +482,7 @@ describe("installed Eve 0.68 projection", () => {
         type: "action.result",
       }),
     ]);
-    expect(pendingBuilderOperation(events.slice(0, 1))).toBe(
-      "Running mise run --no-deps --skip-tools app:check spend-review",
-    );
+    expect(pendingBuilderOperation(events.slice(0, 1))).toBe("Checking the app's data model");
     expect(pendingBuilderOperation(events)).toBe("the current Builder step");
   });
   it("recovers only the latest receipt-bound HTML prototype", () => {
@@ -1337,7 +1338,9 @@ describe("installed Eve 0.68 projection", () => {
       "status",
     ]);
     expect(projected[3]).toMatchObject({ code: "failed" });
-    expect(projected[3]?.type === "error" ? projected[3].message : "").toContain("Cause: Stopped");
+    expect(projected[3]?.type === "error" ? projected[3].message : "").toContain(
+      "Details: Stopped",
+    );
   });
 
   it("explains a source failure with its safe cause", () => {
@@ -1356,7 +1359,7 @@ describe("installed Eve 0.68 projection", () => {
         code: "source_workspace_invalid",
         index: 0,
         message:
-          "Builder could not complete the current Builder operation (source_workspace_invalid). Cause: The GitHub source workspace could not be verified after dependency cache validation of the AppSpec receipt digest. Your progress is saved; correct the cause and resume this session.",
+          "Builder could not finish this Builder step. Your progress is saved; resume this same session to continue.\n\nDetails: The GitHub source workspace could not be verified after dependency cache validation of the AppSpec receipt digest.",
         type: "error",
       },
       { index: 1, status: "failed", type: "status" },
@@ -1371,9 +1374,9 @@ describe("installed Eve 0.68 projection", () => {
       }),
     ]);
     const message = projected[0]?.type === "error" ? projected[0].message : "";
-    expect(message).toContain("provider returned no diagnostic cause");
-    expect(message).toContain("operation, error code, and session ID");
-    expect(message).not.toContain("correct the cause");
+    expect(message).toContain("No further detail was provided");
+    expect(message).toContain("error code");
+    expect(message).not.toContain("addressing the reported issue");
   });
 
   it("names the failed operation and Eve event envelope without exposing URLs or tokens", () => {
@@ -1404,7 +1407,7 @@ describe("installed Eve 0.68 projection", () => {
       code: "result_too_large",
       index: 0,
       message:
-        "Builder could not complete `change_set_status`: the serialized Eve event was 89847765 bytes, above Eve's 10485760-byte event envelope. For prototype or UI-preview content, retry with smaller UTF-8-safe chunks using the chunked read/write path, then resume this saved session.",
+        "Builder could not finish this Builder step because it could not transfer the preview content. Your progress is saved; resume this same session to continue.",
       type: "error",
     });
     expect(JSON.stringify(projected)).not.toContain("private");
@@ -1444,6 +1447,7 @@ describe("installed Eve 0.68 projection", () => {
     const message = projected[0]?.type === "error" ? projected[0].message : "";
     expect(message).toContain("apps/review-app/schema/review-app.cue:12:4");
     expect(message).toContain("correct the named CUE field");
+    expect(message).toContain("Details:");
     expect(message).not.toContain("token=private");
   });
 });
@@ -1562,7 +1566,8 @@ describe("public draft pull request approval scope", () => {
     const event = requested("reconcile_github_draft_pr", receipt());
     const [pending] = outstandingInstalledEveRequests([event]);
     expect(pending).toMatchObject({
-      description: `This will update the existing draft branch refs/heads/reviewed-change in example/reviewed-repository from commit ${"a".repeat(40)} using reviewed reconciliation ${"b".repeat(64)}. The pull request will remain a draft; this will not merge or deploy it.`,
+      description:
+        "Update the reviewed changes in the existing draft pull request in example/reviewed-repository. It will remain a draft; this will not merge or deploy it.",
       requestId: "req_draft_review",
       title: "Update the draft pull request?",
     });

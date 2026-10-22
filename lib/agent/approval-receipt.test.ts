@@ -110,10 +110,10 @@ describe("approval receipt", () => {
     ).toThrow("base commit");
     expect(
       publicApprovalDescription({ approvalReceipt: updateReceipt }, "update_github_draft_pr"),
-    ).toBe(JSON.stringify(updateReceipt));
+    ).toContain("Update the reviewed changes in the existing draft pull request");
     expect(
       publicApprovalDescription({ approvalReceipt: updateReceipt }, "reconcile_github_draft_pr"),
-    ).toContain("update the existing draft branch refs/heads/app-builder/review-original");
+    ).toContain("Update the reviewed changes in the existing draft pull request");
     expect(approvalTargetFromExistingDraftReconciliation(proposal)).toEqual(target);
     const generated = approvalReceiptForExistingDraftUpdate({
       ...proposal,

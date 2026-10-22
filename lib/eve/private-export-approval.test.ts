@@ -155,10 +155,9 @@ describe("native private tenant export approval", () => {
   it("names exact scope and destination on the ordinary human card", () => {
     expect(tenantExportApprovalInputSchema.parse(input)).toEqual(input);
     const description = publicApprovalDescription(input, "export-app-hosted-data");
+    expect(description).toContain("private review");
     expect(description).toContain(plan.scope.customerId);
-    expect(description).toContain(plan.resource.database);
-    expect(description).toContain(plan.release.id);
-    expect(description).toContain("privately on Builder");
+    expect(description).toContain("private to you in this session");
   });
 });
 
