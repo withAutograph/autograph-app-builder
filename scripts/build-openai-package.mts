@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { codexClientId, codexRedirectUri } from "../lib/auth/codex-client.ts";
+import { codexClientId, codexRedirectUri } from "../lib/auth/codex-client-metadata.ts";
 import { formatWithOxfmt } from "./format-with-oxfmt.mts";
 import {
   assertAutographMcpEndpoint,

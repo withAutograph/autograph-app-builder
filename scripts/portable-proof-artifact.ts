@@ -5,7 +5,7 @@ import { gunzipSync } from "node:zlib";
 
 import { z } from "zod";
 
-import { codexClientId, codexRedirectUri } from "../lib/auth/codex-client";
+import { codexClientId, codexRedirectUri } from "../lib/auth/codex-client-metadata.ts";
 import {
   AUTOGRAPH_PACKAGE_VERSION,
   validateAgentPluginPackage,
