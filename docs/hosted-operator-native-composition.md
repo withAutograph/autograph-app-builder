@@ -184,8 +184,12 @@ For both projects,
 reads project ownership and Preview environment inventory even when delivery
 has not happened. Configured origins are intended routing inputs, not observed
 Gateway ownership or public-key evidence. A supplied deployment reference must
-still be independently READY and match its project and branch. The operator's
-own deployment reference remains mandatory.
+still be independently READY within its team, project and declared native
+environment (Preview for the app and Gateway); non-alias reads also retain the
+exact deployment identity. Inventory does not
+admit or reject source branch spelling. Logical branches still select environment
+rows, while approved delivery separately verifies its repository, native Git ref
+and commit SHA. The operator's own deployment reference remains mandatory.
 
 Gateway delivery records its candidates in the durable journal. Identity-link
 preparation requires the journal's actual READY Gateway candidate and validates
