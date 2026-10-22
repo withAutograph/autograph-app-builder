@@ -4,6 +4,7 @@ import { connectAuthProvider } from "@vercel/connect/mcp";
 import { deleteTokenCacheEntry } from "@vercel/connect";
 import { getVercelOidcToken, verifyVercelOidcToken } from "@vercel/oidc";
 import { z } from "zod";
+import { HostedOperatorError, operatorPublicResultSchema } from "./hosted-operator-contract";
 import {
   scopeSchema,
   configurationSchema,
@@ -444,8 +445,20 @@ const runReader = async <T>(
     // This is also the final full credential-wave boundary.
     await assertProviderScope();
     return result;
-  } catch {
-    throw unavailable();
+  } catch (error) {
+    let operatorFailure: HostedOperatorError | undefined;
+    try {
+      if (error instanceof HostedOperatorError) {
+        const code: unknown = Object.getOwnPropertyDescriptor(error, "code")?.value;
+        const parsedCode = operatorPublicResultSchema.shape.code.unwrap().safeParse(code);
+        if (parsedCode.success) {
+          operatorFailure = new HostedOperatorError(parsedCode.data);
+        }
+      }
+    } catch {
+      // Untrusted error properties cannot expose private credential failures.
+    }
+    throw operatorFailure ?? unavailable();
   } finally {
     try {
       await client?.close();
