@@ -2,8 +2,11 @@ import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
-import * as schema from "../db/schema";
+import { oauthClient, oauthClientResource, oauthResource } from "../db/schema";
+
 import { previewOAuthScopes, readPreviewOAuthContractConfig } from "./preview-oauth-contract";
+
+const schema = { oauthClient, oauthClientResource, oauthResource };
 
 export const codexClientId = "autograph-codex-desktop";
 export const codexRedirectUri = "http://127.0.0.1/callback";
@@ -40,27 +43,36 @@ const validateResource = (resource: string) => {
   });
 };
 
+const allowsCodexScopes = (scopes: string[] | null | undefined): boolean => {
+  if (scopes === null || scopes === undefined) {
+    return false;
+  }
+  const allowedScopes = new Set(scopes);
+  return previewOAuthScopes.every((scope) => allowedScopes.has(scope));
+};
+
 /** Read only. Errors propagate so unavailable storage cannot expose an install link. */
 export const isCodexClientReady = async (database: Reader, resource: string): Promise<boolean> => {
   validateResource(resource);
-  const [client] = await database
+  const clients = await database
     .select()
     .from(schema.oauthClient)
     .where(eq(schema.oauthClient.clientId, codexClientId))
     .limit(1);
-  if (!client) {
+  const client = clients.at(0);
+  if (client === undefined) {
     return false;
   }
   const expected = codexClientRegistration();
-  for (const key of Object.keys(expected) as (keyof typeof expected)[]) {
-    const actual = client[key];
-    const value = expected[key];
+  const actualFields = new Map<string, unknown>(Object.entries(client));
+  for (const [key, value] of Object.entries(expected)) {
+    const actual = actualFields.get(key);
     if (Array.isArray(value)) {
-      if (
-        !Array.isArray(actual) ||
-        actual.length !== value.length ||
-        !value.every((entry) => actual.includes(entry))
-      ) {
+      if (!Array.isArray(actual) || actual.length !== value.length) {
+        return false;
+      }
+      const actualValues = new Set<unknown>(actual);
+      if (!value.every((entry) => actualValues.has(entry))) {
         return false;
       }
     } else if (actual !== value) {
@@ -74,35 +86,30 @@ export const isCodexClientReady = async (database: Reader, resource: string): Pr
   if (bindings.length !== 1 || bindings[0].resourceId !== resource) {
     return false;
   }
-  const [target] = await database
+  const targets = await database
     .select()
     .from(schema.oauthResource)
     .where(
       and(eq(schema.oauthResource.identifier, resource), eq(schema.oauthResource.disabled, false)),
     )
     .limit(1);
-  return Boolean(
-    target && previewOAuthScopes.every((scope) => target.allowedScopes?.includes(scope)),
-  );
+  return allowsCodexScopes(targets.at(0)?.allowedScopes);
 };
 
 /** Explicit deployment operation. Never invoke from request handlers or readiness checks. */
 export const setupCodexClient = async (database: Database, resource: string) => {
   validateResource(resource);
   await database.transaction(async (tx) => {
-    const [target] = await tx
+    const targets = await tx
       .select()
       .from(schema.oauthResource)
       .where(eq(schema.oauthResource.identifier, resource))
       .limit(1);
-    if (
-      !target ||
-      target.disabled ||
-      !previewOAuthScopes.every((scope) => target.allowedScopes?.includes(scope))
-    ) {
+    const target = targets.at(0);
+    if (target?.disabled !== false || !allowsCodexScopes(target.allowedScopes)) {
       throw new Error("Initialize the OAuth resource before registering Codex.");
     }
-    const [created] = await tx
+    const created = await tx
       .insert(schema.oauthClient)
       .values({
         id: randomUUID(),
@@ -112,7 +119,7 @@ export const setupCodexClient = async (database: Database, resource: string) => 
       })
       .onConflictDoNothing({ target: schema.oauthClient.clientId })
       .returning({ id: schema.oauthClient.id });
-    if (created) {
+    if (created.length > 0) {
       await tx.insert(schema.oauthClientResource).values({
         clientId: codexClientId,
         createdAt: new Date(),
