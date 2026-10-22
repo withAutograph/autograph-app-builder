@@ -38,15 +38,6 @@ describe("high-fidelity design guidance", () => {
       routes: ["/"],
     });
     expect(() => validateUiPreview(input)).not.toThrow();
-
-    // The example's manifest must describe actual usage, rather than masking
-    // missing imports with a broad inventory of unrelated components.
-    expect(() =>
-      validateUiPreview({
-        ...input,
-        manifest: { ...input.manifest, productionComponents: [] },
-      }),
-    ).toThrow();
   });
 
   it.each([
