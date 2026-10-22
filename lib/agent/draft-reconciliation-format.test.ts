@@ -54,6 +54,7 @@ describe("draft reconciliation app formatter", () => {
       version: 1,
     };
     mocks.workflow = {
+      appSpec: { appId: "example", digest },
       githubSource: { digest },
       phase: "reviewed",
       reviewReceipt: { digest },
@@ -105,6 +106,7 @@ describe("draft reconciliation app formatter", () => {
 
   it("rejects an unrelated source review before running the formatter", async () => {
     mocks.workflow = {
+      appSpec: { appId: "example", digest },
       githubSource: { digest: "different" },
       phase: "reviewed",
       reviewReceipt: { digest },
