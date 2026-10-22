@@ -130,7 +130,11 @@ const context = (callId: string) =>
   // SAFETY: These tool executions use only callId, getSandbox, session identity/turn and cancellation; actual Eve state is bound by contextStorage.run.
   ({
     callId,
-    getSandbox: async () => await Promise.resolve({ id: "local-fixture" }),
+    getSandbox: async () =>
+      await Promise.resolve({
+        id: "local-fixture",
+        readTextFile: () => Promise.resolve(JSON.stringify({ scripts: { test: "vitest run" } })),
+      }),
     session: { auth: null, id: "local-session", turn: { id: "turn" } },
   }) as unknown as Parameters<ReturnType<typeof createAppValidationTool>["execute"]>[1];
 const emptyJudgment = z.object({

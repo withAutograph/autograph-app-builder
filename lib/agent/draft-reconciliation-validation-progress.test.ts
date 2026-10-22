@@ -91,9 +91,14 @@ vi.mock("../../agent/tools/run-app-browser-tests", () => ({
   appBrowserTestCommand: () => "mise run --no-deps app:runtime run spend-review test-e2e",
   runAppBrowserTests: mocks.browser,
 }));
-vi.mock("../repository/target-validation", () => ({
+vi.mock(import("../repository/target-validation"), async (importOriginal) => ({
+  ...(await importOriginal()),
   sandboxValidationCommandExecutor: () => mocks.check,
-  validationOutputExcerpt: (stdout: string, stderr: string) => ({ stderr, stdout }),
+  validationOutputExcerpt: (stdout: string, stderr: string) => ({
+    stderr,
+    stdout,
+    truncated: false,
+  }),
 }));
 vi.mock("./validation-log-store-for-session", () => ({
   validationLogStoreForSession: mocks.logStore,
@@ -152,6 +157,7 @@ describe("draft reconciliation command progress", () => {
     });
     mocks.readText.mockResolvedValue(
       JSON.stringify({
+        scripts: { test: "vitest run" },
         devDependencies: { vitest: "workspace:*", "fixture-runner": "workspace:*" },
       }),
     );
@@ -515,6 +521,9 @@ describe("draft reconciliation command progress", () => {
   ] as const)(
     "continues retained $kind metadata with explicit setup flags and keeps completed work",
     async (pending) => {
+      if (!pending.original.includes(" app:test ")) {
+        mocks.readText.mockResolvedValue(JSON.stringify({}));
+      }
       const completed = { command: "mise run app:compile spend-review", exitCode: 0 };
       mocks.candidate = {
         ...mocks.candidate,
@@ -902,6 +911,7 @@ describe("draft reconciliation command progress", () => {
       if (mocks.candidate === null) {
         throw new Error("Candidate fixture unavailable");
       }
+      mocks.readText.mockResolvedValue(JSON.stringify({}));
       mocks.candidate.validationRun = {
         commands: [],
         compilation: undefined,
@@ -1198,6 +1208,7 @@ describe("draft reconciliation command progress", () => {
     expect(mocks.compile).toHaveBeenCalledTimes(2);
   });
   it("does not infer compilation from a retained command spelling or runtime existence", async () => {
+    mocks.readText.mockResolvedValue(JSON.stringify({}));
     mocks.candidate = {
       ...mocks.candidate,
       validationRun: {

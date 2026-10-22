@@ -80,6 +80,7 @@ vi.mock("./product-behavior-state", () => ({
 }));
 vi.mock("../repository/target-validation", () => ({
   createTargetValidationAttempt: mocks.attempt,
+  readTargetValidationTestShards: () => Promise.resolve([]),
   executeProposalBoundValidation: mocks.execute,
   fixtureValidationCommandExecutor: vi.fn(),
   sandboxValidationCommandExecutor: vi.fn(),
@@ -92,7 +93,11 @@ vi.mock("@/lib/repository/postgres-validation-log-store", () => ({
 
 const workflow = (phase: "validated" | "reviewed") => ({
   appSpec: { appId: "app", content: "## Acceptance walkthrough\n\nSave draft.", digest: "a" },
-  applyReceipt: { applyRoot: "/workspace/repository", digest: "apply" },
+  applyReceipt: {
+    applyRoot: "/workspace/repository",
+    digest: "apply",
+    targetReceipt: { workspacePath: "apps/app" },
+  },
   artifacts: [],
   dependencyReceipt: { dependencyLayout: {} },
   identityReceipt: {},
@@ -689,7 +694,7 @@ describe("behavior evidence invalidation during validation repair", () => {
           context,
         ),
       ).rejects.toThrow("second write failed");
-      expect(mocks.state.current.phase).toBe("validation_pending");
+      expect(mocks.state.current.phase).toBe("applied");
       expect(mocks.state.current).not.toHaveProperty("validationReceipt");
       expect(mocks.state.current).not.toHaveProperty("validationFailure");
       expect(mocks.state.update).toHaveBeenCalledBefore(writeTextFile);
