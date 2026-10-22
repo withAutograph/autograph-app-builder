@@ -274,10 +274,10 @@ index 0000000..12d0af2
 +): RetrospectiveCancelledToolHistory;
 diff --git a/dist/src/execution/session/recovery-cancelled-tool-history.js b/dist/src/execution/session/recovery-cancelled-tool-history.js
 new file mode 100644
-index 0000000..fde2e71
+index 0000000..93ffa84
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-cancelled-tool-history.js
-@@ -0,0 +1,352 @@
+@@ -0,0 +1,354 @@
 +import { isDeepStrictEqual } from "node:util";
 +import { readDurableSession } from "#execution/durable-session-store.js";
 +import { getPendingCoordinationBatch, resolveToolCallInputObject } from "#harness/coordination.js";
@@ -456,6 +456,8 @@ index 0000000..fde2e71
 +  if (assistantCalls(history, call.toolCallId).length === 0)
 +    history = [...history, ...(pending?.responseMessages ?? [])];
 +  const calls = assistantCalls(history, call.toolCallId);
++  // An earlier prefix without the call cannot witness its interruption.
++  if (calls.length === 0 && prefix(history, latestHistory)) return { kind: "absent" };
 +  if (calls.length !== 1 || !isDeepStrictEqual(calls[0], call) || !prefix(history, latestHistory)) {
 +    recordRefusal("witness_history", call.toolCallId, {
 +      history_call_count: () => calls.length !== 1,
