@@ -1,0 +1,39 @@
+# Spend Review: core delivery and deferred backlog
+
+**2026-10-22.** Prioritize a stable first-use path for the fresh app. This note supplements the full acceptance matrix; full closure remains incomplete.
+
+## Core path
+
+1. **Resolve the observed 403 without broadening access.** Main’s actual UI follow-up (16:34:07–16:34:13Z) confirmed the protected fresh-app route: Preview Gateway deployment `dpl_BgKDB6iv9NTQBtLYPbak1QRA8WB7` invoked its function for 1.65 seconds, the firewall allowed the request, and the Requests project in Preview on the exact immutable EMkp domain returned 403. The Gateway forwarded the provider-mismatch response. This closes the wrong-target-snapshot hypothesis; the underlying cause remains unproved. An owner unchanged-policy reconcile read back the full original policy and preserved its project rules, but normal browser access still returned 403. A separate exact-claims custom OIDC alternative also returned 403; that alternative was removed and the original approved policy was restored exactly. No records were created. Preserve tenant, credential, and policy checks.
+2. **Prove intended-user entry.** Use ordinary sign-in and confirm the approved user reaches the fresh app in the intended organization. Prior organization-scoped sign-in is not fresh app-entry proof.
+3. **Make one approved $1 no-purchase request.** Submit once through the app UI; confirm fields, status, and activity; independently read it back and hard-reload. No fresh business record is yet evidenced. Setup or access approval is not write approval.
+4. **Finish Builder repair and exact CI.** Root reviewed the full five-file fresh-session inventory-gate repair; Main’s focused checks passed. [PR1000](https://github.com/withAutograph/autograph-app-builder/pull/1000) merged normally at `e6288348bbed02de0df1b6864072b9f24a0bae83` (16:46:26Z), from head `83729e7d21634b02429f4e86e2f638c03da1b3d0`; exact-head CI run `39816210565` passed all ten substantive jobs and its aggregate check, with two expected skips. The normal Builder address resolves to READY production deployment `dpl_6w2dfMxrco35DyVNYER8nJQeo7Pt` at source `e628834`, with stable alias `new.autograph.so` resolving correctly. Operator deployment `dpl_3xSSzKskYqW62MUbsXsF8P3X9Wr2` is READY at the same source; its approved alias comparison also resolved correctly. This is rollout evidence only; authenticated Preview app access is still unproved. The merge did not wait for CI. Track the final result as source evidence only. Preserve real delivery, approval, tenant, and credential-row protections. CI qualifies source, not hosted behavior.
+5. **Record the proof.** Bind the fresh source/deployment and intended actor/org to the one approved write, independent readback, and reload result. Run Builder source/CI work alongside 403 diagnosis; avoid competing writes to the saved public session.
+
+Core reliability includes tenant and credential isolation, approval boundaries, ordinary durability, and supported Builder start/resume/retry on the saved session with its approvals. Reuse authorization for the same effect; request approval only for genuinely new actors or effects not already covered. Source checks, CI, READY status, and provider inventory do not prove hosted use.
+
+## Existing core automation
+
+Source review at merged `e628834` confirms that ordinary new-app provisioning already plans, applies and reads back both Preview service-trust rules within the approved binding effects. It does not normally require manual dashboard Add steps. The pilot’s explicit externally managed protection mode is an exception that delegates those rules to the administrator. This is source evidence; it does not establish why the current provider request is rejected. No additional automation feature is inferred missing from this review.
+
+## Deferred work — keep visible, do not gate first use
+
+| Work | Evidence today | Later completion and prerequisite | Reason to defer |
+|---|---|---|---|
+| Reviewer and authorization journeys | Historical app has a self-review UI denial only. Fresh approve/reject with notes, unassigned/no-app denial, and tenant denial are unproved. | Ordinary Builder proposal names actors, orgs, records, and effects; obtain access and business approvals; verify persisted decisions and that denials disclose or change nothing unauthorized. | Requires additional identities and business effects beyond one requester save. Hidden controls do not prove denial. |
+| Retry, race, and pagination | One historical submit/reload is not duplicate-submit proof; no fresh decision race or complete queue/history traversal is proved. | Approve a same-record retry and bounded competing-decision plan; reconcile uncertainty before retry; traverse actual pages/cursors and verify ordered independent reads. | Separate business/data-volume exercises; no arbitrary seeding or load testing. |
+| Revocation | Retained evidence covers only its named synthetic method; fresh hosted revocation is unproved. | Identify the accepted method/receipt; for any uncovered behavior, approve an isolated actor/access plan and verify post-revoke authorization and effects. | Do not risk working access; generic QA authority is not revoke approval. |
+| Process restart and later native deployment | Browser reload is not process replacement. Fresh populated continuity across a later native deployment is unproved. | After fresh data exists, approve an app-owned restart plan and separately a legitimate later deployment; verify the same records, history, access, and resource binding after each. | Distinct lifecycle effects beyond initial durability; one result cannot stand in for the other. |
+| Customer-data export | Historical export intent has no extraction/download proof and does not transfer to fresh setup. | After fresh setup, select the organization and data; present the exact export scope for any required approval, then execute the approved export and verify the private manifest and downloaded bytes exclude other tenants. | A separate protected data effect, unnecessary for first usable access; do not add a second approval when the existing authorization covers the export. |
+
+## Improvements for later
+
+These are proposals for after the core path, not first-use prerequisites or implementation authority:
+
+- Consider self-service signup using the existing cross-repository planning; preserve the current identity and tenant protections.
+- Consider Alchemy only if it simplifies the existing resource flow; do not add Terraform or Pulumi.
+- Improve failed-hop diagnostics using verified caller/receiver environment labels and status only; do not expose tokens, add probes, or create admission gates.
+- Make deployment inventory handle commit-filter misses: inspect a bounded recent list and source metadata before deciding another refresh is needed. Never treat a filtered empty result as proof no deployment exists.
+- Measure paid-request cost and build latency during the next already-approved run, then remove redundant calls or reviews where evidence supports it. Do not add arbitrary usage quotas.
+
+The retained populated real-Postgres upgrade/failed-activation rollback-and-retry method is complete at its recorded scope (1/1 pass and original PR/CI). Preserve its receipt; do not rerun or treat it as fresh hosted continuity. No quota, fixed actor count, or ETA is introduced; broader requirements remain open rather than silently credited.
