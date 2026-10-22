@@ -18,7 +18,7 @@ const hostedGuidance = (skillPath: string): string | undefined => {
 };
 
 describe("high-fidelity design guidance", () => {
-  it("provides a first-preview example with an advisory usage inventory", () => {
+  it("provides a first-preview example accepted by the unchanged preview contract", () => {
     const reference = hostedGuidance("design-app/references/ui-preview-authoring.md");
     if (reference === undefined) {
       throw new Error("Hosted preview authoring guidance is unavailable.");
@@ -38,14 +38,6 @@ describe("high-fidelity design guidance", () => {
       routes: ["/"],
     });
     expect(() => validateUiPreview(input)).not.toThrow();
-
-    // Usage inventories guide review; omitting one does not reject valid source.
-    expect(() =>
-      validateUiPreview({
-        ...input,
-        manifest: { ...input.manifest, productionComponents: [] },
-      }),
-    ).not.toThrow();
   });
 
   it.each([

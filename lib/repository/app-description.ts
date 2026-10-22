@@ -30,7 +30,7 @@ export const appDescriptionSchema = z.object({
   validation: z.object({
     browser: z.object({ task: z.string() }).nullable(),
     check: z.object({ task: z.string() }),
-    test: z.object({ shards: z.number().int().positive(), task: z.string() }),
+    test: z.object({ shards: z.number().int().positive(), task: z.string() }).nullable(),
   }),
   version: z.literal(1),
 });
