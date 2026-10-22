@@ -66,7 +66,7 @@ export const configuredBootstrapGatewayBindings = (
   };
 };
 
-const infrastructureOnly = (plan: HostedOperatorPlan) =>
+export const infrastructureOnly = (plan: HostedOperatorPlan) =>
   plan.action === "prepare" &&
   plan.stage === "auth-bootstrap" &&
   plan.access.length === 0 &&

@@ -81,7 +81,10 @@ import { createProjectSettingsSuccessorPlan } from "./hosted-operator-project-se
 import { createInstallerSourceSuccessorPlan } from "./hosted-operator-installer-source-successor";
 import type { OperatorPlanStage } from "./hosted-operator-consent-diagnostic";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
-import { readOwnedOperatorPlanningSelection } from "./hosted-operator-planning-authority";
+import {
+  readOwnedBootstrapPlanningSelection,
+  readOwnedOperatorPlanningSelection,
+} from "./hosted-operator-planning-authority";
 import {
   createNativePreviewNeonPlanningAuthority,
   createNativePreviewNeonExecutionAuthority,
@@ -1476,26 +1479,35 @@ export const composeHostedOperatorDependencies = (
     // Prepared restoration first resumes the frozen prerequisite, without requiring
     // a completed app journal. Changed-source planning may use a recorded publication
     // before identity capture; missing publication is allowed, failed authority is not.
+    const bootstrapSelection =
+      context.releaseIntent === "prepared-preview"
+        ? await observe(
+            "accepted_spec",
+            async () => await readOwnedBootstrapPlanningSelection({ context, controlPlane }),
+          )
+        : undefined;
     const owned =
       context.releaseIntent === "prepared-preview"
         ? undefined
         : await controlPlane.readCurrentPlanningOwner(context);
     const selectedForGateway =
-      owned?.session.privateBuildDecision?.currentSpec === undefined
+      bootstrapSelection ??
+      (owned?.session.privateBuildDecision?.currentSpec === undefined
         ? undefined
-        : await readPlanningSelection();
+        : await readPlanningSelection());
     const currentPlan = current?.record.operator?.plan;
     const frozenGatewaySource = currentPlan?.gatewayDelivery;
     const publishedGatewaySource = publishedGatewayDeliverySource(
       configuration,
       selectedForGateway?.selection,
     );
-    const prerequisiteGatewaySource =
+    const frozenPrerequisiteGatewaySource =
       context.releaseIntent === "prepared-preview" &&
       currentPlan !== undefined &&
       frozenGatewaySource !== undefined
         ? frozenGatewayDeliverySource(currentPlan, frozenGatewaySource)
-        : publishedGatewaySource;
+        : undefined;
+    const prerequisiteGatewaySource = publishedGatewaySource ?? frozenPrerequisiteGatewaySource;
     await selectedForGateway?.assertCurrent?.();
     const existingBootstrap = await readExistingAuthBootstrapPrerequisite(
       current,
