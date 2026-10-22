@@ -104,7 +104,9 @@ const pullFailureReason = (stderr: string) => {
 
 const pullFailureMetadata = (image: string) => {
   const registry =
-    image === PRODUCTION_NAVIGATION_POSTGRES_IMAGE ? "public-mirror" : "fallback";
+    image === PRODUCTION_NAVIGATION_POSTGRES_IMAGE
+      ? "public-mirror"
+      : "fallback";
   return `registry=${registry}; platform=${process.platform}/${process.arch}`;
 };
 
