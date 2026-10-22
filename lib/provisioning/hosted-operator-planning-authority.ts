@@ -6,6 +6,7 @@ import type {
   ProtectedHostedOperatorDependencies,
 } from "./hosted-operator-service";
 import { matchesExactCompiledOperatorRelease } from "./hosted-operator-artifact-selection";
+import { reportOperatorPlanningMismatch } from "./hosted-operator-consent-diagnostic";
 
 type ControlPlane = Pick<
   Awaited<ReturnType<typeof createHostedOperatorControlPlane>>,
@@ -23,15 +24,24 @@ const readPreparedPreviewJournal = async (
   const current = await store.read(context);
   const operator = current?.record.operator;
   if (current === undefined || operator === undefined) {
+    reportOperatorPlanningMismatch(context.target.sessionId, "prepared_preview_journal", {
+      journal_missing: current === undefined,
+      operator_missing: operator === undefined,
+    });
     throw new HostedOperatorError("resource_mismatch");
   }
   const { plan } = operator;
   const { delivery } = plan;
   const artifactRef = plan.release.artifactRef;
   if (delivery === undefined || delivery.gitSha === undefined || artifactRef === undefined) {
+    reportOperatorPlanningMismatch(context.target.sessionId, "prepared_preview_journal", {
+      delivery_missing: delivery === undefined,
+      delivery_sha_missing: delivery?.gitSha === undefined,
+      artifact_missing: artifactRef === undefined,
+    });
     throw new HostedOperatorError("resource_mismatch");
   }
-  const matchesPrepared = [
+  const preparedMatches = [
     current.record.status === "prepared",
     plan.action === "prepare",
     plan.stage === undefined || plan.stage === "app",
@@ -42,8 +52,21 @@ const readPreparedPreviewJournal = async (
     plan.selection.projectId === context.target.projectId,
     plan.selection.sessionId === context.target.sessionId,
     delivery.projectId === context.target.projectId,
-  ].every(Boolean);
+  ];
+  const matchesPrepared = preparedMatches.every(Boolean);
   if (!matchesPrepared) {
+    reportOperatorPlanningMismatch(context.target.sessionId, "prepared_preview_journal", {
+      journal_status: !preparedMatches[0],
+      plan_action: !preparedMatches[1],
+      plan_stage: !preparedMatches[2],
+      plan_digest: !preparedMatches[3],
+      selection_app: !preparedMatches[4],
+      selection_branch: !preparedMatches[5],
+      selection_environment: !preparedMatches[6],
+      selection_project: !preparedMatches[7],
+      selection_session: !preparedMatches[8],
+      delivery_project: !preparedMatches[9],
+    });
     throw new HostedOperatorError("resource_mismatch");
   }
   return { current, operator, plan, artifactRef, delivery, gitSha: delivery.gitSha };
@@ -83,15 +106,25 @@ const readPreparedPreviewSelection = async (
   };
   const selection = await controlPlane.readGeneratedSelection(context, plan.contextId, lookup);
   if (selection === undefined) {
+    reportOperatorPlanningMismatch(context.target.sessionId, "prepared_preview_selection", {
+      selection_missing: true,
+    });
     throw new HostedOperatorError("resource_mismatch");
   }
-  const matchesRelease = [
+  const releaseMatches = [
     matchesExactCompiledOperatorRelease(selection, lookup),
     selection.appId === context.target.appId,
     selection.releaseId === plan.release.id,
     selection.manifestSha256 === plan.release.sha256,
-  ].every(Boolean);
+  ];
+  const matchesRelease = releaseMatches.every(Boolean);
   if (!matchesRelease) {
+    reportOperatorPlanningMismatch(context.target.sessionId, "prepared_preview_selection", {
+      release_source_binding: !releaseMatches[0],
+      release_app: !releaseMatches[1],
+      release_id: !releaseMatches[2],
+      release_manifest: !releaseMatches[3],
+    });
     throw new HostedOperatorError("resource_mismatch");
   }
   const assertCurrent = async () => {
