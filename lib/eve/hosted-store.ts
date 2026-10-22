@@ -1634,17 +1634,17 @@ export class InMemoryHostedEveStore implements HostedEveStore {
   async settleSucceeded(
     input: Parameters<HostedEveStore["settleSucceeded"]>[0],
   ): Promise<HostedOperationRecord> {
-    const operation = this.operations.get(
-      InMemoryHostedEveStore.operationKey(input.principal, input.operationId),
-    );
-    if (operation === undefined || operation.requestDigest !== input.requestDigest) {
+    const operationKey = InMemoryHostedEveStore.operationKey(input.principal, input.operationId);
+    const pendingOperation = this.operations.get(operationKey);
+    if (pendingOperation === undefined || pendingOperation.requestDigest !== input.requestDigest) {
       throw new Error("Hosted operation cannot settle at this digest.");
     }
     const [provedResponse, provedSend, provedApproval] = await Promise.all([
-      this.provedSessionLimitResponse(operation, input.sessionLimitResolution),
-      this.provedSendDelivery(operation, input.sendDeliveryResolution),
-      this.provedResourceApprovalResponse(operation, input.resourceApprovalResolution),
+      this.provedSessionLimitResponse(pendingOperation, input.sessionLimitResolution),
+      this.provedSendDelivery(pendingOperation, input.sendDeliveryResolution),
+      this.provedResourceApprovalResponse(pendingOperation, input.resourceApprovalResolution),
     ]);
+    const { operation, current } = this.readCurrentSettlement(input);
     if (
       !maySettleHostedOperation(
         operation,
@@ -1710,10 +1710,22 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       }
       this.sessions.set(key, structuredClone(session));
     }
-    this.operations.set(
-      InMemoryHostedEveStore.operationKey(input.principal, input.operationId),
-      structuredClone(settled),
-    );
+    if (
+      current !== null &&
+      mayReviveCancelledSession(operation, current, input.sendDeliveryResolution)
+    ) {
+      const durable = toDurableHostedSessionRecord(current);
+      const resumed = durableHostedSessionRecordSchema.parse({
+        ...durable,
+        resumedCancellationRevision: durable.cancellationRevision ?? 0,
+        updatedAtEpochMs: Math.max(durable.updatedAtEpochMs, input.nowEpochMs),
+      });
+      this.sessions.set(
+        InMemoryHostedEveStore.sessionKey(input.principal, current.sessionId),
+        structuredClone(resumed),
+      );
+    }
+    this.operations.set(operationKey, structuredClone(settled));
     return structuredClone(settled);
   }
 
@@ -2046,6 +2058,29 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       digest(unchangedOperation) === digest(operation);
     if (!valid) throw new Error("Resource approval settlement is not proved.");
     return true;
+  }
+
+  private readCurrentSettlement(input: Parameters<HostedEveStore["settleSucceeded"]>[0]) {
+    const operation = this.operations.get(
+      InMemoryHostedEveStore.operationKey(input.principal, input.operationId),
+    );
+    if (operation === undefined || operation.requestDigest !== input.requestDigest) {
+      throw new Error("Hosted operation cannot settle at this digest.");
+    }
+    const current =
+      operation.sessionId === undefined
+        ? null
+        : (this.sessions.get(
+            InMemoryHostedEveStore.sessionKey(input.principal, operation.sessionId),
+          ) ?? null);
+    if (
+      operation.kind === "send" &&
+      operation.internalBuildContinuation === undefined &&
+      !isProvedSendDelivery(operation, current, input.sendDeliveryResolution)
+    ) {
+      throw new Error("Canonical SEND delivery is not proved.");
+    }
+    return { operation, current };
   }
 
   private async provedSendDelivery(
