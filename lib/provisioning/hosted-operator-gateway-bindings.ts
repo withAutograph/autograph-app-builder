@@ -267,11 +267,7 @@ const hasOwnedGatewayConfigChange = (
   },
 ) => {
   const { expected, known, rows, values } = observation;
-  if (
-    input.plan.authAdoption !== undefined ||
-    rows.length !== managedKeys.length ||
-    known.length !== managedKeys.length
-  ) {
+  if (rows.length !== managedKeys.length || known.length !== managedKeys.length) {
     return false;
   }
   const hasDesiredChange = rows.some(
@@ -294,11 +290,10 @@ const hasOwnedGatewayConfigChange = (
       const desired = expected[managedKeySchema.parse(row.key)];
       return (
         value === desired ||
-        [
-          "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
-          "PLATFORM_GATEWAY_PROJECT_BINDINGS",
-          "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS",
-        ].includes(row.key)
+        ["PLATFORM_GATEWAY_PROJECT_BINDINGS", "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS"].includes(
+          row.key,
+        ) ||
+        (input.plan.authAdoption === undefined && row.key === "PLATFORM_REALM_OPERATOR_LINK_CONFIG")
       );
     })
   );
@@ -918,7 +913,40 @@ export const createHostedOperatorGatewayBindings = (deps: {
         throw unavailable();
       }
     };
-    const expectedValues = async (rows: ProviderRow[]): Promise<GatewayValues> => {
+    const expectedRealmLinkValue = (
+      rows: ProviderRow[],
+      observedValues?: ReadonlyMap<string, string>,
+    ): string => {
+      const realmLinkConfig = createHostedOperatorRealmLinkConfig(input.plan);
+      const fallback = JSON.stringify(realmLinkConfig);
+      if (input.plan.authAdoption === undefined || input.plan.normalActorProgram !== undefined) {
+        return fallback;
+      }
+      const row = rows.find((candidate) => candidate.key === "PLATFORM_REALM_OPERATOR_LINK_CONFIG");
+      const observed = row === undefined ? undefined : observedValues?.get(row.id);
+      const canonical = approvedCanonical?.find(
+        (candidate) => candidate.id === row?.id && candidate.key === row?.key,
+      );
+      // Shared Auth keeps an already approved capture endpoint; this app gains no actor program.
+      if (
+        observed !== undefined &&
+        canonical?.valueSha256 === valueDigest(observed) &&
+        isDeepStrictEqual(JSON.parse(observed), {
+          ...realmLinkConfig,
+          browserSessionCapture: {
+            path: "/api/hosted-operator/realm-browser-session",
+            sender: realmLinkConfig.identityHandoff.sender,
+          },
+        })
+      ) {
+        return observed;
+      }
+      return fallback;
+    };
+    const expectedValues = async (
+      rows: ProviderRow[],
+      observedValues?: ReadonlyMap<string, string>,
+    ): Promise<GatewayValues> => {
       await guard();
       observation.at("runtime_binding");
       const runtimeUrl = await deps.readAuthRuntimeUrl(input);
@@ -1019,9 +1047,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
         PLATFORM_AUTH_DATABASE_URL: runtimeUrl,
         PLATFORM_GATEWAY_PROJECT_BINDINGS: JSON.stringify(projection),
         PLATFORM_GATEWAY_PROTECTED_APPLICATIONS: JSON.stringify(protectedApplicationIds),
-        PLATFORM_REALM_OPERATOR_LINK_CONFIG: JSON.stringify(
-          createHostedOperatorRealmLinkConfig(input.plan),
-        ),
+        PLATFORM_REALM_OPERATOR_LINK_CONFIG: expectedRealmLinkValue(rows, observedValues),
       };
     };
     let activeSharedAuth = false;
@@ -1255,7 +1281,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
     const inspect = async (verifyValues: boolean) => {
       const { known, listed, rows, values } = await inspectOwnership();
       await requiredEnvironment(listed);
-      const expected = await expectedValues(rows);
+      const expected = await expectedValues(rows, values);
       if (
         renewal !== undefined &&
         (rows.length !== Object.keys(expected).length ||
