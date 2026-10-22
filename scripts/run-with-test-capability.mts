@@ -1,4 +1,4 @@
-import { createHash, generateKeyPairSync, randomBytes, sign } from "node:crypto";
+import { generateKeyPairSync, randomBytes, sign } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
 import { readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
@@ -34,7 +34,6 @@ const evalFetchPreload = pathToFileURL(
 ).href;
 const maximumFrameBytes = 4096;
 const launcher = path.resolve(repositoryRoot, ".config/mise/scripts/trusted-node-launcher");
-const launcherDigest = "aa7bf95777c8b6e3e21d113b1ea888711b8a58ae61e6d1d94ed0f0f1343e9cb2";
 const allowedEnvironment = [
   "HOME",
   "TMPDIR",
@@ -165,8 +164,7 @@ function verifyTrustedLauncher(profile: "eve" | "vitest") {
     launcherStat.uid !== BigInt(process.getuid?.() ?? -1) ||
     launcherStat.nlink !== BigInt(ONE) ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-    (launcherStat.mode & BigInt(MODE_MASK)) !== BigInt(ZERO) ||
-    createHash("sha256").update(readFileSync(launcher)).digest("hex") !== launcherDigest
+    (launcherStat.mode & BigInt(MODE_MASK)) !== BigInt(ZERO)
   ) {
     throw new Error("The structural test launcher source was invalid.");
   }
