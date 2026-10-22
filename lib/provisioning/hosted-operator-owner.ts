@@ -61,6 +61,7 @@ import type { HostedEveTransport } from "../eve/hosted-service";
 import {
   createHostedOperatorConsentDiagnostic,
   observeOperatorPlanStage,
+  reportOperatorPlanningMismatch,
 } from "./hosted-operator-consent-diagnostic";
 import type { HostedOperatorConsentDiagnosticSink } from "./hosted-operator-consent-diagnostic";
 
@@ -234,6 +235,10 @@ const assertDirectOwnerIdentity = (
     throw unavailable();
   }
   if (session.appId === undefined || session.appId !== selection.appId) {
+    reportOperatorPlanningMismatch(owner.sessionId, "canonical_owner_app", {
+      owner_app_missing: session.appId === undefined,
+      owner_app_mismatch: session.appId !== selection.appId,
+    });
     throw resourceMismatch();
   }
 };
@@ -304,12 +309,29 @@ const readDirectOwnerTarget = async (
   for (const access of projectChecks) {
     if (access.status === "ready" && access.project?.id === selection.projectId) {
       if (projectAccess !== undefined) {
+        reportOperatorPlanningMismatch(
+          selection.sessionId,
+          "direct_owner_project",
+          {
+            ready_project_ambiguous: true,
+          },
+          deps.diagnosticSink,
+        );
         throw resourceMismatch();
       }
       projectAccess = access;
     }
   }
   if (projectAccess?.project === undefined) {
+    reportOperatorPlanningMismatch(
+      selection.sessionId,
+      "direct_owner_project",
+      {
+        active_installations_missing: installationIds.size === 0,
+        ready_project_missing: true,
+      },
+      deps.diagnosticSink,
+    );
     throw resourceMismatch();
   }
   const target = hostedRuntimeTargetSchema.parse({
