@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import {
   HostedOperatorError,
   hostedOperatorPlanSchema,
+  nativeDeliveryGitRef,
   retainedOperatorAuthSchema,
   sameOperatorSelection,
 } from "./hosted-operator-contract";
@@ -93,6 +94,7 @@ export const createExistingAuthBootstrapPrerequisite = (
   configuration: Configuration,
   appDatabase: HostedOperatorPlan["appDatabase"],
   now: number,
+  gatewaySource?: NonNullable<HostedOperatorPlan["gatewayDelivery"]>,
 ) => {
   const current = record?.operator;
   const parsed = retainedOperatorAuthSchema.safeParse(
@@ -177,7 +179,12 @@ export const createExistingAuthBootstrapPrerequisite = (
     return undefined;
   }
   const gatewayBindings = configuredBootstrapGatewayBindings(configuration);
-  const gatewayDelivery = { ...prior.gatewayDelivery, gitSha: configuration.gateway.gitSha };
+  const gatewayDelivery = gatewaySource ?? {
+    branch: configuration.gateway.branch,
+    gitSha: configuration.gateway.gitSha,
+    projectId: configuration.gateway.projectId,
+    repoId: configuration.gateway.repoId,
+  };
   const currentMatches =
     isDeepStrictEqual(
       {
@@ -185,7 +192,17 @@ export const createExistingAuthBootstrapPrerequisite = (
         readonlyAttesters: current.plan.gatewayBindings?.readonlyAttesters,
       },
       { ...gatewayBindings, readonlyAttesters: gatewayBindings.readonlyAttesters },
-    ) && isDeepStrictEqual(current.plan.gatewayDelivery, gatewayDelivery);
+    ) &&
+    isDeepStrictEqual(
+      {
+        ...current.plan.gatewayDelivery,
+        gitRef:
+          current.plan.gatewayDelivery === undefined
+            ? undefined
+            : nativeDeliveryGitRef(current.plan, current.plan.gatewayDelivery, "gateway"),
+      },
+      { ...gatewayDelivery, gitRef: gatewayDelivery.gitRef ?? gatewayDelivery.branch },
+    );
   if (currentMatches) {
     return infrastructureOnly(current.plan) &&
       current.plan.effects.some(
@@ -231,6 +248,7 @@ export const readExistingAuthBootstrapPrerequisite = async (
     store: Pick<ProtectedHostedOperatorDependencies["store"], "read">;
   },
   now: number,
+  gatewaySource?: NonNullable<HostedOperatorPlan["gatewayDelivery"]>,
 ) => {
   const proposed = createExistingAuthBootstrapPrerequisite(
     current?.record,
@@ -238,6 +256,7 @@ export const readExistingAuthBootstrapPrerequisite = async (
     configuration,
     appDatabase,
     now,
+    gatewaySource,
   );
   if (proposed === undefined) {
     return undefined;
