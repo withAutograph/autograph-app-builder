@@ -100,6 +100,7 @@ import {
   managedOperatorEnvironmentRowsSchema,
   operatorAuthSchemaPreparationSchema,
   operatorDeploymentCandidatesSchema,
+  operatorDeliveryCorrectionSchema,
   hostedOperatorPlanSchema,
   hostedOperatorAuthSignupPolicyInputSchema,
   hostedOperatorInstallationCustomerIds,
@@ -138,6 +139,8 @@ import type {
   ManagedOperatorEnvironmentRow,
   OperatorAuthSchemaPreparation,
   OperatorDeploymentCandidate,
+  OperatorDeliveryCorrection,
+  HostedOperatorRecordBase,
   HostedOperatorAuthSignupPolicyInput,
 } from "./hosted-operator-contract";
 import type { HostedOperatorAppProjectSettings } from "./hosted-operator-app-project-settings";
@@ -209,6 +212,10 @@ export type HostedOperatorEffectContext = Context & {
   accountPreparation?: NormalActorAccountPreparation;
   checkpointAccountPreparation?: (preparation: NormalActorAccountPreparation) => Promise<void>;
   deliveryCandidates?: OperatorDeploymentCandidate[];
+  deliveryCorrections?: OperatorDeliveryCorrection[];
+  checkpointDeliveryCorrection?: (
+    correction: OperatorDeliveryCorrection,
+  ) => Promise<OperatorDeliveryCorrection>;
   gatewayDeliveryCandidates?: OperatorDeploymentCandidate[];
   /** Canonical retained approvals for an exact host-protection-only narrowing, never public input. */
   gatewayDeliveryProvenance?: readonly SharedHostProtectionDeliveryProvenance[];
@@ -402,6 +409,33 @@ const assertUnexpired = (plan: HostedOperatorPlan, now: number) => {
 };
 const requireOperator = (record: HostedRuntimeJournalRecord) =>
   hostedOperatorRecordSchema.parse(record.operator);
+const correctionDeliveryIntent = (plan: HostedOperatorPlan, effectId: string) => {
+  const effect = plan.effects.find((candidate) => candidate.id === effectId);
+  if (effect?.kind === "delivery") {
+    return { kind: effect.kind, delivery: plan.delivery };
+  }
+  if (effect?.kind === GATEWAY_DELIVERY_EFFECT) {
+    return { kind: effect.kind, delivery: plan.gatewayDelivery };
+  }
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- Non-delivery effects explicitly have no delivery intent.
+  return undefined;
+};
+const retainedDeliveryCorrections = (
+  prior: HostedOperatorRecordBase,
+  next: HostedOperatorRecordBase,
+) => {
+  if (prior.operationRef !== next.operationRef) {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- An unrelated operation explicitly has no retained correction state.
+    return undefined;
+  }
+  return prior.deliveryCorrections?.filter((correction) => {
+    const previous = correctionDeliveryIntent(prior.plan, correction.effectId);
+    return (
+      previous !== undefined &&
+      isDeepStrictEqual(previous, correctionDeliveryIntent(next.plan, correction.effectId))
+    );
+  });
+};
 type OperatorHttpResponse =
   | OperatorSelection
   | NeonAuthorizationResult
@@ -1315,6 +1349,10 @@ const handlePlanOperation = async (
           if (record.operator.gatewayEnvironment !== undefined) {
             nextOperator.gatewayEnvironment = record.operator.gatewayEnvironment;
           }
+          nextOperator.deliveryCorrections = retainedDeliveryCorrections(
+            record.operator,
+            nextOperator,
+          );
           nextOperator.identityLink = retainedConsumedIdentityLink(record.operator, nextOperator);
           if (
             !retainedRenewalSuccessor &&
@@ -2380,6 +2418,65 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                   await assertCurrent();
                   record = (await ownedUpdate((value) => ({ ...value, privateState }))).record;
                 },
+                checkpointDeliveryCorrection: async (supplied) => {
+                  await assertCurrent();
+                  const correction = operatorDeliveryCorrectionSchema.parse(supplied);
+                  if (
+                    correction.effectId !== effect.id ||
+                    !["delivery", GATEWAY_DELIVERY_EFFECT].includes(effect.kind)
+                  ) {
+                    throw new HostedOperatorError("resource_mismatch");
+                  }
+                  record = (
+                    await ownedUpdate((value) => {
+                      const prior = requireOperator(value);
+                      const currentEffect = prior.plan.effects.find(
+                        (candidate) => candidate.id === effect.id,
+                      );
+                      if (
+                        prior.planDigest !== planDigest ||
+                        prior.fenceGeneration !== fenceGeneration ||
+                        currentEffect?.kind !== effect.kind
+                      ) {
+                        throw new HostedOperatorError("reconciliation_required");
+                      }
+                      const corrections = prior.deliveryCorrections ?? [];
+                      const matching = corrections.filter(
+                        (candidate) => candidate.effectId === effect.id,
+                      );
+                      const attempted = matching.some((candidate) => candidate.createAttempted);
+                      if (correction.createAttempted && attempted) {
+                        throw new HostedOperatorError("reconciliation_required");
+                      }
+                      const saved: OperatorDeliveryCorrection = {
+                        effectId: effect.id,
+                        rejectedDeploymentIds: [
+                          ...new Set([
+                            ...matching.flatMap((candidate) => candidate.rejectedDeploymentIds),
+                            ...correction.rejectedDeploymentIds,
+                          ]),
+                        ],
+                        createAttempted: attempted || correction.createAttempted,
+                      };
+                      return {
+                        ...value,
+                        operator: {
+                          ...prior,
+                          deliveryCorrections: [
+                            ...corrections.filter((candidate) => candidate.effectId !== effect.id),
+                            saved,
+                          ],
+                        },
+                      };
+                    })
+                  ).record;
+                  effectInput.deliveryCorrections = requireOperator(record).deliveryCorrections;
+                  return operatorDeliveryCorrectionSchema.parse(
+                    effectInput.deliveryCorrections?.find(
+                      (candidate) => candidate.effectId === effect.id,
+                    ),
+                  );
+                },
                 checkpointDelivery: async (rows, selectedId) => {
                   await assertCurrent();
                   const candidates = operatorDeploymentCandidatesSchema.parse(rows);
@@ -2563,6 +2660,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                       : ownedAppEnvironmentRows(requireOperator(record));
                 },
                 deliveryCandidates: requireOperator(record).deliveryCandidates,
+                deliveryCorrections: requireOperator(record).deliveryCorrections,
                 effect,
                 fenceGeneration,
                 gatewayDeliveryCandidates: requireOperator(record).gatewayDeliveryCandidates,

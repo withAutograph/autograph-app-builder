@@ -1082,12 +1082,20 @@ export const retainedAppDeliverySchema = z.object({
 });
 export type RetainedAppDelivery = z.infer<typeof retainedAppDeliverySchema>;
 
+export const operatorDeliveryCorrectionSchema = z.strictObject({
+  effectId: id,
+  rejectedDeploymentIds: z.array(id),
+  createAttempted: z.boolean(),
+});
+export type OperatorDeliveryCorrection = z.infer<typeof operatorDeliveryCorrectionSchema>;
+
 const hostedOperatorRecordBaseSchema = z.strictObject({
   approvalId: id.optional(),
   authPreparation: operatorAuthSchemaPreparationSchema.optional(),
   deliveredDeploymentId: id.optional(),
   deliveredGatewayDeploymentId: id.optional(),
   deliveryCandidates: operatorDeploymentCandidatesSchema.optional(),
+  deliveryCorrections: z.array(operatorDeliveryCorrectionSchema).optional(),
   /** Shared across Auth and kernel rows; allocated once by the existing journal CAS. */
   fenceGeneration: z.number().int().positive().optional(),
   gatewayDeliveryCandidates: operatorDeploymentCandidatesSchema.optional(),
