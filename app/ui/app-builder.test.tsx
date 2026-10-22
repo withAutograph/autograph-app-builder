@@ -719,7 +719,7 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(view.querySelector('[aria-label="GPT 6 Luna"]')).not.toBeNull();
     expect(
       view.querySelector(
-        'button[aria-label="Only use providers that support Zero Data Retention."]',
+        'button[aria-label="When enabled, the model list shows options marked as offering Zero Data Retention. Check the provider\'s policy for details."]',
       ),
     ).not.toBeNull();
     expect(view.querySelector<HTMLInputElement>('input[name="zdr"]')?.checked).toBe(false);

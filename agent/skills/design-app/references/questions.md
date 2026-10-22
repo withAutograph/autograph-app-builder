@@ -101,7 +101,7 @@ Ask before build readiness when unresolved:
 
 ### Writes and review
 
-- “Does this action change canonical records, prepare a draft, or only change the
+- “Does this action change saved records, prepare a draft, or only change the
   current view?”
 - “Who reviews or approves a proposed change?”
 - “Can changes take effect in the future or revise a past effective date?”
@@ -111,8 +111,8 @@ Ask before build readiness when unresolved:
 - “Who may view, propose, approve, and publish this information?”
 - “Does the interface expose compensation, personal, financial, or contractual
   information requiring narrower access?”
-- “Is access scoped only by customer, or are additional app-level restrictions
-  needed?”
+- “Which customers or people may access this, and does any group need different
+  access?”
 
 ### Agent authority
 
@@ -124,7 +124,8 @@ Ask before build readiness when unresolved:
 
 - “Which prototype behaviors are required for the first production version?”
 - “Which visible features are illustrative and intentionally deferred?”
-- “Can you accept this walkthrough as the test for the first production build?”
+- “Does this walkthrough cover what you expect people to do in the first
+  version?”
 
 ## Questions not to ask users
 

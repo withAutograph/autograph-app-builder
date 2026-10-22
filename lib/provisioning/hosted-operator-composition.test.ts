@@ -4269,8 +4269,8 @@ describe("normal actor plan with retained installation scope", () => {
       },
       "prepare-app-hosted-runtime",
     );
+    expect(description).toContain("What will happen:");
     expect(description).toContain("retained-owner-org");
-    expect(description).toContain(proposed.release.id);
   });
 
   it("does not silently omit an unknown retained installation scope", async () => {

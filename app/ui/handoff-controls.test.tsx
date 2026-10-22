@@ -189,13 +189,13 @@ describe("durable handoff controls", () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json(data));
     await render(data);
-    expect(container.textContent).toContain("Required App Builder connection endpoint:");
+    expect(container.textContent).toContain("Builder connection address:");
     expect(container.textContent).toContain(data.mcpUrl);
     expect(container.textContent).toContain(
-      "Before sending, confirm your plugin connection targets this endpoint.",
+      "Before sending, make sure your client uses this address.",
     );
     expect(container.textContent).toContain(
-      "local and Preview handoffs need a matching configured App Builder plugin connection.",
+      "The release plugin may use Production; local and Preview handoffs need a connection configured for that environment.",
     );
   });
   it("never reports a launch as continuation, and only polls while visible", async () => {

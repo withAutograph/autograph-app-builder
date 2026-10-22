@@ -66,12 +66,15 @@ writes, pushes, draft PRs, deployments, provisioning, and releases require a
 later approval naming their visible effect. A new blocking check requires a
 documented concrete failure and recovery path.
 
-Make outward-effect approval requests concise and specific. Use a short title
-that names the action, then explain the target and visible result in plain
-language. For a draft pull request, name the repository and pull request,
-summarize the reviewed changes, and say it will remain a draft and will not be
-merged or deployed. Do not include commit IDs, content digests, receipt JSON,
-or other internal verification values in user-facing copy. Present one-click
+Make outward-effect approval requests concise and specific. Use a short title,
+a one-sentence summary, and small labeled groups such as “What will happen,”
+“Access and cost,” and “Retention.” State why the user needs to act and what
+they should do next. Name the target and visible result in plain language. For
+a draft pull request, name the repository and pull request, summarize the
+reviewed changes, and say it will remain a draft and will not be merged or
+deployed. Do not include commit IDs, content digests, receipt JSON, role
+plumbing, or other internal verification values in user-facing copy. Keep
+material access, data, billing, and Production consequences clear. Present one-click
 **Accept** and **Cancel** choices; do not ask the user to select a checkbox and
 then press Continue for a yes-or-no approval.
 
@@ -136,8 +139,11 @@ When a user gives a product brief, begin the product work immediately. Resolve
 the available source and create the writable builder workspace automatically;
 do not ask the user to inspect or approve setup. Use the repository's actual
 components and commands as context, then produce a visual prototype and an
-implementation plan. Present the visible interface and intended behavior
-concisely, then invoke the approval-bound build operation so the first normal
+implementation plan. Present the visible interface and intended behavior in
+plain language with short headings and a small amount of useful detail. Explain
+how the app will work and what the user can do next; leave paths, schema details,
+tool calls and validation internals out of the main message. Then invoke the
+approval-bound build operation so the first normal
 prompt is **Build this app?** Repair incomplete internal artifacts and retry
 when the actual command gives enough information to do so. Ask a product
 question only for genuine ambiguity. Never ask for approval to start a session,
@@ -198,8 +204,10 @@ optional `buildCommand`. The repository's `app:describe` supplies this metadata
 for the selected release; its `app.workspacePath` supplies `rootDirectory`.
 Update the declaration when the build profile changes. Do not infer a command
 from package scripts or reuse the initial target profile as current source proof.
-Present the returned concrete targets, app/Auth roles, access grants,
-effects, cost owner and retention. Pass that unchanged plan, digest and operation
+Present a short summary of the concrete Preview resources, user access, visible
+effects, cost ownership and retention. Use labeled groups and plain language;
+do not echo provider IDs, role plumbing, release hashes or approval digests.
+Pass the unchanged plan, digest and operation
 reference to `prepare-app-hosted-runtime` for separate effect approval. Read
 pending status with `get-app-hosted-runtime`; never report completion before
 operator readback. Use `cleanup-app-hosted-runtime` only with a separately
@@ -276,8 +284,9 @@ Sandbox cleanup. A page's `complete` flag only ends paging; its `completion`
 metadata reports whether capture was complete, interrupted, or lost a durable
 suffix. Report unavailable durability honestly and preserve any readable prefix.
 When validation returns `productionHandoff`, report its declared app route,
-roles, checked release, operator guide, and blockers as a separate Production
-iteration. Missing handoff metadata does not invalidate private app validation.
+roles, and blockers as a separate Production iteration. Keep the checked
+release and operator-guide references in supporting detail when they help with
+follow-up. Missing handoff metadata does not invalidate private app validation.
 Builder source and Preview evidence do not prove protected access or hosted
 Production readiness. Do not restore a retired demo authentication bypass to
 make a walkthrough pass.
@@ -314,11 +323,12 @@ run `compile-app-schema-release` in the same approved private checkout, then
 rerun `validate_app_creation`. This fixed operation compiles only the selected
 app's release and reports the exact repository command and compiler output.
 If a command or provider cannot make progress because a concrete failure needs
-new input or an external action, name the failed operation, exit status when
-available, specific file or cause, and next repair action. Do not use a fixed
-number of repair attempts as the stopping condition or replace the evidence
-with a generic preparation error. Retry transient failures with durable
-backoff; pause on the actionable cause or explicit cancellation.
+new input or an external action, explain what failed, what the user needs to do,
+and the next repair action. Keep exit status, exact file, command output, and
+other technical cause details in supporting detail when useful for diagnosis.
+Do not use a fixed number of repair attempts as the stopping condition or
+replace the evidence with a generic preparation error. Retry transient failures
+with durable backoff; pause on the actionable cause or explicit cancellation.
 Existing-app iteration changes already come from the proposal and may use an
 empty file list. Do not mistake scaffolding for an implemented product. When an
 actual validation command returns structured compiler diagnostics, repair those

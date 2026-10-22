@@ -300,7 +300,7 @@ const recoveryFixture = () => {
 };
 
 describe("native externally managed policy recovery integration", () => {
-  it("shows exact external policy evidence and named READY predecessors in the new approval", () => {
+  it("summarizes external policy and delivery effects without internal identifiers", () => {
     const f = recoveryFixture();
     const input = {
       ...f.proposed.selection,
@@ -318,8 +318,10 @@ describe("native externally managed policy recovery integration", () => {
       "ready-gateway",
       f.original.planDigest,
     ]) {
-      expect(description).toContain(identity);
+      expect(description).not.toContain(identity);
     }
+    expect(description).toContain("Deployment access:");
+    expect(description).toContain("Deployment usage:");
     expect(
       publicApprovalDescription(
         { ...input, planDigest: f.current.operator!.planDigest },

@@ -1160,16 +1160,12 @@ describe("protected hosted operator boundary", () => {
       { ...selection, plan, planDigest: operatorPlanDigest(plan) },
       "prepare-app-hosted-runtime",
     );
-    for (const value of [
-      "shared_auth_runtime",
-      "synthetic-reviewer",
-      "reviewer",
-      "Fixture owner",
-      "Retain while",
-      "br_synthetic",
-    ]) {
-      expect(description).toContain(value);
-    }
+    expect(description).toContain("What will happen:");
+    expect(description).toContain("Access and cost:");
+    expect(description).toContain("synthetic-reviewer");
+    expect(description).toContain("reviewer");
+    expect(description).toContain("Fixture owner");
+    expect(description).toContain("Retain while");
   });
   it("carries explicit prepared Preview intent through normal owner-authorized planning", async () => {
     const f = fixture();

@@ -63,14 +63,14 @@ async function LocalConnectionBridgeContent({ params, searchParams }: Props) {
       provider={typedProvider}
       environment={environment}
       title={title}
-      description={`Approve the seeded ${providerName} identity for this App Builder workspace.`}
+      description={`Approve the prepared test account for this App Builder workspace.`}
       account="Autograph Developer"
       handle={provider === "github" ? "@autograph-dev" : "autograph-dev"}
       details={details}
       scope={
         provider === "github"
-          ? "Access is limited to the seeded GitHub App installation and repository shown above."
-          : "Access is limited to the seeded Vercel team and integration configuration shown above."
+          ? "Access is limited to the GitHub App installation and repository shown above."
+          : "Access is limited to the Vercel team and integration configuration shown above."
       }
       actionLabel={actionLabel}
       backHref={resumeKey ? `/?resume=${encodeURIComponent(resumeKey)}` : "/"}
