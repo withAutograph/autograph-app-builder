@@ -956,7 +956,7 @@ export const createHostedOperatorControlPlane = async (input: {
       return { ...current, operator };
     };
 
-    const reserveRealmIdentityLink = async (linkInput: {
+    interface RealmIdentityLinkInput {
       context: HostedOperatorContext;
       bootstrapPlanDigest: string;
       browserOrigin: string;
@@ -969,8 +969,82 @@ export const createHostedOperatorControlPlane = async (input: {
       sealedNonce?: ReturnType<typeof encryptVercelToken> & { keyVersion: string };
       expiresAt: string;
       browserSession?: z.infer<typeof operatorRealmIdentityLinkSchema>["browserSession"];
-    }) => {
+    }
+    // Selecting another existing organization requires a fresh proof before any app plan.
+    // The old nonce/proof is never reused for that scope; reservation compares the exact old link.
+    const canRefreshSelectedOrganization = (
+      operator: Awaited<ReturnType<typeof readKnownAuthBootstrap>>["operator"],
+      existing: z.infer<typeof operatorRealmIdentityLinkSchema> | undefined,
+      linkInput: Omit<RealmIdentityLinkInput, "nonceSha256" | "sealedNonce">,
+    ) =>
+      existing !== undefined &&
+      [
+        operator.plan.stage === "auth-bootstrap",
+        operator.plan.normalActorProgram === undefined,
+        existing.browserSession === undefined,
+        linkInput.browserSession === undefined,
+        linkInput.organizationId !== null,
+        existing.organizationId !== linkInput.organizationId,
+        existing.ownerSessionId === linkInput.context.target.sessionId,
+        operator.planDigest === linkInput.bootstrapPlanDigest,
+        existing.bootstrapPlanDigest === linkInput.bootstrapPlanDigest,
+        operator.plan.authDatabase.resourceId === linkInput.authResourceId,
+        existing.authResourceId === linkInput.authResourceId,
+        existing.audience === linkInput.audience,
+        existing.browserOrigin === linkInput.browserOrigin,
+        existing.issuer === linkInput.issuer,
+        existing.endpointOrigin === linkInput.endpointOrigin,
+      ].every(Boolean);
+    const assertRealmIdentityLinkReplaceable = (
+      operator: Awaited<ReturnType<typeof readKnownAuthBootstrap>>["operator"],
+      link: z.infer<typeof operatorRealmIdentityLinkSchema>,
+      refreshSelectedOrganization: boolean,
+    ) => {
+      if (refreshSelectedOrganization) {
+        return;
+      }
+      const existing = operator.identityLink;
+      if (
+        [
+          operator.plan.normalActorProgram === undefined,
+          existing?.browserSession === undefined,
+          link.browserSession === undefined,
+          existing?.bootstrapPlanDigest === link.bootstrapPlanDigest,
+          existing?.consumedAt !== undefined,
+        ].every(Boolean)
+      ) {
+        // Capture may finish while provider inventory is read. Never replace the same owner's proof.
+        throw new HostedOperatorError("operation_in_progress");
+      }
+      if (
+        existing !== undefined &&
+        existing.consumedAt === undefined &&
+        Date.parse(existing.expiresAt) > Date.now() &&
+        existing.nonceSha256 !== link.nonceSha256
+      ) {
+        throw new HostedOperatorError("operation_in_progress");
+      }
+    };
+    const reserveRealmIdentityLink = async (
+      linkInput: RealmIdentityLinkInput,
+      expectedOrganizationRefresh?: {
+        operationRef: string;
+        link: z.infer<typeof operatorRealmIdentityLinkSchema>;
+      },
+    ) => {
       const known = await readKnownAuthBootstrap(linkInput.context);
+      if (
+        expectedOrganizationRefresh !== undefined &&
+        (known.operator.operationRef !== expectedOrganizationRefresh.operationRef ||
+          !isDeepStrictEqual(known.operator.identityLink, expectedOrganizationRefresh.link) ||
+          !canRefreshSelectedOrganization(
+            known.operator,
+            expectedOrganizationRefresh.link,
+            linkInput,
+          ))
+      ) {
+        throw new HostedOperatorError("operation_in_progress");
+      }
       if (
         known.operator.planDigest !== linkInput.bootstrapPlanDigest ||
         known.operator.plan.authDatabase.resourceId !== linkInput.authResourceId
@@ -1027,26 +1101,15 @@ export const createHostedOperatorControlPlane = async (input: {
             throw new HostedOperatorError("operation_in_progress");
           }
           const existing = record.operator.identityLink;
-          if (
-            [
-              record.operator.plan.normalActorProgram === undefined,
-              existing?.browserSession === undefined,
-              link.browserSession === undefined,
-              existing?.bootstrapPlanDigest === link.bootstrapPlanDigest,
-              existing?.consumedAt !== undefined,
-            ].every(Boolean)
-          ) {
-            // Capture may finish while provider inventory is read. Never replace the same owner's proof.
+          const refreshSelectedOrganization =
+            expectedOrganizationRefresh !== undefined &&
+            record.leaseExpiresAt === undefined &&
+            isDeepStrictEqual(existing, expectedOrganizationRefresh.link) &&
+            canRefreshSelectedOrganization(record.operator, existing, linkInput);
+          if (expectedOrganizationRefresh !== undefined && !refreshSelectedOrganization) {
             throw new HostedOperatorError("operation_in_progress");
           }
-          if (
-            existing !== undefined &&
-            existing.consumedAt === undefined &&
-            Date.parse(existing.expiresAt) > Date.now() &&
-            existing.nonceSha256 !== link.nonceSha256
-          ) {
-            throw new HostedOperatorError("operation_in_progress");
-          }
+          assertRealmIdentityLinkReplaceable(record.operator, link, refreshSelectedOrganization);
           return { ...record, operator: { ...record.operator, identityLink: link } };
         },
       });
@@ -1061,6 +1124,11 @@ export const createHostedOperatorControlPlane = async (input: {
     ) => {
       const known = await readKnownAuthBootstrap(linkInput.context);
       const existing = known.operator.identityLink;
+      const expectedOrganizationRefresh =
+        existing !== undefined &&
+        canRefreshSelectedOrganization(known.operator, existing, linkInput)
+          ? { operationRef: known.operator.operationRef, link: existing }
+          : undefined;
       const aad = JSON.stringify({
         authority: linkInput.context.authority,
         bootstrapPlanDigest: linkInput.bootstrapPlanDigest,
@@ -1072,6 +1140,7 @@ export const createHostedOperatorControlPlane = async (input: {
           : { browserSession: linkInput.browserSession }),
       });
       if (
+        expectedOrganizationRefresh === undefined &&
         existing !== undefined &&
         existing.consumedAt === undefined &&
         Date.parse(existing.expiresAt) > Date.now()
@@ -1110,11 +1179,14 @@ export const createHostedOperatorControlPlane = async (input: {
         ...encryptVercelToken({ associatedData: aad, key: tokenKeyring.tokenKey, token: nonce }),
         keyVersion: tokenKeyring.tokenKeyVersion,
       };
-      const link = await reserveRealmIdentityLink({
-        ...linkInput,
-        nonceSha256: createHash("sha256").update(nonce).digest("hex"),
-        sealedNonce,
-      });
+      const link = await reserveRealmIdentityLink(
+        {
+          ...linkInput,
+          nonceSha256: createHash("sha256").update(nonce).digest("hex"),
+          sealedNonce,
+        },
+        expectedOrganizationRefresh,
+      );
       return { link, nonce };
     };
     const readCanonicalPendingIdentity = async (pendingInput: {
@@ -2340,7 +2412,8 @@ export const createHostedOperatorControlPlane = async (input: {
         }
         return { active: false, rows };
       },
-      reserveRealmIdentityLink,
+      reserveRealmIdentityLink: (linkInput: RealmIdentityLinkInput) =>
+        reserveRealmIdentityLink(linkInput),
       async resolveRealmIdentityCallbackContext(callbackInput: {
         authority?: HostedOperatorContext["authority"];
         ownerSessionId: string;

@@ -905,6 +905,77 @@ const resolveParticipantPlan = async (
   return await withRetainedAppInstallationTargets(appPlan, context, controlPlane);
 };
 
+const matchesSelectedRealmOrganization = (
+  selectedOrganizationId: string | undefined,
+  observedOrganizationId: string | null | undefined,
+) => selectedOrganizationId === undefined || observedOrganizationId === selectedOrganizationId;
+
+const resolveCapturedRealmMembership = (input: {
+  application: ReturnType<typeof selectedApplication>;
+  captured: NonNullable<Awaited<ReturnType<ControlPlane["readCapturedRealmIdentity"]>>>;
+  privateProof: Awaited<ReturnType<ControlPlane["readCapturedRealmIdentityProof"]>>;
+  verified: Awaited<ReturnType<typeof readVerifiedRealmAccess>>;
+  transportOrigin: string;
+  configuration: HostedOperatorSourceConfiguration;
+}) => {
+  const { application, captured, privateProof, verified, transportOrigin, configuration } = input;
+  if (verified.identity.organizationId !== null) {
+    return { organizationId: verified.identity.organizationId };
+  }
+  const organization = application.organizationProposal;
+  if (organization === undefined) {
+    throw new HostedOperatorError(AUTH_MEMBERSHIP_REQUIRED);
+  }
+  const { organizationId } = organization;
+  return {
+    organizationId,
+    authMembership: {
+      actorId: verified.identity.actorId,
+      bootstrapPlanDigest: captured.bootstrapPlanDigest,
+      identityCapture: {
+        capturedAt: privateProof.link.consumedAt ?? "",
+        realmSessionId: verified.identity.sessionId,
+      },
+      identityNonceSha256: captured.nonceSha256,
+      identityProof: {
+        reference: privateProof.link.proofRef ?? "",
+        sha256: privateProof.link.proofSha256 ?? "",
+      },
+      identityVerification: {
+        audience: captured.audience,
+        issuer: captured.issuer,
+        jwksUrl: `${transportOrigin}/_platform/jwks.json`,
+        transportSource: configuration.nativeNeon.configuration.operator,
+      },
+      kind: "create-owned-organization" as const,
+      name: organization.name,
+      organizationId,
+      slug: organization.slug,
+    },
+  };
+};
+
+const hasCapturedSelectedOwnerIdentity = (
+  record: HostedRuntimeJournalRecord,
+  operator: NonNullable<HostedRuntimeJournalRecord["operator"]>,
+  context: HostedOperatorContext,
+  organizationId: string | undefined,
+) => {
+  const link = operator.identityLink;
+  return [
+    operator.plan.normalActorProgram === undefined,
+    link?.browserSession === undefined,
+    link?.bootstrapPlanDigest === operator.planDigest ||
+      hasRetainedSharedHostProtectionIdentity(record),
+    link?.ownerSessionId === context.target.sessionId,
+    link?.authResourceId === operator.plan.authDatabase.resourceId,
+    link?.consumedAt !== undefined,
+    link?.proofRef !== undefined,
+    link?.proofSha256 !== undefined,
+    matchesSelectedRealmOrganization(organizationId, link?.organizationId),
+  ].every(Boolean);
+};
+
 export const resolveFullPlan = async (
   base: HostedOperatorPlan,
   context: HostedOperatorContext,
@@ -948,6 +1019,9 @@ export const resolveFullPlan = async (
     return base;
   }
   const application = selectedApplication(configuration, context);
+  if (!matchesSelectedRealmOrganization(application.organizationId, captured.organizationId)) {
+    return base;
+  }
   const allowedAppRoles = rolesForNewPlan(application, currentAppRoles);
   // Bootstrap prepares owned Auth and database resources before app publication.
   // Only the app delivery plan needs the actual published Git source.
@@ -987,38 +1061,19 @@ export const resolveFullPlan = async (
       version: 1,
     },
   });
-  let { organizationId } = verified.identity;
-  let authMembership: HostedOperatorPlan["authMembership"];
-  if (organizationId === null) {
-    const organization = application.organizationProposal;
-    if (organization === undefined) {
-      throw new HostedOperatorError(AUTH_MEMBERSHIP_REQUIRED);
-    }
-    ({ organizationId } = organization);
-    authMembership = {
-      actorId: verified.identity.actorId,
-      bootstrapPlanDigest: captured.bootstrapPlanDigest,
-      identityCapture: {
-        capturedAt: privateProof.link.consumedAt ?? "",
-        realmSessionId: verified.identity.sessionId,
-      },
-      identityNonceSha256: captured.nonceSha256,
-      identityProof: {
-        reference: privateProof.link.proofRef ?? "",
-        sha256: privateProof.link.proofSha256 ?? "",
-      },
-      identityVerification: {
-        audience: captured.audience,
-        issuer: captured.issuer,
-        jwksUrl: `${transportOrigin}/_platform/jwks.json`,
-        transportSource: configuration.nativeNeon.configuration.operator,
-      },
-      kind: "create-owned-organization",
-      name: organization.name,
-      organizationId,
-      slug: organization.slug,
-    };
+  if (
+    !matchesSelectedRealmOrganization(application.organizationId, verified.identity.organizationId)
+  ) {
+    return base;
   }
+  const { organizationId, authMembership } = resolveCapturedRealmMembership({
+    application,
+    captured,
+    privateProof,
+    verified,
+    transportOrigin,
+    configuration,
+  });
   const effects: HostedOperatorPlan["effects"] = [
     ...base.effects.filter((effect) => ![GATEWAY_BINDINGS, GATEWAY_DELIVERY].includes(effect.kind)),
     {
@@ -2428,18 +2483,13 @@ export const composeHostedOperatorDependencies = (
     if (!knownPrepared) {
       throw new HostedOperatorError(OPERATION_IN_PROGRESS);
     }
-    const link = operator.identityLink;
-    const capturedOwner = [
-      operator.plan.normalActorProgram === undefined,
-      link?.browserSession === undefined,
-      link?.bootstrapPlanDigest === operator.planDigest ||
-        hasRetainedSharedHostProtectionIdentity(current.record),
-      link?.ownerSessionId === input.target.sessionId,
-      link?.authResourceId === operator.plan.authDatabase.resourceId,
-      link?.consumedAt !== undefined,
-      link?.proofRef !== undefined,
-      link?.proofSha256 !== undefined,
-    ].every(Boolean);
+    const organizationId = selectedApplication(configuration, input).organizationId;
+    const capturedOwner = hasCapturedSelectedOwnerIdentity(
+      current.record,
+      operator,
+      input,
+      organizationId,
+    );
     if (capturedOwner) {
       // Consumption raced the preceding execute read. Preserve its canonical nonce and re-read preparation.
       throw new HostedOperatorError(OPERATION_IN_PROGRESS);
@@ -2492,7 +2542,7 @@ export const composeHostedOperatorDependencies = (
       endpointOrigin: candidate.origin,
       expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
       issuer: boundary.verification.publicOrigin,
-      organizationId: null,
+      organizationId: organizationId ?? null,
     });
     return {
       browserUrl: createRealmIdentityBrowserUrl(pending),
