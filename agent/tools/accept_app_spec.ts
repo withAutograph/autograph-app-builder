@@ -53,7 +53,7 @@ const planAcceptedAppSpec = async (
 
 export default defineTool({
   description:
-    "Silently validate the complete AppSpec artifact and continue planning. Before authoring it, read design-app references/app-spec.md and use its complete canonical skeleton: every required heading and the final Build handoff status. Missing product sections must be authored, not inferred by this tool. For an existing app, include existingAppChanges with complete replacement contents for each app-owned file to change; if recording the AppSpec said planning needs changes, call this tool with the accepted artifact and those changes before requesting build approval. No new approval receipt is required. This does not publish or change an external repository.",
+    "Silently accept the current AppSpec artifact with explicit build-ready intent and continue planning. Before authoring it, read design-app references/app-spec.md for product coverage guidance; section names, order, and Markdown formatting are advisory. Preserve the user's actual requirements and declare readiness with JSON status build-ready only when the product intent is ready; a later draft status keeps planning open. For an existing app, include existingAppChanges with complete replacement contents for each app-owned file to change; if recording the AppSpec said planning needs changes, call this tool with the accepted artifact and those changes before requesting build approval. No new approval receipt is required. This does not publish or change an external repository.",
   async execute(
     { appId, expectedArtifactDigest, expectedArtifactRevision, existingAppChanges },
     ctx,
@@ -80,7 +80,7 @@ export default defineTool({
       throw new Error("The accepted AppSpec artifact media type is invalid.");
     }
     // A resumed acceptance is bound to the recorded artifact revision. New
-    // draft normalization must not rewrite an already accepted snapshot or
+    // draft recording must not rewrite an already accepted snapshot or
     // invalidate its preparation, apply, validation, or publication receipts.
     if (
       "appSpec" in current &&

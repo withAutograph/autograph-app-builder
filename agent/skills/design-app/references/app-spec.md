@@ -19,19 +19,20 @@ and implementation plan are ready.
 
 Apply labels to material decisions, not every sentence.
 
-## Canonical complete skeleton
+## Suggested coverage outline
 
-Before the first AppSpec recording or `accept_app_spec` call, copy the entire
-Markdown block below. Replace the section bodies with this app's product
-meaning, prototype references, and labeled defaults or deferrals. Keep all 14
-exact level-two headings once, even when a section only says why it does not
-apply. Do not submit the instructions around the block or the outer four-backtick
-fence. Do not use a shorter example or reconstruct the headings from memory.
+Before recording or accepting an AppSpec, use the outline below to consider
+this app's product meaning, prototype references, and labeled defaults or
+deferrals. Section names, order, counts, and formatting are advisory. Organize
+the document for the actual product; do not invent irrelevant roles, schemas,
+interfaces, or capabilities merely to fill a heading. Do not submit the outer
+four-backtick fence or these instructions as the specification.
 
-The final section must be exactly `## Build handoff`, one blank line, and one
-lowercase `json` fenced block. End the document at that block's closing fence:
-no conclusion, checklist, comments, or additional sections after it. The
-handoff records readiness only. Product decisions belong in the preceding prose.
+Declare explicit intent in a JSON fenced block with `status: "build-ready"`
+when ready. Its heading, location, spacing, and fence capitalization do not
+control acceptance. The last valid JSON object declaring a top-level status
+controls readiness; a later `draft` or other status does not enable planning.
+The marker records intent only, never identity, grants, or provider approval.
 
 ````markdown
 # AppSpec: <product name>
@@ -111,10 +112,11 @@ completeness includes meaningful section content.
 
 ## Build handoff
 
-The object is closed and contains only `status`, exactly `build-ready`. Set it
+The consumed readiness field is `status`, exactly `build-ready`. Set it
 after the complete AppSpec is internally validated from stated decisions and
-safe revisable defaults. Omit the entire block while a materially
-product-changing choice remains unresolved.
+safe revisable defaults. Omit the marker or use `status: "draft"` while a
+materially product-changing choice remains unresolved. Other metadata is
+ignored by readiness recognition and cannot supply execution authority.
 
 Repository creation derives identity and default routes from the app ID. The
 AppSpec is an optional product-intent snapshot; a convention CUE input selects
@@ -150,7 +152,7 @@ Mark build-ready only when:
   non-goals; and
 - the walkthrough is complete enough for product review.
 
-After those conditions pass, add the strict Build handoff block with status
+After those conditions pass, record explicit readiness with status
 `build-ready`. When the design changes, update the internal specification and
 plan silently. Do not turn internal recording or preparation into another user
 approval.
