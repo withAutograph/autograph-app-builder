@@ -1036,17 +1036,20 @@ export const mayReviveCancelledSession = (
   current: HostedSessionRecord,
   proof?: NativeDeliveryState,
 ): boolean => {
+  if (operation === null || !["reserved", "submission_unknown"].includes(operation.state)) {
+    return false;
+  }
+  const durable = toDurableHostedSessionRecord(current);
   if (
-    current.status !== "cancelled" ||
-    operation === null ||
-    !["reserved", "submission_unknown"].includes(operation.state)
+    current.status !== "cancelled" &&
+    (durable.cancellationRevision ?? 0) <= (durable.resumedCancellationRevision ?? 0)
   ) {
     return false;
   }
   const revision = operation.sendDelivery?.resumeCancellationRevision;
   return (
     revision !== undefined &&
-    revision === (toDurableHostedSessionRecord(current).cancellationRevision ?? 0) &&
+    revision === (durable.cancellationRevision ?? 0) &&
     isProvedSendDelivery(operation, current, proof)
   );
 };
