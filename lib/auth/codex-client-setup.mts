@@ -1,16 +1,17 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import * as schema from "../db/schema";
+import { oauthClient, oauthClientResource, oauthResource } from "../db/schema";
 import { readPrivateDatabaseUrl } from "../db/private-database-url";
 import { hostedTaskPostgresOptions } from "../db/postgres-connection-policy";
 import { setupCodexClient } from "./codex-client";
 import { readPreviewOAuthContractConfig } from "./preview-oauth-contract";
 
+const schema = { oauthClient, oauthClientResource, oauthResource };
 const [flag, fd, resourceFlag, resource] = process.argv.slice(2);
+const validPrivateTransport = flag === "--database-url-fd" && fd === "0";
 if (
   process.argv.length !== 6 ||
-  flag !== "--database-url-fd" ||
-  fd !== "0" ||
+  !validPrivateTransport ||
   resourceFlag !== "--resource" ||
   !resource
 ) {

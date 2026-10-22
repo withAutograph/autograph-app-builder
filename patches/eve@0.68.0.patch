@@ -274,16 +274,44 @@ index 0000000..12d0af2
 +): RetrospectiveCancelledToolHistory;
 diff --git a/dist/src/execution/session/recovery-cancelled-tool-history.js b/dist/src/execution/session/recovery-cancelled-tool-history.js
 new file mode 100644
-index 0000000..d8ffe03
+index 0000000..fde2e71
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-cancelled-tool-history.js
-@@ -0,0 +1,236 @@
+@@ -0,0 +1,352 @@
 +import { isDeepStrictEqual } from "node:util";
 +import { readDurableSession } from "#execution/durable-session-store.js";
 +import { getPendingCoordinationBatch, resolveToolCallInputObject } from "#harness/coordination.js";
 +import { getPendingInputBatches } from "#harness/pending-input-batches.js";
 +import { getBlockingWorkflowToolRuns } from "#harness/workflow-tool-runs.js";
 +import { settleCancelledToolHistory } from "#harness/cancelled-tool-history.js";
++import { protocolIdentityHash } from "#harness/model-protocol-diagnostic.js";
++import { createLogger } from "#internal/logging.js";
++
++const log = createLogger("harness.model-protocol");
++// Advisory diagnostics run only after an unchanged refusal predicate succeeds.
++// Each name is static; no retained input or error value enters this event.
++const recordRefusal = (stage, callId, guards) => {
++  try {
++    const failed = [];
++    const unreadable = [];
++    for (const [name, evaluate] of Object.entries(guards)) {
++      try {
++        if (evaluate()) failed.push(name);
++      } catch {
++        unreadable.push(name);
++      }
++    }
++    log.info(
++      `recovery-cancelled-history ${JSON.stringify({
++        version: 1,
++        stage,
++        callIdHash: protocolIdentityHash(callId),
++        failed,
++        unreadable,
++      })}`,
++    );
++  } catch {}
++};
 +
 +const parts = (messages) =>
 +  messages.flatMap((message) => (Array.isArray(message.content) ? message.content : []));
@@ -358,13 +386,35 @@ index 0000000..d8ffe03
 +        pending.event.sequence !== emission.sequence ||
 +        pending.event.stepIndex > emission.stepIndex)) ||
 +    (runs.length > 0 && actions.length > 0 && runs[0].origin.stepIndex !== pending.event.stepIndex)
-+  )
++  ) {
++    recordRefusal("witness_ownership", call.toolCallId, {
++      multiple_blocking_runs: () => runs.length > 1,
++      multiple_actions: () => actions.length > 1,
++      blocking_name_mismatch: () => runs.some((run) => run.toolName !== call.toolName),
++      blocking_turn_mismatch: () => runs.some((run) => run.origin.turnId !== turnId),
++      blocking_step_after_emission: () =>
++        runs.some((run) => run.origin.stepIndex > emission.stepIndex),
++      action_name_mismatch: () => actions.some((action) => nameOf(action) !== call.toolName),
++      action_input_mismatch: () => actions.some((action) => !sameInput(action, call)),
++      coordination_turn_mismatch: () => actions.length > 0 && pending.event.turnId !== turnId,
++      coordination_sequence_mismatch: () =>
++        actions.length > 0 && pending.event.sequence !== emission.sequence,
++      coordination_step_after_emission: () =>
++        actions.length > 0 && pending.event.stepIndex > emission.stepIndex,
++      blocking_coordination_step_mismatch: () =>
++        runs.length > 0 &&
++        actions.length > 0 &&
++        runs[0].origin.stepIndex !== pending.event.stepIndex,
++    });
 +    return { kind: "ambiguous" };
++  }
 +  const cancellations = nativeEvents.flatMap((event, index) =>
 +    event.type === "turn.cancelled" && event.data?.turnId === turnId ? [{ event, index }] : [],
 +  );
-+  if (cancellations.some(({ event }) => event.data.sequence !== emission.sequence))
++  if (cancellations.some(({ event }) => event.data.sequence !== emission.sequence)) {
++    recordRefusal("cancellation", call.toolCallId, { cancellation_sequence_mismatch: () => true });
 +    return { kind: "ambiguous" };
++  }
 +  if (cancellations.length === 0 || latestEmission.sequence <= emission.sequence)
 +    return { kind: "absent" };
 +  const requested = nativeEvents.flatMap((event, index) =>
@@ -385,16 +435,35 @@ index 0000000..d8ffe03
 +      !cancellations.some(
 +        ({ index }) => index > Math.max(...requested.map((request) => request.index)),
 +      ))
-+  )
++  ) {
++    recordRefusal("requested_coordinates", call.toolCallId, {
++      requested_turn_mismatch: () => requested.some(({ event }) => event.data.turnId !== turnId),
++      requested_sequence_mismatch: () =>
++        requested.some(({ event }) => event.data.sequence !== emission.sequence),
++      requested_step_mismatch: () =>
++        requested.some(({ event }) => event.data.stepIndex !== stepIndex),
++      cancellation_not_after_request: () =>
++        requested.length > 0 &&
++        !cancellations.some(
++          ({ index }) => index > Math.max(...requested.map((request) => request.index)),
++        ),
++    });
 +    return { kind: "ambiguous" };
++  }
 +  // A coordination transcript can have been buffered before its exact assistant
 +  // call entered committed history. It is usable only as the same latest prefix.
 +  let history = session.history;
 +  if (assistantCalls(history, call.toolCallId).length === 0)
 +    history = [...history, ...(pending?.responseMessages ?? [])];
 +  const calls = assistantCalls(history, call.toolCallId);
-+  if (calls.length !== 1 || !isDeepStrictEqual(calls[0], call) || !prefix(history, latestHistory))
++  if (calls.length !== 1 || !isDeepStrictEqual(calls[0], call) || !prefix(history, latestHistory)) {
++    recordRefusal("witness_history", call.toolCallId, {
++      history_call_count: () => calls.length !== 1,
++      history_call_mismatch: () => !isDeepStrictEqual(calls[0], call),
++      history_prefix_mismatch: () => !prefix(history, latestHistory),
++    });
 +    return { kind: "ambiguous" };
++  }
 +  return {
 +    kind: "witness",
 +    index: history.length,
@@ -417,18 +486,34 @@ index 0000000..d8ffe03
 +    payload.events.some((event) => event.runId !== checkpointOwnerRunId) ||
 +    !payload.candidates.includes(latestCandidate) ||
 +    latestSession.sessionId !== logicalSessionId
-+  )
++  ) {
++    recordRefusal("payload_identity", undefined, {
++      checkpoint_owner_mismatch: () => payload.run.runId !== checkpointOwnerRunId,
++      event_owner_mismatch: () =>
++        payload.events.some((event) => event.runId !== checkpointOwnerRunId),
++      latest_candidate_missing: () => !payload.candidates.includes(latestCandidate),
++      latest_session_mismatch: () => latestSession.sessionId !== logicalSessionId,
++    });
 +    return uncertain("cancelled-call-history-unreconciled");
++  }
 +  let observed;
 +  try {
 +    observed = payload.candidates.map((candidate) => inspectCandidate(candidate, logicalSessionId));
 +  } catch {
++    recordRefusal("candidate_read", undefined, { candidate_unreadable: () => true });
 +    return uncertain("cancelled-call-history-unreconciled");
 +  }
-+  if (observed.some((candidate) => candidate === undefined))
++  if (observed.some((candidate) => candidate === undefined)) {
++    recordRefusal("candidate_identity", undefined, {
++      candidate_logical_identity_mismatch: () => true,
++    });
 +    return uncertain("cancelled-call-history-unreconciled");
++  }
 +  const latest = observed.find((entry) => entry.candidate === latestCandidate);
-+  if (latest === undefined) return uncertain("cancelled-call-history-unreconciled");
++  if (latest === undefined) {
++    recordRefusal("latest_candidate", undefined, { latest_candidate_missing: () => true });
++    return uncertain("cancelled-call-history-unreconciled");
++  }
 +  const history = latestSession.history;
 +  const currentPending = getPendingCoordinationBatch(latestSession.state);
 +  const pendingLatest = new Set([
@@ -470,8 +555,10 @@ index 0000000..d8ffe03
 +      if (witness.kind === "witness") witnesses.push(witness);
 +    }
 +    if (witnesses.length === 0) continue;
-+    if (assistantCalls(history, call.toolCallId).length !== 1)
++    if (assistantCalls(history, call.toolCallId).length !== 1) {
++      recordRefusal("latest_history", call.toolCallId, { history_call_count: () => true });
 +      return uncertain("cancelled-call-history-unreconciled", call.toolCallId);
++    }
 +    const first = witnesses[0];
 +    const address = witnesses.find((witness) => witness.address !== undefined)?.address;
 +    if (
@@ -481,8 +568,19 @@ index 0000000..d8ffe03
 +          witness.sequence !== first.sequence ||
 +          (witness.address !== undefined && !isDeepStrictEqual(witness.address, address)),
 +      )
-+    )
++    ) {
++      recordRefusal("witness_consistency", call.toolCallId, {
++        witness_turn_mismatch: () => witnesses.some((witness) => witness.turnId !== first.turnId),
++        witness_sequence_mismatch: () =>
++          witnesses.some((witness) => witness.sequence !== first.sequence),
++        witness_address_mismatch: () =>
++          witnesses.some(
++            (witness) =>
++              witness.address !== undefined && !isDeepStrictEqual(witness.address, address),
++          ),
++      });
 +      return uncertain("cancelled-call-history-unreconciled", call.toolCallId);
++    }
 +    if (
 +      payload.nativeEvents.some(
 +        (event) => event.type === "action.result" && event.data?.result?.callId === call.toolCallId,
@@ -495,8 +593,26 @@ index 0000000..d8ffe03
 +            (result) => result.callId === call.toolCallId,
 +          ),
 +      )
-+    )
++    ) {
++      recordRefusal("result_collision", call.toolCallId, {
++        native_result_present: () =>
++          payload.nativeEvents.some(
++            (event) =>
++              event.type === "action.result" && event.data?.result?.callId === call.toolCallId,
++          ),
++        committed_result_present: () =>
++          observed.some((entry) => hasResult(entry.session.history, call.toolCallId)),
++        buffered_result_present: () =>
++          observed.some((entry) => hasResult(entry.buffered, call.toolCallId)),
++        incoming_result_present: () =>
++          observed.some((entry) =>
++            entry.candidate.incoming?.runtimeResults?.results.some(
++              (result) => result.callId === call.toolCallId,
++            ),
++          ),
++      });
 +      return uncertain("cancelled-call-result-unreconciled", call.toolCallId);
++    }
 +    const index = Math.min(...witnesses.map((witness) => witness.index));
 +    const pending = insertions.get(index) ?? [];
 +    pending.push({ callId: call.toolCallId, toolName: call.toolName });
