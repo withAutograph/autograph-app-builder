@@ -383,12 +383,85 @@ export const projectAuthStartupDiagnostic = (value: unknown): AuthStartupDiagnos
   }
 };
 
+const resourceReadbackStage = z.enum([
+  "fence",
+  "admin_identity",
+  "database_read",
+  "role_read",
+  "role_assertion",
+  "database_assertion",
+  "migrator_login",
+  "runtime_login",
+  "final_fence",
+]);
+const resourceReadbackReason = z.enum([
+  "authority_denied",
+  "database_identity_mismatch",
+  "provider_identity_mismatch",
+  "resource_identity_conflict",
+  "role_login_readback_failed",
+  "runtime_privilege_readback_failed",
+  "startup_rejected",
+  "effect_failed",
+]);
+const resourceReadbackSqlStateClass = z.enum([
+  "08",
+  "22",
+  "23",
+  "28",
+  "3D",
+  "3F",
+  "40",
+  "42",
+  "53",
+  "54",
+  "55",
+  "57",
+  "58",
+  "XX",
+]);
+interface ResourceReadbackDiagnostic {
+  stage: z.infer<typeof resourceReadbackStage>;
+  reason?: z.infer<typeof resourceReadbackReason>;
+  sqlStateClass?: z.infer<typeof resourceReadbackSqlStateClass>;
+}
+
+/** Keep only closed worker failure labels; advisory metadata never changes the result. */
+export const projectResourceReadbackDiagnostic = (
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This projection accepts untrusted advisory metadata and discards arbitrary values.
+  value: unknown,
+): ResourceReadbackDiagnostic | undefined => {
+  try {
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Own data descriptors avoid invoking untrusted getters.
+    if (value === null || typeof value !== "object") {
+      return undefined;
+    }
+    const stage: unknown = Object.getOwnPropertyDescriptor(value, "stage")?.value;
+    const parsedStage = resourceReadbackStage.safeParse(stage);
+    if (!parsedStage.success) {
+      return undefined;
+    }
+    const reason: unknown = Object.getOwnPropertyDescriptor(value, "reason")?.value;
+    const parsedReason = resourceReadbackReason.safeParse(reason);
+    const sqlStateClass: unknown = Object.getOwnPropertyDescriptor(value, "sqlStateClass")?.value;
+    const parsedClass = resourceReadbackSqlStateClass.safeParse(sqlStateClass);
+    return {
+      stage: parsedStage.data,
+      ...(parsedReason.success ? { reason: parsedReason.data } : {}),
+      ...(parsedClass.success ? { sqlStateClass: parsedClass.data } : {}),
+    };
+  } catch {
+    return undefined;
+  }
+};
+
 const operatorExecutionFailure = operatorPlanningFailure
   .omit({ stage: true, nativeStoreFailure: true })
   .extend({
     stage: operatorExecutionStage,
     runtimeReadinessStage: operatorRuntimeReadinessStage.optional(),
     authStartup: z.unknown().optional(),
+    resourceReadback: z.unknown().optional(),
     normalAuth: normalAuthClientFailureDiagnosticSchema.optional(),
     journalFailure: z.literal("normal_actor_journal_changed").optional(),
     mode: z.enum(["inspect", "execute"]).optional(),
@@ -407,12 +480,20 @@ const operatorExecutionFailure = operatorPlanningFailure
       ])
       .optional(),
   })
-  .transform(({ authStartup, ...failure }) => {
+  .transform(({ authStartup, resourceReadback, ...failure }) => {
     const projected =
       failure.workerFailure === "startup_rejected"
         ? projectAuthStartupDiagnostic(authStartup)
         : undefined;
-    return { ...failure, ...(projected === undefined ? {} : { authStartup: projected }) };
+    const readback =
+      failure.workerFailure === "readback_unknown" && failure.mode === "inspect"
+        ? projectResourceReadbackDiagnostic(resourceReadback)
+        : undefined;
+    return {
+      ...failure,
+      ...(projected === undefined ? {} : { authStartup: projected }),
+      ...(readback === undefined ? {} : { resourceReadback: readback }),
+    };
   });
 export type OperatorExecutionFailure = z.infer<typeof operatorExecutionFailure>;
 
@@ -1319,6 +1400,7 @@ export const reportOperatorExecutionFailure = (
     | "workerFailure"
     | "httpStatus"
     | "authStartup"
+    | "resourceReadback"
   >,
 ): void => {
   const executionFailure: OperatorExecutionFailure = {
@@ -1435,6 +1517,7 @@ export const observeOperatorExecutionStage = async <T>(
     | "workerFailure"
     | "httpStatus"
     | "authStartup"
+    | "resourceReadback"
   >,
 ): Promise<T> => {
   try {

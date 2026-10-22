@@ -25,6 +25,7 @@ import type {
 import {
   observeOperatorExecutionStage,
   projectAuthStartupDiagnostic,
+  projectResourceReadbackDiagnostic,
 } from "./hosted-operator-consent-diagnostic";
 import type {
   HostedOperatorConsentDiagnosticSink,
@@ -33,7 +34,14 @@ import type {
 
 type LauncherExecution = Pick<
   OperatorExecutionFailure,
-  "stage" | "mode" | "commandExit" | "protocol" | "workerFailure" | "httpStatus" | "authStartup"
+  | "stage"
+  | "mode"
+  | "commandExit"
+  | "protocol"
+  | "workerFailure"
+  | "httpStatus"
+  | "authStartup"
+  | "resourceReadback"
 >;
 
 const MAX_PROTOCOL_FRAME_BYTES = 1024 * 1024;
@@ -263,6 +271,7 @@ const resourceReadbackSchema = z
     resource_id: z.string().min(1),
     scope: z.enum(["app_database", "auth_database"]),
     status: z.enum(["applied", "absent", "unknown", "retryable"]),
+    inspectionFailure: z.unknown().optional(),
     readback_sha256: digestSchema.optional(),
     databaseAbsent: z.boolean().optional(),
     retainedRoles: z
@@ -1231,6 +1240,40 @@ const runSandboxWorker = async (
           throw resourceMismatch();
         }
         execution.workerFailure = fact.failure_code;
+        if (
+          input.effect.kind === "resources" &&
+          input.readbackOnly === true &&
+          fact.failure_code === "readback_unknown" &&
+          "kind" in context
+        ) {
+          try {
+            const observation = resourceReadbackSchema.safeParse(
+              await readSpoolJson(
+                requireSandbox(),
+                path.posix.join(SPOOL_ROOT, runId, "resource-observation.json"),
+                signal,
+              ),
+            );
+            if (
+              observation.success &&
+              observation.data.status === "unknown" &&
+              observation.data.operation_id === context.operation.operation_id &&
+              observation.data.context_digest === contextDigest &&
+              observation.data.fence_generation === input.fenceGeneration &&
+              observation.data.resource_id === context.resource.resource_id &&
+              observation.data.scope === context.resource.scope
+            ) {
+              const diagnostic = projectResourceReadbackDiagnostic(
+                observation.data.inspectionFailure,
+              );
+              if (diagnostic !== undefined) {
+                execution.resourceReadback = diagnostic;
+              }
+            }
+          } catch {
+            // Missing or malformed advisory metadata cannot replace the worker failure.
+          }
+        }
         if (fact.failure_code === "startup_rejected") {
           const authStartup = projectAuthStartupDiagnostic(fact.auth_startup);
           if (authStartup !== undefined) {
