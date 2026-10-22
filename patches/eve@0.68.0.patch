@@ -1557,10 +1557,10 @@ index 0000000..a320829
 +}): Promise<TerminalCheckpointOwnerResolution>;
 diff --git a/dist/src/execution/session/recovery-owner-provenance.js b/dist/src/execution/session/recovery-owner-provenance.js
 new file mode 100644
-index 0000000..6f16e5c
+index 0000000..27307c0
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-owner-provenance.js
-@@ -0,0 +1,452 @@
+@@ -0,0 +1,450 @@
 +import { isDeepStrictEqual } from "node:util";
 +import {
 +  sessionCommandHookToken,
@@ -1780,18 +1780,16 @@ index 0000000..6f16e5c
 +      chain: [],
 +    };
 +  }
-+  if (world.analytics === undefined) return unavailable("handoff-discovery-unavailable");
-+  const startTime = new Date(anchor.createdAt).toISOString();
-+  const endTime = new Date(anchor.completedAt ?? anchor.updatedAt).toISOString();
++  // Recovery is an operational read of retained canonical storage, not an
++  // observability query whose lookback may expire before the source payloads.
 +  const hints = new Map();
 +  const cursors = new Set();
 +  let cursor;
 +  do {
 +    await authorize();
-+    const page = await world.analytics.runs.list({
++    const page = await world.runs.list({
 +      workflowName: anchor.workflowName,
-+      startTime,
-+      endTime,
++      resolveData: "none",
 +      pagination: { limit: 100, sortOrder: "asc", ...(cursor === undefined ? {} : { cursor }) },
 +    });
 +    for (const hint of page.data) {
