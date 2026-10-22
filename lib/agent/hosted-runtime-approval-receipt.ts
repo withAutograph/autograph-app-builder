@@ -1,6 +1,9 @@
 import type { WorkflowStepToolContext } from "eve/tools";
 import type { HostedEveStore } from "../eve/hosted-store";
-import { hostedSessionRecordSchema, toDurableHostedSessionRecord } from "../eve/hosted-store";
+import {
+  hostedOperatorCallbackExecution,
+  readHostedOperatorCallbackOwner,
+} from "../provisioning/hosted-operator-callback-owner";
 import { tenantKeyFor } from "../eve/hosted-auth";
 import {
   HostedOperatorError,
@@ -36,7 +39,11 @@ const denied = () => new HostedOperatorError("authorization_required");
 
 /** Only canonical owner-scoped session/receipt reads; never provider, status, plan or stream calls. */
 export const createHostedRuntimeApprovalReceiptReader =
-  (ports: { store: Pick<HostedEveStore, "getSession">; now: () => number }) =>
+  (ports: {
+    store: Pick<HostedEveStore, "getSession"> &
+      Partial<Pick<HostedEveStore, "readCurrentBuildSession">>;
+    now: () => number;
+  }) =>
   async (
     input: HostedRuntimeApprovalEnvelope,
     ctx: Context,
@@ -60,7 +67,6 @@ export const createHostedRuntimeApprovalReceiptReader =
         parsed.projectId === selection.projectId,
         parsed.environment === selection.environment,
         operator.sessionId === owner.sessionId,
-        ctx.session.id === owner.adapterSessionId,
         ctx.callId.length > 0,
         Number.isFinite(now),
         expiresAt > now,
@@ -69,25 +75,25 @@ export const createHostedRuntimeApprovalReceiptReader =
     ) {
       throw new HostedOperatorError("resource_mismatch");
     }
-    const raw = await ports.store.getSession(owner.principal, owner.sessionId);
+    const { authoritySession: session, currentSession } = await readHostedOperatorCallbackOwner({
+      store: ports.store,
+      owner,
+      execution: hostedOperatorCallbackExecution(ctx.session),
+    });
     ctx.abortSignal.throwIfAborted();
-    if (raw === null) {
-      throw denied();
-    }
-    const session = toDurableHostedSessionRecord(hostedSessionRecordSchema.parse(raw));
     const snapshot: HostedRuntimeApprovalWaitSnapshot = {
       sessionId: session.sessionId,
-      adapterSessionId: session.adapterSessionId,
-      adapterGeneration: session.adapterGeneration,
-      cancellationRevision: session.cancellationRevision ?? 0,
+      adapterSessionId: currentSession.adapterSessionId,
+      adapterGeneration: currentSession.adapterGeneration,
+      cancellationRevision: currentSession.cancellationRevision ?? 0,
       callId: ctx.callId,
       operationRef: parsed.operationRef,
       planDigest: parsed.planDigest,
     };
     const validSession = [
       session.sessionId === owner.sessionId,
-      session.adapterSessionId === owner.adapterSessionId,
-      session.adapterGeneration === owner.adapterGeneration,
+      currentSession.adapterSessionId === owner.adapterSessionId,
+      currentSession.adapterGeneration === owner.adapterGeneration,
       tenantKeyFor(session.principal) === tenantKeyFor(owner.principal),
       expected === undefined ||
         (

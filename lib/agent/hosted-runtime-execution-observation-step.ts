@@ -13,7 +13,10 @@ import {
   operatorPlanDigest,
   sameOperatorSelection,
 } from "../provisioning/hosted-operator-contract";
-import { hostedSessionRecordSchema, toDurableHostedSessionRecord } from "../eve/hosted-store";
+import {
+  hostedOperatorCallbackExecution,
+  readHostedOperatorCallbackOwner,
+} from "../provisioning/hosted-operator-callback-owner";
 import type { HostedEveStore } from "../eve/hosted-store";
 import {
   matchesHostedRuntimePreparationReceipt,
@@ -36,7 +39,8 @@ export const assertHostedRuntimeExecutionObservationAuthority = async (input: {
   context: Context;
   operator: Operator;
   snapshot: HostedRuntimeApprovalWaitSnapshot;
-  store: Pick<HostedEveStore, "getSession">;
+  store: Pick<HostedEveStore, "getSession"> &
+    Partial<Pick<HostedEveStore, "readCurrentBuildSession">>;
 }) => {
   const { context: ctx, snapshot, operator } = input;
   const approved = hostedRuntimePreparationInputSchema.parse(input.approved);
@@ -50,7 +54,6 @@ export const assertHostedRuntimeExecutionObservationAuthority = async (input: {
     snapshot.callId !== ctx.callId ||
     snapshot.sessionId !== operator.sessionId ||
     snapshot.sessionId !== owner.sessionId ||
-    snapshot.adapterSessionId !== ctx.session.id ||
     snapshot.adapterSessionId !== owner.adapterSessionId ||
     snapshot.adapterGeneration !== owner.adapterGeneration ||
     !sameOperatorSelection(approved.plan.selection, {
@@ -60,21 +63,21 @@ export const assertHostedRuntimeExecutionObservationAuthority = async (input: {
   ) {
     throw new HostedOperatorError("resource_mismatch");
   }
-  const raw = await input.store.getSession(owner.principal, owner.sessionId);
+  const { authoritySession: session, currentSession } = await readHostedOperatorCallbackOwner({
+    store: input.store,
+    owner,
+    execution: hostedOperatorCallbackExecution(ctx.session),
+  });
   ctx.abortSignal.throwIfAborted();
-  if (raw === null) {
-    throw new HostedOperatorError("authorization_required");
-  }
-  const session = toDurableHostedSessionRecord(hostedSessionRecordSchema.parse(raw));
   if (
     // oxlint-disable-next-line sonarjs/expression-complexity -- Reject owner, generation, and cancellation drift together.
     session.sessionId !== snapshot.sessionId ||
-    session.adapterSessionId !== snapshot.adapterSessionId ||
-    session.adapterGeneration !== snapshot.adapterGeneration ||
-    (session.cancellationRevision ?? 0) !== snapshot.cancellationRevision ||
+    currentSession.adapterSessionId !== snapshot.adapterSessionId ||
+    currentSession.adapterGeneration !== snapshot.adapterGeneration ||
+    (currentSession.cancellationRevision ?? 0) !== snapshot.cancellationRevision ||
     tenantKeyFor(session.principal) !== tenantKeyFor(owner.principal) ||
-    session.status === "cancelled" ||
-    session.status === "completed"
+    currentSession.status === "cancelled" ||
+    currentSession.status === "completed"
   ) {
     throw new HostedOperatorError("authorization_required");
   }
@@ -199,7 +202,12 @@ export const readHostedRuntimeExecution = async (
     import("./prepared-runtime-selection"),
   ]);
   const [operator, store] = await Promise.all([
-    client.hostedOperatorClientForSession(ctx.session.auth, ctx.session.id),
+    client.hostedOperatorClientForSession(
+      ctx.session.auth,
+      ctx.session.id,
+      process.env,
+      hostedOperatorCallbackExecution(ctx.session),
+    ),
     approval.openHostedRuntimeApprovalStore(),
   ]);
   let selected: PreparedRuntimeSelection | undefined;

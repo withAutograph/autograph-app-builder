@@ -1,3 +1,4 @@
+import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
 import { createHash } from "node:crypto";
 
@@ -120,6 +121,7 @@ const resolveNativePreview = async (
       appId: protectedAppId,
       sessionAuth: ctx.session.auth,
       sessionId: ctx.session.id,
+      callbackExecution: hostedOperatorCallbackExecution(ctx.session),
       signal: ctx.abortSignal,
     });
     if (bindings) {
@@ -169,6 +171,7 @@ export default defineTool({
       sandboxId: getBuilderSandboxId(sandbox),
       sessionAuth: ctx.session.auth,
       sessionId: ctx.session.id,
+      callbackExecution: hostedOperatorCallbackExecution(ctx.session),
       signal: ctx.abortSignal,
       state: current,
     });

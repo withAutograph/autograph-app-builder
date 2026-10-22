@@ -1,3 +1,4 @@
+import { hostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 import type { WorkflowStepToolContext } from "eve/tools";
 
 import type { ContinuityApprovalInput } from "../eve/private-continuity-approval";
@@ -18,7 +19,12 @@ export async function runHostedContinuityStep(
   );
   const parsed = continuityApprovalInputSchema.parse(input);
   ctx.abortSignal.throwIfAborted();
-  const operator = await hostedOperatorClientForSession(ctx.session.auth, ctx.session.id);
+  const operator = await hostedOperatorClientForSession(
+    ctx.session.auth,
+    ctx.session.id,
+    process.env,
+    hostedOperatorCallbackExecution(ctx.session),
+  );
   const { plan, ...request } = parsed;
   if (plan.target.sessionId !== operator.sessionId) {
     throw new Error("Continuity session differs.");
@@ -40,7 +46,12 @@ export async function readHostedContinuityApprovalStep(
     ],
   );
   const { plan, ...request } = continuityApprovalInputSchema.parse(input);
-  const operator = await hostedOperatorClientForSession(ctx.session.auth, ctx.session.id);
+  const operator = await hostedOperatorClientForSession(
+    ctx.session.auth,
+    ctx.session.id,
+    process.env,
+    hostedOperatorCallbackExecution(ctx.session),
+  );
   if (plan.target.sessionId !== operator.sessionId) {
     throw new Error("Continuity session differs.");
   }

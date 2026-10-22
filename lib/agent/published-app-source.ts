@@ -72,6 +72,7 @@ export const recordPublishedReconciliationForSession = async (input: {
   sessionAuth: unknown;
   adapterSessionId: string;
   recordCurrentEquivalentRelease?: true;
+  callbackExecution?: CompiledOperatorArtifactSessionInput["callbackExecution"];
 }) => {
   const { completion, publication } = input;
   if (

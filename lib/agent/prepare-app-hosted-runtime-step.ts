@@ -1,3 +1,4 @@
+import { hostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 import type { HostedRuntimeApprovalReadOptions } from "./hosted-runtime-prior-approval";
 import type {
   reportRuntimePreparationFailure,
@@ -329,6 +330,8 @@ export async function prepareHostedRuntimeStep(
     const operator = await clientModule.hostedOperatorClientForSession(
       ctx.session.auth,
       ctx.session.id,
+      process.env,
+      hostedOperatorCallbackExecution(ctx.session),
     );
     stage = "prior_approval";
     const retainedApproval = await priorApprovalModule.readHostedRuntimeExecutionApproval(

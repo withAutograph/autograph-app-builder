@@ -1,3 +1,4 @@
+import type { HostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 /** Shared execution over approved private bindings; this module does not resolve agent state or define tools. */
 import type { Sandbox } from "@vercel/sandbox";
 import { z } from "zod";
@@ -63,6 +64,7 @@ export type RuntimeTransport = Pick<Sandbox, "writeFiles"> & {
   }) => Promise<RuntimeCommand>;
 };
 export interface PreparedRuntimeExecutionContext {
+  callbackExecution?: HostedOperatorCallbackExecution;
   appId: string;
   root: string;
   sandboxId: string;

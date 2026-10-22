@@ -94,7 +94,10 @@ const executionDependencies: PreparedRuntimeExecutionDependencies = {
 
 /** Reads the same owner-bound protected selection without creating or adapting private compute. */
 export const resolveProtectedRuntimeBindings = async (
-  input: Pick<PreparedRuntimeExecutionContext, "appId" | "sessionAuth" | "sessionId" | "signal">,
+  input: Pick<
+    PreparedRuntimeExecutionContext,
+    "appId" | "sessionAuth" | "sessionId" | "signal" | "callbackExecution"
+  >,
   selectionInput?: PreparedRuntimeSelection | null,
   operatorClientFactory = hostedOperatorClientForSession,
 ) => {
@@ -108,7 +111,12 @@ export const resolveProtectedRuntimeBindings = async (
   if (selection.appId !== input.appId || !selection.branch) {
     throw new HostedRuntimeProviderError("authorization_required");
   }
-  const client = await operatorClientFactory(input.sessionAuth, input.sessionId);
+  const client = await operatorClientFactory(
+    input.sessionAuth,
+    input.sessionId,
+    process.env,
+    input.callbackExecution,
+  );
   if (selection.sessionId !== client.sessionId) {
     throw new HostedRuntimeProviderError("authorization_required");
   }

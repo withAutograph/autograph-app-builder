@@ -1,3 +1,4 @@
+import type { HostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
@@ -23,6 +24,7 @@ interface ValidationInput {
   adapterSessionId: string;
   appId: string;
   callId: string;
+  callbackExecution?: HostedOperatorCallbackExecution;
   root: string;
   sessionAuth: unknown;
   sandbox: Pick<SandboxSession, "readBinaryFile" | "writeBinaryFile">;
