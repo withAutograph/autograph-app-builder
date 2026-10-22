@@ -284,6 +284,11 @@ export interface GitHubAppInstallationProvider {
     content: GitHubDraftPullRequestContent,
     observed: ExistingDraftObservation,
   ) => Promise<unknown>;
+  inspectAppliedDraftRepair?: (
+    proposal: ExistingDraftUpdateProposal,
+    resolvedTree: string,
+    observed: ExistingDraftObservation,
+  ) => Promise<unknown>;
   reconcileExistingDraft: (
     proposal: ExistingDraftReconciliationProposal,
     content: ReconciliationContent,
@@ -496,6 +501,22 @@ export function createGitHubAppPublicationAdapter(
           await sanitizedProviderCall(
             () => provider.inspectAppliedDraftUpdate(proposal, content, observed),
             "verify whether the draft PR update was applied",
+          ),
+        );
+    },
+    async inspectAppliedDraftRepair(proposal, resolvedTree, observed) {
+      const inspect = provider.inspectAppliedDraftRepair;
+      if (inspect === undefined) {
+        throw new Error(
+          "The GitHub provider cannot verify an applied draft repair without source bytes.",
+        );
+      }
+      return z
+        .boolean()
+        .parse(
+          await sanitizedProviderCall(
+            () => inspect.call(provider, proposal, resolvedTree, observed),
+            "verify the exact published draft repair",
           ),
         );
     },

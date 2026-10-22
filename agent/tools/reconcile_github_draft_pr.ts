@@ -1,3 +1,5 @@
+import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
+import { updatePublishedDraftRepair } from "@/lib/agent/published-draft-repair-publication";
 import { createHash } from "node:crypto";
 
 import { defineTool } from "eve/tools";
@@ -13,6 +15,7 @@ import {
 import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
 import {
   draftReconciliationState,
+  publishedDraftRepairCompletions,
   draftReconciliationCompletions,
   retainDraftReconciliationCompletion,
   updateExactDraftReconciliation,
@@ -36,6 +39,23 @@ export default defineTool({
   // oxlint-disable-next-line eslint/complexity -- Completion recovery and fresh publication have distinct approval, ownership and candidate preconditions.
   async execute(input, ctx) {
     const candidate = draftReconciliationState.get();
+    if (
+      publishedDraftRepairCompletions
+        .get()
+        .some((entry) => entry.proposal.digest === input.expectedProposalDigest)
+    ) {
+      if (input.recordCurrentEquivalentRelease === true) {
+        throw new Error(
+          "Resume this exact approved repair through update_github_draft_pr; it records its retained repair release.",
+        );
+      }
+      return await updatePublishedDraftRepair({
+        ctx,
+        expectedProposalDigest: input.expectedProposalDigest,
+        approvalReceipt: input.approvalReceipt,
+      });
+    }
+
     const state = appBuilderWorkflowState.get();
     let completion = draftReconciliationCompletions
       .get()
@@ -84,7 +104,12 @@ export default defineTool({
       // This legacy branch is read-only in Git, even if the current checkout is still valid.
       retainDraftReconciliationCompletion(completion);
     }
-    const session = { completion, adapterSessionId: ctx.session.id, sessionAuth: ctx.session.auth };
+    const session = {
+      completion,
+      adapterSessionId: ctx.session.id,
+      callbackExecution: hostedOperatorCallbackExecution(ctx.session),
+      sessionAuth: ctx.session.auth,
+    };
     await assertReconciliationCompletionOwnerForSession(session);
     const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
     const inspected = await runtime.inspectAppliedExistingDraftReconciliation({ proposal, review });

@@ -1,3 +1,10 @@
+import type { ToolContext } from "eve/tools";
+import type {
+  DraftPublicationCompletion,
+  DraftReconciliationCandidate,
+} from "@/lib/agent/draft-reconciliation-state";
+import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
+import { currentDraftCandidateSource } from "@/lib/agent/published-draft-repair";
 import { defineTool } from "eve/tools";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import { z } from "zod";
@@ -5,6 +12,7 @@ import { z } from "zod";
 import {
   draftReconciliationState,
   draftReconciliationCompletions,
+  publishedDraftRepairCompletions,
 } from "@/lib/agent/draft-reconciliation-state";
 import { assertReconciliationCompletionOwnerForSession } from "@/lib/agent/compiled-operator-artifacts";
 import { approvalReceiptForExistingDraftUpdate } from "@/lib/agent/approval-receipt";
@@ -15,6 +23,81 @@ import {
   readDraftReconciliationDiff,
 } from "@/lib/repository/sandbox-draft-reconciliation";
 
+type RepairInspectionInput =
+  | { kind: "changes"; against: "base" | "head"; cursor?: number }
+  | { kind: "diff"; against: "base" | "head"; cursor?: number; path?: string };
+const inspectPublishedDraftRepair = async (
+  input: RepairInspectionInput,
+  candidate: Extract<DraftReconciliationCandidate, { kind: "published-draft-repair" }>,
+  ctx: ToolContext,
+) => {
+  const review = candidate.repairReview;
+  if (review === undefined || candidate.validation === undefined) {
+    return {
+      status: "candidate" as const,
+      kind: "published-draft-repair" as const,
+      baseline: "draft-head" as const,
+      root: candidate.root,
+      headSha: candidate.headSha,
+      nextAction:
+        "Inspect app files through edit_github_draft_pr_candidate, format or edit privately, then validate and review this draft-head repair.",
+    };
+  }
+  if (input.kind === "changes") {
+    return {
+      status: "changes" as const,
+      against: "draft-head" as const,
+      ...summarizeReconciliationChanges(review.changes, candidate.appId, input.cursor),
+      reviewDigest: review.digest,
+    };
+  }
+  const page = await readDraftReconciliationDiff({
+    against: "head",
+    cursor: input.cursor,
+    path: input.path,
+    prepared: candidate,
+    resolvedTree: review.resolvedTree,
+    sandbox: await getSourceBoundSandbox(ctx),
+  });
+  return {
+    status: "diff" as const,
+    against: "draft-head" as const,
+    content: Buffer.from(page.chunkBase64, "base64").toString("utf-8"),
+    cursor: page.cursor,
+    path: input.path,
+    nextCursor: page.nextCursor,
+    reviewDigest: review.digest,
+    totalBytes: page.totalBytes,
+  };
+};
+
+const inspectRepairCandidate = (
+  input: RepairInspectionInput | { kind: "conflict"; path: string },
+  candidate: DraftReconciliationCandidate,
+  ctx: ToolContext,
+) =>
+  candidate.kind === "published-draft-repair" && input.kind !== "conflict"
+    ? inspectPublishedDraftRepair(input, candidate, ctx)
+    : undefined;
+
+const publicationRecoveryCall = (completion: DraftPublicationCompletion) =>
+  "kind" in completion
+    ? {
+        tool: "update_github_draft_pr" as const,
+        arguments: {
+          expectedProposalDigest: completion.proposal.digest,
+          approvalReceipt: approvalReceiptForExistingDraftUpdate(completion.proposal),
+        },
+      }
+    : {
+        tool: "reconcile_github_draft_pr" as const,
+        arguments: {
+          expectedProposalDigest: completion.proposal.digest,
+          approvalReceipt: approvalReceiptForExistingDraftUpdate(completion.proposal),
+          recordCurrentEquivalentRelease: true as const,
+        },
+      };
+
 export default defineTool({
   description:
     "Optionally inspect a merge conflict, recorded change metadata, or exact raw diff bytes against base or the old PR head. Metadata cursors are change indexes; raw diff cursors are byte offsets and may be requested independently. A raw diff may target one repository-relative path. For app_source_publication_required, kind=publication-recovery lists retained publication context for the current app and accepted specification, even if its current candidate failed. Copy a returned nextCall to request normal approval and verify the original Git result before recording the equivalent current capture; listed receipts describe approval subjects and grant no approval. Inspection is not a sealing prerequisite and does not update GitHub.",
@@ -22,20 +105,22 @@ export default defineTool({
     const state = appBuilderWorkflowState.get();
     if (input.kind === "publication-recovery") {
       const currentAppSpec = "appSpec" in state ? state.appSpec : undefined;
-      const completions = draftReconciliationCompletions
-        .get()
-        .filter(
-          (completion) =>
-            currentAppSpec !== undefined &&
-            completion.appId === currentAppSpec.appId &&
-            completion.appReview.appSpecDigest === currentAppSpec.digest,
-        );
+      const completions = [
+        ...draftReconciliationCompletions.get(),
+        ...publishedDraftRepairCompletions.get(),
+      ].filter(
+        (completion) =>
+          currentAppSpec !== undefined &&
+          completion.appId === currentAppSpec.appId &&
+          completion.appReview.appSpecDigest === currentAppSpec.digest,
+      );
       const recoveries = [];
       for (const completion of completions) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- Revalidate owner and accepted selection before exposing each retained context.
         await assertReconciliationCompletionOwnerForSession({
           completion,
           adapterSessionId: ctx.session.id,
+          callbackExecution: hostedOperatorCallbackExecution(ctx.session),
           sessionAuth: ctx.session.auth,
         });
         const current = appBuilderWorkflowState.get();
@@ -59,14 +144,7 @@ export default defineTool({
           ...(completion.compilation.release.status === "published"
             ? { releaseId: completion.compilation.release.selection.releaseId }
             : {}),
-          nextCall: {
-            tool: "reconcile_github_draft_pr" as const,
-            arguments: {
-              expectedProposalDigest: completion.proposal.digest,
-              approvalReceipt: approvalReceiptForExistingDraftUpdate(completion.proposal),
-              recordCurrentEquivalentRelease: true as const,
-            },
-          },
+          nextCall: publicationRecoveryCall(completion),
         });
       }
       return {
@@ -83,10 +161,14 @@ export default defineTool({
     if (
       candidate === null ||
       state.phase !== "reviewed" ||
-      state.githubSource?.digest !== candidate.githubSourceDigest ||
+      currentDraftCandidateSource(state, candidate) === undefined ||
       state.reviewReceipt.digest !== candidate.originalReviewDigest
     ) {
       throw new Error("Prepare the current draft reconciliation before inspecting its files.");
+    }
+    const repairInspection = inspectRepairCandidate(input, candidate, ctx);
+    if (repairInspection !== undefined) {
+      return await repairInspection;
     }
     if (input.kind === "conflict") {
       const sandbox = await getSourceBoundSandbox(ctx);

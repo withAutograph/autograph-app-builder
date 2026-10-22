@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import type { SandboxSession } from "eve/sandbox";
 import type { HostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 import { appBuilderWorkflowState } from "./workflow-state";
+import { currentDraftCandidateSource } from "./published-draft-repair";
 import { assertApprovedPrivateApplySession } from "./private-apply-authority";
 import {
   createLocalOperatorArtifactStorage,
@@ -11,9 +12,10 @@ import {
 import {
   draftReconciliationState,
   assertRetainedDraftReconciliationCompletion,
+  assertRetainedPublishedDraftRepairCompletion,
 } from "./draft-reconciliation-state";
 import type {
-  DraftReconciliationCompletion,
+  DraftPublicationCompletion,
   ReconciliationCompilation,
 } from "./draft-reconciliation-state";
 import type { PrivateApplyScope } from "./private-apply-authority";
@@ -78,7 +80,7 @@ const assertApprovedCompilation = (input: {
   }
   const wrongCandidate = candidate.root !== input.root || candidate.appId !== input.appId;
   const wrongReview =
-    candidate.githubSourceDigest !== state.githubSource?.digest ||
+    currentDraftCandidateSource(state, candidate) === undefined ||
     candidate.originalReviewDigest !== state.reviewReceipt.digest;
   if (wrongCandidate || wrongReview) {
     throw operatorArtifactUnavailable();
@@ -107,13 +109,17 @@ export interface CompiledOperatorArtifactSessionInput {
 
 const resolveCompiledArtifactSession = async (
   input: CompiledOperatorArtifactSessionInput,
-  completion?: DraftReconciliationCompletion,
+  completion?: DraftPublicationCompletion,
 ) => {
   const assertCompilation = () => {
     if (completion === undefined) {
       assertApprovedCompilation(input);
     } else {
-      assertRetainedDraftReconciliationCompletion(completion);
+      if ("kind" in completion) {
+        assertRetainedPublishedDraftRepairCompletion(completion);
+      } else {
+        assertRetainedDraftReconciliationCompletion(completion);
+      }
       if (
         input.appId !== completion.appId ||
         input.appSpecDigest !== completion.appReview.appSpecDigest
@@ -275,7 +281,7 @@ export const recordPublishedOperatorSourceForSession = async (
 
 /** A sealed context records no grant: every completion re-resolves the current authenticated owner. */
 export const assertReconciliationCompletionOwnerForSession = async (input: {
-  completion: DraftReconciliationCompletion;
+  completion: DraftPublicationCompletion;
   adapterSessionId: string;
   sessionAuth: unknown;
   callbackExecution?: HostedOperatorCallbackExecution;
@@ -298,7 +304,7 @@ class CurrentReleaseSelectionChangedError extends Error {
 
 /** Complete only a retained sealed publication, using its original release instead of current selection. */
 export const recordPublishedReconciliationSourceForSession = async (input: {
-  completion: DraftReconciliationCompletion;
+  completion: DraftPublicationCompletion;
   adapterSessionId: string;
   sessionAuth: unknown;
   publishedSource: PublishedAppSource;

@@ -1,3 +1,4 @@
+import { currentDraftCandidateSource } from "@/lib/agent/published-draft-repair";
 import { defineTool } from "eve/tools";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import { z } from "zod";
@@ -18,7 +19,7 @@ export default defineTool({
     if (
       candidate === null ||
       state.phase !== "reviewed" ||
-      state.githubSource?.digest !== candidate.githubSourceDigest ||
+      currentDraftCandidateSource(state, candidate) === undefined ||
       state.reviewReceipt.digest !== candidate.originalReviewDigest
     ) {
       throw new Error(
@@ -38,6 +39,7 @@ export default defineTool({
         const next = { ...candidate };
         delete next.proposal;
         delete next.review;
+        delete next.repairReview;
         delete next.reviewReadProgress;
         delete next.validation;
         return next;

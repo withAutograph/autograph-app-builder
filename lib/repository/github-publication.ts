@@ -2,6 +2,11 @@ import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 
 import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
+import {
+  assertPublishedDraftRepairReview,
+  isPublishedDraftRepairReview,
+} from "./published-draft-repair-review";
+import type { DraftUpdateReview } from "./published-draft-repair-review";
 import { parseSourceReceiptEvidence } from "./source-receipt";
 import type { SourceReceiptEvidence } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
@@ -388,6 +393,11 @@ export interface GitHubPublicationAdapter extends GitHubSourceResolutionAdapter 
     content: GitHubDraftPullRequestContent,
     observed: ExistingDraftObservation,
   ) => Promise<boolean>;
+  inspectAppliedDraftRepair?: (
+    proposal: ExistingDraftUpdateProposal,
+    resolvedTree: string,
+    observed: ExistingDraftObservation,
+  ) => Promise<boolean>;
   reconcileExistingDraft?: (
     proposal: ExistingDraftReconciliationProposal,
     content: ReconciliationContent,
@@ -635,12 +645,21 @@ function assertCanonicalReview(review: ReviewedChangeSetReceipt): void {
   }
 }
 
+/** Strict canonical evidence shared by initial and repair update validation. */
+export const assertCanonicalGitHubUpdateReview = (review: DraftUpdateReview): void => {
+  if (isPublishedDraftRepairReview(review)) {
+    assertPublishedDraftRepairReview(review);
+    return;
+  }
+  assertCanonicalReview(review);
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function reviewForProposal(
   proposal: FreshRepositoryProposal | ReviewedPublicationBinding,
-  review: ReviewedChangeSetReceipt,
+  review: DraftUpdateReview,
 ): void {
-  assertCanonicalReview(review);
+  assertCanonicalGitHubUpdateReview(review);
   if (
     proposal.reviewDigest !== review.digest ||
     proposal.changeSetDigest !== review.changeSetDigest ||
@@ -891,7 +910,7 @@ export function assertExactGitHubDraftPullRequestContent(input: {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertExactGitHubPublicationContent(input: {
   proposal: ReviewedPublicationBinding;
-  review: ReviewedChangeSetReceipt;
+  review: DraftUpdateReview;
   content: GitHubDraftPullRequestContent;
 }): void {
   reviewForProposal(input.proposal, input.review);
@@ -944,7 +963,7 @@ export async function readExactGitHubFreshRepositoryContent(input: {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function readExactGitHubPublicationContent(input: {
   proposal: ReviewedPublicationBinding;
-  review: ReviewedChangeSetReceipt;
+  review: DraftUpdateReview;
   source: GitHubDraftPullRequestContentSource;
 }): Promise<GitHubDraftPullRequestContent> {
   reviewForProposal(input.proposal, input.review);

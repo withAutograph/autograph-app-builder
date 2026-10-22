@@ -1,9 +1,13 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 
-import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
+import { isPublishedDraftRepairReview } from "./published-draft-repair-review";
+import type { DraftUpdateReview } from "./published-draft-repair-review";
 import type { GitHubDraftAdoption } from "./postgres-github-draft-adoption-store";
-import { readExactGitHubPublicationContent } from "./github-publication";
+import {
+  assertCanonicalGitHubUpdateReview,
+  readExactGitHubPublicationContent,
+} from "./github-publication";
 import type {
   DraftPullRequestSuccessReceipt,
   GitHubDraftPullRequestContent,
@@ -77,6 +81,11 @@ export interface ExistingDraftUpdateAdapter {
     proposal: ExistingDraftUpdateProposal,
     content: GitHubDraftPullRequestContent,
   ) => Promise<GitHubMutationAcknowledgement>;
+  inspectAppliedRepair?: (
+    proposal: ExistingDraftUpdateProposal,
+    resolvedTree: string,
+    observed: ExistingDraftObservation,
+  ) => Promise<boolean>;
   inspectAppliedUpdate: (
     proposal: ExistingDraftUpdateProposal,
     content: GitHubDraftPullRequestContent,
@@ -119,7 +128,7 @@ export const sealExistingDraftUpdate = async (input: {
   adapter: ExistingDraftUpdateAdapter;
   installation: GitHubInstallationIdentity;
   repository: GitHubRepositoryObservation;
-  review: ReviewedChangeSetReceipt;
+  review: DraftUpdateReview;
   pullRequestNumber: number;
   priorPublication?: DraftPullRequestSuccessReceipt;
   adoptedDraft?: GitHubDraftAdoption;
@@ -127,6 +136,7 @@ export const sealExistingDraftUpdate = async (input: {
   selectedCheckoutHeadSha: string;
   selectedCheckoutHeadTree: string;
 }): Promise<ExistingDraftUpdateProposal> => {
+  assertCanonicalGitHubUpdateReview(input.review);
   if (!Number.isSafeInteger(input.pullRequestNumber) || input.pullRequestNumber < 1) {
     throw new Error("Choose a positive pull request number for the draft update.");
   }
@@ -232,6 +242,14 @@ export const sealExistingDraftUpdate = async (input: {
       "The selected pull request is not an open draft in the selected repository with a branch in that repository. Choose the correct draft PR and review its current files.",
     );
   }
+  if (
+    isPublishedDraftRepairReview(input.review) &&
+    (input.review.headSha !== observed.headSha ||
+      input.review.headTree !== observed.headTree ||
+      input.review.publicationDigest !== input.priorPublication?.digest)
+  ) {
+    throw new Error("The repair review is not bound to this published draft and its current head.");
+  }
   const unsigned = {
     approvedPaths: input.review.approvedPaths,
     baseBranch: observed.baseBranch,
@@ -258,68 +276,106 @@ export const sealExistingDraftUpdate = async (input: {
   return { ...unsigned, digest: hash({ ...unsigned, idempotencyKey }), idempotencyKey };
 };
 
+/** No source bytes or Git writes: verify only the exact approved repair commit. */
+export const inspectAppliedExistingDraftUpdate = async (input: {
+  adapter: ExistingDraftUpdateAdapter;
+  proposal: ExistingDraftUpdateProposal;
+  review: DraftUpdateReview;
+}): Promise<{ applied: boolean; observation: ExistingDraftObservation }> => {
+  const { proposal, review, adapter } = input;
+  assertCanonicalGitHubUpdateReview(review);
+  const { digest: claimed, ...unsigned } = proposal;
+  const { idempotencyKey, ...identity } = unsigned;
+  const canonical = [
+    proposal.version === 1,
+    proposal.intendedOutcome === "update-existing-draft-pull-request",
+    claimed === hash(unsigned),
+    idempotencyKey === hash(identity),
+  ].every(Boolean);
+  if (
+    !canonical ||
+    !isDeepStrictEqual(
+      [
+        proposal.reviewDigest,
+        proposal.changeSetDigest,
+        proposal.changedContentDigest,
+        proposal.approvedPaths,
+      ],
+      [review.digest, review.changeSetDigest, review.changedContentDigest, review.approvedPaths],
+    )
+  ) {
+    throw new Error("The retained draft update proposal or review changed.");
+  }
+  if (
+    isPublishedDraftRepairReview(review) &&
+    (review.headSha !== proposal.expectedHeadSha ||
+      review.headTree !== proposal.expectedHeadTree ||
+      review.publicationDigest !== proposal.priorPublicationDigest)
+  ) {
+    throw new Error(
+      "The repair review is not bound to this published draft and its reviewed head.",
+    );
+  }
+  const installation = await adapter.inspectInstallation();
+  if (
+    installation.operation !== "publish-draft-pull-request" ||
+    installation.digest !== proposal.installationIdentityDigest ||
+    !installation.selectedRepositoryIds.includes(proposal.repositoryId)
+  ) {
+    throw new Error("GitHub installation access changed before draft update recovery.");
+  }
+  const observation = await adapter.inspectDraft({
+    repositoryId: proposal.repositoryId,
+    owner: proposal.owner,
+    name: proposal.name,
+    number: proposal.pullRequestNumber,
+  });
+  if (!sameDraft(proposal, observation)) {
+    throw new Error("The retained publication is no longer this same open draft.");
+  }
+  if (!isPublishedDraftRepairReview(review)) {
+    return { applied: false, observation };
+  }
+  const inspect = adapter.inspectAppliedRepair;
+  if (
+    observation.headSha === proposal.expectedHeadSha ||
+    observation.headTree !== review.resolvedTree ||
+    inspect === undefined
+  ) {
+    return { applied: false, observation };
+  }
+  return {
+    applied: await inspect.call(adapter, proposal, review.resolvedTree, observation),
+    observation,
+  };
+};
+
 // oxlint-disable-next-line eslint/complexity -- verifies sealed review, current PR, and uncertain-result recovery in one operation
 export const updateExistingDraft = async (input: {
   adapter: ExistingDraftUpdateAdapter;
   proposal: ExistingDraftUpdateProposal;
-  review: ReviewedChangeSetReceipt;
+  review: DraftUpdateReview;
   contentSource: GitHubDraftPullRequestContentSource;
 }): Promise<ExistingDraftObservation> => {
   const { proposal } = input;
-  const { digest: proposalDigest, ...unsigned } = proposal;
-  const { idempotencyKey, ...identity } = unsigned;
-  if (proposal.version !== 1 || proposal.intendedOutcome !== "update-existing-draft-pull-request") {
-    throw new Error("The draft update proposal has an invalid operation. Seal a new proposal.");
-  }
-  const reviewMatches = isDeepStrictEqual(
-    [
-      proposal.reviewDigest,
-      proposal.changeSetDigest,
-      proposal.changedContentDigest,
-      proposal.approvedPaths,
-    ],
-    [
-      input.review.digest,
-      input.review.changeSetDigest,
-      input.review.changedContentDigest,
-      input.review.approvedPaths,
-    ],
-  );
-  if (!reviewMatches || proposalDigest !== hash(unsigned) || idempotencyKey !== hash(identity)) {
-    throw new Error(
-      "The draft update proposal no longer matches the reviewed app change set. Review and seal it again.",
-    );
-  }
-  const installation = await input.adapter.inspectInstallation();
-  if (
-    installation.digest !== proposal.installationIdentityDigest ||
-    !installation.selectedRepositoryIds.includes(proposal.repositoryId)
-  ) {
-    throw new Error(
-      "GitHub installation access changed before the draft update. Reconnect access and seal a new proposal.",
-    );
-  }
-  const current = await input.adapter.inspectDraft({
-    name: proposal.name,
-    number: proposal.pullRequestNumber,
-    owner: proposal.owner,
-    repositoryId: proposal.repositoryId,
-  });
-  if (!sameDraft(proposal, current)) {
-    throw new Error(
-      "The pull request changed or is no longer an open draft in the selected repository. Review it again.",
-    );
+  const { applied, observation: current } = await inspectAppliedExistingDraftUpdate(input);
+  if (applied) {
+    return current;
   }
   const content = await readExactGitHubPublicationContent({
     proposal,
     review: input.review,
     source: input.contentSource,
   });
+  const inspectApplied = (observed: ExistingDraftObservation) =>
+    (!isPublishedDraftRepairReview(input.review) ||
+      observed.headTree === input.review.resolvedTree) &&
+    input.adapter.inspectAppliedUpdate(proposal, content, observed);
   if (
     current.headSha !== proposal.expectedHeadSha ||
     current.headTree !== proposal.expectedHeadTree
   ) {
-    if (await input.adapter.inspectAppliedUpdate(proposal, content, current)) {
+    if (await inspectApplied(current)) {
       return current;
     }
     throw new Error(
@@ -336,10 +392,7 @@ export const updateExistingDraft = async (input: {
       owner: proposal.owner,
       repositoryId: proposal.repositoryId,
     });
-    if (
-      sameDraft(proposal, latest) &&
-      (await input.adapter.inspectAppliedUpdate(proposal, content, latest))
-    ) {
+    if (sameDraft(proposal, latest) && (await inspectApplied(latest))) {
       return latest;
     }
     throw error;
@@ -361,10 +414,7 @@ export const updateExistingDraft = async (input: {
     owner: proposal.owner,
     repositoryId: proposal.repositoryId,
   });
-  if (
-    !sameDraft(proposal, updated) ||
-    !(await input.adapter.inspectAppliedUpdate(proposal, content, updated))
-  ) {
+  if (!sameDraft(proposal, updated) || !(await inspectApplied(updated))) {
     throw new Error(
       "GitHub accepted the draft update, but its new branch head could not be verified. Inspect the PR before retrying.",
     );
