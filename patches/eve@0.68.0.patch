@@ -240,16 +240,291 @@ index d9abfbf..fd3b616 100644
 \ No newline at end of file
 +import{getWorkflowMetadata}from"#compiled/@workflow/core/index.js";import{settleCancelledTurnStep}from"#execution/settle-cancelled-turn-step.js";import"#execution/session-inbox/inbox.js";import{bindTurnCallerContextStep,notifyCancelledTaskCallerStep,notifyTurnCallerStep,resolveInitialTurnCallerStep}from"#subagents/parent-notification.js";import{signalSessionAnchorStep}from"#execution/session/handoff-steps.js";import{SessionHandoff,sessionAnchorToken}from"#execution/session/handoff.js";import{nextTurnDelivery}from"#execution/session/next-input.js";import{cancelDescendantTurnsStep}from"#execution/cancel-descendant-turns-step.js";import{SessionInputQueue}from"#execution/session/input-queue.js";import{SessionExecution}from"#execution/session/turn.js";import{SessionStateCursor}from"#execution/session/state-cursor.js";import{finalizeSession}from"#execution/session/finalization.js";import{createSessionTimeoutControl}from"#execution/session/timeout-control.js";function createSafeOuterWorkflowError(){let e=Error(`Agent workflow failed. Inspect the private session trace for details.`);return e.name=`EveWorkflowFailure`,e}async function runPreparedSession(e,t){let n=new SessionStateCursor({inbox:t,sessionWritable:e.sessionWritable,serializedContext:e.serializedContext,sessionState:e.sessionState}),r={caller:e.caller,terminalEmitted:!1},i=new SessionHandoff({checkpoint:{capabilities:e.capabilities,retention:e.retention,sessionTimeoutMs:e.sessionTimeoutMs},deploymentId:e.deploymentId,inbox:t,isInitialOwner:e.anchor.kind===`self`,sessionId:e.sessionId,streamRunId:e.streamRunId}),a={output:``,isError:!0},o;try{try{o=await runSessionLoop(e,{cursor:n,handoff:i,inbox:t,progress:r})}finally{await t.dispose()}return o.kind===`transferred`?e.anchor.kind===`self`?(a=await i.awaitAnchoredResult(),a):{output:``}:(a=await finalizeSession(o.outcome,{caller:r.caller,cursor:n,sessionWritable:e.sessionWritable}),r.terminalEmitted=!0,a)}catch(t){throw r.terminalEmitted||await finalizeSession({error:t,kind:`failed`,turnId:r.turnId},{caller:r.caller,cursor:n,sessionWritable:e.sessionWritable}),createSafeOuterWorkflowError()}finally{await reportResultToAnchor(e,a,i,o)}}async function failSession(e){let t;try{t=await resolveInitialTurnCallerStep({serializedContext:e.serializedContext})}catch{}throw await finalizeSession({error:e.error,kind:`failed`},{caller:t,cursor:{serializedContext:e.serializedContext,sessionState:e.sessionState},sessionWritable:e.sessionWritable}),createSafeOuterWorkflowError()}async function reportResultToAnchor(e,t,n,r){switch(e.anchor.kind){case`self`:await n.disposeAnchor(),await e.anchor.notify?.(t);return;case`successor`:if(r?.kind===`transferred`)return;await signalSessionAnchorStep({result:t,token:sessionAnchorToken(e.streamRunId??e.sessionId)});return}}async function runSessionLoop(e,t){let{cursor:n,handoff:r,inbox:i,progress:a}=t,o=new SessionInputQueue,s=new SessionExecution({capabilities:e.capabilities,cursor:n,inbox:i,queue:o,sessionId:e.sessionId,ownerAnchorRunId:e.streamRunId??getWorkflowMetadata().workflowRunId}),c=e.sessionTimeoutDeadline===void 0?void 0:createSessionTimeoutControl({deadline:e.sessionTimeoutDeadline,sessionId:e.sessionId}),nextParkedActivity=async e=>{for(;;){let t=await nextTurnDelivery({cursor:n,expectedAttemptIds:e,inbox:i,queue:o});if(t.kind!==`workflow`)return t;await s.handleWorkflowMessage(t.message)}},l=0,runTurn=async(e,admitPending=!1)=>{let t=a.caller;return t?.taskId!==void 0&&o.rememberTask(t.taskId),t!==void 0&&await n.apply({serializedContext:await bindTurnCallerContextStep({caller:t,serializedContext:n.serializedContext})}),a.turnId=`turn_${String(l++)}`,await s.runTurn(e,admitPending)},runDeliveredTurn=async e=>{let t=await r.tryTransfer(e,{serializedContext:n.serializedContext,sessionState:n.sessionState});return t.kind===`transferred`?t:(e.delivery.caller!==void 0&&(a.caller=e.delivery.caller),{action:await runTurn({delivery:e.delivery}),kind:`action`})},settleCancelledTurn=async()=>{let t=await settleCancelledTurnStep({sessionWritable:e.sessionWritable,serializedContext:n.serializedContext,sessionState:n.sessionState});return await n.apply(t),a.caller=void 0,t},awaitPrewarmedAction=async()=>{for(;;){let e=await nextParkedActivity(new Set);switch(e.kind){case`expired`:case`reset`:case`closed`:return{kind:`terminal`,outcome:{kind:`expired`}};case`clear`:case`compact`:continue;case`turn`:return await runDeliveredTurn(e);case`cancel-turn`:case`authorization-resume`:continue}}},runInitialAction=async()=>e.awaitFirstMessage?await awaitPrewarmedAction():{action:await runTurn(e.initialTurnInput??(e.initialInput===void 0?void 0:{delivery:e.initialInput}),e.recovery===!0),kind:`action`};try{let[t,r]=await Promise.allSettled([runInitialAction(),c?.start()]);if(r.status===`rejected`)throw r.reason;if(t.status===`rejected`)throw t.reason;let i=t.value;if(i.kind!==`action`)return i;let o=i.action;for(;;){if(o.kind===`done`)return{kind:`terminal`,outcome:{action:o,kind:`done`}};if(o.cancelled===!0){let t={caller:a.caller,sessionId:e.sessionId},n=await settleCancelledTurn();await notifyCancelledTaskCallerStep(n.usage===void 0?t:{...t,usage:n.usage})}else o.settled?.notifyCaller===!0&&(a.caller!==void 0&&await notifyTurnCallerStep({caller:a.caller,lifecycle:`parked`,sessionId:e.sessionId,settled:o.settled}),a.caller=void 0);let t=await nextParkedActivity(new Set(o.authorizationAttemptIds??[]));switch(t.kind){case`authorization-resume`:o=await runTurn({delivery:{kind:`deliver`,payloads:t.payloads}});continue;case`expired`:case`reset`:case`closed`:return{kind:`terminal`,outcome:{kind:`expired`}};case`clear`:case`compact`:o=await runTurn({control:t.kind});continue;case`cancel-turn`:await cancelDescendantTurnsStep({serializedContext:n.serializedContext,sessionState:n.sessionState}),await settleCancelledTurn(),o={...o,settled:void 0};continue;case`turn`:{let e=await runDeliveredTurn(t);if(e.kind!==`action`)return e;o=e.action;continue}}}}finally{await c?.dispose()}}export{failSession,runPreparedSession};
 \ No newline at end of file
+diff --git a/dist/src/execution/session/recovery-cancelled-tool-history.d.ts b/dist/src/execution/session/recovery-cancelled-tool-history.d.ts
+new file mode 100644
+index 0000000..12d0af2
+--- /dev/null
++++ b/dist/src/execution/session/recovery-cancelled-tool-history.d.ts
+@@ -0,0 +1,26 @@
++import type { DurableSession } from "#execution/durable-session-store.js";
++import type {
++  PairedNativeRecoveryCheckpoint,
++  PrivateNativeRecoveryPayload,
++} from "#execution/session/recovery-candidate.js";
++
++export type RetrospectiveCancelledToolHistory =
++  | { readonly kind: "unchanged" }
++  | { readonly kind: "restored"; readonly history: DurableSession["history"] }
++  | {
++      readonly kind: "uncertain";
++      readonly reason: "cancelled-call-history-unreconciled" | "cancelled-call-result-unreconciled";
++      readonly callId?: string;
++    };
++
++/**
++ * Requires an authorized, immutable-provenance physical leaf payload. Run the
++ * existing effect-frontier assessment BEFORE invoking this pure proposal, and
++ * retain normal protocol/replay checks afterwards. Only history may be used;
++ * this result grants no effect authority and supplies no reducer input.
++ */
++export declare function proposeRetrospectiveCancelledToolHistory(
++  payload: PrivateNativeRecoveryPayload,
++  latestCandidate: PairedNativeRecoveryCheckpoint,
++  latestSession: DurableSession,
++): RetrospectiveCancelledToolHistory;
+diff --git a/dist/src/execution/session/recovery-cancelled-tool-history.js b/dist/src/execution/session/recovery-cancelled-tool-history.js
+new file mode 100644
+index 0000000..d8ffe03
+--- /dev/null
++++ b/dist/src/execution/session/recovery-cancelled-tool-history.js
+@@ -0,0 +1,236 @@
++import { isDeepStrictEqual } from "node:util";
++import { readDurableSession } from "#execution/durable-session-store.js";
++import { getPendingCoordinationBatch, resolveToolCallInputObject } from "#harness/coordination.js";
++import { getPendingInputBatches } from "#harness/pending-input-batches.js";
++import { getBlockingWorkflowToolRuns } from "#harness/workflow-tool-runs.js";
++import { settleCancelledToolHistory } from "#harness/cancelled-tool-history.js";
++
++const parts = (messages) =>
++  messages.flatMap((message) => (Array.isArray(message.content) ? message.content : []));
++const assistantCalls = (history, callId) =>
++  history.flatMap((message) =>
++    message.role === "assistant" && Array.isArray(message.content)
++      ? message.content.filter((part) => part.type === "tool-call" && part.toolCallId === callId)
++      : [],
++  );
++const prefix = (earlier, later) =>
++  earlier.length <= later.length &&
++  earlier.every((message, index) => isDeepStrictEqual(message, later[index]));
++const uncertain = (reason, callId) => ({
++  kind: "uncertain",
++  reason,
++  ...(callId === undefined ? {} : { callId }),
++});
++const activeTurn = (emission) =>
++  emission.turnId === "" ? `turn_${emission.sequence}` : emission.turnId;
++const nameOf = (action) => (action.kind === "load-skill" ? "load_skill" : action.toolName);
++const hasResult = (messages, callId) =>
++  parts(messages).some((part) => part.type === "tool-result" && part.toolCallId === callId);
++const sameInput = (action, call) => {
++  try {
++    return isDeepStrictEqual(
++      action.input,
++      resolveToolCallInputObject(call.input, { callId: call.toolCallId, toolName: call.toolName }),
++    );
++  } catch {
++    return false;
++  }
++};
++
++function inspectCandidate(candidate, logicalSessionId) {
++  const session = readDurableSession(candidate.sessionState);
++  if (
++    session.sessionId !== logicalSessionId ||
++    candidate.sessionState.sessionId !== logicalSessionId ||
++    candidate.serializedContext["eve.sessionId"] !== logicalSessionId
++  )
++    return;
++  const pending = getPendingCoordinationBatch(session.state);
++  const blocking = getBlockingWorkflowToolRuns(session.state);
++  const buffered = [
++    ...(pending?.responseMessages ?? []),
++    ...getPendingInputBatches(session.state).flatMap((batch) => batch.responseMessages),
++  ];
++  return { candidate, session, pending, blocking, buffered };
++}
++
++function witnessFor(observed, call, latestHistory, latestEmission, nativeEvents) {
++  const { candidate, session, pending, blocking } = observed;
++  const emission = candidate.sessionState.emissionState;
++  const turnId = activeTurn(emission);
++  const runs = blocking.filter((run) => run.callId === call.toolCallId);
++  const actions = [...(pending?.runtimeActions ?? []), ...(pending?.tasks ?? [])].filter(
++    (action) => action.callId === call.toolCallId,
++  );
++  if (runs.length === 0 && actions.length === 0) return { kind: "absent" };
++  if (
++    runs.length > 1 ||
++    actions.length > 1 ||
++    runs.some(
++      (run) =>
++        run.toolName !== call.toolName ||
++        run.origin.turnId !== turnId ||
++        run.origin.stepIndex > emission.stepIndex,
++    ) ||
++    actions.some((action) => nameOf(action) !== call.toolName || !sameInput(action, call)) ||
++    (actions.length > 0 &&
++      (pending.event.turnId !== turnId ||
++        pending.event.sequence !== emission.sequence ||
++        pending.event.stepIndex > emission.stepIndex)) ||
++    (runs.length > 0 && actions.length > 0 && runs[0].origin.stepIndex !== pending.event.stepIndex)
++  )
++    return { kind: "ambiguous" };
++  const cancellations = nativeEvents.flatMap((event, index) =>
++    event.type === "turn.cancelled" && event.data?.turnId === turnId ? [{ event, index }] : [],
++  );
++  if (cancellations.some(({ event }) => event.data.sequence !== emission.sequence))
++    return { kind: "ambiguous" };
++  if (cancellations.length === 0 || latestEmission.sequence <= emission.sequence)
++    return { kind: "absent" };
++  const requested = nativeEvents.flatMap((event, index) =>
++    event.type === "actions.requested" &&
++    event.data?.actions?.some((action) => action.callId === call.toolCallId)
++      ? [{ event, index }]
++      : [],
++  );
++  const stepIndex = actions.length > 0 ? pending.event.stepIndex : runs[0].origin.stepIndex;
++  if (
++    requested.some(
++      ({ event }) =>
++        event.data.turnId !== turnId ||
++        event.data.sequence !== emission.sequence ||
++        event.data.stepIndex !== stepIndex,
++    ) ||
++    (requested.length > 0 &&
++      !cancellations.some(
++        ({ index }) => index > Math.max(...requested.map((request) => request.index)),
++      ))
++  )
++    return { kind: "ambiguous" };
++  // A coordination transcript can have been buffered before its exact assistant
++  // call entered committed history. It is usable only as the same latest prefix.
++  let history = session.history;
++  if (assistantCalls(history, call.toolCallId).length === 0)
++    history = [...history, ...(pending?.responseMessages ?? [])];
++  const calls = assistantCalls(history, call.toolCallId);
++  if (calls.length !== 1 || !isDeepStrictEqual(calls[0], call) || !prefix(history, latestHistory))
++    return { kind: "ambiguous" };
++  return {
++    kind: "witness",
++    index: history.length,
++    turnId,
++    sequence: emission.sequence,
++    address: runs[0]?.address,
++  };
++}
++
++/**
++ * Pure history proposal after the caller has proved the physical leaf and run
++ * the ordinary effect-frontier assessment. No result here certifies effects,
++ * authorizes replay, or changes latest state, context, receipts, or input.
++ */
++export function proposeRetrospectiveCancelledToolHistory(payload, latestCandidate, latestSession) {
++  const logicalSessionId = payload.binding.logicalSessionId;
++  const checkpointOwnerRunId = payload.checkpointOwnerRunId ?? payload.run.runId;
++  if (
++    payload.run.runId !== checkpointOwnerRunId ||
++    payload.events.some((event) => event.runId !== checkpointOwnerRunId) ||
++    !payload.candidates.includes(latestCandidate) ||
++    latestSession.sessionId !== logicalSessionId
++  )
++    return uncertain("cancelled-call-history-unreconciled");
++  let observed;
++  try {
++    observed = payload.candidates.map((candidate) => inspectCandidate(candidate, logicalSessionId));
++  } catch {
++    return uncertain("cancelled-call-history-unreconciled");
++  }
++  if (observed.some((candidate) => candidate === undefined))
++    return uncertain("cancelled-call-history-unreconciled");
++  const latest = observed.find((entry) => entry.candidate === latestCandidate);
++  if (latest === undefined) return uncertain("cancelled-call-history-unreconciled");
++  const history = latestSession.history;
++  const currentPending = getPendingCoordinationBatch(latestSession.state);
++  const pendingLatest = new Set([
++    ...latest.blocking.map((run) => run.callId),
++    ...getBlockingWorkflowToolRuns(latestSession.state).map((run) => run.callId),
++    ...(latest.pending?.runtimeActions ?? []).map((action) => action.callId),
++    ...(latest.pending?.tasks ?? []).map((action) => action.callId),
++    ...(currentPending?.runtimeActions ?? []).map((action) => action.callId),
++    ...(currentPending?.tasks ?? []).map((action) => action.callId),
++    ...getPendingInputBatches(latestSession.state).flatMap((batch) =>
++      batch.requests.map((request) => request.action?.callId),
++    ),
++  ]);
++  const calls = history.flatMap((message) =>
++    message.role === "assistant" && Array.isArray(message.content)
++      ? message.content.filter(
++          (part) =>
++            part.type === "tool-call" &&
++            part.providerExecuted !== true &&
++            !hasResult(history, part.toolCallId) &&
++            !pendingLatest.has(part.toolCallId),
++        )
++      : [],
++  );
++  const insertions = new Map();
++  for (const call of calls) {
++    const witnesses = [];
++    for (const entry of observed) {
++      if (entry.candidate.origin.slot >= latestCandidate.origin.slot) continue;
++      const witness = witnessFor(
++        entry,
++        call,
++        history,
++        latestCandidate.sessionState.emissionState,
++        payload.nativeEvents,
++      );
++      if (witness.kind === "ambiguous")
++        return uncertain("cancelled-call-history-unreconciled", call.toolCallId);
++      if (witness.kind === "witness") witnesses.push(witness);
++    }
++    if (witnesses.length === 0) continue;
++    if (assistantCalls(history, call.toolCallId).length !== 1)
++      return uncertain("cancelled-call-history-unreconciled", call.toolCallId);
++    const first = witnesses[0];
++    const address = witnesses.find((witness) => witness.address !== undefined)?.address;
++    if (
++      witnesses.some(
++        (witness) =>
++          witness.turnId !== first.turnId ||
++          witness.sequence !== first.sequence ||
++          (witness.address !== undefined && !isDeepStrictEqual(witness.address, address)),
++      )
++    )
++      return uncertain("cancelled-call-history-unreconciled", call.toolCallId);
++    if (
++      payload.nativeEvents.some(
++        (event) => event.type === "action.result" && event.data?.result?.callId === call.toolCallId,
++      ) ||
++      observed.some(
++        (entry) =>
++          hasResult(entry.session.history, call.toolCallId) ||
++          hasResult(entry.buffered, call.toolCallId) ||
++          entry.candidate.incoming?.runtimeResults?.results.some(
++            (result) => result.callId === call.toolCallId,
++          ),
++      )
++    )
++      return uncertain("cancelled-call-result-unreconciled", call.toolCallId);
++    const index = Math.min(...witnesses.map((witness) => witness.index));
++    const pending = insertions.get(index) ?? [];
++    pending.push({ callId: call.toolCallId, toolName: call.toolName });
++    insertions.set(index, pending);
++  }
++  if (insertions.size === 0) return { kind: "unchanged" };
++  const restored = [];
++  let offset = 0;
++  for (const [index, callsAtIndex] of [...insertions].sort(([left], [right]) => left - right)) {
++    restored.push(...history.slice(offset, index));
++    const settled = settleCancelledToolHistory(history.slice(0, index), callsAtIndex);
++    restored.push(...settled.slice(index));
++    offset = index;
++  }
++  restored.push(...history.slice(offset));
++  return { kind: "restored", history: restored };
++}
 diff --git a/dist/src/execution/session/recovery-candidate.d.ts b/dist/src/execution/session/recovery-candidate.d.ts
 new file mode 100644
-index 0000000..a384483
+index 0000000..7e0344b
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.d.ts
-@@ -0,0 +1,133 @@
+@@ -0,0 +1,150 @@
 +import type { World, WorkflowRun, Step, Event } from "#compiled/@workflow/world/index.js";
 +import type { PayloadKey } from "#compiled/@workflow/core/serialization/encryption.js";
 +import type { DurableSession, DurableSessionState } from "#execution/durable-session-store.js";
 +import type { TurnStepPayload } from "#execution/session/turn-step-types.js";
++import type { NativeHandoffProvenance } from "#execution/session/recovery-owner-provenance.js";
 +import type { MessageStreamEvent } from "#protocol/message.js";
 +
 +/** Obtained from a canonical tenant-scoped server reservation, never model/client authority. */
@@ -295,6 +570,9 @@ index 0000000..a384483
 +export interface PrivateNativeRecoveryPayload {
 +  readonly version: 1;
 +  readonly binding: NativeRecoveryOwnerBinding;
++  /** Physical namespace of candidates, events and frontier; authority binding stays anchored. */
++  readonly checkpointOwnerRunId: string;
++  readonly handoffChain: readonly NativeHandoffProvenance[];
 +  readonly run: WorkflowRun;
 +  /** Native-only hydration capability for run.input; never serialize or expose publicly. */
 +  readonly nativeRunKey: PayloadKey | undefined;
@@ -345,7 +623,10 @@ index 0000000..a384483
 +      readonly reason:
 +        | "source-not-terminal"
 +        | "native-data-expired"
-+        | "paired-native-checkpoint-unavailable";
++        | "paired-native-checkpoint-unavailable"
++        | "handoff-discovery-unavailable"
++        | "handoff-owner-ambiguous"
++        | "handoff-parent-frontier-uncertain";
 +    };
 +export interface NativeRecoveryCollectorDependencies {
 +  readonly getWorld: () => Promise<World>;
@@ -353,6 +634,16 @@ index 0000000..a384483
 +    world: World,
 +    run: WorkflowRun,
 +  ) => Promise<PayloadKey | undefined>;
++  readonly hydrateWorkflowArguments: (
++    data: unknown,
++    runId: string,
++    key: PayloadKey | undefined,
++  ) => Promise<unknown>;
++  readonly hydrateHookPayload: (
++    data: unknown,
++    runId: string,
++    key: PayloadKey | undefined,
++  ) => Promise<unknown>;
 +  readonly hydrateStepArguments: (
 +    data: unknown,
 +    runId: string,
@@ -381,10 +672,11 @@ index 0000000..a384483
 +): PrivateNativeRecoveryPayload;
 diff --git a/dist/src/execution/session/recovery-candidate.js b/dist/src/execution/session/recovery-candidate.js
 new file mode 100644
-index 0000000..019c969
+index 0000000..9274615
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.js
-@@ -0,0 +1,368 @@
+@@ -0,0 +1,392 @@
++import { resolveTerminalCheckpointOwner } from "#execution/session/recovery-owner-provenance.js";
 +// Server-only native checkpoint inspection. This module never starts/resumes a run.
 +// The caller MUST supply canonical ownership authorization; model/client IDs are
 +// not authority. Payloads remain behind an in-process opaque handle.
@@ -462,30 +754,41 @@ index 0000000..019c969
 +    // Authorization precedes every private World/stream operation.
 +    await authorizeOwner(binding);
 +    const world = await dependencies.getWorld();
-+    const run = await world.runs.get(binding.ownerRunId, { resolveData: "all" });
-+    if (run.runId !== binding.ownerRunId) throw new Error("Native recovery run identity differs.");
++    const anchor = await world.runs.get(binding.ownerRunId, { resolveData: "all" });
++    if (anchor.runId !== binding.ownerRunId)
++      throw new Error("Native recovery run identity differs.");
 +    // Public Builder failure is checked by authorizeOwner. A terminal model
 +    // failure can settle the native workflow successfully with next.done.
-+    if (!["failed", "completed"].includes(run.status))
++    if (!["failed", "completed"].includes(anchor.status))
 +      return { kind: "unavailable", reason: "source-not-terminal" };
-+    if (run.expiredAt !== undefined && new Date(run.expiredAt).getTime() <= dependencies.now()) {
++    if (
++      anchor.expiredAt !== undefined &&
++      new Date(anchor.expiredAt).getTime() <= dependencies.now()
++    ) {
 +      return { kind: "unavailable", reason: "native-data-expired" };
 +    }
-+    const key = await dependencies.resolveRunEncryptionKey(world, run);
++    const owner = await resolveTerminalCheckpointOwner({
++      world,
++      anchor,
++      binding,
++      authorizeOwner,
++      dependencies,
++    });
++    if (owner.kind !== "resolved") return owner;
++    const { run, key } = owner;
 +    const events = [];
 +    const seenEvents = new Set();
 +    let cursor;
 +    const cursors = new Set();
 +    do {
 +      const page = await world.events.list({
-+        runId: binding.ownerRunId,
++        runId: run.runId,
 +        pagination: { limit: 128, sortOrder: "asc", ...(cursor === undefined ? {} : { cursor }) },
 +        resolveData: "all",
 +      });
 +      for (const event of page.data) {
 +        if (seenEvents.has(event.eventId)) continue;
-+        if (event.runId !== binding.ownerRunId)
-+          throw new Error("Native recovery event owner differs.");
++        if (event.runId !== run.runId) throw new Error("Native recovery event owner differs.");
 +        const slot = dependencies.requireEventSlot(event.eventId);
 +        if (events.length > 0 && slot <= events.at(-1).slot) {
 +          throw new Error("Native recovery event order differs.");
@@ -527,8 +830,8 @@ index 0000000..019c969
 +    ]);
 +    const readStep = async (stepId) => {
 +      if (steps.has(stepId)) return steps.get(stepId);
-+      const step = await world.steps.get(binding.ownerRunId, stepId, { resolveData: "all" });
-+      if (step.runId !== binding.ownerRunId || step.stepId !== stepId) {
++      const step = await world.steps.get(run.runId, stepId, { resolveData: "all" });
++      if (step.runId !== run.runId || step.stepId !== stepId) {
 +        throw new Error("Native recovery step owner differs.");
 +      }
 +      const retained = { step };
@@ -650,7 +953,8 @@ index 0000000..019c969
 +
 +    const nativeEvents = [];
 +    try {
-+      for await (const event of dependencies.readNativeEvents(run.runId)) nativeEvents.push(event);
++      for await (const event of dependencies.readNativeEvents(binding.ownerRunId))
++        nativeEvents.push(event);
 +    } catch {
 +      issues.push({ reason: "native-stream-incomplete" });
 +    }
@@ -681,6 +985,8 @@ index 0000000..019c969
 +    const payload = {
 +      version: 1,
 +      binding,
++      checkpointOwnerRunId: owner.checkpointOwnerRunId,
++      handoffChain: owner.chain,
 +      run,
 +      nativeRunKey: key,
 +      candidates: unique,
@@ -690,6 +996,7 @@ index 0000000..019c969
 +      nativeEvents,
 +      issues,
 +    };
++    await authorizeOwner(binding);
 +    const handle = Object.freeze({ kind: "private-native-recovery-candidate", version: 1 });
 +    payloads.set(handle, payload);
 +    const inspection = Object.freeze({
@@ -739,6 +1046,14 @@ index 0000000..019c969
 +  return createTerminalRecoveryCandidateCollector({
 +    getWorld: runtime.getWorld,
 +    resolveRunEncryptionKey: runtime.resolveRunEncryptionKey,
++    hydrateWorkflowArguments: (value, runId, key) =>
++      serialization.hydrateWorkflowArguments(value, runId, key, globalThis, transportRevivers),
++    hydrateHookPayload: async (value, _runId, key) =>
++      serialization.deserializePreparedReplayPayload(
++        await serialization.prepareReplayPayload(value, key),
++        globalThis,
++        transportRevivers,
++      ),
 +    hydrateStepArguments: (value, runId, key) =>
 +      serialization.hydrateStepArguments(value, runId, key, [], globalThis, transportRevivers),
 +    hydrateStepReturnValue: (value, runId, key) =>
@@ -1195,12 +1510,515 @@ index 0000000..cbedbe5
 +    record: (summary) => console.info(`[eve:terminal-recovery-inbox-holder] ${JSON.stringify(summary)}`),
 +  };
 +}
+diff --git a/dist/src/execution/session/recovery-owner-provenance.d.ts b/dist/src/execution/session/recovery-owner-provenance.d.ts
+new file mode 100644
+index 0000000..a320829
+--- /dev/null
++++ b/dist/src/execution/session/recovery-owner-provenance.d.ts
+@@ -0,0 +1,39 @@
++import type { Event, World, WorkflowRun } from "#compiled/@workflow/world/index.js";
++import type { PayloadKey } from "#compiled/@workflow/core/serialization/encryption.js";
++import type {
++  NativeRecoveryCollectorDependencies,
++  NativeRecoveryOwnerBinding,
++} from "#execution/session/recovery-candidate.js";
++/** Private retained native evidence. Event positions belong only to parentRunId. */
++export interface NativeHandoffProvenance {
++  readonly parentRunId: string;
++  readonly ownerRunId: string;
++  readonly startStepId: string;
++  readonly activationEventId: string;
++  readonly events: readonly Event[];
++}
++export type TerminalCheckpointOwnerResolution =
++  | {
++      readonly kind: "resolved";
++      readonly run: WorkflowRun;
++      readonly key: PayloadKey | undefined;
++      readonly checkpointOwnerRunId: string;
++      readonly chain: readonly NativeHandoffProvenance[];
++    }
++  | {
++      readonly kind: "unavailable";
++      readonly reason:
++        | "source-not-terminal"
++        | "native-data-expired"
++        | "handoff-discovery-unavailable"
++        | "handoff-owner-ambiguous"
++        | "handoff-parent-frontier-uncertain";
++    };
++/** Anchor authorization remains mandatory; discovery metadata is never authority. */
++export declare function resolveTerminalCheckpointOwner(input: {
++  readonly world: World;
++  readonly anchor: WorkflowRun;
++  readonly binding: NativeRecoveryOwnerBinding;
++  readonly authorizeOwner: (binding: NativeRecoveryOwnerBinding) => Promise<void>;
++  readonly dependencies: NativeRecoveryCollectorDependencies;
++}): Promise<TerminalCheckpointOwnerResolution>;
+diff --git a/dist/src/execution/session/recovery-owner-provenance.js b/dist/src/execution/session/recovery-owner-provenance.js
+new file mode 100644
+index 0000000..6f16e5c
+--- /dev/null
++++ b/dist/src/execution/session/recovery-owner-provenance.js
+@@ -0,0 +1,452 @@
++import { isDeepStrictEqual } from "node:util";
++import {
++  sessionCommandHookToken,
++  sessionInboxHookToken,
++} from "#execution/session-inbox/address.js";
++
++const nameOf = (value) =>
++  String(value ?? "")
++    .split(/[/:#]/u)
++    .at(-1);
++const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
++const terminal = (run) => ["completed", "failed"].includes(run.status);
++const unavailable = (reason) => ({ kind: "unavailable", reason });
++
++/** Private discovery hints never authorize collection of a candidate's app state. */
++export async function resolveTerminalCheckpointOwner({
++  world,
++  anchor,
++  binding,
++  authorizeOwner,
++  dependencies,
++}) {
++  const authorize = () => authorizeOwner(binding);
++  const runs = new Map([[anchor.runId, anchor]]);
++  const entries = new Map();
++  const logs = new Map();
++  const retainedSteps = new Map();
++  const stepNames = new Map();
++  const keys = new Map();
++  const keyFor = async (run) => {
++    if (!keys.has(run.runId)) {
++      await authorize();
++      keys.set(run.runId, await dependencies.resolveRunEncryptionKey(world, run));
++    }
++    return keys.get(run.runId);
++  };
++  const runFor = async (runId) => {
++    if (!runs.has(runId)) {
++      await authorize();
++      const run = await world.runs.get(runId, { resolveData: "all" });
++      if (run.runId !== runId) throw new Error("Native handoff run identity differs.");
++      runs.set(runId, run);
++    }
++    return runs.get(runId);
++  };
++  const entryFor = async (run) => {
++    if (!entries.has(run.runId)) {
++      await authorize();
++      const args = await dependencies.hydrateWorkflowArguments(
++        run.input,
++        run.runId,
++        await keyFor(run),
++      );
++      entries.set(run.runId, Array.isArray(args) && args.length === 1 ? args[0] : undefined);
++    }
++    return entries.get(run.runId);
++  };
++  const eventsFor = async (runId, resolveData = "none") => {
++    const cacheKey = `${runId}:${resolveData}`;
++    if (logs.has(cacheKey)) return logs.get(cacheKey);
++    const events = [];
++    const seen = new Set();
++    const cursors = new Set();
++    let cursor;
++    do {
++      await authorize();
++      const page = await world.events.list({
++        runId,
++        resolveData,
++        pagination: {
++          limit: 128,
++          sortOrder: "asc",
++          ...(cursor === undefined ? {} : { cursor }),
++        },
++      });
++      for (const event of page.data) {
++        if (event.runId !== runId) throw new Error("Native handoff event owner differs.");
++        if (seen.has(event.eventId)) continue;
++        if (
++          events.length > 0 &&
++          dependencies.requireEventSlot(event.eventId) <=
++            dependencies.requireEventSlot(events.at(-1).eventId)
++        )
++          throw new Error("Native handoff event order differs.");
++        seen.add(event.eventId);
++        events.push(event);
++      }
++      if (!page.hasMore) break;
++      if (!page.cursor || cursors.has(page.cursor))
++        throw new Error("Native handoff pagination did not advance.");
++      cursor = page.cursor;
++      cursors.add(cursor);
++    } while (true);
++    logs.set(cacheKey, events);
++    return events;
++  };
++  const stepsFor = async (run, wanted) => {
++    const events = await eventsFor(run.runId);
++    const names = new Map();
++    for (const event of events) {
++      if (event.correlationId && typeof event.eventData?.stepName === "string")
++        names.set(event.correlationId, nameOf(event.eventData.stepName));
++    }
++    for (const stepId of new Set(
++      events
++        .filter((event) => event.eventType.startsWith("step_") && event.correlationId)
++        .map((event) => event.correlationId),
++    )) {
++      if (names.has(stepId)) continue;
++      await authorize();
++      const step = await world.steps.get(run.runId, stepId, { resolveData: "none" });
++      if (step.runId !== run.runId || step.stepId !== stepId || typeof step.stepName !== "string")
++        throw new Error("Native handoff step metadata is unavailable.");
++      names.set(stepId, nameOf(step.stepName));
++    }
++    stepNames.set(run.runId, names);
++    const selected = [];
++    for (const [stepId, name] of names) {
++      if (!wanted.has(name)) continue;
++      const cacheKey = `${run.runId}:${stepId}`;
++      if (!retainedSteps.has(cacheKey)) {
++        await authorize();
++        const step = await world.steps.get(run.runId, stepId, { resolveData: "all" });
++        if (step.runId !== run.runId || step.stepId !== stepId || nameOf(step.stepName) !== name)
++          throw new Error("Native handoff step identity differs.");
++        const args =
++          step.input === undefined
++            ? undefined
++            : await dependencies.hydrateStepArguments(step.input, run.runId, await keyFor(run));
++        retainedSteps.set(cacheKey, { step, input: args?.args?.[0] });
++      }
++      selected.push(retainedSteps.get(cacheKey));
++    }
++    return selected;
++  };
++  const activeStarts = async (run) => {
++    const starts = await stepsFor(run, new Set(["startSessionOwnerStep"]));
++    const events = await eventsFor(run.runId);
++    const token = `${run.runId}:handoff`;
++    const hooks = events.filter(
++      (event) => event.eventType === "hook_created" && event.eventData?.token === token,
++    );
++    const active = [];
++    for (const start of starts) {
++      const first = events.find(
++        (event) =>
++          event.correlationId === start.step.stepId &&
++          ["step_created", "step_started"].includes(event.eventType),
++      );
++      if (first === undefined || start.input?.activationToken !== token)
++        throw new Error("Native handoff start provenance is incomplete.");
++      const slot = dependencies.requireEventSlot(first.eventId);
++      const hook = hooks
++        .filter((event) => dependencies.requireEventSlot(event.eventId) < slot)
++        .at(-1);
++      if (hook === undefined) throw new Error("Native handoff activation hook is unavailable.");
++      const receipts = events.filter(
++        (event) =>
++          event.eventType === "hook_received" && event.correlationId === hook.correlationId,
++      );
++      const outcomes = [];
++      for (const receipt of receipts) {
++        await authorize();
++        const full = await world.events.get(run.runId, receipt.eventId, { resolveData: "all" });
++        if (
++          full.runId !== run.runId ||
++          full.correlationId !== hook.correlationId ||
++          full.eventType !== "hook_received"
++        )
++          throw new Error("Native handoff activation identity differs.");
++        const value = await dependencies.hydrateHookPayload(
++          full.eventData.payload,
++          run.runId,
++          await keyFor(run),
++        );
++        outcomes.push({ value, event: full });
++      }
++      if (
++        outcomes.length === 0 ||
++        !["active", "failed"].includes(outcomes[0].value?.kind) ||
++        outcomes.some(
++          (outcome) =>
++            !isDeepStrictEqual(outcome.value, outcomes[0].value) ||
++            dependencies.requireEventSlot(outcome.event.eventId) <= slot,
++        )
++      )
++        throw new Error("Native handoff activation is ambiguous.");
++      if (outcomes[0].value.kind === "failed") continue;
++      if (start.step.status !== "completed")
++        throw new Error("Native handoff start did not commit.");
++      const equivalent = active.find(
++        (prior) =>
++          prior.hook.correlationId === hook.correlationId &&
++          isDeepStrictEqual(prior.input, start.input),
++      );
++      if (equivalent === undefined)
++        active.push({
++          ...start,
++          first,
++          hook,
++          activation: outcomes[0].event,
++          startStepIds: [start.step.stepId],
++        });
++      else equivalent.startStepIds.push(start.step.stepId);
++    }
++    return active;
++  };
++
++  const anchorStarts = await activeStarts(anchor);
++  if (anchorStarts.length === 0) {
++    await authorize();
++    return {
++      kind: "resolved",
++      run: anchor,
++      key: await keyFor(anchor),
++      checkpointOwnerRunId: anchor.runId,
++      chain: [],
++    };
++  }
++  if (world.analytics === undefined) return unavailable("handoff-discovery-unavailable");
++  const startTime = new Date(anchor.createdAt).toISOString();
++  const endTime = new Date(anchor.completedAt ?? anchor.updatedAt).toISOString();
++  const hints = new Map();
++  const cursors = new Set();
++  let cursor;
++  do {
++    await authorize();
++    const page = await world.analytics.runs.list({
++      workflowName: anchor.workflowName,
++      startTime,
++      endTime,
++      pagination: { limit: 100, sortOrder: "asc", ...(cursor === undefined ? {} : { cursor }) },
++    });
++    for (const hint of page.data) {
++      const previous = hints.get(hint.runId);
++      if (
++        previous !== undefined &&
++        ((previous.deploymentId !== undefined &&
++          hint.deploymentId !== undefined &&
++          previous.deploymentId !== hint.deploymentId) ||
++          (previous.workflowName !== undefined &&
++            hint.workflowName !== undefined &&
++            previous.workflowName !== hint.workflowName))
++      )
++        throw new Error("Native handoff discovery identity changed.");
++      hints.set(hint.runId, hint);
++    }
++    if (!page.hasMore) break;
++    if (!page.cursor || cursors.has(page.cursor))
++      throw new Error("Native handoff discovery pagination did not advance.");
++    cursor = page.cursor;
++    cursors.add(cursor);
++  } while (true);
++  const childrenFor = async (parent, input) => {
++    const children = [];
++    for (const hint of hints.values()) {
++      // Reuse the already-required exact target-deployment edge predicate to
++      // avoid hydrating unrelated applications while discovering private hints.
++      if (
++        hint.runId === parent.runId ||
++        hint.runId === anchor.runId ||
++        (hint.workflowName !== undefined && hint.workflowName !== anchor.workflowName) ||
++        (hint.deploymentId !== undefined && hint.deploymentId !== input.targetDeploymentId)
++      )
++        continue;
++      if (hint.deploymentId === undefined || hint.workflowName === undefined) {
++        await authorize();
++        const metadata = await world.runs.get(hint.runId, { resolveData: "none" });
++        if (metadata.runId !== hint.runId)
++          throw new Error("Native handoff discovery run identity differs.");
++        if (
++          metadata.deploymentId !== input.targetDeploymentId ||
++          metadata.workflowName !== anchor.workflowName
++        )
++          continue;
++      }
++      const run = await runFor(hint.runId);
++      if (run.deploymentId !== input.targetDeploymentId || run.workflowName !== anchor.workflowName)
++        continue;
++      const entry = await entryFor(run);
++      if (
++        !record(entry) ||
++        entry.kind !== "handoff" ||
++        entry.sessionId !== binding.logicalSessionId ||
++        entry.streamRunId !== binding.ownerRunId ||
++        entry.activationToken !== `${parent.runId}:handoff`
++      )
++        continue;
++      children.push({ run, entry });
++    }
++    return children;
++  };
++
++  const chain = [];
++  const visited = new Set();
++  let parent = anchor;
++  while (true) {
++    if (visited.has(parent.runId)) throw new Error("Native handoff ownership cycle.");
++    visited.add(parent.runId);
++    const starts = parent.runId === anchor.runId ? anchorStarts : await activeStarts(parent);
++    if (starts.length === 0) break;
++    if (starts.length !== 1) return unavailable("handoff-owner-ambiguous");
++    const start = starts[0];
++    const candidates = [];
++    for (const child of await childrenFor(parent, start.input)) {
++      const input = start.input;
++      if (
++        input.anchorRunId !== binding.ownerRunId ||
++        (input.logicalSessionId ?? input.anchorRunId) !== binding.logicalSessionId ||
++        child.entry.ownerDeploymentId !== input.targetDeploymentId ||
++        child.run.deploymentId !== input.targetDeploymentId ||
++        !isDeepStrictEqual(child.entry.checkpoint, input.checkpoint) ||
++        !isDeepStrictEqual(child.entry.delivery, input.delivery)
++      )
++        continue;
++      if (
++        input.checkpoint.sessionState.sessionId !== binding.logicalSessionId ||
++        input.checkpoint.serializedContext["eve.sessionId"] !== binding.logicalSessionId
++      )
++        throw new Error("Native handoff checkpoint logical identity differs.");
++      const activationSteps = await stepsFor(
++        child.run,
++        new Set(["signalSessionOwnerActivationStep", "validateSessionCheckpointStep"]),
++      );
++      const successful = activationSteps.filter(
++        ({ step, input: activation }) =>
++          nameOf(step.stepName) === "signalSessionOwnerActivationStep" &&
++          step.status === "completed" &&
++          activation?.token === child.entry.activationToken &&
++          activation.activation?.kind === "active",
++      );
++      if (
++        successful.length === 0 ||
++        activationSteps.some(
++          ({ step, input: activation }) =>
++            nameOf(step.stepName) === "signalSessionOwnerActivationStep" &&
++            step.status === "completed" &&
++            !isDeepStrictEqual(activation, successful[0].input),
++        )
++      )
++        continue;
++      const validation = activationSteps.filter(
++        ({ step, input: retained }) =>
++          nameOf(step.stepName) === "validateSessionCheckpointStep" &&
++          step.status === "completed" &&
++          isDeepStrictEqual(retained?.checkpoint, child.entry.checkpoint),
++      );
++      if (validation.length === 0) continue;
++      const events = await eventsFor(child.run.runId);
++      const activation = events.find(
++        (event) =>
++          event.eventType === "step_completed" && event.correlationId === successful[0].step.stepId,
++      );
++      const inbox = sessionInboxHookToken(sessionCommandHookToken(binding.logicalSessionId));
++      const claim = events.find(
++        (event) => event.eventType === "hook_created" && event.eventData?.token === inbox,
++      );
++      const validated = events.find(
++        (event) =>
++          event.eventType === "step_completed" &&
++          validation.some(({ step }) => step.stepId === event.correlationId),
++      );
++      if (
++        activation === undefined ||
++        claim === undefined ||
++        validated === undefined ||
++        dependencies.requireEventSlot(validated.eventId) >=
++          dependencies.requireEventSlot(claim.eventId) ||
++        dependencies.requireEventSlot(claim.eventId) >=
++          dependencies.requireEventSlot(activation.eventId)
++      )
++        continue;
++      await authorize();
++      const claimed = await world.events.get(child.run.runId, claim.eventId, {
++        resolveData: "all",
++      });
++      if (
++        claimed.runId !== child.run.runId ||
++        claimed.eventType !== "hook_created" ||
++        claimed.correlationId !== claim.correlationId ||
++        claimed.eventData?.token !== inbox
++      )
++        throw new Error("Native handoff claim identity differs.");
++      const claimMetadata = await dependencies.hydrateHookPayload(
++        claimed.eventData.metadata,
++        child.run.runId,
++        await keyFor(child.run),
++      );
++      if (claimMetadata?.sessionId !== binding.logicalSessionId) continue;
++      candidates.push(child);
++    }
++    if (candidates.length !== 1) return unavailable("handoff-owner-ambiguous");
++    const child = candidates[0];
++    if (!terminal(parent) || !terminal(child.run)) return unavailable("source-not-terminal");
++    // After successful transfer a parent may only finish handoff bookkeeping.
++    // Retain each complete physical frontier separately; never compare its slots
++    // with the successor's slots or silently discard late authored work.
++    const parentEvents = await eventsFor(parent.runId);
++    const names = stepNames.get(parent.runId) ?? new Map();
++    const safeSteps = new Set(["cancelSessionTimeoutStep", "releaseSessionHooksStep"]);
++    for (const event of parentEvents) {
++      if (
++        dependencies.requireEventSlot(event.eventId) <=
++        dependencies.requireEventSlot(start.first.eventId)
++      )
++        continue;
++      if (
++        event.eventType.startsWith("step_") &&
++        !start.startStepIds.includes(event.correlationId) &&
++        !safeSteps.has(names.get(event.correlationId))
++      )
++        return unavailable("handoff-parent-frontier-uncertain");
++      if (["hook_created", "hook_conflict"].includes(event.eventType))
++        return unavailable("handoff-parent-frontier-uncertain");
++      if (event.eventType === "hook_received" && event.correlationId !== start.hook.correlationId) {
++        const token =
++          event.eventData?.token ??
++          parentEvents.find(
++            (created) =>
++              created.eventType === "hook_created" && created.correlationId === event.correlationId,
++          )?.eventData?.token;
++        if (token !== `${binding.ownerRunId}:anchor`)
++          return unavailable("handoff-parent-frontier-uncertain");
++      }
++    }
++    const retainedEvents = await eventsFor(parent.runId, "all");
++    if (
++      retainedEvents.length !== parentEvents.length ||
++      retainedEvents.some((event, index) => event.eventId !== parentEvents[index].eventId)
++    )
++      return unavailable("handoff-parent-frontier-uncertain");
++    chain.push({
++      parentRunId: parent.runId,
++      ownerRunId: child.run.runId,
++      startStepId: start.step.stepId,
++      activationEventId: start.activation.eventId,
++      events: retainedEvents,
++    });
++    parent = child.run;
++  }
++  if (!terminal(parent)) return unavailable("source-not-terminal");
++  if (parent.expiredAt !== undefined && new Date(parent.expiredAt).getTime() <= dependencies.now())
++    return unavailable("native-data-expired");
++  await authorize();
++  return {
++    kind: "resolved",
++    run: parent,
++    key: await keyFor(parent),
++    checkpointOwnerRunId: parent.runId,
++    chain,
++  };
++}
 diff --git a/dist/src/execution/session/recovery-reconciliation.d.ts b/dist/src/execution/session/recovery-reconciliation.d.ts
 new file mode 100644
-index 0000000..57b2acf
+index 0000000..fc7051d
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-reconciliation.d.ts
-@@ -0,0 +1,63 @@
+@@ -0,0 +1,67 @@
 +import type { SessionCheckpoint } from "#execution/session/handoff.js";
 +import type { TurnStepPayload } from "#execution/session/turn-step-types.js";
 +import type {
@@ -1212,6 +2030,8 @@ index 0000000..57b2acf
 +export interface NativeRecoveryReconciliationProvenance {
 +  readonly version: 1;
 +  readonly sourceOwnerRunId: string;
++  /** Physical namespace of every native origin/event coordinate below. */
++  readonly checkpointOwnerRunId: string;
 +  readonly logicalSessionId: string;
 +  /** The authoritative latest paired typed state; its grants are never replaced. */
 +  readonly selectedOrigin: NativeRecoveryOrigin & { readonly kind: NativeRecoveryCandidateKind };
@@ -1250,7 +2070,9 @@ index 0000000..57b2acf
 +        | "runtime-result-owner-unreconciled"
 +        | "unreadable-native-effect-frontier"
 +        | "unconsumed-native-inbox-input"
-+        | "cancelled-turn-replay";
++        | "cancelled-turn-replay"
++        | "cancelled-call-history-unreconciled"
++        | "cancelled-call-result-unreconciled";
 +      readonly callId?: string;
 +    }
 +  | {
@@ -1266,10 +2088,11 @@ index 0000000..57b2acf
 +): Promise<NativeRecoveryReconciliation>;
 diff --git a/dist/src/execution/session/recovery-reconciliation.js b/dist/src/execution/session/recovery-reconciliation.js
 new file mode 100644
-index 0000000..5c8e0af
+index 0000000..9c0dc56
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-reconciliation.js
-@@ -0,0 +1,513 @@
+@@ -0,0 +1,519 @@
++import { proposeRetrospectiveCancelledToolHistory } from "#execution/session/recovery-cancelled-tool-history.js";
 +import { isCancelledToolHistoryResult } from "#harness/cancelled-tool-history.js";
 +import { recordRecoveryProtocolDiagnostic } from "#harness/model-protocol-diagnostic.js";
 +import { isDeepStrictEqual } from "node:util";
@@ -1706,6 +2529,10 @@ index 0000000..5c8e0af
 +    incomingSource?.incoming,
 +  );
 +  if (effectUncertainty !== undefined) return effectUncertainty;
++  const cancelledHistory = proposeRetrospectiveCancelledToolHistory(payload, latest, session);
++  if (cancelledHistory.kind === "uncertain") return cancelledHistory;
++  if (cancelledHistory.kind === "restored")
++    session = { ...session, history: cancelledHistory.history };
 +  session = restoreRepeatableApprovalTail(session, options.repeatableCallIds, replayInput);
 +  const protocolUncertainty = assessProtocolCompletion(payload, session);
 +  if (protocolUncertainty !== undefined) return protocolUncertainty;
@@ -1725,6 +2552,7 @@ index 0000000..5c8e0af
 +    provenance: {
 +      version: 1,
 +      sourceOwnerRunId: payload.binding.ownerRunId,
++      checkpointOwnerRunId: payload.checkpointOwnerRunId,
 +      logicalSessionId: payload.binding.logicalSessionId,
 +      selectedOrigin: origin(latest),
 +      ...(historySource === latest ? {} : { historySourceOrigin: origin(historySource) }),
@@ -1890,10 +2718,10 @@ index 0000000..ae1eb1e
 +}
 diff --git a/dist/src/execution/session/terminal-recovery.d.ts b/dist/src/execution/session/terminal-recovery.d.ts
 new file mode 100644
-index 0000000..6c1aed3
+index 0000000..a3f1892
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.d.ts
-@@ -0,0 +1,105 @@
+@@ -0,0 +1,107 @@
 +import type { SessionAuthContext } from "#channel/types.js";
 +import type { SessionCheckpoint } from "#execution/session/handoff.js";
 +import type { TerminalRecoveryWorkflowEntryInput } from "#execution/session/entry-input.js";
@@ -1912,6 +2740,8 @@ index 0000000..6c1aed3
 +}
 +export interface TerminalRecoveryProvenance {
 +  readonly kind: "terminal-finalizer-input" | "completed-terminal-turn-input" | "failed-turn-input" | "committed-turn-output";
++  /** Physical owner of checkpoint coordinates; absent on legacy receipts. */
++  readonly checkpointOwnerRunId?: string;
 +  readonly sourceStepId: string;
 +  readonly sourceEventId: string;
 +  readonly sourceSlot: number;
@@ -2001,16 +2831,16 @@ index 0000000..6c1aed3
 +export declare function observeTerminalSession(input: TerminalRecoveryAuthorityInput & { readonly ports: Pick<TerminalRecoveryPorts, "authorize" | "readReceipt" | "observeCandidateFacts" | "observeRecoveryHolderBinding"> }, dependencies: TerminalRecoveryObservationDependencies): Promise<{ readonly kind: "accepted"; readonly sessionId: string }>;
 diff --git a/dist/src/execution/session/terminal-recovery.js b/dist/src/execution/session/terminal-recovery.js
 new file mode 100644
-index 0000000..0e5a9e8
+index 0000000..07e326f
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.js
-@@ -0,0 +1,440 @@
+@@ -0,0 +1,442 @@
 +import { createHash } from "node:crypto";
 +import { DEFAULT_SESSION_TIMEOUT_MS } from "#execution/session/timeout.js";
 +import { SESSION_CHECKPOINT_VERSION } from "#execution/session/handoff.js";
 +
 +const descriptorKeys = ["version", "operationId", "sourcePublicSessionId", "sourceOwnerRunId", "sourceAdapterGeneration", "logicalSessionId", "originalAuthoritySessionId", "parentCancellationRevision", "sourceHandoffId"];
-+const provenanceKeys = ["kind", "sourceStepId", "sourceEventId", "sourceSlot", "checkpointVersion"];
++const provenanceKeys = ["kind", "sourceStepId", "sourceEventId", "sourceSlot", "checkpointVersion", "checkpointOwnerRunId"];
 +const candidateKinds = ["terminal-finalizer-input", "completed-terminal-turn-input", "failed-turn-input", "committed-turn-output"];
 +const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 +
@@ -2033,6 +2863,7 @@ index 0000000..0e5a9e8
 +  return record(binding) && descriptorKeys.every((key) => binding[key] === descriptor[key]) &&
 +    typeof binding.ownerRunId === "string" && binding.ownerRunId.length > 0 && record(binding.provenance) &&
 +    candidateKinds.includes(binding.provenance.kind) && binding.provenance.checkpointVersion === 1 &&
++    (binding.provenance.checkpointOwnerRunId === undefined || (typeof binding.provenance.checkpointOwnerRunId === "string" && binding.provenance.checkpointOwnerRunId.length > 0)) &&
 +    typeof binding.provenance.sourceStepId === "string" && typeof binding.provenance.sourceEventId === "string" &&
 +    Number.isSafeInteger(binding.provenance.sourceSlot) && binding.provenance.sourceSlot >= 0;
 +}
@@ -2140,6 +2971,7 @@ index 0000000..0e5a9e8
 +    if (selected === undefined) return { kind: "uncertain", reason: "checkpoint-origin-unavailable" };
 +    const provenance = {
 +      kind: selected.kind,
++      checkpointOwnerRunId: payload.checkpointOwnerRunId,
 +      sourceStepId: selected.origin.stepId,
 +      sourceEventId: selected.origin.eventId,
 +      sourceSlot: selected.origin.slot,
