@@ -11,6 +11,7 @@ import type { ValidationLogReference } from "../repository/validation-log";
 
 import type {
   ExistingDraftReconciliationProposal,
+  OwnedPublicationReconciliationScope,
   ReconciliationReviewReceipt,
 } from "../repository/github-draft-reconciliation";
 
@@ -32,6 +33,8 @@ export interface DraftReconciliationCompletion {
   appReview: PublishedAppSourceReview;
   appId: string;
   githubSourceDigest: string;
+  publishedOrigin?: PublishedDraftRepairSource;
+  publicationScope?: OwnedPublicationReconciliationScope;
   root: string;
   compilation: ReconciliationCompilation;
 }
@@ -121,11 +124,19 @@ interface DraftCandidateFields {
 /** Repair comparison base is its draft head; it is never represented as live main. */
 export type DraftReconciliationCandidate = DraftCandidateFields &
   (
-    | { kind?: "reconciliation"; repair?: never; repairReview?: never }
+    | {
+        kind?: "reconciliation";
+        repair?: never;
+        repairReview?: never;
+        publishedOrigin?: PublishedDraftRepairSource;
+        publicationScope?: OwnedPublicationReconciliationScope;
+      }
     | {
         kind: "published-draft-repair";
         repair: PublishedDraftRepairSource;
         repairReview?: PublishedDraftRepairReview;
+        publishedOrigin?: never;
+        publicationScope?: never;
       }
   );
 

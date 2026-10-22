@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import type { AppBuilderWorkflowState } from "./workflow-state";
-import type { DraftReconciliationCandidate } from "./draft-reconciliation-state";
+import type {
+  DraftReconciliationCandidate,
+  DraftPublicationCompletion,
+} from "./draft-reconciliation-state";
+import { assertOwnedPublicationReconciliationScope } from "../repository/github-draft-reconciliation";
 import { assertExactImmutableGitHubSourceReceipt } from "../repository/github-publication";
 import type { ImmutableGitHubSourceReceipt } from "../repository/github-publication";
 import type { ExistingDraftObservation } from "../repository/github-draft-update";
@@ -133,13 +137,28 @@ export const currentDraftCandidateSource = (
   ) {
     return undefined;
   }
-  if (candidate.kind !== "published-draft-repair") {
-    return state.githubSource?.digest === candidate.githubSourceDigest
+  const repair =
+    candidate.kind === "published-draft-repair" ? candidate.repair : candidate.publishedOrigin;
+  if (repair === undefined) {
+    return candidate.publicationScope === undefined &&
+      state.githubSource?.digest === candidate.githubSourceDigest
       ? state.githubSource
       : undefined;
   }
-  const { repair } = candidate;
   assertPublishedDraftRepairSource(repair);
+  if (candidate.kind !== "published-draft-repair") {
+    const scope = candidate.publicationScope;
+    if (scope === undefined) {
+      return undefined;
+    }
+    assertOwnedPublicationReconciliationScope(scope);
+    if (
+      scope.proposal.digest !== repair.publicationProposalDigest ||
+      scope.publication.digest !== repair.publicationDigest
+    ) {
+      return undefined;
+    }
+  }
   const matches = [
     state.appSpec.appId === candidate.appId,
     state.sourceReceipt.sourceKind === "fresh-template",
@@ -152,8 +171,8 @@ export const currentDraftCandidateSource = (
     candidate.pullRequestNumber === repair.draft.number,
     candidate.headSha === repair.draft.headSha,
     candidate.headTree === repair.draft.headTree,
-    candidate.baseSha === candidate.headSha,
-    candidate.baseTree === candidate.headTree,
+    candidate.kind !== "published-draft-repair" || candidate.baseSha === candidate.headSha,
+    candidate.kind !== "published-draft-repair" || candidate.baseTree === candidate.headTree,
   ].every(Boolean);
   if (!matches) {
     return undefined;
@@ -161,7 +180,21 @@ export const currentDraftCandidateSource = (
   return repair.source;
 };
 
+const publishedOriginInstallation = (origin: PublishedDraftRepairSource | undefined) => {
+  if (origin === undefined) {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Keep the optional selected-installation return explicit on both branches.
+    return undefined;
+  }
+  assertPublishedDraftRepairSource(origin);
+  return { selectedInstallationId: origin.installationId };
+};
+
 export const draftCandidateInstallation = (candidate: DraftReconciliationCandidate) =>
-  candidate.kind === "published-draft-repair"
-    ? { selectedInstallationId: candidate.repair.installationId }
-    : undefined;
+  publishedOriginInstallation(
+    candidate.kind === "published-draft-repair" ? candidate.repair : candidate.publishedOrigin,
+  );
+
+export const draftCompletionInstallation = (completion: DraftPublicationCompletion) =>
+  publishedOriginInstallation(
+    "kind" in completion ? completion.repair : completion.publishedOrigin,
+  );

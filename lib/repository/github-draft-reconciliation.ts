@@ -2,7 +2,13 @@ import { createHash } from "node:crypto";
 
 import type { ExistingDraftObservation } from "./github-draft-update";
 import { safeSourcePath } from "./source-path";
+import {
+  assertCanonicalGitHubMutationReceipt,
+  assertExactDraftPullRequestProposal,
+} from "./github-publication";
 import type {
+  DraftPullRequestProposal,
+  DraftPullRequestSuccessReceipt,
   GitHubDraftPullRequestContentSource,
   GitHubInstallationIdentity,
   GitHubMutationAcknowledgement,
@@ -21,6 +27,59 @@ const fileDigest = /^[0-9a-f]{64}$/u;
 const draftPublicationOperation = "publish-draft-pull-request" as const;
 const digestBytes = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
 
+/** Original owned publication plus the non-app index produced by Git's actual merge. */
+export interface OwnedPublicationReconciliationScope {
+  kind: "owned-publication";
+  proposal: DraftPullRequestProposal;
+  publication: DraftPullRequestSuccessReceipt;
+  automaticMergeNonAppDigest: string;
+}
+
+export const assertOwnedPublicationReconciliationOrigin = (
+  scope: Pick<OwnedPublicationReconciliationScope, "proposal" | "publication">,
+): void => {
+  assertExactDraftPullRequestProposal(scope.proposal);
+  assertCanonicalGitHubMutationReceipt(scope.publication);
+  const { proposal, publication } = scope;
+  if (
+    publication.kind !== "draft-pull-request" ||
+    publication.status !== "succeeded" ||
+    JSON.stringify([
+      publication.proposalDigest,
+      publication.idempotencyKey,
+      publication.installationIdentityDigest,
+      publication.repositoryId,
+      publication.branchName,
+      publication.baseBranch,
+      publication.changeSetDigest,
+      publication.changedContentDigest,
+      publication.normalizedChangedPaths,
+    ]) !==
+      JSON.stringify([
+        proposal.digest,
+        proposal.idempotencyKey,
+        proposal.installationIdentityDigest,
+        proposal.repositoryId,
+        proposal.branchName,
+        proposal.baseBranch,
+        proposal.changeSetDigest,
+        proposal.changedContentDigest,
+        proposal.approvedPaths,
+      ])
+  ) {
+    throw new Error("The original owned publication does not match this reconciliation scope.");
+  }
+};
+
+export const assertOwnedPublicationReconciliationScope = (
+  scope: OwnedPublicationReconciliationScope,
+): void => {
+  assertOwnedPublicationReconciliationOrigin(scope);
+  if (scope.kind !== "owned-publication" || !fileDigest.test(scope.automaticMergeNonAppDigest)) {
+    throw new Error("The automatic merge provenance is unavailable for this owned publication.");
+  }
+};
+
 /** The two exact diffs the user reviews after Builder reconciles a draft with live base. */
 export interface ReconciliationReviewReceipt {
   version: 1;
@@ -30,11 +89,12 @@ export interface ReconciliationReviewReceipt {
   headSha: string;
   headTree: string;
   resolvedTree: string;
-  /** Final PR diff against the current base. Only app-owned paths may appear here. */
+  /** Final PR diff; an owned publication also retains its automatically merged registration. */
   baseChanges: readonly OverlayChange[];
   /** Every change from the old PR head, including inherited changes from base. */
   headChanges: readonly OverlayChange[];
   approvedPaths: readonly string[];
+  publicationScope?: OwnedPublicationReconciliationScope;
   digest: string;
 }
 
@@ -77,6 +137,9 @@ const uniquePaths = (changes: readonly OverlayChange[]): boolean =>
   changes.every((change, index) => index === 0 || change.path !== changes[index - 1]?.path);
 
 const assertReview = (review: ReconciliationReviewReceipt): void => {
+  if (review.publicationScope !== undefined) {
+    assertOwnedPublicationReconciliationScope(review.publicationScope);
+  }
   const { digest: claimed, ...unsigned } = review;
   const baseChanges = canonicalChanges(review.baseChanges);
   const headChanges = canonicalChanges(review.headChanges);
@@ -91,7 +154,9 @@ const assertReview = (review: ReconciliationReviewReceipt): void => {
     !uniquePaths(baseChanges) ||
     !uniquePaths(headChanges) ||
     baseChanges.some(
-      (change) => !validChange(change) || !change.path.startsWith(`apps/${review.appId}/`),
+      (change) =>
+        !validChange(change) ||
+        (review.publicationScope === undefined && !change.path.startsWith(`apps/${review.appId}/`)),
     ) ||
     headChanges.some((change) => !validChange(change)) ||
     JSON.stringify(review.baseChanges) !== JSON.stringify(baseChanges) ||
@@ -223,6 +288,7 @@ const sameDraft = (
   current.draft &&
   current.state === "open";
 
+// oxlint-disable-next-line eslint/complexity -- Bind every original publication, current draft and reviewed merge field at the sealing boundary.
 export const sealExistingDraftReconciliation = async (input: {
   adapter: ExistingDraftReconciliationAdapter;
   installation: GitHubInstallationIdentity;
@@ -288,6 +354,21 @@ export const sealExistingDraftReconciliation = async (input: {
     throw new Error(
       "Builder cannot verify this draft PR's origin. Refresh its publication provenance before reconciling.",
     );
+  }
+  const scope = input.review.publicationScope;
+  if (
+    scope !== undefined &&
+    (scope.publication.digest !== input.priorPublicationDigest ||
+      scope.proposal.idempotencyKey !== input.originMarker ||
+      scope.proposal.repositoryId !== observed.repositoryId ||
+      scope.proposal.owner !== observed.owner ||
+      scope.proposal.name !== observed.name ||
+      scope.proposal.branchName !== observed.headBranch ||
+      scope.proposal.baseBranch !== observed.baseBranch ||
+      scope.publication.pullRequestId !== observed.pullRequestId ||
+      scope.publication.pullRequestNumber !== observed.number)
+  ) {
+    throw new Error("The owned publication scope does not match this exact draft PR.");
   }
   const unsigned = {
     approvedPaths: input.review.approvedPaths,

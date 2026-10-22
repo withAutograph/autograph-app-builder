@@ -454,7 +454,7 @@ describe("shared Auth encrypted adoption prerequisite", () => {
     },
   );
 
-  it("rejects app collisions, changed Auth roles, and pre-existing v1 target credentials", () => {
+  it("rejects app collisions and changed Auth roles while preserving unused v1 app credentials", () => {
     const f = fixture();
     const changed = structuredClone(f.plan);
     changed.appDatabase = f.sourceInput().plan.appDatabase;
@@ -480,10 +480,18 @@ describe("shared Auth encrypted adoption prerequisite", () => {
       plan: fresh,
     }).privateState;
     const existing = structuredClone(f.destination.record.privateState);
-    expect(() =>
-      sealHostedOperatorSharedAuth({ source: f.sourceInput(), target: f.targetInput() }),
-    ).toThrow();
+    const original = files(f.targetInput());
+    const checkpoint = sealHostedOperatorSharedAuth({
+      source: f.sourceInput(),
+      target: f.targetInput(),
+    });
     expect(f.destination.record.privateState).toEqual(existing);
+    f.destination.record.privateState = checkpoint;
+    const adopted = files(f.targetInput());
+    expect(adopted.version).toBe(2);
+    expect(adopted.state).toBe("pending-shared-auth-verification");
+    expect(adopted.appDatabase).toEqual(original.appDatabase);
+    expect(adopted.authDatabase).toEqual(files(f.sourceInput()).authDatabase);
   });
 
   it("does not regenerate a missing checkpoint after an uncertain target effect", async () => {
