@@ -1,5 +1,5 @@
 import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
-import type { HostedOperatorPlan } from "./hosted-operator-contract";
+import type { HostedOperatorPlan, OperatorDeploymentCandidate } from "./hosted-operator-contract";
 import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
 
 type RetainedGatewayOperation = NonNullable<
@@ -8,43 +8,86 @@ type RetainedGatewayOperation = NonNullable<
 
 export type AppGatewayDeliverySource = NonNullable<HostedOperatorPlan["gatewayDelivery"]>;
 
-/** Proposes only an unattempted APP delivery's source change; this metadata grants no authority. */
-const proposedSourcePlan = (
-  record: HostedRuntimeJournalRecord | undefined,
+type Operator = NonNullable<HostedRuntimeJournalRecord["operator"]>;
+
+const hasApprovedPlan = (operator: Operator, approvedByCallId: string) =>
+  operator.approvalId !== undefined &&
+  approvedByCallId !== "operator:unapproved-plan" &&
+  operator.planDigest === operatorPlanDigest(operator.plan);
+
+const hasUnattemptedGateway = (operator: Operator) => {
+  const effect = operator.plan.effects.find((entry) => entry.kind === "gateway-delivery");
+  return (
+    effect !== undefined &&
+    operator.pendingEffectId !== effect.id &&
+    !operator.receipts.some((receipt) => receipt.effectId === effect.id) &&
+    operator.gatewayDeliveryCandidates?.some(
+      (candidate) => candidate.operationRef === operator.operationRef,
+    ) !== true
+  );
+};
+
+const isOwnedReadyCandidate = (
+  operator: Operator,
+  candidate: OperatorDeploymentCandidate | undefined,
+  delivery: HostedOperatorPlan["delivery"],
+) =>
+  [
+    candidate?.readyState === "READY",
+    candidate?.operationRef === operator.operationRef,
+    candidate?.projectId === delivery?.projectId,
+    candidate?.repoId === delivery?.repoId,
+    candidate?.branch === delivery?.branch,
+  ].every(Boolean);
+
+const hasUncertainGatewayCandidate = (operator: Operator) =>
+  operator.gatewayDeliveryCandidates?.some((candidate) => {
+    const pending = ["BUILDING", "QUEUED", "INITIALIZING"].includes(candidate.readyState);
+    const uncertainAlias =
+      candidate.gatewayAliasAttempted === true &&
+      candidate.deploymentId !== operator.deliveredGatewayDeploymentId;
+    return candidate.operationRef === operator.operationRef && (pending || uncertainAlias);
+  }) === true;
+
+/** Completed delivery remains evidence; an uncertain create or alias is never replaced. */
+const hasCompletedGateway = (operator: Operator) => {
+  const app = operator.deliveryCandidates?.find(
+    (candidate) => candidate.deploymentId === operator.deliveredDeploymentId,
+  );
+  const gateway = operator.gatewayDeliveryCandidates?.find(
+    (candidate) => candidate.deploymentId === operator.deliveredGatewayDeploymentId,
+  );
+  return [
+    operator.pendingEffectId === undefined,
+    operator.pendingEffectAttempt === undefined,
+    operator.plan.effects.every(
+      (effect) =>
+        operator.receipts.filter((receipt) => receipt.effectId === effect.id).length === 1,
+    ),
+    isOwnedReadyCandidate(operator, app, operator.plan.delivery),
+    isOwnedReadyCandidate(operator, gateway, operator.plan.gatewayDelivery),
+    !hasUncertainGatewayCandidate(operator),
+  ].every(Boolean);
+};
+
+/** Pure comparison of approved source ancestry; no historical journal status is invented. */
+const sourceOnlyPlan = (
+  prior: Operator,
   source: AppGatewayDeliverySource,
 ): HostedOperatorPlan | undefined => {
-  const prior = record?.operator;
-  const delivery = prior?.plan.gatewayDelivery;
-  if (record === undefined || prior === undefined || delivery === undefined) {
+  const delivery = prior.plan.gatewayDelivery;
+  if (delivery === undefined) {
     return undefined;
   }
-  const invalid = [
-    record.status !== "pending",
-    record.step !== "reserved",
-    record.privateState === undefined,
-    prior.plan.action !== "prepare",
-    prior.plan.stage !== "app",
-    prior.approvalId === undefined,
-    record.approvedByCallId === "operator:unapproved-plan",
-    prior.planDigest !== operatorPlanDigest(prior.plan),
-    delivery.gitSha === source.gitSha,
-    delivery.branch !== source.branch,
-    delivery.projectId !== source.projectId,
-    delivery.repoId !== source.repoId,
-  ].some(Boolean);
-  if (invalid) {
-    return undefined;
-  }
-  const effect = prior.plan.effects.find((entry) => entry.kind === "gateway-delivery");
   if (
-    effect === undefined ||
-    prior.pendingEffectId === effect.id ||
-    prior.receipts.some((receipt) => receipt.effectId === effect.id) ||
-    // Other attempted-delivery states retain their existing retry/reconciliation path.
-    // In particular, this proposal never discards an unknown create or alias intent.
-    prior.gatewayDeliveryCandidates?.some(
-      (candidate) => candidate.operationRef === prior.operationRef,
-    ) === true
+    [
+      prior.plan.action !== "prepare",
+      prior.plan.stage !== "app",
+      delivery.gitSha === source.gitSha,
+      delivery.branch !== source.branch,
+      delivery.projectId !== source.projectId,
+      delivery.repoId !== source.repoId,
+    ].some(Boolean)
   ) {
     return undefined;
   }
@@ -53,6 +96,28 @@ const proposedSourcePlan = (
     gatewayDelivery: { ...delivery, gitSha: source.gitSha },
   });
   return candidate.success ? candidate.data : undefined;
+};
+
+/** Only an unattempted or completely settled APP Gateway can propose a source change. */
+const proposedSourcePlan = (
+  record: HostedRuntimeJournalRecord | undefined,
+  source: AppGatewayDeliverySource,
+): HostedOperatorPlan | undefined => {
+  const prior = record?.operator;
+  if (
+    record === undefined ||
+    prior === undefined ||
+    record.privateState === undefined ||
+    !hasApprovedPlan(prior, record.approvedByCallId)
+  ) {
+    return undefined;
+  }
+  const unattempted =
+    record.status === "pending" && record.step === "reserved" && hasUnattemptedGateway(prior);
+  const completed =
+    record.status === "prepared" && record.step === "bound" && hasCompletedGateway(prior);
+  const eligible = unattempted || completed;
+  return eligible ? sourceOnlyPlan(prior, source) : undefined;
 };
 const idle = (record: HostedRuntimeJournalRecord, now: number) =>
   record.leaseId === undefined ||
@@ -64,7 +129,7 @@ export const hasAppGatewaySourceUpdate = (
   source: AppGatewayDeliverySource,
 ): boolean => proposedSourcePlan(record, source) !== undefined;
 
-/** Only a receipt-cleared record can change its approved plan; pending worker context is never moved. */
+/** Only a settled boundary can change its approved plan; pending worker context is never moved. */
 export const createAppGatewaySourceSuccessorPlan = (
   record: HostedRuntimeJournalRecord | undefined,
   source: AppGatewayDeliverySource,
@@ -87,6 +152,7 @@ export const readAppGatewaySourcePredecessor = (
 ): RetainedGatewayOperation | undefined => {
   const current = record.operator;
   if (
+    record.privateState === undefined ||
     current?.plan.gatewayDelivery === undefined ||
     current.planDigest !== operatorPlanDigest(current.plan)
   ) {
@@ -101,10 +167,13 @@ export const readAppGatewaySourcePredecessor = (
     ) {
       return false;
     }
-    const proposed = proposedSourcePlan(
-      { ...record, approvedByCallId: entry.approvedByCallId, operator: entry.operator },
-      source,
-    );
+    if (
+      !hasApprovedPlan(entry.operator, entry.approvedByCallId) ||
+      (!hasUnattemptedGateway(entry.operator) && !hasCompletedGateway(entry.operator))
+    ) {
+      return false;
+    }
+    const proposed = sourceOnlyPlan(entry.operator, source);
     return proposed !== undefined && operatorPlanDigest(proposed) === current.planDigest;
   });
 };

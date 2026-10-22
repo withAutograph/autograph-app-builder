@@ -264,7 +264,10 @@ export interface ProtectedHostedOperatorDependencies {
   /** Explicit separate export dispatcher; never enters preparation/cleanup state. */
   exportRequest?: (request: Request, input: TenantExportTransportRequest) => Promise<Response>;
   /** Trusted deployment-owned desired source; ordinary source changes do not mutate an approved plan. */
-  readGatewayDeliverySource?: (context: HostedOperatorContext) => Promise<AppGatewayDeliverySource>;
+  readGatewayDeliverySource?: (
+    context: HostedOperatorContext,
+    currentPlan?: HostedOperatorPlan,
+  ) => Promise<AppGatewayDeliverySource>;
   store: HostedRuntimeJournalStore;
   /** Verify caller signature/audience and independently resolve this session's owner and selected project. Never trust body owner IDs. */
   authorize: (
@@ -622,7 +625,7 @@ const handlePlanOperation = async (
     const savedGatewaySource =
       saved?.record.approvedByCallId === UNAPPROVED_PLAN &&
       saved.record.operator?.retainedGatewayDeliveries !== undefined
-        ? await deps.readGatewayDeliverySource?.(context)
+        ? await deps.readGatewayDeliverySource?.(context, saved.record.operator?.plan)
         : undefined;
     const pendingGatewaySource =
       saved?.record.approvedByCallId === UNAPPROVED_PLAN
@@ -1208,6 +1211,13 @@ const handlePlanOperation = async (
             nextOperator.fenceGeneration = record.operator.fenceGeneration;
             nextOperator.workerCheckpoints = record.operator.workerCheckpoints;
             nextOperator.deliveredDeploymentId = record.operator.deliveredDeploymentId;
+            // The archived receipt still proves the old Gateway; only its replacement needs a new receipt.
+            const gatewayEffect = plan.effects.find(
+              (effect) => effect.kind === GATEWAY_DELIVERY_EFFECT,
+            );
+            nextOperator.receipts = record.operator.receipts.filter(
+              (receipt) => receipt.effectId !== gatewayEffect?.id,
+            );
             // Completed bootstrap candidates remain in retained Auth and approved history;
             // they never attest the new source's delivery.
             nextOperator.gatewayDeliveryCandidates = [];
@@ -1358,6 +1368,7 @@ const handlePlanOperation = async (
             !retainedRenewalSuccessor &&
             !readyDeliverySuccessor &&
             !sharedHostProtectionSuccessor &&
+            !appGatewaySourceSuccessor &&
             authStageCompleted &&
             record.operator.plan.authSchema?.targetDigest === plan.authSchema?.targetDigest
           ) {
@@ -2263,7 +2274,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 requireOperator(record).pendingEffectAttempt === undefined &&
                 deps.readGatewayDeliverySource !== undefined
               ) {
-                const desiredSource = await deps.readGatewayDeliverySource(context);
+                const desiredSource = await deps.readGatewayDeliverySource(context, plan);
                 if (hasAppGatewaySourceUpdate(record, desiredSource)) {
                   await assertCurrent();
                   // Keep the original operator/approval until settlement and lease release.

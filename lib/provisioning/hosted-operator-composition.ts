@@ -148,6 +148,21 @@ const AUTH_MEMBERSHIP = "auth-membership";
 const AUTH_SIGNUP_POLICY = "auth-signup-policy";
 const OPERATION_IN_PROGRESS = "operation_in_progress";
 const RECONCILIATION_REQUIRED = "reconciliation_required";
+const gatewayDeliverySourceForPlan = (
+  configuration: HostedOperatorSourceConfiguration,
+  currentPlan?: HostedOperatorPlan,
+): AppGatewayDeliverySource & { gitSha: string } => {
+  const publishedSha =
+    currentPlan?.stage === "app" && currentPlan.delivery?.repoId === configuration.gateway.repoId
+      ? currentPlan.delivery.gitSha
+      : undefined;
+  return {
+    branch: configuration.gateway.branch,
+    gitSha: publishedSha ?? configuration.gateway.gitSha,
+    projectId: configuration.gateway.projectId,
+    repoId: configuration.gateway.repoId,
+  };
+};
 const appTrustedSourcesForNewPlan = (
   base: HostedOperatorPlan,
   configuration: HostedOperatorSourceConfiguration,
@@ -1323,6 +1338,7 @@ export const composeHostedOperatorDependencies = (
       releaseIntent?: "prepared-preview";
       authSignupPolicy?: HostedOperatorAuthSignupPolicyInput;
     },
+    // oxlint-disable-next-line sonarjs/cognitive-complexity -- Keep all approval stages against the same canonical owner and published-source snapshot.
   ): Promise<HostedOperatorPlan> => {
     const observe = async <T>(stage: OperatorPlanStage, run: () => T | Promise<T>) =>
       await observeOperatorPlanStage(context.target.sessionId, stage, run);
@@ -1398,12 +1414,7 @@ export const composeHostedOperatorDependencies = (
     const gatewayContinuation = await readAppGatewaySourcePlanningContinuation(
       context,
       current,
-      {
-        branch: configuration.gateway.branch,
-        gitSha: configuration.gateway.gitSha,
-        projectId: configuration.gateway.projectId,
-        repoId: configuration.gateway.repoId,
-      },
+      gatewayDeliverySourceForPlan(configuration, current?.record.operator?.plan),
       controlPlane,
     );
     // Complete a source-only continuation or repair the frozen installer/build
@@ -1800,7 +1811,14 @@ export const composeHostedOperatorDependencies = (
           generatedRelease?.description,
         ),
     );
-    return withExternallyManagedHostProtection(resolved, application.hostProtection);
+    const sourced =
+      resolved.stage === "app"
+        ? hostedOperatorPlanSchema.parse({
+            ...resolved,
+            gatewayDelivery: gatewayDeliverySourceForPlan(configuration, resolved),
+          })
+        : resolved;
+    return withExternallyManagedHostProtection(sourced, application.hostProtection);
   };
 
   const workerInput = async (input: HostedOperatorEffectContext) => {
@@ -2123,7 +2141,13 @@ export const composeHostedOperatorDependencies = (
     const observed = await (
       input.effect.kind === "delivery" ? appDelivery : gatewayDelivery
     ).reconcile(deliveryContext(input));
-    if (hasFailedGatewayDelivery(input, observed, configuration.gateway.gitSha)) {
+    if (
+      hasFailedGatewayDelivery(
+        input,
+        observed,
+        gatewayDeliverySourceForPlan(configuration, input.plan).gitSha,
+      )
+    ) {
       throw new HostedOperatorError("gateway_delivery_failed");
     }
     if (observed.status === "applied") {
@@ -2351,7 +2375,13 @@ export const composeHostedOperatorDependencies = (
     const observed = await (
       input.effect.kind === "delivery" ? appDelivery : gatewayDelivery
     ).deliver(deliveryContext(input));
-    if (hasFailedGatewayDelivery(input, observed, configuration.gateway.gitSha)) {
+    if (
+      hasFailedGatewayDelivery(
+        input,
+        observed,
+        gatewayDeliverySourceForPlan(configuration, input.plan).gitSha,
+      )
+    ) {
       throw new HostedOperatorError("gateway_delivery_failed");
     }
     if (observed.status !== "applied") {
@@ -2606,13 +2636,8 @@ export const composeHostedOperatorDependencies = (
     normalActorRuntimeBindings: async (input) =>
       await controlPlane.readNormalActorRuntimeBindings(input),
     executeEffect,
-    readGatewayDeliverySource: () =>
-      Promise.resolve({
-        branch: configuration.gateway.branch,
-        gitSha: configuration.gateway.gitSha,
-        projectId: configuration.gateway.projectId,
-        repoId: configuration.gateway.repoId,
-      }),
+    readGatewayDeliverySource: (_context, currentPlan) =>
+      Promise.resolve(gatewayDeliverySourceForPlan(configuration, currentPlan)),
     readAppProjectSettings: (context) =>
       Promise.resolve(selectedApplication(configuration, context).projectSettings),
     neonAuthorization: createHostedOperatorNeonAuthorization({
