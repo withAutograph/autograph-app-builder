@@ -46,7 +46,12 @@ const request = {
 const ctx = {
   callId: "owned-tool-call",
   abortSignal: new AbortController().signal,
-  session: { auth: { owner: true }, id: "adapter-session" },
+  session: {
+    auth: { owner: true },
+    id: "adapter-session",
+    ownerRunId: "executing-session-owner",
+    ownerAnchorRunId: "adapter-session",
+  },
 };
 // SAFETY: The identity defineTool fixture calls the production execute method; all consumed context fields are supplied.
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Synthetic Eve context for this private tool boundary.
@@ -341,7 +346,13 @@ describe("saved export lookup tool", () => {
     await expect(getTool.execute({ operation: "export", exportId }, toolCtx)).resolves.toEqual(
       saved,
     );
-    expect(hooks.client).toHaveBeenCalledWith(ctx.session.auth, ctx.session.id);
+    const clientCall = hooks.client.mock.calls.at(-1);
+    expect(clientCall?.slice(0, 2)).toEqual([ctx.session.auth, ctx.session.id]);
+    expect(clientCall?.[3]).toEqual({
+      logicalSessionId: ctx.session.id,
+      ownerRunId: ctx.session.ownerRunId,
+      ownerAnchorRunId: ctx.session.ownerAnchorRunId,
+    });
     expect(hooks.readExport).toHaveBeenCalledWith(exportId, ctx.abortSignal);
     expect(hooks.request).not.toHaveBeenCalled();
     expect(hooks.export).not.toHaveBeenCalled();
@@ -404,7 +415,13 @@ describe("saved continuity lookup tool", () => {
     await expect(getTool.execute({ operation: "continuity", intentId }, toolCtx)).resolves.toBe(
       saved,
     );
-    expect(hooks.client).toHaveBeenCalledWith(ctx.session.auth, ctx.session.id);
+    const clientCall = hooks.client.mock.calls.at(-1);
+    expect(clientCall?.slice(0, 2)).toEqual([ctx.session.auth, ctx.session.id]);
+    expect(clientCall?.[3]).toEqual({
+      logicalSessionId: ctx.session.id,
+      ownerRunId: ctx.session.ownerRunId,
+      ownerAnchorRunId: ctx.session.ownerAnchorRunId,
+    });
     expect(hooks.readContinuity).toHaveBeenCalledWith(intentId, ctx.abortSignal);
     expect(hooks.request).not.toHaveBeenCalled();
     expect(hooks.resolve).not.toHaveBeenCalled();

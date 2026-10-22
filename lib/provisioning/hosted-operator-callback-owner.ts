@@ -46,6 +46,8 @@ const recoveredCallbackMatches = (input: {
     binding?.originalAuthoritySessionId === input.authoritySession.sessionId,
     binding?.logicalSessionId === input.logicalSessionId,
     binding?.ownerRunId === input.currentSession.adapterSessionId,
+    (input.currentSession.cancellationRevision ?? 0) ===
+      (input.currentSession.resumedCancellationRevision ?? 0),
     input.execution?.ownerRunId !== undefined && input.execution.ownerRunId.length > 0,
     input.execution?.ownerAnchorRunId === input.currentSession.adapterSessionId,
   ].every(Boolean);
@@ -80,9 +82,6 @@ export const readHostedOperatorCallbackSessions = async (input: {
     currentSession.sourceHandoffId === authoritySession.sourceHandoffId,
     currentSession.appId === authoritySession.appId,
     currentSession.status !== "cancelled",
-    currentSession.status !== "completed",
-    (currentSession.cancellationRevision ?? 0) ===
-      (currentSession.resumedCancellationRevision ?? 0),
     currentSession.sessionId !== authoritySession.sessionId ||
       logicalSessionId === authoritySession.adapterSessionId,
     currentSession.sessionId !== authoritySession.sessionId ||
