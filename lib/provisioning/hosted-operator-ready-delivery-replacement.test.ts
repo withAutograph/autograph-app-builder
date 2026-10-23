@@ -300,7 +300,7 @@ const recoveryFixture = () => {
 };
 
 describe("native externally managed policy recovery integration", () => {
-  it("summarizes external policy and delivery effects without internal identifiers", () => {
+  it("shows the concise cost disclaimer for Preview approval", () => {
     const f = recoveryFixture();
     const input = {
       ...f.proposed.selection,
@@ -308,20 +308,7 @@ describe("native externally managed policy recovery integration", () => {
       planDigest: operatorPlanDigest(f.proposed),
     };
     const description = publicApprovalDescription(input, "prepare-app-hosted-runtime");
-    for (const identity of [
-      externalPolicy.teamId,
-      externalPolicy.appPreview.sourceProjectId,
-      externalPolicy.appPreview.targetProjectId,
-      externalPolicy.provenance.reference,
-      externalPolicy.observedAt,
-      "ready-notes",
-      "ready-gateway",
-      f.original.planDigest,
-    ]) {
-      expect(description).not.toContain(identity);
-    }
-    expect(description).toContain("Deployment access:");
-    expect(description).toContain("Deployment usage:");
+    expect(description).toBe("*This approval may incur provider costs.*");
     expect(
       publicApprovalDescription(
         { ...input, planDigest: f.current.operator!.planDigest },
