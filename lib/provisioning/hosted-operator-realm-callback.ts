@@ -250,15 +250,16 @@ const privateStageJoseCode = z.enum([
   "ERR_JWKS_MULTIPLE_MATCHING_KEYS",
   "ERR_JWKS_TIMEOUT",
 ]);
+const jwksResponseContentTypes = ["json", "html", "other", "missing"] as const;
 interface JwksResponseObservation {
   httpStatus: number;
-  contentType: "json" | "html" | "other" | "missing";
+  contentType: (typeof jwksResponseContentTypes)[number];
   vercelError?: "TRUSTED_SOURCES_ENVIRONMENT_MISMATCH" | "DEPLOYMENT_NOT_FOUND" | "other";
 }
 const observeJwksResponse = (response: Response): JwksResponseObservation => {
   const mediaType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
   let contentType: JwksResponseObservation["contentType"] = "other";
-  if (!mediaType) {
+  if (mediaType === undefined || mediaType === "") {
     contentType = "missing";
   } else if (mediaType === "application/json" || mediaType.endsWith("+json")) {
     contentType = "json";
@@ -267,7 +268,7 @@ const observeJwksResponse = (response: Response): JwksResponseObservation => {
   }
   const providerError = response.headers.get("x-vercel-error");
   const observation: JwksResponseObservation = { httpStatus: response.status, contentType };
-  if (providerError) {
+  if (providerError !== null && providerError !== "") {
     observation.vercelError =
       providerError === "TRUSTED_SOURCES_ENVIRONMENT_MISMATCH" ||
       providerError === "DEPLOYMENT_NOT_FOUND"
