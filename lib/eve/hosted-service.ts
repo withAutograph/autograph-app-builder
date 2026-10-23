@@ -3749,7 +3749,31 @@ export function createHostedEveSessionService(input: {
       }
       const session = await requireSession(sessionId);
       const durable = toDurableHostedSessionRecord(session);
-      const receipts = session.version === 2 ? (session.privateApprovalReceipts ?? []) : [];
+      let approvalSession = session;
+      if (session.version === 2 && session.nativeRecoveryBinding !== undefined) {
+        const binding = session.nativeRecoveryBinding;
+        const [source, operation] = await Promise.all([
+          requireSession(binding.originalAuthoritySessionId),
+          input.store.getPrivateOperation?.(principal, binding.operationId),
+        ]);
+        assertRecoveredBuildContinuationChild(
+          binding.originalAuthoritySessionId,
+          binding.logicalSessionId,
+          source,
+          session,
+          operation ?? null,
+        );
+        await (input.assertNativeRecoveryOwner ?? assertHostedBuildDecisionOwner)(
+          toDurableHostedSessionRecord(source),
+        );
+        approvalSession = source;
+      }
+      await (input.assertSendDeliveryOwner ?? assertHostedBuildDecisionOwner)(
+        toDurableHostedSessionRecord(approvalSession),
+      );
+      const approvalSessionId = approvalSession.sessionId;
+      const receipts =
+        approvalSession.version === 2 ? (approvalSession.privateApprovalReceipts ?? []) : [];
       const matched = responses.map(({ requestId, response }) => {
         const matches = receipts.filter((receipt) => receipt.requestId === requestId);
         if (matches.length !== 1) {
@@ -3757,7 +3781,7 @@ export function createHostedEveSessionService(input: {
         }
         const receipt = matches[0];
         return (
-          receipt?.toolInput.plan.selection.sessionId === sessionId &&
+          receipt?.toolInput.plan.selection.sessionId === approvalSessionId &&
           receipt.responderPrincipalId === principal.ownerUserId &&
           receipt.outcome === (response.kind === "approve" ? "approved" : "cancelled")
         );
@@ -3775,10 +3799,25 @@ export function createHostedEveSessionService(input: {
       if (
         latest.adapterSessionId !== durable.adapterSessionId ||
         latest.adapterGeneration !== durable.adapterGeneration ||
+        canonical(latest.nativeRecoveryBinding) !== canonical(durable.nativeRecoveryBinding) ||
+        current.error !== undefined ||
         (current.status !== "working" && current.status !== "completed")
       ) {
         return undefined;
       }
+      const latestApprovalSession = await requireSession(approvalSessionId);
+      if (
+        latestApprovalSession.version !== approvalSession.version ||
+        (latestApprovalSession.version === 2 &&
+          approvalSession.version === 2 &&
+          canonical(latestApprovalSession.privateApprovalReceipts) !==
+            canonical(approvalSession.privateApprovalReceipts))
+      ) {
+        return undefined;
+      }
+      await (input.assertSendDeliveryOwner ?? assertHostedBuildDecisionOwner)(
+        toDurableHostedSessionRecord(latestApprovalSession),
+      );
       return current;
     },
     async send({ observationCursor, ...request }) {
