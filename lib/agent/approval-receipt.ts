@@ -461,7 +461,10 @@ const operatorApprovalDescription = (
   toolName: string,
 ): string | undefined => {
   const plan = validatedHostedOperatorApprovalPlan(record, toolName);
-  if (plan === undefined) return;
+  if (plan === undefined) {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Invalid plans have no public approval description.
+    return undefined;
+  }
   if (plan.action === "prepare") return "*This approval may incur provider costs.*";
   const effectSummaries = operatorEffectSummaries(plan);
   const signupApproval = signupApprovalDescription(plan);
