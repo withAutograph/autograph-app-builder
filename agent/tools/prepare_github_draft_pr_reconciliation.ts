@@ -1,7 +1,10 @@
 import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { setBuilderSandboxNetworkPolicy } from "../../lib/sandbox/builder-sandbox";
 import { defineTool } from "eve/tools";
-import { preparePublishedDraftReconciliation } from "@/lib/agent/prepare-published-draft-repair";
+import {
+  preparePublishedDraftReconciliation,
+  draftInspectionRecoveryForSession,
+} from "@/lib/agent/prepare-published-draft-repair";
 import {
   draftPreparationPrerequisiteDiagnostic,
   draftPrerequisiteMessage,
@@ -263,6 +266,14 @@ export default defineTool({
       const lineage = reconciliationLineageRequest(state, original);
       const source = await runtime.inspectExistingDraftReconciliationSource({
         ...lineage,
+        recovery: draftInspectionRecoveryForSession({
+          ctx,
+          appId: state.appSpec.appId,
+          appSpecDigest: state.appSpec.digest,
+          root: state.applyReceipt.applyRoot,
+          pullRequestNumber: input.pullRequestNumber,
+          priorPublishedProposalDigest: lineage.priorPublishedProposalDigest,
+        }),
         readPublishedSource: async (draft) =>
           await readPublishedOperatorSourceForSession({
             appId: state.appSpec.appId,

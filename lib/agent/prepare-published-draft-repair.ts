@@ -3,6 +3,7 @@ import type { AppBuilderWorkflowState } from "./workflow-state";
 import { appBuilderWorkflowState } from "./workflow-state";
 import { getSourceBoundSandbox } from "./source-bound-sandbox";
 import { githubPublicationRuntimeForSession } from "./deployment-github-publication-runtime";
+import type { DraftInspectionRecoveryInput } from "./github-publication-runtime";
 import { repositoryAccessRuntimeForSession } from "./deployment-repository-access-runtime";
 import {
   repositoryAccessReceiptSchema,
@@ -49,6 +50,46 @@ interface PreparationInput {
   pullRequestNumber: number;
 }
 
+/** Rebuild request-local recovery authority from owned workflow metadata, never public arguments. */
+export const draftInspectionRecoveryForSession = (input: {
+  ctx: ToolContext;
+  appId: string;
+  appSpecDigest: string;
+  root: string;
+  pullRequestNumber: number;
+  priorPublishedProposalDigest?: string;
+}): DraftInspectionRecoveryInput => {
+  const candidate = draftReconciliationState.get();
+  const sameApp =
+    candidate !== null &&
+    candidate.appId === input.appId &&
+    candidate.pullRequestNumber === input.pullRequestNumber;
+  // Sealed candidates and completions precede approval. Only this marker was retained
+  // after provider-verified publication; an unverified current proposal cannot prove itself.
+  const published = sameApp ? candidate.publishedReconciliation : undefined;
+  return {
+    priorPublishedProposalDigest: input.priorPublishedProposalDigest,
+    reconciliations: published === undefined ? [] : [published],
+    readPublishedSource: async (draft) =>
+      await readPublishedOperatorSourceForSession({
+        appId: input.appId,
+        appSpecDigest: input.appSpecDigest,
+        root: input.root,
+        callId: input.ctx.callId,
+        sessionAuth: input.ctx.session.auth,
+        adapterSessionId: input.ctx.session.id,
+        callbackExecution: hostedOperatorCallbackExecution(input.ctx.session),
+        signal: input.ctx.abortSignal,
+        lookup: {
+          repositoryId: draft.repositoryId,
+          branch: draft.headBranch,
+          gitSha: draft.headSha,
+          gitTree: draft.headTree,
+        },
+      }),
+  };
+};
+
 const acquireOwnedPublishedDraft = async (input: PreparationInput) => {
   const { state, ctx } = input;
   const proposalDigest =
@@ -74,6 +115,14 @@ const acquireOwnedPublishedDraft = async (input: PreparationInput) => {
     appId: state.appSpec.appId,
     expectedInstallationId: access.scope.installationId,
     resolvedByCallId: ctx.callId,
+    recovery: draftInspectionRecoveryForSession({
+      ctx,
+      appId: state.appSpec.appId,
+      appSpecDigest: state.appSpec.digest,
+      root: state.applyReceipt.applyRoot,
+      pullRequestNumber: input.pullRequestNumber,
+      priorPublishedProposalDigest: proposalDigest,
+    }),
     readPublishedSource: async (lookup) =>
       await readPublishedOperatorSourceForSession({
         appId: state.appSpec.appId,
@@ -212,7 +261,6 @@ const samePublishedOrigin = (
       previous.appId === repair.appId,
       previous.repositoryId === repair.draft.repositoryId,
       previous.pullRequestNumber === repair.draft.number,
-      previous.headSha === repair.draft.headSha,
       previous.originalReviewDigest === reviewDigest,
     ].every(Boolean)
   );
@@ -267,6 +315,14 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
     name: owned.draft.name,
     pullRequestNumber: owned.draft.number,
     priorPublishedProposalDigest: owned.proposal.digest,
+    recovery: draftInspectionRecoveryForSession({
+      ctx,
+      appId: state.appSpec.appId,
+      appSpecDigest: state.appSpec.digest,
+      root: state.applyReceipt.applyRoot,
+      pullRequestNumber: input.pullRequestNumber,
+      priorPublishedProposalDigest: owned.proposal.digest,
+    }),
     ...(sameOrigin && previous.proposal !== undefined
       ? { previousReconciliation: previous.proposal }
       : {}),
@@ -339,7 +395,10 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
         ...(unpublished === undefined ? {} : { unpublished }),
         ...(previous === null
           ? {}
-          : { previousCandidate: previous, replayPreviousCandidate: sameOrigin }),
+          : {
+              previousCandidate: previous,
+              replayPreviousCandidate: sameOrigin && previous.headSha === repair.draft.headSha,
+            }),
       });
     },
   });

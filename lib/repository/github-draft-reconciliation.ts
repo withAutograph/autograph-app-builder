@@ -217,6 +217,25 @@ export interface ExistingDraftReconciliationProposal {
   digest: string;
 }
 
+/** Server-created authority for reading an owned branch ahead of GitHub's PR snapshot. */
+export interface OwnedDraftInspectionRecovery {
+  /** Server-retained provider-verified publications, not proposals awaiting approval or readback. */
+  reconciliations: readonly ExistingDraftReconciliationProposal[];
+  verifyOwnedHead: (
+    draft: ExistingDraftObservation,
+    appliedReconciliation?: ExistingDraftReconciliationProposal,
+  ) => Promise<boolean>;
+}
+
+export interface ExistingDraftInspectionRequest {
+  repositoryId: string;
+  owner: string;
+  name: string;
+  number: number;
+  reconciliation?: ExistingDraftReconciliationProposal;
+  recovery?: OwnedDraftInspectionRecovery;
+}
+
 export interface ReconciliationContent {
   version: 1;
   kind: "draft-reconciliation";
@@ -251,13 +270,9 @@ export const assertReconciliationContent = (
 
 export interface ExistingDraftReconciliationAdapter {
   inspectInstallation: () => Promise<GitHubInstallationIdentity>;
-  inspectExistingDraft: (input: {
-    repositoryId: string;
-    owner: string;
-    name: string;
-    number: number;
-    reconciliation?: ExistingDraftReconciliationProposal;
-  }) => Promise<ExistingDraftObservation>;
+  inspectExistingDraft: (
+    input: ExistingDraftInspectionRequest,
+  ) => Promise<ExistingDraftObservation>;
   inspectRepository: (input: {
     operation: typeof draftPublicationOperation;
     repositoryId: string;
@@ -266,10 +281,12 @@ export interface ExistingDraftReconciliationAdapter {
   reconcileExistingDraft: (
     proposal: ExistingDraftReconciliationProposal,
     content: ReconciliationContent,
+    recovery?: OwnedDraftInspectionRecovery,
   ) => Promise<GitHubMutationAcknowledgement>;
   inspectAppliedDraftReconciliation: (
     proposal: ExistingDraftReconciliationProposal,
     observed: ExistingDraftObservation,
+    recovery?: OwnedDraftInspectionRecovery,
   ) => Promise<boolean>;
 }
 
@@ -299,6 +316,7 @@ export const sealExistingDraftReconciliation = async (input: {
   selectedSourceRef: string;
   priorPublicationDigest: string;
   originMarker: string;
+  recovery?: OwnedDraftInspectionRecovery;
 }): Promise<ExistingDraftReconciliationProposal> => {
   assertReview(input.review);
   if (
@@ -315,6 +333,7 @@ export const sealExistingDraftReconciliation = async (input: {
     number: input.pullRequestNumber,
     owner: input.repository.owner,
     repositoryId: input.repository.repositoryId,
+    ...(input.recovery === undefined ? {} : { recovery: input.recovery }),
   });
   if (input.selectedSourceRef !== `refs/heads/${observed.headBranch}`) {
     throw new Error(
@@ -433,6 +452,7 @@ const inspectDraftAfterWrite = async (input: {
   adapter: ExistingDraftReconciliationAdapter;
   proposal: ExistingDraftReconciliationProposal;
   writeError?: unknown;
+  recovery?: OwnedDraftInspectionRecovery;
 }): Promise<ExistingDraftObservation> => {
   try {
     return await input.adapter.inspectExistingDraft({
@@ -441,6 +461,7 @@ const inspectDraftAfterWrite = async (input: {
       owner: input.proposal.owner,
       repositoryId: input.proposal.repositoryId,
       reconciliation: input.proposal,
+      ...(input.recovery === undefined ? {} : { recovery: input.recovery }),
     });
   } catch (readbackError) {
     const prefix =
@@ -464,6 +485,7 @@ export const inspectAppliedExistingDraftReconciliation = async (input: {
   >;
   proposal: ExistingDraftReconciliationProposal;
   review: ReconciliationReviewReceipt;
+  recovery?: OwnedDraftInspectionRecovery;
 }) => {
   const { proposal, review } = input;
   assertReview(review);
@@ -499,6 +521,7 @@ export const inspectAppliedExistingDraftReconciliation = async (input: {
     owner: proposal.owner,
     repositoryId: proposal.repositoryId,
     reconciliation: proposal,
+    ...(input.recovery === undefined ? {} : { recovery: input.recovery }),
   });
   if (!sameDraft(proposal, current)) {
     throw new Error(
@@ -509,7 +532,7 @@ export const inspectAppliedExistingDraftReconciliation = async (input: {
     current.headSha !== proposal.expectedHeadSha ||
     current.headTree !== proposal.expectedHeadTree
   ) {
-    if (await input.adapter.inspectAppliedDraftReconciliation(proposal, current)) {
+    if (await input.adapter.inspectAppliedDraftReconciliation(proposal, current, input.recovery)) {
       return { applied: true as const, observation: current };
     }
     throw new Error(
@@ -525,6 +548,7 @@ export const reconcileExistingDraft = async (input: {
   proposal: ExistingDraftReconciliationProposal;
   review: ReconciliationReviewReceipt;
   contentSource: GitHubDraftPullRequestContentSource;
+  recovery?: OwnedDraftInspectionRecovery;
 }): Promise<ExistingDraftObservation> => {
   const { proposal, review } = input;
   const inspected = await inspectAppliedExistingDraftReconciliation(input);
@@ -544,16 +568,17 @@ export const reconcileExistingDraft = async (input: {
   const content = await readContent(review, input.contentSource);
   let result: GitHubMutationAcknowledgement;
   try {
-    result = await input.adapter.reconcileExistingDraft(proposal, content);
+    result = await input.adapter.reconcileExistingDraft(proposal, content, input.recovery);
   } catch (error) {
     const latest = await inspectDraftAfterWrite({
       adapter: input.adapter,
       proposal,
       writeError: error,
+      ...(input.recovery === undefined ? {} : { recovery: input.recovery }),
     });
     if (
       sameDraft(proposal, latest) &&
-      (await input.adapter.inspectAppliedDraftReconciliation(proposal, latest))
+      (await input.adapter.inspectAppliedDraftReconciliation(proposal, latest, input.recovery))
     ) {
       return latest;
     }
@@ -565,10 +590,14 @@ export const reconcileExistingDraft = async (input: {
       `GitHub rejected the draft reconciliation (${result.code}${location}). Refresh both branch heads and the reviewed merge before retrying.`,
     );
   }
-  const updated = await inspectDraftAfterWrite({ adapter: input.adapter, proposal });
+  const updated = await inspectDraftAfterWrite({
+    adapter: input.adapter,
+    proposal,
+    ...(input.recovery === undefined ? {} : { recovery: input.recovery }),
+  });
   if (
     !sameDraft(proposal, updated) ||
-    !(await input.adapter.inspectAppliedDraftReconciliation(proposal, updated))
+    !(await input.adapter.inspectAppliedDraftReconciliation(proposal, updated, input.recovery))
   ) {
     throw new Error(
       "GitHub accepted the merge commit, but its branch head could not be verified. Inspect the PR before retrying.",
