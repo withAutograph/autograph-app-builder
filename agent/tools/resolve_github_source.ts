@@ -1,4 +1,5 @@
 import { defineTool } from "eve/tools";
+import { ownedPublishedDraftRecovery } from "@/lib/agent/draft-reconciliation-prerequisites";
 import { getBuilderSandboxId } from "@/lib/sandbox/builder-sandbox";
 import {
   recoverSavedWorkflowGitHubBinding,
@@ -147,8 +148,10 @@ const assertAvailableSourceSelection = (input: {
   const workflowUsesStarter =
     input.workflow.phase !== "empty" && input.workflow.githubSource === undefined;
   if (sourceUsesStarter || workflowUsesStarter) {
+    const ownedRecovery = ownedPublishedDraftRecovery(input.workflow);
     throw new Error(
-      "This app build already uses the starter source. Start a new app build to select an existing GitHub repository.",
+      ownedRecovery?.nextAction ??
+        "This app build already uses the starter source. Start a new app build to select an existing GitHub repository.",
     );
   }
   if (

@@ -3,7 +3,26 @@ interface ReconciliationWorkflowPrerequisites {
   githubSource?: { digest: string };
   reviewReceipt?: { digest: string };
   sourceReceipt?: { sourceKind: string };
+  publishedGitHubDraftProposalDigest?: string;
 }
+
+/** Routing guidance only; normal reconciliation verifies the owned publication. */
+export const ownedPublishedDraftRecovery = (state: ReconciliationWorkflowPrerequisites) => {
+  if (
+    state.sourceReceipt?.sourceKind !== "fresh-template" ||
+    state.githubSource !== undefined ||
+    state.publishedGitHubDraftProposalDigest === undefined
+  ) {
+    return null;
+  }
+  return {
+    tool: "prepare_github_draft_pr_reconciliation" as const,
+    recovery: "reopen-current-owned-draft" as const,
+    reviewRequired: state.phase !== "reviewed",
+    nextAction:
+      "Preserve this app, its starter source and private work. Complete the normal current app review if needed, then call prepare_github_draft_pr_reconciliation for this same owned draft PR with recovery: reopen-current-owned-draft. Builder verifies the owned publication and opens a fresh private candidate from its current draft and base without replaying the ambiguous old review. Read preserved work as needed, deliberately edit the current candidate, validate it and review both diffs before sealing a new proposal and requesting exact publication approval. Do not replace the source or start another app build.",
+  };
+};
 
 interface ReconciliationCandidatePrerequisites {
   githubSourceDigest: string;
@@ -32,6 +51,7 @@ const prerequisiteReasons = [
   "workflow_not_reviewed",
   "selected_source_missing",
   "source_not_existing_repository",
+  "owned_published_draft_recovery",
   "source_binding_changed",
   "app_review_changed",
   "seal_review_input_changed",
@@ -62,11 +82,20 @@ const diagnostic = (
 export const draftPreparationPrerequisiteDiagnostic = (
   state: ReconciliationWorkflowPrerequisites,
 ): PrerequisiteDiagnostic | null => {
+  const ownedRecovery = ownedPublishedDraftRecovery(state);
   if (state.phase !== "reviewed") {
+    const recoverySuffix = ownedRecovery === null ? "" : ` ${ownedRecovery.nextAction}`;
     return diagnostic(
       "workflow_not_reviewed",
       "review-app",
-      "The current app workflow has not retained a completed review. Inspect its current status and continue the normal app review workflow before preparing reconciliation. Do not infer a validation failure or rerun completed checks solely from this missing review.",
+      `The current app workflow has not retained a completed review. Inspect its current status and continue the normal app review workflow before preparing reconciliation. Do not infer a validation failure or rerun completed checks solely from this missing review.${recoverySuffix}`,
+    );
+  }
+  if (ownedRecovery !== null) {
+    return diagnostic(
+      "owned_published_draft_recovery",
+      prepareReconciliation,
+      ownedRecovery.nextAction,
     );
   }
   if (state.githubSource === undefined) {

@@ -856,6 +856,7 @@ export default defineTool({
           state.applyReceipt.applyRoot,
           ...state.validationReceipt.commands.map((command) => command.validationRoot),
           candidate.root,
+          ...(candidate.preservedWorkspaces ?? []).map((workspace) => workspace.root),
           ...draftReconciliationCompletions.get().map((completion) => completion.root),
         ],
         signal: ctx.abortSignal,
