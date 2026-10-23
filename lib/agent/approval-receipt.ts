@@ -458,7 +458,7 @@ const validatedHostedOperatorApprovalPlan = (
 
 const operatorApprovalDescription = (record: Record<string, unknown>, toolName: string) => {
   const plan = validatedHostedOperatorApprovalPlan(record, toolName);
-  if (plan === undefined) return undefined;
+  if (plan === undefined) return;
   if (plan.action === "prepare") return "*This approval may incur provider costs.*";
   const effectSummaries = operatorEffectSummaries(plan);
   const signupApproval = signupApprovalDescription(plan);
