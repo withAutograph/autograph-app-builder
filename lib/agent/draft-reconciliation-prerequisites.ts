@@ -13,7 +13,7 @@ export const ownedPublishedDraftRecovery = (state: ReconciliationWorkflowPrerequ
     state.githubSource !== undefined ||
     state.publishedGitHubDraftProposalDigest === undefined
   ) {
-    return undefined;
+    return;
   }
   return {
     tool: "prepare_github_draft_pr_reconciliation" as const,
@@ -87,8 +87,7 @@ export const draftPreparationPrerequisiteDiagnostic = (
     return diagnostic(
       "workflow_not_reviewed",
       "review-app",
-      "The current app workflow has not retained a completed review. Inspect its current status and continue the normal app review workflow before preparing reconciliation. Do not infer a validation failure or rerun completed checks solely from this missing review." +
-        (ownedRecovery === undefined ? "" : ` ${ownedRecovery.nextAction}`),
+      `The current app workflow has not retained a completed review. Inspect its current status and continue the normal app review workflow before preparing reconciliation. Do not infer a validation failure or rerun completed checks solely from this missing review.${ownedRecovery === undefined ? "" : ` ${ownedRecovery.nextAction}`}`,
     );
   }
   if (ownedRecovery !== undefined) {
