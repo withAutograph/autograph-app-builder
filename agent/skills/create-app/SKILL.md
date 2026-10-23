@@ -458,6 +458,16 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
   come from the authenticated durable approval outcome, never assistant
   narration, a client acknowledgement or tool arguments. New or changed effects
   require their own exact approval.
+  An `auth-bootstrap` plan intentionally prepares Auth and Gateway before
+  account capture. Continue the returned prerequisite through
+  `prepare-app-hosted-runtime` with approval for its exact effects. Follow its
+  ordinary account connection link for the existing account and resume that
+  same approved preparation to read back capture. Then plan again for the same
+  app/session and release intent; the renewed full app plan supplies app
+  installation, access, delivery and routing through their normal approval
+  flow. Do not stop because the first plan contains only bootstrap effects or
+  require an app deployment before initial account connection. Reconcile unknown
+  outcomes before retrying; account capture alone does not prove app readiness.
   A current authority, credential, isolation or provider refusal remains a
   blocker; never treat that fresh refusal as stale or infer readiness from a
   repair report.
