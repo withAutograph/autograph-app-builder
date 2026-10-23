@@ -3738,6 +3738,49 @@ export function createHostedEveSessionService(input: {
       return readSession(request);
     }, // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     respond: respondRequest,
+    async recoverAppliedApprovalResponse({ sessionId, responses }) {
+      requireHostedOperationScope(principal, "respond");
+      if (
+        responses.length === 0 ||
+        new Set(responses.map(({ requestId }) => requestId)).size !== responses.length ||
+        responses.some(({ response }) => response.kind !== "approve" && response.kind !== "deny")
+      ) {
+        return undefined;
+      }
+      const session = await requireSession(sessionId);
+      const durable = toDurableHostedSessionRecord(session);
+      const receipts = session.version === 2 ? (session.privateApprovalReceipts ?? []) : [];
+      const matched = responses.map(({ requestId, response }) => {
+        const matches = receipts.filter((receipt) => receipt.requestId === requestId);
+        if (matches.length !== 1) {
+          return false;
+        }
+        const receipt = matches[0];
+        return (
+          receipt?.toolInput.plan.selection.sessionId === sessionId &&
+          receipt.responderPrincipalId === principal.ownerUserId &&
+          receipt.outcome === (response.kind === "approve" ? "approved" : "cancelled")
+        );
+      });
+      if (!matched.every(Boolean)) {
+        return undefined;
+      }
+      const current = await readSession({
+        continueWork: false,
+        cursor: 0,
+        limit: 100,
+        sessionId,
+      });
+      const latest = toDurableHostedSessionRecord(await requireSession(sessionId));
+      if (
+        latest.adapterSessionId !== durable.adapterSessionId ||
+        latest.adapterGeneration !== durable.adapterGeneration ||
+        (current.status !== "working" && current.status !== "completed")
+      ) {
+        return undefined;
+      }
+      return current;
+    },
     async send({ observationCursor, ...request }) {
       requireHostedOperationScope(principal, "send");
       let session = await requireSession(request.sessionId);

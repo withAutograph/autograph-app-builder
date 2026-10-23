@@ -5,6 +5,7 @@ import { authorizeHostedPrincipal, HostedAuthorizationError } from "../eve/hoste
 import type { HostedPrincipal } from "../eve/hosted-auth";
 import { createHostedEveSessionService } from "../eve/hosted-service";
 import type { HostedEveTransport } from "../eve/hosted-service";
+import { HostedRejectedOperationError } from "../eve/hosted-errors";
 import { createEveSessionService } from "../eve/service";
 import type { EveSessionService } from "../eve/service";
 import type { HostedEveStore } from "../eve/hosted-store";
@@ -387,6 +388,32 @@ export function createAutographMcpHandler(
             "Autograph App Builder recorded the answers.",
           );
         } catch (error) {
+          if (
+            error instanceof HostedRejectedOperationError &&
+            error.code === "input_batch_changed" &&
+            input.responses.every(
+              ({ response }) => response.kind === "approve" || response.kind === "deny",
+            ) &&
+            service.recoverAppliedApprovalResponse !== undefined
+          ) {
+            try {
+              const recovered = await service.recoverAppliedApprovalResponse({
+                responses: input.responses as {
+                  requestId: string;
+                  response: { kind: "approve" | "deny" };
+                }[],
+                sessionId: input.sessionId,
+              });
+              if (recovered !== undefined) {
+                return toolResult(
+                  present(recovered),
+                  "The same approval choice was already recorded. The current session state is shown.",
+                );
+              }
+            } catch {
+              // Recovery is read-only and optional; retain the original rejection on any uncertainty.
+            }
+          }
           return safeToolError(error, input.sessionId, "autograph_respond");
         }
       },

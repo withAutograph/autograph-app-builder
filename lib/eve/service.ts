@@ -110,6 +110,14 @@ export interface EveSessionService {
     }[];
     clientRequestId: string;
   }) => Promise<EveSessionResult>;
+  /** Read-only recovery for an exact already-settled hosted approval response. */
+  recoverAppliedApprovalResponse?: (input: {
+    sessionId: string;
+    responses: {
+      requestId: string;
+      response: { kind: "approve" | "deny" };
+    }[];
+  }) => Promise<EveSessionResult | undefined>;
   cancel: (input: { sessionId: string; turnId?: string }) => Promise<EveSessionResult>;
 }
 
