@@ -436,7 +436,10 @@ const operatorRetentionSummary = (plan: HostedOperatorPlan) => {
   return retentionSummary;
 };
 
-const operatorApprovalDescription = (record: Record<string, unknown>, toolName: string) => {
+const validatedHostedOperatorApprovalPlan = (
+  record: Record<string, unknown>,
+  toolName: string,
+): HostedOperatorPlan | undefined => {
   const parsed = hostedOperatorPlanSchema.safeParse(record.plan);
   if (
     !parsed.success ||
@@ -450,7 +453,12 @@ const operatorApprovalDescription = (record: Record<string, unknown>, toolName: 
     // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional descriptions explicitly return no public approval.
     return undefined;
   }
-  const plan = parsed.data;
+  return parsed.data;
+};
+
+const operatorApprovalDescription = (record: Record<string, unknown>, toolName: string) => {
+  const plan = validatedHostedOperatorApprovalPlan(record, toolName);
+  if (plan === undefined) return undefined;
   if (plan.action === "prepare") return "*This approval may incur provider costs.*";
   const effectSummaries = operatorEffectSummaries(plan);
   const signupApproval = signupApprovalDescription(plan);

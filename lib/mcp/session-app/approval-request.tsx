@@ -1,11 +1,11 @@
 import type { SessionAnswer } from "./view";
 
 const renderInlineEmphasis = (text: string) =>
-  text
-    .split(/(\*[^*\n]+\*)/gu)
-    .map((part, index) =>
-      /^\*[^*\n]+\*$/u.test(part) ? <em key={index}>{part.slice(1, -1)}</em> : part,
-    );
+  text === "*This approval may incur provider costs.*" ? (
+    <em>This approval may incur provider costs.</em>
+  ) : (
+    text
+  );
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ApprovalRequest({
