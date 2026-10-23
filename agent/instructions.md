@@ -210,7 +210,17 @@ do not echo provider IDs, role plumbing, release hashes or approval digests.
 Pass the unchanged plan, digest and operation
 reference to `prepare-app-hosted-runtime` for separate effect approval. Read
 pending status with `get-app-hosted-runtime`; never report completion before
-operator readback. Use `cleanup-app-hosted-runtime` only with a separately
+operator readback. An `auth-bootstrap` plan intentionally prepares Auth and
+Gateway before account capture. Continue that prerequisite through the returned
+`prepare-app-hosted-runtime` operation and approval for its exact effects. Follow
+its ordinary account connection link for the existing account, resume the same
+approved preparation to read back capture, then plan again for the same
+app/session and release intent. The renewed full app plan supplies app
+installation, access, delivery and routing through their normal approval flow.
+Do not stop because the first plan contains only bootstrap effects or require
+an app deployment before initial account connection. Preserve unknown outcomes
+for reconciliation; account capture alone does not prove app readiness.
+Use `cleanup-app-hosted-runtime` only with a separately
 planned and approved cleanup scope. Static apps require no database preparation.
 The protected operator must be separately configured with explicit owner Neon
 authority and a synthetic-only nonproduction context. Missing operator,
