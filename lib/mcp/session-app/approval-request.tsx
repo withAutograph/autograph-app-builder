@@ -1,7 +1,7 @@
 import type { SessionAnswer } from "./view";
 
-const renderInlineEmphasis = (text: string) =>
-  text === "*This approval may incur provider costs.*" ? (
+const renderPreviewApprovalDescription = (text: string) =>
+  text === "<em>This approval may incur provider costs.</em>" ? (
     <em>This approval may incur provider costs.</em>
   ) : (
     text
@@ -27,7 +27,7 @@ export function ApprovalRequest({
   const publishDraft = title === "Publish the reviewed changes?";
   const previewApproval = title === "Do you approve creating a preview?";
   const renderApprovalDescription = (text: string) =>
-    previewApproval ? renderInlineEmphasis(text) : text;
+    previewApproval ? renderPreviewApprovalDescription(text) : text;
   const supportingCopy =
     description ??
     (readyToBuild
