@@ -26,6 +26,8 @@ export function ApprovalRequest({
   const readyToBuild = title === "Build this app?";
   const publishDraft = title === "Publish the reviewed changes?";
   const previewApproval = title === "Do you approve creating a preview environment?";
+  const renderApprovalDescription = (text: string) =>
+    previewApproval ? renderInlineEmphasis(text) : text;
   const supportingCopy =
     description ??
     (readyToBuild
@@ -64,11 +66,11 @@ export function ApprovalRequest({
             const content = bullets ? (
               <ul>
                 {body.map((line) => (
-                  <li key={line}>{renderInlineEmphasis(line.slice(2))}</li>
+                  <li key={line}>{renderApprovalDescription(line.slice(2))}</li>
                 ))}
               </ul>
             ) : (
-              <p>{renderInlineEmphasis(body.join(" "))}</p>
+              <p>{renderApprovalDescription(body.join(" "))}</p>
             );
             const referenceSection = heading?.includes("(provider ") ?? false;
             return referenceSection ? (
