@@ -807,12 +807,8 @@ const selectCandidateRoot = async (
   let preservedCandidateRoot: string | undefined;
   let replayedAppChanges = false;
   const changedLineage = previous !== undefined && !replayEligible;
-  if (
-    input.forceFreshCandidate === true ||
-    advancedBase ||
-    changedLineage ||
-    (!created && (await outsideCandidateChanges(input, root)))
-  ) {
+  const needsFreshRoot = input.forceFreshCandidate === true || advancedBase || changedLineage;
+  if (needsFreshRoot || (!created && (await outsideCandidateChanges(input, root)))) {
     preservedCandidateRoot = previous?.root ?? (created ? undefined : root);
     root = `${canonicalRoot}-${randomUUID()}`;
     created = true;

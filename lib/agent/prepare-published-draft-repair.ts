@@ -29,6 +29,7 @@ import {
   prepareDraftReconciliation,
   preparePublishedDraftRepairCandidate,
 } from "../repository/sandbox-draft-reconciliation";
+import type { DraftReconciliationInput } from "../repository/sandbox-draft-reconciliation";
 
 type Reviewed = Extract<AppBuilderWorkflowState, { phase: "reviewed" }>;
 const assertCurrentOrigin = (expected: Reviewed): void => {
@@ -310,9 +311,19 @@ const preservedDraftWorkspaces = (
   state: Reviewed,
   previous: DraftReconciliationCandidate | undefined,
   currentRoot: string,
+  preservedCandidateRoot: string | undefined,
 ): readonly PreservedDraftWorkspace[] => {
   const workspaces: PreservedDraftWorkspace[] = [
     ...(previous?.preservedWorkspaces ?? []),
+    ...(preservedCandidateRoot === undefined || preservedCandidateRoot === currentRoot
+      ? []
+      : [
+          {
+            kind: "draft-candidate" as const,
+            root: preservedCandidateRoot,
+            reviewDigest: state.reviewReceipt.digest,
+          },
+        ]),
     {
       kind: "app-review",
       root: state.applyReceipt.applyRoot,
@@ -341,15 +352,40 @@ const preservedDraftWorkspaces = (
   ];
 };
 
+const reconciliationPreparationLineage = (
+  input: PreparationInput,
+  previous: DraftReconciliationCandidate | null,
+  repair: ReturnType<typeof createPublishedDraftRepairSource>,
+) => {
+  const sameOrigin =
+    previous !== null && samePublishedOrigin(previous, repair, input.state.reviewReceipt.digest);
+  const ownedPrevious = sameOrigin ? previous : undefined;
+  const recoveryMode = input.recovery ?? ownedPrevious?.recoveryMode;
+  const reopenCurrent = recoveryMode === "reopen-current-owned-draft";
+  const previousCandidate =
+    previous !== null && (!reopenCurrent || sameOrigin) ? previous : undefined;
+  const previousInput: Pick<
+    DraftReconciliationInput,
+    "previousCandidate" | "replayPreviousCandidate"
+  > = previousCandidate === undefined
+    ? {}
+    : {
+        previousCandidate,
+        replayPreviousCandidate:
+          input.recovery === undefined &&
+          sameOrigin &&
+          previousCandidate.headSha === repair.draft.headSha,
+      };
+  return { ownedPrevious, recoveryMode, reopenCurrent, previousInput };
+};
+
 /** Reconcile the owned draft with its live base without changing the accepted starter source. */
 export const preparePublishedDraftReconciliation = async (input: PreparationInput) => {
   const { state, ctx } = input;
   const { access, runtime, owned, repair } = await acquireOwnedPublishedDraft(input);
   const previous = draftReconciliationState.get();
-  const sameOrigin =
-    previous !== null && samePublishedOrigin(previous, repair, state.reviewReceipt.digest);
-  const recoveryMode = input.recovery ?? (sameOrigin ? previous.recoveryMode : undefined);
-  const reopenCurrent = recoveryMode === "reopen-current-owned-draft";
+  const { ownedPrevious, recoveryMode, reopenCurrent, previousInput } =
+    reconciliationPreparationLineage(input, previous, repair);
   const source = await runtime.inspectExistingDraftReconciliationSource({
     repositoryId: owned.draft.repositoryId,
     owner: owned.draft.owner,
@@ -364,12 +400,12 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
       pullRequestNumber: input.pullRequestNumber,
       priorPublishedProposalDigest: owned.proposal.digest,
     }),
-    ...(sameOrigin && previous.proposal !== undefined
-      ? { previousReconciliation: previous.proposal }
-      : {}),
-    ...(sameOrigin && previous.publishedReconciliation !== undefined
-      ? { publishedReconciliation: previous.publishedReconciliation }
-      : {}),
+    ...(ownedPrevious?.proposal === undefined
+      ? {}
+      : { previousReconciliation: ownedPrevious.proposal }),
+    ...(ownedPrevious?.publishedReconciliation === undefined
+      ? {}
+      : { publishedReconciliation: ownedPrevious.publishedReconciliation }),
     readPublishedSource: async (draft) =>
       await readPublishedOperatorSourceForSession({
         appId: state.appSpec.appId,
@@ -435,15 +471,7 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
         ownedPublication: { proposal: owned.proposal, publication: owned.publication },
         ...(input.recovery === undefined ? {} : { forceFreshCandidate: true }),
         ...(unpublished === undefined ? {} : { unpublished }),
-        ...(previous === null || (reopenCurrent && !sameOrigin)
-          ? {}
-          : {
-              previousCandidate: previous,
-              replayPreviousCandidate:
-                input.recovery === undefined &&
-                sameOrigin &&
-                previous.headSha === repair.draft.headSha,
-            }),
+        ...previousInput,
       });
     },
   });
@@ -456,9 +484,9 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
   } = prepared;
   void _created;
   const publishedReconciliation =
-    source.publishedReconciliation ?? (sameOrigin ? previous.publishedReconciliation : undefined);
+    source.publishedReconciliation ?? ownedPrevious?.publishedReconciliation;
   const preservedWorkspaces = reopenCurrent
-    ? preservedDraftWorkspaces(state, sameOrigin ? previous : undefined, prepared.root)
+    ? preservedDraftWorkspaces(state, ownedPrevious, prepared.root, preservedCandidateRoot)
     : undefined;
   const candidate = {
     ...preparedCandidate,
