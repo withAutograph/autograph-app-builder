@@ -16,7 +16,10 @@ import {
   publishedDraftRepairCompletions,
   updateExactDraftReconciliation,
 } from "./draft-reconciliation-state";
-import type { DraftReconciliationCandidate } from "./draft-reconciliation-state";
+import type {
+  DraftReconciliationCandidate,
+  PreservedDraftWorkspace,
+} from "./draft-reconciliation-state";
 import { publicationContentSourceForReviewedWorkflow } from "./github-publication-content-source";
 import { readPublishedOperatorSourceForSession } from "./compiled-operator-artifacts";
 import { hostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
@@ -48,6 +51,7 @@ interface PreparationInput {
   state: Reviewed;
   ctx: ToolContext;
   pullRequestNumber: number;
+  recovery?: "reopen-current-owned-draft";
 }
 
 /** Rebuild request-local recovery authority from owned workflow metadata, never public arguments. */
@@ -302,6 +306,41 @@ const reviewedOriginAlreadyPublished = (
   );
 };
 
+const preservedDraftWorkspaces = (
+  state: Reviewed,
+  previous: DraftReconciliationCandidate | undefined,
+  currentRoot: string,
+): readonly PreservedDraftWorkspace[] => {
+  const workspaces: PreservedDraftWorkspace[] = [
+    ...(previous?.preservedWorkspaces ?? []),
+    {
+      kind: "app-review",
+      root: state.applyReceipt.applyRoot,
+      reviewDigest: state.reviewReceipt.digest,
+      paths: state.reviewReceipt.changes.flatMap((change) =>
+        change.path.startsWith(`apps/${state.appSpec.appId}/`) ? [change.path] : [],
+      ),
+    },
+    ...(previous === undefined || previous.root === currentRoot
+      ? []
+      : [
+          {
+            kind: "draft-candidate" as const,
+            root: previous.root,
+            reviewDigest: previous.originalReviewDigest,
+          },
+        ]),
+  ];
+  return [
+    ...new Map(
+      workspaces.map((workspace) => [
+        JSON.stringify([workspace.kind, workspace.root, workspace.reviewDigest]),
+        workspace,
+      ]),
+    ).values(),
+  ];
+};
+
 /** Reconcile the owned draft with its live base without changing the accepted starter source. */
 export const preparePublishedDraftReconciliation = async (input: PreparationInput) => {
   const { state, ctx } = input;
@@ -309,6 +348,8 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
   const previous = draftReconciliationState.get();
   const sameOrigin =
     previous !== null && samePublishedOrigin(previous, repair, state.reviewReceipt.digest);
+  const recoveryMode = input.recovery ?? (sameOrigin ? previous.recoveryMode : undefined);
+  const reopenCurrent = recoveryMode === "reopen-current-owned-draft";
   const source = await runtime.inspectExistingDraftReconciliationSource({
     repositoryId: owned.draft.repositoryId,
     owner: owned.draft.owner,
@@ -360,7 +401,7 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
     change.path.startsWith(`apps/${repair.appId}/`),
   );
   const unpublished =
-    reviewedOriginAlreadyPublished(state, owned, repair) || changes.length === 0
+    reopenCurrent || reviewedOriginAlreadyPublished(state, owned, repair) || changes.length === 0
       ? undefined
       : {
           reviewDigest: state.reviewReceipt.digest,
@@ -392,12 +433,16 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
         headBranch: source.draft.headBranch,
         headSha: source.draft.headSha,
         ownedPublication: { proposal: owned.proposal, publication: owned.publication },
+        ...(input.recovery === undefined ? {} : { forceFreshCandidate: true }),
         ...(unpublished === undefined ? {} : { unpublished }),
-        ...(previous === null
+        ...(previous === null || (reopenCurrent && !sameOrigin)
           ? {}
           : {
               previousCandidate: previous,
-              replayPreviousCandidate: sameOrigin && previous.headSha === repair.draft.headSha,
+              replayPreviousCandidate:
+                input.recovery === undefined &&
+                sameOrigin &&
+                previous.headSha === repair.draft.headSha,
             }),
       });
     },
@@ -412,10 +457,14 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
   void _created;
   const publishedReconciliation =
     source.publishedReconciliation ?? (sameOrigin ? previous.publishedReconciliation : undefined);
+  const preservedWorkspaces = reopenCurrent
+    ? preservedDraftWorkspaces(state, sameOrigin ? previous : undefined, prepared.root)
+    : undefined;
   const candidate = {
     ...preparedCandidate,
     kind: "reconciliation" as const,
     publishedOrigin: repair,
+    ...(recoveryMode === undefined ? {} : { recoveryMode, preservedWorkspaces }),
     ...(publishedReconciliation === undefined ? {} : { publishedReconciliation }),
     version: 1 as const,
     repositoryId: owned.draft.repositoryId,
@@ -435,11 +484,13 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
     headSha: candidate.headSha,
     root: candidate.root,
     conflicts: candidate.conflicts,
+    ...(reopenCurrent ? { recoveryMode, originalReviewReplayed: false, preservedWorkspaces } : {}),
     ...(preservedCandidateRoot === undefined ? {} : { preservedCandidateRoot, replayedAppChanges }),
     ...(retriedGitFetch
       ? { gitTransportRecovery: "Verified installation Git fetch recovered." }
       : {}),
-    nextAction:
-      "Resolve any app conflicts, validate and review this native base/head merge, then seal_github_draft_pr_reconciliation and request its exact update approval. The original starter, same draft branch, and approved root registration remain intact.",
+    nextAction: reopenCurrent
+      ? "The original app review was not replayed. Compare its preserved app changes through change_set_status and any retained draft candidates with this current owned draft, then apply only intended app edits. Resolve app conflicts, validate and review the candidate, then seal_github_draft_pr_reconciliation and request its exact update approval. The original source and private workspaces remain retained; their availability is established when read."
+      : "Resolve any app conflicts, validate and review this native base/head merge, then seal_github_draft_pr_reconciliation and request its exact update approval. The original starter, same draft branch, and approved root registration remain intact.",
   };
 };

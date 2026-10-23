@@ -73,6 +73,14 @@ export const assertRetainedDraftReconciliationCompletion = (
   }
 };
 
+/** Owned private work retained for comparison; it grants no replay or publication authority. */
+export interface PreservedDraftWorkspace {
+  kind: "app-review" | "draft-candidate";
+  root: string;
+  reviewDigest: string;
+  paths?: readonly string[];
+}
+
 interface DraftCandidateFields {
   version: 1;
   appId: string;
@@ -87,6 +95,8 @@ interface DraftCandidateFields {
   baseSha: string;
   baseTree: string;
   conflicts: readonly string[];
+  recoveryMode?: "reopen-current-owned-draft";
+  preservedWorkspaces?: readonly PreservedDraftWorkspace[];
   validation?: {
     resolvedTree: string;
     commands: readonly { command: string; exitCode: number }[];

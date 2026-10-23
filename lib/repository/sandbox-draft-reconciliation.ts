@@ -90,6 +90,8 @@ export interface DraftReconciliationInput {
   /** Server-retained private candidate; replay authority is checked by the prepare tool. */
   previousCandidate?: PreparedDraftReconciliation;
   replayPreviousCandidate?: boolean;
+  /** Explicit owned-draft reopening preserves all previous roots and creates a new private candidate. */
+  forceFreshCandidate?: boolean;
   ownedPublication?: Pick<OwnedPublicationReconciliationScope, "proposal" | "publication">;
   unpublished?: {
     reviewDigest: string;
@@ -787,6 +789,7 @@ const selectCandidateRoot = async (
 ) => {
   const previous = input.previousCandidate;
   const replayEligible =
+    input.forceFreshCandidate !== true &&
     previous !== undefined &&
     input.replayPreviousCandidate === true &&
     [
@@ -805,11 +808,12 @@ const selectCandidateRoot = async (
   let replayedAppChanges = false;
   const changedLineage = previous !== undefined && !replayEligible;
   if (
+    input.forceFreshCandidate === true ||
     advancedBase ||
     changedLineage ||
     (!created && (await outsideCandidateChanges(input, root)))
   ) {
-    preservedCandidateRoot = previous?.root ?? root;
+    preservedCandidateRoot = previous?.root ?? (created ? undefined : root);
     root = `${canonicalRoot}-${randomUUID()}`;
     created = true;
     replayedAppChanges = replayEligible && preservedCandidateRoot === previous.root;
