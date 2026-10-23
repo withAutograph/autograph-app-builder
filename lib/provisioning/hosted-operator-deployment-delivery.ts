@@ -429,7 +429,6 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
             name: string;
             project: string;
             projectSettings?: NonNullable<HostedOperatorPlan["delivery"]>["projectSettings"];
-            target?: "staging";
           }
         | { alias: string },
       allowNotFound = false,
@@ -1142,7 +1141,6 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
               meta: reader.expectedMeta,
               name: project.name,
               project: project.id,
-              target: "staging",
               ...((deps.target ?? "app") === "app" &&
               input.plan.delivery?.projectSettings !== undefined
                 ? { projectSettings: input.plan.delivery.projectSettings }
