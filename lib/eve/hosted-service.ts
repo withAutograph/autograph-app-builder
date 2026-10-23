@@ -3738,6 +3738,88 @@ export function createHostedEveSessionService(input: {
       return readSession(request);
     }, // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     respond: respondRequest,
+    async recoverAppliedApprovalResponse({ sessionId, responses }) {
+      requireHostedOperationScope(principal, "respond");
+      if (
+        responses.length === 0 ||
+        new Set(responses.map(({ requestId }) => requestId)).size !== responses.length ||
+        responses.some(({ response }) => response.kind !== "approve" && response.kind !== "deny")
+      ) {
+        return undefined;
+      }
+      const session = await requireSession(sessionId);
+      const durable = toDurableHostedSessionRecord(session);
+      let approvalSession = session;
+      if (session.version === 2 && session.nativeRecoveryBinding !== undefined) {
+        const binding = session.nativeRecoveryBinding;
+        const [source, operation] = await Promise.all([
+          requireSession(binding.originalAuthoritySessionId),
+          input.store.getPrivateOperation?.(principal, binding.operationId),
+        ]);
+        assertRecoveredBuildContinuationChild(
+          binding.originalAuthoritySessionId,
+          binding.logicalSessionId,
+          source,
+          session,
+          operation ?? null,
+        );
+        await (input.assertNativeRecoveryOwner ?? assertHostedBuildDecisionOwner)(
+          toDurableHostedSessionRecord(source),
+        );
+        approvalSession = source;
+      }
+      await (input.assertSendDeliveryOwner ?? assertHostedBuildDecisionOwner)(
+        toDurableHostedSessionRecord(approvalSession),
+      );
+      const approvalSessionId = approvalSession.sessionId;
+      const receipts =
+        approvalSession.version === 2 ? (approvalSession.privateApprovalReceipts ?? []) : [];
+      const matched = responses.map(({ requestId, response }) => {
+        const matches = receipts.filter((receipt) => receipt.requestId === requestId);
+        if (matches.length !== 1) {
+          return false;
+        }
+        const receipt = matches[0];
+        return (
+          receipt?.toolInput.plan.selection.sessionId === approvalSessionId &&
+          receipt.responderPrincipalId === principal.ownerUserId &&
+          receipt.outcome === (response.kind === "approve" ? "approved" : "cancelled")
+        );
+      });
+      if (!matched.every(Boolean)) {
+        return undefined;
+      }
+      const current = await readSession({
+        continueWork: false,
+        cursor: 0,
+        limit: 100,
+        sessionId,
+      });
+      const latest = toDurableHostedSessionRecord(await requireSession(sessionId));
+      if (
+        latest.adapterSessionId !== durable.adapterSessionId ||
+        latest.adapterGeneration !== durable.adapterGeneration ||
+        canonical(latest.nativeRecoveryBinding) !== canonical(durable.nativeRecoveryBinding) ||
+        current.error !== undefined ||
+        (current.status !== "working" && current.status !== "completed")
+      ) {
+        return undefined;
+      }
+      const latestApprovalSession = await requireSession(approvalSessionId);
+      if (
+        latestApprovalSession.version !== approvalSession.version ||
+        (latestApprovalSession.version === 2 &&
+          approvalSession.version === 2 &&
+          canonical(latestApprovalSession.privateApprovalReceipts) !==
+            canonical(approvalSession.privateApprovalReceipts))
+      ) {
+        return undefined;
+      }
+      await (input.assertSendDeliveryOwner ?? assertHostedBuildDecisionOwner)(
+        toDurableHostedSessionRecord(latestApprovalSession),
+      );
+      return current;
+    },
     async send({ observationCursor, ...request }) {
       requireHostedOperationScope(principal, "send");
       let session = await requireSession(request.sessionId);
