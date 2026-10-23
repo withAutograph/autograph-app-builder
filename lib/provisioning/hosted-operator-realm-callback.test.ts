@@ -383,6 +383,72 @@ describe("native private Realm identity handoff", () => {
     expect(JSON.stringify(log.mock.calls)).not.toContain(f.ownerSessionId);
     expect(JSON.stringify(log.mock.calls)).not.toContain("private-cookie");
   });
+  it.each<{
+    status: number;
+    headers: Record<string, string>;
+    expected: { httpStatus: number; contentType: string; vercelError?: string };
+  }>([
+    {
+      status: 403,
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "x-vercel-error": "TRUSTED_SOURCES_ENVIRONMENT_MISMATCH",
+      },
+      expected: {
+        httpStatus: 403,
+        contentType: "html",
+        vercelError: "TRUSTED_SOURCES_ENVIRONMENT_MISMATCH",
+      },
+    },
+    {
+      status: 403,
+      headers: {
+        "content-type": "private-content-type; private-parameter=private-value",
+        "x-vercel-error": "private-provider-error",
+      },
+      expected: { httpStatus: 403, contentType: "other", vercelError: "other" },
+    },
+    {
+      status: 200,
+      headers: { "content-type": "application/json; private-parameter=private-value" },
+      expected: { httpStatus: 200, contentType: "json" },
+    },
+    {
+      status: 404,
+      headers: { "x-vercel-error": "DEPLOYMENT_NOT_FOUND" },
+      expected: { httpStatus: 404, contentType: "missing", vercelError: "DEPLOYMENT_NOT_FOUND" },
+    },
+  ])("reports only closed JWKS response metadata on failure: $expected", async (input) => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const f = await fixture();
+    const denied = new Response(null, { status: input.status, headers: input.headers });
+    f.ports.fetch.mockResolvedValue(denied);
+    const response = await f.nativePost();
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ code: "auth_identity_required" });
+    expect(log).toHaveBeenCalledExactlyOnceWith("realm_identity_callback_failure", {
+      stage: "proof_verification",
+      errorClass: "jose_error",
+      code: "ERR_JOSE_GENERIC",
+      jwks: input.expected,
+    });
+    expect(f.ports.fetch).toHaveBeenCalledOnce();
+    expect(f.ports.identityHandoff.artifacts.put).not.toHaveBeenCalled();
+    expect(f.ports.consume).not.toHaveBeenCalled();
+    const retained = JSON.stringify(log.mock.calls);
+    for (const secret of [
+      "private-content-type",
+      "private-parameter",
+      "private-value",
+      "private-provider-error",
+      f.proof,
+      f.nonce,
+      f.ownerSessionId,
+      f.link.endpointOrigin,
+    ]) {
+      expect(retained).not.toContain(secret);
+    }
+  });
   it("omits malicious messages and nonallowlisted codes without invoking getters", async () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     const f = await fixture();

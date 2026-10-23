@@ -250,17 +250,49 @@ const privateStageJoseCode = z.enum([
   "ERR_JWKS_MULTIPLE_MATCHING_KEYS",
   "ERR_JWKS_TIMEOUT",
 ]);
+interface JwksResponseObservation {
+  httpStatus: number;
+  contentType: "json" | "html" | "other" | "missing";
+  vercelError?: "TRUSTED_SOURCES_ENVIRONMENT_MISMATCH" | "DEPLOYMENT_NOT_FOUND" | "other";
+}
+const observeJwksResponse = (response: Response): JwksResponseObservation => {
+  const mediaType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+  let contentType: JwksResponseObservation["contentType"] = "other";
+  if (!mediaType) {
+    contentType = "missing";
+  } else if (mediaType === "application/json" || mediaType.endsWith("+json")) {
+    contentType = "json";
+  } else if (mediaType === "text/html" || mediaType === "application/xhtml+xml") {
+    contentType = "html";
+  }
+  const providerError = response.headers.get("x-vercel-error");
+  const observation: JwksResponseObservation = { httpStatus: response.status, contentType };
+  if (providerError) {
+    observation.vercelError =
+      providerError === "TRUSTED_SOURCES_ENVIRONMENT_MISMATCH" ||
+      providerError === "DEPLOYMENT_NOT_FOUND"
+        ? providerError
+        : "other";
+  }
+  return observation;
+};
 interface PrivateStageFailure {
   stage: z.infer<typeof privateStageName>;
   errorClass: "operator_error" | "jose_error" | "unknown";
   code?: string;
+  jwks?: JwksResponseObservation;
 }
 const reportPrivateStageFailure = (
   stage: z.infer<typeof privateStageName>,
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Caught exceptions are reduced to exact allowlisted codes; never messages, causes, or request values.
   error: unknown,
+  jwks?: JwksResponseObservation,
 ) => {
-  const failure: PrivateStageFailure = { stage, errorClass: "unknown" };
+  const failure: PrivateStageFailure = {
+    stage,
+    errorClass: "unknown",
+    ...(stage === "proof_verification" && jwks !== undefined ? { jwks } : {}),
+  };
   try {
     // Read only an own data descriptor; a hostile code getter is never invoked.
     const code: unknown = Object.getOwnPropertyDescriptor(error, "code")?.value;
@@ -289,6 +321,7 @@ const reportPrivateStageFailure = (
 
 const privateStage = async (ports: RealmIdentityCallbackPorts, request: Request) => {
   let stage: z.infer<typeof privateStageName> = "sender";
+  let jwks: JwksResponseObservation | undefined;
   try {
     const handoff = ports.identityHandoff;
     if (handoff === undefined) {
@@ -308,7 +341,17 @@ const privateStage = async (ports: RealmIdentityCallbackPorts, request: Request)
       throw new Error("realm_callback_origin");
     }
     stage = "proof_verification";
-    const getKey = createRemoteJWKSet(new URL(staging.jwksUrl), { [customFetch]: ports.fetch });
+    const getKey = createRemoteJWKSet(new URL(staging.jwksUrl), {
+      [customFetch]: async (url, init) => {
+        const response = await ports.fetch(url, init);
+        try {
+          jwks = observeJwksResponse(response);
+        } catch {
+          /* Metadata observation must preserve the original response and verification. */
+        }
+        return response;
+      },
+    });
     const claims = await verifyRealmIdentityLinkProof({
       ...input,
       getKey,
@@ -371,7 +414,7 @@ const privateStage = async (ports: RealmIdentityCallbackPorts, request: Request)
       { headers: noStore },
     );
   } catch (error) {
-    reportPrivateStageFailure(stage, error);
+    reportPrivateStageFailure(stage, error, jwks);
     throw error;
   }
 };
