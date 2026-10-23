@@ -772,7 +772,7 @@ describe("native externally managed policy recovery integration", () => {
         }
         if (url.pathname === "/v13/deployments" && method === "POST") {
           expect(approved).toBe(true);
-          expect(body).toHaveProperty("target", "staging");
+          expect(body).not.toHaveProperty("target");
           const project = z.string().parse(body?.project);
           const app = project === "project-notes";
           expect(app ? appBound : gatewayBoundOrigin === "https://fresh-notes.example.test").toBe(
