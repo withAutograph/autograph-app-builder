@@ -53,16 +53,17 @@ export default defineTool({
           sandbox,
         })),
         path: input.path,
-        source:
-          preserved === undefined
-            ? { kind: "current-draft-candidate" as const }
-            : {
+        ...(preserved === undefined
+          ? {}
+          : {
+              source: {
                 kind: "preserved-draft-candidate" as const,
                 preservedWorkspaceIndex: input.preservedWorkspaceIndex,
                 reviewDigest: preserved.reviewDigest,
                 nextAction:
                   "This digest belongs to preserved content. Read the current candidate separately before a deliberate replacement using its current digest.",
               },
+            }),
         status: preserved === undefined ? ("current_file" as const) : ("preserved_file" as const),
       };
     }
