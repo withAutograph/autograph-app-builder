@@ -134,10 +134,13 @@ rejection, the server may recover success only for an all-approval response
 batch whose exact request IDs and `approve`/`deny` directions match unique,
 owner-scoped hosted approval receipts in the same session. It returns the
 current session snapshot without resubmitting the approval. The UI then shows
-the normal successful response state. This recovery currently applies only to
-approval types with those retained receipts; missing, ambiguous, conflicting,
-or unrelated evidence keeps the original error. Questions, mixed batches,
-unknown outcomes, and other approval types are not inferred successful.
+the normal successful response state. The retained receipt schema currently
+covers only the hosted runtime preparation and cleanup approvals
+(`prepare-app-hosted-runtime` and `cleanup-app-hosted-runtime`). Missing,
+ambiguous, conflicting, or unrelated evidence keeps the original error.
+Questions, mixed batches, unknown outcomes, and Build, native-target, or
+draft-publication approvals without these exact receipts are not inferred
+successful.
 
 New hosted checkpoints store the complete public history in tenant-scoped,
 digest-verified pages and publish a versioned manifest only after its chunks
