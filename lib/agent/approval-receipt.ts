@@ -451,6 +451,7 @@ const operatorApprovalDescription = (record: Record<string, unknown>, toolName: 
     return undefined;
   }
   const plan = parsed.data;
+  if (plan.action === "prepare") return "*This approval may incur provider costs.*";
   const effectSummaries = operatorEffectSummaries(plan);
   const signupApproval = signupApprovalDescription(plan);
   const host = plan.hostProtection;

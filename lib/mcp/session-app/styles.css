@@ -129,6 +129,25 @@
   letter-spacing: -0.04em;
 }
 
+.mcpApp .approval-request--preview .approval-request__label {
+  font-size: 24px;
+  letter-spacing: -0.035em;
+}
+
+.mcpApp .approval-request--preview .approval-request__supporting-title {
+  max-width: 520px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1.45;
+}
+
+.mcpApp .approval-request--preview .approval-request__description {
+  margin-top: 8px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
 .mcpApp .approval-request__description {
   display: grid;
   max-width: 520px;
@@ -181,6 +200,11 @@
   font-size: 14px !important;
   font-weight: 650;
   letter-spacing: -0.02em;
+}
+
+.mcpApp .approval-request--preview .approval-request__actions {
+  margin-top: 24px;
+  padding-top: 20px;
 }
 
 .mcpApp .approval-request__actions {

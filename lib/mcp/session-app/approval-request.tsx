@@ -1,5 +1,12 @@
 import type { SessionAnswer } from "./view";
 
+const renderInlineEmphasis = (text: string) =>
+  text
+    .split(/(\*[^*\n]+\*)/gu)
+    .map((part, index) =>
+      /^\*[^*\n]+\*$/u.test(part) ? <em key={index}>{part.slice(1, -1)}</em> : part,
+    );
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ApprovalRequest({
   description,
@@ -18,6 +25,7 @@ export function ApprovalRequest({
 }) {
   const readyToBuild = title === "Build this app?";
   const publishDraft = title === "Publish the reviewed changes?";
+  const previewApproval = title === "Do you approve creating a preview environment?";
   const supportingCopy =
     description ??
     (readyToBuild
@@ -30,13 +38,22 @@ export function ApprovalRequest({
   } else if (publishDraft) {
     defaultPrimaryLabel = "Publish draft PR";
   }
-  const primaryLabel = primaryLabelOverride ?? defaultPrimaryLabel;
+  const primaryLabel = primaryLabelOverride ?? (previewApproval ? "Approve" : defaultPrimaryLabel);
   const secondaryLabel = secondaryLabelOverride ?? (readyToBuild ? "Make changes" : "Cancel");
 
   return (
-    <div className="approval-request">
-      <p className="approval-request__eyebrow">Approval required</p>
-      <h2>{readyToBuild ? "Ready to build your app?" : title}</h2>
+    <div className={`approval-request${previewApproval ? " approval-request--preview" : ""}`}>
+      {previewApproval ? (
+        <>
+          <h2 className="approval-request__label">Approval required</h2>
+          <p className="approval-request__supporting-title">{title}</p>
+        </>
+      ) : (
+        <>
+          <p className="approval-request__eyebrow">Approval required</p>
+          <h2>{readyToBuild ? "Ready to build your app?" : title}</h2>
+        </>
+      )}
       {supportingCopy ? (
         <div className="approval-request__description">
           {supportingCopy.split("\n\n").map((section) => {
@@ -47,11 +64,11 @@ export function ApprovalRequest({
             const content = bullets ? (
               <ul>
                 {body.map((line) => (
-                  <li key={line}>{line.slice(2)}</li>
+                  <li key={line}>{renderInlineEmphasis(line.slice(2))}</li>
                 ))}
               </ul>
             ) : (
-              <p>{body.join(" ")}</p>
+              <p>{renderInlineEmphasis(body.join(" "))}</p>
             );
             const referenceSection = heading?.includes("(provider ") ?? false;
             return referenceSection ? (
@@ -78,7 +95,7 @@ export function ApprovalRequest({
           >
             {secondaryLabel}
           </button>
-          <p className="approval-request__hint">{hint}</p>
+          {previewApproval ? null : <p className="approval-request__hint">{hint}</p>}
         </div>
         <button
           type="button"
