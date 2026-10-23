@@ -456,7 +456,10 @@ const validatedHostedOperatorApprovalPlan = (
   return parsed.data;
 };
 
-const operatorApprovalDescription = (record: Record<string, unknown>, toolName: string) => {
+const operatorApprovalDescription = (
+  record: Record<string, unknown>,
+  toolName: string,
+): string | undefined => {
   const plan = validatedHostedOperatorApprovalPlan(record, toolName);
   if (plan === undefined) return;
   if (plan.action === "prepare") return "*This approval may incur provider costs.*";
