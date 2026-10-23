@@ -1,3 +1,5 @@
+> **Historical checkpoint, superseded October 23:** the fresh Requests app now supports authenticated entry and one approved save/readback/hard reload. The delivery session stopped after that proof. Read the [October 23 closeout](spend-review-core-closeout-20261023.md); the invitation, source and failure snapshots below are not current instructions or blockers.
+
 > Coordinator addendum, captured after this delivery checkpoint: PR #1018 exact-head CI run 39876316245 completed SUCCESS. All ten substantive jobs and aggregate check passed; two configured jobs skipped. Independently read via GitHub workflow and job APIs. The pending-CI wording retained below is historical.
 
 # Spend Review Requests — delivery checkpoint

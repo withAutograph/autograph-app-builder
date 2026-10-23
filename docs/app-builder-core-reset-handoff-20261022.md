@@ -1,5 +1,7 @@
 # App Builder reset: current state and core closeout
 
+> **Historical handoff, superseded October 23:** authenticated entry, script loading, and exactly one saved request with independent readback and hard reload are now proved. Read the [October 23 closeout](spend-review-core-closeout-20261023.md) for the current result, source evidence and deferred work. The failures and instructions below describe the original checkpoint; they are not current blockers or authority to resume the stopped delivery session.
+
 Captured October 22, 2026, approximately 8:22 p.m. Eastern (October 23 UTC). This is a handoff, not a completion report.
 
 Publication addendum: the user authorized committing these documents to main and starting a fresh execution session. The old delivery goal is confirmed paused. The fresh session takes sole delivery ownership under the fixed plan; the old sessions remain at their checkpoints. All runtime details below remain timestamped snapshots and require an ordinary current-state read before resumption.
