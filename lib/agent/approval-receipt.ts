@@ -466,7 +466,7 @@ const operatorApprovalDescription = (
     return undefined;
   }
   if (plan.action === "prepare") {
-    return "<em>This approval may incur provider costs.</em>";
+    return "This approval may incur provider costs.";
   }
   const effectSummaries = operatorEffectSummaries(plan);
   const signupApproval = signupApprovalDescription(plan);

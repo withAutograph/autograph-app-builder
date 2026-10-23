@@ -308,7 +308,7 @@ describe("native externally managed policy recovery integration", () => {
       planDigest: operatorPlanDigest(f.proposed),
     };
     const description = publicApprovalDescription(input, "prepare-app-hosted-runtime");
-    expect(description).toBe("<em>This approval may incur provider costs.</em>");
+    expect(description).toBe("This approval may incur provider costs.");
     expect(
       publicApprovalDescription(
         { ...input, planDigest: f.current.operator!.planDigest },

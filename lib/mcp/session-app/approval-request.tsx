@@ -1,7 +1,7 @@
 import type { SessionAnswer } from "./view";
 
 const renderPreviewApprovalDescription = (text: string) =>
-  text === "<em>This approval may incur provider costs.</em>" ? (
+  text === "This approval may incur provider costs." ? (
     <em>This approval may incur provider costs.</em>
   ) : (
     text
