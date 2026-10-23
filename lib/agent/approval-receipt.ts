@@ -465,7 +465,9 @@ const operatorApprovalDescription = (
     // oxlint-disable-next-line unicorn/no-useless-undefined -- Invalid plans have no public approval description.
     return undefined;
   }
-  if (plan.action === "prepare") return "*This approval may incur provider costs.*";
+  if (plan.action === "prepare") {
+    return "<em>This approval may incur provider costs.</em>";
+  }
   const effectSummaries = operatorEffectSummaries(plan);
   const signupApproval = signupApprovalDescription(plan);
   const host = plan.hostProtection;
