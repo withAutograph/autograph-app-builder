@@ -4,6 +4,8 @@
 
 Open the [Spend Review Requests Preview](https://autograph-gateway-preview.vercel.app/spend-review-requests) using the existing account. This is Preview evidence, not Production business-use approval or certification of every generated app.
 
+For a new session, read the [consolidated continuation handoff](app-builder-next-session-handoff-20261023.md): all deferred areas, decisions, session ownership, current CI follow-ups and operating boundaries are indexed there.
+
 This report supersedes the active-blocker wording in the October 22 [priorities](core-builder-priorities-and-deferred-work-20261022.md), [reset handoff](app-builder-core-reset-handoff-20261022.md), [fixed plan](app-builder-core-closeout-plan-20261022.md), and [delivery checkpoint](spend-review-delivery-checkpoint-20261022.md). Those handoff records retain their original timestamps and provenance.
 
 ## Completed behavior
@@ -47,6 +49,12 @@ The app remained on its existing Builder-owned draft, [Arrusted PR #1647](https:
 At **22:15 UTC / 6:15 p.m. Eastern**, Vercel reported successful publication for #1026's merge commit. A live duplicate-card walkthrough was not performed. Its initial exact-head CI run [40029016712](https://github.com/withAutograph/autograph-app-builder/actions/runs/40029016712) failed repository lint on four explicit `return undefined` statements in the new recovery method; the other nine substantive lanes passed. Follow-up [#1027](https://github.com/withAutograph/autograph-app-builder/pull/1027) carries this closeout and a behavior-preserving return-flow correction that satisfies both return-style lint rules. All receipt, owner, session and uncertainty checks remain in place. This report does not claim a green final CI result for that correction before one is observed.
 
 The pre-correction hosted-service focused suites passed 155 tests. The local request-handler suite could not load with its incomplete dependency closure; local TypeScript reported dependency/type mismatches. Those local results are not full final-head qualification or hosted UI proof.
+
+### Follow-up observed at 23:00 UTC
+
+Builder #1027 merged as `0eee1056ffaa97d3d730789e9343c527bc01eb54`. Its main [CI 40033053807](https://github.com/withAutograph/autograph-app-builder/actions/runs/40033053807) completed successfully, including both unchanged Auth shards and package publication. The earlier failed run remains historical; no live duplicate-card walkthrough is claimed.
+
+Arrusted [#1658](https://github.com/withAutograph/arrusted-development/pull/1658), merged as `1513ce0db79948f3ae1197b2a266e82995738188`, fixed the unrelated-project event handling behind historical Auth workflow failure [40026212732](https://github.com/withAutograph/arrusted-development/actions/runs/40026212732). It preserves strict identity/ownership checks and scopes migration/status writes to the configured root project. Main [CI 40034028430](https://github.com/withAutograph/arrusted-development/actions/runs/40034028430), [CD 40035842998](https://github.com/withAutograph/arrusted-development/actions/runs/40035842998), and subsequent natural [Production](https://github.com/withAutograph/arrusted-development/actions/runs/40034598216) and [Preview](https://github.com/withAutograph/arrusted-development/actions/runs/40035002575) Auth authorization runs succeeded. This later workflow evidence is separate from the earlier app proof; the app was not resubmitted or revalidated for this documentation.
 
 ## Workflow status at the stopping point
 
