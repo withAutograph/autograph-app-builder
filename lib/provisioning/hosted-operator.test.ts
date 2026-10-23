@@ -1150,7 +1150,7 @@ describe("protected hosted operator boundary", () => {
       }),
     ).toThrow("protected_operator_required");
   });
-  it("plans without effects, exposes concrete approval scope and rejects caller-asserted approval", async () => {
+  it("plans without effects, requests Preview approval and rejects caller-asserted approval", async () => {
     const f = fixture();
     const request = await prepared(f);
     expect(f.deps.executeEffect).not.toHaveBeenCalled();
@@ -1160,12 +1160,7 @@ describe("protected hosted operator boundary", () => {
       { ...selection, plan, planDigest: operatorPlanDigest(plan) },
       "prepare-app-hosted-runtime",
     );
-    expect(description).toContain("What will happen:");
-    expect(description).toContain("Access and cost:");
-    expect(description).toContain("synthetic-reviewer");
-    expect(description).toContain("reviewer");
-    expect(description).toContain("Fixture owner");
-    expect(description).toContain("Retain while");
+    expect(description).toBe("*This approval may incur provider costs.*");
   });
   it("carries explicit prepared Preview intent through normal owner-authorized planning", async () => {
     const f = fixture();
