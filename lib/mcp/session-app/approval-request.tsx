@@ -25,7 +25,7 @@ export function ApprovalRequest({
 }) {
   const readyToBuild = title === "Build this app?";
   const publishDraft = title === "Publish the reviewed changes?";
-  const previewApproval = title === "Do you approve creating a preview environment?";
+  const previewApproval = title === "Do you approve creating a preview?";
   const renderApprovalDescription = (text: string) =>
     previewApproval ? renderInlineEmphasis(text) : text;
   const supportingCopy =

@@ -1172,7 +1172,7 @@ const inputRequest = (request: {
   const approvalTitles = {
     apply_app_creation: "Build this app?",
     "cleanup-app-hosted-runtime": "Remove this app's Preview resources?",
-    "prepare-app-hosted-runtime": "Do you approve creating a preview environment?",
+    "prepare-app-hosted-runtime": "Do you approve creating a preview?",
     "prepare-app-native-target": "Create this app's Preview project?",
     "export-app-hosted-data": "Export this customer’s app data privately?",
     "run-app-continuity-tests": "Run this app continuity suite?",
