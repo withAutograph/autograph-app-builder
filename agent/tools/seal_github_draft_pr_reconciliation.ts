@@ -1,3 +1,4 @@
+import { draftInspectionRecoveryForSession } from "@/lib/agent/prepare-published-draft-repair";
 import { sealPublishedDraftRepair } from "@/lib/agent/published-draft-repair-publication";
 import {
   currentDraftCandidateSource,
@@ -94,6 +95,14 @@ export default defineTool({
       review: candidate.review,
       selectedCheckoutHeadSha: candidate.headSha,
       selectedCheckoutHeadTree: candidate.headTree,
+      recovery: draftInspectionRecoveryForSession({
+        ctx,
+        appId: state.appSpec.appId,
+        appSpecDigest: state.appSpec.digest,
+        root: candidate.root,
+        pullRequestNumber: candidate.pullRequestNumber,
+        priorPublishedProposalDigest,
+      }),
     };
     const proposal =
       priorPublishedProposalDigest === undefined

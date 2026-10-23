@@ -137,6 +137,22 @@ repository, branch, commit and tree exactly. This reads retained publication
 history; it neither selects a latest release nor accepts a supplied historical
 commit. An absent or mismatched marker leaves the original baseline unchanged.
 
+GitHub's PR snapshot may still report an older head after an accepted branch
+update. Same-draft recovery obtains the tenant-owned publication and its retained
+applied proposal or canonical owner/app/spec-scoped source before that mismatch
+can prevent source acquisition. The recovery context stays internal and follows
+the same operation through inspection, sealing, mutation and exact-result
+read-back; public tools accept no caller-supplied source proof.
+
+Recovery binds the same repository, PR, branch and verified Builder origin to
+the existing publication. A marker or commit ancestry alone grants no authority.
+A later approved merge proves its exact parent commits, reviewed tree and commit
+message against that owned baseline, even when the PR snapshot predates it.
+Result recovery runs before recording the new published source, so that record
+is not a prerequisite for proving an already accepted write. Live-ref rereads,
+expected-OID non-force updates, review and separate effect approval remain
+required. An unproved branch advance still leaves the draft untouched.
+
 `hosted_github_installation` binds that same tenant tuple to one exact GitHub
 App installation and expected account identity. Binding is available only
 through the owner-only, confirmation-digest-bound
