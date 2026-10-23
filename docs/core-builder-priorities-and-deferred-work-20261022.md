@@ -2,12 +2,14 @@
 
 **Updated October 23, 2026.** The fixed first-use milestone is complete: existing-account entry, repaired script loading, exactly one approved USD 1.00 save, independent readback and hard reload. See the [closeout and evidence](spend-review-core-closeout-20261023.md). Broader acceptance remains deferred; this is not certification of every Builder flow or generated app.
 
+The [next-session handoff](app-builder-next-session-handoff-20261023.md) consolidates this inventory with signup planning, storage, cost/performance, messaging, deployment choices, session archives and continuation rules. Use it as the entry point for selecting new work.
+
 ## Core path
 
 1. **Protected access and scripts — complete for the observed path.** Account connection and app document loading succeeded. Arrusted [#1657](https://github.com/withAutograph/arrusted-development/pull/1657) repaired the signed-target mismatch caused by consumption of the deployment query parameter. Normal browser asset responses returned 200; exact target verification remains enforced.
 2. **Intended-user entry — complete.** The existing account connected and opened the fresh Requests app and form.
 3. **One approved save — complete.** Exactly one USD 1.00 synthetic no-purchase request was saved as Pending review. Details, activity, independent database readback and hard reload matched the exact record. No reviewer decision was made.
-4. **Source and follow-up qualification — recorded separately.** The asset repair's PR and main CI passed. Builder approval-UI [#1026](https://github.com/withAutograph/autograph-app-builder/pull/1026) is merged and Vercel reported successful publication; its initial CI found four lint errors. The closeout records the small correction and its evidence limits rather than claiming full green CI or a live UI walkthrough.
+4. **Source and follow-up qualification — recorded separately.** The asset repair's PR and main CI passed. Builder approval-UI [#1026](https://github.com/withAutograph/autograph-app-builder/pull/1026) is merged; its initial CI found four lint errors. Follow-up [#1027](https://github.com/withAutograph/autograph-app-builder/pull/1027) corrected those and its main CI passed. The closeout preserves the historical failures and distinguishes successful CI from the unperformed live duplicate-card walkthrough.
 5. **Proof and stopping point — recorded.** The [closeout](spend-review-core-closeout-20261023.md) binds the actual app/Gateway source and one record to the hosted result. Further app/database mutations stopped. The final captured public status label was still finishing; it is not another admission gate.
 
 Core reliability includes tenant and credential isolation, approval boundaries, ordinary durability, and supported Builder start/resume/retry on the saved session with its approvals. Reuse authorization for the same effect; request approval only for genuinely new actors or effects not already covered. Source checks, CI, READY status, and provider inventory do not prove hosted use.
