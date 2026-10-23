@@ -61,7 +61,7 @@ export default defineTool({
       phase: state.phase,
       receipt: state.receipt,
       version: state.version,
-      ...(ownedDraftRecovery === undefined ? {} : { ownedDraftRecovery }),
+      ...(ownedDraftRecovery === null ? {} : { ownedDraftRecovery }),
     };
     if (githubSource === undefined) {
       return result;

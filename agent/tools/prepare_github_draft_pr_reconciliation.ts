@@ -181,6 +181,7 @@ const prepareOwnedDraftRecovery = async (input: {
       "Reopening an owned draft is supported only for this reviewed starter-created app's existing publication. Preserve its source and complete the normal app review before reopening that same owned draft; this mode cannot replace an existing repository selection.",
     );
   }
+  return null;
 };
 
 const isReviewedExistingSource = (
@@ -196,7 +197,7 @@ export default defineTool({
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     const ownedRecovery = await prepareOwnedDraftRecovery({ ...input, state, ctx });
-    if (ownedRecovery !== undefined) {
+    if (ownedRecovery !== null) {
       return ownedRecovery;
     }
     if (!isReviewedExistingSource(state)) {
