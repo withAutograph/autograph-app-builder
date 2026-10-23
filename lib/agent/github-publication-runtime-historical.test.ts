@@ -340,7 +340,11 @@ describe("same-session owned draft repair", () => {
         previousReconciliation: proposal,
       });
       expect(result.publishedHeadSha).toBe(applied ? draft.headSha : receipt.branchSha);
-      expect(inspectAppliedDraftReconciliation).toHaveBeenCalledWith(proposal, draft);
+      const verifyOwnedHeadMatcher: unknown = expect.any(Function);
+      expect(inspectAppliedDraftReconciliation).toHaveBeenCalledWith(proposal, draft, {
+        reconciliations: [],
+        verifyOwnedHead: verifyOwnedHeadMatcher,
+      });
       const unrelated = await runtime.inspectExistingDraftReconciliationSource({
         name: draft.name,
         owner: draft.owner,
