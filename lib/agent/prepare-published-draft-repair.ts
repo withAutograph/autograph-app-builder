@@ -367,15 +367,16 @@ const reconciliationPreparationLineage = (
   const previousInput: Pick<
     DraftReconciliationInput,
     "previousCandidate" | "replayPreviousCandidate"
-  > = previousCandidate === undefined
-    ? {}
-    : {
-        previousCandidate,
-        replayPreviousCandidate:
-          input.recovery === undefined &&
-          sameOrigin &&
-          previousCandidate.headSha === repair.draft.headSha,
-      };
+  > =
+    previousCandidate === undefined
+      ? {}
+      : {
+          previousCandidate,
+          replayPreviousCandidate:
+            input.recovery === undefined &&
+            sameOrigin &&
+            previousCandidate.headSha === repair.draft.headSha,
+        };
   return { ownedPrevious, recoveryMode, reopenCurrent, previousInput };
 };
 
