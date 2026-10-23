@@ -1,5 +1,7 @@
 # Fixed plan: finish the core App Builder flow
 
+> **Executed plan, closed October 23:** the agreed authenticated entry and one save/readback/reload milestone is complete. See the [closeout and remaining deferred work](spend-review-core-closeout-20261023.md). Preserve this plan as history; do not restart its implementation or add acceptance work from these old checkpoints.
+
 ## Objective
 
 Make the already-built **Spend Review Requests** app usable through its saved public Builder workflow: connect the existing intended account, open the protected app, and save exactly one approved synthetic request that survives independent readback and reload.
