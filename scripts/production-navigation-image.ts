@@ -67,6 +67,63 @@ const inspectFailureReason = (stderr: string) => {
   return reasons.find(({ pattern }) => pattern.test(stderr))?.reason ?? "unrecognized_diagnostic";
 };
 
+const pullFailureReason = (stderr: string) => {
+  const reasons: { pattern: RegExp; reason: string }[] = [
+    {
+      reason: "authorization_failed",
+      pattern:
+        /unauthorized|authentication required|no basic auth credentials|permission denied|forbidden|pull access denied|failed to authorize/iu,
+    },
+    {
+      reason: "manifest_unavailable",
+      pattern: /manifest unknown|name unknown|repository does not exist/iu,
+    },
+    { reason: "registry_client_error", pattern: /\b4\d\d\b/u },
+    { reason: "registry_server_error", pattern: /\b5\d\d\b/u },
+    {
+      reason: "daemon_unavailable",
+      pattern:
+        /cannot connect to .*docker daemon|is the docker daemon running|connection refused|error during connect/iu,
+    },
+    {
+      reason: "transport_failed",
+      pattern:
+        /x509|certificate|tls|network is unreachable|timeout|no such host|connection reset|unexpected eof/iu,
+    },
+    { reason: "storage_exhausted", pattern: /no space left on device/iu },
+    { reason: "platform_mismatch", pattern: /no matching manifest for/iu },
+    {
+      reason: "docker_configuration_invalid",
+      pattern:
+        /error parsing config file|credential helper.*not found|credentials store.*not found/iu,
+    },
+    { reason: "invalid_reference", pattern: /invalid reference format|invalid image reference/iu },
+  ];
+  return reasons.find(({ pattern }) => pattern.test(stderr))?.reason ?? "unrecognized_diagnostic";
+};
+
+const pullFailureSource = (stderr: string) => {
+  const firstLine = stderr
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .find(Boolean);
+  if (firstLine === undefined) {
+    return "empty_stderr";
+  }
+  if (/^Error response from daemon:/iu.test(firstLine)) {
+    return "daemon_response";
+  }
+  if (/^(?:docker|Error):/iu.test(firstLine)) {
+    return "docker_cli";
+  }
+  return "other_stderr";
+};
+
+const pullFailureMetadata = (image: string) => {
+  const registry = image === PRODUCTION_NAVIGATION_POSTGRES_IMAGE ? "public-mirror" : "fallback";
+  return `registry=${registry}; platform=${process.platform}/${process.arch}`;
+};
+
 const registryThrottled = (result: ImageCommandResult): boolean =>
   /\btoomanyrequests\b|\bHTTP(?:\/\d(?:\.\d)?)?\s+429\b|\b429\s+Too Many Requests\b|\bstatus code\s*:?\s*429\b/iu.test(
     result.stderr,
@@ -121,7 +178,9 @@ export const ensureProductionNavigationImage = async (
       return image;
     }
     if (!registryThrottled(pulled)) {
-      throw new Error("Production navigation could not pull the pinned PostgreSQL image.");
+      throw new Error(
+        `Production navigation could not pull the pinned PostgreSQL image (${pullFailureReason(pulled.stderr)}; source=${pullFailureSource(pulled.stderr)}; ${pullFailureMetadata(image)}; exit ${pulled.exitCode}).`,
+      );
     }
     if (image === PRODUCTION_NAVIGATION_POSTGRES_IMAGE) {
       // The canonical registry supplies the identical digest when the public mirror is throttled.
