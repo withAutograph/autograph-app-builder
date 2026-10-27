@@ -66,6 +66,12 @@ reconciliation. For a GitHub and Vercel workflow, describe which source-control
 and application-hosting operations are required and which need separate approval.
 Explicitly defer integrations that are outside the first version.
 
+When requested, describe which provider accounts the app uses, who can connect
+and activate them, the target data and reconciliation outcome, and whether an
+Integrations page belongs in navigation. Executable recipe selection and typed
+schema bindings belong to the app's integration definition during implementation;
+keep this section as product intent and preserve separate outward-effect approval.
+
 ## Temporal semantics
 
 Define timestamps, as-of/effective dates, stale data behavior, or an explicit non-goal.

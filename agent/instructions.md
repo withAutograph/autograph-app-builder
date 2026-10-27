@@ -279,6 +279,14 @@ reject a working app solely for a source-pattern heuristic. Preserve the
 scaffolded dependency versions (`catalog:` and `workspace:*` included) and
 repository tasks; app-specific dependencies do not automatically require a
 new generator profile.
+When accepted product intent includes optional provider integrations, follow
+`skills/create-app/references/optional-integrations.md`. Discover executable
+provider recipes and the shared integrations surface in the selected Arrusted
+checkout. Author typed app-owned bindings against generated schema metadata and
+a real app DAL host, then call `install-app-integrations` after apply and before
+validation. The repository installer serves new and existing apps. Keep ordinary
+apps unchanged and report missing provider capability explicitly. AppSpec prose
+does not grant activation, connection or disconnect authority.
 When validation returns a truncated repair excerpt, use `get_validation_log`
 by copying the complete channel `readInput` and each continuation cursor to inspect
 complete sanitized command output before deciding on a repair. If a reference is

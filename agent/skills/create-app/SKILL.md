@@ -67,6 +67,9 @@ app-owned files and reuse the same component-backed preview flow.
    and `docs/schema-compiler.md`. Follow current repository docs and actual
    commands; missing documentation is context to investigate, not a build gate.
    Preserve unrelated changes.
+   When the brief requests provider data or an integrations management surface,
+   follow [optional integrations](references/optional-integrations.md) for
+   discovery, typed recipes, the repository installer and shared composition.
    When the brief requests an existing app revision from an agreed historical
    version while retaining current shared platform capabilities, select that
    baseline in this first `resolve_github_source` call, before reading any app
@@ -228,9 +231,11 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    unassessed authenticated behavior explicit. Resume the candidate's full
    validation, review and separate publication approval when delivering its
    changes; do not reset it or pin ongoing revision work to published source.
-   For delivery of applied changes, after apply succeeds continue with
-   `validate_app_creation`. It runs the repository's normal commands against
-   the current applied app. When it
+   For delivery of applied changes with approved optional integrations, run
+   `install-app-integrations` against the executable app definition after apply
+   and before validation. After apply and any requested integration installation
+   succeed, continue with `validate_app_creation`. It runs the repository's normal
+   commands against the current applied app. When it
    reports a repairable failure, provide corrected `implementationFiles` to
    `validate_app_creation` and retry in the same approved checkout. Use the
    returned diagnostics and status; do not invent extra validation capabilities
