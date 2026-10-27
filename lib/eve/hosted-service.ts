@@ -3738,12 +3738,95 @@ export function createHostedEveSessionService(input: {
       return readSession(request);
     }, // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     respond: respondRequest,
+    async recoverAppliedApprovalResponse({ sessionId, responses }) {
+      requireHostedOperationScope(principal, "respond");
+      let recovered: EveSessionResult | undefined;
+      const validResponses =
+        responses.length > 0 &&
+        new Set(responses.map(({ requestId }) => requestId)).size === responses.length &&
+        responses.every(({ response }) => response.kind === "approve" || response.kind === "deny");
+      if (validResponses) {
+        const session = await requireSession(sessionId);
+        const durable = toDurableHostedSessionRecord(session);
+        let approvalSession = session;
+        if (session.version === 2 && session.nativeRecoveryBinding !== undefined) {
+          const binding = session.nativeRecoveryBinding;
+          const [source, operation] = await Promise.all([
+            requireSession(binding.originalAuthoritySessionId),
+            input.store.getPrivateOperation?.(principal, binding.operationId),
+          ]);
+          assertRecoveredBuildContinuationChild(
+            binding.originalAuthoritySessionId,
+            binding.logicalSessionId,
+            source,
+            session,
+            operation ?? null,
+          );
+          await (input.assertNativeRecoveryOwner ?? assertHostedBuildDecisionOwner)(
+            toDurableHostedSessionRecord(source),
+          );
+          approvalSession = source;
+        }
+        await (input.assertSendDeliveryOwner ?? assertHostedBuildDecisionOwner)(
+          toDurableHostedSessionRecord(approvalSession),
+        );
+        const approvalSessionId = approvalSession.sessionId;
+        const receipts =
+          approvalSession.version === 2 ? (approvalSession.privateApprovalReceipts ?? []) : [];
+        const matched = responses.every(({ requestId, response }) => {
+          const matches = receipts.filter((receipt) => receipt.requestId === requestId);
+          if (matches.length !== 1) {
+            return false;
+          }
+          const receipt = matches[0];
+          return (
+            receipt?.toolInput.plan.selection.sessionId === approvalSessionId &&
+            receipt.responderPrincipalId === principal.ownerUserId &&
+            receipt.outcome === (response.kind === "approve" ? "approved" : "cancelled")
+          );
+        });
+        if (matched) {
+          const current = await readSession({
+            continueWork: false,
+            cursor: 0,
+            limit: 100,
+            sessionId,
+          });
+          const latest = toDurableHostedSessionRecord(await requireSession(sessionId));
+          const currentIsStable =
+            latest.adapterSessionId === durable.adapterSessionId &&
+            latest.adapterGeneration === durable.adapterGeneration &&
+            canonical(latest.nativeRecoveryBinding) === canonical(durable.nativeRecoveryBinding) &&
+            current.error === undefined &&
+            (current.status === "working" || current.status === "completed");
+          if (currentIsStable) {
+            const latestApprovalSession = await requireSession(approvalSessionId);
+            const receiptsAreStable =
+              latestApprovalSession.version === approvalSession.version &&
+              (latestApprovalSession.version !== 2 ||
+                approvalSession.version !== 2 ||
+                canonical(latestApprovalSession.privateApprovalReceipts) ===
+                  canonical(approvalSession.privateApprovalReceipts));
+            if (receiptsAreStable) {
+              await (input.assertSendDeliveryOwner ?? assertHostedBuildDecisionOwner)(
+                toDurableHostedSessionRecord(latestApprovalSession),
+              );
+              recovered = current;
+            }
+          }
+        }
+      }
+      return recovered;
+    },
     async send({ observationCursor, ...request }) {
       requireHostedOperationScope(principal, "send");
       let session = await requireSession(request.sessionId);
       const initialBinding = toDurableHostedSessionRecord(session);
       const resumeCancellationRevision =
-        session.status === "cancelled" && input.store.recordCancellationIntent !== undefined
+        (session.status === "cancelled" ||
+          (initialBinding.cancellationRevision ?? 0) >
+            (initialBinding.resumedCancellationRevision ?? 0)) &&
+        input.store.recordCancellationIntent !== undefined
           ? (initialBinding.cancellationRevision ?? 0)
           : undefined;
       const settledResult = await mutate({

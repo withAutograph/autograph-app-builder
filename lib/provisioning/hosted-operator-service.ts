@@ -100,6 +100,7 @@ import {
   managedOperatorEnvironmentRowsSchema,
   operatorAuthSchemaPreparationSchema,
   operatorDeploymentCandidatesSchema,
+  operatorDeliveryCorrectionSchema,
   hostedOperatorPlanSchema,
   hostedOperatorAuthSignupPolicyInputSchema,
   hostedOperatorInstallationCustomerIds,
@@ -138,6 +139,8 @@ import type {
   ManagedOperatorEnvironmentRow,
   OperatorAuthSchemaPreparation,
   OperatorDeploymentCandidate,
+  OperatorDeliveryCorrection,
+  HostedOperatorRecordBase,
   HostedOperatorAuthSignupPolicyInput,
 } from "./hosted-operator-contract";
 import type { HostedOperatorAppProjectSettings } from "./hosted-operator-app-project-settings";
@@ -209,6 +212,10 @@ export type HostedOperatorEffectContext = Context & {
   accountPreparation?: NormalActorAccountPreparation;
   checkpointAccountPreparation?: (preparation: NormalActorAccountPreparation) => Promise<void>;
   deliveryCandidates?: OperatorDeploymentCandidate[];
+  deliveryCorrections?: OperatorDeliveryCorrection[];
+  checkpointDeliveryCorrection?: (
+    correction: OperatorDeliveryCorrection,
+  ) => Promise<OperatorDeliveryCorrection>;
   gatewayDeliveryCandidates?: OperatorDeploymentCandidate[];
   /** Canonical retained approvals for an exact host-protection-only narrowing, never public input. */
   gatewayDeliveryProvenance?: readonly SharedHostProtectionDeliveryProvenance[];
@@ -257,7 +264,10 @@ export interface ProtectedHostedOperatorDependencies {
   /** Explicit separate export dispatcher; never enters preparation/cleanup state. */
   exportRequest?: (request: Request, input: TenantExportTransportRequest) => Promise<Response>;
   /** Trusted deployment-owned desired source; ordinary source changes do not mutate an approved plan. */
-  readGatewayDeliverySource?: (context: HostedOperatorContext) => Promise<AppGatewayDeliverySource>;
+  readGatewayDeliverySource?: (
+    context: HostedOperatorContext,
+    currentPlan?: HostedOperatorPlan,
+  ) => Promise<AppGatewayDeliverySource>;
   store: HostedRuntimeJournalStore;
   /** Verify caller signature/audience and independently resolve this session's owner and selected project. Never trust body owner IDs. */
   authorize: (
@@ -402,6 +412,33 @@ const assertUnexpired = (plan: HostedOperatorPlan, now: number) => {
 };
 const requireOperator = (record: HostedRuntimeJournalRecord) =>
   hostedOperatorRecordSchema.parse(record.operator);
+const correctionDeliveryIntent = (plan: HostedOperatorPlan, effectId: string) => {
+  const effect = plan.effects.find((candidate) => candidate.id === effectId);
+  if (effect?.kind === "delivery") {
+    return { kind: effect.kind, delivery: plan.delivery };
+  }
+  if (effect?.kind === GATEWAY_DELIVERY_EFFECT) {
+    return { kind: effect.kind, delivery: plan.gatewayDelivery };
+  }
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- Non-delivery effects explicitly have no delivery intent.
+  return undefined;
+};
+const retainedDeliveryCorrections = (
+  prior: HostedOperatorRecordBase,
+  next: HostedOperatorRecordBase,
+) => {
+  if (prior.operationRef !== next.operationRef) {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- An unrelated operation explicitly has no retained correction state.
+    return undefined;
+  }
+  return prior.deliveryCorrections?.filter((correction) => {
+    const previous = correctionDeliveryIntent(prior.plan, correction.effectId);
+    return (
+      previous !== undefined &&
+      isDeepStrictEqual(previous, correctionDeliveryIntent(next.plan, correction.effectId))
+    );
+  });
+};
 type OperatorHttpResponse =
   | OperatorSelection
   | NeonAuthorizationResult
@@ -457,10 +494,15 @@ const isGatewaySourceSuccessor = (
     prior.approvalId !== undefined,
     record.approvedByCallId !== UNAPPROVED_PLAN,
     prior.plan.stage === AUTH_BOOTSTRAP_STAGE,
-    prior.plan.gatewayDelivery.gitSha !== plan.gatewayDelivery.gitSha,
+    prior.plan.gatewayDelivery.gitSha !== plan.gatewayDelivery.gitSha ||
+      prior.plan.gatewayDelivery.gitRef !== plan.gatewayDelivery.gitRef,
     sameOperatorPlanExceptExpiry(prior.plan, {
       ...plan,
-      gatewayDelivery: { ...plan.gatewayDelivery, gitSha: prior.plan.gatewayDelivery.gitSha },
+      gatewayDelivery: {
+        ...plan.gatewayDelivery,
+        gitSha: prior.plan.gatewayDelivery.gitSha,
+        gitRef: prior.plan.gatewayDelivery.gitRef,
+      },
     }),
     record.leaseId === undefined ||
       (record.leaseExpiresAt !== undefined && Date.parse(record.leaseExpiresAt) <= now),
@@ -588,7 +630,7 @@ const handlePlanOperation = async (
     const savedGatewaySource =
       saved?.record.approvedByCallId === UNAPPROVED_PLAN &&
       saved.record.operator?.retainedGatewayDeliveries !== undefined
-        ? await deps.readGatewayDeliverySource?.(context)
+        ? await deps.readGatewayDeliverySource?.(context, saved.record.operator?.plan)
         : undefined;
     const pendingGatewaySource =
       saved?.record.approvedByCallId === UNAPPROVED_PLAN
@@ -968,6 +1010,7 @@ const handlePlanOperation = async (
           if (
             installerSuccessor ||
             appGatewaySuccessor ||
+            sharedHostSuccessor ||
             settingsSuccessor ||
             retentionRenewal ||
             readySuccessor
@@ -1173,6 +1216,13 @@ const handlePlanOperation = async (
             nextOperator.fenceGeneration = record.operator.fenceGeneration;
             nextOperator.workerCheckpoints = record.operator.workerCheckpoints;
             nextOperator.deliveredDeploymentId = record.operator.deliveredDeploymentId;
+            // The archived receipt still proves the old Gateway; only its replacement needs a new receipt.
+            const gatewayEffect = plan.effects.find(
+              (effect) => effect.kind === GATEWAY_DELIVERY_EFFECT,
+            );
+            nextOperator.receipts = record.operator.receipts.filter(
+              (receipt) => receipt.effectId !== gatewayEffect?.id,
+            );
             // Completed bootstrap candidates remain in retained Auth and approved history;
             // they never attest the new source's delivery.
             nextOperator.gatewayDeliveryCandidates = [];
@@ -1281,6 +1331,8 @@ const handlePlanOperation = async (
           }
           if (sharedHostProtectionSuccessor) {
             nextOperator.operationRef = record.operator.operationRef;
+            // Keep completed access receipts in their original fence while narrowing only policy writes.
+            nextOperator.fenceGeneration = record.operator.fenceGeneration;
             nextOperator.pendingEffectId = record.operator.pendingEffectId;
             nextOperator.pendingEffectAttempt = record.operator.pendingEffectAttempt;
             nextOperator.workerCheckpoints = record.operator.workerCheckpoints;
@@ -1312,10 +1364,16 @@ const handlePlanOperation = async (
           if (record.operator.gatewayEnvironment !== undefined) {
             nextOperator.gatewayEnvironment = record.operator.gatewayEnvironment;
           }
+          nextOperator.deliveryCorrections = retainedDeliveryCorrections(
+            record.operator,
+            nextOperator,
+          );
           nextOperator.identityLink = retainedConsumedIdentityLink(record.operator, nextOperator);
           if (
             !retainedRenewalSuccessor &&
             !readyDeliverySuccessor &&
+            !sharedHostProtectionSuccessor &&
+            !appGatewaySourceSuccessor &&
             authStageCompleted &&
             record.operator.plan.authSchema?.targetDigest === plan.authSchema?.targetDigest
           ) {
@@ -2221,7 +2279,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 requireOperator(record).pendingEffectAttempt === undefined &&
                 deps.readGatewayDeliverySource !== undefined
               ) {
-                const desiredSource = await deps.readGatewayDeliverySource(context);
+                const desiredSource = await deps.readGatewayDeliverySource(context, plan);
                 if (hasAppGatewaySourceUpdate(record, desiredSource)) {
                   await assertCurrent();
                   // Keep the original operator/approval until settlement and lease release.
@@ -2375,6 +2433,65 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 checkpoint: async (privateState) => {
                   await assertCurrent();
                   record = (await ownedUpdate((value) => ({ ...value, privateState }))).record;
+                },
+                checkpointDeliveryCorrection: async (supplied) => {
+                  await assertCurrent();
+                  const correction = operatorDeliveryCorrectionSchema.parse(supplied);
+                  if (
+                    correction.effectId !== effect.id ||
+                    !["delivery", GATEWAY_DELIVERY_EFFECT].includes(effect.kind)
+                  ) {
+                    throw new HostedOperatorError("resource_mismatch");
+                  }
+                  record = (
+                    await ownedUpdate((value) => {
+                      const prior = requireOperator(value);
+                      const currentEffect = prior.plan.effects.find(
+                        (candidate) => candidate.id === effect.id,
+                      );
+                      if (
+                        prior.planDigest !== planDigest ||
+                        prior.fenceGeneration !== fenceGeneration ||
+                        currentEffect?.kind !== effect.kind
+                      ) {
+                        throw new HostedOperatorError("reconciliation_required");
+                      }
+                      const corrections = prior.deliveryCorrections ?? [];
+                      const matching = corrections.filter(
+                        (candidate) => candidate.effectId === effect.id,
+                      );
+                      const attempted = matching.some((candidate) => candidate.createAttempted);
+                      if (correction.createAttempted && attempted) {
+                        throw new HostedOperatorError("reconciliation_required");
+                      }
+                      const saved: OperatorDeliveryCorrection = {
+                        effectId: effect.id,
+                        rejectedDeploymentIds: [
+                          ...new Set([
+                            ...matching.flatMap((candidate) => candidate.rejectedDeploymentIds),
+                            ...correction.rejectedDeploymentIds,
+                          ]),
+                        ],
+                        createAttempted: attempted || correction.createAttempted,
+                      };
+                      return {
+                        ...value,
+                        operator: {
+                          ...prior,
+                          deliveryCorrections: [
+                            ...corrections.filter((candidate) => candidate.effectId !== effect.id),
+                            saved,
+                          ],
+                        },
+                      };
+                    })
+                  ).record;
+                  effectInput.deliveryCorrections = requireOperator(record).deliveryCorrections;
+                  return operatorDeliveryCorrectionSchema.parse(
+                    effectInput.deliveryCorrections?.find(
+                      (candidate) => candidate.effectId === effect.id,
+                    ),
+                  );
                 },
                 checkpointDelivery: async (rows, selectedId) => {
                   await assertCurrent();
@@ -2559,6 +2676,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                       : ownedAppEnvironmentRows(requireOperator(record));
                 },
                 deliveryCandidates: requireOperator(record).deliveryCandidates,
+                deliveryCorrections: requireOperator(record).deliveryCorrections,
                 effect,
                 fenceGeneration,
                 gatewayDeliveryCandidates: requireOperator(record).gatewayDeliveryCandidates,

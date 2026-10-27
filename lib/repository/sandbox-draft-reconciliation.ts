@@ -5,6 +5,11 @@ import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
 
 import type { GitHubDraftPullRequestContentSource } from "./github-publication";
+import {
+  assertOwnedPublicationReconciliationOrigin,
+  assertOwnedPublicationReconciliationScope,
+} from "./github-draft-reconciliation";
+import type { OwnedPublicationReconciliationScope } from "./github-draft-reconciliation";
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { safeSourcePath } from "./source-path";
 import { attachCheckoutDependencyView } from "./dependency-cache";
@@ -85,6 +90,9 @@ export interface DraftReconciliationInput {
   /** Server-retained private candidate; replay authority is checked by the prepare tool. */
   previousCandidate?: PreparedDraftReconciliation;
   replayPreviousCandidate?: boolean;
+  /** Explicit owned-draft reopening preserves all previous roots and creates a new private candidate. */
+  forceFreshCandidate?: boolean;
+  ownedPublication?: Pick<OwnedPublicationReconciliationScope, "proposal" | "publication">;
   unpublished?: {
     reviewDigest: string;
     /** Exact original publication head, resolved from this workflow's tenant receipt. */
@@ -103,6 +111,7 @@ export interface PreparedDraftReconciliation {
   headSha: string;
   headTree: string;
   conflicts: readonly string[];
+  publicationScope?: OwnedPublicationReconciliationScope;
 }
 
 /** A saved candidate is sandbox-local; an expired sandbox can retain its receipt but not its files. */
@@ -157,6 +166,18 @@ const verifyInputs = (input: DraftReconciliationInput) => {
   ] as const;
   if (fields.some(([pattern, value]) => !pattern.test(value))) {
     throw new Error(INVALID_INPUT);
+  }
+  if (input.ownedPublication !== undefined) {
+    assertOwnedPublicationReconciliationOrigin(input.ownedPublication);
+    const { proposal } = input.ownedPublication;
+    if (
+      proposal.owner !== input.repository.owner ||
+      proposal.name !== input.repository.name ||
+      proposal.branchName !== input.headBranch ||
+      proposal.baseBranch !== input.baseBranch
+    ) {
+      throw new Error("The owned publication does not match the selected reconciliation branches.");
+    }
   }
 };
 
@@ -404,10 +425,86 @@ const candidateUntracked = async (sandbox: SandboxSession, root: string, workspa
       ),
     );
 
+/** Git's stage-zero entries preserve inherited main and originally published non-app content. */
+const nonAppIndexDigest = async (sandbox: SandboxSession, root: string, appId: string) => {
+  const result = await run(
+    sandbox,
+    "inspect the automatic merge index",
+    git(root, ["ls-files", "--stage", "-z"]),
+  );
+  if (result.exitCode !== 0) {
+    throw new Error(`Builder could not inspect the merge index (exit ${result.exitCode}).`);
+  }
+  const entries = records(result.stdout).filter((entry) => {
+    const match = /^(?<mode>\d{6}) (?<blob>[a-f0-9]+) (?<stage>[0-3])\t(?<path>[\s\S]+)$/u.exec(
+      entry,
+    );
+    if (match === null) {
+      throw new Error("Git returned an unreadable merge index entry.");
+    }
+    if (appPath(appId, match.groups?.path ?? "")) {
+      return false;
+    }
+    if (match.groups?.stage !== "0") {
+      throw new Error(
+        "A repository owner must resolve non-app merge conflicts before Builder can continue.",
+      );
+    }
+    return true;
+  });
+  return createHash("sha256").update(JSON.stringify(entries.toSorted())).digest("hex");
+};
+
+const retainedPublicationScope = (input: DraftReconciliationInput, root: string) => {
+  const previous = input.previousCandidate;
+  const scope = previous?.publicationScope;
+  if (
+    // oxlint-disable-next-line sonarjs/expression-complexity -- All retained candidate and original publication fields must match before reusing merge provenance.
+    input.ownedPublication === undefined ||
+    previous === undefined ||
+    scope === undefined ||
+    previous.root !== root ||
+    previous.headSha !== input.headSha ||
+    previous.baseSha !== input.baseSha ||
+    !isDeepStrictEqual(
+      { proposal: scope.proposal, publication: scope.publication },
+      input.ownedPublication,
+    )
+  ) {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Keep optional retained scope explicit on both return branches.
+    return undefined;
+  }
+  assertOwnedPublicationReconciliationScope(scope);
+  return scope;
+};
+
 const outsideCandidateChanges = async (
   input: DraftReconciliationInput,
   root: string,
 ): Promise<boolean> => {
+  if (input.ownedPublication !== undefined) {
+    const scope = retainedPublicationScope(input, root);
+    if (
+      scope === undefined ||
+      scope.automaticMergeNonAppDigest !==
+        (await nonAppIndexDigest(input.sandbox, root, input.appId))
+    ) {
+      return true;
+    }
+    const unstaged = records(
+      await checked(
+        input.sandbox,
+        "inspect private candidate changes",
+        git(root, [DIFF_COMMAND, NAME_ONLY, ZERO_TERMINATED]),
+      ),
+    );
+    const { paths: untracked } = await candidateUntracked(
+      input.sandbox,
+      root,
+      input.workspaceRoot ?? DEFAULT_WORKSPACE,
+    );
+    return [...unstaged, ...untracked].some((path) => !appPath(input.appId, path));
+  }
   const merge = await run(
     input.sandbox,
     "inspect the private candidate merge state",
@@ -692,6 +789,7 @@ const selectCandidateRoot = async (
 ) => {
   const previous = input.previousCandidate;
   const replayEligible =
+    input.forceFreshCandidate !== true &&
     previous !== undefined &&
     input.replayPreviousCandidate === true &&
     [
@@ -709,12 +807,9 @@ const selectCandidateRoot = async (
   let preservedCandidateRoot: string | undefined;
   let replayedAppChanges = false;
   const changedLineage = previous !== undefined && !replayEligible;
-  if (
-    advancedBase ||
-    changedLineage ||
-    (!created && (await outsideCandidateChanges(input, root)))
-  ) {
-    preservedCandidateRoot = previous?.root ?? root;
+  const needsFreshRoot = input.forceFreshCandidate === true || advancedBase || changedLineage;
+  if (needsFreshRoot || (!created && (await outsideCandidateChanges(input, root)))) {
+    preservedCandidateRoot = previous?.root ?? (created ? undefined : root);
     root = `${canonicalRoot}-${randomUUID()}`;
     created = true;
     replayedAppChanges = replayEligible && preservedCandidateRoot === previous.root;
@@ -727,6 +822,7 @@ const selectCandidateRoot = async (
 };
 
 /** Prepare a private merge candidate. This never updates the GitHub PR branch. */
+/* oxlint-disable eslint/complexity, sonarjs/cognitive-complexity -- Ordered native Git preparation preserves existing candidate recovery and publication provenance. */
 export const prepareDraftReconciliation = async (
   input: DraftReconciliationInput,
 ): Promise<
@@ -855,6 +951,20 @@ export const prepareDraftReconciliation = async (
       }
     }
   }
+  // Capture only a newly created native merge, before replay or any app edits.
+  let publicationScope: OwnedPublicationReconciliationScope | undefined;
+  if (input.ownedPublication !== undefined) {
+    publicationScope = created
+      ? {
+          kind: "owned-publication",
+          ...input.ownedPublication,
+          automaticMergeNonAppDigest: await nonAppIndexDigest(sandbox, root, input.appId),
+        }
+      : retainedPublicationScope(input, root);
+  }
+  if (input.ownedPublication !== undefined && publicationScope === undefined) {
+    throw new Error("Reprepare this owned draft to retain its automatic merge provenance.");
+  }
   if (replayedAppChanges && preservedCandidateRoot !== undefined) {
     await replayCandidateApp(input, preservedCandidateRoot, root);
   }
@@ -871,6 +981,7 @@ export const prepareDraftReconciliation = async (
     baseTree: await inspectRevision(sandbox, checkout, input.baseSha),
     conflicts,
     created,
+    ...(publicationScope === undefined ? {} : { publicationScope }),
     ...(preservedCandidateRoot === undefined ? {} : { preservedCandidateRoot, replayedAppChanges }),
     headSha: input.headSha,
     headTree: await inspectRevision(sandbox, checkout, input.headSha),
@@ -878,6 +989,7 @@ export const prepareDraftReconciliation = async (
     workspaceRoot,
   };
 };
+/* oxlint-enable eslint/complexity, sonarjs/cognitive-complexity */
 
 const safeResolutionProgram = String.raw`
 const { lstatSync, realpathSync } = require("node:fs");
@@ -1286,6 +1398,17 @@ export const inspectDraftReconciliation = async (input: {
 }> => {
   const { sandbox, prepared } = input;
   await assertDraftReconciliationCandidateAvailable(input);
+  if (prepared.publicationScope !== undefined) {
+    assertOwnedPublicationReconciliationScope(prepared.publicationScope);
+    if (
+      prepared.publicationScope.automaticMergeNonAppDigest !==
+      (await nonAppIndexDigest(sandbox, prepared.root, prepared.appId))
+    ) {
+      throw new Error(
+        "Non-app content changed after Git prepared this owned draft merge. Reprepare the candidate before review.",
+      );
+    }
+  }
   const unstaged = records(
     await checked(
       sandbox,
@@ -1325,11 +1448,6 @@ export const inspectDraftReconciliation = async (input: {
   if (unresolvedConflicts.length > 0) {
     return { baseChanges: [], headChanges: [], resolvedTree: "", unresolvedConflicts };
   }
-  await checked(
-    sandbox,
-    "check the resolved merge for whitespace and conflict markers",
-    git(prepared.root, ["diff", "--cached", "--check"]),
-  );
   const raw = await checked(
     sandbox,
     "inspect the resolved merge tree and both diffs",
@@ -1349,7 +1467,7 @@ export const inspectDraftReconciliation = async (input: {
     })
     .parse(JSON.parse(raw));
   const nonAppChange = parsed.baseChanges.find((change) => !appPath(prepared.appId, change.path));
-  if (nonAppChange !== undefined) {
+  if (nonAppChange !== undefined && prepared.publicationScope === undefined) {
     throw new Error(
       `Builder's resolved PR differs from main at ${nonAppChange.path}, outside apps/${prepared.appId}/. Restore main's content there before review.`,
     );

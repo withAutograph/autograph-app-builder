@@ -21,6 +21,7 @@ import { isRetentionRenewalBindingProvenance } from "./hosted-operator-retention
 import {
   canonicalGatewayEnvironmentRowsSchema,
   HostedOperatorError,
+  nativeDeliveryGitRef,
   plannedAppBranch,
 } from "./hosted-operator-contract";
 import type {
@@ -201,7 +202,10 @@ const ignoreDiagnostic = () => {
   /* Unobserved read-only helpers keep their existing behavior. */
 };
 // Bound untrusted error-body buffering only; oversized or unreadable diagnostics stay unclassified.
-const readProviderFailure = async (response: Response, signal: AbortSignal) => {
+export const readOperatorGatewayProviderFailure = async (
+  response: Response,
+  signal: AbortSignal,
+) => {
   try {
     const reader = response.body?.getReader();
     if (reader === undefined) {
@@ -267,11 +271,7 @@ const hasOwnedGatewayConfigChange = (
   },
 ) => {
   const { expected, known, rows, values } = observation;
-  if (
-    input.plan.authAdoption !== undefined ||
-    rows.length !== managedKeys.length ||
-    known.length !== managedKeys.length
-  ) {
+  if (rows.length !== managedKeys.length || known.length !== managedKeys.length) {
     return false;
   }
   const hasDesiredChange = rows.some(
@@ -294,11 +294,10 @@ const hasOwnedGatewayConfigChange = (
       const desired = expected[managedKeySchema.parse(row.key)];
       return (
         value === desired ||
-        [
-          "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
-          "PLATFORM_GATEWAY_PROJECT_BINDINGS",
-          "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS",
-        ].includes(row.key)
+        ["PLATFORM_GATEWAY_PROJECT_BINDINGS", "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS"].includes(
+          row.key,
+        ) ||
+        (input.plan.authAdoption === undefined && row.key === "PLATFORM_REALM_OPERATOR_LINK_CONFIG")
       );
     })
   );
@@ -479,7 +478,10 @@ export const createHostedOperatorGatewayBindings = (deps: {
   fetch?: typeof fetch;
   diagnosticSink?: HostedOperatorConsentDiagnosticSink;
 }) => {
-  const diagnostic = (input: GatewayManagedEnvironmentContext, mode: "bind" | "reconcile") => {
+  const diagnostic = (
+    input: GatewayManagedEnvironmentContext,
+    mode: OperatorGatewayBindingsDiagnostic["mode"],
+  ) => {
     let report: ReturnType<typeof createHostedOperatorConsentDiagnostic> | undefined;
     try {
       report = createHostedOperatorConsentDiagnostic(input.target.sessionId, deps.diagnosticSink);
@@ -590,6 +592,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
     liveInput: GatewayManagedEnvironmentContext,
     readonlyCanonical = false,
     observation = silentObservation,
+    environmentGitRef = liveInput.gateway.branch,
   ) => {
     const input = {
       ...liveInput,
@@ -707,7 +710,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
       try {
         await requestGuard();
         if (!response.ok) {
-          observation.providerFailure(await readProviderFailure(response, signal));
+          observation.providerFailure(await readOperatorGatewayProviderFailure(response, signal));
           throw unavailable();
         }
         if (response.status === 204) {
@@ -844,7 +847,9 @@ export const createHostedOperatorGatewayBindings = (deps: {
     };
     const isBranchPreview = (row: ProviderRow) =>
       row.target.includes("preview") &&
-      (row.gitBranch === null || row.gitBranch === undefined || row.gitBranch === branch);
+      (row.gitBranch === null ||
+        row.gitBranch === undefined ||
+        row.gitBranch === environmentGitRef);
     const requiredEnvironment = async (rows: ProviderRow[]) => {
       observation.at("required_environment");
       const byKey = (key: string) =>
@@ -853,7 +858,9 @@ export const createHostedOperatorGatewayBindings = (deps: {
             row.key === key &&
             row.target.length === 1 &&
             row.target[0] === "preview" &&
-            (row.gitBranch === null || row.gitBranch === undefined || row.gitBranch === branch),
+            (row.gitBranch === null ||
+              row.gitBranch === undefined ||
+              row.gitBranch === environmentGitRef),
         );
       for (const key of requiredSecretKeys) {
         if (byKey(key).length !== 1) {
@@ -918,7 +925,46 @@ export const createHostedOperatorGatewayBindings = (deps: {
         throw unavailable();
       }
     };
-    const expectedValues = async (rows: ProviderRow[]): Promise<GatewayValues> => {
+    const expectedRealmLinkValue = (
+      rows: ProviderRow[],
+      observedValues?: ReadonlyMap<string, string>,
+    ): string => {
+      const realmLinkConfig = createHostedOperatorRealmLinkConfig(input.plan);
+      const fallback = JSON.stringify(realmLinkConfig);
+      if (input.plan.authAdoption === undefined || input.plan.normalActorProgram !== undefined) {
+        return fallback;
+      }
+      const row = rows.find((candidate) => candidate.key === "PLATFORM_REALM_OPERATOR_LINK_CONFIG");
+      const observed = row === undefined ? undefined : observedValues?.get(row.id);
+      const canonical = approvedCanonical?.find(
+        (candidate) => candidate.id === row?.id && candidate.key === row?.key,
+      );
+      // Shared Auth keeps an already approved capture endpoint; this app gains no actor program.
+      if (
+        observed !== undefined &&
+        canonical?.valueSha256 === valueDigest(observed) &&
+        isDeepStrictEqual(
+          JSON.parse(observed),
+          // oxlint-disable-next-line unicorn/prefer-structured-clone, react-doctor/no-json-parse-stringify-clone -- Project the exact provider JSON wire representation, omitting absent optional fields.
+          JSON.parse(
+            JSON.stringify({
+              ...realmLinkConfig,
+              browserSessionCapture: {
+                path: "/api/hosted-operator/realm-browser-session",
+                sender: realmLinkConfig.identityHandoff.sender,
+              },
+            }),
+          ),
+        )
+      ) {
+        return observed;
+      }
+      return fallback;
+    };
+    const expectedValues = async (
+      rows: ProviderRow[],
+      observedValues?: ReadonlyMap<string, string>,
+    ): Promise<GatewayValues> => {
       await guard();
       observation.at("runtime_binding");
       const runtimeUrl = await deps.readAuthRuntimeUrl(input);
@@ -1019,9 +1065,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
         PLATFORM_AUTH_DATABASE_URL: runtimeUrl,
         PLATFORM_GATEWAY_PROJECT_BINDINGS: JSON.stringify(projection),
         PLATFORM_GATEWAY_PROTECTED_APPLICATIONS: JSON.stringify(protectedApplicationIds),
-        PLATFORM_REALM_OPERATOR_LINK_CONFIG: JSON.stringify(
-          createHostedOperatorRealmLinkConfig(input.plan),
-        ),
+        PLATFORM_REALM_OPERATOR_LINK_CONFIG: expectedRealmLinkValue(rows, observedValues),
       };
     };
     let activeSharedAuth = false;
@@ -1255,7 +1299,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
     const inspect = async (verifyValues: boolean) => {
       const { known, listed, rows, values } = await inspectOwnership();
       await requiredEnvironment(listed);
-      const expected = await expectedValues(rows);
+      const expected = await expectedValues(rows, values);
       if (
         renewal !== undefined &&
         (rows.length !== Object.keys(expected).length ||
@@ -1573,23 +1617,36 @@ export const createHostedOperatorGatewayBindings = (deps: {
       }
     },
     async verifyForDelivery(input: GatewayManagedEnvironmentContext) {
-      if (input.effect.kind !== "gateway-delivery") {
-        throw unavailable();
+      const observation = diagnostic(input, "verify");
+      try {
+        if (input.effect.kind !== "gateway-delivery") {
+          throw unavailable();
+        }
+        const delivery = input.plan.gatewayDelivery;
+        const environmentGitRef =
+          delivery === undefined
+            ? input.gateway.branch
+            : nativeDeliveryGitRef(input.plan, delivery, "gateway");
+        const io = open(input, false, observation, environmentGitRef);
+        await io.fullGuard();
+        const { rows, known, expected, values } = await io.inspect(true);
+        if (rows.length !== Object.keys(expected).length) {
+          throw unavailable();
+        }
+        const protection = await io.observeTrustedSources();
+        if (protection !== undefined && protection.missing.length !== 0) {
+          throw unavailable();
+        }
+        await io.fullGuard();
+        const result = {
+          rows: io.referenceRows(rows, known, values),
+        };
+        observation.finish("applied");
+        return result;
+      } catch (error) {
+        observation.finish("unknown");
+        throw error;
       }
-      const io = open(input);
-      await io.fullGuard();
-      const { rows, known, expected, values } = await io.inspect(true);
-      if (rows.length !== Object.keys(expected).length) {
-        throw unavailable();
-      }
-      const protection = await io.observeTrustedSources();
-      if (protection !== undefined && protection.missing.length !== 0) {
-        throw unavailable();
-      }
-      await io.fullGuard();
-      return {
-        rows: io.referenceRows(rows, known, values),
-      };
     },
   };
 };

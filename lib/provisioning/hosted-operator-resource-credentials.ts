@@ -427,23 +427,25 @@ export const sealHostedOperatorSharedAuth = (input: {
     throw new HostedOperatorError("resource_mismatch");
   }
   const files = decryptHostedRuntimeFiles(target);
+  let existingAppCredentials: z.infer<typeof credentialsSchema> | undefined;
   if (files !== undefined) {
     const parsed = readStoredBundle(target);
-    if (
-      parsed.version !== 2 ||
-      parsed.state !== pendingAdoptionState ||
-      target.record.privateState === undefined
-    ) {
+    if (!isDeepStrictEqual(parsed.identity, identity) || target.record.privateState === undefined) {
       throw new HostedOperatorError("resource_mismatch");
     }
-    if (
-      !isDeepStrictEqual(parsed.identity, identity) ||
-      !isDeepStrictEqual(parsed.adoption, adoption) ||
-      !isDeepStrictEqual(parsed.authDatabase, sourceBundle.authDatabase)
-    ) {
-      throw new HostedOperatorError("resource_mismatch");
+    if (parsed.version === 2) {
+      if (
+        parsed.state !== pendingAdoptionState ||
+        !isDeepStrictEqual(parsed.adoption, adoption) ||
+        !isDeepStrictEqual(parsed.authDatabase, sourceBundle.authDatabase)
+      ) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+      return target.record.privateState;
     }
-    return target.record.privateState;
+    // An unused v1 checkpoint can adopt the verified Auth owner without changing
+    // the app's saved passwords. The same no-dispatch checks below still apply.
+    existingAppCredentials = parsed.appDatabase;
   }
   const uncertainTarget = [
     target.record.operator === undefined,
@@ -457,7 +459,7 @@ export const sealHostedOperatorSharedAuth = (input: {
   }
   const bundle = adoptionBundleSchema.parse({
     adoption,
-    appDatabase: createCredentials(),
+    appDatabase: existingAppCredentials ?? createCredentials(),
     authDatabase: sourceBundle.authDatabase,
     identity,
     state: pendingAdoptionState,

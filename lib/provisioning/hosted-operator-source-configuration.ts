@@ -97,6 +97,8 @@ export const hostedOperatorSourceConfigurationSchema = z.strictObject({
         .regex(/^[a-f0-9]{40}$/u)
         .optional(),
       organizationProposal: z.strictObject({ name: id, organizationId: id, slug: id }).optional(),
+      /** Existing organization selected for the ordinary owner-bound Realm capture. */
+      organizationId: id.optional(),
       projectId: id,
       repoId: id.optional(),
     }),

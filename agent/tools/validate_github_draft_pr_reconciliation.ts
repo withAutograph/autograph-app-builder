@@ -34,6 +34,7 @@ import { supportedValidationCommands } from "@/lib/repository/supported-template
 import { inspectDraftReconciliation } from "@/lib/repository/sandbox-draft-reconciliation";
 import {
   sandboxValidationCommandExecutor,
+  readTargetValidationTestShards,
   validationOutputExcerpt,
 } from "@/lib/repository/target-validation";
 import { ValidationLogWriter } from "@/lib/repository/validation-log";
@@ -75,8 +76,9 @@ const validationSteps = (input: {
   additionalCheckTasks: string[];
   runBrowserTests: boolean;
   schemaTaskCompleted?: true;
+  testShards: readonly string[];
 }): ValidationStep[] => {
-  const checks: ValidationStep[] = supportedValidationCommands(input.appId, undefined, {
+  const checks: ValidationStep[] = supportedValidationCommands(input.appId, input.testShards, {
     alreadyCompiled: input.schemaTaskCompleted,
   }).map(({ command }) => ({
     command,
@@ -192,6 +194,7 @@ const executeCandidateCheck = async (input: {
   sandbox: SandboxSession;
   signal?: AbortSignal;
   alreadyCompiled?: true;
+  testShards: readonly string[];
 }): Promise<Awaited<ReturnType<ReturnType<typeof sandboxValidationCommandExecutor>>>> => {
   const binding = {
     appId: input.candidate.appId,
@@ -310,6 +313,7 @@ const executeCandidateCheck = async (input: {
     // The executor uses onChunk to switch to spawn; retain its detached run lifecycle and capture its returned output.
     const result = await sandboxValidationCommandExecutor({
       alreadyCompiled: input.alreadyCompiled,
+      testShards: input.testShards,
     })({
       appId: input.candidate.appId,
       command: input.planned.command,
@@ -342,6 +346,7 @@ const currentValidationStep = (
   step: ValidationStep,
   appId: string,
   alreadyCompiled?: true,
+  testShards?: readonly string[],
 ): ValidationStep => {
   switch (step.kind) {
     case "install": {
@@ -360,7 +365,7 @@ const currentValidationStep = (
       return { ...step, command: appBrowserTestCommand(appId) };
     }
     case "check": {
-      const planned = supportedValidationCommands(appId, undefined, { alreadyCompiled }).find(
+      const planned = supportedValidationCommands(appId, testShards, { alreadyCompiled }).find(
         (candidate) => {
           const legacy =
             candidate.name === "check-build"
@@ -395,6 +400,48 @@ interface ValidationStepResult {
   output?: ReturnType<typeof validationOutputExcerpt>;
 }
 
+const testShardForStep = (step: ValidationStep, appId: string): string | undefined => {
+  if (step.kind !== "check") {
+    return undefined;
+  }
+  const shard = / (?<shard>[1-9][0-9]*\/[1-9][0-9]*)$/u.exec(step.command)?.groups?.shard;
+  if (shard === undefined) {
+    return undefined;
+  }
+  const normalized = currentValidationStep(step, appId, true, [shard]);
+  const planned = supportedValidationCommands(appId, [shard], { alreadyCompiled: true }).find(
+    (entry) => entry.name === "test",
+  );
+  return normalized.command === planned?.command ? shard : undefined;
+};
+
+/** Only pending test commands follow the current declaration; completed evidence stays intact. */
+const currentValidationSteps = (
+  run: NonNullable<DraftReconciliationCandidate["validationRun"]>,
+  appId: string,
+  testShards: readonly string[],
+): ValidationStep[] => {
+  const completed = run.steps.slice(0, run.nextIndex);
+  const completedShards = new Set(completed.map((step) => testShardForStep(step, appId)));
+  const tests: ValidationStep[] = supportedValidationCommands(appId, testShards, {
+    alreadyCompiled: run.schemaTaskCompleted,
+  })
+    .filter((step) => step.name === "test" && !completedShards.has(step.command.split(" ").at(-1)))
+    .map(({ command }) => ({ command, kind: "check" }));
+  let inserted = false;
+  const pending = run.steps.slice(run.nextIndex).flatMap((step) => {
+    const isTest = testShardForStep(step, appId) !== undefined;
+    const insert =
+      !inserted && (isTest || ["browser", "additional", "capture"].includes(step.kind));
+    if (insert) {
+      inserted = true;
+    }
+    const current = currentValidationStep(step, appId, run.schemaTaskCompleted, testShards);
+    return [...(insert ? tests : []), ...(isTest ? [] : [current])];
+  });
+  return [...completed, ...pending, ...(inserted ? [] : tests)];
+};
+
 /** Eve publishes progress at tool boundaries, so each incremental call runs one command. */
 /* oxlint-disable eslint/complexity, sonarjs/cognitive-complexity -- Ordered validation branches by command category and recovery outcome. */
 const runIncrementalValidation = async (
@@ -415,6 +462,12 @@ const runIncrementalValidation = async (
       status: "needs_resolution" as const,
     };
   }
+  const testShards = await readTargetValidationTestShards({
+    sandbox,
+    root: candidate.root,
+    workspacePath: `apps/${candidate.appId}`,
+    signal: ctx.abortSignal,
+  });
   let run = candidate.validationRun ?? null;
   const checkoutChanged = run !== null && run.resolvedTree !== before.resolvedTree;
   if (checkoutChanged) {
@@ -427,6 +480,7 @@ const runIncrementalValidation = async (
       appId: candidate.appId,
       root: candidate.root,
       sandbox,
+      testShards,
     });
     run = { commands: [], nextIndex: 0, resolvedTree: before.resolvedTree, steps };
     const initialRun = run;
@@ -444,16 +498,13 @@ const runIncrementalValidation = async (
       },
     });
   }
-  const originalStepCommand = run.steps[run.nextIndex]?.command;
+  const originalStep = run.steps[run.nextIndex];
+  const originalStepCommand = originalStep?.command;
   const nextIndexToRun = run.nextIndex;
   const schemaTaskCompleted = run.schemaTaskCompleted;
   run = {
     ...run,
-    steps: run.steps.map((step, index) =>
-      index < nextIndexToRun
-        ? step
-        : currentValidationStep(step, candidate.appId, schemaTaskCompleted),
-    ),
+    steps: currentValidationSteps(run, candidate.appId, testShards),
   };
   if (!run.steps.some((entry) => entry.kind === "capture")) {
     run = { ...run, steps: [...run.steps, { kind: "capture", command: captureCommand }] };
@@ -463,6 +514,29 @@ const runIncrementalValidation = async (
     throw new Error(
       "Candidate validation has no next command. Inspect this saved session and restart validation.",
     );
+  }
+  if (
+    originalStep !== undefined &&
+    input.expectedCommand === originalStepCommand &&
+    currentValidationStep(originalStep, candidate.appId, schemaTaskCompleted, testShards)
+      .command !== step.command
+  ) {
+    const latest = draftReconciliationState.get();
+    if (latest === null) {
+      throw new Error("The candidate is unavailable while refreshing its test plan.");
+    }
+    const refreshed = run;
+    updateExactDraftReconciliation({
+      expected: latest,
+      operation: "refreshing the current declared test plan",
+      transition: () => ({ ...latest, validationRun: refreshed }),
+    });
+    return {
+      status: "plan_refreshed" as const,
+      nextCommand: step.command,
+      passedCommands: run.commands.length,
+      remainingCommands: run.steps.length - run.nextIndex,
+    };
   }
   if (
     input.expectedCommand !== undefined &&
@@ -504,7 +578,9 @@ const runIncrementalValidation = async (
           ...run,
           schemaTaskCompleted: true,
           steps: run.steps.map((entry, index) =>
-            index > nextIndexToRun ? currentValidationStep(entry, candidate.appId, true) : entry,
+            index > nextIndexToRun
+              ? currentValidationStep(entry, candidate.appId, true, testShards)
+              : entry,
           ),
         };
       } else {
@@ -563,7 +639,7 @@ const runIncrementalValidation = async (
         status: browser.status === "passed" ? "passed" : "failed",
       };
     } else {
-      const planned = supportedValidationCommands(candidate.appId, undefined, {
+      const planned = supportedValidationCommands(candidate.appId, testShards, {
         alreadyCompiled: run.schemaTaskCompleted,
       }).find(({ command }) => command === step.command);
       if (step.kind === "check" && planned === undefined) {
@@ -581,6 +657,7 @@ const runIncrementalValidation = async (
               sessionId: ctx.session.id,
               signal: ctx.abortSignal,
               alreadyCompiled: run.schemaTaskCompleted,
+              testShards,
             })
           : await sandbox.run({
               abortSignal: ctx.abortSignal,
@@ -645,6 +722,7 @@ const runIncrementalValidation = async (
           root: candidate.root,
           sandbox,
           schemaTaskCompleted: recovery.kind === "schema" ? true : run.schemaTaskCompleted,
+          testShards,
         }),
       ];
       const changed = await inspectDraftReconciliation({ prepared: candidate, sandbox });
@@ -753,7 +831,7 @@ const runIncrementalValidation = async (
 
 export default defineTool({
   description:
-    "Compile the selected app once for this coherent candidate validation, then run repository app:check and app:test without repeating their compile dependency, optional local/browser and check: tasks, and capture its actual checked release. Reuse installed dependencies; only concrete missing-dependency diagnostics schedule locked installation. Failures identify the command and cause. This does not update GitHub.",
+    "Compile the selected app once for this coherent candidate validation, then run repository app:check and all declared app:test shards without repeating their compile dependency, optional local/browser and check: tasks, and capture its actual checked release. Reuse installed dependencies; only concrete missing-dependency diagnostics schedule locked installation. Failures identify the command and cause. This does not update GitHub.",
   // oxlint-disable-next-line eslint/complexity -- ordered candidate checks need one exit for each named failure.
   async execute(input, ctx) {
     const candidate = draftReconciliationState.get();
@@ -778,6 +856,7 @@ export default defineTool({
           state.applyReceipt.applyRoot,
           ...state.validationReceipt.commands.map((command) => command.validationRoot),
           candidate.root,
+          ...(candidate.preservedWorkspaces ?? []).map((workspace) => workspace.root),
           ...draftReconciliationCompletions.get().map((completion) => completion.root),
         ],
         signal: ctx.abortSignal,

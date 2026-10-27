@@ -560,8 +560,8 @@ export function SessionAppView({
 
   if (!result) {
     return (
-      <main className="mcpApp shell">
-        <p>Loading requested controls…</p>
+      <main className="mcpApp shell" aria-busy="true">
+        <p role="status">Loading your request…</p>
       </main>
     );
   }
@@ -620,7 +620,7 @@ export function SessionAppView({
         <header>
           <div>
             <strong>Autograph App Builder</strong>
-            <p>Review the request and choose how to proceed.</p>
+            <p>Review the request below and choose how to proceed.</p>
           </div>
           <span>
             {requests.length} {requests.length === 1 ? "request" : "requests"}

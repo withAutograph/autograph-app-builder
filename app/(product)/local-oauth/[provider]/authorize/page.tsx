@@ -74,7 +74,7 @@ async function LocalOAuthApprovalContent({ params, searchParams }: Props) {
       provider={parsed.provider}
       environment={environment}
       title={actionLabel}
-      description={`Authorize Autograph App Builder to use your emulated ${details.name} identity.`}
+      description={`Authorize Autograph App Builder to use this simulated ${details.name} account.`}
       account={details.account}
       handle={details.handle}
       details={[]}

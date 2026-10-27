@@ -11,6 +11,7 @@ import type { ValidationLogReference } from "../repository/validation-log";
 
 import type {
   ExistingDraftReconciliationProposal,
+  OwnedPublicationReconciliationScope,
   ReconciliationReviewReceipt,
 } from "../repository/github-draft-reconciliation";
 
@@ -32,6 +33,8 @@ export interface DraftReconciliationCompletion {
   appReview: PublishedAppSourceReview;
   appId: string;
   githubSourceDigest: string;
+  publishedOrigin?: PublishedDraftRepairSource;
+  publicationScope?: OwnedPublicationReconciliationScope;
   root: string;
   compilation: ReconciliationCompilation;
 }
@@ -70,6 +73,14 @@ export const assertRetainedDraftReconciliationCompletion = (
   }
 };
 
+/** Owned private work retained for comparison; it grants no replay or publication authority. */
+export interface PreservedDraftWorkspace {
+  kind: "app-review" | "draft-candidate";
+  root: string;
+  reviewDigest: string;
+  paths?: readonly string[];
+}
+
 interface DraftCandidateFields {
   version: 1;
   appId: string;
@@ -84,6 +95,8 @@ interface DraftCandidateFields {
   baseSha: string;
   baseTree: string;
   conflicts: readonly string[];
+  recoveryMode?: "reopen-current-owned-draft";
+  preservedWorkspaces?: readonly PreservedDraftWorkspace[];
   validation?: {
     resolvedTree: string;
     commands: readonly { command: string; exitCode: number }[];
@@ -121,11 +134,19 @@ interface DraftCandidateFields {
 /** Repair comparison base is its draft head; it is never represented as live main. */
 export type DraftReconciliationCandidate = DraftCandidateFields &
   (
-    | { kind?: "reconciliation"; repair?: never; repairReview?: never }
+    | {
+        kind?: "reconciliation";
+        repair?: never;
+        repairReview?: never;
+        publishedOrigin?: PublishedDraftRepairSource;
+        publicationScope?: OwnedPublicationReconciliationScope;
+      }
     | {
         kind: "published-draft-repair";
         repair: PublishedDraftRepairSource;
         repairReview?: PublishedDraftRepairReview;
+        publishedOrigin?: never;
+        publicationScope?: never;
       }
   );
 

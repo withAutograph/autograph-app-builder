@@ -1486,6 +1486,31 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           }
           parseHostedSessionRow(insertedSession[0]);
         }
+        if (
+          current !== null &&
+          mayReviveCancelledSession(operation, current, input.sendDeliveryResolution)
+        ) {
+          const durable = toDurableHostedSessionRecord(current);
+          const resumed = durableHostedSessionRecordSchema.parse({
+            ...durable,
+            resumedCancellationRevision: durable.cancellationRevision ?? 0,
+            updatedAtEpochMs: Math.max(durable.updatedAtEpochMs, input.nowEpochMs),
+          });
+          const updatedSession = await transaction
+            .update(agentSessions)
+            .set(sessionValues(resumed))
+            .where(
+              and(
+                sessionTenantPredicate(principal),
+                eq(agentSessions.sessionId, current.sessionId),
+              ),
+            )
+            .returning();
+          if (updatedSession.length !== 1) {
+            throw new Error("Hosted session resume was not durable.");
+          }
+          parseHostedSessionRow(updatedSession[0]);
+        }
         const updated = await transaction
           .update(agentOperations)
           .set(operationValues(settled))

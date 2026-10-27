@@ -3,8 +3,16 @@ import { z } from "zod";
 import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import type { createHostedOperatorControlPlane } from "./hosted-operator-deployment";
-import { HostedOperatorError, operatorPlanDigest } from "./hosted-operator-contract";
-import type { HostedOperatorPlan, OperatorDeploymentCandidate } from "./hosted-operator-contract";
+import {
+  HostedOperatorError,
+  nativeDeliveryGitRef,
+  operatorPlanDigest,
+} from "./hosted-operator-contract";
+import type {
+  HostedOperatorPlan,
+  OperatorDeliveryCorrection,
+  OperatorDeploymentCandidate,
+} from "./hosted-operator-contract";
 import type {
   HostedOperatorDeploymentContext,
   HostedOperatorEffectContext,
@@ -12,6 +20,9 @@ import type {
 import { isSharedHostProtectionDeliveryProvenance } from "./hosted-operator-shared-host-protection-successor";
 import { isRetentionRenewalDeliveryProvenance } from "./hosted-operator-retention-renewal";
 import type { RetentionRenewalDeliveryProvenance } from "./hosted-operator-retention-renewal";
+import { createHostedOperatorConsentDiagnostic } from "./hosted-operator-consent-diagnostic";
+import type { OperatorGatewayDeliveryDiagnostic } from "./hosted-operator-consent-diagnostic";
+import { readOperatorGatewayProviderFailure } from "./hosted-operator-gateway-bindings";
 
 interface DeploymentListQuery {
   branch: string;
@@ -140,6 +151,12 @@ const blockedProductionSchema = z.object({
   readyState: z.literal("BLOCKED"),
   target: z.literal("production"),
 });
+const rejectedProductionSchema = blockedProductionSchema
+  .omit({ buildSkipped: true, builds: true })
+  .extend({
+    customEnvironment: z.null().optional(),
+    readyState: id,
+  });
 const failedNativePreviewSchema = z.object({
   customEnvironment: z.null().optional(),
   gitSource: z.object({
@@ -237,6 +254,57 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     selected: OperatorDeploymentCandidate,
   ) => Promise<"write" | "applied" | "unknown">;
 }) => {
+  const deliveryDiagnostic = (input: HostedOperatorDeploymentContext) => {
+    let stage: OperatorGatewayDeliveryDiagnostic["stage"] = "context";
+    let phase: OperatorGatewayDeliveryDiagnostic["phase"];
+    let method: OperatorGatewayDeliveryDiagnostic["method"];
+    let httpStatus: OperatorGatewayDeliveryDiagnostic["httpStatus"];
+    let providerFailure:
+      | Pick<
+          OperatorGatewayDeliveryDiagnostic,
+          "providerCode" | "providerTerms" | "validationFields"
+        >
+      | undefined;
+    return {
+      at(value: OperatorGatewayDeliveryDiagnostic["stage"]) {
+        stage = value;
+        phase = undefined;
+        method = undefined;
+        httpStatus = undefined;
+        providerFailure = undefined;
+      },
+      phase(value: OperatorGatewayDeliveryDiagnostic["phase"]) {
+        phase = value;
+      },
+      request(value: OperatorGatewayDeliveryDiagnostic["method"]) {
+        method = value;
+        httpStatus = undefined;
+        providerFailure = undefined;
+      },
+      response(value: number) {
+        httpStatus = value;
+      },
+      providerFailure(value: NonNullable<typeof providerFailure>) {
+        providerFailure = value;
+      },
+      finish(result: OperatorGatewayDeliveryDiagnostic["result"]) {
+        if (deps.target !== "gateway") {
+          return;
+        }
+        try {
+          createHostedOperatorConsentDiagnostic(input.target.sessionId)({
+            boundary: "operator",
+            phase: "inline",
+            stage: "operator_request",
+            outcome: result === "applied" ? "verified" : "setup_unavailable",
+            gatewayDelivery: { stage, phase, method, httpStatus, result, ...providerFailure },
+          });
+        } catch {
+          /* Advisory metadata never changes delivery or its original exception. */
+        }
+      },
+    };
+  };
   const observeAlias = (diagnostic: GatewayAliasDiagnostic) => {
     try {
       if (deps.observeAlias === undefined) {
@@ -286,7 +354,10 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     observeAlias({ stage, method, httpStatus: response.status, category });
     return { response, rejectedAssignment };
   };
-  const io = (input: HostedOperatorDeploymentContext) => {
+  const io = (
+    input: HostedOperatorDeploymentContext,
+    observation?: ReturnType<typeof deliveryDiagnostic>,
+  ) => {
     const deliveryKind = deps.target === "gateway" ? "gateway-delivery" : "delivery";
     const delivery = deps.target === "gateway" ? input.plan.gatewayDelivery : input.plan.delivery;
     if (delivery === undefined) {
@@ -306,12 +377,16 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     if (!validScope) {
       throw new HostedOperatorError("resource_mismatch");
     }
+    const gitRef = nativeDeliveryGitRef(input.plan, delivery, deps.target ?? "app");
     const planDigest = operatorPlanDigest(input.plan);
     const expectedMeta = {
       autograph_operator_effect: input.effect.id,
       autograph_operator_operation: input.operationRef,
       autograph_operator_plan: planDigest,
     };
+    let deliveryCorrection = input.deliveryCorrections?.find(
+      (correction) => correction.effectId === input.effect.id,
+    );
     const gatewayProvenance =
       deps.target === "gateway"
         ? (input.gatewayDeliveryProvenance ?? []).filter((provenance) =>
@@ -343,6 +418,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       await input.assertCurrent();
       await deps.assertAuthorized(input);
     };
+    // oxlint-disable-next-line eslint/complexity -- Preserve provider request order and add only optional diagnostic observations.
     const request = async (
       pathname: string,
       query: Record<string, string> = {},
@@ -353,13 +429,15 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
             name: string;
             project: string;
             projectSettings?: NonNullable<HostedOperatorPlan["delivery"]>["projectSettings"];
-            target?: "staging";
           }
         | { alias: string },
       allowNotFound = false,
       aliasStage?: GatewayAliasDiagnostic["stage"],
     ) => {
+      observation?.request(body === undefined ? "GET" : "POST");
+      observation?.phase("authority");
       await assertCurrent();
+      observation?.phase("credential");
       const credential = await deps.readCredential(input.authority, input.target.installationId);
       if (
         credential?.binding.active !== true ||
@@ -369,6 +447,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       ) {
         throw new HostedOperatorError("authorization_required");
       }
+      observation?.phase("authority");
       await assertCurrent();
       const url = new URL(pathname, "https://api.vercel.com");
       if (input.target.scopeType === "team") {
@@ -377,6 +456,10 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       for (const [key, value] of Object.entries(query)) {
         url.searchParams.set(key, value);
       }
+      const signal = AbortSignal.any([
+        AbortSignal.timeout(20_000),
+        ...(input.signal === undefined ? [] : [input.signal]),
+      ]);
       const send = async () =>
         await (deps.fetch ?? fetch)(url, {
           body: body === undefined ? undefined : JSON.stringify(body),
@@ -388,17 +471,17 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
           },
           method: body === undefined ? "GET" : "POST",
           redirect: "error",
-          signal: AbortSignal.any([
-            AbortSignal.timeout(20_000),
-            ...(input.signal === undefined ? [] : [input.signal]),
-          ]),
+          signal,
         });
+      observation?.phase("fetch");
       const { response, rejectedAssignment } = await sendObserved(
         send,
         aliasStage,
         body === undefined ? "GET" : "POST",
         allowNotFound,
       );
+      observation?.phase("http_response");
+      observation?.response(response.status);
       try {
         if (rejectedAssignment) {
           throw new RejectedAliasAssignmentError();
@@ -407,10 +490,16 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
           return null;
         }
         if (!response.ok) {
+          if (deps.target === "gateway" && observation !== undefined) {
+            observation.providerFailure(await readOperatorGatewayProviderFailure(response, signal));
+          }
           throw new HostedOperatorError("operator_unavailable");
         }
+        observation?.phase("json_decode");
         const value = z.json().parse(await response.json());
+        observation?.phase("authority");
         await assertCurrent();
+        observation?.phase("response_schema");
         return value;
       } finally {
         if (!response.bodyUsed) {
@@ -418,22 +507,25 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         }
       }
     };
+    // oxlint-disable-next-line eslint/complexity -- Keep native source, owner, environment and operation checks in one authoritative readback.
     const readDeployment = async (
       deploymentId: string,
       verifyProject: boolean,
       requireOperatorMetadata: boolean,
+      supplied?: z.infer<typeof deploymentSchema>,
     ): Promise<OperatorDeploymentCandidate> => {
       const observed = deploymentSchema.parse(
-        await request(`/v13/deployments/${encodeURIComponent(deploymentId)}`, {
-          withGitRepoInfo: "true",
-        }),
+        supplied ??
+          (await request(`/v13/deployments/${encodeURIComponent(deploymentId)}`, {
+            withGitRepoInfo: "true",
+          })),
       );
       const matches = [
         observed.id === deploymentId,
         observed.projectId === delivery.projectId,
         observed.ownerId === undefined || observed.ownerId === input.target.scopeId,
         String(observed.gitSource.repoId) === delivery.repoId,
-        observed.gitSource.ref === delivery.branch,
+        observed.gitSource.ref === gitRef,
         delivery.gitSha !== undefined && observed.gitSource.sha === delivery.gitSha,
         !requireOperatorMetadata || matchesMetadata(observed.meta),
       ].every(Boolean);
@@ -501,6 +593,39 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     };
     const readCandidate = async (deploymentId: string, verifyProject = true) =>
       await readDeployment(deploymentId, verifyProject, true);
+    const readCandidateOrRejection = async (deploymentId: string) => {
+      const raw = await request(`/v13/deployments/${encodeURIComponent(deploymentId)}`, {
+        withGitRepoInfo: "true",
+      });
+      const rejected = rejectedProductionSchema.safeParse(raw);
+      if (!rejected.success) {
+        return await readDeployment(deploymentId, true, true, deploymentSchema.parse(raw));
+      }
+      const observed = rejected.data;
+      const exactRejectedIdentity = [
+        observed.id === deploymentId,
+        observed.projectId === delivery.projectId,
+        observed.ownerId === input.target.scopeId,
+        observed.oidcTokenClaims.owner_id === input.target.scopeId,
+        observed.oidcTokenClaims.project_id === delivery.projectId,
+        String(observed.gitSource.repoId) === delivery.repoId,
+        observed.gitSource.ref === gitRef,
+        delivery.gitSha !== undefined && observed.gitSource.sha === delivery.gitSha,
+        matchesMetadataIdentity(expectedMeta, observed.meta),
+      ].every(Boolean);
+      if (!exactRejectedIdentity || input.checkpointDeliveryCorrection === undefined) {
+        throw new HostedOperatorError("reconciliation_required");
+      }
+      await assertCurrent();
+      deliveryCorrection = await input.checkpointDeliveryCorrection({
+        effectId: input.effect.id,
+        rejectedDeploymentIds: [deploymentId],
+        createAttempted: false,
+      });
+      // This observed Production result never enters the Preview candidate collection.
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- A rejected deployment explicitly has no Preview candidate.
+      return undefined;
+    };
     const provesDifferentGatewayAliasTarget = async (deploymentId: string | null) => {
       if (gatewayProvenance.length === 0 || deploymentId === null) {
         return false;
@@ -509,12 +634,16 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       const observed = await readDeployment(deploymentId, true, false);
       return observed.readyState === "READY";
     };
+    // oxlint-disable-next-line sonarjs/cognitive-complexity -- Complete ordered inventory and journal observations before deciding whether another create is safe.
     const readCandidates = async () => {
       const ids = new Set<string>();
       for (const candidate of input.deliveryCandidates ?? []) {
         if (candidate.operationRef === input.operationRef) {
           ids.add(candidate.deploymentId);
         }
+      }
+      for (const deploymentId of deliveryCorrection?.rejectedDeploymentIds ?? []) {
+        ids.add(deploymentId);
       }
       // Candidate IDs are observation hints only. Even rejected provenance must be read
       // rather than mistaken for absence that could authorize another create.
@@ -527,7 +656,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       const seen = new Set<number>();
       for (;;) {
         const query: DeploymentListQuery = {
-          branch: delivery.branch,
+          branch: gitRef,
           limit: "100",
           projectId: delivery.projectId,
         };
@@ -550,9 +679,14 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         seen.add(next);
         cursor = next;
       }
-      const candidates = await Promise.all(
-        [...ids].map((deploymentId) => readCandidate(deploymentId)),
-      );
+      const candidates: OperatorDeploymentCandidate[] = [];
+      for (const deploymentId of ids) {
+        // oxlint-disable-next-line react-doctor/async-await-in-loop -- Rejection observations update one journal CAS and must remain sequential.
+        const candidate = await readCandidateOrRejection(deploymentId);
+        if (candidate !== undefined) {
+          candidates.push(candidate);
+        }
+      }
       if (candidates.length !== 0) {
         await input.checkpointDelivery(candidates);
       }
@@ -597,17 +731,23 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     return {
       assertCurrent,
       delivery,
+      gitRef,
       expectedMeta,
       readCandidate,
+      readCandidateOrRejection,
       readCandidates,
+      deliveryCorrection: () => deliveryCorrection,
       readGatewayAlias,
       provesDifferentGatewayAliasTarget,
       request,
     };
   };
-  const reconcile = async (input: HostedOperatorDeploymentContext) => {
+  const reconcile = async (
+    input: HostedOperatorDeploymentContext,
+    observation?: ReturnType<typeof deliveryDiagnostic>,
+  ) => {
     try {
-      const reader = io(input);
+      const reader = io(input, observation);
       let candidates = await reader.readCandidates();
       let waitedForBuild = false;
       let waitMilliseconds = 5000;
@@ -637,6 +777,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       let selected = candidates.find((value) => value.readyState === "READY");
       if (selected === undefined) {
         if (
+          reader.deliveryCorrection()?.createAttempted === true ||
           waitedForBuild ||
           candidates.some(
             (candidate) => deps.target === "gateway" && candidate.gatewayAliasAttempted === true,
@@ -646,8 +787,15 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         }
         return {
           candidates,
+          correction: reader.deliveryCorrection(),
           resourceVersion: createHash("sha256")
-            .update(JSON.stringify({ candidates, scope: reader.delivery }))
+            .update(
+              JSON.stringify({
+                candidates,
+                correction: reader.deliveryCorrection(),
+                scope: reader.delivery,
+              }),
+            )
             .digest("hex"),
           status: "retryable" as const,
         };
@@ -729,7 +877,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     const seen = new Set<number>();
     for (;;) {
       const query: DeploymentListQuery = {
-        branch: priorDelivery.branch,
+        branch: nativeDeliveryGitRef(prior.plan, priorDelivery, "app"),
         limit: "100",
         projectId: priorDelivery.projectId,
       };
@@ -771,7 +919,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
             observed.oidcTokenClaims.owner_id === input.target.scopeId,
             observed.oidcTokenClaims.project_id === priorDelivery.projectId,
             String(observed.gitSource.repoId) === priorDelivery.repoId,
-            observed.gitSource.ref === priorDelivery.branch,
+            observed.gitSource.ref === nativeDeliveryGitRef(prior.plan, priorDelivery, "app"),
             priorDelivery.gitSha !== undefined && observed.gitSource.sha === priorDelivery.gitSha,
             matchesMetadataIdentity(oldMeta, observed.meta),
             observed.builds.length === 0,
@@ -789,7 +937,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
           observed.oidcTokenClaims.owner_id === input.target.scopeId,
           observed.oidcTokenClaims.project_id === priorDelivery.projectId,
           String(observed.gitSource.repoId) === priorDelivery.repoId,
-          observed.gitSource.ref === priorDelivery.branch,
+          observed.gitSource.ref === nativeDeliveryGitRef(prior.plan, priorDelivery, "app"),
           priorDelivery.gitSha !== undefined && observed.gitSource.sha === priorDelivery.gitSha,
           matchesMetadataIdentity(oldMeta, observed.meta),
         ].every(Boolean);
@@ -914,80 +1062,129 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
   };
   return {
     async deliver(input: HostedOperatorDeploymentContext) {
-      const reader = io(input);
-      await reader.assertCurrent();
-      const prior = await reconcile(input);
-      if (prior.status === "applied" || prior.status === "unknown") {
-        return prior;
-      }
-      if (deps.target === "gateway") {
-        const selected = prior.candidates?.find((candidate) => candidate.readyState === "READY");
-        if (selected !== undefined) {
-          return await assignGatewayAlias(input, prior.candidates, selected);
+      const observation = deliveryDiagnostic(input);
+      // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Preserve ordered reconciliation, durable correction claim and provider creation within the same lease.
+      const run = async () => {
+        observation.at("context");
+        const reader = io(input, observation);
+        observation.at("authority");
+        await reader.assertCurrent();
+        observation.at("reconciliation");
+        const prior = await reconcile(input, observation);
+        if (prior.status === "applied" || prior.status === "unknown") {
+          return prior;
         }
-      }
-      // A complete no-match listing is still uncertain; this approved retry is at-least-once and may create another scoped Preview.
-      await deps.assertEnvironment(input);
-      await reader.assertCurrent();
-      if (!(await priorAttemptIsProven(input, reader))) {
-        return { candidates: prior.candidates ?? [], status: "unknown" as const };
-      }
-      const project = projectSchema.parse(
-        await reader.request(`/v9/projects/${encodeURIComponent(reader.delivery.projectId)}`),
-      );
-      const { gitSha } = reader.delivery;
-      if (gitSha === undefined) {
-        throw new HostedOperatorError("resource_mismatch");
-      }
-      const exactProject = [
-        project.id === reader.delivery.projectId,
-        project.accountId === input.target.scopeId,
-        projectLinkMatchesDelivery(project, reader.delivery.repoId, deps.target !== "gateway"),
-        reader.delivery.gitSha !== undefined,
-      ].every(Boolean);
-      if (!exactProject) {
-        throw new HostedOperatorError("resource_mismatch");
-      }
-      await reader.assertCurrent();
-      await deps.beforeCreate?.(input);
-      await reader.assertCurrent();
-      const response = z.object({ id }).parse(
-        await reader.request(
-          "/v13/deployments",
-          {},
-          {
-            gitSource: {
-              ref: reader.delivery.branch,
-              repoId: reader.delivery.repoId,
-              sha: gitSha,
-              type: "github",
+        if (deps.target === "gateway") {
+          const selected = prior.candidates?.find((candidate) => candidate.readyState === "READY");
+          if (selected !== undefined) {
+            observation.at("alias_assignment");
+            return await assignGatewayAlias(input, prior.candidates, selected);
+          }
+        }
+        // A complete no-match listing is still uncertain; this approved retry is at-least-once and may create another scoped Preview.
+        observation.at("environment");
+        await deps.assertEnvironment(input);
+        observation.at("authority");
+        await reader.assertCurrent();
+        observation.at("prior_attempt");
+        if (!(await priorAttemptIsProven(input, reader))) {
+          return { candidates: prior.candidates ?? [], status: "unknown" as const };
+        }
+        observation.at("project_read");
+        const project = projectSchema.parse(
+          await reader.request(`/v9/projects/${encodeURIComponent(reader.delivery.projectId)}`),
+        );
+        observation.at("project_assertion");
+        const { gitSha } = reader.delivery;
+        if (gitSha === undefined) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        const exactProject = [
+          project.id === reader.delivery.projectId,
+          project.accountId === input.target.scopeId,
+          projectLinkMatchesDelivery(project, reader.delivery.repoId, deps.target !== "gateway"),
+          reader.delivery.gitSha !== undefined,
+        ].every(Boolean);
+        if (!exactProject) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        observation.at("authority");
+        await reader.assertCurrent();
+        observation.at("before_create");
+        await deps.beforeCreate?.(input);
+        observation.at("authority");
+        await reader.assertCurrent();
+        const correction: OperatorDeliveryCorrection | undefined =
+          "correction" in prior ? prior.correction : undefined;
+        if (correction !== undefined) {
+          if (input.checkpointDeliveryCorrection === undefined) {
+            return { candidates: prior.candidates ?? [], status: "unknown" as const };
+          }
+          // Claim this correction before POST. A lost response may be observed, never blindly repeated.
+          observation.at("correction_intent");
+          await input.checkpointDeliveryCorrection({ ...correction, createAttempted: true });
+          observation.at("authority");
+          await reader.assertCurrent();
+        }
+        observation.at("deployment_create");
+        const response = z.object({ id }).parse(
+          await reader.request(
+            "/v13/deployments",
+            {},
+            {
+              gitSource: {
+                ref: reader.gitRef,
+                repoId: reader.delivery.repoId,
+                sha: gitSha,
+                type: "github",
+              },
+              meta: reader.expectedMeta,
+              name: project.name,
+              project: project.id,
+              ...((deps.target ?? "app") === "app" &&
+              input.plan.delivery?.projectSettings !== undefined
+                ? { projectSettings: input.plan.delivery.projectSettings }
+                : {}),
             },
-            meta: reader.expectedMeta,
-            name: project.name,
-            project: project.id,
-            ...((deps.target ?? "app") === "app" &&
-            input.plan.delivery?.projectSettings !== undefined
-              ? { projectSettings: input.plan.delivery.projectSettings }
-              : {}),
-          },
-        ),
-      );
-      const candidate = await reader.readCandidate(response.id);
-      const candidates = [
-        ...(prior.candidates ?? []).filter(
-          (value) => value.deploymentId !== candidate.deploymentId,
-        ),
-        candidate,
-      ];
-      await input.checkpointDelivery(candidates);
-      const observed = await reconcile({ ...input, deliveryCandidates: candidates });
-      if (deps.target === "gateway" && observed.status === "retryable") {
-        const selected = observed.candidates.find((value) => value.readyState === "READY");
-        if (selected !== undefined) {
-          return await assignGatewayAlias(input, observed.candidates, selected);
+          ),
+        );
+        observation.at("deployment_readback");
+        const candidate = await reader.readCandidateOrRejection(response.id);
+        if (candidate === undefined) {
+          const rejected = reader.deliveryCorrection();
+          if (rejected !== undefined && !rejected.createAttempted) {
+            observation.at("correction_intent");
+            await input.checkpointDeliveryCorrection?.({ ...rejected, createAttempted: true });
+          }
+          return { candidates: prior.candidates ?? [], status: "unknown" as const };
         }
+        const candidates = [
+          ...(prior.candidates ?? []).filter(
+            (value) => value.deploymentId !== candidate.deploymentId,
+          ),
+          candidate,
+        ];
+        observation.at("checkpoint");
+        await input.checkpointDelivery(candidates);
+        observation.at("reconciliation");
+        const observed = await reconcile({ ...input, deliveryCandidates: candidates }, observation);
+        if (deps.target === "gateway" && observed.status === "retryable") {
+          const selected = observed.candidates.find((value) => value.readyState === "READY");
+          if (selected !== undefined) {
+            observation.at("alias_assignment");
+            return await assignGatewayAlias(input, observed.candidates, selected);
+          }
+        }
+        return observed;
+      };
+      try {
+        const result = await run();
+        observation.finish(result.status);
+        return result;
+      } catch (error) {
+        observation.finish("unknown");
+        throw error;
       }
-      return observed;
     },
     reconcile,
   };

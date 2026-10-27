@@ -1872,8 +1872,43 @@ it.each([
   },
 );
 
-const adoptionFixture = async (generic = false) => {
+const enableNormalActorCapture = (f: ReturnType<typeof fixture>) => {
+  const program = {
+    version: 1 as const,
+    appId: selection.appId,
+    origin: gateway.publicOrigin,
+    actors: [
+      {
+        actorKey: "owner",
+        email: "owner@example.test",
+        name: "Owner",
+        account: "capture-existing" as const,
+      },
+    ],
+    organizations: [],
+    memberships: [],
+    appAccess: [],
+  };
+  f.input.plan = hostedOperatorPlanSchema.parse({
+    ...f.input.plan,
+    stage: "app",
+    access: [],
+    normalActorProgram: program,
+    normalActorPreparation: {
+      accountOperationRef: "11111111-1111-4111-8111-111111111111",
+      programDigest: normalActorProgramDigest(program),
+      accountPlanDigest: "d".repeat(64),
+      accountApprovalId: "actual-initial-approval",
+      accountApprovedByCallId: "initial-call",
+    },
+  });
+};
+
+const adoptionFixture = async (generic = false, sourceBrowserCapture = false) => {
   const f = fixture(undefined, false, generic ? gateway.branch : undefined);
+  if (sourceBrowserCapture) {
+    enableNormalActorCapture(f);
+  }
   if (generic) {
     for (const row of f.rows) {
       row.gitBranch = null;
@@ -1896,6 +1931,8 @@ const adoptionFixture = async (generic = false) => {
   f.input.target.appId = "inventory";
   f.input.target.projectId = "prj_inventory";
   f.input.plan = structuredClone(f.input.plan);
+  delete f.input.plan.normalActorProgram;
+  delete f.input.plan.normalActorPreparation;
   f.input.plan.selection = { ...selection, appId: "inventory", projectId: "prj_inventory" };
   f.input.plan.deploymentBoundary!.app.projectId = "prj_inventory";
   f.input.plan.authAdoption = {
@@ -1966,8 +2003,14 @@ it("proves canonical ownership during the actual Auth resource effect with GET-o
 });
 
 it("merges approved canonical sibling bindings and checkpoints exact non-secret value hashes for retries", async () => {
-  const f = await adoptionFixture();
+  const f = await adoptionFixture(false, true);
+  const realm = f.rows.find((row) => row.key === "PLATFORM_REALM_OPERATOR_LINK_CONFIG")!;
+  const sourceRealmValue = realm.value;
+  expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "retryable" });
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+  f.requests.length = 0;
   const result = await f.writer.bind(f.input);
+  expect(realm.value).toBe(sourceRealmValue);
   const projection = f.rows.find((row) => row.key === "PLATFORM_GATEWAY_PROJECT_BINDINGS")!;
   expect(
     z
@@ -2279,35 +2322,7 @@ it("enables the exact native identity handoff without requiring a participant pr
 
 it("activates normal browser capture with the exact frozen native sender workload", async () => {
   const f = fixture();
-  const program = {
-    version: 1 as const,
-    appId: selection.appId,
-    origin: gateway.publicOrigin,
-    actors: [
-      {
-        actorKey: "owner",
-        email: "owner@example.test",
-        name: "Owner",
-        account: "capture-existing" as const,
-      },
-    ],
-    organizations: [],
-    memberships: [],
-    appAccess: [],
-  };
-  f.input.plan = hostedOperatorPlanSchema.parse({
-    ...plan,
-    stage: "app",
-    access: [],
-    normalActorProgram: program,
-    normalActorPreparation: {
-      accountOperationRef: "11111111-1111-4111-8111-111111111111",
-      programDigest: normalActorProgramDigest(program),
-      accountPlanDigest: "d".repeat(64),
-      accountApprovalId: "actual-initial-approval",
-      accountApprovedByCallId: "initial-call",
-    },
-  });
+  enableNormalActorCapture(f);
   await f.writer.bind(f.input);
   const link = f.rows.find((row) => row.key === "PLATFORM_REALM_OPERATOR_LINK_CONFIG");
   const config = z.record(z.string(), z.json()).parse(JSON.parse(z.string().parse(link?.value)));

@@ -410,6 +410,8 @@ const hostedOperatorPlanDataSchema = z.strictObject({
   gatewayDelivery: z
     .strictObject({
       branch: id,
+      /** Approved native source ref; branch retains the Gateway environment and alias namespace. */
+      gitRef: id.optional(),
       gitSha: z
         .string()
         .regex(/^[a-f0-9]{40}$/u)
@@ -937,6 +939,27 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
   }
 });
 export type HostedOperatorPlan = z.infer<typeof hostedOperatorPlanSchema>;
+
+/** Provider source ref is separate from the Gateway environment and alias namespace. */
+export const nativeDeliveryGitRef = (
+  plan: HostedOperatorPlan,
+  delivery: NonNullable<HostedOperatorPlan["delivery"]>,
+  target: "app" | "gateway",
+): string => {
+  if (target !== "gateway") {
+    return delivery.branch;
+  }
+  if (plan.gatewayDelivery?.gitRef !== undefined) {
+    return plan.gatewayDelivery.gitRef;
+  }
+  return plan.stage === "app" &&
+    delivery.gitSha !== undefined &&
+    plan.delivery?.repoId === delivery.repoId &&
+    plan.delivery.gitSha === delivery.gitSha
+    ? plan.delivery.branch
+    : delivery.branch;
+};
+
 /** Legacy plans install only their grant tenants; explicit plans retain owned installation tenants. */
 export const hostedOperatorInstallationCustomerIds = (
   plan: Pick<HostedOperatorPlan, "access" | "appInstallation">,
@@ -1082,12 +1105,20 @@ export const retainedAppDeliverySchema = z.object({
 });
 export type RetainedAppDelivery = z.infer<typeof retainedAppDeliverySchema>;
 
+export const operatorDeliveryCorrectionSchema = z.strictObject({
+  effectId: id,
+  rejectedDeploymentIds: z.array(id),
+  createAttempted: z.boolean(),
+});
+export type OperatorDeliveryCorrection = z.infer<typeof operatorDeliveryCorrectionSchema>;
+
 const hostedOperatorRecordBaseSchema = z.strictObject({
   approvalId: id.optional(),
   authPreparation: operatorAuthSchemaPreparationSchema.optional(),
   deliveredDeploymentId: id.optional(),
   deliveredGatewayDeploymentId: id.optional(),
   deliveryCandidates: operatorDeploymentCandidatesSchema.optional(),
+  deliveryCorrections: z.array(operatorDeliveryCorrectionSchema).optional(),
   /** Shared across Auth and kernel rows; allocated once by the existing journal CAS. */
   fenceGeneration: z.number().int().positive().optional(),
   gatewayDeliveryCandidates: operatorDeploymentCandidatesSchema.optional(),

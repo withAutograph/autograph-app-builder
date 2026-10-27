@@ -34,8 +34,10 @@ app-owned files and reuse the same component-backed preview flow.
    scaffolding.
 2. Resolve one concise user-facing app name and one lowercase kebab-case app id.
    Preserve each explicitly supplied valid value. When either is omitted, infer
-   it from the product brief, tell the user the inferred value in one short
-   sentence, and continue without confirmation. Derive an inferred id
+   it from the product brief, tell the user the inferred product name in one
+   short sentence, and continue without confirmation. Mention the inferred id
+   only when it helps the user identify the app or resolve a real collision.
+   Derive an inferred id
    deterministically from the chosen name by lowercasing it, replacing each run
    of non-alphanumeric characters with one hyphen, and trimming hyphens. Ask
    only when the result is unsupported, the prepared source proves a real
@@ -76,9 +78,9 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    for an explicitly supplied full commit. The platform branch/open PR remains
    the ordinary source selection. Builder verifies and projects the app itself;
    never ask the evaluator to restore files or manually construct a baseline.
-   Retry the saved selection after a preparation failure. Report the receipt's
-   historical app source and actual platform base separately from newly authored
-   changes. Retained later release archives are not initial implementation input;
+   Retry the saved selection after a preparation failure. Report the app source
+   and actual platform base separately from newly authored changes; include
+   receipt details in supporting context when useful. Retained later release archives are not initial implementation input;
    do not inspect them to copy a later revision. A baseline is provenance only,
    and grants no publication, deployment, or readiness authority.
    For a hosted existing repository named as `owner/name`, use only
@@ -399,8 +401,9 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    When validation returns `productionHandoff`, follow
    [Production handoff](../../../docs/production-readiness-handoff.md) for
    reviewed Auth identity, explicit QA access and runtime binding delivery.
-   Include its declared app route,
-   roles, checked release, operator guide, and blockers in the result. Keep it
+   Include its declared app route, roles, and blockers in the result. Keep the
+   checked release and operator-guide references in supporting context when
+   useful. Keep the handoff
    separate from private validation and GitHub checks: a protected operator
    owns tenant preparation, access grants, and hosted activation. Missing
    Production metadata is not a private build failure. Preserve the selected
@@ -460,6 +463,16 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
   come from the authenticated durable approval outcome, never assistant
   narration, a client acknowledgement or tool arguments. New or changed effects
   require their own exact approval.
+  An `auth-bootstrap` plan intentionally prepares Auth and Gateway before
+  account capture. Continue the returned prerequisite through
+  `prepare-app-hosted-runtime` with approval for its exact effects. Follow its
+  ordinary account connection link for the existing account and resume that
+  same approved preparation to read back capture. Then plan again for the same
+  app/session and release intent; the renewed full app plan supplies app
+  installation, access, delivery and routing through their normal approval
+  flow. Do not stop because the first plan contains only bootstrap effects or
+  require an app deployment before initial account connection. Reconcile unknown
+  outcomes before retrying; account capture alone does not prove app readiness.
   A current authority, credential, isolation or provider refusal remains a
   blocker; never treat that fresh refusal as stale or infer readiness from a
   repair report.

@@ -29,6 +29,7 @@ import {
 import { repairCheckoutDependenciesAfterValidationFailure } from "@/lib/agent/checkout-dependencies";
 import {
   createTargetValidationAttempt,
+  readTargetValidationTestShards,
   executeProposalBoundValidation,
   fixtureValidationCommandExecutor,
   sandboxValidationCommandExecutor,
@@ -186,7 +187,6 @@ export const createAppValidationTool = (
       validationPhase(ctx.callId, "sandbox_ready");
       const relativeApplyRoot = current.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
       const fixture = hasTestCapability("simulated-target");
-      const attempt = createTargetValidationAttempt(current.applyReceipt, ctx.callId);
       const priorPublishedGitHubDraftProposalDigest =
         current.publishedGitHubDraftProposalDigest ??
         (current.phase === "reviewed" ? current.githubDraftProposal?.proposal.digest : undefined);
@@ -211,8 +211,7 @@ export const createAppValidationTool = (
       } as const;
       appBuilderWorkflowState.update(() => ({
         ...base,
-        phase: "validation_pending",
-        validationAttempt: attempt,
+        phase: "applied",
       }));
       if (input.implementationFiles.length > 0) {
         invalidateProductBehaviorEvidence("source-repair");
@@ -333,6 +332,18 @@ export const createAppValidationTool = (
         validationPhase(ctx.callId, "declared_local_data_ready");
       }
       validationPhase(ctx.callId, "running_repository_commands");
+      const testShards = await readTargetValidationTestShards({
+        sandbox,
+        root: current.applyReceipt.applyRoot,
+        workspacePath: current.applyReceipt.targetReceipt.workspacePath,
+        signal: ctx.abortSignal,
+      });
+      const attempt = createTargetValidationAttempt(current.applyReceipt, ctx.callId, testShards);
+      appBuilderWorkflowState.update(() => ({
+        ...base,
+        phase: "validation_pending",
+        validationAttempt: attempt,
+      }));
       logStore ??= fixture
         ? undefined
         : await validationLogStoreForSession({
@@ -346,7 +357,9 @@ export const createAppValidationTool = (
         attempt,
         dependencyLayout: current.dependencyReceipt.dependencyLayout,
         environment: schemaInput.environment,
-        executor: fixture ? fixtureValidationCommandExecutor() : sandboxValidationCommandExecutor(),
+        executor: fixture
+          ? fixtureValidationCommandExecutor()
+          : sandboxValidationCommandExecutor({ testShards }),
         logStore,
         sandbox,
         sessionId: ctx.session.id,

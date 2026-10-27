@@ -8,6 +8,7 @@ import { z } from "zod";
 
 import {
   supportedValidationCommands,
+  supportedValidationTestShards,
   SUPPORTED_VALIDATION_TEST_SHARDS,
 } from "./supported-template";
 import { ARRUSTED_APP_VALIDATION_SHA256 } from "./dependency-cache";
@@ -357,7 +358,28 @@ export const compilerDiagnostics = (output: string): TargetValidationDiagnostic[
   return diagnostics;
 };
 
-export const validationBinding = (apply: TargetApplyReceipt): TargetValidationBinding => ({
+export const readTargetValidationTestShards = async (input: {
+  sandbox: Pick<SandboxSession, "readTextFile">;
+  root: string;
+  workspacePath: string;
+  signal?: AbortSignal;
+}): Promise<readonly string[]> => {
+  input.signal?.throwIfAborted();
+  const content = await input.sandbox.readTextFile({
+    path: nodePath.posix.join(input.root, input.workspacePath, "package.json"),
+    abortSignal: input.signal,
+  });
+  input.signal?.throwIfAborted();
+  if (content === null) {
+    throw new Error("The selected app's package manifest could not be read for validation.");
+  }
+  return supportedValidationTestShards(content);
+};
+
+export const validationBinding = (
+  apply: TargetApplyReceipt,
+  testShards: readonly string[] = SUPPORTED_VALIDATION_TEST_SHARDS,
+): TargetValidationBinding => ({
   appId: apply.targetReceipt.appId,
   appSpecDigest: apply.appSpecDigest,
   appSpecPath: apply.appSpecPath,
@@ -376,26 +398,26 @@ export const validationBinding = (apply: TargetApplyReceipt): TargetValidationBi
   sourceReceiptDigest: apply.sourceReceiptDigest,
   sourceSha: apply.sourceSha,
   sourceTree: apply.sourceTree,
-  testShards: SUPPORTED_VALIDATION_TEST_SHARDS,
+  testShards,
   workspaceDigest: apply.workspaceDigest,
 });
 
 export const createTargetValidationAttempt = (
   apply: TargetApplyReceipt,
   startedByCallId: string,
+  testShards: readonly string[] = SUPPORTED_VALIDATION_TEST_SHARDS,
 ): TargetValidationAttemptReceipt => {
   const unsigned = {
     status: "pending" as const,
     version: 3 as const,
-    ...validationBinding(apply),
-    commands: supportedValidationCommands(
-      apply.targetReceipt.appId,
-      SUPPORTED_VALIDATION_TEST_SHARDS,
-    ).map(({ command, name }) => ({
-      command,
-      name,
-      validationRoot: apply.applyRoot,
-    })),
+    ...validationBinding(apply, testShards),
+    commands: supportedValidationCommands(apply.targetReceipt.appId, testShards).map(
+      ({ command, name }) => ({
+        command,
+        name,
+        validationRoot: apply.applyRoot,
+      }),
+    ),
     startedByCallId,
   };
   return { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
@@ -428,10 +450,11 @@ export const sandboxValidationCommandExecutor =
   (options?: {
     runtime?: PreparedRuntimeExecution | null;
     alreadyCompiled?: true;
+    testShards?: readonly string[];
   }): ValidationCommandExecutor =>
   async ({ sandbox, appId, command, validationRoot, environment, onChunk, abortSignal }) => {
     if (
-      !supportedValidationCommands(appId, undefined, options).some(
+      !supportedValidationCommands(appId, options?.testShards, options).some(
         (planned) => planned.command === command,
       )
     ) {

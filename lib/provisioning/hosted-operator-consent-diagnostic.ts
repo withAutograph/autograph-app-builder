@@ -638,6 +638,10 @@ export type OperatorWorkloadFailure = z.infer<typeof operatorWorkloadFailureSche
 
 const operatorPlanningMismatchBoundary = z.enum([
   "application_selection",
+  "canonical_owner_app",
+  "direct_owner_project",
+  "prepared_preview_journal",
+  "prepared_preview_selection",
   "inventory_configuration",
   "inventory_project",
   "inventory_deployment",
@@ -647,6 +651,30 @@ const operatorPlanningMismatchBoundary = z.enum([
 export type OperatorPlanningMismatchBoundary = z.infer<typeof operatorPlanningMismatchBoundary>;
 const operatorPlanningMismatchField = z.enum([
   "application_missing",
+  "owner_app_missing",
+  "owner_app_mismatch",
+  "active_installations_missing",
+  "ready_project_missing",
+  "ready_project_ambiguous",
+  "journal_missing",
+  "operator_missing",
+  "delivery_missing",
+  "delivery_sha_missing",
+  "artifact_missing",
+  "journal_status",
+  "plan_stage",
+  "plan_digest",
+  "selection_app",
+  "selection_branch",
+  "selection_environment",
+  "selection_project",
+  "selection_session",
+  "delivery_project",
+  "selection_missing",
+  "release_source_binding",
+  "release_app",
+  "release_id",
+  "release_manifest",
   "app_project",
   "app_branch",
   "team",
@@ -798,8 +826,33 @@ const gatewayProviderTerm = z.enum([
   "size",
   "update",
   "length",
+  "repository",
+  "commit",
+  "framework",
+  "author",
+  "build",
+  "source",
+  "sha",
+  "ref",
+  "repoId",
+  "gitSource",
+  "projectSettings",
 ]);
-const gatewayValidationField = z.enum(["gitBranch", "target", "type", "key", "value", "comment"]);
+const gatewayValidationField = z.enum([
+  "gitBranch",
+  "target",
+  "type",
+  "key",
+  "value",
+  "comment",
+  "gitSource",
+  "ref",
+  "sha",
+  "repoId",
+  "name",
+  "project",
+  "projectSettings",
+]);
 
 /** Literal observations only: labels are neither provider causes nor permission to retry. */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the parser for untrusted advisory provider metadata; only closed fields are returned.
@@ -861,7 +914,7 @@ export const projectOperatorGatewayProviderFailure = (payload: unknown) => {
 };
 
 const gatewayBindingsDiagnostic = z.strictObject({
-  mode: z.enum(["bind", "reconcile"]),
+  mode: z.enum(["bind", "reconcile", "verify"]),
   stage: z.enum([
     "context",
     "authority",
@@ -907,6 +960,34 @@ const gatewayBindingsDiagnostic = z.strictObject({
   result: z.enum(["bound", "applied", "absent", "unknown", "failed"]),
 });
 export type OperatorGatewayBindingsDiagnostic = z.infer<typeof gatewayBindingsDiagnostic>;
+
+const gatewayDeliveryDiagnostic = z.strictObject({
+  stage: z.enum([
+    "context",
+    "reconciliation",
+    "alias_assignment",
+    "environment",
+    "authority",
+    "prior_attempt",
+    "project_read",
+    "project_assertion",
+    "before_create",
+    "correction_intent",
+    "deployment_create",
+    "deployment_readback",
+    "checkpoint",
+  ]),
+  phase: z
+    .enum(["authority", "credential", "fetch", "http_response", "json_decode", "response_schema"])
+    .optional(),
+  method: z.enum(["GET", "POST"]).optional(),
+  httpStatus: z.number().int().min(100).max(599).optional(),
+  result: z.enum(["applied", "retryable", "unknown"]),
+  providerCode: gatewayProviderCode.optional(),
+  providerTerms: z.array(gatewayProviderTerm).optional(),
+  validationFields: z.array(gatewayValidationField).optional(),
+});
+export type OperatorGatewayDeliveryDiagnostic = z.infer<typeof gatewayDeliveryDiagnostic>;
 
 const inventoryReadFailure = z.strictObject({
   target: z.enum(["inventory", "app", "gateway", "operator"]),
@@ -995,6 +1076,7 @@ const metadata = z.strictObject({
   executionFailure: operatorExecutionFailure.optional(),
   hostedEnvironmentBindingFailure: hostedEnvironmentBindingFailure.optional(),
   gatewayBindings: gatewayBindingsDiagnostic.optional(),
+  gatewayDelivery: gatewayDeliveryDiagnostic.optional(),
   inventoryReadFailure: inventoryReadFailure.optional(),
   planningMismatch: z
     .strictObject({

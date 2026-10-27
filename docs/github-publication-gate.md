@@ -137,6 +137,41 @@ repository, branch, commit and tree exactly. This reads retained publication
 history; it neither selects a latest release nor accepts a supplied historical
 commit. An absent or mismatched marker leaves the original baseline unchanged.
 
+GitHub's PR snapshot may still report an older head after an accepted branch
+update. Same-draft recovery obtains the tenant-owned publication and its retained
+applied proposal or canonical owner/app/spec-scoped source before that mismatch
+can prevent source acquisition. The recovery context stays internal and follows
+the same operation through inspection, sealing, mutation and exact-result
+read-back; public tools accept no caller-supplied source proof.
+
+Recovery binds the same repository, PR, branch and verified Builder origin to
+the existing publication. A marker or commit ancestry alone grants no authority.
+A later approved merge proves its exact parent commits, reviewed tree and commit
+message against that owned baseline, even when the PR snapshot predates it.
+Result recovery runs before recording the new published source, so that record
+is not a prerequisite for proving an already accepted write. Live-ref rereads,
+expected-OID non-force updates, review and separate effect approval remain
+required. An unproved branch advance still leaves the draft untouched.
+
+When the original app review cannot be replayed onto its current owned draft,
+`prepare_github_draft_pr_reconciliation` supports the explicit
+`recovery: "reopen-current-owned-draft"` mode. Builder verifies the same owned
+publication, current draft and live base, then creates a fresh isolated merge
+candidate without replaying the ambiguous original overlay or an earlier
+candidate. The original starter provenance, apply workspace and earlier private
+candidates remain retained. The result identifies the unreplayed original
+review and preserved workspaces; those edits are not claimed as part of the new
+candidate.
+
+The recovery mode follows subsequent preparation attempts within the same owned
+review lineage. Original app-review content remains available through
+`change_set_status`; retained draft candidates can be read through the bounded,
+read-only preserved-workspace selector on `edit_github_draft_pr_candidate`.
+Edits still target only the current candidate. Builder must validate that
+candidate, review its new base and prior-head diffs, seal the exact result and
+obtain separate outward-effect approval. Reopening is private preparation and
+does not replace the accepted source or update GitHub.
+
 `hosted_github_installation` binds that same tenant tuple to one exact GitHub
 App installation and expected account identity. Binding is available only
 through the owner-only, confirmation-digest-bound

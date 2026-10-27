@@ -42,6 +42,7 @@ import { createHostedOperatorRealmHttpTransport } from "./hosted-operator-realm-
 import {
   HostedOperatorError,
   hostedOperatorPlanSchema,
+  nativeDeliveryGitRef,
   hostedOperatorAuthSignupPolicyInputSchema,
   operatorReceiptSchema,
   restrictedOperatorEnvironment,
@@ -80,7 +81,10 @@ import { createProjectSettingsSuccessorPlan } from "./hosted-operator-project-se
 import { createInstallerSourceSuccessorPlan } from "./hosted-operator-installer-source-successor";
 import type { OperatorPlanStage } from "./hosted-operator-consent-diagnostic";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
-import { readOwnedOperatorPlanningSelection } from "./hosted-operator-planning-authority";
+import {
+  readOwnedBootstrapPlanningSelection,
+  readOwnedOperatorPlanningSelection,
+} from "./hosted-operator-planning-authority";
 import {
   createNativePreviewNeonPlanningAuthority,
   createNativePreviewNeonExecutionAuthority,
@@ -129,7 +133,14 @@ const sharedHostProtectionPrerequisite = (
       plan.deploymentBoundary?.gateway.projectId === configuration.gateway.projectId,
       plan.deploymentBoundary?.teamId === configuration.teamId,
     ].every(Boolean);
-  return configuredHost ? createSharedHostProtectionSuccessorPlan(record, Date.now()) : undefined;
+  return configuredHost
+    ? createSharedHostProtectionSuccessorPlan(
+        record,
+        Date.now(),
+        // oxlint-disable-next-line eslint/no-use-before-define -- Called after module initialization; retain canonical application-selection validation.
+        selectedApplication(configuration, context).hostProtection,
+      )
+    : undefined;
 };
 
 const GATEWAY_DELIVERY = "gateway-delivery";
@@ -141,6 +152,49 @@ const AUTH_MEMBERSHIP = "auth-membership";
 const AUTH_SIGNUP_POLICY = "auth-signup-policy";
 const OPERATION_IN_PROGRESS = "operation_in_progress";
 const RECONCILIATION_REQUIRED = "reconciliation_required";
+const gatewayDeliverySourceForPlan = (
+  configuration: HostedOperatorSourceConfiguration,
+  currentPlan?: HostedOperatorPlan,
+): AppGatewayDeliverySource & { gitSha: string } => {
+  const publishedSha =
+    currentPlan?.stage === "app" && currentPlan.delivery?.repoId === configuration.gateway.repoId
+      ? currentPlan.delivery.gitSha
+      : undefined;
+  const frozenBootstrapSource =
+    currentPlan?.stage !== "app" && currentPlan?.gatewayDelivery?.gitRef !== undefined
+      ? currentPlan.gatewayDelivery
+      : undefined;
+  return {
+    branch: configuration.gateway.branch,
+    ...(frozenBootstrapSource === undefined ? {} : { gitRef: frozenBootstrapSource.gitRef }),
+    gitSha: publishedSha ?? frozenBootstrapSource?.gitSha ?? configuration.gateway.gitSha,
+    projectId: configuration.gateway.projectId,
+    repoId: configuration.gateway.repoId,
+  };
+};
+const publishedGatewayDeliverySource = (
+  configuration: HostedOperatorSourceConfiguration,
+  selection: CompiledOperatorReleaseSelection | undefined,
+): AppGatewayDeliverySource | undefined => {
+  const published = selection?.publishedSource;
+  if (published?.repositoryId !== configuration.gateway.repoId) {
+    return undefined;
+  }
+  return {
+    branch: configuration.gateway.branch,
+    gitRef: published.branch,
+    gitSha: published.gitSha,
+    projectId: configuration.gateway.projectId,
+    repoId: configuration.gateway.repoId,
+  };
+};
+const frozenGatewayDeliverySource = (
+  plan: HostedOperatorPlan,
+  source: AppGatewayDeliverySource,
+): AppGatewayDeliverySource => {
+  const gitRef = nativeDeliveryGitRef(plan, source, "gateway");
+  return source.gitRef !== undefined || gitRef === source.branch ? source : { ...source, gitRef };
+};
 const appTrustedSourcesForNewPlan = (
   base: HostedOperatorPlan,
   configuration: HostedOperatorSourceConfiguration,
@@ -905,6 +959,77 @@ const resolveParticipantPlan = async (
   return await withRetainedAppInstallationTargets(appPlan, context, controlPlane);
 };
 
+const matchesSelectedRealmOrganization = (
+  selectedOrganizationId: string | undefined,
+  observedOrganizationId: string | null | undefined,
+) => selectedOrganizationId === undefined || observedOrganizationId === selectedOrganizationId;
+
+const resolveCapturedRealmMembership = (input: {
+  application: ReturnType<typeof selectedApplication>;
+  captured: NonNullable<Awaited<ReturnType<ControlPlane["readCapturedRealmIdentity"]>>>;
+  privateProof: Awaited<ReturnType<ControlPlane["readCapturedRealmIdentityProof"]>>;
+  verified: Awaited<ReturnType<typeof readVerifiedRealmAccess>>;
+  transportOrigin: string;
+  configuration: HostedOperatorSourceConfiguration;
+}) => {
+  const { application, captured, privateProof, verified, transportOrigin, configuration } = input;
+  if (verified.identity.organizationId !== null) {
+    return { organizationId: verified.identity.organizationId };
+  }
+  const organization = application.organizationProposal;
+  if (organization === undefined) {
+    throw new HostedOperatorError(AUTH_MEMBERSHIP_REQUIRED);
+  }
+  const { organizationId } = organization;
+  return {
+    organizationId,
+    authMembership: {
+      actorId: verified.identity.actorId,
+      bootstrapPlanDigest: captured.bootstrapPlanDigest,
+      identityCapture: {
+        capturedAt: privateProof.link.consumedAt ?? "",
+        realmSessionId: verified.identity.sessionId,
+      },
+      identityNonceSha256: captured.nonceSha256,
+      identityProof: {
+        reference: privateProof.link.proofRef ?? "",
+        sha256: privateProof.link.proofSha256 ?? "",
+      },
+      identityVerification: {
+        audience: captured.audience,
+        issuer: captured.issuer,
+        jwksUrl: `${transportOrigin}/_platform/jwks.json`,
+        transportSource: configuration.nativeNeon.configuration.operator,
+      },
+      kind: "create-owned-organization" as const,
+      name: organization.name,
+      organizationId,
+      slug: organization.slug,
+    },
+  };
+};
+
+const hasCapturedSelectedOwnerIdentity = (
+  record: HostedRuntimeJournalRecord,
+  operator: NonNullable<HostedRuntimeJournalRecord["operator"]>,
+  context: HostedOperatorContext,
+  organizationId: string | undefined,
+) => {
+  const link = operator.identityLink;
+  return [
+    operator.plan.normalActorProgram === undefined,
+    link?.browserSession === undefined,
+    link?.bootstrapPlanDigest === operator.planDigest ||
+      hasRetainedSharedHostProtectionIdentity(record),
+    link?.ownerSessionId === context.target.sessionId,
+    link?.authResourceId === operator.plan.authDatabase.resourceId,
+    link?.consumedAt !== undefined,
+    link?.proofRef !== undefined,
+    link?.proofSha256 !== undefined,
+    matchesSelectedRealmOrganization(organizationId, link?.organizationId),
+  ].every(Boolean);
+};
+
 export const resolveFullPlan = async (
   base: HostedOperatorPlan,
   context: HostedOperatorContext,
@@ -948,6 +1073,9 @@ export const resolveFullPlan = async (
     return base;
   }
   const application = selectedApplication(configuration, context);
+  if (!matchesSelectedRealmOrganization(application.organizationId, captured.organizationId)) {
+    return base;
+  }
   const allowedAppRoles = rolesForNewPlan(application, currentAppRoles);
   // Bootstrap prepares owned Auth and database resources before app publication.
   // Only the app delivery plan needs the actual published Git source.
@@ -987,38 +1115,19 @@ export const resolveFullPlan = async (
       version: 1,
     },
   });
-  let { organizationId } = verified.identity;
-  let authMembership: HostedOperatorPlan["authMembership"];
-  if (organizationId === null) {
-    const organization = application.organizationProposal;
-    if (organization === undefined) {
-      throw new HostedOperatorError(AUTH_MEMBERSHIP_REQUIRED);
-    }
-    ({ organizationId } = organization);
-    authMembership = {
-      actorId: verified.identity.actorId,
-      bootstrapPlanDigest: captured.bootstrapPlanDigest,
-      identityCapture: {
-        capturedAt: privateProof.link.consumedAt ?? "",
-        realmSessionId: verified.identity.sessionId,
-      },
-      identityNonceSha256: captured.nonceSha256,
-      identityProof: {
-        reference: privateProof.link.proofRef ?? "",
-        sha256: privateProof.link.proofSha256 ?? "",
-      },
-      identityVerification: {
-        audience: captured.audience,
-        issuer: captured.issuer,
-        jwksUrl: `${transportOrigin}/_platform/jwks.json`,
-        transportSource: configuration.nativeNeon.configuration.operator,
-      },
-      kind: "create-owned-organization",
-      name: organization.name,
-      organizationId,
-      slug: organization.slug,
-    };
+  if (
+    !matchesSelectedRealmOrganization(application.organizationId, verified.identity.organizationId)
+  ) {
+    return base;
   }
+  const { organizationId, authMembership } = resolveCapturedRealmMembership({
+    application,
+    captured,
+    privateProof,
+    verified,
+    transportOrigin,
+    configuration,
+  });
   const effects: HostedOperatorPlan["effects"] = [
     ...base.effects.filter((effect) => ![GATEWAY_BINDINGS, GATEWAY_DELIVERY].includes(effect.kind)),
     {
@@ -1261,6 +1370,7 @@ export const composeHostedOperatorDependencies = (
       releaseIntent?: "prepared-preview";
       authSignupPolicy?: HostedOperatorAuthSignupPolicyInput;
     },
+    // oxlint-disable-next-line sonarjs/cognitive-complexity -- Keep all approval stages against the same canonical owner and published-source snapshot.
   ): Promise<HostedOperatorPlan> => {
     const observe = async <T>(stage: OperatorPlanStage, run: () => T | Promise<T>) =>
       await observeOperatorPlanStage(context.target.sessionId, stage, run);
@@ -1336,12 +1446,7 @@ export const composeHostedOperatorDependencies = (
     const gatewayContinuation = await readAppGatewaySourcePlanningContinuation(
       context,
       current,
-      {
-        branch: configuration.gateway.branch,
-        gitSha: configuration.gateway.gitSha,
-        projectId: configuration.gateway.projectId,
-        repoId: configuration.gateway.repoId,
-      },
+      gatewayDeliverySourceForPlan(configuration, current?.record.operator?.plan),
       controlPlane,
     );
     // Complete a source-only continuation or repair the frozen installer/build
@@ -1359,6 +1464,51 @@ export const composeHostedOperatorDependencies = (
     if (sharedHostPrerequisite !== undefined) {
       return sharedHostPrerequisite;
     }
+    const readPlanningSelection = async () =>
+      await observe(
+        "accepted_spec",
+        async () =>
+          await readOwnedOperatorPlanningSelection({
+            context,
+            controlPlane,
+            ...(context.releaseIntent === undefined
+              ? {}
+              : { releaseIntent: context.releaseIntent }),
+          }),
+      );
+    // Prepared restoration first resumes the frozen prerequisite, without requiring
+    // a completed app journal. Changed-source planning may use a recorded publication
+    // before identity capture; missing publication is allowed, failed authority is not.
+    const bootstrapSelection =
+      context.releaseIntent === "prepared-preview"
+        ? await observe(
+            "accepted_spec",
+            async () => await readOwnedBootstrapPlanningSelection({ context, controlPlane }),
+          )
+        : undefined;
+    const owned =
+      context.releaseIntent === "prepared-preview"
+        ? undefined
+        : await controlPlane.readCurrentPlanningOwner(context);
+    const selectedForGateway =
+      bootstrapSelection ??
+      (owned?.session.privateBuildDecision?.currentSpec === undefined
+        ? undefined
+        : await readPlanningSelection());
+    const currentPlan = current?.record.operator?.plan;
+    const frozenGatewaySource = currentPlan?.gatewayDelivery;
+    const publishedGatewaySource = publishedGatewayDeliverySource(
+      configuration,
+      selectedForGateway?.selection,
+    );
+    const frozenPrerequisiteGatewaySource =
+      context.releaseIntent === "prepared-preview" &&
+      currentPlan !== undefined &&
+      frozenGatewaySource !== undefined
+        ? frozenGatewayDeliverySource(currentPlan, frozenGatewaySource)
+        : undefined;
+    const prerequisiteGatewaySource = publishedGatewaySource ?? frozenPrerequisiteGatewaySource;
+    await selectedForGateway?.assertCurrent?.();
     const existingBootstrap = await readExistingAuthBootstrapPrerequisite(
       current,
       context,
@@ -1366,19 +1516,12 @@ export const composeHostedOperatorDependencies = (
       application.appDatabase,
       controlPlane,
       Date.now(),
+      prerequisiteGatewaySource,
     );
     if (existingBootstrap !== undefined) {
       return existingBootstrap;
     }
-    const selected = await observe(
-      "accepted_spec",
-      async () =>
-        await readOwnedOperatorPlanningSelection({
-          context,
-          controlPlane,
-          ...(context.releaseIntent === undefined ? {} : { releaseIntent: context.releaseIntent }),
-        }),
-    );
+    const selected = selectedForGateway ?? (await readPlanningSelection());
     const selection = await observe("release_selection", () => {
       if (selected.selection === undefined) {
         throw new HostedOperatorError("operator_unavailable");
@@ -1682,12 +1825,10 @@ export const composeHostedOperatorDependencies = (
         },
       ],
       gatewayBindings: configuredBootstrapGatewayBindings(configuration),
-      gatewayDelivery: {
-        branch: configuration.gateway.branch,
-        gitSha: configuration.gateway.gitSha,
-        projectId: configuration.gateway.projectId,
-        repoId: configuration.gateway.repoId,
-      },
+      gatewayDelivery:
+        prerequisiteGatewaySource ??
+        publishedGatewayDeliverySource(configuration, selection) ??
+        gatewayDeliverySourceForPlan(configuration),
     });
     let participantsBootstrapPrepared = false;
     const bootstrapPreparation =
@@ -1738,7 +1879,14 @@ export const composeHostedOperatorDependencies = (
           generatedRelease?.description,
         ),
     );
-    return withExternallyManagedHostProtection(resolved, application.hostProtection);
+    const sourced =
+      resolved.stage === "app"
+        ? hostedOperatorPlanSchema.parse({
+            ...resolved,
+            gatewayDelivery: gatewayDeliverySourceForPlan(configuration, resolved),
+          })
+        : resolved;
+    return withExternallyManagedHostProtection(sourced, application.hostProtection);
   };
 
   const workerInput = async (input: HostedOperatorEffectContext) => {
@@ -2061,7 +2209,13 @@ export const composeHostedOperatorDependencies = (
     const observed = await (
       input.effect.kind === "delivery" ? appDelivery : gatewayDelivery
     ).reconcile(deliveryContext(input));
-    if (hasFailedGatewayDelivery(input, observed, configuration.gateway.gitSha)) {
+    if (
+      hasFailedGatewayDelivery(
+        input,
+        observed,
+        gatewayDeliverySourceForPlan(configuration, input.plan).gitSha,
+      )
+    ) {
       throw new HostedOperatorError("gateway_delivery_failed");
     }
     if (observed.status === "applied") {
@@ -2289,7 +2443,13 @@ export const composeHostedOperatorDependencies = (
     const observed = await (
       input.effect.kind === "delivery" ? appDelivery : gatewayDelivery
     ).deliver(deliveryContext(input));
-    if (hasFailedGatewayDelivery(input, observed, configuration.gateway.gitSha)) {
+    if (
+      hasFailedGatewayDelivery(
+        input,
+        observed,
+        gatewayDeliverySourceForPlan(configuration, input.plan).gitSha,
+      )
+    ) {
       throw new HostedOperatorError("gateway_delivery_failed");
     }
     if (observed.status !== "applied") {
@@ -2428,18 +2588,13 @@ export const composeHostedOperatorDependencies = (
     if (!knownPrepared) {
       throw new HostedOperatorError(OPERATION_IN_PROGRESS);
     }
-    const link = operator.identityLink;
-    const capturedOwner = [
-      operator.plan.normalActorProgram === undefined,
-      link?.browserSession === undefined,
-      link?.bootstrapPlanDigest === operator.planDigest ||
-        hasRetainedSharedHostProtectionIdentity(current.record),
-      link?.ownerSessionId === input.target.sessionId,
-      link?.authResourceId === operator.plan.authDatabase.resourceId,
-      link?.consumedAt !== undefined,
-      link?.proofRef !== undefined,
-      link?.proofSha256 !== undefined,
-    ].every(Boolean);
+    const organizationId = selectedApplication(configuration, input).organizationId;
+    const capturedOwner = hasCapturedSelectedOwnerIdentity(
+      current.record,
+      operator,
+      input,
+      organizationId,
+    );
     if (capturedOwner) {
       // Consumption raced the preceding execute read. Preserve its canonical nonce and re-read preparation.
       throw new HostedOperatorError(OPERATION_IN_PROGRESS);
@@ -2492,7 +2647,7 @@ export const composeHostedOperatorDependencies = (
       endpointOrigin: candidate.origin,
       expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
       issuer: boundary.verification.publicOrigin,
-      organizationId: null,
+      organizationId: organizationId ?? null,
     });
     return {
       browserUrl: createRealmIdentityBrowserUrl(pending),
@@ -2549,13 +2704,8 @@ export const composeHostedOperatorDependencies = (
     normalActorRuntimeBindings: async (input) =>
       await controlPlane.readNormalActorRuntimeBindings(input),
     executeEffect,
-    readGatewayDeliverySource: () =>
-      Promise.resolve({
-        branch: configuration.gateway.branch,
-        gitSha: configuration.gateway.gitSha,
-        projectId: configuration.gateway.projectId,
-        repoId: configuration.gateway.repoId,
-      }),
+    readGatewayDeliverySource: (_context, currentPlan) =>
+      Promise.resolve(gatewayDeliverySourceForPlan(configuration, currentPlan)),
     readAppProjectSettings: (context) =>
       Promise.resolve(selectedApplication(configuration, context).projectSettings),
     neonAuthorization: createHostedOperatorNeonAuthorization({

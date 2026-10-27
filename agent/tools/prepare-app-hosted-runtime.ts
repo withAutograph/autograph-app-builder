@@ -55,7 +55,7 @@ export const participantIdentityInputQuestion = (identityInput: {
   dismissible: true,
   display: "confirmation",
   options: [{ id: "continue", label: "I signed in" }],
-  prompt: `Sign in to the account you approved using [Connect your account](${identityInput.browserUrl}), then continue here. This link expires at ${identityInput.expiresAt}. We will resume the same approved account preparation.`,
+  prompt: `Connect the approved account\n\nSign in using [Connect your account](${identityInput.browserUrl}), then return here. The link expires at ${identityInput.expiresAt}. The same preparation will resume when you continue.`,
 });
 
 /** Uses the same approval invocation across ordinary human input and protected step readback. */

@@ -21,9 +21,11 @@ import type {
 } from "./github-publication";
 import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
-import type { ExistingDraftUpdateProposal } from "./github-draft-update";
+import type { ExistingDraftObservation, ExistingDraftUpdateProposal } from "./github-draft-update";
 import { assertReconciliationContent } from "./github-draft-reconciliation";
 import type {
+  ExistingDraftInspectionRequest,
+  OwnedDraftInspectionRecovery,
   ExistingDraftReconciliationProposal,
   ReconciliationContent,
 } from "./github-draft-reconciliation";
@@ -803,13 +805,131 @@ export const createGitHubAppHttpProvider = (input: {
     workflows: "write",
   };
 
+  const reconciliationMatchesDraft = (
+    proposal: ExistingDraftReconciliationProposal,
+    draft: ExistingDraftObservation,
+  ): boolean =>
+    proposal.repositoryId === draft.repositoryId &&
+    proposal.owner === draft.owner &&
+    proposal.name === draft.name &&
+    proposal.pullRequestNumber === draft.number &&
+    proposal.pullRequestId === draft.pullRequestId &&
+    draft.headRepositoryId === proposal.repositoryId &&
+    draft.baseRepositoryId === proposal.repositoryId &&
+    draft.draft &&
+    draft.state === "open" &&
+    draft.headBranch === proposal.branchName &&
+    draft.baseBranch === proposal.baseBranch &&
+    draft.verifiedBuilderOrigin?.marker === proposal.originMarker;
+
+  const exactReconciliationHead = async (
+    proposal: ExistingDraftReconciliationProposal,
+    draft: ExistingDraftObservation,
+    accessToken: string,
+  ): Promise<boolean> => {
+    if (!reconciliationMatchesDraft(proposal, draft) || draft.headTree !== proposal.resolvedTree) {
+      return false;
+    }
+    const applied = await github({
+      authorization: accessToken,
+      expected: [200],
+      path: `/repos/${encodeURIComponent(draft.owner)}/${encodeURIComponent(draft.name)}/git/commits/${draft.headSha}`,
+    });
+    const parents = property(applied.body, "parents");
+    return (
+      Array.isArray(parents) &&
+      parents.length === 2 &&
+      stringProperty(parents[0], "sha") === proposal.expectedHeadSha &&
+      stringProperty(parents[1], "sha") === proposal.expectedBaseSha &&
+      stringProperty(property(applied.body, "tree"), "sha") === proposal.resolvedTree &&
+      stringProperty(applied.body, "message") === reconciliationCommitMessage(proposal)
+    );
+  };
+
+  const ownedDraftHead = async (
+    recovery: OwnedDraftInspectionRecovery | undefined,
+    draft: ExistingDraftObservation,
+    accessToken: string,
+  ): Promise<boolean> => {
+    if (
+      recovery === undefined ||
+      draft.verifiedBuilderOrigin === undefined ||
+      !draft.draft ||
+      draft.state !== "open" ||
+      draft.headRepositoryId !== draft.repositoryId ||
+      draft.baseRepositoryId !== draft.repositoryId
+    ) {
+      return false;
+    }
+    // Only provider-verified published markers enter this list. An acknowledged current
+    // result can support recording retries; an unacknowledged proposal must prove its parent.
+    for (const proposal of recovery.reconciliations) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Stop at the first exact result; later GitHub reads are unnecessary once ownership is proven.
+      const exact = await exactReconciliationHead(proposal, draft, accessToken);
+      if (!exact) {
+        continue;
+      }
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Verify tenant ownership only after this candidate's exact provider readback succeeds.
+      if (await recovery.verifyOwnedHead(draft, proposal)) {
+        return true;
+      }
+    }
+    return await recovery.verifyOwnedHead(draft);
+  };
+
+  const provenDraftHead = async (
+    draftRequest: ExistingDraftInspectionRequest,
+    observed: ExistingDraftObservation,
+    snapshotHeadSha: string,
+    accessToken: string,
+  ): Promise<boolean> => {
+    const reconciliation = draftRequest.reconciliation;
+    if (await ownedDraftHead(draftRequest.recovery, observed, accessToken)) {
+      return true;
+    }
+    if (
+      reconciliation === undefined ||
+      !(await exactReconciliationHead(reconciliation, observed, accessToken))
+    ) {
+      return false;
+    }
+    // The original result readback can use its exact prior snapshot. A later operation
+    // proves its actual approved parent independently when GitHub's snapshot is older.
+    if (snapshotHeadSha === reconciliation.expectedHeadSha) {
+      return true;
+    }
+    if (draftRequest.recovery === undefined) {
+      return false;
+    }
+    const baselineCommit = await github({
+      authorization: accessToken,
+      expected: [200],
+      path: `/repos/${encodeURIComponent(draftRequest.owner)}/${encodeURIComponent(draftRequest.name)}/commits/${reconciliation.expectedHeadSha}`,
+    });
+    const baselineTree = objectId.parse(
+      stringProperty(property(property(baselineCommit.body, "commit"), "tree"), "sha"),
+    );
+    const message = stringProperty(property(baselineCommit.body, "commit"), "message");
+    const marker = observed.verifiedBuilderOrigin?.marker;
+    if (
+      marker === undefined ||
+      baselineTree !== reconciliation.expectedHeadTree ||
+      !(
+        message.includes(`App-Builder-Idempotency: ${marker}`) ||
+        message.includes(`App-Builder-Origin: ${marker}`)
+      )
+    ) {
+      return false;
+    }
+    return await ownedDraftHead(
+      draftRequest.recovery,
+      { ...observed, headSha: reconciliation.expectedHeadSha, headTree: baselineTree },
+      accessToken,
+    );
+  };
+
   // oxlint-disable-next-line eslint/complexity -- verify the repository, PR, branch, and Builder-authored origin in one read
-  const inspectExistingDraft = async (draftRequest: {
-    repositoryId: string;
-    owner: string;
-    name: string;
-    number: number;
-  }) => {
+  const inspectExistingDraft = async (draftRequest: ExistingDraftInspectionRequest) => {
     if (!Number.isSafeInteger(draftRequest.number) || draftRequest.number < 1) {
       throw new Error("invalid-pull-request-number");
     }
@@ -825,15 +945,14 @@ export const createGitHubAppHttpProvider = (input: {
     const head = property(pull.body, "head");
     const base = property(pull.body, "base");
     const headBranch = stringProperty(head, "ref");
-    const headSha = objectId.parse(stringProperty(head, "sha"));
+    const snapshotHeadSha = objectId.parse(stringProperty(head, "sha"));
     const reference = await github({
       authorization: repository.accessToken,
       expected: [200],
       path: `/repos/${encodeURIComponent(draftRequest.owner)}/${encodeURIComponent(draftRequest.name)}/git/ref/heads/${encodePath(headBranch)}`,
     });
-    if (objectId.parse(stringProperty(property(reference.body, "object"), "sha")) !== headSha) {
-      throw new Error("pull-request-head-out-of-date");
-    }
+    const headSha = objectId.parse(stringProperty(property(reference.body, "object"), "sha"));
+    const stalePull = headSha !== snapshotHeadSha;
     const commit = await github({
       authorization: repository.accessToken,
       expected: [200],
@@ -864,7 +983,7 @@ export const createGitHubAppHttpProvider = (input: {
         };
       }
     }
-    return {
+    const observed: ExistingDraftObservation = {
       baseBranch: stringProperty(base, "ref"),
       baseRepositoryId: decimalProperty(property(base, "repo"), "id"),
       draft: booleanProperty(pull.body, "draft"),
@@ -882,6 +1001,22 @@ export const createGitHubAppHttpProvider = (input: {
       state: z.enum(["open", "closed"]).parse(stringProperty(pull.body, "state")),
       ...(verifiedBuilderOrigin === undefined ? {} : { verifiedBuilderOrigin }),
     };
+    if (stalePull) {
+      if (
+        !(await provenDraftHead(draftRequest, observed, snapshotHeadSha, repository.accessToken))
+      ) {
+        throw new Error("pull-request-head-out-of-date");
+      }
+      const confirmed = await github({
+        authorization: repository.accessToken,
+        expected: [200],
+        path: `/repos/${encodeURIComponent(draftRequest.owner)}/${encodeURIComponent(draftRequest.name)}/git/ref/heads/${encodePath(headBranch)}`,
+      });
+      if (objectId.parse(stringProperty(property(confirmed.body, "object"), "sha")) !== headSha) {
+        throw new Error("pull-request-head-out-of-date");
+      }
+    }
+    return observed;
   };
 
   const inspectHistoricalAppSource = async (sourceRequest: {
@@ -1084,7 +1219,7 @@ export const createGitHubAppHttpProvider = (input: {
       });
       return { requestId: reference.requestId, status: "accepted" };
     },
-    async inspectAppliedDraftReconciliation(proposal, observed) {
+    async inspectAppliedDraftReconciliation(proposal, observed, recovery) {
       if (
         observed.headSha === proposal.expectedHeadSha ||
         observed.headTree !== proposal.resolvedTree ||
@@ -1097,6 +1232,8 @@ export const createGitHubAppHttpProvider = (input: {
         number: proposal.pullRequestNumber,
         owner: proposal.owner,
         repositoryId: proposal.repositoryId,
+        reconciliation: proposal,
+        ...(recovery === undefined ? {} : { recovery }),
       });
       if (current.headSha !== observed.headSha || current.headTree !== observed.headTree) {
         return false;
@@ -1635,6 +1772,7 @@ export const createGitHubAppHttpProvider = (input: {
     async reconcileExistingDraft(
       proposal: ExistingDraftReconciliationProposal,
       content: ReconciliationContent,
+      recovery?: OwnedDraftInspectionRecovery,
     ) {
       try {
         assertReconciliationContent(proposal, content);
@@ -1646,6 +1784,7 @@ export const createGitHubAppHttpProvider = (input: {
         number: proposal.pullRequestNumber,
         owner: proposal.owner,
         repositoryId: proposal.repositoryId,
+        ...(recovery === undefined ? {} : { recovery }),
       });
       if (
         current.pullRequestId !== proposal.pullRequestId ||

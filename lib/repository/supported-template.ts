@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 
 import type { SandboxSession } from "eve/sandbox";
 import { parse as parseYaml } from "yaml";
+import { z } from "zod";
 
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import {
@@ -83,6 +84,28 @@ export const SUPPORTED_VALIDATION_COMMAND_TEMPLATES =
   SUPPORTED_REPOSITORY_CONTRACT.validationCommands;
 export const SUPPORTED_VALIDATION_TEST_SHARDS = ["1/1"] as const;
 
+/** Match repository discovery without executing source-provided command text. */
+export const supportedValidationTestShards = (manifestContent: string): readonly string[] => {
+  const object = z.record(z.string(), z.unknown());
+  const manifest = object.parse(JSON.parse(manifestContent));
+  const scripts = object.safeParse(manifest.scripts);
+  const test = scripts.success ? scripts.data.test : undefined;
+  if (test === undefined) {
+    return [];
+  }
+  if (typeof test !== "string" || test.trim() === "") {
+    throw new Error("The selected app's declared test command must be a non-empty string.");
+  }
+  const autograph = object.safeParse(manifest.autograph);
+  const ci = object.safeParse(autograph.success ? autograph.data.ci : undefined);
+  const declared = ci.success ? ci.data.testShards : undefined;
+  const shards = declared === undefined ? 1 : declared;
+  if (typeof shards !== "number" || !Number.isInteger(shards) || shards < 1) {
+    throw new Error("The selected app's declared test shard count must be a positive integer.");
+  }
+  return Array.from({ length: shards }, (_, index) => `${index + 1}/${shards}`);
+};
+
 const expectedCommands = {
   appIdentity: SUPPORTED_REPOSITORY_CONTRACT.commands.appIdentity,
   apply: SUPPORTED_REPOSITORY_CONTRACT.commands.apply,
@@ -99,10 +122,7 @@ export const supportedValidationCommands = function supportedValidationCommands(
   if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u.test(appId)) {
     throw new Error("The validation application id is invalid.");
   }
-  if (
-    testShards.length === 0 ||
-    testShards.some((shard) => !/^[1-9][0-9]*\/[1-9][0-9]*$/u.test(shard))
-  ) {
+  if (testShards.some((shard) => !/^[1-9][0-9]*\/[1-9][0-9]*$/u.test(shard))) {
     throw new Error("The validation test shard set is invalid.");
   }
   const compileDependency = options?.alreadyCompiled === true ? "--skip-deps " : "";

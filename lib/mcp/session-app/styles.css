@@ -129,12 +129,69 @@
   letter-spacing: -0.04em;
 }
 
-.mcpApp .approval-request > p {
+.mcpApp .approval-request--preview .approval-request__label {
+  font-size: 24px;
+  letter-spacing: -0.035em;
+}
+
+.mcpApp .approval-request--preview .approval-request__supporting-title {
   max-width: 520px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1.45;
+}
+
+.mcpApp .approval-request--preview .approval-request__description {
+  margin-top: 8px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.mcpApp .approval-request__description {
+  display: grid;
+  max-width: 520px;
+  gap: 12px;
   margin: 10px 0 0;
   color: var(--muted);
   font-size: 16px;
   line-height: 1.6;
+}
+
+.mcpApp .approval-request__description section {
+  display: grid;
+  gap: 4px;
+}
+
+.mcpApp .approval-request__description details {
+  font-size: 13px;
+}
+
+.mcpApp .approval-request__description summary {
+  width: fit-content;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.mcpApp .approval-request__description details ul,
+.mcpApp .approval-request__description details p {
+  margin-top: 6px;
+}
+
+.mcpApp .approval-request__description h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.mcpApp .approval-request__description p,
+.mcpApp .approval-request__description ul {
+  margin: 0;
+}
+
+.mcpApp .approval-request__description ul {
+  padding-left: 20px;
 }
 
 .mcpApp .approval-request__eyebrow {
@@ -143,6 +200,11 @@
   font-size: 14px !important;
   font-weight: 650;
   letter-spacing: -0.02em;
+}
+
+.mcpApp .approval-request--preview .approval-request__actions {
+  margin-top: 24px;
+  padding-top: 20px;
 }
 
 .mcpApp .approval-request__actions {

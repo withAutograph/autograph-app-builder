@@ -9,6 +9,7 @@ import {
   hostedOperatorPlanSchema,
   operatorPlanDigest,
 } from "../provisioning/hosted-operator-contract";
+import type { HostedOperatorPlan } from "../provisioning/hosted-operator-contract";
 import type {
   DraftPullRequestProposal,
   ImmutableGitHubSourceReceipt,
@@ -117,6 +118,13 @@ export const approvalTargetFromExistingDraftReconciliation: (
   >,
 ) => ApprovalTarget = approvalTargetFromDraftHead;
 
+const utcExpiryFormatter = new Intl.DateTimeFormat("en", {
+  dateStyle: "long",
+  timeStyle: "short",
+  timeZone: "UTC",
+});
+const formatUtcExpiry = (value: string) => `${utcExpiryFormatter.format(new Date(value))} UTC`;
+
 /** Give Builder the exact update subject; the model must not infer it from the PR base. */
 export const approvalReceiptForExistingDraftUpdate = (
   proposal: DraftHeadApprovalSubject & { digest: string },
@@ -190,15 +198,248 @@ function publicReceiptDescription(receipt: unknown, toolName?: string): string |
   }
   if (isDraftPullRequestTool(toolName)) {
     const baseBranch = parsed.data.baseRef.replace(/^refs\/heads\//u, "");
-    return `This will publish the reviewed changes to a draft pull request in ${parsed.data.repository} on ${baseBranch}. The pull request will remain a draft; this will not merge or deploy it.`;
+    return `Publish the reviewed changes to a draft pull request in ${parsed.data.repository} on ${baseBranch}. It will remain a draft; this will not merge or deploy it.`;
   }
-  if (toolName === "reconcile_github_draft_pr") {
-    return `This will update the existing draft branch ${parsed.data.baseRef} in ${parsed.data.repository} from commit ${parsed.data.baseSha} using reviewed reconciliation ${parsed.data.subjectDigest}. The pull request will remain a draft; this will not merge or deploy it.`;
+  if (toolName === "update_github_draft_pr" || toolName === "reconcile_github_draft_pr") {
+    return `Update the reviewed changes in the existing draft pull request in ${parsed.data.repository}. It will remain a draft; this will not merge or deploy it.`;
   }
-  return JSON.stringify(parsed.data);
+  return undefined;
 }
 
-const operatorApprovalDescription = (record: Record<string, unknown>, toolName: string) => {
+const resourceEffectSummary = (
+  plan: HostedOperatorPlan,
+  effect: HostedOperatorPlan["effects"][number],
+) => {
+  if (plan.action === "cleanup")
+    return "Remove the app-owned Preview resources included in this cleanup plan.";
+  if (effect.resourceId === plan.authDatabase.resourceId) {
+    return /never recreate or rotate shared auth/iu.test(effect.description)
+      ? "Verify the existing shared sign-in resources and access; do not recreate or rotate shared Auth."
+      : "Prepare or verify the approved shared sign-in database and access roles.";
+  }
+  return effect.resourceId === plan.appDatabase.resourceId
+    ? "Prepare or verify the app's Preview database and access roles."
+    : "Prepare or verify an approved Preview data resource.";
+};
+const installEffectSummary = (effect: HostedOperatorPlan["effects"][number]) => {
+  if (effect.id === "auth-schema") {
+    return /read-only/iu.test(effect.description)
+      ? "Check the existing sign-in schema without migrating or recreating it."
+      : "Install or migrate the approved shared sign-in schema.";
+  }
+  return effect.id === "app-install"
+    ? "Install and verify the app's approved Preview release."
+    : "Install or update the approved Preview data structures.";
+};
+const effectSummaryByKind = {
+  resources: (plan: HostedOperatorPlan, effect: HostedOperatorPlan["effects"][number]) =>
+    resourceEffectSummary(plan, effect),
+  install: (_plan: HostedOperatorPlan, effect: HostedOperatorPlan["effects"][number]) =>
+    installEffectSummary(effect),
+  "gateway-bindings": () => "Connect the app's Preview environment to the shared sign-in service.",
+  "gateway-delivery": () => "Update the shared sign-in service used by Preview.",
+  access: (plan: HostedOperatorPlan) =>
+    plan.action === "cleanup"
+      ? "Revoke the app access created by this setup."
+      : "Grant the app's approved Preview access.",
+  "auth-membership": (plan: HostedOperatorPlan) =>
+    plan.action === "cleanup"
+      ? "Remove the organization memberships created by this setup."
+      : "Create the planned organization and add its approved members.",
+  "auth-signup-policy": (plan: HostedOperatorPlan) =>
+    plan.action === "cleanup"
+      ? "Remove the sign-up policy created by this setup."
+      : "Apply the approved sign-up eligibility and app roles.",
+  "normal-accounts": (plan: HostedOperatorPlan) =>
+    plan.action === "cleanup"
+      ? "Remove the app-owner access created by this setup."
+      : "Create or update the approved app-owner access.",
+  bindings: (plan: HostedOperatorPlan) =>
+    plan.action === "cleanup"
+      ? "Remove service connections created by this setup."
+      : "Connect the app to its approved Preview services.",
+  delivery: (plan: HostedOperatorPlan) =>
+    plan.action === "cleanup"
+      ? "Remove the app's Preview delivery."
+      : "Publish the app's Preview delivery.",
+  revoke: () => "Revoke access created by this setup.",
+  "remove-bindings": () => "Remove service connections created by this setup.",
+  retire: () => "Retire the app-owned Preview resource; shared Auth resources may be retained.",
+} satisfies Record<
+  HostedOperatorPlan["effects"][number]["kind"],
+  (plan: HostedOperatorPlan, effect: HostedOperatorPlan["effects"][number]) => string
+>;
+const planHasEffect = (
+  plan: HostedOperatorPlan,
+  kind: HostedOperatorPlan["effects"][number]["kind"],
+) => plan.effects.some((effect) => effect.kind === kind);
+const operatorEffectSummaries = (plan: HostedOperatorPlan) => {
+  const summaries = new Set<string>();
+  for (const effect of plan.effects) {
+    if (
+      effect.kind === "access" ||
+      effect.kind === "auth-membership" ||
+      effect.kind === "auth-signup-policy"
+    )
+      continue;
+    summaries.add(effectSummaryByKind[effect.kind](plan, effect));
+  }
+  return [...summaries];
+};
+const signupApprovalDescription = (plan: HostedOperatorPlan) => {
+  const signupPolicy = plan.authSignupPolicy;
+  if (signupPolicy === undefined || !planHasEffect(plan, "auth-signup-policy")) return "";
+  return plan.action === "cleanup"
+    ? `Sign-up access:\n- Remove sign-up access for ${signupPolicy.eligibility === "public" ? "anyone" : "approved email addresses only"}, including its ${signupPolicy.membershipRole} membership and app roles: ${signupPolicy.appRoles.join(", ")}.`
+    : `Sign-up access:\n- Eligibility: ${signupPolicy.eligibility === "public" ? "anyone" : "approved email addresses only"}.\n- New members receive the ${signupPolicy.membershipRole} membership and these app roles: ${signupPolicy.appRoles.join(", ")}.`;
+};
+const operatorActorLookups = (plan: HostedOperatorPlan) => {
+  const program = plan.normalActorProgram;
+  const actorByKey = new Map(program?.actors.map((actor) => [actor.actorKey, actor] as const));
+  const organizationById = new Map(
+    (program?.organizations ?? []).map(
+      (organization) => [organization.organizationId, organization.name] as const,
+    ),
+  );
+  return { actorByKey, organizationById };
+};
+const operatorMembershipNames = (plan: HostedOperatorPlan) => {
+  if (!planHasEffect(plan, "auth-membership")) return [];
+  const membership = plan.authMembership;
+  if (membership === undefined)
+    return plan.normalActorProgram?.organizations.map((organization) => organization.name) ?? [];
+  return membership.kind === "create-owned-organization"
+    ? [membership.name]
+    : membership.organizations.map((organization) => organization.name);
+};
+const operatorOwnedOrganizations = (plan: HostedOperatorPlan) => {
+  const membership = plan.authMembership;
+  if (!planHasEffect(plan, "auth-membership") || membership === undefined) return [];
+  return membership.kind === "create-owned-organization" ? [membership] : membership.organizations;
+};
+const operatorInstallationScopeSummary = (plan: HostedOperatorPlan) => {
+  const organizationIds = plan.appInstallation?.customerIds ?? [];
+  if (organizationIds.length === 0) return "";
+  return `App schema installation tenant references (provider organization identifiers):\n${organizationIds
+    .map(
+      (organizationId) =>
+        `- Organization ${organizationId}: included in the approved app schema installation scope; access roles and memberships are described separately.`,
+    )
+    .join("\n")}`;
+};
+const operatorMembershipSummary = (plan: HostedOperatorPlan) => {
+  const program = plan.normalActorProgram;
+  const membershipNames = operatorMembershipNames(plan);
+  const { actorByKey, organizationById } = operatorActorLookups(plan);
+  const memberLines = planHasEffect(plan, "auth-membership")
+    ? (program?.memberships ?? []).map((grant) => {
+        const actor = actorByKey.get(grant.actorKey);
+        const person =
+          actor === undefined ? "the approved member" : `${actor.name} (${actor.email})`;
+        const organization =
+          organizationById.get(grant.organizationId) ?? "the approved organization";
+        return plan.action === "cleanup"
+          ? `Remove the ${grant.role} membership for ${person} in ${organization}.`
+          : `Give ${person} the ${grant.role} membership in ${organization}.`;
+      })
+    : [];
+  const ownedOrganizations = operatorOwnedOrganizations(plan);
+  const organizationReferenceLines = ownedOrganizations.map(
+    (organization) =>
+      `${organization.actorId} in ${organization.organizationId}: owner membership for ${organization.name}.`,
+  );
+  if (memberLines.length === 0 && membershipNames.length > 0) {
+    memberLines.push(
+      `${plan.action === "cleanup" ? "Remove" : "Create"} the approved organization and its owner membership.`,
+    );
+  }
+  const membershipSummary =
+    memberLines.length === 0
+      ? ""
+      : `Organization access:\n${memberLines.map((line) => `- ${line}`).join("\n")}`;
+  const organizationReferenceSummary =
+    organizationReferenceLines.length === 0
+      ? ""
+      : `Organization details (provider identity references):\n${organizationReferenceLines.map((line) => `- ${plan.action === "cleanup" ? "Remove" : "Create"} ${line}`).join("\n")}`;
+  return { membershipSummary, organizationReferenceSummary };
+};
+const operatorAccessEffect = (plan: HostedOperatorPlan) => {
+  if (planHasEffect(plan, "revoke")) return "Revoke";
+  return planHasEffect(plan, "access") ? "Grant" : undefined;
+};
+const operatorAccessSummary = (
+  appAccessLines: string[],
+  unresolvedAccessLines: string[],
+  accessEffect: ReturnType<typeof operatorAccessEffect>,
+  accessDescription: string,
+) => {
+  if (appAccessLines.length > 0)
+    return `${accessDescription}\n${appAccessLines.map((line) => `- ${line}`).join("\n")}`;
+  if (unresolvedAccessLines.length > 0)
+    return "See Access details for each app user and its roles.";
+  if (accessEffect === undefined) return "No app-user access changes are included in this plan.";
+  return accessEffect === "Revoke"
+    ? "No app-user access is included in the revoke effect."
+    : "No app-user access is included in the grant effect.";
+};
+const operatorAccessDescriptions = (plan: HostedOperatorPlan) => {
+  const program = plan.normalActorProgram;
+  const { actorByKey, organizationById } = operatorActorLookups(plan);
+  const appAccessLines = (program?.appAccess ?? []).map((grant) => {
+    const actor = actorByKey.get(grant.actorKey);
+    const person = actor === undefined ? "the approved user" : `${actor.name} (${actor.email})`;
+    const organization = organizationById.get(grant.organizationId) ?? "the approved organization";
+    return `${person} in ${organization}: ${grant.roles.join(", ")}.`;
+  });
+  const unresolvedAccessLines = plan.access.map(
+    (grant) =>
+      `Recipient ${grant.actorId} in organization ${grant.organizationId}: ${grant.roles.join(", ")}.`,
+  );
+  const accessEffect = operatorAccessEffect(plan);
+  const accessDescription =
+    accessEffect === undefined
+      ? "Approved app-role scope by recipient and organization (not changed by this plan):"
+      : `${accessEffect} these app roles by recipient and organization:`;
+  const accessSummary = operatorAccessSummary(
+    appAccessLines,
+    unresolvedAccessLines,
+    accessEffect,
+    accessDescription,
+  );
+  const unresolvedAccessVerb =
+    accessEffect === undefined ? "Approved scope (not changed by this plan):" : `${accessEffect}:`;
+  const unresolvedAccessSummary =
+    unresolvedAccessLines.length === 0
+      ? ""
+      : `Access details (provider identity references):\n${unresolvedAccessLines.map((line) => `- ${unresolvedAccessVerb} ${line}`).join("\n")}`;
+  return { accessSummary, unresolvedAccessSummary };
+};
+const operatorAccountSummary = (plan: HostedOperatorPlan) => {
+  const program = plan.normalActorProgram;
+  const newAccountActors =
+    plan.action === "prepare" && planHasEffect(plan, "normal-accounts")
+      ? (program?.actors.filter((actor) => actor.account === "create-email-password") ?? [])
+      : [];
+  const accountSummary =
+    newAccountActors.length > 0
+      ? ` Create sign-in accounts for ${newAccountActors.map((actor) => `${actor.name} (${actor.email})`).join(", ")}.`
+      : "";
+  return accountSummary;
+};
+
+const operatorRetentionSummary = (plan: HostedOperatorPlan) => {
+  const retentionDate = formatUtcExpiry(plan.retention.expiresAt);
+  const retentionSummary =
+    plan.action === "cleanup"
+      ? `${plan.retention.policy} (scheduled expiry ${retentionDate}). Cleanup removes only the app-owned resources included in this plan; shared Auth may be retained.`
+      : `${plan.retention.policy} (expires ${retentionDate}). Resources may continue to incur provider charges until removed.`;
+  return retentionSummary;
+};
+
+const validatedHostedOperatorApprovalPlan = (
+  record: Record<string, unknown>,
+  toolName: string,
+): HostedOperatorPlan | undefined => {
   const parsed = hostedOperatorPlanSchema.safeParse(record.plan);
   if (
     !parsed.success ||
@@ -212,40 +453,77 @@ const operatorApprovalDescription = (record: Record<string, unknown>, toolName: 
     // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional descriptions explicitly return no public approval.
     return undefined;
   }
-  const plan = parsed.data;
-  const grants = plan.access
-    .map((entry) => `${entry.actorId} in ${entry.organizationId}: ${entry.roles.join(", ")}`)
-    .join("; ");
-  const signupPolicy = plan.authSignupPolicy;
-  const signupApproval =
-    signupPolicy === undefined
-      ? ""
-      : ` Public signup: eligibility ${signupPolicy.eligibility}; organization ${signupPolicy.organizationId}; member role ${signupPolicy.membershipRole}; app roles ${signupPolicy.appRoles.join(", ") || "none"}.`;
+  return parsed.data;
+};
+
+const operatorApprovalDescription = (
+  record: Record<string, unknown>,
+  toolName: string,
+): string | undefined => {
+  const plan = validatedHostedOperatorApprovalPlan(record, toolName);
+  if (plan === undefined) {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Invalid plans have no public approval description.
+    return undefined;
+  }
+  if (plan.action === "prepare") {
+    return "This approval may incur provider costs.";
+  }
+  const effectSummaries = operatorEffectSummaries(plan);
+  const signupApproval = signupApprovalDescription(plan);
   const host = plan.hostProtection;
   const hostApproval =
     host === undefined
       ? ""
-      : ` Deployment Protection: consume externally managed Trusted Sources in team ${host.teamId}: ${host.appPreview.sourceProjectId} Preview → ${host.appPreview.targetProjectId} Preview and ${host.gatewayPreview.sourceProjectId} Preview → ${host.gatewayPreview.targetProjectId} Preview. Administrator evidence ${host.provenance.reference}, observed ${host.observedAt}. No policy-setting write or fresh operator policy proof is authorized.`;
+      : "Deployment access:\n- Uses the team's existing Preview deployment protection settings; those settings will not change.";
   const replacement = plan.appDeliveryReplacement?.predecessor;
   const replacementApproval =
     replacement === undefined
       ? ""
-      : ` Replace READY App deployment ${replacement.appDeploymentId}${replacement.gatewayDeploymentId === undefined ? "" : ` and Gateway deployment ${replacement.gatewayDeploymentId}`} from operation ${replacement.operationRef}, plan ${replacement.planDigest}, with freshly delivered native Previews. This can incur duplicate deployment usage; old unknown attempts remain archived without success claims.`;
-  return (
-    `${plan.action === "cleanup" ? "Clean up" : "Prepare"} ${plan.selection.appId} on Preview branch ${plan.selection.branch} in Vercel project ${plan.selection.projectId}. ` +
-    `Context ${plan.contextId}; Neon project ${plan.neon.projectId}, branch ${plan.neon.branchId} (${plan.neon.source}). ` +
-    `Auth database ${plan.authDatabase.database} with runtime role ${plan.authDatabase.runtimeRole} and migrator role ${plan.authDatabase.migratorRole}; app database ${plan.appDatabase.database} with runtime role ${plan.appDatabase.runtimeRole} and migrator role ${plan.appDatabase.migratorRole}. ` +
-    `Release ${plan.release.id} (${plan.release.sha256}); trusted installer ${plan.installer.reference} (${plan.installer.sha256}). Effects: ${plan.effects.map((effect) => effect.description).join("; ")}. ` +
-    `Access: ${grants || "no new actor grants"}.${signupApproval} Cost owner: ${plan.cost.owner}; ${plan.cost.class}: ${plan.cost.description}. ` +
-    `Retention: ${plan.retention.policy}; expires ${plan.retention.expiresAt}.${hostApproval}${replacementApproval} This does not deploy or activate Production.`
-  );
+      : "Deployment usage:\n- A new Preview delivery will replace an existing ready delivery. Both may incur deployment usage until replacement finishes.";
+  const { membershipSummary, organizationReferenceSummary } = operatorMembershipSummary(plan);
+  const { accessSummary, unresolvedAccessSummary } = operatorAccessDescriptions(plan);
+  const installationScopeSummary = operatorInstallationScopeSummary(plan);
+  const accountSummary = operatorAccountSummary(plan);
+  const costOwnerReferenceSummary = `Billing details (provider owner reference):\n- ${plan.cost.owner}`;
+  const resourceSentence =
+    plan.action === "cleanup"
+      ? "Clean up this app's Preview resources and revoke access created for them. Shared Auth resources may remain under the approved retention policy."
+      : "Prepare this app's Preview resources and required service connections.";
+  const costOwner = "the owner recorded in this approved plan";
+  const retentionSummary = operatorRetentionSummary(plan);
+  return [
+    resourceSentence,
+    "Production will not be deployed or activated.",
+    ...(effectSummaries.length > 0
+      ? [`What will happen:\n${effectSummaries.map((effect) => `- ${effect}`).join("\n")}`]
+      : []),
+    ...(membershipSummary ? [membershipSummary] : []),
+    `Access and cost:\n- ${accessSummary}${accountSummary}\n- ${plan.cost.description} Billing responsibility follows ${costOwner}. Check the provider's billing page for amounts.`,
+    ...(unresolvedAccessSummary ? [unresolvedAccessSummary] : []),
+    installationScopeSummary,
+    ...(organizationReferenceSummary ? [organizationReferenceSummary] : []),
+    costOwnerReferenceSummary,
+    ...(signupApproval ? [signupApproval] : []),
+    ...(hostApproval ? [hostApproval] : []),
+    ...(replacementApproval ? [replacementApproval] : []),
+    `Retention:\n- ${retentionSummary}`,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 };
 
 const continuityApprovalDescription = (input: unknown): string | undefined => {
   const parsed = continuityApprovalInputSchema.safeParse(input);
   if (!parsed.success) return undefined;
-  const plan = parsed.data.plan;
-  return `Run one app-authored continuity suite for ${plan.target.appId} using prepared setup ${plan.originalSetup.operationRef}, release ${plan.preparedPlan.release.id}. Copy the exact verified runtime worker from one credential-free operator-source Sandbox into this owner's app Sandbox and dispose that source Sandbox. Resume this owner's logical Sandbox ${plan.runtime.sandboxId} at ${plan.runtime.root} on compute ${plan.runtime.ownerId}/${plan.runtime.projectId}; launch its same app environment on ports ${plan.runtime.appPort}/${plan.runtime.bridgePort}. Temporarily publish only intent ${plan.intentId}'s separate managed target and private transport row to Gateway ${plan.gateway.projectId}, refresh that Gateway once from the displayed source ${plan.preparedPlan.gatewayDelivery?.gitSha ?? plan.preparedPlan.gatewayDelivery?.branch}, and run the app's existing browser suite for the approved actor/organization pairs ${plan.actors.map((actor) => `${actor.actorId}/${actor.organizationId}`).join(", ")}. The suite may perform its authored app operations and stop/restart only this owned app process. Close the owned runtime before deleting its own configuration rows; a deployed Gateway may retain the now-closed target until normal refresh or expiry. This neither changes the native app target nor proves continuity after a native deployment. Scope digest ${parsed.data.planDigest}.`;
+  const actorOrganizationReferences = parsed.data.plan.actors.map(
+    (actor) => `${actor.actorId} in ${actor.organizationId}`,
+  );
+  return [
+    `Run the app's existing browser checks against its Preview environment. The checks may perform the actions written into the app and restart only this app's process.`,
+    "What will happen:\n- Start the app's Preview environment and temporarily publish its test connection to the shared service.\n- Close the app environment and remove the temporary connection when the checks finish. The shared service may retain the target until its normal refresh or expiry.",
+    `Test actor and organization references (provider identity references):\n${actorOrganizationReferences.map((reference) => `- ${reference}`).join("\n")}`,
+    "This does not change the app's main project or prove behavior after a later deployment.",
+  ].join("\n\n");
 };
 const nativeTargetApprovalDescription = (input: unknown): string | undefined => {
   const parsed = z
@@ -267,7 +545,16 @@ const nativeTargetApprovalDescription = (input: unknown): string | undefined => 
     plan.conflictPolicy === "stop-on-conflict"
       ? "Stop if the project name is already taken."
       : "Use a unique suffix only after the provider confirms a name conflict.";
-  return `Create one dedicated Preview project ${plan.project.name} in Vercel team ${plan.project.teamId} for ${plan.appId}, and register it for branch ${plan.branch}. Set Vercel Authentication for All Deployments and enable team-issued OIDC tokens on this project; independently verify both settings before registration. ${conflict} Reserve the database name ${plan.appDatabase.database} and its separate migration/runtime role names for the later resource plan; this approval creates no database or access grants. Cost owner: current app owner; ${plan.cost.description}. Retention: ${plan.retention.policy}${plan.retention.expiresAt === undefined ? "" : `; expires ${plan.retention.expiresAt}`}. Resources remain billable until normal approved cleanup. This does not deploy the app or activate Production. Scope digest ${parsed.data.planDigest}.`;
+  const retentionExpiry =
+    plan.retention.expiresAt === undefined
+      ? ""
+      : ` (expires ${formatUtcExpiry(plan.retention.expiresAt)})`;
+  return [
+    `Create the Preview project ${plan.project.name} for app ${plan.appId}, then register its Preview branch.`,
+    `Access and setup:\n- Require Vercel sign-in for deployments and enable this project's workload identity before registration.\n- ${conflict}\n- This reserves the app database name for a later, separately approved setup. No database or app-user access is created now.`,
+    `Cost and retention:\n- ${plan.cost.description} Billing responsibility follows the current owner recorded in this plan. Check the provider's billing page for amounts.\n- ${plan.retention.policy}${retentionExpiry}.`,
+    "This does not deploy the app or activate Production.",
+  ].join("\n\n");
 };
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function publicApprovalDescription(input: unknown, toolName?: string): string | undefined {
@@ -281,7 +568,10 @@ export function publicApprovalDescription(input: unknown, toolName?: string): st
     const parsed = tenantExportApprovalInputSchema.safeParse(record);
     if (!parsed.success) return undefined;
     const plan = parsed.data.plan;
-    return `Export app ${plan.scope.appId}, customer ${plan.scope.customerId}, from ${plan.resource.database} (${plan.resource.projectId}/${plan.resource.branchId}/${plan.resource.resourceId}), selected release ${plan.release.id} (${plan.release.artifactHash}). Read all public tables carrying app_id and customer_id within this exact app/customer scope using one read-only snapshot. Retain NDJSON files and manifest privately on Builder for this owner and session. No external recipient or database write is authorized. Export ${plan.exportId}, scope digest ${parsed.data.planDigest}.`;
+    return [
+      `Export the selected customer's ${plan.scope.appId} data for private review. Builder will read the app's public tables in a read-only snapshot and keep the export and manifest private to you in this session. No external recipient or database changes are included. This may contain customer information; approve only if you need this export.`,
+      `Customer reference (provider identity reference):\n- ${plan.scope.customerId}`,
+    ].join("\n\n");
   }
   if (toolName === "prepare-app-hosted-runtime" || toolName === "cleanup-app-hosted-runtime") {
     return operatorApprovalDescription(record, toolName);
@@ -316,7 +606,9 @@ export function publicApprovalDescription(input: unknown, toolName?: string): st
         subjectDigest: record.expectedArtifactDigest,
         workspaceDigest: record.expectedWorkspaceDigest,
       });
-    return parsed.success ? JSON.stringify(parsed.data) : undefined;
+    return parsed.success
+      ? `Accept the reviewed AppSpec for ${parsed.data.appId} and continue with its implementation plan.`
+      : undefined;
   }
   if (toolName === "accept_change_set") {
     const changeSet =
@@ -338,7 +630,9 @@ export function publicApprovalDescription(input: unknown, toolName?: string): st
         phase: "change_set",
         subjectDigest: changeSet?.digest,
       });
-    return parsed.success ? JSON.stringify(parsed.data) : undefined;
+    return parsed.success
+      ? "Accept the reviewed change set after its final source assessment. This records review in the Builder session; it does not publish or change an external repository."
+      : undefined;
   }
   return undefined;
 }

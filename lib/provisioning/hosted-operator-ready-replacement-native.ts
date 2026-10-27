@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { HostedOperatorError } from "./hosted-operator-contract";
+import { HostedOperatorError, nativeDeliveryGitRef } from "./hosted-operator-contract";
 import type { HostedOperatorPlan } from "./hosted-operator-contract";
 import type { HostedOperatorContext } from "./hosted-operator-service";
 import type { ReadyDeliveryReplacementPredecessor } from "./hosted-operator-ready-delivery-replacement";
@@ -107,9 +107,9 @@ export const createReadyReplacementNativeReader = (ports: {
       >,
     ) {
       const previous = predecessor.originatingOperator;
-      for (const [candidate, source] of [
-        [predecessor.appCandidate, previous.plan.delivery],
-        [predecessor.gatewayCandidate, previous.plan.gatewayDelivery],
+      for (const [candidate, source, target] of [
+        [predecessor.appCandidate, previous.plan.delivery, "app"],
+        [predecessor.gatewayCandidate, previous.plan.gatewayDelivery, "gateway"],
       ] as const) {
         if (!candidate) {
           continue;
@@ -137,7 +137,7 @@ export const createReadyReplacementNativeReader = (ports: {
           origin.hash !== "" ||
           origin.username !== "" ||
           origin.password !== "" ||
-          native.gitSource.ref !== source.branch ||
+          native.gitSource.ref !== nativeDeliveryGitRef(previous.plan, source, target) ||
           String(native.gitSource.repoId) !== source.repoId ||
           (source.gitSha !== undefined && native.gitSource.sha !== source.gitSha)
         ) {
