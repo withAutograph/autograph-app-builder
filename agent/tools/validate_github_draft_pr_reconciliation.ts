@@ -7,7 +7,10 @@ import { publishCompiledOperatorArtifactsForSession } from "@/lib/agent/compiled
 import type { ToolContext } from "eve/tools";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import { withCandidateCommandEnvironment } from "@/lib/agent/candidate-command-environment";
-import { attachCheckoutDependencyView } from "@/lib/repository/dependency-cache";
+import {
+  attachCheckoutDependencyView,
+  detachCheckoutDependencyView,
+} from "@/lib/repository/dependency-cache";
 import { retireUnusedDraftWorktrees } from "@/lib/repository/retire-unused-draft-worktrees";
 import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
@@ -76,6 +79,7 @@ const validationSteps = (input: {
   additionalCheckTasks: string[];
   runBrowserTests: boolean;
   schemaTaskCompleted?: true;
+  dependenciesPrepared?: true;
   testShards: readonly string[];
 }): ValidationStep[] => {
   const checks: ValidationStep[] = supportedValidationCommands(input.appId, input.testShards, {
@@ -85,6 +89,9 @@ const validationSteps = (input: {
     kind: "check",
   }));
   return [
+    ...(input.dependenciesPrepared === true
+      ? []
+      : [{ command: installCommand, kind: "install" as const }]),
     ...(input.schemaTaskCompleted === true
       ? []
       : [{ command: appSchemaReleaseCommand(input.appId), kind: "schema" as const }]),
@@ -474,6 +481,7 @@ const runIncrementalValidation = async (
     // An expired/replaced sandbox or a normal source edit invalidates only this validation pass.
     run = null;
   }
+  const startingRun = run === null;
   if (run === null) {
     const steps = validationSteps({
       ...input,
@@ -500,8 +508,29 @@ const runIncrementalValidation = async (
   }
   const originalStep = run.steps[run.nextIndex];
   const originalStepCommand = originalStep?.command;
-  const nextIndexToRun = run.nextIndex;
   const schemaTaskCompleted = run.schemaTaskCompleted;
+  const dependenciesPrepared = run.commands.some(
+    ({ command, exitCode }) =>
+      exitCode === 0 &&
+      [installCommand, "mise exec -- bun install --frozen-lockfile"].includes(command),
+  );
+  const bootstrapNeeded = !dependenciesPrepared && originalStep?.kind !== "install";
+  if (bootstrapNeeded) {
+    const completed = run.steps.slice(0, run.nextIndex);
+    const acknowledgedSchema = completed.filter((entry) => entry.kind === "schema");
+    run = {
+      ...run,
+      nextIndex: acknowledgedSchema.length,
+      steps: [
+        ...acknowledgedSchema,
+        { command: installCommand, kind: "install" },
+        ...completed.filter((entry) => entry.kind !== "schema" && entry.kind !== "install"),
+        ...run.steps.slice(run.nextIndex),
+      ],
+      compilation: undefined,
+    };
+  }
+  const nextIndexToRun = run.nextIndex;
   run = {
     ...run,
     steps: currentValidationSteps(run, candidate.appId, testShards),
@@ -515,11 +544,19 @@ const runIncrementalValidation = async (
       "Candidate validation has no next command. Inspect this saved session and restart validation.",
     );
   }
-  if (
+  const requestedPreviousStep =
     originalStep !== undefined &&
-    input.expectedCommand === originalStepCommand &&
-    currentValidationStep(originalStep, candidate.appId, schemaTaskCompleted, testShards)
-      .command !== step.command
+    (input.expectedCommand === originalStepCommand ||
+      input.expectedCommand ===
+        currentValidationStep(originalStep, candidate.appId, schemaTaskCompleted, testShards)
+          .command);
+  const initialSchemaRequest =
+    startingRun && input.expectedCommand === appSchemaReleaseCommand(candidate.appId);
+  if (
+    initialSchemaRequest ||
+    (requestedPreviousStep &&
+      currentValidationStep(originalStep, candidate.appId, schemaTaskCompleted, testShards)
+        .command !== step.command)
   ) {
     const latest = draftReconciliationState.get();
     if (latest === null) {
@@ -528,8 +565,16 @@ const runIncrementalValidation = async (
     const refreshed = run;
     updateExactDraftReconciliation({
       expected: latest,
-      operation: "refreshing the current declared test plan",
-      transition: () => ({ ...latest, validationRun: refreshed }),
+      operation: "refreshing the current candidate validation setup and test plan",
+      transition: () => {
+        const next = { ...latest, validationRun: refreshed };
+        delete next.validation;
+        delete next.proposal;
+        delete next.review;
+        delete next.repairReview;
+        delete next.reviewReadProgress;
+        return next;
+      },
     });
     return {
       status: "plan_refreshed" as const,
@@ -547,11 +592,53 @@ const runIncrementalValidation = async (
       `Candidate validation is ready for ${step.command}, but this call supplied a different command.${checkoutChanged ? " The checkout changed since the prior validation command, so Builder restarted the check sequence." : ""} Resume with the returned nextCommand; no command was run.`,
     );
   }
+  if (bootstrapNeeded) {
+    const latest = draftReconciliationState.get();
+    if (latest === null) {
+      throw new Error("The candidate is unavailable while preparing its locked dependencies.");
+    }
+    const preparedRun = run;
+    updateExactDraftReconciliation({
+      expected: latest,
+      operation: "preparing the candidate's own locked dependency graph",
+      transition: () => {
+        const next = { ...latest, validationRun: preparedRun };
+        delete next.validation;
+        delete next.proposal;
+        delete next.review;
+        delete next.repairReview;
+        delete next.reviewReadProgress;
+        return next;
+      },
+    });
+  }
   let result: ValidationStepResult;
   let recovery: ValidationStep | undefined;
   let compilation = run.compilation;
   try {
-    if (step.kind === "capture") {
+    if (step.kind === "install") {
+      if (step.command !== installCommand) {
+        throw new Error("The saved candidate installation command is not supported.");
+      }
+      await detachCheckoutDependencyView({
+        sandbox,
+        checkoutRoot: `${candidate.workspaceRoot}/repository`,
+        candidateRoot: candidate.root,
+        workspaceRoot: candidate.workspaceRoot,
+        signal: ctx.abortSignal,
+      });
+      const installed = await sandbox.run({
+        abortSignal: ctx.abortSignal,
+        command: installCommand,
+        workingDirectory: candidate.root,
+      });
+      result = {
+        command: installCommand,
+        exitCode: installed.exitCode,
+        output: validationOutputExcerpt(installed.stdout, installed.stderr),
+        status: installed.exitCode === 0 ? "passed" : "failed",
+      };
+    } else if (step.kind === "capture") {
       try {
         const captured = await publishCandidateArtifacts(ctx, candidate, sandbox);
         compilation = captured.compilation;
@@ -722,6 +809,7 @@ const runIncrementalValidation = async (
           root: candidate.root,
           sandbox,
           schemaTaskCompleted: recovery.kind === "schema" ? true : run.schemaTaskCompleted,
+          dependenciesPrepared: true,
           testShards,
         }),
       ];
@@ -831,7 +919,7 @@ const runIncrementalValidation = async (
 
 export default defineTool({
   description:
-    "Compile the selected app once for this coherent candidate validation, then run repository app:check and all declared app:test shards without repeating their compile dependency, optional local/browser and check: tasks, and capture its actual checked release. Reuse installed dependencies; only concrete missing-dependency diagnostics schedule locked installation. Failures identify the command and cause. This does not update GitHub.",
+    "Restore this candidate's locked dependencies using the existing sandbox cache, compile the selected app once for this coherent candidate validation, then run repository app:check and all declared app:test shards without repeating their compile dependency, optional local/browser and check: tasks, and capture its actual checked release. Each coherent validation pass checks its own locked dependency graph before running checks; preserve earlier source and validation evidence. Failures identify the command and cause. This does not update GitHub.",
   // oxlint-disable-next-line eslint/complexity -- ordered candidate checks need one exit for each named failure.
   async execute(input, ctx) {
     const candidate = draftReconciliationState.get();
