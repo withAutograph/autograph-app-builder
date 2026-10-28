@@ -612,6 +612,36 @@ describe("legacy owner bootstrap public readiness", () => {
 });
 
 describe("protected hosted operator boundary", () => {
+  it("reports approved-plan recovery refusal without exposing private approval context", async () => {
+    const f = fixture();
+    const failure = new HostedOperatorError("operation_in_progress");
+    failure.message = "private approval token and owner detail";
+    f.deps.readApprovedPlan = vi.fn(async () => {
+      throw failure;
+    });
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const result = await f.client.request({ action: "plan", operation: "prepare", selection });
+      expect(result).toMatchObject({ status: "blocked", code: "operation_in_progress" });
+      expect(log.mock.calls).toContainEqual([
+        "[builder:hosted-neon-consent]",
+        expect.objectContaining({
+          planningFailure: {
+            stage: "approved_plan_recovery",
+            errorClass: "operator_error",
+            code: "operation_in_progress",
+          },
+        }),
+      ]);
+      const output = JSON.stringify(log.mock.calls);
+      expect(output).not.toContain(failure.message);
+      expect(output).not.toContain(selection.sessionId);
+      expect(f.row).toBeUndefined();
+      expect(f.deps.executeEffect).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
   it("serves consent-only setup before full resource configuration and refuses planning/effects", async () => {
     const f = fixture();
     const deps = composeHostedOperatorAuthorizationDependencies(

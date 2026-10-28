@@ -948,7 +948,11 @@ const handlePlanOperation = async (
     retentionRenewal ||
     readySuccessor
       ? null
-      : await recoverOriginalApprovedPlan(deps, context, input, appId, plan, now);
+      : await observeOperatorPlanStage(
+          context.target.sessionId,
+          "approved_plan_recovery",
+          async () => await recoverOriginalApprovedPlan(deps, context, input, appId, plan, now),
+        );
   if (recovered !== null) {
     return response(recovered);
   }
