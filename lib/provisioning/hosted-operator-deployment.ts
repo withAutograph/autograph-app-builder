@@ -326,7 +326,7 @@ const isCompletedGatewayBindingObservation = (
   return [
     input.workerAttemptId === undefined,
     input.plan.action === "prepare",
-    input.plan.stage === "app",
+    input.plan.stage === "app" || input.plan.stage === "auth-bootstrap",
     input.effect.kind === "gateway-bindings",
     operator?.receipts.some((receipt) => receipt.effectId === input.effect.id) === true,
     operator?.pendingEffectAttempt !== undefined,
