@@ -368,6 +368,10 @@ export interface ProtectedHostedOperatorDependencies {
   verifyNormalActorAccounts?: (
     input: Context & {
       plan: HostedOperatorPlan;
+      effect: HostedOperatorPlan["effects"][number];
+      operationRef: string;
+      leaseId: string;
+      fenceGeneration: number;
       assertCurrent: () => Promise<void>;
       accountPreparation: NormalActorAccountPreparation;
       checkpointAccountPreparation: (preparation: NormalActorAccountPreparation) => Promise<void>;
@@ -2946,10 +2950,14 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
               record = latest.record;
               const preparation = record.accountPreparation;
               const program = plan.normalActorProgram;
+              const accountEffect = plan.effects.find(
+                (effect) => effect.kind === "normal-accounts",
+              );
               if (
                 deps.verifyNormalActorAccounts === undefined ||
                 preparation === undefined ||
-                program === undefined
+                program === undefined ||
+                accountEffect === undefined
               ) {
                 throw new HostedOperatorError("operator_unavailable");
               }
@@ -2958,6 +2966,10 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 await deps.verifyNormalActorAccounts({
                   ...context,
                   plan,
+                  effect: accountEffect,
+                  operationRef,
+                  leaseId,
+                  fenceGeneration,
                   assertCurrent,
                   accountPreparation: preparation,
                   checkpointAccountPreparation,

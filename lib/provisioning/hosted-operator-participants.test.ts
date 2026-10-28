@@ -18,6 +18,7 @@ import {
   normalActorProgramSchema,
 } from "./hosted-operator-normal-actor-program";
 import type { NormalActorAccountPreparation } from "./hosted-operator-normal-actor-journal";
+import { createNormalActorJournalAuthority } from "./hosted-operator-normal-actor-authority";
 
 const authority = {
   audience: "https://builder.example/mcp",
@@ -487,6 +488,79 @@ describe("participant preparation service branch", () => {
     expect(replanned.operationRef).not.toBe(execution.operationRef);
     expect(f.row?.record.accountPreparation).toEqual(original);
     expect(f.row?.record.accountPreparation?.accountOperationRef).toBe(execution.operationRef);
+  });
+  it("checkpoints verified account completion on resume without replaying a receipted account effect", async () => {
+    const fixtureInput = participantServiceFixture();
+    const { f } = fixtureInput;
+    const execution = await prepared(f);
+    const { state, preparation } = participantAccountCompletion(
+      fixtureInput,
+      execution.operationRef,
+    );
+    delete preparation.accountsCompletedAt;
+    const originalReceipt = {
+      effectId: "normal-accounts",
+      fenceGeneration: 7,
+      observedAt: "2026-10-14T12:00:00.000Z",
+      resourceVersion: "original-verified-accounts",
+    };
+    if (f.row?.record.operator === undefined) {
+      throw new Error("Missing approved participant operation");
+    }
+    f.row = {
+      ...f.row,
+      record: hostedRuntimeJournalRecordSchema.parse({
+        ...f.row.record,
+        approvedByCallId: execution.callId,
+        accountPreparation: preparation,
+        status: "participants-prepared",
+        operator: {
+          ...f.row.record.operator,
+          approvalId: preparation.accountApprovalId,
+          receipts: [originalReceipt],
+        },
+      }),
+    };
+    f.deps.verifyNormalActorAccounts = vi.fn<
+      NonNullable<ProtectedHostedOperatorDependencies["verifyNormalActorAccounts"]>
+    >(async (input) => {
+      await input.assertCurrent();
+      const current = await f.deps.store.read(input);
+      if (current === undefined) {
+        throw new Error("Missing leased account preparation");
+      }
+      const journalAuthority = createNormalActorJournalAuthority({
+        store: f.deps.store,
+        keyring: { tokenKey: Buffer.alloc(32, 1), tokenKeyVersion: "fixture-key" },
+        now: Date.now,
+        assertCanonicalOwner: async () => {
+          await f.deps.assertAuthorized({ authority, target, plan: fixtureInput.accountPlan });
+        },
+        assertApprovedOwner: f.deps.assertAuthorized,
+        readApproval: f.deps.readApproval,
+      });
+      await journalAuthority.assertMutationAuthority(input, current);
+      await input.checkpointAccountPreparation({
+        ...input.accountPreparation,
+        accountsCompletedAt: "2026-10-14T12:05:00.000Z",
+      });
+      await input.assertCurrent();
+      return state;
+    });
+    f.approve();
+
+    const result = await f.client.request(execution);
+
+    expect(result.status).toBe("participants-prepared");
+    expect(f.row?.record.accountPreparation?.accountsCompletedAt).toBe("2026-10-14T12:05:00.000Z");
+    expect(f.row?.record.accountPreparation?.accountOperationRef).toBe(execution.operationRef);
+    expect(f.row?.record.accountPreparation?.accountApprovalId).toBe(preparation.accountApprovalId);
+    expect(f.row?.record.accountPreparation?.programDigest).toBe(preparation.programDigest);
+    expect(f.row?.record.operator?.receipts).toEqual([originalReceipt]);
+    expect(f.row?.record.leaseId).toBeUndefined();
+    expect(f.row?.record.operator?.pendingEffectId).toBeUndefined();
+    expect(f.deps.executeEffect).not.toHaveBeenCalled();
+    expect(f.deps.verify).not.toHaveBeenCalled();
   });
   it("requires capture after real approval and before leases, fences or pending account effects", async () => {
     const { f } = participantServiceFixture();

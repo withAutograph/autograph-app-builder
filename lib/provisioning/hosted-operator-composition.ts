@@ -2332,12 +2332,13 @@ export const composeHostedOperatorDependencies = (
       if (prepared.state.actors.some((actor) => actor.signup !== "complete")) {
         return { status: "retryable", resourceVersion: normalActorFingerprint(prepared.state) };
       }
-      if (input.checkpointAccountPreparation === undefined) {
+      if (input.checkpointAccountPreparation === undefined || input.leaseId === undefined) {
         throw new HostedOperatorError(OPERATION_IN_PROGRESS);
       }
       try {
         const state = await controlPlane.verifyNormalActorAccounts({
           ...input,
+          leaseId: input.leaseId,
           accountPreparation: prepared.preparation,
           checkpointAccountPreparation: input.checkpointAccountPreparation,
         });
