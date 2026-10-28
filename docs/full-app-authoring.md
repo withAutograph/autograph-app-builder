@@ -76,6 +76,11 @@ not a connected or activated provider. AppSpec integration prose carries product
 intent; executable app definitions carry recipe selection and target bindings.
 Existing navigation composes the generated navigation entry explicitly.
 
+The [App Builder / Autograph integration delivery handoff](optional-integrations-delivery.md)
+records the ordered runtime and migration prerequisites, owner roles, current
+PR evidence, public acceptance and recovery boundaries. Follow that sequence
+before describing the optional capability as ready for live use.
+
 Inspect the selected app's actual CUE and checked release before changing it.
 `existingAppChanges` and `implementationFiles` accept legacy `{path, content}`
 upserts, explicit `{path, operation: "upsert", content}`, and
