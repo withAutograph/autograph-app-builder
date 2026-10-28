@@ -153,6 +153,20 @@ and app roles while the current approved stage prepares accounts only.
 | `participants-prepared` | Accounts and private sessions only. It does not establish organization creation, memberships, app access or business test writes. |
 | `prepared`              | Confirmed preparation effects. Actual signed-in behavior evidence is still required before claiming app readiness.                |
 
+Authorized operator status and preparation results can include
+`preparationProgress`, a read-only projection of the current journal, when the
+client sends `x-autograph-preparation-progress: v1` on status or execute. This
+preference is independent of execution observation. Older clients receive the
+original result shape; new clients also accept responses from older operators
+without this optional field. It reports
+the recorded plan stage (when present), lease classification, pending effect and
+attempt presence, missing approved effect kinds, and account preparation,
+completion and program association. Effect kinds are deduplicated; operation,
+lease, account and effect identifiers, program digests and private values are not
+included. These facts describe recorded bookkeeping only: receipted effects do
+not replace independent provider readback, account completion does not establish
+signed-in app behavior, and this projection grants no approval or retry authority.
+
 Preserve pending, unknown and blocked outcomes; a journal lease is not proof of
 execution. Report successful completion of the same operation under verified
 human approval even when an earlier request said proposal-only. That earlier

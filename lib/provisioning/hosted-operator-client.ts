@@ -46,6 +46,8 @@ import { resolveHostedOperatorOwnerContext } from "./hosted-operator-owner-conte
 import {
   OPERATOR_EXECUTION_OBSERVATION_HEADER,
   OPERATOR_EXECUTION_OBSERVATION_PREFERENCE,
+  OPERATOR_PREPARATION_PROGRESS_HEADER,
+  OPERATOR_PREPARATION_PROGRESS_PREFERENCE,
 } from "./hosted-operator-execution-observation-protocol";
 import type { OperatorOwnerContext, OperatorRequest } from "./hosted-operator-contract";
 import {
@@ -188,7 +190,10 @@ export const createHostedOperatorClient = (input: {
         "content-type": "application/json",
         "x-vercel-trusted-oidc-idp-token": token,
         ...(body.action === "status" || body.action === "execute"
-          ? { [OPERATOR_EXECUTION_OBSERVATION_HEADER]: OPERATOR_EXECUTION_OBSERVATION_PREFERENCE }
+          ? {
+              [OPERATOR_EXECUTION_OBSERVATION_HEADER]: OPERATOR_EXECUTION_OBSERVATION_PREFERENCE,
+              [OPERATOR_PREPARATION_PROGRESS_HEADER]: OPERATOR_PREPARATION_PROGRESS_PREFERENCE,
+            }
           : {}),
       },
       method: "POST",
