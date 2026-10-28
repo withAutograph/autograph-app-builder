@@ -1,3 +1,9 @@
+import {
+  frameworkUpgradeSchema,
+  planFrameworkUpgrade,
+  resolveLatestFrameworkVersions,
+} from "./framework-upgrade";
+import type { FrameworkVersions } from "./framework-upgrade";
 import { setBuilderSandboxNetworkPolicy } from "../sandbox/builder-sandbox";
 import { describeSelectedApp } from "./app-description";
 import { createHash } from "node:crypto";
@@ -53,6 +59,7 @@ const appSpecBindingSchema = z.strictObject({
 const targetCreationProposalSchemaForTopology = (topologyOwner: string) =>
   z.strictObject({
     blockers: z.array(z.string()),
+    frameworkUpgrade: frameworkUpgradeSchema.optional(),
     contract: z.strictObject({
       appId,
       appSpec: appSpecBindingSchema,
@@ -117,12 +124,18 @@ const targetIterationProposalSchemaForTopology = (topologyOwner: string) =>
   targetCreationProposalSchemaForTopology(topologyOwner)
     .extend({
       iteration: z.strictObject({
-        changes: z.array(iterationChangeSchema).min(1),
+        changes: z.array(iterationChangeSchema),
         digest,
       }),
       operation: z.literal("iterate-existing-app"),
     })
     .superRefine((proposal, context) => {
+      if (proposal.iteration.changes.length === 0 && proposal.frameworkUpgrade === undefined) {
+        context.addIssue({
+          code: "custom",
+          message: "An existing-app iteration requires app changes or a framework upgrade",
+        });
+      }
       if (sha256(JSON.stringify(proposal.iteration.changes)) !== proposal.iteration.digest) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
@@ -423,6 +436,8 @@ export const executeTargetIdentityAndPlanning = async (input: {
   appSpecDigest: string;
   artifactRevision: string;
   existingAppChanges?: readonly ApplicationFileChange[];
+  frameworkUpgradeRequested?: boolean;
+  resolveFrameworkVersions?: () => Promise<FrameworkVersions>;
   sourceReceipt?: SourceReceipt;
   environment?: Readonly<Record<string, string | undefined>>;
   onIdentity?: (identity: TargetIdentity) => void | Promise<void>;
@@ -450,13 +465,25 @@ export const executeTargetIdentityAndPlanning = async (input: {
     command: `test -d /workspace/repository/${identity.workspacePath}`,
   });
   const existingApplication = existingApplicationResult.exitCode === 0;
-  if (existingApplication && input.existingAppChanges === undefined) {
+  const frameworkUpgrade =
+    input.frameworkUpgradeRequested === true ||
+    (!existingApplication && input.resolveFrameworkVersions !== undefined)
+      ? await planFrameworkUpgrade(
+          input.sandbox,
+          await (input.resolveFrameworkVersions ?? resolveLatestFrameworkVersions)(),
+        )
+      : undefined;
+  if (
+    existingApplication &&
+    input.existingAppChanges === undefined &&
+    frameworkUpgrade === undefined
+  ) {
     throw new ExistingApplicationChangesRequiredError();
   }
-  if (existingApplication && input.existingAppChanges !== undefined) {
+  if (existingApplication) {
     const seen = new Set<string>();
     const changes: TargetIterationChange[] = [];
-    for (const requested of input.existingAppChanges) {
+    for (const requested of input.existingAppChanges ?? []) {
       if (
         !safeSourcePath(requested.path) ||
         !requested.path.startsWith(`${identity.workspacePath}/`) ||
@@ -505,12 +532,12 @@ export const executeTargetIdentityAndPlanning = async (input: {
         path: requested.path,
       });
     }
-    if (changes.length === 0) {
+    if (changes.length === 0 && frameworkUpgrade === undefined) {
       throw new Error("At least one existing-app change is required.");
     }
     const iterationDigest = sha256(JSON.stringify(changes));
     await input.onIdentity?.(identity);
-    const schemaChange = input.existingAppChanges.find(
+    const schemaChange = input.existingAppChanges?.find(
       (change) => change.path === identity.schemaCuePath,
     );
     const description =
@@ -527,6 +554,7 @@ export const executeTargetIdentityAndPlanning = async (input: {
         : schemaChange.operation !== "delete";
     const proposal = targetIterationProposalSchemaForTopology("microfrontends.json").parse({
       ...creationPlan(identity, input.appSpecDigest, hasSchema),
+      ...(frameworkUpgrade === undefined ? {} : { frameworkUpgrade }),
       iteration: { changes, digest: iterationDigest },
       operation: "iterate-existing-app",
     });
@@ -539,7 +567,10 @@ export const executeTargetIdentityAndPlanning = async (input: {
     command: `test -f ${identity.cueSourcePath}`,
     workingDirectory: "/workspace/repository",
   });
-  const proposal = creationPlan(identity, input.appSpecDigest, cue.exitCode === 0);
+  const proposal = {
+    ...creationPlan(identity, input.appSpecDigest, cue.exitCode === 0),
+    ...(frameworkUpgrade === undefined ? {} : { frameworkUpgrade }),
+  };
   const result = { identity, proposal, ...overlay };
   planningMarker("target-identity-and-planning", "finish");
   return result;

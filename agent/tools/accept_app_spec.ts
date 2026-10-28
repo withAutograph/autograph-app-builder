@@ -10,6 +10,7 @@ import {
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
+  assertUpstreamMutationAllowed,
   sha256,
   updateExactWorkflow,
   validAppId,
@@ -26,11 +27,24 @@ import { isPrototypeArtifactV2 } from "@/lib/agent/prototype-artifacts";
 import { createHostedPrototypeChunkStore } from "@/lib/agent/hosted-prototype-chunk-store";
 import { openHostedPostgresDatabase } from "@/lib/mcp/hosted-route";
 
-const acceptanceResult = (appSpec: AcceptedAppSpec, reused: boolean) => ({
-  ...appSpec,
-  productAcceptance: productAcceptanceObligations(appSpec),
-  reused,
-});
+const acceptanceResult = (appSpec: AcceptedAppSpec, reused: boolean) => {
+  const state = appBuilderWorkflowState.get();
+  const upgrade = "proposal" in state ? state.proposal.target?.frameworkUpgrade : undefined;
+  return {
+    ...appSpec,
+    ...(upgrade === undefined
+      ? {}
+      : {
+          frameworkUpgradePlan: {
+            scope: upgrade.scope,
+            versions: upgrade.versions,
+            sharedPaths: ["package.json", "bun.lock"],
+          },
+        }),
+    productAcceptance: productAcceptanceObligations(appSpec),
+    reused,
+  };
+};
 
 /**
  * Planning is the deterministic continuation of a successfully accepted
@@ -40,12 +54,43 @@ const acceptanceResult = (appSpec: AcceptedAppSpec, reused: boolean) => ({
 const planAcceptedAppSpec = async (
   ctx: Parameters<typeof prepareAppCreation>[1],
   existingAppChanges?: ExistingAppChange[],
+  frameworkUpgrade?: "latest",
 ) => {
-  const latest = appBuilderWorkflowState.get();
+  let latest = appBuilderWorkflowState.get();
+  if (
+    frameworkUpgrade === "latest" &&
+    "appSpec" in latest &&
+    (!("proposal" in latest) || latest.proposal.target?.frameworkUpgrade === undefined)
+  ) {
+    assertUpstreamMutationAllowed(latest, "framework upgrade planning");
+    const current = latest;
+    updateExactWorkflow({
+      expected: current,
+      operation: "framework upgrade planning",
+      transition: () => ({
+        appSpec: { ...current.appSpec, frameworkUpgrade: "latest" },
+        artifacts: current.artifacts,
+        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
+        phase: "app_spec_accepted",
+        preparedByCallId: current.preparedByCallId,
+        sourceReceipt: current.sourceReceipt,
+        version: APP_BUILDER_WORKFLOW_VERSION,
+        workspace: current.workspace,
+      }),
+    });
+    latest = appBuilderWorkflowState.get();
+  }
   await continueAcceptedAppSpec({
     phase: latest.phase,
     plan: async () => {
-      await prepareAppCreation(existingAppChanges === undefined ? {} : { existingAppChanges }, ctx);
+      await prepareAppCreation(
+        {
+          existingAppChanges,
+          frameworkUpgrade:
+            frameworkUpgrade ?? ("appSpec" in latest ? latest.appSpec.frameworkUpgrade : undefined),
+        },
+        ctx,
+      );
     },
     planComplete: "proposal" in latest,
   });
@@ -55,7 +100,13 @@ export default defineTool({
   description:
     "Silently accept the current AppSpec artifact with explicit build-ready intent and continue planning. Before authoring it, read design-app references/app-spec.md for product coverage guidance; section names, order, and Markdown formatting are advisory. Preserve the user's actual requirements and declare readiness with JSON status build-ready only when the product intent is ready; a later draft status keeps planning open. For an existing app, include existingAppChanges with complete replacement contents for each app-owned file to change; if recording the AppSpec said planning needs changes, call this tool with the accepted artifact and those changes before requesting build approval. No new approval receipt is required. This does not publish or change an external repository.",
   async execute(
-    { appId, expectedArtifactDigest, expectedArtifactRevision, existingAppChanges },
+    {
+      appId,
+      expectedArtifactDigest,
+      expectedArtifactRevision,
+      existingAppChanges,
+      frameworkUpgrade,
+    },
     ctx,
   ) {
     if (!validAppId(appId)) {
@@ -88,7 +139,7 @@ export default defineTool({
       current.appSpec.artifactPath === artifact.path &&
       current.appSpec.artifactRevision === artifact.revision
     ) {
-      await planAcceptedAppSpec(ctx, existingAppChanges);
+      await planAcceptedAppSpec(ctx, existingAppChanges, frameworkUpgrade);
       await emitCurrentBuildWorkflowProjection(ctx);
       return acceptanceResult(current.appSpec, true);
     }
@@ -121,6 +172,7 @@ export default defineTool({
     }
     const accepted: AcceptedAppSpec = {
       acceptedByCallId: ctx.callId,
+      ...(frameworkUpgrade === undefined ? {} : { frameworkUpgrade }),
       appId,
       artifactPath: artifact.path,
       artifactRevision: artifact.revision,
@@ -133,7 +185,7 @@ export default defineTool({
       current.appSpec.digest === accepted.digest &&
       current.appSpec.appId === accepted.appId
     ) {
-      await planAcceptedAppSpec(ctx, existingAppChanges);
+      await planAcceptedAppSpec(ctx, existingAppChanges, frameworkUpgrade);
       await emitCurrentBuildWorkflowProjection(ctx);
       return acceptanceResult(current.appSpec, true);
     }
@@ -151,12 +203,18 @@ export default defineTool({
         workspace: current.workspace,
       }),
     });
-    await planAcceptedAppSpec(ctx, existingAppChanges);
+    await planAcceptedAppSpec(ctx, existingAppChanges, frameworkUpgrade);
     await emitCurrentBuildWorkflowProjection(ctx);
     return acceptanceResult(accepted, false);
   },
   inputSchema: z.strictObject({
     appId: z.string().min(1),
+    frameworkUpgrade: z
+      .literal("latest")
+      .optional()
+      .describe(
+        "Upgrade this existing app to the latest stable Next.js and React versions; new apps select current stable versions automatically. Shared catalog and lockfile updates are included in the reviewed change set.",
+      ),
     existingAppChanges: existingAppChangesSchema.optional(),
     expectedArtifactDigest: z
       .string()

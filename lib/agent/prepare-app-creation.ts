@@ -1,3 +1,4 @@
+import { resolveLatestFrameworkVersions } from "../repository/framework-upgrade";
 import { refreshPlanningSource } from "./refresh-planning-source";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import type { ExistingAppChange } from "./existing-app-changes";
@@ -24,8 +25,16 @@ import {
   targetExecutionBinding,
 } from "@/lib/repository/target-planning";
 
+const frameworkPlanningOptions = (fixture: boolean, requested?: "latest", accepted?: "latest") => ({
+  frameworkUpgradeRequested: (requested ?? accepted) === "latest",
+  ...(fixture ? {} : { resolveFrameworkVersions: resolveLatestFrameworkVersions }),
+});
+
 export const prepareAppCreation = async (
-  { existingAppChanges }: { existingAppChanges?: ExistingAppChange[] },
+  {
+    existingAppChanges,
+    frameworkUpgrade,
+  }: { existingAppChanges?: ExistingAppChange[]; frameworkUpgrade?: "latest" },
   ctx: ToolContext,
 ) => {
   const state = appBuilderWorkflowState.get();
@@ -107,6 +116,11 @@ export const prepareAppCreation = async (
       ? fixtureTargetCommandExecutor()
       : sandboxTargetCommandExecutor(sandbox),
     existingAppChanges,
+    ...frameworkPlanningOptions(
+      execution.fixture,
+      frameworkUpgrade,
+      current.appSpec.frameworkUpgrade,
+    ),
     onIdentity(identity) {
       if (identityReceipt !== undefined) {
         return;
