@@ -3961,7 +3961,7 @@ describe("retained active schema installation scope", () => {
         },
         operator: {
           mode: "protected-operator-v1",
-          approvalId: "prior-approval",
+          approvalId: f.receipt(1).requestId,
           operationRef: f.receipt(1).toolInput.operationRef,
           plan: f.prior,
           planDigest: operatorPlanDigest(f.prior),
@@ -3995,11 +3995,18 @@ describe("retained active schema installation scope", () => {
       await Promise.resolve();
     });
     const createOwner = owners.createHostedOperatorOwnerAuthority;
+    const assertAuthorized = vi.fn<ReturnType<typeof createOwner>["assertAuthorized"]>(
+      async (input) => {
+        expect(input.purpose).toBe("planning");
+        await assertPlanningAuthorized();
+      },
+    );
     vi.spyOn(owners, "createHostedOperatorOwnerAuthority").mockImplementation((dependencies) => ({
       ...createOwner(dependencies),
       readCurrentPlanningOwner: async () =>
         await Promise.resolve({ session: f.session, target: context.target }),
       assertPlanningAuthorized,
+      assertAuthorized,
     }));
     const bindings = {
       appDatabase: { migrationUrl: "fixture-app-migrator", runtimeUrl: "fixture-app-runtime" },
@@ -4040,6 +4047,7 @@ describe("retained active schema installation scope", () => {
       readMetadata,
       metadataRead,
       assertPlanningAuthorized,
+      assertAuthorized,
       bindings,
     };
   };
@@ -4065,6 +4073,9 @@ describe("retained active schema installation scope", () => {
       }),
     );
     expect(f.metadataRead).toHaveBeenCalled();
+    expect(f.assertAuthorized).toHaveBeenCalledWith(
+      expect.objectContaining({ purpose: "planning", plan: f.prior }),
+    );
   });
 
   it.each([
