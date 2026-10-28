@@ -338,13 +338,33 @@ it("leaves native result and incoming runtime outcome reconciliation to their or
 });
 it("rejects a completed or duplicate call without rewriting history", () => {
   const completed = fixture();
-  completed.history.push({
-    role: "tool",
-    content: [
-      { type: "tool-result", toolCallId: "reconcile-call", approvalId: "", approved: false },
-    ],
-  });
-  expect(authorizeRepeatableDraftReconciliationCalls(completed.input)).toEqual([]);
+  expect(
+    authorizeRepeatableDraftReconciliationCalls({
+      ...completed.input,
+      payload: {
+        ...completed.input.payload,
+        candidates: [
+          {
+            ...completed.input.payload.candidates[0],
+            sessionState: {
+              snapshot: {
+                session: {
+                  sessionId: "logical",
+                  history: [
+                    ...completed.history,
+                    {
+                      role: "tool",
+                      content: [{ type: "tool-result", toolCallId: "reconcile-call" }],
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      },
+    }),
+  ).toEqual([]);
   const duplicate = fixture();
   duplicate.history.push({ role: "assistant", content: [{ ...duplicate.call }] });
   expect(authorizeRepeatableDraftReconciliationCalls(duplicate.input)).toEqual([]);
@@ -455,7 +475,9 @@ it("rejects ambiguous latest checkpoints, unknown arguments and native mode chan
 });
 it("rejects changed sealed merge bytes, review scope and current source", () => {
   const merge = fixture();
-  merge.completion.review.baseChanges[0].after.digest = "f".repeat(64);
+  const after = merge.completion.review.baseChanges[0].after;
+  if (after === undefined) throw new Error("The added-file fixture requires after bytes.");
+  after.digest = "f".repeat(64);
   expect(authorizeRepeatableDraftReconciliationCalls(merge.input)).toEqual([]);
   const source = fixture();
   source.candidate.githubSourceDigest = "f".repeat(64);

@@ -240,7 +240,8 @@ const currentCompletion = (
       state.reviewReceipt.digest === completion.appReview.digest,
       state.reviewReceipt.appSpecDigest === completion.appReview.appSpecDigest,
       state.reviewReceipt.changeSetDigest === completion.appReview.changeSetDigest,
-      compilation.context.authority.ownerUserId === input.expectedPrincipalId,
+      "ownerUserId" in compilation.context.authority &&
+        compilation.context.authority.ownerUserId === input.expectedPrincipalId,
       compilation.context.target.sessionId === input.descriptor.originalAuthoritySessionId,
       compilation.context.target.appId === completion.appId,
       source.resolvedRef === `refs/heads/${proposal.branchName}`,
