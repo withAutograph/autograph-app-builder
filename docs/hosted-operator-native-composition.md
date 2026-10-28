@@ -287,6 +287,12 @@ successful hostname write replaces the current delivery's verified receipt.
 Reconciliation refusals report only closed stages and error classifications;
 they preserve uncertain attempts and never authorize a duplicate deployment.
 
+Gateway setup and app installation both reverify completed Gateway bindings
+while reconciling their pending Gateway delivery. That read uses the same live
+owner, approval, operation, plan, fence, lease and sealed resource checkpoint.
+The completed binding receipt and actual pending delivery attempt remain
+required; this observation cannot authorize a worker attempt or replay a write.
+
 Under the fresh approval, reconcile access and runtime bindings again, apply
 and read back the approved service grant, and read both existing native
 candidates and the canonical Gateway alias. Historical metadata must remain
