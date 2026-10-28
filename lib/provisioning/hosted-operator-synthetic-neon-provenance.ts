@@ -134,7 +134,8 @@ const verifyOperationalBranch = (
   const branch = providerBranchSchema.parse(provider);
   const mismatches = [
     branch.created_at !== expected.createdAt,
-    branch.current_state !== "ready",
+    // Neon archives idle cache without changing branch data or lineage; queries reactivate it.
+    !["ready", "archived"].includes(branch.current_state),
     branch.default !== expected.default,
     branch.id !== expected.id,
     branch.init_source !== expected.initSource,
