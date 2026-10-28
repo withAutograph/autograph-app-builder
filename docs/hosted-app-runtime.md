@@ -196,6 +196,15 @@ live approvals remain required. This does not replay the notification. The old
 sealed claim cannot authorize effects without its exact active identity nonce;
 subsequent normal capture must mint a fresh server nonce.
 
+After participant completion, its frozen account plan may still name an older
+Gateway source. Planning may reuse a separately completed current Gateway when
+its exact source, READY candidate, binding values and original effect receipts
+match the requested infrastructure. The participant operation must be settled
+and idle with account completion recorded. This does not change the account
+plan or restore an older infrastructure approval over it; full app effects
+still require their own approval. Approved-plan recovery failures retain their
+original refusal and emit only a closed planning stage and error code.
+
 The app's normal signup or sign-in establishes the user's Auth session. A
 protected server-side enrollment path idempotently applies only the approved
 organization membership and app roles, including when an eligible account
