@@ -42,6 +42,7 @@ import { createHostedOperatorRealmHttpTransport } from "./hosted-operator-realm-
 import {
   HostedOperatorError,
   hostedOperatorPlanSchema,
+  operatorPlanDigest,
   nativeDeliveryGitRef,
   hostedOperatorAuthSignupPolicyInputSchema,
   operatorReceiptSchema,
@@ -2153,6 +2154,59 @@ export const composeHostedOperatorDependencies = (
     const empty = await inspectEmptyAuthNamespace(urls.authDatabase.runtimeUrl, input);
     return empty ? { status: "absent" } : { status: "unknown" };
   };
+  const emptyAccessScope = (input: HostedOperatorEffectContext) => {
+    if (input.effect.kind !== "access" || input.plan.access.length !== 0) {
+      return undefined;
+    }
+    if (input.plan.action !== "prepare") {
+      throw new HostedOperatorError(RESOURCE_MISMATCH);
+    }
+    if (
+      !isDeepStrictEqual(
+        input.plan.effects.find((effect) => effect.id === input.effect.id),
+        input.effect,
+      )
+    ) {
+      throw new HostedOperatorError(RESOURCE_MISMATCH);
+    }
+    return {
+      planDigest: operatorPlanDigest(input.plan),
+      effect: structuredClone(input.effect),
+      operationRef: input.operationRef,
+      fenceGeneration: input.fenceGeneration,
+      leaseId: input.leaseId,
+    };
+  };
+  const emptyAccessReceipt = async (
+    input: HostedOperatorEffectContext,
+    approved: ReturnType<typeof emptyAccessScope>,
+  ) => {
+    if (approved === undefined) {
+      return undefined;
+    }
+    const assertScope = () => {
+      if (!isDeepStrictEqual(emptyAccessScope(input), approved)) {
+        throw new HostedOperatorError(RESOURCE_MISMATCH);
+      }
+    };
+    // An empty approved grant set adds no access. Installation-only tenants
+    // remain outside this effect's authority and require no access worker.
+    assertScope();
+    if (input.plan.normalActorProgram !== undefined) {
+      assertParticipantAccess(input.plan, await controlPlane.verifyNormalActorMemberships(input));
+    }
+    assertScope();
+    await input.assertCurrent();
+    await controlPlane.assertAuthorized(input);
+    await input.assertCurrent();
+    assertScope();
+    return receipt(
+      input,
+      createHash("sha256")
+        .update(JSON.stringify({ effect: "access", grants: [] }))
+        .digest("hex"),
+    );
+  };
   const reconcileAppWorker = async (
     input: HostedOperatorEffectContext,
   ): ReturnType<ProtectedHostedOperatorDependencies["reconcile"]> => {
@@ -2365,8 +2419,13 @@ export const composeHostedOperatorDependencies = (
     revoke: reconcileAppWorker,
   };
   const reconcile: ProtectedHostedOperatorDependencies["reconcile"] = async (input) => {
+    const approvedEmptyAccess = emptyAccessScope(input);
     await input.assertCurrent();
     await controlPlane.assertAuthorized(input);
+    const empty = await emptyAccessReceipt(input, approvedEmptyAccess);
+    if (empty !== undefined) {
+      return { receipt: empty, status: "applied" };
+    }
     if (input.effect.kind === "install" && input.effect.id === AUTH_SCHEMA_EFFECT) {
       return await reconcileAuthSchema(input);
     }
@@ -2556,8 +2615,13 @@ export const composeHostedOperatorDependencies = (
     revoke: executeEffectAppWorker,
   };
   const executeEffect: ProtectedHostedOperatorDependencies["executeEffect"] = async (input) => {
+    const approvedEmptyAccess = emptyAccessScope(input);
     await input.assertCurrent();
     await controlPlane.assertAuthorized(input);
+    const empty = await emptyAccessReceipt(input, approvedEmptyAccess);
+    if (empty !== undefined) {
+      return empty;
+    }
     if (input.effect.kind === "install" && input.effect.id === AUTH_SCHEMA_EFFECT) {
       return await executeEffectAuthSchema(input);
     }
