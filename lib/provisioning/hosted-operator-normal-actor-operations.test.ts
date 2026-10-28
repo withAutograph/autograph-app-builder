@@ -15,6 +15,7 @@ import {
   operatorPlanDigest,
 } from "./hosted-operator-contract";
 import {
+  initialNormalActorState,
   normalActorProgramSchema,
   proposeResolvedNormalActorAccess,
 } from "./hosted-operator-normal-actor-program";
@@ -398,6 +399,7 @@ const fixture = (captureExisting = false, selectedProgram = program) => {
   };
   return {
     operations,
+    auth,
     journalPorts,
     preflight,
     effect,
@@ -419,6 +421,88 @@ const fixture = (captureExisting = false, selectedProgram = program) => {
 };
 
 describe("normal actor operations", () => {
+  it.each(["valid", "invalid", "expired", "cancelled"] as const)(
+    "checkpoints owner-confirmed capture completion only after %s session verification",
+    async (outcome) => {
+      const capturedProgram = normalActorProgramSchema.parse({
+        ...program,
+        actors: [{ ...program.actors[0], account: "capture-existing" }],
+        organizations: [],
+        memberships: [],
+        appAccess: [],
+      });
+      const f = fixture(false, capturedProgram);
+      await expect(f.operations.ensureNormalActorCapture(f.preflight)).rejects.toThrow(
+        "fixture_capture_required",
+      );
+      const client = createHostedOperatorNormalAuthClient({
+        origin: capturedProgram.origin,
+        assertApprovedEffect: f.effect.assertCurrent,
+        fetch: async (url, init) => await f.auth.handler(new Request(url, init)),
+      });
+      await client.signUp({
+        email: "owner@example.com",
+        name: "Owner",
+        password: randomUUID(),
+      });
+      const session = await client.getSession();
+      if (session === null) {
+        throw new Error("fixture_missing_session");
+      }
+      const state = initialNormalActorState(capturedProgram, accountOperationRef);
+      state.actors = [
+        {
+          actorKey: "owner",
+          signup: "complete",
+          session: {
+            reference: randomUUID(),
+            actorId: outcome === "invalid" ? "other-actor" : session.actorId,
+            realmSessionId: session.sessionId,
+            origin: capturedProgram.origin,
+            expiresAt: session.expiresAt,
+          },
+          storageState: client.exportStorageState(),
+        },
+      ];
+      await f.journal.checkpoint(context, state);
+      // Owner confirmation stores the complete captured state before its effect reconciliation.
+      const preparation = f.row.record.accountPreparation;
+      if (preparation === undefined) {
+        throw new Error("fixture_missing_preparation");
+      }
+      delete preparation.accountsCompletedAt;
+      if (outcome === "expired") {
+        f.journalPorts.now = () => Date.parse(session.expiresAt) + 1;
+      }
+      const before = structuredClone(f.row);
+      const requestCount = f.requests.length;
+      const verify = f.operations.verifyNormalActorAccounts({
+        ...context,
+        plan: f.preflight.plan,
+        accountPreparation: preparation,
+        checkpointAccountPreparation: f.checkpointAccountPreparation,
+        assertCurrent: async () => {
+          await f.effect.assertCurrent();
+          if (outcome === "cancelled") {
+            throw new Error("cancelled");
+          }
+        },
+      });
+      if (outcome === "valid") {
+        await verify;
+        expect(f.row.record.accountPreparation?.accountsCompletedAt).toBeDefined();
+        const saved = await f.journal.read(context);
+        expect(saved?.state).toEqual(state);
+        expect(f.row.record.accountPreparation?.accountPlan).toEqual(preparation.accountPlan);
+      } else {
+        await expect(verify).rejects.toThrow();
+        expect(f.row).toEqual(before);
+      }
+      expect(f.requests.slice(requestCount).every((request) => request.method === "GET")).toBe(
+        true,
+      );
+    },
+  );
   it("persists original encrypted authority before ordinary signup and prepares independent pending organization sessions", async () => {
     const f = fixture();
     expect(await f.operations.ensureNormalActorCapture(f.preflight)).toBe("ready");

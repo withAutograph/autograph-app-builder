@@ -246,7 +246,14 @@ export const createHostedOperatorNormalActorOperations = (
     );
     return state;
   };
-  const checkpoint = async (input: HostedOperatorEffectContext, state: NormalActorState) => {
+  const checkpoint = async (
+    input: HostedOperatorContext &
+      Pick<
+        HostedOperatorEffectContext,
+        "assertCurrent" | "assertCurrentObservation" | "checkpointAccountPreparation"
+      >,
+    state: NormalActorState,
+  ) => {
     if (input.checkpointAccountPreparation === undefined) {
       throw new HostedOperatorError("operation_in_progress");
     }
@@ -535,6 +542,7 @@ export const createHostedOperatorNormalActorOperations = (
       const state = await freshAccounts(input, prepared.preparation, prepared.state);
       await freshOrganizationCandidates(input, prepared.preparation, state);
       await input.assertCurrent();
+      await checkpoint(input, state);
       return state;
     },
     async readNormalActorOrganizationProofs(input) {
