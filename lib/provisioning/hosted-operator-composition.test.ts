@@ -987,9 +987,9 @@ describe("configured owner-authorized Preview target metadata", () => {
   });
 });
 
-const participantResolutionFixture = () => {
+const participantResolutionFixture = (captureOnly = false) => {
   const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
-  const program = normalActorProgramSchema.parse({
+  const declaredProgram = normalActorProgramSchema.parse({
     version: 1,
     appId: context.target.appId,
     origin: f.configuration.gateway.publicOrigin,
@@ -1014,6 +1014,15 @@ const participantResolutionFixture = () => {
       { organizationId: "second-org", actorKey: "owner", roles: ["member"] },
     ],
   });
+  const program = captureOnly
+    ? normalActorProgramSchema.parse({
+        ...declaredProgram,
+        actors: declaredProgram.actors.map((actor) => ({ ...actor, account: "capture-existing" })),
+        organizations: [],
+        memberships: [],
+        appAccess: [],
+      })
+    : declaredProgram;
   const base = hostedOperatorPlanSchema.parse({
     ...bootstrapWithGatewayOrigin("https://gateway.example"),
     normalActorProgram: program,
@@ -1219,6 +1228,220 @@ const unusedCompositionControlPlane = (): Parameters<
     withResourceLease: unexpectedPort,
   };
 };
+
+describe("empty approved access effects", () => {
+  const setup = async (captureOnly = true) => {
+    const f = participantResolutionFixture(captureOnly);
+    f.state.memberships = f.state.memberships.map((membership) => ({
+      ...membership,
+      status: "complete",
+    }));
+    const plan = await resolveFullPlan(
+      f.base,
+      context,
+      f.configuration,
+      {
+        ...f.ports,
+        readAppInstallationCustomerIds: async () => await Promise.resolve(["existing-owner"]),
+      },
+      {},
+      true,
+      true,
+    );
+    const effect = plan.effects.find((candidate) => candidate.kind === "access");
+    if (effect === undefined) {
+      throw new Error("Controlled access effect missing");
+    }
+    const inspect = vi.fn<
+      ReturnType<typeof membershipLauncher.createHostedOperatorSandboxLauncher>["inspect"]
+    >(
+      async () =>
+        await Promise.resolve({
+          version: 1,
+          operation_id: "00000000-0000-4000-8000-000000000021",
+          context_digest: "d".repeat(64),
+          fence_generation: 1,
+          status: "applied",
+          readback_sha256: "e".repeat(64),
+        }),
+    );
+    const execute = vi.fn<
+      ReturnType<typeof membershipLauncher.createHostedOperatorSandboxLauncher>["execute"]
+    >(async () => {
+      await Promise.resolve();
+    });
+    vi.spyOn(membershipLauncher, "createHostedOperatorSandboxLauncher").mockReturnValue({
+      inspect,
+      execute,
+    });
+    const assertCurrent = vi.fn<HostedOperatorEffectContext["assertCurrent"]>(async () => {
+      await Promise.resolve();
+    });
+    const assertAuthorized = vi.fn<ProtectedHostedOperatorDependencies["assertAuthorized"]>(
+      async () => {
+        await Promise.resolve();
+      },
+    );
+    const verifyNormalActorMemberships = vi.fn(async () => await Promise.resolve(f.state));
+    const readResourceBindings = vi.fn(
+      async () =>
+        await Promise.resolve({
+          authDatabase: { migrationUrl: "private-auth", runtimeUrl: "private-auth-runtime" },
+          appDatabase: { migrationUrl: "private-app", runtimeUrl: "private-app-runtime" },
+        }),
+    );
+    const readGeneratedRelease = vi.fn(
+      async () => await Promise.reject(new Error("Controlled worker release read")),
+    );
+    const dependencies = composeHostedOperatorDependencies(f.configuration, {
+      ...unusedCompositionControlPlane(),
+      assertAuthorized,
+      verifyNormalActorMemberships,
+      readResourceBindings,
+      readGeneratedRelease,
+    });
+    const input: HostedOperatorWorkerEffectContext = {
+      ...context,
+      plan,
+      effect,
+      accountPreparation: f.preparation,
+      operationRef: "00000000-0000-4000-8000-000000000021",
+      fenceGeneration: 7,
+      leaseId: "00000000-0000-4000-8000-000000000022",
+      workerAttemptId: "00000000-0000-4000-8000-000000000023",
+      workerCheckpoints: [],
+      assertCurrent,
+      checkpoint: async () => {
+        await Promise.resolve();
+      },
+      bindWorkerContext: async () =>
+        await Promise.resolve(async () => {
+          await Promise.resolve();
+        }),
+    };
+    return {
+      f,
+      input,
+      dependencies,
+      inspect,
+      execute,
+      assertCurrent,
+      assertAuthorized,
+      verifyNormalActorMemberships,
+      readResourceBindings,
+      readGeneratedRelease,
+    };
+  };
+  it("settles only zero approved grants under the original captured accounts without opening a worker or credentials", async () => {
+    const f = await setup();
+    const before = structuredClone({
+      plan: f.input.plan,
+      preparation: f.f.preparation,
+      state: f.f.state,
+    });
+    expect(f.input.plan.access).toEqual([]);
+    expect(f.input.plan.appInstallation?.customerIds).toEqual(["existing-owner"]);
+    expect(f.input.plan.normalActorPreparation?.accountOperationRef).toBe(
+      f.f.preparation.accountOperationRef,
+    );
+    const observed = await f.dependencies.reconcile(f.input);
+    const executed = await f.dependencies.executeEffect(f.input);
+    expect(observed).toMatchObject({
+      status: "applied",
+      receipt: {
+        effectId: f.input.effect.id,
+        fenceGeneration: 7,
+        resourceVersion: executed.resourceVersion,
+      },
+    });
+    expect(executed.resourceVersion).toBe(
+      createHash("sha256")
+        .update(JSON.stringify({ effect: "access", grants: [] }))
+        .digest("hex"),
+    );
+    expect(f.verifyNormalActorMemberships).toHaveBeenCalledWith(f.input);
+    expect({ plan: f.input.plan, preparation: f.f.preparation, state: f.f.state }).toEqual(before);
+    expect(f.inspect).not.toHaveBeenCalled();
+    expect(f.execute).not.toHaveBeenCalled();
+    expect(f.readResourceBindings).not.toHaveBeenCalled();
+    expect(f.readGeneratedRelease).not.toHaveBeenCalled();
+  });
+  it.each(
+    (["inspect", "execute"] as const).flatMap((mode) =>
+      (
+        [
+          "owner",
+          "fence",
+          "account",
+          "participant-scope",
+          "changed-plan",
+          "changed-effect",
+        ] as const
+      ).map((failure) => ({
+        mode,
+        failure,
+      })),
+    ),
+  )("rejects $failure before $mode can settle empty grants", async ({ mode, failure }) => {
+    const f = await setup();
+    const denied = new HostedOperatorError("authorization_required");
+    if (failure === "owner") {
+      f.assertAuthorized
+        .mockImplementationOnce(async () => {
+          await Promise.resolve();
+        })
+        .mockRejectedValue(denied);
+    } else if (failure === "fence") {
+      f.verifyNormalActorMemberships.mockImplementation(async () => {
+        f.assertCurrent.mockRejectedValue(denied);
+        return await Promise.resolve(f.f.state);
+      });
+    } else if (failure === "account") {
+      f.verifyNormalActorMemberships.mockRejectedValue(denied);
+    } else if (failure === "changed-plan" || failure === "changed-effect") {
+      f.verifyNormalActorMemberships.mockImplementation(async () => {
+        if (failure === "changed-plan") {
+          f.input.plan = hostedOperatorPlanSchema.parse({
+            ...f.input.plan,
+            contextId: "changed-after-account-check",
+          });
+        } else {
+          f.input.effect = { ...f.input.effect, id: "unapproved-empty-access" };
+        }
+        return await Promise.resolve(f.f.state);
+      });
+    } else {
+      f.verifyNormalActorMemberships.mockResolvedValue({
+        ...f.f.state,
+        operationRef: "00000000-0000-4000-8000-000000000099",
+      });
+    }
+    await expect(
+      mode === "inspect"
+        ? f.dependencies.reconcile(f.input)
+        : f.dependencies.executeEffect(f.input),
+    ).rejects.toThrow();
+    expect(f.inspect).not.toHaveBeenCalled();
+    expect(f.execute).not.toHaveBeenCalled();
+    expect(f.readResourceBindings).not.toHaveBeenCalled();
+  });
+  it.each(["install", "revoke"] as const)(
+    "keeps %s on the existing worker preparation path even without grants",
+    async (kind) => {
+      const f = await setup();
+      const input = { ...f.input, effect: { ...f.input.effect, id: kind, kind } };
+      await expect(f.dependencies.reconcile(input)).rejects.toThrow();
+      expect(f.readResourceBindings).toHaveBeenCalledWith(input);
+    },
+  );
+  it("keeps nonempty grants on the existing worker preparation path", async () => {
+    const f = await setup(false);
+    expect(f.input.plan.access.length).toBeGreaterThan(0);
+    await expect(f.dependencies.reconcile(f.input)).rejects.toThrow();
+    expect(f.verifyNormalActorMemberships).toHaveBeenCalledWith(f.input);
+    expect(f.readResourceBindings).toHaveBeenCalledWith(f.input);
+  });
+});
 
 describe("participant plan resolution", () => {
   it.each(["inspect", "execute"] as const)(

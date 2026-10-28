@@ -708,6 +708,34 @@ describe("hosted protected installer Sandbox launcher", () => {
     expect(inspector.records).toHaveLength(0);
   });
 
+  it("keeps empty access contexts invalid when schema installation retains an existing customer", async () => {
+    const fixture = makeFixture({
+      generated: true,
+      access: true,
+      fenceOnly: true,
+      installationCustomers: ["tenant-a", "existing-owner"],
+      readbackStatus: "incomplete",
+    });
+    fixture.input.plan = hostedOperatorPlanSchema.parse({
+      ...fixture.input.plan,
+      access: [],
+      appInstallation: { customerIds: ["existing-owner"] },
+    });
+    expect(
+      buildProtectedInstallContext({
+        plan: fixture.input.plan,
+        database: "appDatabase",
+        fenceGeneration: 3,
+        operationRef: runId,
+        purpose: "install",
+      }).tenant_targets,
+    ).toEqual(["existing-owner"]);
+    await expect(
+      fixture.launcher.inspect({ ...fixture.input, readbackOnly: true }),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
+    expect(fixture.createSandbox).not.toHaveBeenCalled();
+  });
+
   it("keeps access inspection limited to access targets when installation includes an existing owner", async () => {
     const fixture = makeFixture({
       generated: true,
