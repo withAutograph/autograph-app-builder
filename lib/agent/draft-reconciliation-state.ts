@@ -196,7 +196,7 @@ export interface CandidateValidationAttempt {
   appId: string;
   baseSha: string;
   callId: string;
-  category: "check-build" | "test";
+  category: "check-build" | "test" | "local-preparation";
   command: string;
   completion: "complete" | "interrupted" | "unavailable";
   durability: "available" | "unavailable";

@@ -3,12 +3,13 @@ import type {
   TargetValidationFailureReceipt,
   TargetValidationReceipt,
 } from "../repository/target-validation";
+import type { CandidateValidationAttempt } from "./draft-reconciliation-state";
 import type { ValidationLogReference } from "../repository/validation-log";
 
 /** Copy the complete immutable log identity; receipt.digest is not an attempt identity. */
 export const validationLogReadInput = (
   attemptDigest: string,
-  command: TargetValidationCommandReceipt["name"],
+  command: CandidateValidationAttempt["category"],
   reference: ValidationLogReference,
 ) => ({
   attemptDigest,

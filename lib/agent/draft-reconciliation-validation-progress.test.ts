@@ -118,6 +118,33 @@ const candidateInstallCalls = () =>
     .map(([input]: unknown[]) => input as Parameters<SandboxSession["run"]>[0])
     .filter((input) => input.command === installCommand);
 
+const candidateLogStore = () => {
+  const manifests = new Map<string, ValidationLogReference>();
+  const chunks = new Map<string, { content: string; digest: string }>();
+  const keyFor = (key: ValidationLogKey) =>
+    JSON.stringify([key.sessionId, key.attemptDigest, key.command, key.channel, key.logId]);
+  const store: ValidationLogStore = {
+    async getChunk(key, index) {
+      return await Promise.resolve(chunks.get(`${keyFor(key)}:${index}`));
+    },
+    async getReference(key) {
+      return await Promise.resolve(manifests.get(keyFor(key)));
+    },
+    async publish(key, reference) {
+      await Promise.resolve(manifests.set(keyFor(key), reference));
+    },
+    async putChunk(key, index, content, chunkDigest) {
+      await Promise.resolve(
+        chunks.set(`${keyFor(key)}:${index}`, { content, digest: chunkDigest }),
+      );
+    },
+    async removeStaged(key) {
+      await Promise.resolve(manifests.delete(keyFor(key)));
+    },
+  };
+  return store;
+};
+
 const candidateValidationCall = async (command?: string) =>
   (await validateReconciliation.execute(
     {
@@ -845,30 +872,134 @@ describe("draft reconciliation command progress", () => {
     });
   });
 
-  it("retains one historical attempt for a real failed supported command", async () => {
-    const manifests = new Map<string, ValidationLogReference>();
-    const chunks = new Map<string, { content: string; digest: string }>();
-    const keyFor = (key: ValidationLogKey) =>
-      JSON.stringify([key.sessionId, key.attemptDigest, key.command, key.channel, key.logId]);
-    const store: ValidationLogStore = {
-      async getChunk(key, index) {
-        return await Promise.resolve(chunks.get(`${keyFor(key)}:${index}`));
-      },
-      async getReference(key) {
-        return await Promise.resolve(manifests.get(keyFor(key)));
-      },
-      async publish(key, reference) {
-        await Promise.resolve(manifests.set(keyFor(key), reference));
-      },
-      async putChunk(key, index, content, chunkDigest) {
-        await Promise.resolve(
-          chunks.set(`${keyFor(key)}:${index}`, { content, digest: chunkDigest }),
-        );
-      },
-      async removeStaged(key) {
-        await Promise.resolve(manifests.delete(keyFor(key)));
-      },
+  it("retains a failed local preparation cause with exact candidate identity after ordinary repair", async () => {
+    const store = candidateLogStore();
+    mocks.logStore.mockResolvedValue(store);
+    mocks.declaresLocal = true;
+    await incremental(checkCommand);
+    const prior = [...mocks.attempts];
+    mocks.local.mockResolvedValueOnce({
+      command: "mise run app:local -- spend-review setup",
+      status: "failed",
+      exitCode: 1,
+      stdout: "local setup began\n",
+      stderr:
+        "kernel_bind_actor_membership rejected runtime preparation\nBearer local-secret\nhttps://user:db-secret@database.invalid/app\n",
+      problem: "The selected local runtime failed",
+    });
+    await expect(incremental("mise run app:local -- spend-review setup")).resolves.toMatchObject({
+      status: "needs_repair",
+      exitCode: 1,
+    });
+    const attempt = mocks.attempts.at(-1) as {
+      attemptDigest: string;
+      logs: { stderr: ValidationLogReference };
     };
+    expect(attempt).toMatchObject({
+      category: "local-preparation",
+      command: "mise run app:local -- spend-review setup",
+      appId: "spend-review",
+      baseSha: "base-sha",
+      headSha: "head-sha",
+      repositoryId: "repo-id",
+      pullRequestNumber: 7,
+      githubSourceDigest: digest,
+      originalReviewDigest: digest,
+      resolvedTree: tree,
+      callId: "validation_1",
+      completion: "complete",
+      durability: "available",
+      exitCode: 1,
+    });
+    expect(mocks.attempts.slice(0, -1)).toEqual(prior);
+    const key = {
+      attemptDigest: attempt.attemptDigest,
+      command: "local-preparation",
+      channel: "stderr" as const,
+      logId: attempt.logs.stderr.logId,
+      sessionId: "adapter",
+    };
+    const saved = await store.getChunk(key, 0);
+    expect(saved?.content).toContain("kernel_bind_actor_membership rejected runtime preparation");
+    expect(saved?.content).not.toMatch(/local-secret|db-secret/u);
+    mocks.candidate = { ...mocks.candidate, validationRun: undefined };
+    expect(mocks.attempts.at(-1)).toBe(attempt);
+    expect(mocks.candidate.validation).toBeUndefined();
+  });
+
+  it.each(["unavailable", "partial"])(
+    "keeps failed local setup independent of %s log storage",
+    async (state) => {
+      mocks.declaresLocal = true;
+      await incremental(checkCommand);
+      if (state === "partial") {
+        const store = candidateLogStore();
+        store.putChunk = async () => {
+          throw new Error("log storage offline");
+        };
+        mocks.logStore.mockResolvedValue(store);
+      }
+      mocks.local.mockResolvedValueOnce({
+        command: "mise run app:local -- spend-review setup",
+        status: "failed",
+        exitCode: 3,
+        stdout: "",
+        stderr: "kernel_bind_actor_membership rejected runtime preparation",
+      });
+      await expect(incremental("mise run app:local -- spend-review setup")).resolves.toMatchObject({
+        status: "needs_repair",
+        exitCode: 3,
+      });
+      expect(mocks.attempts.at(-1)).toMatchObject({
+        category: "local-preparation",
+        completion: "complete",
+        durability: "unavailable",
+        exitCode: 3,
+      });
+      if (state === "partial") {
+        expect(mocks.attempts.at(-1)).toMatchObject({
+          logs: { stderr: { completion: "unavailable" } },
+        });
+      }
+      expect(mocks.candidate?.validation).toBeUndefined();
+    },
+  );
+
+  it.each(["returned", "thrown"])(
+    "retains interrupted local preparation when its failure is %s",
+    async (mode) => {
+      mocks.logStore.mockResolvedValue(candidateLogStore());
+      mocks.declaresLocal = true;
+      await incremental(checkCommand);
+      if (mode === "returned") {
+        mocks.local.mockResolvedValueOnce({
+          command: "mise run app:local -- spend-review setup",
+          status: "failed",
+          exitCode: null,
+          stdout: "",
+          stderr: "",
+        });
+        await expect(
+          incremental("mise run app:local -- spend-review setup"),
+        ).resolves.toMatchObject({ status: "needs_repair", exitCode: null });
+      } else {
+        mocks.local.mockRejectedValueOnce(new Error("sandbox command interrupted"));
+        await expect(incremental("mise run app:local -- spend-review setup")).rejects.toThrow(
+          "sandbox command interrupted",
+        );
+      }
+      expect(mocks.attempts.at(-1)).toMatchObject({
+        category: "local-preparation",
+        completion: "interrupted",
+        durability: "available",
+        exitCode: null,
+      });
+      expect(mocks.candidate?.validation).toBeUndefined();
+    },
+  );
+
+  it("retains one historical attempt for a real failed supported command", async () => {
+    const store = candidateLogStore();
     mocks.logStore.mockResolvedValue(store);
     const check = checkCommand;
     mocks.check.mockResolvedValueOnce({

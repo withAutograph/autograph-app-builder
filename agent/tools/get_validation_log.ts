@@ -12,12 +12,19 @@ import {
 import { readValidationLogPage } from "@/lib/repository/validation-log";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { candidateValidationAttemptHistory } from "@/lib/agent/draft-reconciliation-state";
+import type { CandidateValidationAttempt } from "@/lib/agent/draft-reconciliation-state";
 
 export const validationLogInputSchema = z.union([
   z.strictObject({
     attemptDigest: z.string().regex(/^[0-9a-f]{64}$/u),
     channel: z.enum(["stdout", "stderr"]),
-    command: z.enum(["check-build", "test", "dependency-probe", "dependency-install"]),
+    command: z.enum([
+      "check-build",
+      "test",
+      "local-preparation",
+      "dependency-probe",
+      "dependency-install",
+    ]),
     cursor: z.string().max(128).optional(),
     digest: z.string().regex(/^[0-9a-f]{64}$/u),
     logId: z.uuid(),
@@ -26,9 +33,16 @@ export const validationLogInputSchema = z.union([
   z.strictObject({ operation: z.literal("validation-attempts") }),
 ]);
 
+const candidateAttemptStatus = (attempt: CandidateValidationAttempt) => {
+  if (attempt.completion !== "complete" || attempt.exitCode !== 0) {
+    return "failed";
+  }
+  return attempt.category === "local-preparation" ? "prepared" : "passed";
+};
+
 export default defineTool({
   description:
-    "Read one authenticated page of a saved validation or dependency command log after execution or sandbox cleanup. To recover saved validation references, use operation: validation-attempts and copy a complete channel readInput. Discovery lists retained workflow receipts and historical supported candidate check/test attempts, including attempts from before a source repair or validation reset. Historical candidate attempts are evidence of that execution only, not current validation. For saved dependency references, use operation: dependency-attempts. For pages supply the exact attempt, command, channel, log ID and digest. Continue with each nextCursor and verify assembled UTF-8 SHA-256 against digest. Page complete means the manifest is exhausted; completion distinguishes complete capture, interrupted output, and an unavailable durable suffix.",
+    "Read one authenticated page of a saved validation or dependency command log after execution or sandbox cleanup. To recover saved validation references, use operation: validation-attempts and copy a complete channel readInput. Discovery lists retained workflow receipts and historical supported candidate check/test and local preparation attempts, including attempts from before a source repair or validation reset. Historical candidate attempts are evidence of that execution only, not current validation. Local preparation success means prepared, never a passed app check. For saved dependency references, use operation: dependency-attempts. For pages supply the exact attempt, command, channel, log ID and digest. Continue with each nextCursor and verify assembled UTF-8 SHA-256 against digest. Page complete means the manifest is exhausted; completion distinguishes complete capture, interrupted output, and an unavailable durable suffix.",
   async execute(input, ctx) {
     if ("operation" in input) {
       await assertValidationLogSession({
@@ -79,7 +93,7 @@ export default defineTool({
           repositoryId: attempt.repositoryId,
           resolvedTree: attempt.resolvedTree,
         },
-        status: attempt.completion === "complete" && attempt.exitCode === 0 ? "passed" : "failed",
+        status: candidateAttemptStatus(attempt),
       }));
       if (state.phase === "validation_failed") {
         return {

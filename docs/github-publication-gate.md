@@ -112,6 +112,13 @@ and historical command evidence. Installation failure stays pending with its rea
 cause. Normal source edits can start a new pass using the same package-manager
 cache and installed candidate files; they do not rebuild a sandbox or dependency
 closure. Actual checks and fresh source review remain required after setup.
+Candidate local-runtime preparation uses the same owner-bound durable log capture
+as app checks and tests. `get_validation_log` discovery identifies these attempts
+as `local-preparation`, retaining their exact candidate and invocation identity,
+exit status, capture completion and durability across later edits or sandbox
+cleanup. A successful preparation is `prepared`; it does not prove an app check
+passed. Sanitized log references remain session-scoped. Missing storage or an
+interrupted command stays explicit and never changes the command's outcome.
 Independent semantic source review
 remains required through the app acceptance workflow. Separately,
 `review_github_draft_pr_reconciliation` records a deterministic exact-candidate,

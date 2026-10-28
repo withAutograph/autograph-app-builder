@@ -191,30 +191,31 @@ const recoveryStep = async (input: {
   return undefined;
 };
 
-const executeCandidateCheck = async (input: {
-  planned: ReturnType<typeof supportedValidationCommands>[number];
+const runCandidateCommandWithLogs = async <
+  Result extends { exitCode: number | null; stdout: string; stderr: string },
+>(input: {
+  category: CandidateValidationAttempt["category"];
+  command: string;
   candidate: DraftReconciliationCandidate;
   callId: string;
   sessionId: string;
   sessionAuth: unknown;
   resolvedTree: string;
-  sandbox: SandboxSession;
-  signal?: AbortSignal;
-  alreadyCompiled?: true;
-  testShards: readonly string[];
-}): Promise<Awaited<ReturnType<ReturnType<typeof sandboxValidationCommandExecutor>>>> => {
+  run: () => Promise<Result>;
+}): Promise<Result> => {
   const binding = {
     appId: input.candidate.appId,
     baseSha: input.candidate.baseSha,
     callId: input.callId,
-    category: input.planned.name,
-    command: input.planned.command,
+    category: input.category,
+    command: input.command,
     githubSourceDigest: input.candidate.githubSourceDigest,
     headSha: input.candidate.headSha,
     originalReviewDigest: input.candidate.originalReviewDigest,
     pullRequestNumber: input.candidate.pullRequestNumber,
     repositoryId: input.candidate.repositoryId,
     resolvedTree: input.resolvedTree,
+    root: input.candidate.root,
     sessionId: input.sessionId,
     unique: randomUUID(),
   };
@@ -245,7 +246,7 @@ const executeCandidateCheck = async (input: {
             {
               attemptDigest,
               channel: "stderr",
-              command: input.planned.name,
+              command: input.category,
               sessionId: input.sessionId,
             },
             { bestEffort: true },
@@ -255,7 +256,7 @@ const executeCandidateCheck = async (input: {
             {
               attemptDigest,
               channel: "stdout",
-              command: input.planned.name,
+              command: input.category,
               sessionId: input.sessionId,
             },
             { bestEffort: true },
@@ -317,17 +318,7 @@ const executeCandidateCheck = async (input: {
     }
   };
   try {
-    // The executor uses onChunk to switch to spawn; retain its detached run lifecycle and capture its returned output.
-    const result = await sandboxValidationCommandExecutor({
-      alreadyCompiled: input.alreadyCompiled,
-      testShards: input.testShards,
-    })({
-      appId: input.candidate.appId,
-      command: input.planned.command,
-      sandbox: input.sandbox,
-      validationRoot: input.candidate.root,
-      abortSignal: input.signal,
-    });
+    const result = await input.run();
     if (writers !== undefined) {
       try {
         if (result.stdout) {
@@ -340,7 +331,7 @@ const executeCandidateCheck = async (input: {
         // Best-effort capture must not affect the command outcome.
       }
     }
-    await finish("complete", result.exitCode);
+    await finish(result.exitCode === null ? "interrupted" : "complete", result.exitCode);
     return result;
   } catch (error) {
     await finish("interrupted", null);
@@ -689,11 +680,21 @@ const runIncrementalValidation = async (
         status: schema.status === "compiled" ? "passed" : "failed",
       };
     } else if (step.kind === "local") {
-      const local = await prepareAppLocalPreview({
-        appId: candidate.appId,
-        root: candidate.root,
-        sandbox,
-        signal: ctx.abortSignal,
+      const local = await runCandidateCommandWithLogs({
+        category: "local-preparation",
+        command: step.command,
+        candidate,
+        callId: ctx.callId,
+        resolvedTree: before.resolvedTree,
+        sessionAuth: ctx.session.auth,
+        sessionId: ctx.session.id,
+        run: () =>
+          prepareAppLocalPreview({
+            appId: candidate.appId,
+            root: candidate.root,
+            sandbox,
+            signal: ctx.abortSignal,
+          }),
       });
       result = {
         command: local.command,
@@ -726,6 +727,7 @@ const runIncrementalValidation = async (
         status: browser.status === "passed" ? "passed" : "failed",
       };
     } else {
+      const alreadyCompiled = run.schemaTaskCompleted;
       const planned = supportedValidationCommands(candidate.appId, testShards, {
         alreadyCompiled: run.schemaTaskCompleted,
       }).find(({ command }) => command === step.command);
@@ -734,17 +736,26 @@ const runIncrementalValidation = async (
       }
       const execution =
         step.kind === "check" && planned !== undefined
-          ? await executeCandidateCheck({
+          ? await runCandidateCommandWithLogs({
+              category: planned.name,
+              command: planned.command,
               candidate,
               callId: ctx.callId,
-              planned,
               resolvedTree: before.resolvedTree,
-              sandbox,
               sessionAuth: ctx.session.auth,
               sessionId: ctx.session.id,
-              signal: ctx.abortSignal,
-              alreadyCompiled: run.schemaTaskCompleted,
-              testShards,
+              // Preserve the executor's detached command lifecycle and capture its returned output.
+              run: () =>
+                sandboxValidationCommandExecutor({
+                  alreadyCompiled,
+                  testShards,
+                })({
+                  appId: candidate.appId,
+                  command: planned.command,
+                  sandbox,
+                  validationRoot: candidate.root,
+                  abortSignal: ctx.abortSignal,
+                }),
             })
           : await sandbox.run({
               abortSignal: ctx.abortSignal,
