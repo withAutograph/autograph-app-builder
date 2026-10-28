@@ -182,6 +182,31 @@ Reservation responses and unsuccessful settlements are parsed as closed
 runtime discriminated unions and rebound to the exact principal, kind, client
 request ID, request digest, state, and session before they grant any authority.
 Unknown dispositions and mismatched store responses fail closed.
+
+### Recovery of approved publication readback
+
+An interrupted native turn can retain a human-approved `reconcile_github_draft_pr`
+call without its result after a later question moves the approval away from the
+history tail. The app-owned recovery policy may designate only its explicit
+`recordCurrentEquivalentRelease: true` readback mode as repeatable when the
+retained completion, proposal, review, compiled artifact and original authority
+session agree. A unique native `input.requested` action must bind the exact call and input, and its
+independently settled `approval.settled` record must identify the verified
+original owner. A model-supplied approval receipt or transcript approval response
+alone cannot provide this authority. Changed or ambiguous identity, scope,
+approval, completion, or an already recorded result grants no repeatability.
+
+This preserves uncertainty about any earlier effect; it never certifies
+nonexecution or synthesizes a result. The native effect-frontier checks still
+reject unresolved dispatches and uncommitted outcomes. If native reconciliation
+permits continuation, the existing tool performs its normal current-owner,
+artifact, review and exact GitHub readback checks. Only an already verified
+publication can be associated with an exactly equivalent current compiled
+capture. If publication cannot be verified, this mode returns before any Git
+write or source association. Fresh branch updates, other flags, other tools,
+repository creation, provider resource writes, merging, deployment and Production
+activation receive no retry authority from this policy.
+
 Successful settlement is also untrusted until its public result is canonically
 exact and digest-equal to the dispatched result. A successful start additionally
 requires the returned result, proposed new-session record, and an immediate
