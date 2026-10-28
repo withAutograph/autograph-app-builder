@@ -101,7 +101,17 @@ and the app browser task when requested. Candidate commands select the existing
 `app-validation` Mise environment alongside other explicitly selected profiles.
 This carries the explicit dependency-setup boundary through nested formatter,
 compiler, runtime and browser commands: dependencies are prepared by the locked
-install step, and child Mise processes inherit that policy.
+install step, and child Mise processes inherit that policy. Each coherent candidate
+validation pass starts with the fixed cached `bun install --frozen-lockfile` operation
+in that candidate's root. Builder first unlinks only that candidate's borrowed
+checkout dependency-view roots; it preserves candidate-owned installations and
+never installs through those links into the original checkout or shared cache.
+Saved validation runs without a successful locked-install acknowledgement insert
+this setup before their pending check, preserving acknowledged schema compilation
+and historical command evidence. Installation failure stays pending with its real
+cause. Normal source edits can start a new pass using the same package-manager
+cache and installed candidate files; they do not rebuild a sandbox or dependency
+closure. Actual checks and fresh source review remain required after setup.
 Independent semantic source review
 remains required through the app acceptance workflow. Separately,
 `review_github_draft_pr_reconciliation` records a deterministic exact-candidate,

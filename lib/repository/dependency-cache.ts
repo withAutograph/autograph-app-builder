@@ -659,6 +659,10 @@ const contains = (root, candidate) => {
   return relative === "" || (!path.isAbsolute(relative) && relative !== ".." && !relative.startsWith(".." + path.sep));
 };
 if (sourceRoot === overlayRoot || !contains(workspaceRoot, sourceRoot) || !contains(workspaceRoot, overlayRoot) || !contains(path.join(workspaceRoot, ".app-builder/dependency-views"), viewRoot)) throw Error("Dependency view is outside its owned workspace");
+// A package-manager-owned root closure also owns whether workspace node_modules are absent/hoisted.
+// Reattaching a borrowed nested root would shadow that candidate's locked dependency graph.
+const installedRoot = fs.lstatSync(path.join(overlayRoot, "node_modules"), { throwIfNoEntry: false });
+if (installedRoot?.isDirectory()) process.exit(0);
 const roots = [];
 const discover = (directory) => {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -784,6 +788,61 @@ export const attachCheckoutDependencyView = async (input: {
   if (result.exitCode !== 0) {
     throw new Error(
       "Builder could not attach the existing checkout dependencies to its private candidate. Check the owned dependency paths and sandbox file access, then retry.",
+    );
+  }
+};
+
+/** Unlink only this candidate's borrowed dependency roots; never follow package/cache links. */
+export const detachCheckoutDependencyViewScript = String.raw`
+const fs = require("node:fs");
+const path = require("node:path");
+const [sourceInput, candidateInput, viewInput, workspaceInput] = process.argv.slice(1);
+const source = fs.realpathSync(sourceInput);
+const candidate = fs.realpathSync(candidateInput);
+const workspace = fs.realpathSync(workspaceInput);
+const contains = (root, target) => {
+  const relative = path.relative(root, target);
+  return relative === "" || (!path.isAbsolute(relative) && relative !== ".." && !relative.startsWith(".." + path.sep));
+};
+if (candidate === source || candidate === workspace || !contains(workspace, candidate) || !contains(workspace, source)) throw Error("Candidate dependency installation is outside its owned checkout");
+const view = path.resolve(viewInput);
+if (!contains(path.join(workspace, ".app-builder/dependency-views/checkout"), view)) throw Error("Candidate dependency view is outside its owned workspace");
+const links = [];
+const inspect = directory => {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    if (entry.name === ".git") continue;
+    const absolute = path.join(directory, entry.name);
+    if (entry.name === "node_modules") {
+      if (entry.isSymbolicLink()) {
+        const target = path.resolve(directory, fs.readlinkSync(absolute));
+        if (target !== path.join(view, path.relative(candidate, absolute))) throw Error("Candidate dependency root is not its owned borrowed view");
+        links.push(absolute);
+      } else if (!entry.isDirectory()) throw Error("Candidate dependency root is not a directory");
+    } else if (entry.isDirectory()) inspect(absolute);
+  }
+};
+inspect(candidate);
+for (const link of links) fs.unlinkSync(link);
+`;
+
+/** Prepare the existing candidate for its own fixed locked install, preserving original checkout bytes. */
+export const detachCheckoutDependencyView = async (input: {
+  sandbox: Pick<SandboxSession, "run">;
+  checkoutRoot: string;
+  candidateRoot: string;
+  workspaceRoot: string;
+  signal?: AbortSignal;
+}): Promise<void> => {
+  const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
+  const viewRoot = `${input.workspaceRoot}/.app-builder/dependency-views/checkout/${sha256(input.candidateRoot)}`;
+  const result = await input.sandbox.run({
+    command: `node -e ${quote(detachCheckoutDependencyViewScript)} ${[input.checkoutRoot, input.candidateRoot, viewRoot, input.workspaceRoot].map(quote).join(" ")}`,
+    workingDirectory: input.workspaceRoot,
+    abortSignal: input.signal,
+  });
+  if (result.exitCode !== 0) {
+    throw new Error(
+      "Builder could not detach this candidate's borrowed dependency links safely. Preserve the original checkout and inspect its owned sandbox dependency paths before retrying; no installation was attempted.",
     );
   }
 };
