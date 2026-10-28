@@ -2,6 +2,7 @@ import { hasFailedGatewayDelivery } from "./hosted-operator-gateway-delivery-fai
 import { expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
+  HostedOperatorError,
   hostedOperatorPlanSchema,
   operatorPlanDigest,
   operatorDeploymentCandidatesSchema,
@@ -1907,3 +1908,120 @@ it("does not turn unknown completed-candidate readback into Gateway binding auth
   expect(f.calls.every((call) => call.method === "GET")).toBe(true);
   expect(f.checkpoint).not.toHaveBeenCalled();
 });
+
+it.each([
+  [
+    "standalone",
+    "post-read-authority",
+    "alias_assignment",
+    "authority",
+    "operator_error",
+    "authorization_required",
+  ],
+  [
+    "standalone",
+    "alias-identity",
+    "alias_assignment",
+    "response_schema",
+    "operator_error",
+    "resource_mismatch",
+  ],
+  ["standalone", "selection-checkpoint", "checkpoint", undefined, "validation_error", undefined],
+  [
+    "nested",
+    "post-read-authority",
+    "alias_assignment",
+    "authority",
+    "operator_error",
+    "authorization_required",
+  ],
+  [
+    "nested",
+    "alias-identity",
+    "alias_assignment",
+    "response_schema",
+    "operator_error",
+    "resource_mismatch",
+  ],
+  ["nested", "selection-checkpoint", "checkpoint", undefined, "validation_error", undefined],
+] as const)(
+  "reports closed %s reconciliation diagnostics for %s without changing uncertain effects",
+  async (mode, failure, stage, phase, errorClass, publicCode) => {
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const f = fixture(gatewayPlan, null, true);
+      f.seedCandidate();
+      if (mode === "standalone") {
+        f.aliasState.deploymentId = "dpl_new";
+      }
+      if (failure === "alias-identity" && mode === "standalone") {
+        f.aliasState.projectId = "foreign-project";
+      }
+      vi.mocked(f.input.assertCurrent).mockImplementation(async () => {
+        await Promise.resolve();
+        const last = f.calls.at(-1);
+        if (
+          failure === "alias-identity" &&
+          last?.method === "POST" &&
+          last.path.endsWith("/aliases")
+        ) {
+          f.aliasState.projectId = "foreign-project";
+        }
+        if (
+          failure === "post-read-authority" &&
+          f.aliasState.deploymentId === "dpl_new" &&
+          last?.path.startsWith("/v4/aliases/") === true
+        ) {
+          throw new HostedOperatorError("authorization_required");
+        }
+      });
+      f.checkpoint.mockImplementation(async (rows, selectedId) => {
+        await Promise.resolve();
+        if (failure === "selection-checkpoint" && selectedId !== undefined) {
+          z.object({ safe: z.literal(true) }).parse({ private: "private-checkpoint-identity" });
+        }
+        f.input.deliveryCandidates = operatorDeploymentCandidatesSchema.parse(rows);
+      });
+      const result = await (mode === "standalone"
+        ? f.writer.reconcile(f.input)
+        : f.writer.deliver(f.input));
+      expect(result.status).toBe("unknown");
+      const rawDiagnostic: unknown = log.mock.calls.find(
+        ([label]) => label === "[builder:hosted-neon-consent]",
+      )?.[1];
+      const diagnostic = z
+        .object({
+          gatewayDelivery: z.object({
+            stage: z.string(),
+            phase: z.string().optional(),
+            errorClass: z.string(),
+            publicCode: z.string().optional(),
+            result: z.literal("unknown"),
+          }),
+        })
+        .parse(rawDiagnostic);
+      expect(diagnostic).toMatchObject({
+        gatewayDelivery: { stage, errorClass, result: "unknown" },
+      });
+      expect(diagnostic.gatewayDelivery.phase).toBe(phase);
+      expect(diagnostic.gatewayDelivery.publicCode).toBe(publicCode);
+      const serialized = JSON.stringify(rawDiagnostic);
+      for (const privateValue of [
+        "private-checkpoint-identity",
+        "foreign-project",
+        f.input.operationRef,
+        f.aliasState.name,
+      ]) {
+        expect(serialized).not.toContain(privateValue);
+      }
+      expect(
+        f.calls.filter((call) => call.method === "POST" && call.path.endsWith("/aliases")),
+      ).toHaveLength(mode === "nested" ? 1 : 0);
+      expect(
+        f.calls.some((call) => call.method === "POST" && call.path === "/v13/deployments"),
+      ).toBe(false);
+    } finally {
+      log.mockRestore();
+    }
+  },
+);

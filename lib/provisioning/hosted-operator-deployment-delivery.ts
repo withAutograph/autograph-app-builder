@@ -20,7 +20,10 @@ import type {
 import { isSharedHostProtectionDeliveryProvenance } from "./hosted-operator-shared-host-protection-successor";
 import { isRetentionRenewalDeliveryProvenance } from "./hosted-operator-retention-renewal";
 import type { RetentionRenewalDeliveryProvenance } from "./hosted-operator-retention-renewal";
-import { createHostedOperatorConsentDiagnostic } from "./hosted-operator-consent-diagnostic";
+import {
+  createHostedOperatorConsentDiagnostic,
+  projectOperatorGatewayDeliveryFailure,
+} from "./hosted-operator-consent-diagnostic";
 import type { OperatorGatewayDeliveryDiagnostic } from "./hosted-operator-consent-diagnostic";
 import { readOperatorGatewayProviderFailure } from "./hosted-operator-gateway-bindings";
 
@@ -265,7 +268,11 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
           "providerCode" | "providerTerms" | "validationFields"
         >
       | undefined;
+    let failure: Pick<OperatorGatewayDeliveryDiagnostic, "errorClass" | "publicCode"> = {};
     return {
+      failed(error: Parameters<typeof projectOperatorGatewayDeliveryFailure>[0]) {
+        failure = projectOperatorGatewayDeliveryFailure(error);
+      },
       at(value: OperatorGatewayDeliveryDiagnostic["stage"]) {
         stage = value;
         phase = undefined;
@@ -297,7 +304,15 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
             phase: "inline",
             stage: "operator_request",
             outcome: result === "applied" ? "verified" : "setup_unavailable",
-            gatewayDelivery: { stage, phase, method, httpStatus, result, ...providerFailure },
+            gatewayDelivery: {
+              stage,
+              phase,
+              method,
+              httpStatus,
+              result,
+              ...providerFailure,
+              ...failure,
+            },
           });
         } catch {
           /* Advisory metadata never changes delivery or its original exception. */
@@ -358,6 +373,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     input: HostedOperatorDeploymentContext,
     observation?: ReturnType<typeof deliveryDiagnostic>,
   ) => {
+    const at = (stage: OperatorGatewayDeliveryDiagnostic["stage"]) => observation?.at(stage);
     const deliveryKind = deps.target === "gateway" ? "gateway-delivery" : "delivery";
     const delivery = deps.target === "gateway" ? input.plan.gatewayDelivery : input.plan.delivery;
     if (delivery === undefined) {
@@ -514,6 +530,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       requireOperatorMetadata: boolean,
       supplied?: z.infer<typeof deploymentSchema>,
     ): Promise<OperatorDeploymentCandidate> => {
+      at("deployment_readback");
       const observed = deploymentSchema.parse(
         supplied ??
           (await request(`/v13/deployments/${encodeURIComponent(deploymentId)}`, {
@@ -594,6 +611,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     const readCandidate = async (deploymentId: string, verifyProject = true) =>
       await readDeployment(deploymentId, verifyProject, true);
     const readCandidateOrRejection = async (deploymentId: string) => {
+      at("deployment_readback");
       const raw = await request(`/v13/deployments/${encodeURIComponent(deploymentId)}`, {
         withGitRepoInfo: "true",
       });
@@ -636,6 +654,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     };
     // oxlint-disable-next-line sonarjs/cognitive-complexity -- Complete ordered inventory and journal observations before deciding whether another create is safe.
     const readCandidates = async () => {
+      at("reconciliation");
       const ids = new Set<string>();
       for (const candidate of input.deliveryCandidates ?? []) {
         if (candidate.operationRef === input.operationRef) {
@@ -688,6 +707,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         }
       }
       if (candidates.length !== 0) {
+        at("checkpoint");
         await input.checkpointDelivery(candidates);
       }
       return candidates;
@@ -698,6 +718,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         throw new HostedOperatorError("resource_mismatch");
       }
       const alias = new URL(gateway.origin).hostname;
+      at("alias_assignment");
       const raw = await request(
         `/v4/aliases/${encodeURIComponent(alias)}`,
         {},
@@ -742,9 +763,9 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       request,
     };
   };
-  const reconcile = async (
+  const reconcileObserved = async (
     input: HostedOperatorDeploymentContext,
-    observation?: ReturnType<typeof deliveryDiagnostic>,
+    observation: ReturnType<typeof deliveryDiagnostic>,
   ) => {
     try {
       const reader = io(input, observation);
@@ -800,7 +821,9 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
           status: "retryable" as const,
         };
       }
+      observation.at("environment");
       await deps.assertEnvironment(input);
+      observation.at("authority");
       await reader.assertCurrent();
       if (deps.target === "gateway") {
         const alias = await reader.readGatewayAlias();
@@ -828,11 +851,24 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         }
         selected = assigned;
       }
+      observation.at("checkpoint");
       await input.checkpointDelivery(candidates, selected.deploymentId);
       return { candidates, selected, status: "applied" as const };
-    } catch {
+    } catch (error) {
+      observation.failed(error);
       return { status: "unknown" as const };
     }
+  };
+  const reconcile = async (
+    input: HostedOperatorDeploymentContext,
+    observation?: ReturnType<typeof deliveryDiagnostic>,
+  ) => {
+    const current = observation ?? deliveryDiagnostic(input);
+    const result = await reconcileObserved(input, current);
+    if (observation === undefined) {
+      current.finish(result.status);
+    }
+    return result;
   };
   const priorAppDeliveryIsTerminalFailure = async (
     input: HostedOperatorDeploymentContext,
@@ -979,8 +1015,9 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     input: HostedOperatorDeploymentContext,
     candidates: OperatorDeploymentCandidate[],
     selected: OperatorDeploymentCandidate,
+    observation: ReturnType<typeof deliveryDiagnostic>,
   ) => {
-    const fresh = io({ ...input, deliveryCandidates: candidates });
+    const fresh = io({ ...input, deliveryCandidates: candidates }, observation);
     await deps.assertEnvironment(input);
     await fresh.assertCurrent();
 
@@ -995,7 +1032,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         return { candidates, status: "unknown" as const };
       }
       if (alias.deploymentId === selected.deploymentId) {
-        return await reconcile({ ...input, deliveryCandidates: candidates });
+        return await reconcile({ ...input, deliveryCandidates: candidates }, observation);
       }
       if (
         candidates.some((value) => value.gatewayAliasAttempted === true) &&
@@ -1008,13 +1045,14 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         selected,
       );
       if (aliasAuthority === "applied") {
-        return await reconcile({ ...input, deliveryCandidates: candidates });
+        return await reconcile({ ...input, deliveryCandidates: candidates }, observation);
       }
       if (aliasAuthority === "unknown") {
         return { candidates, status: "unknown" as const };
       }
       await fresh.assertCurrent();
-    } catch {
+    } catch (error) {
+      observation.failed(error);
       // No assignment was dispatched; a later corrected read may safely try again.
       return { candidates, status: "unknown" as const };
     }
@@ -1035,8 +1073,9 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         false,
         "assignment",
       );
-      return await reconcile(markedInput);
+      return await reconcile(markedInput, observation);
     } catch (error) {
+      observation.failed(error);
       if (error instanceof RejectedAliasAssignmentError) {
         const rejected = marked.map((candidate) =>
           candidate.deploymentId === selected.deploymentId
@@ -1078,7 +1117,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
           const selected = prior.candidates?.find((candidate) => candidate.readyState === "READY");
           if (selected !== undefined) {
             observation.at("alias_assignment");
-            return await assignGatewayAlias(input, prior.candidates, selected);
+            return await assignGatewayAlias(input, prior.candidates, selected, observation);
           }
         }
         // A complete no-match listing is still uncertain; this approved retry is at-least-once and may create another scoped Preview.
@@ -1172,7 +1211,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
           const selected = observed.candidates.find((value) => value.readyState === "READY");
           if (selected !== undefined) {
             observation.at("alias_assignment");
-            return await assignGatewayAlias(input, observed.candidates, selected);
+            return await assignGatewayAlias(input, observed.candidates, selected, observation);
           }
         }
         return observed;
