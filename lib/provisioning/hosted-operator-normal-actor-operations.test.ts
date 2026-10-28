@@ -421,7 +421,15 @@ const fixture = (captureExisting = false, selectedProgram = program) => {
 };
 
 describe("normal actor operations", () => {
-  it.each(["valid", "invalid", "expired", "cancelled"] as const)(
+  it.each([
+    "valid",
+    "invalid",
+    "expired",
+    "cancelled",
+    "foreign-lease",
+    "stale-fence",
+    "expired-lease",
+  ] as const)(
     "checkpoints owner-confirmed capture completion only after %s session verification",
     async (outcome) => {
       const capturedProgram = normalActorProgramSchema.parse({
@@ -474,10 +482,38 @@ describe("normal actor operations", () => {
       if (outcome === "expired") {
         f.journalPorts.now = () => Date.parse(session.expiresAt) + 1;
       }
+      const leaseId = f.row.record.leaseId;
+      if (leaseId === undefined || f.row.record.operator === undefined) {
+        throw new Error("fixture_missing_lease");
+      }
+      f.effect.leaseId = outcome === "foreign-lease" ? randomUUID() : leaseId;
+      f.row.record.leaseExpiresAt =
+        outcome === "expired-lease" ? "2020-01-01T00:00:00.000Z" : "2030-01-01T00:00:00.000Z";
+      f.row.record.operator.fenceGeneration =
+        outcome === "stale-fence" ? f.effect.fenceGeneration + 1 : f.effect.fenceGeneration;
+      const authorityPorts = createNormalActorJournalAuthority({
+        store: f.journalPorts.store,
+        keyring: f.journalPorts.keyring,
+        now: f.journalPorts.now,
+        assertCanonicalOwner: f.journalPorts.assertAuthorized,
+        assertApprovedOwner: f.journalPorts.assertAuthorized,
+        readApproval: async (input) => ({
+          action: input.action,
+          approvalId: "initial-approval",
+          approved: true,
+          callId: input.callId,
+          planDigest: input.planDigest,
+        }),
+      });
+      Object.assign(f.journalPorts, authorityPorts);
       const before = structuredClone(f.row);
+      // A final verifier with only idle-owner context must not mutate an active lease.
+      await expect(authorityPorts.assertMutationAuthority(context, before)).rejects.toMatchObject({
+        code: "operation_in_progress",
+      });
       const requestCount = f.requests.length;
       const verify = f.operations.verifyNormalActorAccounts({
-        ...context,
+        ...f.effect,
         plan: f.preflight.plan,
         accountPreparation: preparation,
         checkpointAccountPreparation: f.checkpointAccountPreparation,
@@ -524,7 +560,7 @@ describe("normal actor operations", () => {
       throw new Error("fixture_missing_preparation");
     }
     await f.operations.verifyNormalActorAccounts({
-      ...context,
+      ...f.effect,
       plan: f.preflight.plan,
       assertCurrent: f.effect.assertCurrent,
       accountPreparation: saved.preparation,
@@ -663,7 +699,7 @@ describe("normal actor operations", () => {
     const before = f.requests.length;
     await expect(
       f.operations.verifyNormalActorAccounts({
-        ...context,
+        ...f.effect,
         plan: f.preflight.plan,
         assertCurrent: f.effect.assertCurrent,
         accountPreparation: saved.preparation,
