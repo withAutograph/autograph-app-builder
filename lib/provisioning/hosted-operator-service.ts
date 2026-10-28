@@ -1,3 +1,4 @@
+import { restorePendingAccountPreparation } from "./hosted-operator-pending-account-restoration";
 import { readOperatorPreparationProgress } from "./hosted-operator-preparation-progress";
 import {
   retainCompletedParticipantGateway,
@@ -930,6 +931,10 @@ const handlePlanOperation = async (
       "prior_successor_approval",
       assertPriorSuccessorApproval,
     );
+  }
+  const restoredAccount = await restorePendingAccountPreparation(deps, context, input, plan, now);
+  if (restoredAccount !== null) {
+    return response(restoredAccount);
   }
   const recovered =
     sharedHostSuccessor ||

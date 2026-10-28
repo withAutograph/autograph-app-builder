@@ -175,6 +175,20 @@ authenticated durable approval outcome described above; assistant narration,
 client acknowledgements and tool arguments are not approval evidence. New or
 changed effects require their own exact approval.
 
+When an unfinished account capture is temporarily displaced by a separately
+approved Auth/Gateway prerequisite, ordinary planning can restore that exact
+original account preparation after every prerequisite effect is receipted and
+all leases and unknown effects are clear. This transition rereads current owner
+and both actual approvals, requires unchanged physical resources, participant
+program and browser/issuer scope, and preserves both unexpired frozen plans.
+It does not create an account, capture, approval or provider effect. Original
+sealed state, capture nonces and organization proofs remain unchanged. The
+completed prerequisite and prior Auth provenance are archived in the journal;
+its verified Auth/Gateway evidence remains available for the existing capture
+and later planning guards. Current or unknown continuations prevent restoration.
+An accepted continuation or hook from a displaced adapter can only be archived
+after canonical owner reauthorization; it is never replayed for the new owner.
+
 The app's normal signup or sign-in establishes the user's Auth session. A
 protected server-side enrollment path idempotently applies only the approved
 organization membership and app roles, including when an eligible account

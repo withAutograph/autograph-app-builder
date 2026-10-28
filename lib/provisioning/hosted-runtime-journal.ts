@@ -60,7 +60,7 @@ export const retainedParticipantGatewaySchema = z.strictObject({
   candidate: operatorDeploymentCandidateSchema,
 });
 
-export const hostedRuntimeJournalRecordSchema = z.strictObject({
+const hostedRuntimeJournalRecordBaseSchema = z.strictObject({
   approvedByCallId: z.string().min(1),
   accountPreparation: normalActorAccountPreparationSchema.optional(),
   cleanupApprovedByCallId: z.string().min(1).optional(),
@@ -148,6 +148,22 @@ export const hostedRuntimeJournalRecordSchema = z.strictObject({
     "cleaned",
   ]),
   version: z.literal(1),
+});
+
+export const hostedRuntimeJournalRecordSchema = hostedRuntimeJournalRecordBaseSchema.extend({
+  /** Immutable prerequisites displaced only by exact pending-account restoration. */
+  pendingAccountRestorations: z
+    .array(
+      z.strictObject({
+        approvedByCallId: z.string().min(1),
+        operator: hostedOperatorRecordSchema,
+        retainedAuth: retainedOperatorAuthSchema.optional(),
+        executionObservation: hostedRuntimeJournalRecordBaseSchema.shape.executionObservation,
+        realmIdentityWait: hostedRuntimeJournalRecordBaseSchema.shape.realmIdentityWait,
+        realmContinuation: hostedRuntimeJournalRecordBaseSchema.shape.realmContinuation,
+      }),
+    )
+    .optional(),
 });
 
 export type HostedRuntimeJournalRecord = z.infer<typeof hostedRuntimeJournalRecordSchema>;
