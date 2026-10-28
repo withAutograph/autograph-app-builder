@@ -20,6 +20,12 @@ changes. In an Arrusted monorepo these pins affect all catalog consumers; the
 review must make that scope visible. Do not submit arbitrary root file changes
 through the app implementation-files interface or hand-author lockfile edits.
 
+For an existing Arrusted app with explicit framework pins in its app manifest,
+include the app-owned migration of those entries to `catalog:` in the planned
+changes. Preserve unrelated dependencies and custom configuration. Updating
+the shared catalog alone does not change explicit app pins; version-only
+upgrades need no app edits only when the app already follows that catalog.
+
 Use the existing build approval and publication controls. An upgrade is part
 of that approved change, not another approval step. Inspect actual registry,
 install, build, or behavior failures and repair them in the same workflow.

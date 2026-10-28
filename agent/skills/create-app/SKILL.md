@@ -574,6 +574,13 @@ pass `frameworkUpgrade: "latest"` to `accept_app_spec`. Version-only upgrades
 may have no authored app file changes; navigation improvements include the
 actual app-owned edits. New-app plans select current stable versions automatically.
 
+When an existing Arrusted app has explicit Next.js, React/React DOM, or React
+type pins in its own manifest, include the app-owned manifest migration to
+`catalog:` in the planned changes, preserving unrelated dependencies and custom
+configuration. A shared catalog change alone cannot upgrade an app that still
+uses its own old pin. Use version-only upgrades with no authored app edits only
+when its dependencies already follow the repository catalog.
+
 The accepted plan retains concrete versions through apply, retries, and resume.
 Use its version-matched installed Next docs and the published adoption skills.
 Builder's repository adapter invokes the declared `repository:upgrade-framework`
