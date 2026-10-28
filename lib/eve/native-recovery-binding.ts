@@ -1,4 +1,5 @@
 import { authorizeRepeatablePrivateApplyCalls } from "./native-recovery-repeatable-apply";
+import { authorizeRepeatableDraftReconciliationCalls } from "./native-recovery-repeatable-draft-reconciliation";
 import { observePrivateApplyRecoveryCandidate } from "./native-recovery-apply-observation";
 import { openHostedPostgresDatabase } from "../db/hosted-postgres";
 import {
@@ -400,8 +401,15 @@ export function createHostedNativeRecoveryBinding(
     observeRecoveryHolderBinding: (call: RecoveryHolderCall) =>
       get().observeRecoveryHolderBinding(call),
     authorizeRepeatableRecoveryCalls: (
-      input: Parameters<typeof authorizeRepeatablePrivateApplyCalls>[0],
-    ) => Promise.resolve(authorizeRepeatablePrivateApplyCalls(input)),
+      input: Parameters<typeof authorizeRepeatablePrivateApplyCalls>[0] & RecoveryCall,
+    ) =>
+      Promise.resolve([
+        ...authorizeRepeatablePrivateApplyCalls(input),
+        ...authorizeRepeatableDraftReconciliationCalls({
+          ...input,
+          expectedPrincipalId: principalFor(input).ownerUserId,
+        }),
+      ]),
     observeCandidateFacts: (input: Parameters<typeof observePrivateApplyRecoveryCandidate>[0]) =>
       Promise.resolve(observePrivateApplyRecoveryCandidate(input)),
     authorize: (call: RecoveryCall) => get().authorize(call),
