@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 import { expect, it } from "vitest";
 import { approvalReceiptForExistingDraftUpdate } from "../agent/approval-receipt";
-import { createRepositoryObservation } from "../repository/github-publication";
+import {
+  createGitHubInstallationIdentity,
+  createRepositoryObservation,
+} from "../repository/github-publication";
 import type { ImmutableGitHubSourceReceipt } from "../repository/github-publication";
 import type { ExistingDraftReconciliationProposal } from "../repository/github-draft-reconciliation";
 import { createReconciliationReviewReceipt } from "../repository/github-draft-reconciliation";
@@ -18,11 +21,24 @@ const digest = "a".repeat(64);
 const sourceDigest = "b".repeat(64);
 const originReviewDigest = "c".repeat(64);
 const fixture = () => {
+  const sourceInstallation = createGitHubInstallationIdentity({
+    accountId: "103",
+    accountLogin: "fixture-owner",
+    accountType: "Organization",
+    installationId: "102",
+    operation: "resolve-existing-source",
+    repositorySelection: "selected",
+    selectedRepositoryIds: ["101"],
+  });
+  const publicationInstallation = createGitHubInstallationIdentity({
+    ...sourceInstallation,
+    operation: "publish-draft-pull-request",
+  });
   const repository = createRepositoryObservation({
     defaultBranch: "main",
     headSha: "1".repeat(40),
     headTree: "2".repeat(40),
-    installationIdentityDigest: digest,
+    installationIdentityDigest: sourceInstallation.digest,
     name: "fixture",
     owner: "fixture-owner",
     releaseGate: { configured: false, name: "REPOSITORY_RELEASE_ENABLED" },
@@ -30,7 +46,7 @@ const fixture = () => {
     visibility: "private",
   });
   const unsignedSource = {
-    installationIdentityDigest: digest,
+    installationIdentityDigest: sourceInstallation.digest,
     repository,
     resolvedByCallId: "source-read",
     resolvedRef: "refs/heads/app-builder/fixture",
@@ -82,7 +98,7 @@ const fixture = () => {
     expectedHeadSha: review.headSha,
     expectedHeadTree: review.headTree,
     headChangesDigest: hash(review.headChanges),
-    installationIdentityDigest: digest,
+    installationIdentityDigest: publicationInstallation.digest,
     intendedOutcome: "reconcile-existing-draft-pull-request" as const,
     name: repository.name,
     originMarker: "origin-marker",
@@ -222,6 +238,8 @@ const fixture = () => {
     nativeEvents,
     history,
     settlement,
+    sourceInstallation,
+    publicationInstallation,
   };
 };
 
@@ -487,4 +505,20 @@ it("rejects changed sealed merge bytes, review scope and current source", () => 
   const review = fixture();
   review.context["autograph-app-builder.workflow.v17"].reviewReceipt.digest = "f".repeat(64);
   expect(authorizeRepeatableDraftReconciliationCalls(review.input)).toEqual([]);
+});
+
+it("accepts distinct canonical read and publication identity scopes for the same installation", () => {
+  const f = fixture();
+  expect(f.sourceInstallation.installationId).toBe(f.publicationInstallation.installationId);
+  expect(f.sourceInstallation.selectedRepositoryIds).toEqual(
+    f.publicationInstallation.selectedRepositoryIds,
+  );
+  expect(f.sourceInstallation.digest).not.toBe(f.publicationInstallation.digest);
+  expect(f.sourceInstallation.permissions).not.toEqual(f.publicationInstallation.permissions);
+  expect(authorizeRepeatableDraftReconciliationCalls(f.input)).toEqual(["reconcile-call"]);
+});
+it("retains the approved publication installation digest binding", () => {
+  const f = fixture();
+  f.completion.proposal.installationIdentityDigest = f.sourceInstallation.digest;
+  expect(authorizeRepeatableDraftReconciliationCalls(f.input)).toEqual([]);
 });

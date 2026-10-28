@@ -248,7 +248,8 @@ const currentCompletion = (
       source.repository.repositoryId === proposal.repositoryId,
       source.repository.owner === proposal.owner,
       source.repository.name === proposal.name,
-      source.installationIdentityDigest === proposal.installationIdentityDigest,
+      // Source-read and publication identities hash different operation/permission scopes.
+      // The tool freshly checks publication installation identity against this exact approved proposal.
       candidate.repositoryId === proposal.repositoryId,
       candidate.pullRequestNumber === proposal.pullRequestNumber,
       candidate.headSha === proposal.expectedHeadSha,
