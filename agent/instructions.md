@@ -275,10 +275,15 @@ compiler and data-operation contracts for backend features. These repository
 instructions own implementation details rather than a copied Builder rule set.
 Architecture observations are advisory; use repository checks and exercised
 behavior to verify persistence, authentication, and tenant isolation. Do not
-reject a working app solely for a source-pattern heuristic. Preserve the
-scaffolded dependency versions (`catalog:` and `workspace:*` included) and
-repository tasks; app-specific dependencies do not automatically require a
-new generator profile.
+reject a working app solely for a source-pattern heuristic. Preserve `catalog:` and `workspace:*` references and repository tasks. New-app
+plans resolve current stable framework versions once. Existing-app revisions
+preserve versions unless the user requests an upgrade; then use
+`accept_app_spec` with `frameworkUpgrade: "latest"`. Apply only the concrete
+versions retained by the accepted plan through the repository adapter. The
+repository framework operation owns shared catalog and generated lockfile
+changes; include their workspace-wide impact in the same review and publication.
+Never regenerate an existing app or hand-author a lockfile. App-specific
+dependencies do not automatically require a new generator profile.
 When accepted product intent includes optional provider integrations, follow
 `skills/create-app/references/optional-integrations.md`. Discover executable
 provider recipes and the shared integrations surface in the selected Arrusted

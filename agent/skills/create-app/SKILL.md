@@ -136,8 +136,10 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    Keep the scaffolded repository infrastructure authoritative. Do not include
    `package.json`, lockfiles, `next.config.*`, `tsconfig.json`, Turbo config, or
    duplicate frontend entrypoints in `implementationFiles` for a new app. Use
-   the dependency versions and scripts already present in the prepared
-   workspace; never guess or pin framework versions from model knowledge.
+   concrete framework versions resolved by the accepted build plan and the scripts
+   present in the prepared workspace. New-app plans resolve the latest stable
+   compatible Next.js, React/React DOM, and React types once. Preserve that
+   selection through retries; never guess versions from model knowledge.
    For a complete app, Builder owns the backend and persistence implementation
    as well as the UI. Follow [full app authoring](../../../docs/full-app-authoring.md), including
    its authenticated route, mounted receipt and fresh-process persistence requirements.
@@ -559,3 +561,30 @@ For a new CUE-backed app, include `.config/app-specs/<id>.cue` in
 `implementationFiles` with the reviewed schema contents. Apply stages this
 convention input before creation and preserves the resulting app-owned CUE and
 checked release. Do not request a backend through Markdown metadata.
+
+## Upgrade an existing Next application
+
+Follow [Builder-managed framework upgrades](../../../docs/framework-upgrades.md).
+
+Treat a framework upgrade as an existing-app revision, never as creation or a
+template overwrite. Inspect the current app's routes, Server Components,
+request-scoped authentication, DAL, actions, cache invalidation, and tests.
+Ordinary revisions retain their versions. When the user requests an upgrade,
+pass `frameworkUpgrade: "latest"` to `accept_app_spec`. Version-only upgrades
+may have no authored app file changes; navigation improvements include the
+actual app-owned edits. New-app plans select current stable versions automatically.
+
+The accepted plan retains concrete versions through apply, retries, and resume.
+Use its version-matched installed Next docs and the published adoption skills.
+Builder's repository adapter invokes the declared `repository:upgrade-framework`
+operation; do not submit root manifests or hand-authored lockfiles as arbitrary
+implementation files. In Arrusted, catalog and lock changes affect the workspace,
+so include that scope in the same reviewed change set. Follow the existing build
+approval and publication flow rather than asking for an additional upgrade approval.
+
+Use `arrusted-next-app-like-experience` to modernize navigation while retaining
+server reads and Server Actions. Preserve the app's identity, schema, product
+behavior, and custom configuration. Verify direct loads, soft navigation and
+Back/Forward; test cache reuse and successful-mutation invalidation where caching
+is introduced. Use existing focused tests and report unexercised behavior. A
+successful dependency installation alone does not prove a migrated app works.

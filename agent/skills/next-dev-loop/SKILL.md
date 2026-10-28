@@ -1,28 +1,22 @@
 ---
 name: next-dev-loop
 description: >
-  Optionally inspect Next.js runtime behavior in a running app. Use the
-  available framework and browser diagnostics that help verify the changed
-  behavior; this workflow is not required for unrelated source edits.
+  Verify Next.js runtime behavior after editing app code. Use this
+  skill to confirm a change actually works in a running app — not
+  just that it compiles or type-checks. Combines /_next/mcp
+  (Next.js's view) with agent-browser (the browser's view).
+  Requires a running `next dev`.
 ---
+
+## App Builder execution policy
+
+Use this upstream workflow only for the requested framework adoption or navigation improvement. In App Builder, use its supported plan, apply, and validation operations; commands in this skill do not authorize raw shell access, provider changes, or publication. An explicitly requested framework upgrade uses the concrete versions saved in the accepted plan. Ordinary existing-app edits preserve dependency versions. Reuse useful evidence, run focused checks for changed behavior, and report unavailable behavior honestly. Do not add blanket gates, install a new test rig, or require a per-route build merely to use this skill. Preserve authentication, tenant isolation, credential protection, and effect approval.
 
 # next-dev-loop
 
-## project policy and scope
-
-Use this workflow only as a task-relevant way to inspect Next.js behavior. The
-repository's local-development and focused-validation policy takes precedence:
-no source edit, route layout, framework version, cache state, receipt, or exact
-tool shape is a gate for unrelated work. CI should verify task-relevant
-functionality and security properties, not incidental source shapes. Keep
-credential, tenant-isolation, and approval protections intact.
-
-This is an optional diagnostic workflow for changes whose behavior benefits
-from Next.js runtime introspection. Follow the repository's supported local
-development and validation policy first. For an ordinary edit, keep working
-with the running development app and the focused checks relevant to that edit;
-missing optional tools or diagnostics do not block source work. Report what was
-and was not verified.
+The edit/verify rhythm during `next dev` — make a change, then
+confirm it actually works at runtime, not only that the types or
+the build are happy.
 
 You verify through two views of the same running app:
 
@@ -38,34 +32,29 @@ You verify through two views of the same running app:
 
 The two views cross-check each other.
 
-## optional diagnostics
+## requires
 
-- Next.js **16.3+** with **Turbopack** provides `/_next/mcp` plus the
+- Next.js **16.3+** with **Turbopack** — `/_next/mcp` plus the
   proactive compile check via `get_compilation_issues`.
-- `agent-browser` **>= 0.31.1** provides React introspection, worktree-scoped
+- `agent-browser` **>= 0.31.1** — React introspection, worktree-scoped
   `session id`, idempotent `--restore`, and launch flag reconciliation.
 
-These versions describe the capabilities covered by this workflow, not gates
-for ordinary edits. If a capability is unavailable, use a supported browser,
-existing test, direct observation, or focused source check that can establish
-the changed behavior. Identify the narrower evidence in your report; do not
-upgrade frameworks or install tools solely to satisfy this optional workflow.
+These are hard floors, not soft preferences. If anything is missing,
+tell the user how to upgrade and stop. Don't fall back to grepping
+source or to a weaker probe — this skill assumes both views are live
+at the versions above.
 
-- If a requested Next.js feature itself requires an unavailable framework
-  capability, explain that feature-specific limitation and ask before an
-  upgrade that changes project dependencies. Do not upgrade to run this optional
-  diagnostic workflow.
+- Upgrade Next.js: `pnpm next upgrade` (or `npx next upgrade`).
   Docs: https://nextjs.org/docs/app/getting-started/upgrading
   (version-16 guide:
   https://nextjs.org/docs/app/guides/upgrading/version-16)
-- Use `agent-browser` when it is already available and useful. Do not install a
-  global CLI for this workflow; the integrated Browser or the project's
-  existing Playwright setup can provide browser evidence.
+- Install or upgrade `agent-browser`: `npm i -g agent-browser@latest`.
+  If the CLI isn't on `PATH`, install it before continuing — preflight
+  expects to invoke it directly.
 
 ## preflight
 
-When these diagnostics are useful and available, confirm the views you plan to
-use. Skip unavailable optional probes and continue with the best focused check.
+Once per session, confirm both views are live.
 
 1. **Open `agent-browser` at the target URL, restoring saved
    login state when present.** First derive one stable session id for
@@ -80,7 +69,7 @@ use. Skip unavailable optional probes and continue with the best focused check.
    Then open the target URL:
 
    ```bash
-   agent-browser --session "$SESSION" --restore --headed --enable react-devtools open <url>
+   agent-browser --session "$SESSION" --restore --enable react-devtools open <url>
    ```
 
    `--scope worktree` keeps parallel worktrees and copied checkouts
@@ -90,26 +79,29 @@ use. Skip unavailable optional probes and continue with the best focused check.
    launch flags on `open`; agent-browser will reuse, relaunch, or restart
    its scoped background state as needed.
 
-   The browser is the user's. If state was not restored (first run,
-   expired session) and the page is gated, the user drives the login —
-   pause until they confirm. After login, continue using the same session
-   and restore context; `agent-browser close` saves the cookie state so
-   the next `open` restores it.
+   Keep routine verification headless. If the user asks to see the UI, open the
+   current URL in the coding harness's inline browser. It is a separate browser
+   context, so do not assume state carries over. When login or existing
+   `agent-browser` state must carry over, reopen that session headed instead:
+
+   ```bash
+   agent-browser --session "$SESSION" --restore --headed --enable react-devtools open <url>
+   ```
+
+   Pause while the user drives login, then continue with the same session and
+   keep it headed for the rest of the loop.
 
 2. Probe `/_next/mcp` (`tools/list`) — confirm it's reachable and
    lists `get_compilation_issues`. First read the port off the
    `next dev` banner; if it isn't 3000, set
    `NEXT_MCP_URL=http://localhost:<port>/_next/mcp` before probing:
    - Unreachable → either `next dev` isn't running, or Next.js is
-     below 16.3. Check `package.json` if that distinction matters to the
-     diagnostic; otherwise use the available browser or project check.
+     below 16.3. Check `package.json` to disambiguate, then refuse.
    - `get_compilation_issues` not in the list → Next.js below 16.3.
-     The diagnostic is unavailable on this version; continue with other
-     relevant verification.
+     Refuse and tell the user to upgrade.
 3. `get_compilation_issues` doubles as a Turbopack probe. An error
    response of `"Turbopack project is not available..."` means the
-   user is on webpack. Skip this Turbopack-only probe and use other available
-   diagnostics.
+   user is on webpack. Refuse — Turbopack is required.
 4. `get_routes` → your route map for the rest of the session.
 
 ## loop
@@ -164,11 +156,11 @@ manual rather than from memory.
 - A blank read, empty snapshot, `about:blank`, or a "no browser
   session" error — right after `open` or after a click (even if `open`
   reported the page) — is the browser dropping the page (a stale
-  session), not a broken route. Reopen your session at the URL with
-  `--session "$SESSION" --restore` and re-snapshot; if still blank,
-  run `agent-browser --session "$SESSION" --restore close`, then open
-  again. Don't fall back to `curl`; it bypasses the browser you're
-  testing.
+  session), not a broken route. Reopen your session at the URL with the
+  same launch flags as the active loop, then re-snapshot. If still blank, run
+  `agent-browser --session "$SESSION" --restore close`, then reopen with
+  those same flags. Don't fall back to `curl`; it bypasses the browser
+  you're testing.
 - React introspection output is stale after navigation. Re-run.
 - `/_next/mcp` replies are SSE — read the JSON off the `data:` line
   with `sed -n 's/^data: //p'` (a plain `sed 's/^data: //'` leaves the
@@ -178,9 +170,8 @@ manual rather than from memory.
 
 ## reference
 
-The following tools may be available in `/_next/mcp`; use only the diagnostics
-that this app version exposes. A missing optional tool does not block the edit
-or other verification.
+All tools below are present once preflight passes. If `tools/list`
+is missing any of them, preflight should have refused — re-check.
 
 ```
 # /_next/mcp                 notes
@@ -204,3 +195,17 @@ Close the session with the same session and restore context:
 `agent-browser --session "$SESSION" --restore close`. `close` saves
 that session's cookies and storage so the next loop's `--restore` open
 keeps the user logged in. Leave `next dev` up for the next loop.
+
+## Report Next.js friction
+
+Only participate in agent feedback when managed Next.js feedback instructions
+are already loaded for the project. Their presence means the feature is
+enabled; their absence means it is disabled.
+
+When enabled, add qualifying feedback candidates found during verification to
+the feedback candidate queue for the current user request, then continue
+verification. Do not run the feedback command or open review forms during the
+loop or at this Skill's teardown.
+
+The managed instructions own the single reporting pass immediately before the
+final response. If they are absent, do not queue or report feedback.
