@@ -19,8 +19,11 @@ Neon branches with `parent-schema` or `schema-only` provenance. Explicit synthet
 enrollment supports a dedicated project's default `main` root with `parent-data`
 or `schema-only` provenance. Provider readback must match the enrolled project ID,
 owner and creation metadata, plus the root's branch ID, creation metadata,
-initialization source, ready state and `default: true`. Enrolled children also
-require verified lineage and fork metadata back to that root.
+initialization source, `ready` or idle-cache `archived` state and `default: true`.
+Enrolled children also require verified lineage and fork metadata back to that
+root. Archived cache reactivates on database access; it does not require branch
+replacement or enrollment changes. Metadata planning does not wake the database
+or renew expired effect authority.
 
 Operator use can select the enrolled root directly; creating a child is optional.
 Default branches remain unavailable without explicit synthetic enrollment. Preserve

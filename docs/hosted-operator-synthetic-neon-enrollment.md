@@ -67,8 +67,13 @@ defines `Project.id`, `owner_id`, `created_at`, and `Branch.id`, `project_id`,
 
 Enrollment requires exact project identity, provider owner and creation time.
 Every selected branch/ancestor must match its recorded identity, creation time
-and initialization source, be `ready` with no pending transition except
-`ready`, and have no reset/restore marker. Missing, malformed or failed
+and initialization source, be `ready` or `archived` with no pending transition
+except `ready`, and have no reset/restore marker. Neon automatically archives
+idle cache while retaining the same data and branch lineage; the next owned
+database query reactivates it. Metadata planning therefore accepts that storage
+state without issuing a wake-up query, changing enrollment or extending an
+expired approval. See [Neon's archive-storage behavior](https://neon.com/blog/cutting-storage-costs).
+Missing, malformed or failed
 readback denies access. An enrolled root has no parent or fork position and
 must be default. A newly created project's root may report `parent-data`
 without a parent; that source string is accepted only with the reviewed fresh
