@@ -216,6 +216,14 @@ freshly checks these sessions and memberships before delivering private browser
 storage through authenticated bindings. It never exposes passwords or cookies
 as tool text or environment variables.
 
+Successful normal-account verification checkpoints the verified actor and
+organization sessions before participant preparation settles. This records
+account completion after an owner callback or reconciliation without creating
+another account. Resuming the same approved participant operation also performs
+this verification when its account effect already has a receipt; the original
+receipt and approval remain intact and account effects are not replayed.
+Rejected, expired or revoked sessions cannot establish the completion marker.
+
 The evaluator submits product replies and approvals through the existing public
 workflow. It does not insert users, patch organization grants or steer private
 stages. Preserve pending operations and their approvals across replies and
