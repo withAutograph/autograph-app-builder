@@ -694,7 +694,9 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
     if (proposal.frameworkUpgrade !== undefined) {
       const upgradeCommand = frameworkUpgradeCommand(proposal.frameworkUpgrade, appId);
       const upgraded = await sandbox.run({ command: upgradeCommand, workingDirectory: applyRoot });
-      if (upgraded.exitCode !== 0) {return { ...upgraded, failedCommand: upgradeCommand };}
+      if (upgraded.exitCode !== 0) {
+        return { ...upgraded, failedCommand: upgradeCommand };
+      }
     }
     // The repository operation owns lockfile generation. Install that selected
     // closure into this sandbox before compilation or preview uses it.
