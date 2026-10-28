@@ -1,3 +1,4 @@
+import { frameworkSharedPaths } from "@/lib/repository/framework-upgrade";
 import { defineTool } from "eve/tools";
 import type { SandboxSession } from "eve/sandbox";
 import { createHash } from "node:crypto";
@@ -48,8 +49,11 @@ export const isCandidateExportTextPath = (path: string): boolean => {
   if (/(?:^|\/)(?:\.next|node_modules|dist|coverage|storybook-static)(?:\/|$)/u.test(path)) {
     return false;
   }
-  return /(?:^|\/)(?:Dockerfile|\.gitignore)$|\.(?:[cm]?[jt]sx?|css|mdx?|json|toml|ya?ml|cue|sql|pkl)$/u.test(
-    path,
+  return (
+    path === "bun.lock" ||
+    /(?:^|\/)(?:Dockerfile|\.gitignore)$|\.(?:[cm]?[jt]sx?|css|mdx?|json|toml|ya?ml|cue|sql|pkl)$/u.test(
+      path,
+    )
   );
 };
 
@@ -154,6 +158,7 @@ export const reviewableChanges = <T extends ChangePath>(
   changes: readonly T[],
   appId: string,
   existingApp: boolean,
+  frameworkUpgrade = false,
 ) =>
   changes.filter(({ path }) => {
     if (
@@ -164,15 +169,22 @@ export const reviewableChanges = <T extends ChangePath>(
     ) {
       return false;
     }
-    return !existingApp || path.startsWith(`apps/${appId}/`);
+    return (
+      !existingApp ||
+      path.startsWith(`apps/${appId}/`) ||
+      (frameworkUpgrade && frameworkSharedPaths.some((shared) => path === shared))
+    );
   });
 
 export const baselineReviewableChanges = <T extends ChangePath>(
   changes: readonly T[],
   appId: string,
   includePlanningSpecs = true,
+  frameworkUpgrade = false,
 ): T[] => {
-  const allowed = new Set(reviewableChanges(changes, appId, true).map(({ path }) => path));
+  const allowed = new Set(
+    reviewableChanges(changes, appId, true, frameworkUpgrade).map(({ path }) => path),
+  );
   if (includePlanningSpecs) {
     allowed.add(`.config/app-specs/${appId}.cue`);
     allowed.add(`.config/app-specs/${appId}.md`);
@@ -435,6 +447,7 @@ export const observeNormalizedChangeSet = async (input: {
         observed,
         input.state.appSpec.appId,
         isExistingRepositorySource(input.state.sourceReceipt.sourceKind),
+        input.state.proposal.target.frameworkUpgrade !== undefined,
       ),
       validationDigest: input.state.validationReceipt.digest,
     });
@@ -465,11 +478,13 @@ export const observeNormalizedChangeSet = async (input: {
           completeChanges,
           input.state.appSpec.appId,
           isExistingRepositorySource(input.state.sourceReceipt.sourceKind),
+          input.state.proposal.target.frameworkUpgrade !== undefined,
         )
       : baselineReviewableChanges(
           completeChanges,
           input.state.appSpec.appId,
           includeBaselinePlanningSpecs,
+          input.state.proposal.target.frameworkUpgrade !== undefined,
         );
   const changeSet = deriveNormalizedChangeSet(
     {
@@ -489,6 +504,7 @@ export const observeNormalizedChangeSet = async (input: {
         observed,
         input.state.appSpec.appId,
         isExistingRepositorySource(input.state.sourceReceipt.sourceKind),
+        input.state.proposal.target.frameworkUpgrade !== undefined,
       ),
     },
     input.state.validationReceipt,
@@ -628,6 +644,7 @@ const exportAppliedTextFiles = async (input: {
       ),
       input.state.appSpec.appId,
       isExistingRepositorySource(input.state.sourceReceipt.sourceKind),
+      input.state.proposal.target.frameworkUpgrade !== undefined,
     );
   const before = input.contentSide === "before";
   const destination = input.state.githubDestinationReview;
@@ -660,7 +677,9 @@ const exportAppliedTextFiles = async (input: {
         .filter(
           ({ path }) =>
             path === `.config/app-specs/${input.state.appSpec.appId}.cue` ||
-            path === `.config/app-specs/${input.state.appSpec.appId}.md`,
+            path === `.config/app-specs/${input.state.appSpec.appId}.md` ||
+            (input.state.proposal.target.frameworkUpgrade !== undefined &&
+              frameworkSharedPaths.some((shared) => path === shared)),
         )
         .map(({ path }) => path),
     },

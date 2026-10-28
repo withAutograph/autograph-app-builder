@@ -1,3 +1,5 @@
+import type { FrameworkVersions } from "./framework-upgrade";
+import { frameworkUpgradeCommand, frameworkSharedPaths } from "./framework-upgrade";
 import { setBuilderSandboxNetworkPolicy } from "../sandbox/builder-sandbox";
 import { createHash } from "node:crypto";
 
@@ -89,11 +91,16 @@ export const reviewedOverlayTreeDigest = (
   snapshot: OverlaySnapshot,
   appId: string,
   existingApp: boolean,
+  frameworkUpgrade = false,
 ): string => {
   if (!existingApp) {
     return snapshot.treeDigest;
   }
-  const files = snapshot.files.filter(({ path }) => path.startsWith(`apps/${appId}/`));
+  const files = snapshot.files.filter(
+    ({ path }) =>
+      path.startsWith(`apps/${appId}/`) ||
+      (frameworkUpgrade && frameworkSharedPaths.some((shared) => path === shared)),
+  );
   return createHash("sha256")
     .update(JSON.stringify(canonicalOverlayFiles(files)))
     .digest("hex");
@@ -138,6 +145,7 @@ export interface TargetApplyBinding {
 }
 
 type ApplyResultBase = TargetApplyBinding & {
+  frameworkUpgrade?: FrameworkVersions;
   version: 2;
   applyRoot: string;
   planningTreeDigest: string;
@@ -683,10 +691,18 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
     // after iteration writes or before invoking its generator, and treat Bun's
     // real result as authority. Failed installs retain partial-apply evidence.
     await setBuilderSandboxNetworkPolicy(sandbox, "allow-all");
-    const install = await sandbox.run({
-      command: "bun install",
-      workingDirectory: applyRoot,
-    });
+    if (proposal.frameworkUpgrade !== undefined) {
+      const upgradeCommand = frameworkUpgradeCommand(proposal.frameworkUpgrade, appId);
+      const upgraded = await sandbox.run({ command: upgradeCommand, workingDirectory: applyRoot });
+      if (upgraded.exitCode !== 0) {
+        return { ...upgraded, failedCommand: upgradeCommand };
+      }
+    }
+    // The repository operation owns lockfile generation. Install that selected
+    // closure into this sandbox before compilation or preview uses it.
+    const installCommand =
+      proposal.frameworkUpgrade === undefined ? "bun install" : "bun install --frozen-lockfile";
+    const install = await sandbox.run({ command: installCommand, workingDirectory: applyRoot });
     if (install.exitCode !== 0) {
       const output = `${install.stderr}\n${install.stdout}`;
       let reason = "unclassified";
@@ -707,7 +723,7 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
         exitCode: install.exitCode,
         reason,
       });
-      return { ...install, failedCommand: "bun install" };
+      return { ...install, failedCommand: installCommand };
     }
     const cue = await sandbox.run({
       command: sourceDeclaredCueActivationCommand(),
@@ -903,6 +919,9 @@ export async function executeProposalBoundApply(input: {
     if ("operation" in input.proposal) {
       before = iterationBaselineSnapshot(before, input.proposal.iteration.changes);
     }
+    if (input.proposal.frameworkUpgrade !== undefined) {
+      before = iterationBaselineSnapshot(before, input.proposal.frameworkUpgrade.baseline);
+    }
   } catch (error) {
     await input.sandbox.removePath({
       force: true,
@@ -936,6 +955,9 @@ export async function executeProposalBoundApply(input: {
   }
   const attemptBase = {
     ...input.binding,
+    ...(input.proposal.frameworkUpgrade === undefined
+      ? {}
+      : { frameworkUpgrade: input.proposal.frameworkUpgrade.versions }),
     appliedByCallId: input.appliedByCallId,
     applyRoot: overlay.applyRoot,
     command: {

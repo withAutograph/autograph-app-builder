@@ -12,6 +12,7 @@ export const APP_CREATION_SKILL_ROOTS = [
   "next-cache-components-optimizer",
   "next-dev-loop",
   "next-partial-prefetching-adoption",
+  "next-partial-prefetching-optimizer",
   "scaffold-app-workspace",
 ] as const;
 

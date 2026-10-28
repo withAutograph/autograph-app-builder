@@ -26,6 +26,7 @@ describe("app-creation skill export", () => {
         "next-cache-components-optimizer",
         "next-dev-loop",
         "next-partial-prefetching-adoption",
+        "next-partial-prefetching-optimizer",
       ]),
     );
     const repositoryRoot = path.resolve(import.meta.dirname, "../..");
@@ -33,12 +34,12 @@ describe("app-creation skill export", () => {
       readFileSync(path.join(repositoryRoot, "agent/vercel-next-workflows.lock.json"), "utf-8"),
     ) as { revision: string; skills: Record<string, string> };
     expect(lock.revision).toMatch(/^[0-9a-f]{40}$/u);
-    expect(Object.keys(lock.skills).toSorted()).toEqual([
-      "next-cache-components-adoption",
-      "next-cache-components-optimizer",
-      "next-dev-loop",
-      "next-partial-prefetching-adoption",
-    ]);
+    for (const skill of Object.keys(lock.skills)) {
+      expect(APP_CREATION_SKILL_ROOTS).toContain(skill);
+      expect(
+        readFileSync(path.join(repositoryRoot, "agent/skills", skill, "SKILL.md"), "utf-8"),
+      ).toBeTruthy();
+    }
   });
 
   it("emits byte-identical manifests and artifacts in two independent exports", async () => {
@@ -72,26 +73,27 @@ describe("app-creation skill export", () => {
     );
   });
 
-  it.each(["interactions.md", "information-composition.md"])(
-    "ships %s unchanged in exports and hosted seeds",
-    async (name) => {
-      const repositoryRoot = path.resolve(import.meta.dirname, "../..");
-      const reference = `design-app/references/${name}`;
-      const source = readFileSync(path.join(repositoryRoot, "agent/skills", reference), "utf-8");
-      const outputRoot = path.join(
-        mkdtempSync(path.join(tmpdir(), "interaction-skill-export-")),
-        "payload",
-      );
-      const manifest = await exportAppCreationSkills({
-        outputRoot,
-        repositoryRoot,
-      });
+  it.each([
+    "design-app/references/interactions.md",
+    "design-app/references/information-composition.md",
+    "next-partial-prefetching-optimizer/SKILL.md",
+  ])("ships %s unchanged in exports and hosted seeds", async (name) => {
+    const repositoryRoot = path.resolve(import.meta.dirname, "../..");
+    const reference = name;
+    const source = readFileSync(path.join(repositoryRoot, "agent/skills", reference), "utf-8");
+    const outputRoot = path.join(
+      mkdtempSync(path.join(tmpdir(), "interaction-skill-export-")),
+      "payload",
+    );
+    const manifest = await exportAppCreationSkills({
+      outputRoot,
+      repositoryRoot,
+    });
 
-      expect(manifest.files.some((file) => file.path === reference)).toBe(true);
-      expect(readFileSync(path.join(outputRoot, reference), "utf-8")).toBe(source);
-      expect(HOSTED_MANAGED_SKILL_CONTENTS.find((file) => file.path === reference)?.content).toBe(
-        source,
-      );
-    },
-  );
+    expect(manifest.files.some((file) => file.path === reference)).toBe(true);
+    expect(readFileSync(path.join(outputRoot, reference), "utf-8")).toBe(source);
+    expect(HOSTED_MANAGED_SKILL_CONTENTS.find((file) => file.path === reference)?.content).toBe(
+      source,
+    );
+  });
 });

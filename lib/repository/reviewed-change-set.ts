@@ -1,3 +1,5 @@
+import { frameworkSharedPaths } from "./framework-upgrade";
+import type { FrameworkVersions } from "./framework-upgrade";
 import { createHash } from "node:crypto";
 
 import type { OverlayChange, TargetApplyReceipt } from "./target-apply";
@@ -6,6 +8,7 @@ import type { AppBaselineReceipt } from "./app-baseline";
 import type { SourceKind } from "./source-receipt";
 
 export interface NormalizedChangeSet {
+  frameworkUpgrade?: FrameworkVersions;
   version: 2;
   validationDigest: string;
   applyDigest: string;
@@ -45,7 +48,7 @@ export type ReviewedChangeSetReceipt = NormalizedChangeSet & {
 
 export const assertExistingAppReviewScope = (
   review: Pick<ReviewedChangeSetReceipt, "approvedPaths"> &
-    Partial<Pick<ReviewedChangeSetReceipt, "sourceSha">>,
+    Partial<Pick<ReviewedChangeSetReceipt, "sourceSha" | "frameworkUpgrade">>,
   appId: string,
   sourceKind: SourceKind,
   baseline?: AppBaselineReceipt,
@@ -59,7 +62,13 @@ export const assertExistingAppReviewScope = (
       : [],
   );
   const outside = review.approvedPaths.find(
-    (path) => !path.startsWith(`apps/${appId}/`) && !baselineSpecs.has(path),
+    (path) =>
+      !path.startsWith(`apps/${appId}/`) &&
+      !baselineSpecs.has(path) &&
+      !(
+        review.frameworkUpgrade !== undefined &&
+        frameworkSharedPaths.some((shared) => path === shared)
+      ),
   );
   if (outside !== undefined) {
     throw new Error(
@@ -79,6 +88,7 @@ export function deriveNormalizedChangeSet(
 ): NormalizedChangeSet {
   const canonicalChanges = apply.changes;
   const unsigned = {
+    ...(apply.frameworkUpgrade === undefined ? {} : { frameworkUpgrade: apply.frameworkUpgrade }),
     appSpecDigest: apply.appSpecDigest,
     appSpecPath: apply.appSpecPath,
     applyDigest: apply.digest,

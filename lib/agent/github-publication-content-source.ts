@@ -42,6 +42,7 @@ export function publicationContentSourceForReviewedWorkflow(input: {
           observed,
           input.state.appSpec.appId,
           input.state.sourceReceipt.sourceKind === "existing-repository",
+          input.state.proposal.target.frameworkUpgrade !== undefined,
         ) !== input.state.reviewReceipt.postTreeDigest
       ) {
         throw new Error(
