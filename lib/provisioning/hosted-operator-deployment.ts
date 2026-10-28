@@ -52,7 +52,11 @@ import { createTenantExportArtifacts } from "./hosted-operator-export-artifacts"
 import { createTenantExportDispatcher } from "./hosted-operator-export-transport";
 import { resolveExportOwnerOrganization } from "./hosted-operator-export-customer";
 import { createPrivateTenantExportApprovalCapture } from "../eve/private-export-approval";
-import { requireFinalResourceBindingPhase } from "./hosted-operator-resource-binding-phase";
+import {
+  requireFinalResourceBindingPhase,
+  selectAuthPlanningResourceBindingRow,
+} from "./hosted-operator-resource-binding-phase";
+import { createAppInstallationPlanningResourceReader } from "./hosted-operator-installation-planning-resources";
 import {
   readApprovedRetainedMembershipInspection,
   readApprovedRetainedMembershipInspections,
@@ -210,7 +214,6 @@ import {
 } from "./hosted-operator-shared-gateway";
 import type {
   HostedRuntimeJournalRecord,
-  HostedRuntimeJournalRow,
   HostedRuntimeJournalStore,
 } from "./hosted-runtime-journal";
 import { createPostgresOperatorArtifactStore } from "./hosted-operator-artifact-store";
@@ -455,68 +458,12 @@ export const readHostedOperatorEffectResourceBindings = async (
 };
 
 type ResourceBindingContext = HostedOperatorContext & {
+  purpose?: "planning";
   plan: ResourceCredentialEffect["plan"];
   privateState?: HostedRuntimeJournalRecord["privateState"];
 };
 
-/** Select only the original retained prepare evidence for a read-only binding request.
- * Approval, owner, completion, sealed checkpoint and second-read checks remain with the caller.
- */
-export const selectAuthPlanningResourceBindingRow = (
-  row: HostedRuntimeJournalRow | undefined,
-  plan: ResourceBindingContext["plan"],
-): HostedRuntimeJournalRow | undefined => {
-  if (row === undefined || row.record.operator?.planDigest === operatorPlanDigest(plan)) {
-    return row;
-  }
-  const parsed = retainedOperatorAuthSchema.safeParse(row.record.retainedAuth);
-  if (!parsed.success) {
-    return row;
-  }
-  const retained = parsed.data;
-  if (retained.planDigest !== operatorPlanDigest(plan)) {
-    return row;
-  }
-  const current = row.record.operator;
-  // An idle app delivery cannot mutate the completed retained Auth credentials.
-  // Keep unknown Auth/resource effects and cleanup behind the existing phase guard.
-  const pendingAppDelivery =
-    current?.plan.action === "prepare" &&
-    current.plan.stage === "app" &&
-    current.plan.effects.some(
-      (effect) => effect.kind === "delivery" && effect.id === current.pendingEffectId,
-    );
-  const pendingMutation =
-    !pendingAppDelivery &&
-    (current?.pendingEffectId !== undefined || current?.pendingEffectAttempt !== undefined);
-  if (
-    row.record.leaseId !== undefined ||
-    row.record.leaseExpiresAt !== undefined ||
-    pendingMutation
-  ) {
-    throw new HostedOperatorError("operation_in_progress");
-  }
-  return {
-    ...row,
-    record: {
-      ...row.record,
-      approvedByCallId: retained.approvedByCallId,
-      operator: {
-        approvalId: retained.approvalId,
-        authPreparation: retained.authPreparation,
-        fenceGeneration: retained.fenceGeneration,
-        gatewayEnvironment: retained.gatewayEnvironment,
-        mode: "protected-operator-v1",
-        operationRef: retained.operationRef,
-        plan: retained.plan,
-        planDigest: retained.planDigest,
-        receipts: retained.receipts,
-      },
-      status: "prepared",
-      step: "bound",
-    },
-  };
-};
+export { selectAuthPlanningResourceBindingRow } from "./hosted-operator-resource-binding-phase";
 
 /** Compare transport only with the canonical approved plan; older plans retain their captured endpoint. */
 export const matchesApprovedMembershipJwks = (
@@ -1467,6 +1414,68 @@ export const createHostedOperatorControlPlane = async (input: {
       observe: observeOwnerRealmContinuation,
     });
 
+    const readResourceBindings = async (
+      effectInput: ResourceCredentialEffect | ResourceBindingContext,
+    ) => {
+      if (
+        effectInput.plan.action !== "prepare" &&
+        (!("effect" in effectInput) ||
+          !["revoke", "remove-bindings", "retire"].includes(effectInput.effect.kind))
+      ) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      if ("effect" in effectInput) {
+        return await readHostedOperatorEffectResourceBindings({
+          assertAuthorized: owner.assertAuthorized,
+          effect: effectInput,
+          store,
+          config: tokenKeyring,
+        });
+      }
+      await owner.assertAuthorized(effectInput);
+      const current = requireFinalResourceBindingPhase(
+        selectAuthPlanningResourceBindingRow(await store.read(effectInput), effectInput.plan),
+        effectInput,
+      );
+      const { operator } = current.record;
+      if (operator === undefined) {
+        throw new HostedOperatorError("operation_in_progress");
+      }
+      const approval = await readApproval({
+        ...effectInput,
+        action: "prepare",
+        callId: current.record.approvedByCallId,
+        planDigest: operator.planDigest,
+      });
+      if (!approval?.approved || approval.approvalId !== operator.approvalId) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      if (
+        approval.callId !== current.record.approvedByCallId ||
+        approval.planDigest !== operator.planDigest ||
+        approval.action !== "prepare"
+      ) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      const bindings = readHostedOperatorResourceBindings({
+        ...effectInput,
+        config: tokenKeyring,
+        record: current.record,
+      });
+      await owner.assertAuthorized(effectInput);
+      const latest = requireFinalResourceBindingPhase(
+        selectAuthPlanningResourceBindingRow(await store.read(effectInput), effectInput.plan),
+        effectInput,
+      );
+      if (
+        latest.revision !== current.revision ||
+        JSON.stringify(latest.record.operator) !== JSON.stringify(operator)
+      ) {
+        throw new HostedOperatorError("operation_in_progress");
+      }
+      return bindings;
+    };
+
     const installationPlanning: AppInstallationPlanningPort = {
       readAppInstallationCustomerIds: createRetainedAppInstallationCustomerReader({
         readOwner: owner.readCurrentPlanningOwner,
@@ -1481,40 +1490,12 @@ export const createHostedOperatorControlPlane = async (input: {
             selection: receipt.toolInput.plan.selection,
             requestId: receipt.requestId,
           }),
-        readActiveCustomers: async (context, desired, scopes) => {
-          await owner.assertPlanningAuthorized(context);
-          const row = await store.read(context);
-          const plan = row?.record.operator?.plan;
-          if (row === undefined || plan === undefined) {
-            throw new HostedOperatorError("resource_mismatch");
-          }
-          const sameResources = [
-            isDeepStrictEqual(plan.appDatabase, desired.appDatabase),
-            plan.neon.projectId === desired.neon.projectId,
-            plan.neon.branchId === desired.neon.branchId,
-            plan.neon.endpoint === desired.neon.endpoint,
-          ].every(Boolean);
-          if (!sameResources) {
-            throw new HostedOperatorError("resource_mismatch");
-          }
-          const bindingInput = structuredClone({ plan, privateState: row.record.privateState });
-          requireFinalResourceBindingPhase(row, bindingInput);
-          const bindings = readHostedOperatorResourceBindings({
-            ...context,
-            config: tokenKeyring,
-            record: row.record,
-            plan,
-          });
-          return await readActiveAppInstallationCustomerIds({
-            plan: desired,
-            scopes,
-            runtimeUrl: bindings.appDatabase.runtimeUrl,
-            assertCurrent: async () => {
-              await owner.assertPlanningAuthorized(context);
-              requireFinalResourceBindingPhase(await store.read(context), bindingInput);
-            },
-          });
-        },
+        readActiveCustomers: createAppInstallationPlanningResourceReader({
+          assertPlanningAuthorized: owner.assertPlanningAuthorized,
+          store,
+          readResourceBindings,
+          readActiveCustomers: readActiveAppInstallationCustomerIds,
+        }),
       }),
     };
     const controlPlane = {
@@ -2237,65 +2218,7 @@ export const createHostedOperatorControlPlane = async (input: {
         await owner.assertPlanningAuthorized(context);
         return link === undefined ? null : operatorRealmIdentityLinkSchema.parse(link);
       },
-      async readResourceBindings(effectInput: ResourceCredentialEffect | ResourceBindingContext) {
-        if (
-          effectInput.plan.action !== "prepare" &&
-          (!("effect" in effectInput) ||
-            !["revoke", "remove-bindings", "retire"].includes(effectInput.effect.kind))
-        ) {
-          throw new HostedOperatorError("authorization_required");
-        }
-        if ("effect" in effectInput) {
-          return await readHostedOperatorEffectResourceBindings({
-            assertAuthorized: owner.assertAuthorized,
-            effect: effectInput,
-            store,
-            config: tokenKeyring,
-          });
-        }
-        await owner.assertAuthorized(effectInput);
-        const current = requireFinalResourceBindingPhase(
-          selectAuthPlanningResourceBindingRow(await store.read(effectInput), effectInput.plan),
-          effectInput,
-        );
-        const { operator } = current.record;
-        if (operator === undefined) {
-          throw new HostedOperatorError("operation_in_progress");
-        }
-        const approval = await readApproval({
-          ...effectInput,
-          action: "prepare",
-          callId: current.record.approvedByCallId,
-          planDigest: operator.planDigest,
-        });
-        if (!approval?.approved || approval.approvalId !== operator.approvalId) {
-          throw new HostedOperatorError("authorization_required");
-        }
-        if (
-          approval.callId !== current.record.approvedByCallId ||
-          approval.planDigest !== operator.planDigest ||
-          approval.action !== "prepare"
-        ) {
-          throw new HostedOperatorError("authorization_required");
-        }
-        const bindings = readHostedOperatorResourceBindings({
-          ...effectInput,
-          config: tokenKeyring,
-          record: current.record,
-        });
-        await owner.assertAuthorized(effectInput);
-        const latest = requireFinalResourceBindingPhase(
-          selectAuthPlanningResourceBindingRow(await store.read(effectInput), effectInput.plan),
-          effectInput,
-        );
-        if (
-          latest.revision !== current.revision ||
-          JSON.stringify(latest.record.operator) !== JSON.stringify(operator)
-        ) {
-          throw new HostedOperatorError("operation_in_progress");
-        }
-        return bindings;
-      },
+      readResourceBindings,
       async readRetirementResourceCredentials(effectInput: ResourceCredentialEffect) {
         if (
           effectInput.plan.action !== "cleanup" ||
