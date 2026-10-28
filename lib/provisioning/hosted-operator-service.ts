@@ -1,3 +1,4 @@
+import { readOperatorPreparationProgress } from "./hosted-operator-preparation-progress";
 import {
   retainCompletedParticipantGateway,
   inspectPlanningParticipantBootstrap,
@@ -12,6 +13,8 @@ import type { NativeTargetTransportRequest } from "./native-target-onboarding-tr
 import {
   OPERATOR_EXECUTION_OBSERVATION_HEADER,
   OPERATOR_EXECUTION_OBSERVATION_PREFERENCE,
+  OPERATOR_PREPARATION_PROGRESS_HEADER,
+  OPERATOR_PREPARATION_PROGRESS_PREFERENCE,
 } from "./hosted-operator-execution-observation-protocol";
 import {
   readOperatorExecutionObservation,
@@ -1582,6 +1585,9 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
     const executionObservationRequested =
       request.headers.get(OPERATOR_EXECUTION_OBSERVATION_HEADER) ===
       OPERATOR_EXECUTION_OBSERVATION_PREFERENCE;
+    const preparationProgressRequested =
+      request.headers.get(OPERATOR_PREPARATION_PROGRESS_HEADER) ===
+      OPERATOR_PREPARATION_PROGRESS_PREFERENCE;
     try {
       if (request.method !== "POST" || new URL(request.url).pathname !== "/v1/runtime") {
         return response({ code: "not_found" }, 404);
@@ -1832,6 +1838,9 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           operationRef,
           planDigest,
           status,
+          ...(preparationProgressRequested
+            ? { preparationProgress: readOperatorPreparationProgress(record, now()) }
+            : {}),
           ...(appUrl === undefined ? {} : { appUrl }),
           ...(signupUrl === undefined ? {} : { signupUrl }),
         };

@@ -1634,6 +1634,20 @@ export const operatorExecutionObservationSchema = z.discriminatedUnion("state", 
   z.strictObject({ state: z.literal("unknown") }),
   z.strictObject({ state: z.literal("settled"), outcome: operatorExecutionOutcomeSchema }),
 ]);
+/** Recorded preparation facts only; no provider proof or execution authority. */
+export const operatorPreparationProgressSchema = z.strictObject({
+  planStage: hostedOperatorPlanDataSchema.shape.stage,
+  lease: z.enum(["absent", "active", "expired", "unclassified"]),
+  hasPendingEffect: z.boolean(),
+  pendingEffectKind: hostedOperatorPlanDataSchema.shape.effects.element.shape.kind.optional(),
+  hasPendingAttempt: z.boolean(),
+  allPlanEffectsReceipted: z.boolean(),
+  missingEffectKinds: z.array(hostedOperatorPlanDataSchema.shape.effects.element.shape.kind),
+  hasAccountPreparation: z.boolean(),
+  accountsCompleted: z.boolean(),
+  accountProgramMatchesPlan: z.boolean().optional(),
+});
+export type OperatorPreparationProgress = z.infer<typeof operatorPreparationProgressSchema>;
 export const operatorPublicResultSchema = z.strictObject({
   appId: id,
   authenticatedBehavior: z.literal("unassessed"),
@@ -1643,6 +1657,7 @@ export const operatorPublicResultSchema = z.strictObject({
   planDigest: digest.optional(),
   status: operatorPublicStatusSchema,
   execution: operatorExecutionObservationSchema.optional(),
+  preparationProgress: operatorPreparationProgressSchema.optional(),
   appUrl: z.url().optional(),
   signupUrl: z.url().optional(),
 });
