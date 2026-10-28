@@ -2158,6 +2158,9 @@ export const composeHostedOperatorDependencies = (
     if (input.effect.kind !== "access" || input.plan.access.length !== 0) {
       return undefined;
     }
+    if (input.plan.action !== "prepare") {
+      throw new HostedOperatorError(RESOURCE_MISMATCH);
+    }
     if (
       !isDeepStrictEqual(
         input.plan.effects.find((effect) => effect.id === input.effect.id),

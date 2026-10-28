@@ -1425,6 +1425,23 @@ describe("empty approved access effects", () => {
     expect(f.execute).not.toHaveBeenCalled();
     expect(f.readResourceBindings).not.toHaveBeenCalled();
   });
+  it.each(["inspect", "execute"] as const)(
+    "rejects cleanup before %s can settle empty access",
+    async (mode) => {
+      const f = await setup();
+      f.input.plan = { ...f.input.plan, action: "cleanup" };
+      await expect(
+        mode === "inspect"
+          ? f.dependencies.reconcile(f.input)
+          : f.dependencies.executeEffect(f.input),
+      ).rejects.toMatchObject({ code: "resource_mismatch" });
+      expect(f.assertAuthorized).not.toHaveBeenCalled();
+      expect(f.verifyNormalActorMemberships).not.toHaveBeenCalled();
+      expect(f.readResourceBindings).not.toHaveBeenCalled();
+      expect(f.inspect).not.toHaveBeenCalled();
+      expect(f.execute).not.toHaveBeenCalled();
+    },
+  );
   it.each(["install", "revoke"] as const)(
     "keeps %s on the existing worker preparation path even without grants",
     async (kind) => {
