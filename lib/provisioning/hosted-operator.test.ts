@@ -4293,6 +4293,118 @@ describe("completed owned Gateway binding convergence", () => {
     ).toHaveLength(1);
   });
 
+  it.each(["unknown", "matching", "nonmatching", "retryable", "absent", "orphan"] as const)(
+    "preserves another pending effect during binding readback until its %s delivery outcome",
+    async (outcome) => {
+      const f = fixture();
+      f.deps.plan = async () =>
+        hostedOperatorPlanSchema.parse({
+          ...plan,
+          stage: "app",
+          gatewayBindings: adoptedGatewayPlan().gatewayBindings,
+          gatewayDelivery: {
+            projectId: "prj_gateway",
+            branch: selection.branch,
+            repoId: "gateway-repo",
+            gitSha: "c".repeat(40),
+          },
+          effects: [
+            ...plan.effects,
+            { description: "Bind Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
+            { description: "Deliver Gateway", id: "gateway-delivery", kind: "gateway-delivery" },
+          ],
+        });
+      const request = await prepared(f);
+      f.approve();
+      expect((await f.client.request(request)).status).toBe("prepared");
+      const row = f.row;
+      if (row?.record.operator === undefined) {
+        throw new Error("Missing approved fixture operation");
+      }
+      const pending = { id: "11111111-1111-4111-8111-111111111111", contextDigest: "a".repeat(64) };
+      const pendingId = outcome === "orphan" ? undefined : "gateway-delivery";
+      f.row = {
+        ...row,
+        record: hostedRuntimeJournalRecordSchema.parse({
+          ...row.record,
+          status: "pending",
+          step: "reserved",
+          operator: {
+            ...row.record.operator,
+            receipts: row.record.operator.receipts.filter(
+              (receipt) => receipt.effectId !== "gateway-delivery",
+            ),
+            pendingEffectId: pendingId,
+            pendingEffectAttempt: pending,
+          },
+        }),
+      };
+      const executeCalls = vi.mocked(f.deps.executeEffect).mock.calls.length;
+      const reconcile = f.deps.reconcile;
+      const deliveryReceipt = {
+        effectId: outcome === "nonmatching" ? "unrelated-effect" : "gateway-delivery",
+        resourceVersion: "verified-existing-delivery",
+        observedAt: "2026-10-29T00:00:00Z",
+      };
+      let observedDelivery = false;
+      let pendingAtDelivery: { id?: string; attempt?: unknown } | undefined;
+      f.deps.reconcile = async (input) => {
+        if (input.effect.kind === "gateway-bindings") {
+          await input.assertCurrent();
+          if (outcome === "retryable" || outcome === "orphan") {
+            return { status: "retryable", resourceVersion: "verified-bindings-need-retry" };
+          }
+          if (outcome === "absent") {
+            return { status: "absent" };
+          }
+          return {
+            status: "applied",
+            receipt: {
+              effectId: input.effect.id,
+              resourceVersion: "verified-existing-bindings",
+              observedAt: "2026-10-29T00:00:00Z",
+            },
+          };
+        }
+        if (input.effect.kind === "gateway-delivery") {
+          observedDelivery = true;
+          pendingAtDelivery = structuredClone({
+            id: f.row?.record.operator?.pendingEffectId,
+            attempt: f.row?.record.operator?.pendingEffectAttempt,
+          });
+          return outcome === "unknown"
+            ? { status: "unknown" }
+            : { status: "applied", receipt: deliveryReceipt };
+        }
+        return await reconcile(input);
+      };
+      const result = await f.client.request(request);
+      const after = hostedOperatorRecordSchema.parse(f.row?.record.operator);
+      const bindingNeedsExecution =
+        outcome === "retryable" || outcome === "absent" || outcome === "orphan";
+      expect(observedDelivery).toBe(!bindingNeedsExecution);
+      if (!bindingNeedsExecution) {
+        expect(pendingAtDelivery).toEqual({ id: pendingId, attempt: pending });
+      }
+      expect(f.deps.executeEffect).toHaveBeenCalledTimes(executeCalls);
+      if (outcome === "matching") {
+        expect(result.status).toBe("prepared");
+        expect(after.pendingEffectId).toBeUndefined();
+        expect(after.pendingEffectAttempt).toBeUndefined();
+        expect(after.receipts).toContainEqual(deliveryReceipt);
+      } else {
+        expect(result.code).toBe(
+          outcome === "nonmatching" ? "resource_mismatch" : "reconciliation_required",
+        );
+        expect(after.pendingEffectId).toBe(pendingId);
+        expect(after.pendingEffectAttempt).toEqual(pending);
+        expect(after.receipts.some((receipt) => receipt.effectId === "gateway-delivery")).toBe(
+          false,
+        );
+      }
+    },
+  );
+
   it("retains a completed Gateway receipt when fresh reconciliation is unknown", async () => {
     const f = fixture();
     f.deps.plan = async () =>

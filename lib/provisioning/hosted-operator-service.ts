@@ -2777,15 +2777,26 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 const workerAttemptId = randomUUID();
                 await assertCurrent();
                 record = (
-                  await ownedUpdate((value) => ({
-                    ...value,
-                    operator: {
-                      ...requireOperator(value),
-                      pendingEffectAttempt: { id: workerAttemptId },
-                      pendingEffectId: effect.id,
-                    },
-                    status: plan.action === "prepare" ? "pending" : "cleaning",
-                  }))
+                  await ownedUpdate((value) => {
+                    const currentOperator = requireOperator(value);
+                    if (
+                      (currentOperator.pendingEffectId !== undefined &&
+                        currentOperator.pendingEffectId !== effect.id) ||
+                      (currentOperator.pendingEffectId === undefined &&
+                        currentOperator.pendingEffectAttempt !== undefined)
+                    ) {
+                      throw new HostedOperatorError("reconciliation_required");
+                    }
+                    return {
+                      ...value,
+                      operator: {
+                        ...currentOperator,
+                        pendingEffectAttempt: { id: workerAttemptId },
+                        pendingEffectId: effect.id,
+                      },
+                      status: plan.action === "prepare" ? "pending" : "cleaning",
+                    };
+                  })
                 ).record;
                 const executeInput: HostedOperatorWorkerEffectContext = {
                   ...effectInput,
@@ -2939,8 +2950,10 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                       receipt,
                     ],
                   };
-                  delete next.pendingEffectId;
-                  delete next.pendingEffectAttempt;
+                  if (next.pendingEffectId === receipt.effectId) {
+                    delete next.pendingEffectId;
+                    delete next.pendingEffectAttempt;
+                  }
                   return { ...value, operator: next };
                 })
               ).record;
