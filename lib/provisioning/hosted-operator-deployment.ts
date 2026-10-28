@@ -53,6 +53,7 @@ import { createTenantExportDispatcher } from "./hosted-operator-export-transport
 import { resolveExportOwnerOrganization } from "./hosted-operator-export-customer";
 import { createPrivateTenantExportApprovalCapture } from "../eve/private-export-approval";
 import {
+  isFinalResourceBindingLeaseRenewal,
   requireFinalResourceBindingPhase,
   selectAuthPlanningResourceBindingRow,
 } from "./hosted-operator-resource-binding-phase";
@@ -1468,7 +1469,8 @@ export const createHostedOperatorControlPlane = async (input: {
         effectInput,
       );
       if (
-        latest.revision !== current.revision ||
+        (latest.revision !== current.revision &&
+          !isFinalResourceBindingLeaseRenewal(current, latest)) ||
         JSON.stringify(latest.record.operator) !== JSON.stringify(operator)
       ) {
         throw new HostedOperatorError("operation_in_progress");

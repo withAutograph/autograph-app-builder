@@ -295,9 +295,13 @@ Cleanup uses a separate frozen scope/approval and clears ciphertext only after
 all cleanup receipts. Shared Auth retirement must account for remaining consumers.
 
 The private `bindings` operation rechecks access, current provider/database proof
-and an unchanged journal revision. Its app projection returns only the app's
-restricted runtime database credential and public Gateway verification settings,
-plus nonsecret plan/proof. It verifies endpoint, TLS, database and explicit
+and an unchanged journal revision. A final execution credential read may accept
+a newer revision from renewal of the same active lease only when its expiry
+advances and every other journal field remains identical. Both owner checks and
+the final phase, approval, fence and sealed-state checks still apply; a changed
+checkpoint or lease identity refuses the read. Its app projection returns only
+the app's restricted runtime database credential and public Gateway verification
+settings, plus nonsecret plan/proof. It verifies endpoint, TLS, database and explicit
 runtime role. Auth SQL credentials and signing secrets remain in the separate
 trusted Gateway/Auth host; installer authority remains in the protected operator.
 The actual SQL grants, schema identity and absence of elevated capabilities are

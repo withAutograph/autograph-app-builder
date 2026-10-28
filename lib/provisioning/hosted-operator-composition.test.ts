@@ -4182,7 +4182,7 @@ describe("retained active schema installation scope", () => {
     return { desired, prior, receipt, session, readOwner, readApproval, readActiveCustomers, read };
   };
 
-  const deploymentFixture = async () => {
+  const deploymentFixture = async (encrypted = false) => {
     const f = fixture();
     const row = {
       revision: 1,
@@ -4220,7 +4220,17 @@ describe("retained active schema installation scope", () => {
     const owners = await import("./hosted-operator-owner");
     const credentials = await import("./hosted-operator-resource-credentials");
     const appReadiness = await import("./hosted-operator-app-readiness");
-    const readJournal = vi.fn(async () => await Promise.resolve(row));
+    if (encrypted) {
+      const prepared = credentials.prepareHostedOperatorResourceCredentials({
+        ...context,
+        plan: f.prior,
+        record: { ...row.record, privateState: undefined },
+        database: "appDatabase",
+        config: { tokenKey: Buffer.alloc(32, 1), tokenKeyVersion: "fixture-key" },
+      });
+      row.record.privateState = prepared.privateState;
+    }
+    const readJournal = vi.fn(async () => await Promise.resolve(structuredClone(row)));
     const createJournal = journal.createPostgresHostedRuntimeJournalStore;
     vi.spyOn(journal, "createPostgresHostedRuntimeJournalStore").mockImplementation((database) => ({
       ...createJournal(database),
@@ -4252,9 +4262,10 @@ describe("retained active schema installation scope", () => {
       appDatabase: { migrationUrl: "fixture-app-migrator", runtimeUrl: "fixture-app-runtime" },
       authDatabase: { migrationUrl: "fixture-auth-migrator", runtimeUrl: "fixture-auth-runtime" },
     };
-    const readBindings = vi
-      .spyOn(credentials, "readHostedOperatorResourceBindings")
-      .mockReturnValue(bindings);
+    const readBindings = vi.spyOn(credentials, "readHostedOperatorResourceBindings");
+    if (!encrypted) {
+      readBindings.mockReturnValue(bindings);
+    }
     const metadataRead = vi.fn(async () => await Promise.resolve(["original-org"]));
     const readMetadata = vi
       .spyOn(appReadiness, "readActiveAppInstallationCustomerIds")
@@ -4289,8 +4300,168 @@ describe("retained active schema installation scope", () => {
       assertPlanningAuthorized,
       assertAuthorized,
       bindings,
+      readResourceBindings: controlPlane.readResourceBindings,
     };
   };
+
+  const pausedEncryptedRead = async () => {
+    const f = await deploymentFixture(true);
+    f.row.record.status = "pending";
+    f.row.record.step = "reserved";
+    f.row.record.leaseId = "00000000-0000-4000-8000-000000000031";
+    f.row.record.leaseExpiresAt = new Date(Date.now() + 60_000).toISOString();
+    const before = structuredClone(f.row);
+    const entered = Promise.withResolvers<undefined>();
+    const resume = Promise.withResolvers<undefined>();
+    let checks = 0;
+    f.assertAuthorized.mockImplementation(async () => {
+      checks += 1;
+      if (checks === 2) {
+        entered.resolve(undefined);
+        await resume.promise;
+      }
+    });
+    const reading = f.readResourceBindings({
+      ...context,
+      plan: f.prior,
+      privateState: before.record.privateState,
+    });
+    // Attach the rejection handler before resuming the deliberately paused read.
+    const result = (async () => {
+      try {
+        return { bindings: await reading };
+      } catch (error) {
+        return { error };
+      }
+    })();
+    await entered.promise;
+    expect(f.readBindings).toHaveBeenCalledOnce();
+    f.row.revision += 1;
+    f.row.record.leaseExpiresAt = new Date(Date.now() + 90_000).toISOString();
+    return { ...f, before, result, resume };
+  };
+
+  it("reads real encrypted credentials across renewal of the same active lease", async () => {
+    const f = await pausedEncryptedRead();
+    expect(f.row.record.operator).toEqual(f.before.record.operator);
+    expect(f.row.record.privateState).toEqual(f.before.record.privateState);
+    expect(f.row.record.leaseId).toBe(f.before.record.leaseId);
+    f.resume.resolve(undefined);
+    const result = await f.result;
+    expect(result).not.toHaveProperty("error");
+    if (!("bindings" in result)) {
+      throw new Error("expected decrypted bindings");
+    }
+    expect(new URL(result.bindings.appDatabase.runtimeUrl).username).toBe(
+      f.prior.appDatabase.runtimeRole,
+    );
+    expect(new URL(result.bindings.authDatabase.runtimeUrl).username).toBe(
+      f.prior.authDatabase.runtimeRole,
+    );
+    expect(f.row.record.status).toBe("pending");
+    expect(f.assertAuthorized).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    "lease identity",
+    "lease removal",
+    "expiry rollback",
+    "expired lease",
+    "unchanged expiry",
+    "revision rollback",
+    "private state",
+    "approval",
+    "approval call",
+    "fence",
+    "receipt",
+    "plan",
+    "checkpoint",
+  ] as const)(
+    "refuses real encrypted credentials after a concurrent change to %s",
+    async (changed) => {
+      const f = await pausedEncryptedRead();
+      const operator = f.row.record.operator!;
+      if (changed === "lease identity") {
+        f.row.record.leaseId = "00000000-0000-4000-8000-000000000032";
+      }
+      if (changed === "lease removal") {
+        delete f.row.record.leaseId;
+        delete f.row.record.leaseExpiresAt;
+        f.row.record.status = "prepared";
+        f.row.record.step = "bound";
+      }
+      if (changed === "expiry rollback") {
+        f.row.record.leaseExpiresAt = new Date(Date.now() + 30_000).toISOString();
+      }
+      if (changed === "expired lease") {
+        f.row.record.leaseExpiresAt = new Date(Date.now() - 1000).toISOString();
+      }
+      if (changed === "unchanged expiry") {
+        f.row.record.leaseExpiresAt = f.before.record.leaseExpiresAt;
+      }
+      if (changed === "revision rollback") {
+        f.row.revision = f.before.revision - 1;
+      }
+      if (changed === "private state") {
+        f.row.record.privateState!.encryptedToken = "replacement-ciphertext";
+      }
+      if (changed === "approval") {
+        operator.approvalId = "replacement-approval";
+      }
+      if (changed === "approval call") {
+        f.row.record.approvedByCallId = "replacement-call";
+      }
+      if (changed === "fence") {
+        operator.fenceGeneration! += 1;
+      }
+      if (changed === "receipt") {
+        operator.receipts = [];
+      }
+      if (changed === "plan") {
+        operator.plan = hostedOperatorPlanSchema.parse({
+          ...f.prior,
+          contextId: "replacement-context",
+        });
+        operator.planDigest = operatorPlanDigest(operator.plan);
+      }
+      if (changed === "checkpoint") {
+        f.row.record.environmentBound = true;
+      }
+      f.resume.resolve(undefined);
+      const result = await f.result;
+      expect(result).toHaveProperty("error");
+      expect(result).not.toHaveProperty("bindings");
+    },
+  );
+
+  it("refuses decrypted bindings when the second owner check is revoked", async () => {
+    const f = await deploymentFixture(true);
+    f.assertAuthorized
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new HostedOperatorError("authorization_required"));
+    await expect(
+      f.readResourceBindings({
+        ...context,
+        plan: f.prior,
+        privateState: f.row.record.privateState,
+      }),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    expect(f.readBindings).toHaveBeenCalledOnce();
+  });
+
+  it("refuses real credentials without the canonical durable approval", async () => {
+    const f = await deploymentFixture(true);
+    f.assertAuthorized.mockResolvedValue(undefined);
+    f.session.privateApprovalReceipts = [{ ...f.receipt(1), outcome: "cancelled" }];
+    await expect(
+      f.readResourceBindings({
+        ...context,
+        plan: f.prior,
+        privateState: f.row.record.privateState,
+      }),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    expect(f.readBindings).not.toHaveBeenCalled();
+  });
 
   it("uses the deployed retained-scope reader with prepared protected bindings", async () => {
     const f = await deploymentFixture();
