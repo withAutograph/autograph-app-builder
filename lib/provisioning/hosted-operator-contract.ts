@@ -1240,6 +1240,31 @@ const retainedRenewalGatewayDeliveryOrigin = (
       candidate.origin === link.endpointOrigin,
   )?.origin;
 };
+/** A consumed proof keeps its observed endpoint after serving selection advances.
+ * These retained observations prove identity origin only, never current delivery.
+ */
+const retainedConsumedGatewayDeliveryOrigin = (
+  operator: z.infer<typeof hostedOperatorRecordDataSchema>,
+): string | undefined => {
+  const link = operator.identityLink;
+  if (
+    link?.consumedAt === undefined ||
+    link.proofRef === undefined ||
+    link.proofSha256 === undefined ||
+    operator.plan.gatewayDelivery === undefined ||
+    operator.plan.publicGateway === undefined
+  ) {
+    return undefined;
+  }
+  return operator.gatewayDeliveryCandidates?.find(
+    (candidate) =>
+      candidate.readyState === "READY" &&
+      candidate.origin === link.endpointOrigin &&
+      candidate.projectId === operator.plan.publicGateway?.projectId &&
+      candidate.branch === operator.plan.publicGateway?.branch &&
+      candidate.repoId === operator.plan.gatewayDelivery?.repoId,
+  )?.origin;
+};
 /** Exact identity scope shared by validation and successor metadata composition. */
 export const matchesHostedOperatorIdentityLinkScope = (
   operator: z.infer<typeof hostedOperatorRecordDataSchema>,
@@ -1254,6 +1279,7 @@ export const matchesHostedOperatorIdentityLinkScope = (
       link.issuer === operator.plan.deploymentBoundary?.verification.publicOrigin,
       link.endpointOrigin === operator.plan.deploymentBoundary?.verification.gatewayOrigin ||
         gatewayDeliveryOrigin(operator) === link.endpointOrigin ||
+        retainedConsumedGatewayDeliveryOrigin(operator) === link.endpointOrigin ||
         retainedRenewalGatewayDeliveryOrigin(operator) === link.endpointOrigin,
     ].every(Boolean)
   );

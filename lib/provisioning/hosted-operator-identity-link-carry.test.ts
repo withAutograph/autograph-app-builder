@@ -440,3 +440,167 @@ describe("participant proposal identity continuity", () => {
     },
   );
 });
+
+describe("consumed proof after Gateway selection advances", () => {
+  const fixture = () => {
+    const f = preparedOwnerFixture(true);
+    const original = f.row().record.operator;
+    if (original === undefined || original.plan.deploymentBoundary === undefined) {
+      throw new Error("Missing controlled owner record");
+    }
+    const currentPlan = hostedOperatorPlanSchema.parse({
+      ...original.plan,
+      effects: [
+        ...original.plan.effects,
+        {
+          id: "gateway-delivery",
+          kind: "gateway-delivery",
+          description: "Deliver the approved Gateway",
+        },
+      ],
+      gatewayDelivery: {
+        projectId: "prj_gateway",
+        branch: "preview",
+        repoId: "gateway-repo",
+        gitSha: "c".repeat(40),
+      },
+      deploymentBoundary: {
+        ...original.plan.deploymentBoundary,
+        verification: {
+          ...original.plan.deploymentBoundary.verification,
+          gatewayOrigin: "https://frozen-gateway.example.test",
+          jwksUrl: "https://frozen-gateway.example.test/_platform/jwks.json",
+        },
+      },
+    });
+    const before = hostedOperatorRecordSchema.parse({
+      ...original,
+      plan: currentPlan,
+      planDigest: operatorPlanDigest(currentPlan),
+    });
+    const previous = before.gatewayDeliveryCandidates?.[0];
+    if (previous === undefined) {
+      throw new Error("Missing observed original Gateway");
+    }
+    const next = {
+      ...previous,
+      deploymentId: "next-gateway",
+      origin: "https://next-gateway.example.test",
+      operationRef: "00000000-0000-4000-8000-000000000002",
+    };
+    return {
+      before,
+      after: {
+        ...before,
+        operationRef: next.operationRef,
+        gatewayDeliveryCandidates: [previous, next],
+        deliveredGatewayDeploymentId: next.deploymentId,
+      },
+    };
+  };
+
+  it("keeps the exact consumed proof when a fresh READY Gateway replaces its serving selection", () => {
+    const { before, after } = fixture();
+    expect(hostedOperatorRecordSchema.safeParse(before).success).toBe(true);
+    const advanced = hostedOperatorRecordSchema.parse(after);
+    expect(advanced.identityLink).toEqual(before.identityLink);
+    expect(advanced.deliveredGatewayDeploymentId).toBe("next-gateway");
+    expect(retainedConsumedIdentityLink(before, advanced)).toEqual(before.identityLink);
+    const newer = {
+      ...after.gatewayDeliveryCandidates[1],
+      deploymentId: "newest-gateway",
+      origin: "https://newest-gateway.example.test",
+    };
+    const next = hostedOperatorRecordSchema.parse({
+      ...advanced,
+      gatewayDeliveryCandidates: [...(advanced.gatewayDeliveryCandidates ?? []), newer],
+      deliveredGatewayDeploymentId: newer.deploymentId,
+    });
+    expect(next.identityLink).toEqual(before.identityLink);
+    expect(next.receipts).toEqual(before.receipts);
+    expect(next.receipts.some((receipt) => receipt.effectId === "gateway-delivery")).toBe(false);
+  });
+
+  it.each([
+    "unconsumed",
+    "missing-proof",
+    "missing-hash",
+    "resource",
+    "session",
+    "issuer",
+    "browser",
+    "endpoint",
+    "missing-candidate",
+    "not-ready",
+    "project",
+    "branch",
+    "repo",
+  ] as const)("rejects incompatible retained identity evidence: %s", (change) => {
+    const { after } = fixture();
+    const link = after.identityLink;
+    const previous = after.gatewayDeliveryCandidates[0];
+    if (link === undefined || previous === undefined) {
+      throw new Error("Missing controlled proof");
+    }
+    switch (change) {
+      case "unconsumed": {
+        delete link.consumedAt;
+        delete link.proofRef;
+        delete link.proofSha256;
+        break;
+      }
+      case "missing-proof": {
+        delete link.proofRef;
+        break;
+      }
+      case "missing-hash": {
+        delete link.proofSha256;
+        break;
+      }
+      case "resource": {
+        link.authResourceId = "foreign-auth";
+        break;
+      }
+      case "session": {
+        link.ownerSessionId = "foreign-session";
+        break;
+      }
+      case "issuer": {
+        link.issuer = "https://foreign-apps.example.test";
+        break;
+      }
+      case "browser": {
+        link.browserOrigin = "https://foreign-auth.example.test";
+        break;
+      }
+      case "endpoint": {
+        link.endpointOrigin = "https://unobserved.example.test";
+        break;
+      }
+      case "missing-candidate": {
+        after.gatewayDeliveryCandidates.shift();
+        break;
+      }
+      case "not-ready": {
+        previous.readyState = "ERROR";
+        break;
+      }
+      case "project": {
+        previous.projectId = "foreign-project";
+        break;
+      }
+      case "branch": {
+        previous.branch = "foreign-branch";
+        break;
+      }
+      case "repo": {
+        previous.repoId = "foreign-repo";
+        break;
+      }
+      default: {
+        throw new Error("Unknown controlled mutation");
+      }
+    }
+    expect(hostedOperatorRecordSchema.safeParse(after).success).toBe(false);
+  });
+});
