@@ -476,7 +476,9 @@ it("rejects ambiguous latest checkpoints, unknown arguments and native mode chan
 it("rejects changed sealed merge bytes, review scope and current source", () => {
   const merge = fixture();
   const after = merge.completion.review.baseChanges[0].after;
-  if (after === undefined) throw new Error("The added-file fixture requires after bytes.");
+  if (after === undefined) {
+    throw new Error("The added-file fixture requires after bytes.");
+  }
   after.digest = "f".repeat(64);
   expect(authorizeRepeatableDraftReconciliationCalls(merge.input)).toEqual([]);
   const source = fixture();
