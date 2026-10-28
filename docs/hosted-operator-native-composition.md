@@ -278,6 +278,15 @@ resource, owner session, browser origin, and issuer bindings intact. Retained
 origin evidence does not authorize another identity-link consumption or replace
 fresh deployment observation under the new approval.
 
+The same rule applies when a new Gateway becomes selected while the original
+READY candidate remains in the owned candidate list. A consumed proof keeps its
+exact endpoint and proof reference; selecting a new serving deployment does not
+invalidate that historical identity fact. Unconsumed links still require the
+approved endpoint or selected Gateway. Neither retained identity evidence nor a
+successful hostname write replaces the current delivery's verified receipt.
+Reconciliation refusals report only closed stages and error classifications;
+they preserve uncertain attempts and never authorize a duplicate deployment.
+
 Under the fresh approval, reconcile access and runtime bindings again, apply
 and read back the approved service grant, and read both existing native
 candidates and the canonical Gateway alias. Historical metadata must remain
