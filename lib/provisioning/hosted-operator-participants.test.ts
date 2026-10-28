@@ -18,6 +18,7 @@ import {
   normalActorProgramSchema,
 } from "./hosted-operator-normal-actor-program";
 import type { NormalActorAccountPreparation } from "./hosted-operator-normal-actor-journal";
+import { createNormalActorJournalAuthority } from "./hosted-operator-normal-actor-authority";
 
 const authority = {
   audience: "https://builder.example/mcp",
@@ -524,6 +525,21 @@ describe("participant preparation service branch", () => {
       NonNullable<ProtectedHostedOperatorDependencies["verifyNormalActorAccounts"]>
     >(async (input) => {
       await input.assertCurrent();
+      const current = await f.deps.store.read(input);
+      if (current === undefined) {
+        throw new Error("Missing leased account preparation");
+      }
+      const journalAuthority = createNormalActorJournalAuthority({
+        store: f.deps.store,
+        keyring: { tokenKey: Buffer.alloc(32, 1), tokenKeyVersion: "fixture-key" },
+        now: Date.now,
+        assertCanonicalOwner: async () => {
+          await f.deps.assertAuthorized({ authority, target, plan: fixtureInput.accountPlan });
+        },
+        assertApprovedOwner: f.deps.assertAuthorized,
+        readApproval: f.deps.readApproval,
+      });
+      await journalAuthority.assertMutationAuthority(input, current);
       await input.checkpointAccountPreparation({
         ...input.accountPreparation,
         accountsCompletedAt: "2026-10-14T12:05:00.000Z",

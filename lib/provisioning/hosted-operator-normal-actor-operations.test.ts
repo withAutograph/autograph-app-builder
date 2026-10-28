@@ -380,8 +380,13 @@ const fixture = (captureExisting = false, selectedProgram = program) => {
     expect(preparation.accountOperationRef).toBe(accountOperationRef);
     expect(row.record.accountPreparation?.sealedState).toEqual(preparation.sealedState);
   };
-  const effect: HostedOperatorWorkerEffectContext = {
+  const leaseId = row.record.leaseId;
+  if (leaseId === undefined) {
+    throw new Error("fixture_missing_lease");
+  }
+  const effect: HostedOperatorWorkerEffectContext & { leaseId: string } = {
     ...context,
+    leaseId,
     plan: actualPlan,
     operationRef: accountOperationRef,
     effect: selectedEffect,

@@ -222,6 +222,9 @@ account completion after an owner callback or reconciliation without creating
 another account. Resuming the same approved participant operation also performs
 this verification when its account effect already has a receipt; the original
 receipt and approval remain intact and account effects are not replayed.
+Final participant verification carries the active effect's operation, lease and
+fence into this checkpoint; it does not use idle-owner mutation authority while
+an execution lease is active.
 Rejected, expired or revoked sessions cannot establish the completion marker.
 
 The evaluator submits product replies and approvals through the existing public
