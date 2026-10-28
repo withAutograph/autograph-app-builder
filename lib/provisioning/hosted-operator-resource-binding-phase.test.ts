@@ -1,12 +1,26 @@
 import { encryptHostedRuntimeFiles } from "./hosted-runtime-service";
 import { describe, expect, it } from "vitest";
-import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
+import {
+  HostedOperatorError,
+  hostedOperatorPlanSchema,
+  operatorPlanDigest,
+} from "./hosted-operator-contract";
 import type { HostedOperatorPlan } from "./hosted-operator-contract";
 import type { HostedOperatorContext } from "./hosted-operator-service";
-import { hostedRuntimeJournalRecordSchema } from "./hosted-runtime-journal";
-import { normalActorProgramSchema } from "./hosted-operator-normal-actor-program";
+import {
+  hostedRuntimeJournalRecordSchema,
+  retainedOperatorAuthFromJournal,
+} from "./hosted-runtime-journal";
+import {
+  normalActorProgramSchema,
+  normalActorProgramDigest,
+} from "./hosted-operator-normal-actor-program";
 import { hostedOperatorRealmLinkConfigSha256 } from "./hosted-operator-realm-link-config";
-import { requireFinalResourceBindingPhase } from "./hosted-operator-resource-binding-phase";
+import { createAppInstallationPlanningResourceReader } from "./hosted-operator-installation-planning-resources";
+import {
+  requireFinalResourceBindingPhase,
+  selectAuthPlanningResourceBindingRow,
+} from "./hosted-operator-resource-binding-phase";
 
 const resource = (name: string) => ({
   database: name,
@@ -408,4 +422,154 @@ describe("read-only completed resource binding phase", () => {
     prepared.row.record.step = "bound";
     expect(requireFinalResourceBindingPhase(prepared.row, prepared.input)).toBe(prepared.row);
   });
+});
+
+describe("retained installation metadata resource authority", () => {
+  const fixture = () => {
+    const f = phaseFixture();
+    f.row.record.retainedAuth = retainedOperatorAuthFromJournal(f.row.record);
+    const retained = f.row.record.retainedAuth;
+    if (retained === undefined) {
+      throw new Error("Fixture retained completion missing");
+    }
+    const original = structuredClone(retained);
+    const accounts = phaseFixture(true);
+    f.row.record.operator = accounts.row.record.operator;
+    f.row.record.status = "participants-prepared";
+    let approvalAvailable = true;
+    let metadataReads = 0;
+    const desired = hostedOperatorPlanSchema.parse({
+      ...f.input.plan,
+      stage: "app",
+      normalActorPreparation: {
+        accountOperationRef: operationRef,
+        accountPlanDigest: operatorPlanDigest(accounts.input.plan),
+        programDigest: normalActorProgramDigest(
+          normalActorProgramSchema.parse(f.input.plan.normalActorProgram),
+        ),
+        accountApprovalId: "actual-approval",
+        accountApprovedByCallId: "ordinary-public-approval",
+      },
+      effects: [
+        ...f.input.plan.effects.filter((effect) => ["resources", "install"].includes(effect.kind)),
+        { id: "access", kind: "access", description: "Access" },
+        { id: "bindings", kind: "bindings", description: "Bindings" },
+        ...f.input.plan.effects.filter((effect) =>
+          ["gateway-bindings", "gateway-delivery"].includes(effect.kind),
+        ),
+      ],
+    });
+    const reader = createAppInstallationPlanningResourceReader({
+      assertPlanningAuthorized: async () => {
+        await Promise.resolve();
+      },
+      store: { read: async () => await Promise.resolve(structuredClone(f.row)) },
+      readResourceBindings: async (input) => {
+        await Promise.resolve();
+        const selected = requireFinalResourceBindingPhase(
+          selectAuthPlanningResourceBindingRow(f.row, input.plan),
+          input,
+        );
+        // The canonical resource port must re-read the original approval before decryption.
+        if (!approvalAvailable || selected.record.operator?.approvalId !== original.approvalId) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        return {
+          appDatabase: { runtimeUrl: "private-app-runtime", migrationUrl: "private-app-migration" },
+          authDatabase: {
+            runtimeUrl: "private-auth-runtime",
+            migrationUrl: "private-auth-migration",
+          },
+        };
+      },
+      readActiveCustomers: async (input) => {
+        await input.assertCurrent();
+        expect(input.plan).toEqual(desired);
+        expect(input.runtimeUrl).toBe("private-app-runtime");
+        metadataReads += 1;
+        await input.assertCurrent();
+        return ["retained-customer"];
+      },
+    });
+    return {
+      ...f,
+      desired,
+      reader,
+      metadataReads: () => metadataReads,
+      revoke: () => {
+        approvalAvailable = false;
+      },
+      pendingApp: () => {
+        const operator = f.row.record.operator;
+        if (operator === undefined) {
+          throw new Error("Fixture operator missing");
+        }
+        operator.plan = desired;
+        operator.planDigest = operatorPlanDigest(desired);
+        operator.approvalId = undefined;
+        operator.receipts = [];
+        f.row.record.approvedByCallId = "operator:unapproved-plan";
+        f.row.record.status = "pending";
+        f.row.revision += 1;
+      },
+    };
+  };
+  const scopes = [
+    {
+      appId: context.target.appId,
+      actorId: "retained-actor",
+      organizationId: "retained-customer",
+      role: "member",
+    },
+  ];
+  it("reads installed targets before and after an unapproved app reservation without approving it", async () => {
+    const f = fixture();
+    const beforeAccounts = structuredClone(f.row);
+    expect(await f.reader(context, f.desired, scopes)).toEqual(["retained-customer"]);
+    expect(f.row).toEqual(beforeAccounts);
+    f.pendingApp();
+    const before = structuredClone(f.row);
+    expect(await f.reader(context, f.desired, scopes)).toEqual(["retained-customer"]);
+    expect(f.row).toEqual(before);
+    expect(f.row.record.operator?.approvalId).toBeUndefined();
+    expect(f.metadataReads()).toBe(2);
+  });
+  it.each([
+    "missing",
+    "missing-receipt",
+    "foreign-resource",
+    "foreign-selection",
+    "revoked",
+    "expired",
+  ] as const)(
+    "refuses %s retained authority without reading metadata or changing the journal",
+    async (failure) => {
+      const f = fixture();
+      f.pendingApp();
+      const retained = f.row.record.retainedAuth;
+      if (retained === undefined) {
+        throw new Error("Fixture retained authority missing");
+      }
+      if (failure === "missing") {
+        delete f.row.record.retainedAuth;
+      } else if (failure === "missing-receipt") {
+        retained.receipts = retained.receipts.slice(1);
+      } else if (failure === "foreign-resource") {
+        retained.plan.appDatabase.database = "foreign";
+        retained.planDigest = operatorPlanDigest(retained.plan);
+      } else if (failure === "foreign-selection") {
+        retained.plan.selection.sessionId = "foreign-session";
+        retained.planDigest = operatorPlanDigest(retained.plan);
+      } else {
+        // Both revoked and expired canonical approvals are denied by the authoritative resource port.
+        f.revoke();
+      }
+      const before = structuredClone(f.row);
+      await expect(f.reader(context, f.desired, scopes)).rejects.toBeInstanceOf(
+        HostedOperatorError,
+      );
+      expect(f.metadataReads()).toBe(0);
+      expect(f.row).toEqual(before);
+    },
+  );
 });

@@ -205,6 +205,15 @@ plan or restore an older infrastructure approval over it; full app effects
 still require their own approval. Approved-plan recovery failures retain their
 original refusal and emit only a closed planning stage and error code.
 
+An unapproved app proposal cannot authorize an installed-target metadata read.
+When planning retains previously installed tenants, credential reads use the
+completed original resource plan and its freshly verified durable approval.
+The proposed app plan remains the metadata query scope; both plans must name
+the same owned database, Neon branch, endpoint and selection. Existing phase,
+lease, owner and journal revision checks still apply. This read does not approve
+the app proposal or install a release. Refusals report the closed
+`retained_installation_targets` planning stage without private provider details.
+
 The app's normal signup or sign-in establishes the user's Auth session. A
 protected server-side enrollment path idempotently applies only the approved
 organization membership and app roles, including when an eligible account

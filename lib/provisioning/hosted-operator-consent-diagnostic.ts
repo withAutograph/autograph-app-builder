@@ -33,6 +33,7 @@ const operatorPlanStage = z.enum([
   "successor_classification",
   "prior_successor_approval",
   "approved_plan_recovery",
+  "retained_installation_targets",
   "retained_state_read",
   "retained_approval",
   "plan_journal_update",

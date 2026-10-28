@@ -776,7 +776,11 @@ const withRetainedAppInstallationTargets = async (
     Partial<HostedOperatorNormalActorPlanningPorts>,
 ): Promise<HostedOperatorPlan> => {
   const retainedCustomers =
-    (await controlPlane.readAppInstallationCustomerIds?.(context, appPlan)) ?? [];
+    (await observeOperatorPlanStage(
+      context.target.sessionId,
+      "retained_installation_targets",
+      async () => await controlPlane.readAppInstallationCustomerIds?.(context, appPlan),
+    )) ?? [];
   if (retainedCustomers.length === 0) {
     return appPlan;
   }
