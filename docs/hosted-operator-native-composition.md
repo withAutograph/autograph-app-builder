@@ -293,6 +293,19 @@ owner, approval, operation, plan, fence, lease and sealed resource checkpoint.
 The completed binding receipt and actual pending delivery attempt remain
 required; this observation cannot authorize a worker attempt or replay a write.
 
+An approved app plan may install for retained customers while requesting zero
+access grants. Verify its current account state and execution authority, then
+record only the empty grant set; do not launch an access worker or borrow schema
+installation customers as access targets. Nonempty grants, revocation and
+installation keep their existing workers. An empty-access receipt proves no
+existing access, installation, readiness or delivery outcome.
+
+Reobserving an earlier completed effect preserves another effect's pending
+attempt. Only the matching verified receipt clears that pending state. If an
+earlier effect instead needs another worker, retain the uncertain effect and
+refuse that reservation until it is reconciled; an orphan attempt also remains
+unresolved. Same-effect retries retain their existing proof requirements.
+
 Under the fresh approval, reconcile access and runtime bindings again, apply
 and read back the approved service grant, and read both existing native
 candidates and the canonical Gateway alias. Historical metadata must remain
