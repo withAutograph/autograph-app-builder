@@ -743,3 +743,459 @@ it("refuses a live mismatched identity wait instead of carrying a stale nonce in
   await expect(f.run()).rejects.toMatchObject({ code: "operation_in_progress" });
   expect(f.ports.store.compareAndSet).not.toHaveBeenCalled();
 });
+
+it("reports a closed authorized candidate before a nonparticipant proposal silently falls back", async () => {
+  const f = setup();
+  const original = structuredClone(f.row.record);
+  const logs = vi.spyOn(console, "info").mockImplementation(() => {});
+  try {
+    await expect(
+      restorePendingAccountPreparation(
+        f.ports,
+        context,
+        f.input,
+        required(f.row.record.operator).plan,
+        () => now,
+      ),
+    ).resolves.toBeNull();
+    expect(logs).toHaveBeenCalledWith("[builder:pending-account-restoration]", {
+      proposalIsOriginalAccountPlan: false,
+      proposalStage: "auth-bootstrap",
+      lease: "absent",
+      hasLeaseExpiry: false,
+      hasPendingEffect: false,
+      hasPendingAttempt: false,
+      allPlanEffectsReceipted: true,
+      missingEffectKinds: [],
+      executionState: "absent",
+      linkScope: "absent",
+      wait: "absent",
+      continuation: "absent",
+      continuationArchiveable: false,
+      currentExecutionAcknowledged: false,
+      continuationAcceptanceReceiptPresent: false,
+      ownerRestrictedCapabilityPresent: false,
+    });
+    expect(f.row.record).toEqual(original);
+    expect(f.ports.readApproval).not.toHaveBeenCalled();
+    expect(f.ports.store.compareAndSet).not.toHaveBeenCalled();
+  } finally {
+    logs.mockRestore();
+  }
+});
+
+it("distinguishes an exact account proposal without exporting any retained private payload", async () => {
+  const f = setup();
+  const logs = vi.spyOn(console, "info").mockImplementation(() => {});
+  try {
+    await f.run();
+    expect(logs).toHaveBeenCalledWith(
+      "[builder:pending-account-restoration]",
+      expect.objectContaining({
+        proposalIsOriginalAccountPlan: true,
+        proposalStage: "auth-participants",
+      }),
+    );
+    const output = JSON.stringify(logs.mock.calls);
+    for (const forbidden of [
+      accountOperationRef,
+      operationRef,
+      "owner@example.test",
+      "https://apps.example",
+      "private-ciphertext",
+      "private-hook",
+      "actual-approval",
+      normalActorProgramDigest(required(f.accountPlan.normalActorProgram)),
+      "c".repeat(64),
+    ]) {
+      expect(output).not.toContain(forbidden);
+    }
+  } finally {
+    logs.mockRestore();
+  }
+});
+
+it.each(["read", "unauthorized", "logger"])(
+  "keeps %s diagnostic failure advisory for the original nonparticipant fallback",
+  async (failure) => {
+    const f = setup();
+    const logs = vi.spyOn(console, "info").mockImplementation(() => {
+      if (failure === "logger") {
+        throw new Error("private-logger-error");
+      }
+    });
+    if (failure === "read") {
+      f.ports.store.read.mockRejectedValueOnce(new Error("private-read-error"));
+    }
+    if (failure === "unauthorized") {
+      f.ports.assertAuthorized.mockRejectedValueOnce(
+        new HostedOperatorError("authorization_required"),
+      );
+    }
+    try {
+      await expect(
+        restorePendingAccountPreparation(
+          f.ports,
+          context,
+          f.input,
+          required(f.row.record.operator).plan,
+          () => now,
+        ),
+      ).resolves.toBeNull();
+      if (failure !== "logger") {
+        expect(logs).not.toHaveBeenCalled();
+      }
+      expect(f.ports.store.compareAndSet).not.toHaveBeenCalled();
+    } finally {
+      logs.mockRestore();
+    }
+  },
+);
+
+it("emits nothing for a consistently unauthorized actual restoration", async () => {
+  const f = setup();
+  const logs = vi.spyOn(console, "info").mockImplementation(() => {});
+  f.ports.assertAuthorized.mockRejectedValue(new HostedOperatorError("authorization_required"));
+  try {
+    await expect(f.run()).rejects.toMatchObject({ code: "authorization_required" });
+    expect(logs).not.toHaveBeenCalled();
+    expect(f.ports.store.compareAndSet).not.toHaveBeenCalled();
+  } finally {
+    logs.mockRestore();
+  }
+});
+
+it.each(["current-account", "old-adapter", "observed", "unrelated"] as const)(
+  "classifies %s identity waits with fixed values only",
+  async (classification) => {
+    const f = setup();
+    const original = required(f.row.record.accountPreparation);
+    const operator = required(f.row.record.operator);
+    if (classification === "current-account") {
+      operator.identityLink = {
+        audience: required(original.accountPlan.gatewayBindings).operatorOrigin,
+        authResourceId: original.accountPlan.authDatabase.resourceId,
+        bootstrapPlanDigest: original.accountPlanDigest,
+        browserSession: {
+          operationRef: original.accountOperationRef,
+          participantProgramDigest: original.programDigest,
+        },
+        browserOrigin: original.program.origin,
+        endpointOrigin: "https://gateway.example",
+        issuer: required(original.accountPlan.deploymentBoundary).verification.publicOrigin,
+        expiresAt: "2027-01-01T00:00:00Z",
+        nonceSha256: "c".repeat(64),
+        organizationId: null,
+        ownerSessionId: context.target.sessionId,
+      };
+    }
+    f.row.record.realmIdentityWait = {
+      adapterSessionId:
+        classification === "old-adapter"
+          ? "private-old-adapter"
+          : required(context.ownerContext).adapterSessionId,
+      approvedPlanDigest: original.accountPlanDigest,
+      callId: original.accountApprovedByCallId,
+      hook: { encryptedToken: "private-hook", keyVersion: "v1", tokenIv: "iv", tokenTag: "tag" },
+      nonceSha256: "c".repeat(64),
+      operationRef: accountOperationRef,
+      registeredAt: observedAt,
+      ...(classification === "observed" ? { observedAt, eventId: "f".repeat(64) } : {}),
+    };
+    const logs = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      await restorePendingAccountPreparation(f.ports, context, f.input, operator.plan, () => now);
+      expect(logs).toHaveBeenCalledWith(
+        "[builder:pending-account-restoration]",
+        expect.objectContaining({ wait: classification }),
+      );
+      expect(JSON.stringify(logs.mock.calls)).not.toMatch(/private-hook|private-old-adapter/u);
+    } finally {
+      logs.mockRestore();
+    }
+  },
+);
+
+it.each(["old-accepted", "current-accepted", "current-pending", "old-unknown"] as const)(
+  "classifies %s continuation without exporting capability data",
+  async (classification) => {
+    const f = setup();
+    const accepted = classification.endsWith("accepted");
+    f.row.record.realmContinuation = {
+      dispatchId: "d".repeat(64),
+      operationRef,
+      approvedPlanDigest: required(f.row.record.operator).planDigest,
+      nonceSha256: "e".repeat(64),
+      status: accepted ? "accepted" : "unknown",
+      claimedAt: observedAt,
+      adapterSessionId: classification.startsWith("old")
+        ? "private-displaced-adapter"
+        : required(context.ownerContext).adapterSessionId,
+      ...(accepted ? { acceptedAt: observedAt, receiverClaimedAt: observedAt } : {}),
+    };
+    const logs = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      await restorePendingAccountPreparation(
+        f.ports,
+        context,
+        f.input,
+        required(f.row.record.operator).plan,
+        () => now,
+      );
+      expect(logs).toHaveBeenCalledWith(
+        "[builder:pending-account-restoration]",
+        expect.objectContaining({
+          continuation: classification,
+          continuationArchiveable: classification === "old-accepted",
+        }),
+      );
+      expect(JSON.stringify(logs.mock.calls)).not.toMatch(/private-displaced-adapter/u);
+    } finally {
+      logs.mockRestore();
+    }
+  },
+);
+
+it("projects pending record facts and only the presence of restricted owner capability", async () => {
+  const f = setup();
+  const operator = required(f.row.record.operator);
+  f.row.record.leaseId = "00000000-0000-4000-8000-000000000009";
+  f.row.record.leaseExpiresAt = "2027-01-01T00:00:00Z";
+  operator.pendingEffectId = "private-effect-id";
+  operator.pendingEffectAttempt = { id: "00000000-0000-4000-8000-000000000008" };
+  operator.receipts.pop();
+  f.row.record.executionObservation = {
+    state: "running",
+    attemptRef: f.row.record.leaseId,
+    operationRef,
+    planDigest: operator.planDigest,
+    callId: f.row.record.approvedByCallId,
+    approvalId: required(operator.approvalId),
+  };
+  const restrictedContext = {
+    ...context,
+    ownerContext: {
+      ...required(context.ownerContext),
+      realmContinuation: { sealedAuthority: "private-sealed-authority" },
+    },
+  };
+  const logs = vi.spyOn(console, "info").mockImplementation(() => {});
+  try {
+    await restorePendingAccountPreparation(
+      f.ports,
+      restrictedContext,
+      f.input,
+      operator.plan,
+      () => now,
+    );
+    expect(logs).toHaveBeenCalledWith(
+      "[builder:pending-account-restoration]",
+      expect.objectContaining({
+        lease: "active",
+        hasLeaseExpiry: true,
+        hasPendingEffect: true,
+        hasPendingAttempt: true,
+        allPlanEffectsReceipted: false,
+        missingEffectKinds: ["gateway-delivery"],
+        executionState: "running",
+        ownerRestrictedCapabilityPresent: true,
+      }),
+    );
+    expect(JSON.stringify(logs.mock.calls)).not.toMatch(
+      /private-sealed-authority|private-effect-id/u,
+    );
+    expect(f.ports.store.compareAndSet).not.toHaveBeenCalled();
+  } finally {
+    logs.mockRestore();
+  }
+});
+
+it("does not change an authorized restoration when its advisory logger throws", async () => {
+  const f = setup();
+  const logs = vi.spyOn(console, "info").mockImplementation(() => {
+    throw new Error("private-logging-failure");
+  });
+  try {
+    await expect(f.run()).resolves.toMatchObject({
+      status: "planned",
+      operationRef: accountOperationRef,
+    });
+    expect(f.ports.store.compareAndSet).toHaveBeenCalledOnce();
+  } finally {
+    logs.mockRestore();
+  }
+});
+
+const completedNotification = () => {
+  const f = setup();
+  const operator = required(f.row.record.operator);
+  f.row.record.executionObservation = {
+    state: "settled",
+    attemptRef: "00000000-0000-4000-8000-000000000007",
+    operationRef,
+    planDigest: operator.planDigest,
+    callId: f.row.record.approvedByCallId,
+    approvalId: required(operator.approvalId),
+    outcome: { status: "auth-schema-prepared" },
+  };
+  f.row.record.realmContinuation = {
+    dispatchId: "d".repeat(64),
+    operationRef,
+    approvedPlanDigest: operator.planDigest,
+    nonceSha256: "e".repeat(64),
+    status: "accepted",
+    claimedAt: observedAt,
+    acceptedAt: observedAt,
+    receiverClaimedAt: observedAt,
+    adapterSessionId: required(context.ownerContext).adapterSessionId,
+  };
+  f.row.record.realmIdentityWait = {
+    adapterSessionId: required(context.ownerContext).adapterSessionId,
+    approvedPlanDigest: "a".repeat(64),
+    callId: "past-notification-call",
+    hook: { encryptedToken: "private-hook", keyVersion: "v1", tokenIv: "iv", tokenTag: "tag" },
+    nonceSha256: "b".repeat(64),
+    operationRef: accountOperationRef,
+    registeredAt: observedAt,
+    observedAt,
+    eventId: "f".repeat(64),
+  };
+  return f;
+};
+
+it.each(["past", "absent", "account"] as const)(
+  "archives a fully acknowledged current-adapter notification without requiring past wait scope equality (wait %s)",
+  async (waitKind) => {
+    const f = completedNotification();
+    if (waitKind === "absent") {
+      delete f.row.record.realmIdentityWait;
+    }
+    if (waitKind === "account") {
+      const wait = required(f.row.record.realmIdentityWait);
+      const account = required(f.row.record.accountPreparation);
+      wait.operationRef = account.accountOperationRef;
+      wait.approvedPlanDigest = account.accountPlanDigest;
+      wait.callId = account.accountApprovedByCallId;
+    }
+    const before = structuredClone(f.row.record);
+    const logs = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      await expect(f.run()).resolves.toMatchObject({
+        status: "planned",
+        operationRef: accountOperationRef,
+      });
+      expect(f.row.record.realmContinuation).toBeUndefined();
+      expect(f.row.record.realmIdentityWait).toBeUndefined();
+      expect(f.row.record.operator?.identityLink).toBeUndefined();
+      expect(f.row.record.accountPreparation).toEqual(before.accountPreparation);
+      expect(f.row.record.privateState).toEqual(before.privateState);
+      expect(f.row.record.pendingAccountRestorations?.[0]).toMatchObject({
+        realmContinuation: before.realmContinuation,
+        executionObservation: before.executionObservation,
+      });
+      expect(f.row.record.pendingAccountRestorations?.[0].realmIdentityWait).toEqual(
+        before.realmIdentityWait,
+      );
+      expect(logs).toHaveBeenCalledWith(
+        "[builder:pending-account-restoration]",
+        expect.objectContaining({
+          continuation: "current-accepted",
+          continuationArchiveable: true,
+          currentExecutionAcknowledged: true,
+          continuationAcceptanceReceiptPresent: true,
+        }),
+      );
+    } finally {
+      logs.mockRestore();
+    }
+  },
+);
+
+it.each([
+  "claimed",
+  "unknown",
+  "running",
+  "ack-operation",
+  "ack-plan",
+  "ack-call",
+  "ack-approval",
+  "ack-outcome",
+  "unobserved-wait",
+  "missing-event-id",
+  "missing-acceptance",
+  "missing-receiver-claim",
+  "identity-link",
+  "restricted-owner",
+])("keeps completed-notification exception closed for %s", async (change) => {
+  const f = completedNotification();
+  const execution = required(f.row.record.executionObservation);
+  const continuation = required(f.row.record.realmContinuation);
+  if (change === "claimed" || change === "unknown") {
+    continuation.status = change;
+  }
+  if (change === "running") {
+    f.row.record.executionObservation = { ...execution, state: "running" };
+  }
+  if (change === "ack-operation") {
+    execution.operationRef = accountOperationRef;
+  }
+  if (change === "ack-plan") {
+    execution.planDigest = "c".repeat(64);
+  }
+  if (change === "ack-call") {
+    execution.callId = "other-call";
+  }
+  if (change === "ack-approval") {
+    execution.approvalId = "other-approval";
+  }
+  if (change === "ack-outcome" && execution.state === "settled") {
+    execution.outcome.status = "pending";
+  }
+  if (change === "unobserved-wait") {
+    delete required(f.row.record.realmIdentityWait).observedAt;
+  }
+  if (change === "missing-event-id") {
+    delete required(f.row.record.realmIdentityWait).eventId;
+  }
+  if (change === "missing-acceptance") {
+    delete continuation.acceptedAt;
+  }
+  if (change === "missing-receiver-claim") {
+    delete continuation.receiverClaimedAt;
+  }
+  if (change === "identity-link") {
+    const account = required(f.row.record.accountPreparation);
+    required(f.row.record.operator).identityLink = {
+      audience: required(account.accountPlan.gatewayBindings).operatorOrigin,
+      authResourceId: account.accountPlan.authDatabase.resourceId,
+      bootstrapPlanDigest: account.accountPlanDigest,
+      browserSession: {
+        operationRef: account.accountOperationRef,
+        participantProgramDigest: account.programDigest,
+      },
+      browserOrigin: account.program.origin,
+      endpointOrigin: "https://gateway.example",
+      issuer: required(account.accountPlan.deploymentBoundary).verification.publicOrigin,
+      expiresAt: "2027-01-01T00:00:00Z",
+      nonceSha256: "c".repeat(64),
+      organizationId: null,
+      ownerSessionId: context.target.sessionId,
+    };
+  }
+  const invocation =
+    change === "restricted-owner"
+      ? {
+          ...context,
+          ownerContext: {
+            ...required(context.ownerContext),
+            realmContinuation: { sealedAuthority: "private-capability" },
+          },
+        }
+      : context;
+  const before = structuredClone(f.row.record);
+  await expect(
+    restorePendingAccountPreparation(f.ports, invocation, f.input, f.accountPlan, () => now),
+  ).rejects.toMatchObject({ code: "operation_in_progress" });
+  expect(f.row.record).toEqual(before);
+  expect(f.ports.store.compareAndSet).not.toHaveBeenCalled();
+});
