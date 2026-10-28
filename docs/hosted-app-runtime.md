@@ -185,9 +185,16 @@ It does not create an account, capture, approval or provider effect. Original
 sealed state, capture nonces and organization proofs remain unchanged. The
 completed prerequisite and prior Auth provenance are archived in the journal;
 its verified Auth/Gateway evidence remains available for the existing capture
-and later planning guards. Current or unknown continuations prevent restoration.
+and later planning guards. Unsettled continuations prevent restoration.
 An accepted continuation or hook from a displaced adapter can only be archived
 after canonical owner reauthorization; it is never replayed for the new owner.
+A persisted accepted notification in the current adapter may also be archived by
+an unrestricted canonical owner when the identity link is absent, its wait is
+absent or observed, and the exact current execution acknowledgement is settled
+as `auth-schema-prepared`. Full completion, idle state, unchanged scope and both
+live approvals remain required. This does not replay the notification. The old
+sealed claim cannot authorize effects without its exact active identity nonce;
+subsequent normal capture must mint a fresh server nonce.
 
 The app's normal signup or sign-in establishes the user's Auth session. A
 protected server-side enrollment path idempotently applies only the approved

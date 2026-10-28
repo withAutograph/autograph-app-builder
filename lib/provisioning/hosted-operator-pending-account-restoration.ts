@@ -1,7 +1,10 @@
 /* oxlint-disable eslint/no-await-in-loop -- Each CAS retry rereads canonical owner and both original approvals. */
 import { isDeepStrictEqual } from "node:util";
+import { z } from "zod";
+import { readOperatorPreparationProgress } from "./hosted-operator-preparation-progress";
 import {
   HostedOperatorError,
+  operatorPreparationProgressSchema,
   operatorPlanDigest,
   operatorPublicResultSchema,
   sameOperatorSelection,
@@ -28,12 +31,10 @@ type Ports = Pick<ProtectedHostedOperatorDependencies, "assertAuthorized" | "rea
   store: Pick<ProtectedHostedOperatorDependencies["store"], "read" | "compareAndSet">;
 };
 
-// oxlint-disable-next-line eslint/complexity -- Keep the exact restoration scope and settled-effect authority checks together.
-const assertCompatible = (
+// oxlint-disable-next-line eslint/complexity -- Share the existing exact coordination scope checks between authority and advisory projection.
+const readRestorationCoordination = (
   record: HostedRuntimeJournalRecord,
-  proposal: HostedOperatorPlan,
   context: HostedOperatorContext,
-  now: number,
 ) => {
   const current = record.operator;
   const preparation = record.accountPreparation;
@@ -59,14 +60,44 @@ const assertCompatible = (
   const historicalWait =
     wait !== undefined && currentAdapter !== undefined && wait.adapterSessionId !== currentAdapter;
   const continuation = record.realmContinuation;
+  const continuationAcceptanceReceiptPresent =
+    continuation !== undefined &&
+    [continuation.acceptedAt !== undefined, continuation.receiverClaimedAt !== undefined].every(
+      Boolean,
+    );
   const historicalAcceptedContinuation =
     continuation !== undefined &&
     [
       currentAdapter !== undefined,
       continuation.adapterSessionId !== currentAdapter,
       continuation.status === "accepted",
-      continuation.acceptedAt !== undefined,
-      continuation.receiverClaimedAt !== undefined,
+      continuationAcceptanceReceiptPresent,
+    ].every(Boolean);
+  const execution = record.executionObservation;
+  const currentExecutionAcknowledged =
+    execution !== undefined &&
+    [
+      execution.state === "settled",
+      execution.operationRef === current.operationRef,
+      execution.planDigest === current.planDigest,
+      execution.callId === record.approvedByCallId,
+      execution.approvalId === current.approvalId,
+      execution.state === "settled" && execution.outcome.status === "auth-schema-prepared",
+    ].every(Boolean);
+  // An ordinary owner can archive a completed notification only after its old nonce capability is gone.
+  // Effect authorization still requires an active exact nonce; fresh capture mints a new one.
+  const completedCurrentContinuation =
+    continuation !== undefined &&
+    [
+      currentAdapter !== undefined,
+      continuation.adapterSessionId === currentAdapter,
+      context.ownerContext?.realmContinuation === undefined,
+      continuation.status === "accepted",
+      continuationAcceptanceReceiptPresent,
+      link === undefined,
+      wait === undefined ||
+        [wait.observedAt !== undefined, wait.eventId !== undefined].every(Boolean),
+      currentExecutionAcknowledged,
     ].every(Boolean);
   const accountWait =
     wait !== undefined &&
@@ -94,9 +125,45 @@ const assertCompatible = (
     accountWait ||
     historicalWait ||
     [wait.observedAt !== undefined, wait.eventId !== undefined].every(Boolean);
+  return {
+    accountLink,
+    accountWait,
+    historicalWait,
+    historicalAcceptedContinuation,
+    completedCurrentContinuation,
+    currentExecutionAcknowledged,
+    continuationAcceptanceReceiptPresent,
+    settledLink,
+    settledWait,
+  };
+};
+
+// oxlint-disable-next-line eslint/complexity -- Keep the exact restoration scope and settled-effect authority checks together.
+const assertCompatible = (
+  record: HostedRuntimeJournalRecord,
+  proposal: HostedOperatorPlan,
+  context: HostedOperatorContext,
+  now: number,
+) => {
+  const current = record.operator;
+  const preparation = record.accountPreparation;
+  if (current === undefined || preparation === undefined) {
+    throw new HostedOperatorError("resource_mismatch");
+  }
+  const account = preparation.accountPlan;
+  const {
+    accountLink,
+    accountWait,
+    historicalAcceptedContinuation,
+    completedCurrentContinuation,
+    settledLink,
+    settledWait,
+  } = readRestorationCoordination(record, context);
   if (
     [
-      record.realmContinuation !== undefined && !historicalAcceptedContinuation,
+      record.realmContinuation !== undefined &&
+        !historicalAcceptedContinuation &&
+        !completedCurrentContinuation,
       record.executionObservation?.state === "running",
       !settledLink,
       !settledWait,
@@ -175,7 +242,138 @@ const assertCompatible = (
   ) {
     throw new HostedOperatorError("reconciliation_required");
   }
-  return { current, preparation, auth, accountLink, accountWait };
+  return {
+    current,
+    preparation,
+    auth,
+    accountLink,
+    // Completed notification recovery always removes its observed hook; only an existing pending account wait can survive.
+    accountWait: accountWait && !completedCurrentContinuation,
+  };
+};
+
+const restorationDiagnosticSchema = z.strictObject({
+  proposalIsOriginalAccountPlan: z.boolean(),
+  proposalStage: operatorPreparationProgressSchema.shape.planStage.unwrap().or(z.literal("absent")),
+  lease: operatorPreparationProgressSchema.shape.lease,
+  hasLeaseExpiry: z.boolean(),
+  hasPendingEffect: z.boolean(),
+  hasPendingAttempt: z.boolean(),
+  allPlanEffectsReceipted: z.boolean(),
+  missingEffectKinds: operatorPreparationProgressSchema.shape.missingEffectKinds,
+  executionState: z.enum(["absent", "running", "settled"]),
+  linkScope: z.enum(["absent", "current-account", "settled-or-historical", "unrelated"]),
+  wait: z.enum(["absent", "current-account", "old-adapter", "observed", "unrelated"]),
+  continuation: z.enum([
+    "absent",
+    "old-accepted",
+    "current-accepted",
+    "current-pending",
+    "old-unknown",
+  ]),
+  continuationArchiveable: z.boolean(),
+  currentExecutionAcknowledged: z.boolean(),
+  continuationAcceptanceReceiptPresent: z.boolean(),
+  ownerRestrictedCapabilityPresent: z.boolean(),
+});
+
+type RestorationDiagnostic = z.infer<typeof restorationDiagnosticSchema>;
+type Coordination = ReturnType<typeof readRestorationCoordination>;
+const diagnosticWait = (
+  record: HostedRuntimeJournalRecord,
+  coordination: Coordination,
+): RestorationDiagnostic["wait"] => {
+  const wait = record.realmIdentityWait;
+  if (wait === undefined) {
+    return "absent";
+  }
+  if (coordination.accountWait) {
+    return "current-account";
+  }
+  if (coordination.historicalWait) {
+    return "old-adapter";
+  }
+  if (wait.observedAt !== undefined && wait.eventId !== undefined) {
+    return "observed";
+  }
+  return "unrelated";
+};
+const diagnosticContinuation = (
+  record: HostedRuntimeJournalRecord,
+  context: HostedOperatorContext,
+): RestorationDiagnostic["continuation"] => {
+  const continuation = record.realmContinuation;
+  if (continuation === undefined) {
+    return "absent";
+  }
+  const current = continuation.adapterSessionId === context.ownerContext?.adapterSessionId;
+  if (continuation.status === "accepted") {
+    return current ? "current-accepted" : "old-accepted";
+  }
+  return current ? "current-pending" : "old-unknown";
+};
+const diagnosticLinkScope = (
+  record: HostedRuntimeJournalRecord,
+  coordination: Coordination,
+): RestorationDiagnostic["linkScope"] => {
+  if (record.operator?.identityLink === undefined) {
+    return "absent";
+  }
+  if (coordination.accountLink) {
+    return "current-account";
+  }
+  return coordination.settledLink ? "settled-or-historical" : "unrelated";
+};
+
+/** Advisory closed facts only: this probe grants no authority and cannot change a planning outcome. */
+const reportRestorationCandidate = async (
+  deps: Ports,
+  context: HostedOperatorContext,
+  proposal: HostedOperatorPlan,
+  now: () => number,
+) => {
+  try {
+    const row = await deps.store.read(context);
+    const record = row?.record;
+    const operator = record?.operator;
+    const preparation = record?.accountPreparation;
+    if (
+      record === undefined ||
+      operator?.plan.stage !== "auth-bootstrap" ||
+      preparation === undefined ||
+      preparation.accountsCompletedAt !== undefined
+    ) {
+      return;
+    }
+    await deps.assertAuthorized({ ...context, plan: operator.plan, purpose: "planning" });
+    const progress = readOperatorPreparationProgress(record, now());
+    if (progress === undefined) {
+      return;
+    }
+    const coordination = readRestorationCoordination(record, context);
+    const diagnostic = restorationDiagnosticSchema.parse({
+      proposalIsOriginalAccountPlan: isDeepStrictEqual(proposal, preparation.accountPlan),
+      proposalStage: proposal.stage ?? "absent",
+      lease: progress.lease,
+      hasLeaseExpiry: record.leaseExpiresAt !== undefined,
+      hasPendingEffect: progress.hasPendingEffect,
+      hasPendingAttempt: progress.hasPendingAttempt,
+      allPlanEffectsReceipted: progress.allPlanEffectsReceipted,
+      missingEffectKinds: progress.missingEffectKinds,
+      executionState: record.executionObservation?.state ?? "absent",
+      linkScope: diagnosticLinkScope(record, coordination),
+      wait: diagnosticWait(record, coordination),
+      continuation: diagnosticContinuation(record, context),
+      continuationArchiveable:
+        coordination.historicalAcceptedContinuation || coordination.completedCurrentContinuation,
+      currentExecutionAcknowledged: coordination.currentExecutionAcknowledged,
+      continuationAcceptanceReceiptPresent: coordination.continuationAcceptanceReceiptPresent,
+      ownerRestrictedCapabilityPresent: context.ownerContext?.realmContinuation !== undefined,
+    });
+    console.info("[builder:pending-account-restoration]", diagnostic);
+  } catch {
+    // Missing diagnostics, reads, authorization or logging never change the existing restoration path.
+  }
 };
 
 /** Restore only the original unfinished account authority after its approved infrastructure prerequisite settles. */
@@ -187,6 +385,9 @@ export const restorePendingAccountPreparation = async (
   proposal: HostedOperatorPlan,
   now: () => number,
 ): Promise<OperatorPublicResult | null> => {
+  if (input.operation === "prepare") {
+    await reportRestorationCandidate(deps, context, proposal, now);
+  }
   if (input.operation !== "prepare" || proposal.stage !== "auth-participants") {
     return null;
   }

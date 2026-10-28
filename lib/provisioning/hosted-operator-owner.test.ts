@@ -3081,6 +3081,28 @@ describe("Realm delegation at operator effect boundaries", () => {
     });
   });
 
+  it("rejects an old sealed notification while its identity link is absent and after a fresh nonce replaces it", async () => {
+    const f = setup();
+    const operator = f.record.operator;
+    if (operator?.identityLink === undefined) {
+      throw new Error("Fixture identity link missing");
+    }
+    const originalLink = structuredClone(operator.identityLink);
+    delete operator.identityLink;
+    await expect(f.authority.assertAuthorized(f.context)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    operator.identityLink = { ...originalLink, nonceSha256: "b".repeat(64) };
+    await expect(f.authority.assertAuthorized(f.context)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    const { realmContinuation, ...ordinaryOwner } = f.context.ownerContext;
+    void realmContinuation;
+    await expect(
+      f.authority.assertAuthorized({ ...f.context, ownerContext: ordinaryOwner }),
+    ).resolves.toBeUndefined();
+  });
+
   it.each(["app", "nonce", "proof", "plan"])(
     "rejects substituted %s at the actual effect authorizer",
     async (field) => {
