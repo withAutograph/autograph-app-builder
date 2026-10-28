@@ -35,6 +35,19 @@ import type { HistoricalAppSourceObservation } from "./historical-app-source";
 const reconciliationCommitMessage = (proposal: ExistingDraftReconciliationProposal): string =>
   `Reconcile draft pull request #${proposal.pullRequestNumber} with ${proposal.baseBranch}\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}\nApp-Builder-Origin: ${proposal.originMarker}`;
 
+/** The ownership comment is one standalone line, independent of the PR description. */
+const existingDraftOriginMarker = (body: string): string | undefined => {
+  const markers = new Set(
+    body.split(/\r\n?|\n/u).flatMap((line) => {
+      const match = /^<!--\s*App-Builder-Idempotency:\s*(?<marker>[0-9a-f]{64})\s*-->$/u.exec(
+        line.trim(),
+      );
+      return match?.groups?.marker === undefined ? [] : [match.groups.marker];
+    }),
+  );
+  return markers.size === 1 ? markers.values().next().value : undefined;
+};
+
 class GitHubBlobWriteFailureError extends Error {
   readonly path: string;
   readonly bytes: number;
@@ -958,11 +971,9 @@ export const createGitHubAppHttpProvider = (input: {
       expected: [200],
       path: `/repos/${encodeURIComponent(draftRequest.owner)}/${encodeURIComponent(draftRequest.name)}/commits/${headSha}`,
     });
-    const markerMatch = /^<!-- App-Builder-Idempotency: (?<marker>[0-9a-f]{64}) -->$/u.exec(
-      String(record(pull.body) ? pull.body.body : ""),
-    );
+    const marker = existingDraftOriginMarker(String(record(pull.body) ? pull.body.body : ""));
     let verifiedBuilderOrigin: { appId: string; authorId: string; marker: string } | undefined;
-    if (markerMatch !== null) {
+    if (marker !== undefined) {
       const appInfo = await app.octokit.request("GET /app");
       const appId = decimalProperty(appInfo.data, "id");
       const appSlug = stringProperty(appInfo.data, "slug");
@@ -972,14 +983,14 @@ export const createGitHubAppHttpProvider = (input: {
         appId === config.appId &&
         stringProperty(author, "type") === "Bot" &&
         stringProperty(author, "login") === `${appSlug}[bot]` &&
-        headBranch === `app-builder/review-${markerMatch.groups?.marker?.slice(0, 20)}` &&
-        (commitMessage.includes(`App-Builder-Idempotency: ${markerMatch.groups?.marker}`) ||
-          commitMessage.includes(`App-Builder-Origin: ${markerMatch.groups?.marker}`))
+        headBranch === `app-builder/review-${marker.slice(0, 20)}` &&
+        (commitMessage.includes(`App-Builder-Idempotency: ${marker}`) ||
+          commitMessage.includes(`App-Builder-Origin: ${marker}`))
       ) {
         verifiedBuilderOrigin = {
           appId,
           authorId: decimalProperty(author, "id"),
-          marker: markerMatch.groups?.marker ?? "",
+          marker,
         };
       }
     }

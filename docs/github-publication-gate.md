@@ -38,8 +38,13 @@ even when its original publication receipt is unavailable to that tenant.
 The recovery path does not invent an original receipt. It asks GitHub for the
 current open draft, verifies the selected same-repository branch and head,
 checks that the PR author is this GitHub App's bot, and requires the same
-Builder origin marker in the PR body and current head commit. It then writes
-one immutable adoption record in `hosted_github_draft_adoption`, keyed by the
+Builder origin marker in the PR body and current head commit. The PR-body
+marker is a standalone HTML comment within the description; normal evidence
+text and whitespace do not change its meaning. Identical repeated markers are
+accepted, while distinct conflicting markers leave the origin unverified.
+These comments still require the configured App's bot author, matching Builder
+branch and full marker in the current head commit. It then writes one immutable
+adoption record in `hosted_github_draft_adoption`, keyed by the
 tenant and exact repository and PR IDs. Each later Builder update commit
 preserves the origin marker so subsequent reads keep that commit-level proof.
 The sealed proposal still binds the current head and exact reviewed app-owned
