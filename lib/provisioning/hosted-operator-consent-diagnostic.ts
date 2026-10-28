@@ -985,6 +985,8 @@ const gatewayDeliveryDiagnostic = z.strictObject({
   method: z.enum(["GET", "POST"]).optional(),
   httpStatus: z.number().int().min(100).max(599).optional(),
   result: z.enum(["applied", "retryable", "unknown"]),
+  errorClass: operatorPlanningFailure.shape.errorClass.optional(),
+  publicCode: operatorPublicResultSchema.shape.code.unwrap().optional(),
   providerCode: gatewayProviderCode.optional(),
   providerTerms: z.array(gatewayProviderTerm).optional(),
   validationFields: z.array(gatewayValidationField).optional(),
@@ -1539,6 +1541,34 @@ export const reportOperatorExecutionFailure = (
   } catch {
     /* Reporting cannot change the original rejection. */
   }
+};
+
+/** Project a swallowed delivery rejection without exposing its message or provider data. */
+export const projectOperatorGatewayDeliveryFailure = (
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Exception boundary accepts arbitrary thrown values and returns closed labels only.
+  error: unknown,
+): Pick<OperatorGatewayDeliveryDiagnostic, "errorClass" | "publicCode"> => {
+  const failure: Pick<OperatorGatewayDeliveryDiagnostic, "errorClass" | "publicCode"> = {
+    errorClass: "unexpected",
+  };
+  try {
+    if (error instanceof HostedOperatorError) {
+      failure.errorClass = "operator_error";
+      const code = operatorPublicResultSchema.shape.code
+        .unwrap()
+        .safeParse(ownDiagnosticValue(error, "code"));
+      if (code.success) {
+        failure.publicCode = code.data;
+      }
+    } else if (error instanceof z.ZodError) {
+      failure.errorClass = "validation_error";
+    } else if (error instanceof TypeError) {
+      failure.errorClass = "type_error";
+    }
+  } catch {
+    /* Hostile exceptions cannot change delivery reconciliation. */
+  }
+  return failure;
 };
 
 /** Report one private provider inventory read using only closed operation and error labels. */
