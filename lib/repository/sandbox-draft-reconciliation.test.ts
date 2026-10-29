@@ -22,6 +22,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   inspectDraftReconciliation,
+  nonAppIndexDigest,
   prepareDraftReconciliation,
   readDraftReconciliationCandidateFile,
   readDraftReconciliationCandidateFilePage,
@@ -214,6 +215,128 @@ const advanceFixtureBase = (
 };
 
 describe("isolated draft reconciliation", () => {
+  const catalogCandidate = async () => {
+    const f = fixture(false, true);
+    const prepared = await prepareDraftReconciliation(candidateFixtureInput(f));
+    writeFileSync(
+      path.join(prepared.root, "apps/demo/tests/journey.spec.ts"),
+      "resolved app edit\n",
+    );
+    await inspectDraftReconciliation({ sandbox: f.sandbox, prepared });
+    const files = [
+      {
+        path: "package.json",
+        content: '{"private":true,"workspaces":["packages/*"],"catalog":{"probe":"1.0.0"}}\n',
+      },
+      {
+        path: "packages/probe/package.json",
+        content: '{"name":"@fixture/probe","dependencies":{"probe":"catalog:"}}\n',
+      },
+      { path: "bun.lock", content: "normalized catalog lock\n" },
+    ];
+    for (const file of files) {
+      writeFileSync(path.join(prepared.root, file.path), file.content);
+    }
+    git(prepared.root, "add", "--", ...files.map((file) => file.path));
+    const dependencyCatalog = {
+      files: files.map((file) => ({ path: file.path, digest: digest(file.content) })),
+      nonAppIndexDigest: await nonAppIndexDigest(f.sandbox, prepared.root, "demo"),
+    };
+    return { f, prepared: { ...prepared, dependencyCatalog } };
+  };
+
+  it("reviews and reuses exact normalized catalog files while preserving app edits", async () => {
+    const { f, prepared } = await catalogCandidate();
+    const inspected = await inspectDraftReconciliation({ sandbox: f.sandbox, prepared });
+    expect(inspected.baseChanges.map((change) => change.path)).toEqual(
+      expect.arrayContaining([
+        "package.json",
+        "packages/probe/package.json",
+        "bun.lock",
+        "apps/demo/tests/journey.spec.ts",
+      ]),
+    );
+    const retained = await prepareDraftReconciliation({
+      ...candidateFixtureInput(f),
+      previousCandidate: prepared,
+      replayPreviousCandidate: true,
+    });
+    expect(retained.root).toBe(prepared.root);
+    expect(retained.dependencyCatalog).toEqual(prepared.dependencyCatalog);
+    expect(readFileSync(path.join(retained.root, "apps/demo/tests/journey.spec.ts"), "utf-8")).toBe(
+      "resolved app edit\n",
+    );
+    const retainedInspection = await inspectDraftReconciliation({
+      sandbox: f.sandbox,
+      prepared: retained,
+    });
+    expect(retainedInspection.resolvedTree).toBe(inspected.resolvedTree);
+  });
+
+  it.each([
+    "unstaged bytes",
+    "staged bytes",
+    "unrelated staged file",
+    "unrelated unstaged file",
+    "symlink",
+    "parent symlink",
+    "file mode",
+  ])("rejects catalog receipt tampering: %s", async (change) => {
+    const { f, prepared } = await catalogCandidate();
+    if (change === "unstaged bytes" || change === "staged bytes") {
+      writeFileSync(path.join(prepared.root, "package.json"), "tampered\n");
+      if (change === "staged bytes") {
+        git(prepared.root, "add", "package.json");
+      }
+    } else if (change === "file mode") {
+      chmodSync(path.join(prepared.root, "package.json"), 0o755);
+    } else if (change === "symlink") {
+      const target = path.join(f.root, "external-package.json");
+      writeFileSync(target, readFileSync(path.join(prepared.root, "package.json")));
+      rmSync(path.join(prepared.root, "package.json"));
+      symlinkSync(target, path.join(prepared.root, "package.json"));
+    } else if (change === "parent symlink") {
+      const target = path.join(f.root, "external-probe");
+      mkdirSync(target);
+      writeFileSync(
+        path.join(target, "package.json"),
+        readFileSync(path.join(prepared.root, "packages/probe/package.json")),
+      );
+      rmSync(path.join(prepared.root, "packages/probe"), { recursive: true });
+      symlinkSync(target, path.join(prepared.root, "packages/probe"));
+    } else {
+      writeFileSync(path.join(prepared.root, "docs/platform.md"), "unauthorized\n");
+      if (change === "unrelated staged file") {
+        git(prepared.root, "add", "docs/platform.md");
+      }
+    }
+    await expect(inspectDraftReconciliation({ sandbox: f.sandbox, prepared })).rejects.toThrow();
+  });
+
+  it("rejects receipts authorizing non-manifest paths", async () => {
+    const { f, prepared } = await catalogCandidate();
+    prepared.dependencyCatalog.files.push({ path: "docs/platform.md", digest: digest("main\n") });
+    await expect(inspectDraftReconciliation({ sandbox: f.sandbox, prepared })).rejects.toThrow(
+      "receipt is invalid",
+    );
+  });
+
+  it("does not replay catalog authority into a fresh candidate after main advances", async () => {
+    const { f, prepared } = await catalogCandidate();
+    const baseSha = advanceFixtureBase(f, { "docs/next.md": "new main\n" });
+    const next = await prepareDraftReconciliation({
+      ...candidateFixtureInput(f, baseSha),
+      previousCandidate: prepared,
+      replayPreviousCandidate: true,
+    });
+    expect(next.root).not.toBe(prepared.root);
+    expect(next.dependencyCatalog).toBeUndefined();
+    expect(existsSync(path.join(next.root, "bun.lock"))).toBe(false);
+    expect(readFileSync(path.join(next.root, "apps/demo/tests/journey.spec.ts"), "utf-8")).toBe(
+      "resolved app edit\n",
+    );
+  });
+
   it("reuses the checkout dependency closure while binding workspace imports to candidate source", async () => {
     const f = fixture(false, true);
     const checkout = path.join(f.root, "repository");

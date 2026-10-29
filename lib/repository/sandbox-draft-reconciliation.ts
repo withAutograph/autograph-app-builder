@@ -112,6 +112,11 @@ export interface PreparedDraftReconciliation {
   headTree: string;
   conflicts: readonly string[];
   publicationScope?: OwnedPublicationReconciliationScope;
+  /** Exact server-produced catalog normalization in this retained candidate. */
+  dependencyCatalog?: {
+    files: readonly { path: string; digest: string }[];
+    nonAppIndexDigest: string;
+  };
 }
 
 /** A saved candidate is sandbox-local; an expired sandbox can retain its receipt but not its files. */
@@ -426,7 +431,7 @@ const candidateUntracked = async (sandbox: SandboxSession, root: string, workspa
     );
 
 /** Git's stage-zero entries preserve inherited main and originally published non-app content. */
-const nonAppIndexDigest = async (sandbox: SandboxSession, root: string, appId: string) => {
+export const nonAppIndexDigest = async (sandbox: SandboxSession, root: string, appId: string) => {
   const result = await run(
     sandbox,
     "inspect the automatic merge index",
@@ -453,6 +458,76 @@ const nonAppIndexDigest = async (sandbox: SandboxSession, root: string, appId: s
     return true;
   });
   return createHash("sha256").update(JSON.stringify(entries.toSorted())).digest("hex");
+};
+
+const retainedDependencyCatalog = (input: DraftReconciliationInput, root: string) => {
+  const previous = input.previousCandidate;
+  return previous !== undefined &&
+    [
+      previous.root === root,
+      previous.workspaceRoot === (input.workspaceRoot ?? DEFAULT_WORKSPACE),
+      previous.appId === input.appId,
+      previous.headSha === input.headSha,
+      previous.baseSha === input.baseSha,
+    ].every(Boolean)
+    ? previous.dependencyCatalog
+    : undefined;
+};
+
+const catalogFilesProgram = String.raw`
+const fs = require("node:fs");
+const path = require("node:path");
+const { createHash } = require("node:crypto");
+const [root, json] = process.argv.slice(1);
+const realRoot = fs.realpathSync(root);
+for (const file of JSON.parse(json)) {
+  let target = root;
+  for (const component of file.path.split("/")) {
+    target = path.join(target, component);
+    const stat = fs.lstatSync(target);
+    if (stat.isSymbolicLink()) throw Error("Catalog receipt path is a symbolic link");
+  }
+  if (!fs.lstatSync(target).isFile() || !fs.realpathSync(target).startsWith(realRoot + path.sep)) {
+    throw Error("Catalog receipt path is not a contained regular file");
+  }
+  if (createHash("sha256").update(fs.readFileSync(target)).digest("hex") !== file.digest) {
+    throw Error("Catalog receipt bytes changed");
+  }
+}
+`;
+
+const inspectDependencyCatalog = async (
+  sandbox: SandboxSession,
+  prepared: Pick<PreparedDraftReconciliation, "root" | "appId" | "dependencyCatalog">,
+): Promise<ReadonlySet<string>> => {
+  const receipt = prepared.dependencyCatalog;
+  if (receipt === undefined) {
+    return new Set();
+  }
+  if (
+    !/^[a-f0-9]{64}$/u.test(receipt.nonAppIndexDigest) ||
+    receipt.files.some(
+      (file) =>
+        !safeSourcePath(file.path) ||
+        !/^(?:bun\.lock|(?:[^/]+\/)*package\.json)$/u.test(file.path) ||
+        !/^[a-f0-9]{64}$/u.test(file.digest),
+    )
+  ) {
+    throw new Error("The retained dependency catalog receipt is invalid.");
+  }
+  await checked(
+    sandbox,
+    "verify normalized dependency catalog files",
+    `node -e ${quote(catalogFilesProgram)} ${quote(prepared.root)} ${quote(JSON.stringify(receipt.files))}`,
+  );
+  if (
+    receipt.nonAppIndexDigest !== (await nonAppIndexDigest(sandbox, prepared.root, prepared.appId))
+  ) {
+    throw new Error(
+      "Non-app content changed after dependency catalog normalization. Reprepare the candidate before review.",
+    );
+  }
+  return new Set(receipt.files.map((file) => file.path));
 };
 
 const retainedPublicationScope = (input: DraftReconciliationInput, root: string) => {
@@ -482,11 +557,17 @@ const outsideCandidateChanges = async (
   input: DraftReconciliationInput,
   root: string,
 ): Promise<boolean> => {
+  const dependencyCatalog = retainedDependencyCatalog(input, root);
+  const catalogPaths = await inspectDependencyCatalog(input.sandbox, {
+    root,
+    appId: input.appId,
+    ...(dependencyCatalog === undefined ? {} : { dependencyCatalog }),
+  });
   if (input.ownedPublication !== undefined) {
     const scope = retainedPublicationScope(input, root);
     if (
       scope === undefined ||
-      scope.automaticMergeNonAppDigest !==
+      (dependencyCatalog?.nonAppIndexDigest ?? scope.automaticMergeNonAppDigest) !==
         (await nonAppIndexDigest(input.sandbox, root, input.appId))
     ) {
       return true;
@@ -503,7 +584,9 @@ const outsideCandidateChanges = async (
       root,
       input.workspaceRoot ?? DEFAULT_WORKSPACE,
     );
-    return [...unstaged, ...untracked].some((path) => !appPath(input.appId, path));
+    return [...unstaged, ...untracked].some(
+      (path) => !appPath(input.appId, path) && !catalogPaths.has(path),
+    );
   }
   const merge = await run(
     input.sandbox,
@@ -536,7 +619,9 @@ const outsideCandidateChanges = async (
     root,
     input.workspaceRoot ?? DEFAULT_WORKSPACE,
   );
-  return [...changed, ...untracked].some((path) => !appPath(input.appId, path));
+  return [...changed, ...untracked].some(
+    (path) => !appPath(input.appId, path) && !catalogPaths.has(path),
+  );
 };
 
 const replayCandidateProgram = String.raw`
@@ -982,6 +1067,9 @@ export const prepareDraftReconciliation = async (
     conflicts,
     created,
     ...(publicationScope === undefined ? {} : { publicationScope }),
+    ...(!created && retainedDependencyCatalog(input, root) !== undefined
+      ? { dependencyCatalog: retainedDependencyCatalog(input, root) }
+      : {}),
     ...(preservedCandidateRoot === undefined ? {} : { preservedCandidateRoot, replayedAppChanges }),
     headSha: input.headSha,
     headTree: await inspectRevision(sandbox, checkout, input.headSha),
@@ -1398,10 +1486,12 @@ export const inspectDraftReconciliation = async (input: {
 }> => {
   const { sandbox, prepared } = input;
   await assertDraftReconciliationCandidateAvailable(input);
+  const catalogPaths = await inspectDependencyCatalog(sandbox, prepared);
   if (prepared.publicationScope !== undefined) {
     assertOwnedPublicationReconciliationScope(prepared.publicationScope);
     if (
-      prepared.publicationScope.automaticMergeNonAppDigest !==
+      (prepared.dependencyCatalog?.nonAppIndexDigest ??
+        prepared.publicationScope.automaticMergeNonAppDigest) !==
       (await nonAppIndexDigest(sandbox, prepared.root, prepared.appId))
     ) {
       throw new Error(
@@ -1421,7 +1511,9 @@ export const inspectDraftReconciliation = async (input: {
     prepared.root,
     prepared.workspaceRoot,
   );
-  const outside = [...unstaged, ...untracked].find((path) => !appPath(prepared.appId, path));
+  const outside = [...unstaged, ...untracked].find(
+    (path) => !appPath(prepared.appId, path) && !catalogPaths.has(path),
+  );
   if (outside !== undefined) {
     throw new Error(
       `Builder cannot accept reconciliation edit ${outside}: only apps/${prepared.appId}/ may be edited while resolving this draft.`,
@@ -1435,9 +1527,12 @@ export const inspectDraftReconciliation = async (input: {
       "--all",
       "--",
       `apps/${prepared.appId}`,
+      ...[...catalogPaths].map((path) => `:(literal)${path}`),
       ...dependencyRoots.map((root) => `:(exclude,literal)${root}`),
     ]),
   );
+  // Staging must not alter the trusted non-app index (including file modes).
+  await inspectDependencyCatalog(sandbox, prepared);
   const unresolvedConflicts = records(
     await checked(
       sandbox,
@@ -1466,7 +1561,9 @@ export const inspectDraftReconciliation = async (input: {
       resolvedTree: z.string().regex(SHA),
     })
     .parse(JSON.parse(raw));
-  const nonAppChange = parsed.baseChanges.find((change) => !appPath(prepared.appId, change.path));
+  const nonAppChange = parsed.baseChanges.find(
+    (change) => !appPath(prepared.appId, change.path) && !catalogPaths.has(change.path),
+  );
   if (nonAppChange !== undefined && prepared.publicationScope === undefined) {
     throw new Error(
       `Builder's resolved PR differs from main at ${nonAppChange.path}, outside apps/${prepared.appId}/. Restore main's content there before review.`,

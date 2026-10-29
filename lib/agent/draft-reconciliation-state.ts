@@ -95,6 +95,11 @@ interface DraftCandidateFields {
   baseSha: string;
   baseTree: string;
   conflicts: readonly string[];
+  /** Server-produced exact catalog normalization, scoped to this retained candidate. */
+  dependencyCatalog?: {
+    files: readonly { path: string; digest: string }[];
+    nonAppIndexDigest: string;
+  };
   recoveryMode?: "reopen-current-owned-draft";
   preservedWorkspaces?: readonly PreservedDraftWorkspace[];
   validation?: {
