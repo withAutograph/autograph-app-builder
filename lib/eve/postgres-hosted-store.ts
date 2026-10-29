@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import {
   isProvedSessionLimitResponse,
   isProvedResourceApprovalResponse,
@@ -17,6 +18,8 @@ import {
   assertExistingStartSession,
   sendAcknowledgementCursorSchema,
   unsettledSendAcknowledgementPageSchema,
+  unsettledResponseCursorSchema,
+  unsettledResponsePageSchema,
   assertNativeRecoverySourceBinding,
   assertNativeRecoverySessionReceipt,
   assertRecoveredBuildContinuationChild,
@@ -39,8 +42,14 @@ import { agentOperations, agentSessions } from "../db/schema";
 import { eveSessionResultSchema, sessionStatusSchema } from "../mcp/contracts";
 import { hostedPrincipalSchema, tenantKeyFor } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
-import type { HostedEveStore, HostedOperationRecord, HostedSessionRecord } from "./hosted-store";
+import type {
+  HostedEveStore,
+  HostedOperationRecord,
+  HostedPagedCheckpointMetadata,
+  HostedSessionRecord,
+} from "./hosted-store";
 import { mergePrivateHostedApprovalReceipts } from "./private-hosted-approval";
+import type { PrivateResourceApprovalReceipt } from "./private-hosted-approval";
 import { createPostgresHostedCheckpointHistory } from "./postgres-hosted-checkpoint-history";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
@@ -48,6 +57,19 @@ type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 const SESSION_NOT_FOUND = "Hosted session was not found.";
 const OPERATION_CANNOT_SETTLE = "Hosted operation cannot settle at this digest.";
 const OPERATION_SETTLEMENT_NOT_DURABLE = "Hosted operation settlement was not durable.";
+
+const replayReceiptsMatchCapture = (
+  metadata: HostedPagedCheckpointMetadata,
+  receipts: readonly PrivateResourceApprovalReceipt[],
+) => {
+  const capture = metadata.privateApprovalCaptureState;
+  if (capture === undefined) {
+    return false;
+  }
+  return receipts.every((receipt) =>
+    capture.receipts.some((captured) => isDeepStrictEqual(captured, receipt)),
+  );
+};
 
 const sessionRowSchema = z
   .object({
@@ -684,6 +706,21 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           if (durable.checkpointDigest !== input.expectedCheckpointDigest) {
             throw new HostedCheckpointObservationConflictError();
           }
+          if (
+            input.replayBinding !== undefined &&
+            (durable.adapterSessionId !== input.replayBinding.adapterSessionId ||
+              durable.adapterGeneration !== input.replayBinding.adapterGeneration ||
+              (durable.cancellationRevision ?? 0) !== input.replayBinding.cancellationRevision)
+          ) {
+            throw new HostedCheckpointObservationConflictError();
+          }
+          if (
+            input.verifiedReplayReceipts !== undefined &&
+            (input.replayBinding === undefined ||
+              !replayReceiptsMatchCapture(input.metadata, input.verifiedReplayReceipts))
+          ) {
+            throw new Error("Verified replay receipts do not match the checkpoint.");
+          }
           await checkpointHistory.publishInTransaction(transaction, {
             checkpointDigest: staged.checkpointDigest,
             checkpointId: staged.checkpointId,
@@ -697,6 +734,15 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           void priorInlineCheckpoint;
           const observed = durableHostedSessionRecordSchema.parse({
             ...pagedBase,
+            ...(input.verifiedReplayReceipts === undefined
+              ? {}
+              : {
+                  privateApprovalReceipts: mergePrivateHostedApprovalReceipts(
+                    input.sessionId,
+                    durable.privateApprovalReceipts,
+                    input.verifiedReplayReceipts,
+                  ),
+                }),
             ...(provedResume
               ? { resumedCancellationRevision: durable.cancellationRevision ?? 0 }
               : {}),
@@ -979,6 +1025,54 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       const last = acknowledgements.at(-1)?.operation;
       return unsettledSendAcknowledgementPageSchema.parse({
         acknowledgements,
+        ...(rows.length > limit && last !== undefined
+          ? {
+              nextCursor: {
+                createdAtEpochMs: last.createdAtEpochMs,
+                operationId: last.operationId,
+              },
+            }
+          : {}),
+      });
+    },
+
+    async readUnsettledResponseOperations(input) {
+      const principal = hostedPrincipalSchema.parse(input.principal);
+      const sessionId = z.string().min(1).parse(input.sessionId);
+      const limit = z
+        .number()
+        .int()
+        .positive()
+        .max(Number.MAX_SAFE_INTEGER - 1)
+        .parse(input.limit);
+      const cursor =
+        input.cursor === undefined ? undefined : unsettledResponseCursorSchema.parse(input.cursor);
+      const rows = await database
+        .select()
+        .from(agentOperations)
+        .where(
+          and(
+            tenantPredicate(principal),
+            eq(agentOperations.sessionId, sessionId),
+            eq(agentOperations.kind, "respond"),
+            eq(agentOperations.state, "submission_unknown"),
+            cursor === undefined
+              ? undefined
+              : or(
+                  gt(agentOperations.createdAt, new Date(cursor.createdAtEpochMs)),
+                  and(
+                    eq(agentOperations.createdAt, new Date(cursor.createdAtEpochMs)),
+                    gt(agentOperations.operationId, cursor.operationId),
+                  ),
+                ),
+          ),
+        )
+        .orderBy(asc(agentOperations.createdAt), asc(agentOperations.operationId))
+        .limit(limit + 1);
+      const operations = rows.slice(0, limit).map(parseHostedOperationRow);
+      const last = operations.at(-1);
+      return unsettledResponsePageSchema.parse({
+        operations,
         ...(rows.length > limit && last !== undefined
           ? {
               nextCursor: {

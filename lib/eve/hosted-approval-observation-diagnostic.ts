@@ -4,7 +4,7 @@ import type { PublicInputRequest } from "../mcp/contracts";
 import type { NativeObservationState } from "./native-observation-state";
 import type {
   PrivateHostedApprovalCaptureState,
-  PrivateHostedApprovalReceipt,
+  PrivateResourceApprovalReceipt,
 } from "./private-hosted-approval";
 import type { PrivateInputState } from "./session-limit-input";
 
@@ -28,7 +28,7 @@ interface ApprovalReference {
 }
 
 const approvalReference = (
-  value: Pick<PrivateHostedApprovalReceipt, "callId" | "requestId" | "toolInput">,
+  value: Pick<PrivateResourceApprovalReceipt, "callId" | "requestId" | "toolInput">,
   source: ApprovalReference["source"],
   outcome?: ApprovalReference["outcome"],
 ): ApprovalReference => ({
@@ -58,7 +58,7 @@ const nativeInputObservations = (nativeState: NativeStateForDiagnostic | undefin
 /** Closed, owner-scoped observation only; never carries approval input or presentation text. */
 export const createHostedApprovalObservationDiagnostic = (input: {
   coldReadProgress: boolean;
-  inlineReceipts: readonly PrivateHostedApprovalReceipt[];
+  inlineReceipts: readonly PrivateResourceApprovalReceipt[];
   nativeState?: NativeStateForDiagnostic;
   privateCapture?: PrivateHostedApprovalCaptureState;
   publicPendingRequests: readonly PublicInputRequest[];

@@ -16,8 +16,14 @@ import {
 } from "../provisioning/hosted-operator-contract";
 import {
   captureResourceApprovalResponse,
+  provesResourceApprovalResponse,
   resourceApprovalResponseProofSchema,
 } from "./resource-approval-response";
+import {
+  nativeTargetOnboardingPlanDigest,
+  nativeTargetOnboardingPlanSchema,
+  nativeTargetRequiredProjectProtection,
+} from "../provisioning/native-target-onboarding-contract";
 import {
   isProvedResourceApprovalResponse,
   hostedOperationRecordSchema,
@@ -37,6 +43,162 @@ const principal = {
   scopes: Object.values(hostedEveOperationScopes),
   workspaceId: "workspace_1",
 };
+const nativePlan = nativeTargetOnboardingPlanSchema.parse({
+  version: 1,
+  appId: "requests-app",
+  origin: {
+    publicSessionId: "session_fixture",
+    adapterSessionId: "adapter_1",
+    adapterGeneration: 1,
+    appSpecDigest: "a".repeat(64),
+    release: {
+      id: "release",
+      artifactRef: "artifact",
+      manifestSha256: "b".repeat(64),
+      schemaSha256: "c".repeat(64),
+    },
+  },
+  project: {
+    name: "requests-app",
+    teamId: "team",
+    installationId: "installation",
+    projectSettings: {
+      framework: "nextjs",
+      rootDirectory: "apps/requests",
+      sourceFilesOutsideRootDirectory: true,
+    },
+    protection: nativeTargetRequiredProjectProtection,
+  },
+  branch: "preview",
+  appDatabase: {
+    resourceId: "resource",
+    database: "requests_data",
+    migratorRole: "requests_owner",
+    runtimeRole: "requests_runtime",
+  },
+  productRoles: [],
+  nativeNeon: {
+    approvalReference: "scope",
+    nativeStore: { configurationId: "config", resourceId: "store", sourceProjectId: "source" },
+    scope: {
+      projectId: "project",
+      branchId: "branch",
+      endpointId: "endpoint",
+      hostname: "ep-fixture.neon.tech",
+      maintenanceDatabase: "maintenance",
+      maintenanceRole: "installer",
+    },
+  },
+  worker: {
+    id: "worker",
+    executablePath: "/trusted/worker",
+    sha256: "d".repeat(64),
+    operationScope: "generated-app-release-install-v1",
+    subcommand: "protected-generated-app-install",
+  },
+  cost: { ownership: "current-owner", description: "Preview usage" },
+  retention: { policy: "Until approved cleanup" },
+  conflictPolicy: "stop-on-conflict",
+});
+
+describe("native target response reconciliation", () => {
+  it("requires every exact request in a batch to have an owner settlement", () => {
+    const input = {
+      appId: nativePlan.appId,
+      operationRef: "a3f06690-718f-41c7-a67f-c6c1c0ecdbf3",
+      plan: nativePlan,
+      planDigest: nativeTargetOnboardingPlanDigest(nativePlan),
+    };
+    const approvals = ["one", "two"].map((id) => ({
+      callId: `call-${id}`,
+      requestId: id,
+      toolInput: input,
+      toolName: "prepare-app-native-target" as const,
+    }));
+    const nativeBatch = {
+      requests: approvals.map(({ requestId, toolName }) => ({
+        kind: "tool-approval" as const,
+        optionIds: ["approve", "deny"],
+        requestId,
+        toolName,
+      })),
+      sequence: 1,
+      stepIndex: 1,
+      turnId: "turn",
+    };
+    const nativeRequest = {
+      clientRequestId: "native-response",
+      sessionId: "session_fixture",
+      responses: approvals.map(({ requestId }) => ({
+        requestId,
+        response: { kind: "approve" as const },
+      })),
+    };
+    const nativeReceipts = approvals.map((approval, sequence) => ({
+      ...approval,
+      format: "autograph-hosted-approval-v1" as const,
+      outcome: "approved" as const,
+      responderPrincipalId: principal.ownerUserId,
+      sequence,
+      turnId: "",
+    }));
+    const proof = {
+      adapterSessionId: "adapter_1",
+      adapterGeneration: 1,
+      checkpointDigest: `sha256:${"f".repeat(64)}`,
+      request: nativeRequest,
+    };
+    const marker = {
+      adapterSessionId: "adapter_1",
+      adapterGeneration: 1,
+      approvals,
+      batches: [nativeBatch],
+    };
+    const complete = {
+      pending: [],
+      resolved: [
+        {
+          batch: nativeBatch,
+          resolutions: approvals.map(({ requestId }) => ({
+            kind: "tool-approval" as const,
+            outcome: "approved" as const,
+            requestId,
+          })),
+        },
+      ],
+      version: 1 as const,
+    };
+    const capture = {
+      sessionId: nativeRequest.sessionId,
+      version: 1 as const,
+      pendingRequests: [],
+      receipts: nativeReceipts,
+    };
+    const args = {
+      clientRequestId: nativeRequest.clientRequestId,
+      requestDigest: digest({
+        kind: "respond",
+        request: nativeRequest,
+        sessionId: nativeRequest.sessionId,
+      }),
+      sessionId: nativeRequest.sessionId,
+      ownerUserId: principal.ownerUserId,
+      marker,
+      proof,
+      state: complete,
+      capture,
+      receipts: nativeReceipts,
+    };
+    expect(provesResourceApprovalResponse(args)).toBe(true);
+    expect(provesResourceApprovalResponse({ ...args, receipts: nativeReceipts.slice(0, 1) })).toBe(
+      false,
+    );
+    expect(provesResourceApprovalResponse({ ...args, ownerUserId: "foreign-owner" })).toBe(false);
+    expect(provesResourceApprovalResponse({ ...args, state: { ...complete, resolved: [] } })).toBe(
+      false,
+    );
+  });
+});
 const sessionId = "session_fixture";
 const selection = {
   appId: "spend-review",

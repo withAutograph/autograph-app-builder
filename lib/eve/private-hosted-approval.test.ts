@@ -542,6 +542,9 @@ describe("private approval delta checkpoints", () => {
     capture.observe(inputRequested("split-request"));
     const snapshot = capture.snapshot();
     const [request] = snapshot.pendingRequests;
+    if (request.toolName === "prepare-app-native-target") {
+      throw new Error("Expected hosted runtime");
+    }
     expect(() =>
       hydratePrivateHostedApprovalCaptureState(sessionId, {
         ...snapshot,

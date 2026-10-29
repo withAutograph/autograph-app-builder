@@ -12,7 +12,7 @@ import {
   privateHostedApprovalCaptureStateSchema,
 } from "../eve/private-hosted-approval";
 import { nativeObservationStateSchema } from "../eve/native-observation-state";
-import type { PrivateHostedApprovalReceipt } from "../eve/private-hosted-approval";
+import type { PrivateResourceApprovalReceipt } from "../eve/private-hosted-approval";
 import {
   HostedOperatorError,
   hostedOperatorPlanSchema,
@@ -68,11 +68,13 @@ export interface HostedRuntimePriorApproval {
 }
 
 export const matchesHostedRuntimePreparationReceipt = (
-  receipt: PrivateHostedApprovalReceipt,
+  receipt: PrivateResourceApprovalReceipt,
   input: z.infer<typeof hostedRuntimePreparationInputSchema>,
-) =>
-  [
-    receipt.toolName === "prepare-app-hosted-runtime",
+) => {
+  if (receipt.toolName !== "prepare-app-hosted-runtime") {
+    return false;
+  }
+  return [
     receipt.toolInput.operationRef === input.operationRef,
     receipt.toolInput.planDigest === input.planDigest,
     operatorPlanDigest(receipt.toolInput.plan) === input.planDigest,
@@ -82,6 +84,7 @@ export const matchesHostedRuntimePreparationReceipt = (
     receipt.toolInput.projectId === input.projectId,
     receipt.toolInput.environment === input.environment,
   ].every(Boolean);
+};
 
 const matchesRestoredApproval = (
   restored: OperatorPublicResult,

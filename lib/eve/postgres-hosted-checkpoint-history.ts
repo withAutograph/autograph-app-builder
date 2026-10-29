@@ -33,10 +33,46 @@ type Database = PostgresJsDatabase<typeof databaseSchema>;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type Bytes = AsyncIterable<Uint8Array>;
 
+/** Private, resumable replay; sourceCheckpoint remains the original trusted prefix. */
+export const approvalReplayProgressSchema = z
+  .strictObject({
+    version: z.literal(1),
+    binding: z.strictObject({
+      principal: hostedPrincipalSchema,
+      sessionId: z.string().min(1),
+      approvalSessionId: z.string().min(1),
+      adapterSessionId: z.string().min(1),
+      adapterGeneration: z.number().int().positive(),
+    }),
+    sourceCheckpoint: z.strictObject({
+      id: z.uuid(),
+      digest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+      eventCount: z.number().int().nonnegative(),
+    }),
+    events: z.array(publicEveEventSchema),
+    nativeObservationState: nativeObservationStateSchema,
+    privateApprovalCaptureState: privateHostedApprovalCaptureStateSchema,
+  })
+  .superRefine((progress, context) => {
+    if (
+      progress.nativeObservationState.adapterSessionId !== progress.binding.adapterSessionId ||
+      progress.privateApprovalCaptureState.sessionId !== progress.binding.approvalSessionId ||
+      progress.events.length !== progress.nativeObservationState.publicEventCount ||
+      progress.events.some((event, index) => event.index !== index)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Approval replay progress binding or prefix is inconsistent.",
+      });
+    }
+  });
+export type ApprovalReplayProgress = z.infer<typeof approvalReplayProgressSchema>;
+
 // New checkpoint metadata lives in byte chunks. Legacy inline checkpoint
 // validation retains its size limit until every read has moved to this store.
 export const pagedCheckpointMetadataSchema = z.strictObject({
   activeTurnId: z.string().min(1).optional(),
+  approvalReplayProgress: approvalReplayProgressSchema.optional(),
   capturedAtEpochMs: z.number().int().nonnegative(),
   // A validated cold-read prefix remains private until the observer reaches its durable tail.
   coldReadProgress: z

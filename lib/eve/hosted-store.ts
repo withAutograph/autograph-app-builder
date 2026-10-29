@@ -50,9 +50,9 @@ import type { PublicSessionSummary } from "../mcp/contracts";
 import type { pagedCheckpointMetadataSchema } from "./postgres-hosted-checkpoint-history";
 import {
   mergePrivateHostedApprovalReceipts,
-  privateHostedApprovalReceiptSchema,
+  privateResourceApprovalReceiptSchema,
 } from "./private-hosted-approval";
-import type { PrivateHostedApprovalReceipt } from "./private-hosted-approval";
+import type { PrivateResourceApprovalReceipt } from "./private-hosted-approval";
 
 export const hostedOperationKindSchema = z.enum(["start", "resume", "send", "respond"]);
 export type HostedOperationKind = z.infer<typeof hostedOperationKindSchema>;
@@ -277,7 +277,7 @@ export const durableHostedSessionRecordSchema = z
     parentSessionId: z.string().min(1).max(200).optional(),
     principal: hostedPrincipalSchema,
     // Private Eve authority facts live beside the session record, outside its public checkpoint.
-    privateApprovalReceipts: z.array(privateHostedApprovalReceiptSchema).optional(),
+    privateApprovalReceipts: z.array(privateResourceApprovalReceiptSchema).optional(),
     privateBuildDecision: approvedBuildDecisionSchema.optional(),
     nativeRecoveryBinding: nativeRecoveryBindingSchema.optional(),
     resumability: publicSessionResumabilitySchema,
@@ -778,6 +778,12 @@ export const unsettledSendAcknowledgementPageSchema = z.strictObject({
   acknowledgements: z.array(unsettledSendAcknowledgementSchema),
   nextCursor: sendAcknowledgementCursorSchema.optional(),
 });
+/** The cursor is an ordered storage coordinate, never a limit on total recovery history. */
+export const unsettledResponseCursorSchema = sendAcknowledgementCursorSchema;
+export const unsettledResponsePageSchema = z.strictObject({
+  operations: z.array(hostedOperationRecordSchema),
+  nextCursor: unsettledResponseCursorSchema.optional(),
+});
 
 const START_ALIAS_CANNOT_BIND = "The original start request cannot bind this canonical result.";
 
@@ -1127,7 +1133,7 @@ export interface HostedEveStore {
   recordPrivateApprovalReceipts?: (input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
     sessionId: string;
-    receipts: readonly PrivateHostedApprovalReceipt[];
+    receipts: readonly PrivateResourceApprovalReceipt[];
   }) => Promise<void>;
   bindExistingStart?: (
     principal: z.infer<typeof hostedPrincipalSchema>,
@@ -1184,6 +1190,13 @@ export interface HostedEveStore {
     cursor?: SendAcknowledgementCursor;
     limit: number;
   }) => Promise<z.infer<typeof unsettledSendAcknowledgementPageSchema>>;
+  /** Read only unknown RESPONDs for the exact authenticated tenant and public session. */
+  readUnsettledResponseOperations?: (input: {
+    principal: HostedPrincipal;
+    sessionId: string;
+    cursor?: z.infer<typeof unsettledResponseCursorSchema>;
+    limit: number;
+  }) => Promise<z.infer<typeof unsettledResponsePageSchema>>;
   settleSucceeded: (input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
     operationId: string;
@@ -1244,6 +1257,12 @@ export interface HostedEveStore {
   }) => Promise<HostedSessionRecord>;
   observeSessionPaged?: (input: {
     explicitSendOperationId?: string;
+    replayBinding?: {
+      adapterSessionId: string;
+      adapterGeneration: number;
+      cancellationRevision: number;
+    };
+    verifiedReplayReceipts?: readonly PrivateResourceApprovalReceipt[];
     principal: z.infer<typeof hostedPrincipalSchema>;
     sessionId: string;
     expectedCheckpointDigest: string | undefined;
@@ -1630,6 +1649,56 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     );
   };
 
+  // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous store contract for validation errors.
+  async readUnsettledResponseOperations(
+    input: Parameters<NonNullable<HostedEveStore["readUnsettledResponseOperations"]>>[0],
+  ): Promise<z.infer<typeof unsettledResponsePageSchema>> {
+    const principal = hostedPrincipalSchema.parse(input.principal);
+    const sessionId = z.string().min(1).parse(input.sessionId);
+    const limit = z
+      .number()
+      .int()
+      .positive()
+      .max(Number.MAX_SAFE_INTEGER - 1)
+      .parse(input.limit);
+    const cursor =
+      input.cursor === undefined ? undefined : unsettledResponseCursorSchema.parse(input.cursor);
+    const operations = [...this.operations.values()]
+      .filter((operation) => {
+        if (
+          tenantKeyFor(operation.principal) !== tenantKeyFor(principal) ||
+          operation.sessionId !== sessionId ||
+          operation.kind !== "respond" ||
+          operation.state !== "submission_unknown"
+        ) {
+          return false;
+        }
+        if (cursor === undefined) {
+          return true;
+        }
+        return (
+          operation.createdAtEpochMs > cursor.createdAtEpochMs ||
+          (operation.createdAtEpochMs === cursor.createdAtEpochMs &&
+            operation.operationId > cursor.operationId)
+        );
+      })
+      .toSorted(
+        (left, right) =>
+          left.createdAtEpochMs - right.createdAtEpochMs ||
+          (left.operationId < right.operationId
+            ? -1
+            : Number(left.operationId > right.operationId)),
+      );
+    const page = operations.slice(0, limit);
+    const last = page.at(-1);
+    return unsettledResponsePageSchema.parse({
+      operations: structuredClone(page),
+      ...(operations.length > page.length && last !== undefined
+        ? { nextCursor: { createdAtEpochMs: last.createdAtEpochMs, operationId: last.operationId } }
+        : {}),
+    });
+  }
+
   // oxlint-disable-next-line eslint/complexity -- Settlement now checks the native recovery receipt alongside existing operation guards.
   async settleSucceeded(
     input: Parameters<HostedEveStore["settleSucceeded"]>[0],
@@ -1890,7 +1959,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
   async recordPrivateApprovalReceipts(input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
     sessionId: string;
-    receipts: readonly PrivateHostedApprovalReceipt[];
+    receipts: readonly PrivateResourceApprovalReceipt[];
   }): Promise<void> {
     const key = InMemoryHostedEveStore.sessionKey(input.principal, input.sessionId);
     const current = this.sessions.get(key);
