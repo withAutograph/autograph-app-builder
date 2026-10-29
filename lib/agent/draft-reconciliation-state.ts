@@ -196,7 +196,8 @@ export interface CandidateValidationAttempt {
   appId: string;
   baseSha: string;
   callId: string;
-  category: "check-build" | "test" | "local-preparation";
+  // oxlint-disable-next-line sonarjs/max-union-size -- Persisted command categories distinguish the supported diagnostic readback forms.
+  category: "check-build" | "test" | "local-preparation" | "additional-check";
   command: string;
   completion: "complete" | "interrupted" | "unavailable";
   durability: "available" | "unavailable";

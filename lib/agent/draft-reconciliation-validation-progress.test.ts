@@ -12,6 +12,7 @@ import type {
 import type { retireUnusedDraftWorktrees } from "../repository/retire-unused-draft-worktrees";
 
 import validateReconciliation from "../../agent/tools/validate_github_draft_pr_reconciliation";
+import getValidationLog, { validationLogInputSchema } from "../../agent/tools/get_validation_log";
 import formatCandidate from "../../agent/tools/format_github_draft_pr_candidate";
 import editCandidate from "../../agent/tools/edit_github_draft_pr_candidate";
 
@@ -37,6 +38,7 @@ const mocks = vi.hoisted(() => ({
   logStore: vi.fn(),
   publish: vi.fn(),
   run: vi.fn(),
+  spawn: vi.fn(),
   replace: vi.fn(),
   readText: vi.fn(),
   workflow: null as Record<string, unknown> | null,
@@ -54,6 +56,7 @@ vi.mock("./source-bound-sandbox", () => ({
     id: "owned-provider-sandbox",
     readTextFile: mocks.readText,
     run: mocks.run,
+    spawn: mocks.spawn,
   }),
 }));
 vi.mock("./draft-reconciliation-state", () => ({
@@ -103,6 +106,7 @@ vi.mock(import("../repository/target-validation"), async (importOriginal) => ({
 }));
 vi.mock("./validation-log-store-for-session", () => ({
   validationLogStoreForSession: mocks.logStore,
+  assertValidationLogSession: vi.fn(),
 }));
 
 const abortSignal = new AbortController().signal;
@@ -236,6 +240,20 @@ describe("draft reconciliation command progress", () => {
       stderr: "",
       stdout: "",
     });
+    mocks.spawn.mockImplementation(async () => ({
+      stdout: new ReadableStream({
+        start(controller) {
+          controller.close();
+        },
+      }),
+      stderr: new ReadableStream({
+        start(controller) {
+          controller.close();
+        },
+      }),
+      wait: async () => ({ exitCode: 0 }),
+      kill: async () => {},
+    }));
     mocks.logStore.mockRejectedValue(new Error("log storage unavailable"));
     mocks.candidate = {
       appId: "spend-review",
@@ -800,7 +818,12 @@ describe("draft reconciliation command progress", () => {
         nextCommand: "mise run --no-deps app:runtime run spend-review test-e2e",
         status: "in_progress",
       });
-      const executor = pending.kind === "check" ? mocks.check : mocks.run;
+      let executor = mocks.run;
+      if (pending.kind === "check") {
+        executor = mocks.check;
+      } else if (pending.kind === "additional") {
+        executor = mocks.spawn;
+      }
       expect(executor).toHaveBeenCalledWith(expect.objectContaining({ command: pending.current }));
       expect(mocks.candidate?.validationRun).toMatchObject({
         commands: [
@@ -1155,6 +1178,87 @@ describe("draft reconciliation command progress", () => {
     expect(mocks.compile).toHaveBeenCalledOnce();
   });
 
+  it("recovers complete additional-check diagnostics through supported paged readback after repair", async () => {
+    const store = candidateLogStore();
+    mocks.logStore.mockResolvedValue(store);
+    // Larger than both the provider response and durable chunk size, with a split UTF-8 character.
+    const stdout = `catalog inspection started\n${"workspace package detail\n".repeat(4000)}catalog inspection finished\n`;
+    const stderr = "catalog mismatch: missing café workspace entry\nBearer catalog-secret\n";
+    const encode = (text: string) =>
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          const bytes = new TextEncoder().encode(text);
+          const split = bytes.indexOf(0xc3) + 1;
+          controller.enqueue(bytes.slice(0, split));
+          controller.enqueue(bytes.slice(split));
+          controller.close();
+        },
+      });
+    mocks.spawn.mockResolvedValueOnce({
+      stdout: encode(stdout),
+      stderr: encode(stderr),
+      wait: async () => ({ exitCode: 1 }),
+      kill: vi.fn(),
+    });
+    await expect(
+      validateReconciliation.execute(
+        {
+          additionalCheckTasks: ["check:package-manifests"],
+          incremental: false,
+          runBrowserTests: false,
+        },
+        context,
+      ),
+    ).resolves.toMatchObject({ status: "needs_repair", exitCode: 1 });
+    expect(mocks.spawn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: "mise run --no-deps --skip-tools check:package-manifests",
+        workingDirectory: "/workspace/candidate",
+        abortSignal,
+      }),
+    );
+    // Repair may reset current validation; historical diagnostics must remain discoverable.
+    mocks.candidate = { ...mocks.candidate, validationRun: undefined };
+    mocks.workflow = { phase: "empty" };
+    const discovery = (await getValidationLog.execute(
+      { operation: "validation-attempts" },
+      context,
+    )) as {
+      attempts: {
+        commands: {
+          category: string;
+          exitCode: number;
+          logs: Record<string, { readInput: unknown }>;
+        }[];
+      }[];
+    };
+    const command = discovery.attempts
+      .flatMap((attempt) => attempt.commands)
+      .find((entry) => entry.category === "additional-check");
+    expect(command?.exitCode).toBe(1);
+    const recovered: Record<string, string> = {};
+    for (const channel of ["stdout", "stderr"]) {
+      const readInput = validationLogInputSchema.parse(command?.logs[channel]?.readInput);
+      let cursor: string | undefined;
+      let content = "";
+      do {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Follow the authenticated page cursor sequentially.
+        const page = (await getValidationLog.execute({ ...readInput, cursor }, context)) as {
+          content: string;
+          nextCursor?: string;
+          completion: string;
+        };
+        content += page.content;
+        cursor = page.nextCursor;
+        expect(page.completion).toBe("complete");
+      } while (cursor !== undefined);
+      recovered[channel] = content;
+    }
+    expect(recovered.stdout).toBe(stdout);
+    expect(recovered.stderr).toContain("catalog mismatch: missing café workspace entry");
+    expect(recovered.stderr).not.toContain("catalog-secret");
+  });
+
   it("retains local, browser and additional repository task behavior", async () => {
     mocks.declaresLocal = true;
     await expect(
@@ -1177,7 +1281,7 @@ describe("draft reconciliation command progress", () => {
     );
     expect(mocks.local.mock.calls[0]?.[0]).not.toHaveProperty("execution");
     expect(mocks.browser).toHaveBeenCalledOnce();
-    expect(mocks.run).toHaveBeenCalledWith(
+    expect(mocks.spawn).toHaveBeenCalledWith(
       expect.objectContaining({ command: "mise run --no-deps --skip-tools check:vercel-services" }),
     );
     expect(mocks.candidate?.validation).toMatchObject({

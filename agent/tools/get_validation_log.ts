@@ -22,6 +22,7 @@ export const validationLogInputSchema = z.union([
       "check-build",
       "test",
       "local-preparation",
+      "additional-check",
       "dependency-probe",
       "dependency-install",
     ]),
@@ -42,7 +43,7 @@ const candidateAttemptStatus = (attempt: CandidateValidationAttempt) => {
 
 export default defineTool({
   description:
-    "Read one authenticated page of a saved validation or dependency command log after execution or sandbox cleanup. To recover saved validation references, use operation: validation-attempts and copy a complete channel readInput. Discovery lists retained workflow receipts and historical supported candidate check/test and local preparation attempts, including attempts from before a source repair or validation reset. Historical candidate attempts are evidence of that execution only, not current validation. Local preparation success means prepared, never a passed app check. For saved dependency references, use operation: dependency-attempts. For pages supply the exact attempt, command, channel, log ID and digest. Continue with each nextCursor and verify assembled UTF-8 SHA-256 against digest. Page complete means the manifest is exhausted; completion distinguishes complete capture, interrupted output, and an unavailable durable suffix.",
+    "Read one authenticated page of a saved validation or dependency command log after execution or sandbox cleanup. To recover saved validation references, use operation: validation-attempts and copy a complete channel readInput. Discovery lists retained workflow receipts and historical supported candidate check/test, additional check and local preparation attempts, including attempts from before a source repair or validation reset. Historical candidate attempts are evidence of that execution only, not current validation. Local preparation success means prepared, never a passed app check. For saved dependency references, use operation: dependency-attempts. For pages supply the exact attempt, command, channel, log ID and digest. Continue with each nextCursor and verify assembled UTF-8 SHA-256 against digest. Page complete means the manifest is exhausted; completion distinguishes complete capture, interrupted output, and an unavailable durable suffix.",
   async execute(input, ctx) {
     if ("operation" in input) {
       await assertValidationLogSession({
