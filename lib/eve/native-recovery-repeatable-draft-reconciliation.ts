@@ -29,32 +29,29 @@ const part = z.looseObject({
   approved: z.boolean().optional(),
 });
 const event = z.looseObject({ type: z.string(), data: z.looseObject({}) });
+const candidateSchema = z.object({
+  origin: z.object({ slot: z.number().int().nonnegative() }),
+  serializedContext: z.looseObject({ "eve.sessionId": z.string() }),
+  sessionState: z.object({
+    snapshot: z.object({
+      session: z.object({
+        sessionId: z.string(),
+        history: z.array(
+          z.object({ role: z.string(), content: z.union([z.string(), z.array(part)]) }),
+        ),
+      }),
+    }),
+  }),
+  incoming: z
+    .object({
+      runtimeResults: z.object({ results: z.array(z.object({ callId: z.string() })) }).optional(),
+    })
+    .optional(),
+});
 const payloadSchema = z.object({
   binding: z.object({ ownerRunId: z.string(), logicalSessionId: z.string() }),
-  nativeEvents: z.array(event),
-  candidates: z.array(
-    z.object({
-      origin: z.object({ slot: z.number().int().nonnegative() }),
-      serializedContext: z.looseObject({ "eve.sessionId": z.string() }),
-      sessionState: z.object({
-        snapshot: z.object({
-          session: z.object({
-            sessionId: z.string(),
-            history: z.array(
-              z.object({ role: z.string(), content: z.union([z.string(), z.array(part)]) }),
-            ),
-          }),
-        }),
-      }),
-      incoming: z
-        .object({
-          runtimeResults: z
-            .object({ results: z.array(z.object({ callId: z.string() })) })
-            .optional(),
-        })
-        .optional(),
-    }),
-  ),
+  nativeEvents: z.array(z.unknown()),
+  candidates: z.array(z.unknown()),
 });
 const requestSchema = z.object({
   kind: z.literal("tool-approval"),
@@ -79,6 +76,55 @@ interface DraftReconciliationRecoveryInput {
 }
 type Part = z.infer<typeof part>;
 type Event = z.infer<typeof event>;
+
+const readRecoveryHistory = (
+  payload: z.infer<typeof payloadSchema>,
+):
+  | {
+      latest: z.infer<typeof candidateSchema>;
+      nativeEvents: Event[];
+      runtimeResults: Set<string>;
+    }
+  | undefined => {
+  // Keep only policy-relevant frames after validating every native event.
+  // Filtering preserves relative request/settlement order used by nativeHumanApproval.
+  const nativeEvents: Event[] = [];
+  for (const value of payload.nativeEvents) {
+    const parsed = event.safeParse(value).data;
+    if (parsed === undefined) {
+      return undefined;
+    }
+    if (
+      parsed.type === "input.requested" ||
+      parsed.type === "approval.settled" ||
+      parsed.type === "action.result"
+    ) {
+      nativeEvents.push(parsed);
+    }
+  }
+  let latest: z.infer<typeof candidateSchema> | undefined;
+  let latestCount = 0;
+  const runtimeResults = new Set<string>();
+  for (const value of payload.candidates) {
+    const candidate = candidateSchema.safeParse(value).data;
+    if (candidate === undefined) {
+      return undefined;
+    }
+    for (const result of candidate.incoming?.runtimeResults?.results ?? []) {
+      runtimeResults.add(result.callId);
+    }
+    if (latest === undefined || candidate.origin.slot > latest.origin.slot) {
+      latest = candidate;
+      latestCount = 1;
+    } else if (candidate.origin.slot === latest.origin.slot) {
+      latestCount += 1;
+    }
+  }
+  if (latest === undefined || latestCount !== 1) {
+    return undefined;
+  }
+  return { latest, nativeEvents, runtimeResults };
+};
 
 const uniqueHistoryApproval = (parts: Part[], callId: string): boolean => {
   const requests = parts.filter(
@@ -175,7 +221,7 @@ const hash = (value: ProposalDigestMaterial) =>
 // The current tool still performs fresh owner, artifact, installation, source and provider checks.
 // This policy only identifies its same sealed proposal in Git read-only mode; it infers no write outcome.
 const currentCompletion = (
-  context: z.infer<typeof payloadSchema>["candidates"][number]["serializedContext"],
+  context: z.infer<typeof candidateSchema>["serializedContext"],
   digest: string,
   input: DraftReconciliationRecoveryInput,
 ): DraftReconciliationCompletion | undefined => {
@@ -285,15 +331,15 @@ export const authorizeRepeatableDraftReconciliationCalls = (
   ) {
     return [];
   }
-  const latest = payload.candidates.toSorted((a, b) => b.origin.slot - a.origin.slot)[0];
+  const history = readRecoveryHistory(payload);
   if (
-    latest === undefined ||
-    payload.candidates.filter((value) => value.origin.slot === latest.origin.slot).length !== 1 ||
-    latest.serializedContext["eve.sessionId"] !== input.descriptor.logicalSessionId ||
-    latest.sessionState.snapshot.session.sessionId !== input.descriptor.logicalSessionId
+    history === undefined ||
+    history.latest.serializedContext["eve.sessionId"] !== input.descriptor.logicalSessionId ||
+    history.latest.sessionState.snapshot.session.sessionId !== input.descriptor.logicalSessionId
   ) {
     return [];
   }
+  const { latest, nativeEvents, runtimeResults } = history;
   const parts = latest.sessionState.snapshot.session.history.flatMap((value) =>
     Array.isArray(value.content) ? value.content : [],
   );
@@ -314,22 +360,18 @@ export const authorizeRepeatableDraftReconciliationCalls = (
         1 ||
       parts.some((value) => value.type === "tool-result" && value.toolCallId === callId) ||
       !uniqueHistoryApproval(parts, callId) ||
-      !nativeHumanApproval(payload.nativeEvents, call, input.expectedPrincipalId)
+      !nativeHumanApproval(nativeEvents, call, input.expectedPrincipalId)
     ) {
       return [];
     }
     if (
-      payload.nativeEvents.some(
+      nativeEvents.some(
         (value) =>
           value.type === "action.result" &&
           z.object({ result: z.object({ callId: z.string() }) }).safeParse(value.data).data?.result
             .callId === callId,
       ) ||
-      payload.candidates.some(
-        (value) =>
-          value.incoming?.runtimeResults?.results.some((result) => result.callId === callId) ===
-          true,
-      )
+      runtimeResults.has(callId)
     ) {
       return [];
     }

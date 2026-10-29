@@ -35,24 +35,23 @@ const partSchema = z.looseObject({
   approvalId: z.string().optional(),
   approved: z.boolean().optional(),
 });
-const payloadSchema = z.object({
-  binding: z.object({ ownerRunId: z.string(), logicalSessionId: z.string() }),
-  candidates: z.array(
-    z.object({
-      origin: z.object({ slot: z.number() }),
-      serializedContext: z.looseObject({ "eve.sessionId": z.string() }),
-      sessionState: z.object({
-        snapshot: z.object({
-          session: z.object({
-            sessionId: z.string(),
-            history: z.array(
-              z.object({ role: z.string(), content: z.union([z.string(), z.array(partSchema)]) }),
-            ),
-          }),
-        }),
+const candidateSchema = z.object({
+  origin: z.object({ slot: z.number() }),
+  serializedContext: z.looseObject({ "eve.sessionId": z.string() }),
+  sessionState: z.object({
+    snapshot: z.object({
+      session: z.object({
+        sessionId: z.string(),
+        history: z.array(
+          z.object({ role: z.string(), content: z.union([z.string(), z.array(partSchema)]) }),
+        ),
       }),
     }),
-  ),
+  }),
+});
+const payloadSchema = z.object({
+  binding: z.object({ ownerRunId: z.string(), logicalSessionId: z.string() }),
+  candidates: z.array(z.unknown()),
 });
 interface RepeatableApplyInput {
   descriptor: { logicalSessionId: string };
@@ -110,11 +109,26 @@ const matchingBinding = (
   isDeepStrictEqual(binding, input.binding) &&
   input.binding.logicalSessionId === input.descriptor.logicalSessionId;
 const matchingLatestIdentity = (
-  latest: z.infer<typeof payloadSchema>["candidates"][number],
+  latest: z.infer<typeof candidateSchema>,
   logical: string,
 ): boolean =>
   latest.serializedContext["eve.sessionId"] === logical &&
   latest.sessionState.snapshot.session.sessionId === logical;
+
+// Validate every history, but release parsed older copies after selecting the latest.
+const readLatestCandidate = (values: unknown[]): z.infer<typeof candidateSchema> | undefined => {
+  let latest: z.infer<typeof candidateSchema> | undefined;
+  for (const value of values) {
+    const candidate = candidateSchema.safeParse(value).data;
+    if (candidate === undefined) {
+      return undefined;
+    }
+    if (latest === undefined || candidate.origin.slot > latest.origin.slot) {
+      latest = candidate;
+    }
+  }
+  return latest;
+};
 
 /** Pure policy inside the already authenticated native boundary. This allows
  * the authored same-proposal private retry, never certifies nonexecution.
@@ -127,7 +141,7 @@ export const authorizeRepeatablePrivateApplyCalls = (
   if (payload === undefined || !matchingBinding(payload.binding, input)) {
     return [];
   }
-  const latest = payload.candidates.toSorted((a, b) => b.origin.slot - a.origin.slot)[0];
+  const latest = readLatestCandidate(payload.candidates);
   if (latest === undefined || !matchingLatestIdentity(latest, input.binding.logicalSessionId)) {
     return [];
   }

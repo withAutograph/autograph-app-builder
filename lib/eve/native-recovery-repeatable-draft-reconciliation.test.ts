@@ -522,3 +522,67 @@ it("retains the approved publication installation digest binding", () => {
   f.completion.proposal.installationIdentityDigest = f.sourceInstallation.digest;
   expect(authorizeRepeatableDraftReconciliationCalls(f.input)).toEqual([]);
 });
+
+it("validates old histories and preserves latest selection across unordered candidates", () => {
+  const f = fixture();
+  const latest = f.input.payload.candidates[0];
+  const older = structuredClone(latest);
+  older.origin.slot = 1;
+  older.sessionState.snapshot.session.history = [];
+  f.input.payload.candidates = [older, latest, structuredClone(older)];
+  const before = structuredClone(f.input);
+  expect(authorizeRepeatableDraftReconciliationCalls(f.input)).toEqual(["reconcile-call"]);
+  expect(f.input).toEqual(before);
+  const malformed = {
+    ...older,
+    sessionState: {
+      snapshot: {
+        session: { sessionId: "logical", history: [{ role: "assistant", content: [{ type: 7 }] }] },
+      },
+    },
+  };
+  expect(
+    authorizeRepeatableDraftReconciliationCalls({
+      ...f.input,
+      payload: { ...f.input.payload, candidates: [latest, malformed] },
+    }),
+  ).toEqual([]);
+});
+it("retains historical runtime-result vetoes outside the latest candidate", () => {
+  const f = fixture();
+  const latest = f.input.payload.candidates[0];
+  const older = {
+    ...latest,
+    origin: { slot: 1 },
+    incoming: { runtimeResults: { results: [{ callId: f.call.toolCallId }] } },
+  };
+  expect(
+    authorizeRepeatableDraftReconciliationCalls({
+      ...f.input,
+      payload: { ...f.input.payload, candidates: [older, latest] },
+    }),
+  ).toEqual([]);
+});
+it("validates unrelated native events and preserves approval ordering across them", () => {
+  const f = fixture();
+  const unrelated = { type: "assistant.output", data: { retained: "unrelated native evidence" } };
+  const events = [unrelated, f.nativeEvents[0], unrelated, f.nativeEvents[1], unrelated];
+  expect(
+    authorizeRepeatableDraftReconciliationCalls({
+      ...f.input,
+      payload: { ...f.input.payload, nativeEvents: events },
+    }),
+  ).toEqual(["reconcile-call"]);
+  expect(
+    authorizeRepeatableDraftReconciliationCalls({
+      ...f.input,
+      payload: { ...f.input.payload, nativeEvents: [{ type: "unrelated", data: null }, ...events] },
+    }),
+  ).toEqual([]);
+  expect(
+    authorizeRepeatableDraftReconciliationCalls({
+      ...f.input,
+      payload: { ...f.input.payload, nativeEvents: events.toReversed() },
+    }),
+  ).toEqual([]);
+});
