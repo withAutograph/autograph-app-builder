@@ -95,6 +95,11 @@ export interface ReconciliationReviewReceipt {
   headChanges: readonly OverlayChange[];
   approvedPaths: readonly string[];
   publicationScope?: OwnedPublicationReconciliationScope;
+  /** Server-produced dependency operation, bound into this exact source review. */
+  dependencyCatalog?: {
+    files: readonly { path: string; digest: string }[];
+    nonAppIndexDigest: string;
+  };
   digest: string;
 }
 
@@ -143,6 +148,28 @@ const assertReview = (review: ReconciliationReviewReceipt): void => {
   const { digest: claimed, ...unsigned } = review;
   const baseChanges = canonicalChanges(review.baseChanges);
   const headChanges = canonicalChanges(review.headChanges);
+  const catalog = review.dependencyCatalog;
+  const catalogChange = (change: OverlayChange) =>
+    catalog?.files.some(
+      (file) => file.path === change.path && file.digest === change.after?.digest,
+    ) === true;
+  if (
+    catalog !== undefined &&
+    (!fileDigest.test(catalog.nonAppIndexDigest) ||
+      new Set(catalog.files.map((file) => file.path)).size !== catalog.files.length ||
+      catalog.files.some(
+        (file) =>
+          !safeSourcePath(file.path) ||
+          !fileDigest.test(file.digest) ||
+          !(
+            file.path === "bun.lock" ||
+            file.path === "package.json" ||
+            file.path.endsWith("/package.json")
+          ),
+      ))
+  ) {
+    throw new Error("The candidate dependency metadata receipt is invalid.");
+  }
   // oxlint-disable-next-line sonarjs/expression-complexity -- validate every sealed review dimension before approval
   if (
     !objectId.test(review.baseSha) ||
@@ -156,7 +183,9 @@ const assertReview = (review: ReconciliationReviewReceipt): void => {
     baseChanges.some(
       (change) =>
         !validChange(change) ||
-        (review.publicationScope === undefined && !change.path.startsWith(`apps/${review.appId}/`)),
+        (review.publicationScope === undefined &&
+          !change.path.startsWith(`apps/${review.appId}/`) &&
+          !catalogChange(change)),
     ) ||
     headChanges.some((change) => !validChange(change)) ||
     JSON.stringify(review.baseChanges) !== JSON.stringify(baseChanges) ||

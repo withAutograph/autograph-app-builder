@@ -119,6 +119,23 @@ exit status, capture completion and durability across later edits or sandbox
 cleanup. A successful preparation is `prepared`; it does not prove an app check
 passed. Sanitized log references remain session-scoped. Missing storage or an
 interrupted command stays explicit and never changes the command's outcome.
+The candidate-bound `normalize_github_draft_pr_dependency_catalog` operation
+aligns one dependency already declared by the selected app with a shared Bun
+catalog without selecting a new version. It verifies compatible existing
+consumers before writing, retains unrelated manifest data, and uses pinned Bun
+with install scripts disabled to generate lock metadata. Its server-retained
+receipt binds exact changed metadata bytes and the resulting non-app index.
+Normal candidate review includes those shared metadata paths; arbitrary shared
+edits, changed receipt bytes, symlinks and unrelated root edits remain denied.
+The original automatic-merge receipt remains provenance, never substituted by
+caller-provided catalog authority. Successful normalization is not validation,
+publication, deployment, or hosted acceptance. A failed lock operation retains
+its metadata result and failure so the same candidate can retry normally.
+Additional repository checks stream through detached execution into the same
+durable, tenant-bound validation log store as app tests. Their `additional-check`
+references remain discoverable and pageable after a later repair; a failed
+manifest command no longer loses its output through whole-result truncation.
+
 Independent semantic source review
 remains required through the app acceptance workflow. Separately,
 `review_github_draft_pr_reconciliation` records a deterministic exact-candidate,

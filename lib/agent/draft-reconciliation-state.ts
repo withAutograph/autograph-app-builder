@@ -1,3 +1,4 @@
+import type { CandidateDependencyCatalogIntent } from "../repository/candidate-dependency-catalog";
 import { defineState } from "eve/context";
 import type { PublishedDraftRepairSource } from "./published-draft-repair";
 import type { PublishedDraftRepairReview } from "../repository/published-draft-repair-review";
@@ -82,6 +83,7 @@ export interface PreservedDraftWorkspace {
 }
 
 interface DraftCandidateFields {
+  dependencyCatalogPending?: CandidateDependencyCatalogIntent;
   version: 1;
   appId: string;
   githubSourceDigest: string;
