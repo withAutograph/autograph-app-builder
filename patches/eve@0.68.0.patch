@@ -127,10 +127,9 @@ index 90fabce..9b33738 100644
 +import{getWorkflowMetadata}from"#compiled/@workflow/core/index.js";import{createDurableSessionState}from"#execution/durable-session-store.js";import{executeTaskControlAction}from"#execution/tasks/parent/dispatch.js";import{cancelBackgroundAgentTask}from"#execution/tools/subagent/task-cancel.js";import{prepareCoordinationDispatch}from"#execution/coordination-dispatch-shared.js";import{startWorkflowTask}from"#execution/tools/workflow/start.js";async function dispatchCoordinationStep(e){"use step";if(e.ownerRunId!==void 0&&getWorkflowMetadata().workflowRunId!==e.ownerRunId)throw Error(`Session dispatch execution owner changed.`);let t=await prepareCoordinationDispatch({serializedContext:e.serializedContext,sessionState:e.sessionState});if(t===void 0)return{results:[],sessionState:e.sessionState};let{batch:n,session:r}=t,i=r,a=[];for(let r of t.plan){if(r.kind===`workflow-task`){let o=await startWorkflowTask({agents:t.workflowAgents,auth:t.auth,batchEvent:n.event,canRequestInput:t.capabilities?.requestInput===!0,initiatorAuth:t.initiatorAuth,owner:e.workflowToolRunOwner,ownerAnchorRunId:e.ownerAnchorRunId,parentSession:t.parentSession,session:i,task:r.task});i=o.session,o.result!==void 0&&a.push(o.result);continue}if(r.kind===`task-control`){let e=await executeTaskControlAction({action:r.action,cancelOwnedWork:cancelBackgroundAgentTask,serializedContext:t.serializedContext,session:i});i=e.session,a.push(e.result)}}return{results:a,sessionState:i===r?t.sessionState:createDurableSessionState({session:i})}}export{dispatchCoordinationStep};
 \ No newline at end of file
 diff --git a/dist/src/execution/session/entry-input.d.ts b/dist/src/execution/session/entry-input.d.ts
-index f5769a5..f17ddc3 100644
 --- a/dist/src/execution/session/entry-input.d.ts
 +++ b/dist/src/execution/session/entry-input.d.ts
-@@ -25,6 +25,7 @@ export interface InitialWorkflowEntryInput {
+@@ -25,6 +25,7 @@
  }
  /** A successor owner started by a previous owner during a deployment handoff. */
  export interface HandoffWorkflowEntryInput {
@@ -138,7 +137,7 @@ index f5769a5..f17ddc3 100644
      readonly activationToken: string;
      readonly checkpoint: SessionCheckpoint;
      /** The one delivery that triggered the handoff; processed before any later arrival. */
-@@ -37,7 +38,16 @@ export interface HandoffWorkflowEntryInput {
+@@ -37,7 +38,17 @@
      /** Stable public identity; also the original run that anchors the stream. */
      readonly sessionId: string;
  }
@@ -151,6 +150,7 @@ index f5769a5..f17ddc3 100644
 +    readonly provenance: import("#execution/session/terminal-recovery.js").TerminalRecoveryProvenance;
 +    readonly checkpoint: SessionCheckpoint;
 +    readonly replayInput?: import("#execution/session/turn-step-types.js").TurnStepPayload;
++    readonly carriedInbox?: readonly import("#execution/session/recovery-candidate.js").NativeRecoveryInboxEvent[];
 +}
 +export type WorkflowEntryInput = InitialWorkflowEntryInput | HandoffWorkflowEntryInput | TerminalRecoveryWorkflowEntryInput;
  export interface WorkflowEntryResult {
@@ -634,16 +634,20 @@ index 0000000..93ffa84
 +}
 diff --git a/dist/src/execution/session/recovery-candidate.d.ts b/dist/src/execution/session/recovery-candidate.d.ts
 new file mode 100644
-index 0000000..7e0344b
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.d.ts
-@@ -0,0 +1,150 @@
-+import type { World, WorkflowRun, Step, Event } from "#compiled/@workflow/world/index.js";
+@@ -0,0 +1,165 @@
++import type { World, WorkflowRun, StepWithoutData, Event } from "#compiled/@workflow/world/index.js";
 +import type { PayloadKey } from "#compiled/@workflow/core/serialization/encryption.js";
 +import type { DurableSession, DurableSessionState } from "#execution/durable-session-store.js";
 +import type { TurnStepPayload } from "#execution/session/turn-step-types.js";
 +import type { NativeHandoffProvenance } from "#execution/session/recovery-owner-provenance.js";
 +import type { MessageStreamEvent } from "#protocol/message.js";
++
++/** Private finite reader; caller must first authorize the canonical native owner. */
++export declare function readTerminalNativeEventsSnapshot(
++  world: World, runId: string, key: PayloadKey | undefined,
++): AsyncIterable<MessageStreamEvent>;
 +
 +/** Obtained from a canonical tenant-scoped server reservation, never model/client authority. */
 +export interface NativeRecoveryOwnerBinding {
@@ -682,9 +686,18 @@ index 0000000..7e0344b
 +export type NativeRecoveryUncertaintyReason =
 +  | "native-step-input-unreadable"
 +  | "native-step-output-unreadable"
++  | "native-inbox-payload-unreadable"
 +  | "native-stream-incomplete"
 +  | "failed-turn-effects-unreconciled"
 +  | "completed-terminal-effects-unreconciled";
++/** Exact accepted command evidence, never a new tool result or approval. */
++export interface NativeRecoveryInboxEvent {
++  readonly runId: string;
++  readonly eventId: string;
++  readonly correlationId: string;
++  readonly slot: number;
++  readonly payload: unknown;
++}
 +export interface PrivateNativeRecoveryPayload {
 +  readonly version: 1;
 +  readonly binding: NativeRecoveryOwnerBinding;
@@ -695,20 +708,21 @@ index 0000000..7e0344b
 +  /** Native-only hydration capability for run.input; never serialize or expose publicly. */
 +  readonly nativeRunKey: PayloadKey | undefined;
 +  readonly candidates: readonly PairedNativeRecoveryCheckpoint[];
-+  /** Complete retained native event log; includes facts preceding the preferred candidate. */
++  /** Complete native event metadata; opaque payloads remain in the authoritative World. */
 +  readonly events: readonly Event[];
 +  readonly frontier: readonly {
 +    readonly origin: NativeRecoveryOrigin;
 +    readonly events: readonly Event[];
 +  }[];
-+  /** Relevant native steps fetched once; unrelated raw facts stay in events/frontier. */
++  /** Relevant native payloads fetched once; serialized blobs stay in the authoritative World. */
 +  readonly steps: readonly {
-+    readonly step: Step;
++    readonly step: StepWithoutData;
 +    readonly arguments?: unknown;
 +    readonly output?: unknown;
 +  }[];
 +  /** Actual persisted protocol events, including results; these do not imply authored-state commit. */
 +  readonly nativeEvents: readonly MessageStreamEvent[];
++  readonly carriedInbox: readonly NativeRecoveryInboxEvent[];
 +  readonly issues: readonly {
 +    readonly reason: NativeRecoveryUncertaintyReason;
 +    readonly stepId?: string;
@@ -790,10 +804,13 @@ index 0000000..7e0344b
 +): PrivateNativeRecoveryPayload;
 diff --git a/dist/src/execution/session/recovery-candidate.js b/dist/src/execution/session/recovery-candidate.js
 new file mode 100644
-index 0000000..9274615
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.js
-@@ -0,0 +1,392 @@
+@@ -0,0 +1,630 @@
++import {
++  sessionCommandHookToken,
++  sessionInboxHookToken,
++} from "#execution/session-inbox/address.js";
 +import { resolveTerminalCheckpointOwner } from "#execution/session/recovery-owner-provenance.js";
 +// Server-only native checkpoint inspection. This module never starts/resumes a run.
 +// The caller MUST supply canonical ownership authorization; model/client IDs are
@@ -877,7 +894,7 @@ index 0000000..9274615
 +      throw new Error("Native recovery run identity differs.");
 +    // Public Builder failure is checked by authorizeOwner. A terminal model
 +    // failure can settle the native workflow successfully with next.done.
-+    if (!["failed", "completed"].includes(anchor.status))
++    if (!["failed", "completed", "cancelled"].includes(anchor.status))
 +      return { kind: "unavailable", reason: "source-not-terminal" };
 +    if (
 +      anchor.expiredAt !== undefined &&
@@ -902,7 +919,7 @@ index 0000000..9274615
 +      const page = await world.events.list({
 +        runId: run.runId,
 +        pagination: { limit: 128, sortOrder: "asc", ...(cursor === undefined ? {} : { cursor }) },
-+        resolveData: "all",
++        resolveData: "none",
 +      });
 +      for (const event of page.data) {
 +        if (seenEvents.has(event.eventId)) continue;
@@ -946,13 +963,30 @@ index 0000000..9274615
 +      "terminateChildSessionsStep",
 +      "dispatchCoordinationStep",
 +    ]);
-+    const readStep = async (stepId) => {
++    const readStep = async (stepId, knownName) => {
 +      if (steps.has(stepId)) return steps.get(stepId);
++      let metadata;
++      if (knownName === undefined) {
++        metadata = await world.steps.get(run.runId, stepId, { resolveData: "none" });
++        if (
++          metadata.runId !== run.runId ||
++          metadata.stepId !== stepId ||
++          typeof metadata.stepName !== "string"
++        )
++          throw new Error("Native recovery step owner differs.");
++        if (!relevantSteps.has(nativeFunction(metadata.stepName))) {
++          const retained = { step: { ...metadata, input: undefined, output: undefined } };
++          steps.set(stepId, retained);
++          return retained;
++        }
++      }
 +      const step = await world.steps.get(run.runId, stepId, { resolveData: "all" });
++      if (metadata !== undefined && step.stepName !== metadata.stepName)
++        throw new Error("Native recovery step name differs.");
 +      if (step.runId !== run.runId || step.stepId !== stepId) {
 +        throw new Error("Native recovery step owner differs.");
 +      }
-+      const retained = { step };
++      const retained = { step: { ...step, input: undefined, output: undefined } };
 +      steps.set(stepId, retained);
 +      const name = nativeFunction(step.stepName);
 +      if (!relevantSteps.has(name)) return retained;
@@ -1012,10 +1046,10 @@ index 0000000..9274615
 +    for (const { event, slot } of events) {
 +      if (!event.eventType.startsWith("step_") || !event.correlationId) continue;
 +      const knownName = stepNames.get(event.correlationId);
-+      // Unrelated steps already retain their raw resolved input/result/error
-+      // in the native log. Do not fetch or hydrate them a second time.
++      // The immutable World retains every raw payload. Keep its complete
++      // metadata frontier here; fetch only relevant checkpoint payloads.
 +      if (knownName !== undefined && !relevantSteps.has(knownName)) continue;
-+      const retained = await readStep(event.correlationId);
++      const retained = await readStep(event.correlationId, knownName);
 +      const name = nativeFunction(retained.step.stepName);
 +      const origin = coordinates(event, slot);
 +      const argument = retained.arguments?.args?.[0];
@@ -1069,6 +1103,62 @@ index 0000000..9274615
 +    if (unique.length === 0)
 +      return { kind: "unavailable", reason: "paired-native-checkpoint-unavailable" };
 +
++    // Preserve accepted, uncommitted command envelopes as inert private evidence.
++    // Only the activated recovery owner may admit them through the ordinary inbox.
++    const carriedInbox = [];
++    const latest = [...unique].sort((left, right) => right.origin.slot - left.origin.slot)[0];
++    const latestSession = dependencies.readDurableSession(latest.sessionState);
++    const command = sessionCommandHookToken(binding.logicalSessionId);
++    const inboxTokens = new Set([command, sessionInboxHookToken(command)]);
++    if (
++      typeof latestSession.continuationToken === "string" &&
++      latestSession.continuationToken.length > 0
++    ) {
++      inboxTokens.add(latestSession.continuationToken);
++      inboxTokens.add(sessionInboxHookToken(latestSession.continuationToken));
++    }
++    const hookTokens = new Map(
++      events
++        .filter(({ event }) => event.eventType === "hook_created")
++        .map(({ event }) => [event.correlationId, event.eventData?.token]),
++    );
++    for (const { event, slot } of events) {
++      if (
++        slot <= latest.origin.slot ||
++        event.eventType !== "hook_received" ||
++        !inboxTokens.has(event.eventData?.token ?? hookTokens.get(event.correlationId))
++      )
++        continue;
++      await authorizeOwner(binding);
++      try {
++        const full = await world.events.get(run.runId, event.eventId, { resolveData: "all" });
++        if (
++          full.runId !== run.runId ||
++          full.eventId !== event.eventId ||
++          full.eventType !== event.eventType ||
++          full.correlationId !== event.correlationId ||
++          (full.eventData?.token ?? hookTokens.get(full.correlationId)) !==
++            (event.eventData?.token ?? hookTokens.get(event.correlationId))
++        )
++          throw new Error("Native inbox receipt identity differs.");
++        const payload = await dependencies.hydrateHookPayload(
++          full.eventData.payload,
++          run.runId,
++          key,
++        );
++        carriedInbox.push({
++          runId: run.runId,
++          eventId: event.eventId,
++          correlationId: event.correlationId,
++          slot,
++          payload,
++        });
++      } catch {
++        // Absence of an exact retained envelope can never waive the inbox guard.
++        issues.push({ reason: "native-inbox-payload-unreadable" });
++      }
++    }
++
 +    const nativeEvents = [];
 +    try {
 +      for await (const event of dependencies.readNativeEvents(binding.ownerRunId))
@@ -1112,6 +1202,7 @@ index 0000000..9274615
 +      frontier,
 +      steps: [...steps.values()],
 +      nativeEvents,
++      carriedInbox,
 +      issues,
 +    };
 +    await authorizeOwner(binding);
@@ -1143,14 +1234,171 @@ index 0000000..9274615
 +  };
 +}
 +
++/** Read a finite, unchanged prefix without following an unclosed terminal stream. */
++export async function* readTerminalNativeEventsSnapshot(world, runId, key) {
++  const [serialization, stream, protocol] = await Promise.all([
++    import("#compiled/@workflow/core/serialization.js"),
++    import("#execution/ndjson-stream.js"),
++    import("#protocol/message-version.js"),
++  ]);
++  const name = `${runId.replace("wrun_", "strm_")}_user`;
++  const before = await world.streams.getInfo(runId, name);
++  if (!Number.isSafeInteger(before.tailIndex) || before.tailIndex < -1 || typeof before.done !== "boolean")
++    throw new Error("Incomplete native stream.");
++  const count = before.tailIndex + 1;
++  const assertUnchanged = async () => {
++    const after = await world.streams.getInfo(runId, name);
++    if (after.tailIndex !== before.tailIndex || after.done !== before.done)
++      throw new Error("Changed native stream.");
++  };
++  let frames = 0;
++  let stopped = false;
++  let connection;
++  const closeConnection = async (current) => {
++    if (current === undefined) return;
++    if (current.closing !== undefined) return current.closing;
++    current.closing = (async () => {
++      try { await current.reader.cancel(); }
++      catch (error) { if (error !== current.disconnect) throw error; }
++      finally {
++        current.reader.releaseLock();
++        try { await current.writer.abort(); }
++        catch (error) { if (error !== current.disconnect) throw error; }
++        finally {
++          current.writer.releaseLock();
++          try { await current.raw.cancel(); }
++          catch (error) { if (error !== current.disconnect) throw error; }
++          finally { current.raw.releaseLock(); }
++        }
++      }
++    })();
++    return current.closing;
++  };
++  const readFrames = async function* () {
++    while (!stopped && frames < count) {
++      // Preserve the supplied World and its absolute native-index contract.
++      const raw = (await world.streams.get(runId, name, frames)).getReader();
++      const unframer = serialization.getByteUnframingStream();
++      const current = { start: frames, raw, reader: unframer.readable.getReader(), writer: unframer.writable.getWriter() };
++      connection = current;
++      let pending = current.reader.read();
++      pending.catch(() => {});
++      let headerSize = 0;
++      let remaining = 0;
++      const header = new Uint8Array(4);
++      try {
++        while (!stopped && frames < count) {
++          let next;
++          try { next = await raw.read(); }
++          catch (error) { current.disconnect = error; break; }
++          if (next.done) break;
++          const value = next.value;
++          if (!(value instanceof Uint8Array)) throw new Error("Invalid native stream bytes.");
++          let offset = 0;
++          let complete = 0;
++          while (offset < value.byteLength) {
++            if (remaining === 0) {
++              const take = Math.min(4 - headerSize, value.byteLength - offset);
++              header.set(value.subarray(offset, offset + take), headerSize);
++              headerSize += take;
++              offset += take;
++              if (headerSize !== 4) continue;
++              remaining = new DataView(header.buffer).getUint32(0, false);
++              headerSize = 0;
++              if (remaining === 0) throw new Error("Incomplete native stream frame.");
++            }
++            const take = Math.min(remaining, value.byteLength - offset);
++            remaining -= take;
++            offset += take;
++            if (remaining === 0) {
++              complete++;
++              if (frames + complete === count && offset !== value.byteLength)
++                throw new Error("Changed native stream.");
++            }
++          }
++          // Drain every complete frame before another transport read. An EOF
++          // cannot discard complete queued frames or bytes already decoded.
++          await current.writer.write(value);
++          for (let index = 0; index < complete; index++) {
++            const decoded = await pending;
++            if (decoded.done) throw new Error("Incomplete native stream decoding.");
++            pending = current.reader.read();
++            pending.catch(() => {});
++            const frame = new Uint8Array(decoded.value.byteLength + 4);
++            new DataView(frame.buffer).setUint32(0, decoded.value.byteLength, false);
++            frame.set(decoded.value, 4);
++            frames++;
++            yield frame;
++          }
++        }
++      } finally { await closeConnection(current); }
++      if (stopped || frames === count) return;
++      if (frames === current.start) throw new Error("Native stream made no progress.");
++      // Keep complete prefix frames in RAM; only the connection-local partial
++      // frame is discarded and reread at this exact next native index.
++      await assertUnchanged();
++    }
++  };
++  const iterator = readFrames();
++  const finite = new ReadableStream({
++    async pull(controller) {
++      const next = await iterator.next();
++      if (next.done) controller.close();
++      else controller.enqueue(next.value);
++    },
++    async cancel() {
++      stopped = true;
++      await closeConnection(connection);
++      await iterator.return();
++    },
++  });
++  const inert = Object.fromEntries(
++    ["ReadableStream", "WritableStream", "AbortController", "AbortSignal"].map((type) => [
++      type,
++      (value) => Object.freeze({ kind: "native-recovery-transport-reference", type, value }),
++    ]),
++  );
++  let decodedFrames = 0;
++  const bytes = finite
++    .pipeThrough(
++      serialization.getDeserializeStream(
++        { ...serialization.getCommonRevivers(globalThis), ...inert },
++        key,
++      ),
++    )
++    .pipeThrough(
++      new TransformStream({
++        transform(value, controller) {
++          if (!(value instanceof Uint8Array)) throw new Error("Invalid native stream bytes.");
++          decodedFrames++;
++          controller.enqueue(value);
++        },
++      }),
++    );
++  const events = [];
++  try {
++    for await (const event of stream.parseNdjsonStream(
++      () => bytes,
++      protocol.normalizePersistedMessageStreamEvent,
++    ))
++      events.push(event);
++    if (frames !== count || decodedFrames !== count)
++      throw new Error("Incomplete native stream decoding.");
++    await assertUnchanged();
++  } finally {
++    stopped = true;
++    await closeConnection(connection);
++    await iterator.return();
++  }
++  yield* events;
++}
++
 +/** Production wiring stays inside the native framework, after owner authorization. */
 +export async function collectTerminalRecoveryCandidate(input) {
-+  const [runtime, serialization, durable, stream, protocol] = await Promise.all([
++  const [runtime, serialization, durable] = await Promise.all([
 +    import("#internal/workflow/runtime.js"),
 +    import("#compiled/@workflow/core/serialization.js"),
 +    import("#execution/durable-session-store.js"),
-+    import("#execution/ndjson-stream.js"),
-+    import("#protocol/message-version.js"),
 +  ]);
 +  // Hydration for inspection must not start stream forwarding, lock polling,
 +  // or live AbortSignal readers. Keep transport refs inert; their original
@@ -1178,11 +1426,14 @@ index 0000000..9274615
 +      serialization.hydrateStepReturnValue(value, runId, key, globalThis, transportRevivers),
 +    readDurableSession: durable.readDurableSession,
 +    requireEventSlot: nativeEventSlot,
-+    readNativeEvents: (runId) =>
-+      stream.parseNdjsonStream(
-+        () => runtime.getRun(runId).getReadable(),
-+        protocol.normalizePersistedMessageStreamEvent,
-+      ),
++    async *readNativeEvents(runId) {
++      const world = await runtime.getWorld();
++      const run = await world.runs.get(runId, { resolveData: "none" });
++      if (run.runId !== runId || !["failed", "completed", "cancelled"].includes(run.status))
++        throw new Error("Native stream owner is not terminal.");
++      const key = await runtime.resolveRunEncryptionKey(world, run);
++      yield* readTerminalNativeEventsSnapshot(world, runId, key);
++    },
 +    now: Date.now,
 +  })(input);
 +}
@@ -1678,7 +1929,7 @@ new file mode 100644
 index 0000000..27307c0
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-owner-provenance.js
-@@ -0,0 +1,450 @@
+@@ -0,0 +1,454 @@
 +import { isDeepStrictEqual } from "node:util";
 +import {
 +  sessionCommandHookToken,
@@ -1690,7 +1941,7 @@ index 0000000..27307c0
 +    .split(/[/:#]/u)
 +    .at(-1);
 +const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
-+const terminal = (run) => ["completed", "failed"].includes(run.status);
++const terminal = (run) => ["completed", "failed", "cancelled"].includes(run.status);
 +const unavailable = (reason) => ({ kind: "unavailable", reason });
 +
 +/** Private discovery hints never authorize collection of a candidate's app state. */
@@ -1736,9 +1987,9 @@ index 0000000..27307c0
 +    }
 +    return entries.get(run.runId);
 +  };
-+  const eventsFor = async (runId, resolveData = "none") => {
++  const eventsFor = async (runId, resolveData = "none", refresh = false) => {
 +    const cacheKey = `${runId}:${resolveData}`;
-+    if (logs.has(cacheKey)) return logs.get(cacheKey);
++    if (!refresh && logs.has(cacheKey)) return logs.get(cacheKey);
 +    const events = [];
 +    const seen = new Set();
 +    const cursors = new Set();
@@ -1808,7 +2059,10 @@ index 0000000..27307c0
 +          step.input === undefined
 +            ? undefined
 +            : await dependencies.hydrateStepArguments(step.input, run.runId, await keyFor(run));
-+        retainedSteps.set(cacheKey, { step, input: args?.args?.[0] });
++        retainedSteps.set(cacheKey, {
++          step: { ...step, input: undefined, output: undefined },
++          input: args?.args?.[0],
++        });
 +      }
 +      selected.push(retainedSteps.get(cacheKey));
 +    }
@@ -2102,7 +2356,8 @@ index 0000000..27307c0
 +          return unavailable("handoff-parent-frontier-uncertain");
 +      }
 +    }
-+    const retainedEvents = await eventsFor(parent.runId, "all");
++    // A fresh metadata scan must independently certify the full parent frontier.
++    const retainedEvents = await eventsFor(parent.runId, "none", true);
 +    if (
 +      retainedEvents.length !== parentEvents.length ||
 +      retainedEvents.some((event, index) => event.eventId !== parentEvents[index].eventId)
@@ -2131,15 +2386,15 @@ index 0000000..27307c0
 +}
 diff --git a/dist/src/execution/session/recovery-reconciliation.d.ts b/dist/src/execution/session/recovery-reconciliation.d.ts
 new file mode 100644
-index 0000000..fc7051d
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-reconciliation.d.ts
-@@ -0,0 +1,67 @@
+@@ -0,0 +1,70 @@
 +import type { SessionCheckpoint } from "#execution/session/handoff.js";
 +import type { TurnStepPayload } from "#execution/session/turn-step-types.js";
 +import type {
 +  NativeRecoveryCandidateKind,
 +  NativeRecoveryOrigin,
++  NativeRecoveryInboxEvent,
 +  PrivateNativeRecoveryCandidate,
 +} from "#execution/session/recovery-candidate.js";
 +
@@ -2168,6 +2423,7 @@ index 0000000..fc7051d
 +      readonly checkpointCore: Pick<SessionCheckpoint, "serializedContext" | "sessionState">;
 +      /** Exact original typed incoming payload. Only the native owner may execute it. */
 +      readonly replayInput?: TurnStepPayload;
++      readonly carriedInbox?: readonly NativeRecoveryInboxEvent[];
 +      readonly provenance: NativeRecoveryReconciliationProvenance;
 +    }
 +  | {
@@ -2202,12 +2458,14 @@ index 0000000..fc7051d
 +  handle: PrivateNativeRecoveryCandidate,
 +  options?: { readonly repeatableCallIds?: readonly string[] },
 +): Promise<NativeRecoveryReconciliation>;
++
 diff --git a/dist/src/execution/session/recovery-reconciliation.js b/dist/src/execution/session/recovery-reconciliation.js
 new file mode 100644
-index 0000000..9c0dc56
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-reconciliation.js
-@@ -0,0 +1,519 @@
+@@ -0,0 +1,597 @@
++import { activeTurnId } from "#harness/active-turn-id.js";
++import { decodeSessionInboxPayload } from "#execution/session-inbox/protocol.js";
 +import { proposeRetrospectiveCancelledToolHistory } from "#execution/session/recovery-cancelled-tool-history.js";
 +import { isCancelledToolHistoryResult } from "#harness/cancelled-tool-history.js";
 +import { recordRecoveryProtocolDiagnostic } from "#harness/model-protocol-diagnostic.js";
@@ -2328,7 +2586,76 @@ index 0000000..9c0dc56
 +    (data.sequence === emission.sequence && data.stepIndex >= emission.stepIndex)
 +  );
 +}
-+function assessEffects(payload, source, session, incoming) {
++function isRestorableTerminalInboxPayload(payload, sourceTurnId) {
++  let decoded;
++  try {
++    decoded = decodeSessionInboxPayload(payload);
++  } catch {
++    return false;
++  }
++  if (decoded.kind === "cancel") {
++    return (
++      typeof decoded.turnId === "string" &&
++      decoded.turnId === sourceTurnId &&
++      Object.keys(decoded).every((key) => ["kind", "turnId"].includes(key))
++    );
++  }
++  return decoded.kind === "deliver";
++}
++
++function retainedInboxSuffix(payload, latest) {
++  const retained = payload.carriedInbox ?? [];
++  // A later authored step may already have admitted an envelope without a
++  // committed checkpoint. Keep that ambiguity; never submit it twice.
++  if (
++    retained.length > 0 &&
++    payload.events.some(
++      (event) =>
++        event.eventType.startsWith("step_") && Number(event.eventId.slice(5)) > retained[0].slot,
++    )
++  )
++    return;
++  const ids = new Set();
++  const command = sessionCommandHookToken(payload.binding.logicalSessionId);
++  const session = readDurableSession(latest.sessionState);
++  const tokens = new Set([command, sessionInboxHookToken(command)]);
++  if (typeof session.continuationToken === "string" && session.continuationToken.length > 0) {
++    tokens.add(session.continuationToken);
++    tokens.add(sessionInboxHookToken(session.continuationToken));
++  }
++  const hooks = new Map(
++    payload.events
++      .filter((event) => event.eventType === "hook_created")
++      .map((event) => [event.correlationId, event.eventData?.token]),
++  );
++  for (const item of retained) {
++    const event = payload.events.find((value) => value.eventId === item.eventId);
++    if (
++      event === undefined ||
++      event.eventType !== "hook_received" ||
++      event.runId !== payload.checkpointOwnerRunId ||
++      item.runId !== event.runId ||
++      event.correlationId !== item.correlationId ||
++      Number(event.eventId.slice(5)) !== item.slot ||
++      item.slot <= latest.origin.slot ||
++      ids.has(item.eventId) ||
++      !tokens.has(event.eventData?.token ?? hooks.get(event.correlationId))
++    )
++      return;
++    if (
++      !isRestorableTerminalInboxPayload(
++        item.payload,
++        activeTurnId(latest.sessionState.emissionState),
++      )
++    )
++      return;
++    ids.add(item.eventId);
++  }
++  if (retained.some((item, index) => index > 0 && item.slot <= retained[index - 1].slot)) return;
++  return { entries: retained, ids };
++}
++
++function assessEffects(payload, source, session, incoming, carriedInboxIds) {
 +  if (payload.issues.some((issue) => issue.reason === "native-stream-incomplete"))
 +    return uncertain("native-stream-incomplete");
 +  // A failed turn has no committed authored-state return. A finalizer input
@@ -2379,7 +2706,10 @@ index 0000000..9c0dc56
 +  for (const event of payload.events) {
 +    if (event.eventType !== "hook_received" || Number(event.eventId.slice(5)) <= source.origin.slot)
 +      continue;
-+    if (inboxTokens.has(event.eventData?.token ?? hookTokens.get(event.correlationId)))
++    if (
++      inboxTokens.has(event.eventData?.token ?? hookTokens.get(event.correlationId)) &&
++      !carriedInboxIds?.has(event.eventId)
++    )
 +      return uncertain("unconsumed-native-inbox-input");
 +  }
 +  const committedResults = committedResultIds(session.history);
@@ -2638,13 +2968,16 @@ index 0000000..9c0dc56
 +        return uncertain("cancelled-call-result-unreconciled", result.callId);
 +    }
 +  }
++  const carriedInbox = retainedInboxSuffix(payload, latest);
 +  const effectUncertainty = assessEffects(
 +    payload,
 +    historySource,
 +    session,
 +    incomingSource?.incoming,
++    carriedInbox?.ids,
 +  );
 +  if (effectUncertainty !== undefined) return effectUncertainty;
++  if (carriedInbox === undefined) return uncertain("unconsumed-native-inbox-input");
 +  const cancelledHistory = proposeRetrospectiveCancelledToolHistory(payload, latest, session);
 +  if (cancelledHistory.kind === "uncertain") return cancelledHistory;
 +  if (cancelledHistory.kind === "restored")
@@ -2665,6 +2998,7 @@ index 0000000..9c0dc56
 +          : replaceDurableSessionSnapshot({ session, state: latest.sessionState }),
 +    },
 +    ...(replayInput === undefined ? {} : { replayInput }),
++    ...(carriedInbox.entries.length === 0 ? {} : { carriedInbox: carriedInbox.entries }),
 +    provenance: {
 +      version: 1,
 +      sourceOwnerRunId: payload.binding.ownerRunId,
@@ -2747,15 +3081,33 @@ index 0000000..c7f0dc2
 +}): Promise<{ inbox: SessionInboxHandle; session: SessionBoot } | undefined>;
 diff --git a/dist/src/execution/session/terminal-recovery-boot.js b/dist/src/execution/session/terminal-recovery-boot.js
 new file mode 100644
-index 0000000..ae1eb1e
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery-boot.js
-@@ -0,0 +1,81 @@
+@@ -0,0 +1,137 @@
++import { decodeSessionInboxPayload } from "#execution/session-inbox/protocol.js";
++import { activeTurnId } from "#harness/active-turn-id.js";
 +import { createHook, getWorkflowMetadata, getWritable } from "#compiled/@workflow/core/index.js";
 +import { createSessionInbox } from "#execution/session-inbox/inbox.js";
 +import { sessionHookTokens } from "#execution/session/hook-tokens.js";
 +import { validateTerminalRecoveryCheckpointStep } from "#execution/session/handoff-steps.js";
 +import { sessionTimeoutDeadline } from "#execution/session/timeout.js";
++
++function isRestorableTerminalInboxPayload(payload, sourceTurnId) {
++  let decoded;
++  try {
++    decoded = decodeSessionInboxPayload(payload);
++  } catch {
++    return false;
++  }
++  if (decoded.kind === "cancel") {
++    return (
++      typeof decoded.turnId === "string" &&
++      decoded.turnId === sourceTurnId &&
++      Object.keys(decoded).every((key) => ["kind", "turnId"].includes(key))
++    );
++  }
++  return decoded.kind === "deliver";
++}
 +
 +/** No harness, tool, model, or sandbox lifecycle starts before the durable receipt is activated. */
 +export async function bootTerminalRecoveryOwner(input) {
@@ -2770,9 +3122,33 @@ index 0000000..ae1eb1e
 +
 +export async function bootTerminalRecoveryOwnerWithPorts(input, ports) {
 +  const { checkpoint, descriptor } = input;
-+  if (checkpoint.sessionState.sessionId !== descriptor.logicalSessionId ||
-+      checkpoint.serializedContext["eve.sessionId"] !== descriptor.logicalSessionId) {
++  if (
++    checkpoint.sessionState.sessionId !== descriptor.logicalSessionId ||
++    checkpoint.serializedContext["eve.sessionId"] !== descriptor.logicalSessionId
++  ) {
 +    throw new Error("Terminal recovery checkpoint identity changed.");
++  }
++  const carriedInbox = input.carriedInbox ?? [];
++  const ids = new Set();
++  for (const [index, item] of carriedInbox.entries()) {
++    if (
++      item.runId !== (input.provenance.checkpointOwnerRunId ?? descriptor.sourceOwnerRunId) ||
++      typeof item.eventId !== "string" ||
++      !/^evnt_[0-9]{26}$/u.test(item.eventId) ||
++      Number(item.eventId.slice(5)) !== item.slot ||
++      !Number.isSafeInteger(item.slot) ||
++      typeof item.correlationId !== "string" ||
++      item.correlationId.length === 0 ||
++      item.slot <= input.provenance.sourceSlot ||
++      ids.has(item.eventId) ||
++      (index > 0 && item.slot <= carriedInbox[index - 1].slot) ||
++      !isRestorableTerminalInboxPayload(
++        item.payload,
++        activeTurnId(checkpoint.sessionState.emissionState),
++      )
++    )
++      throw new Error("Terminal recovery retained inbox binding changed.");
++    ids.add(item.eventId);
 +  }
 +  const validateCheckpoint = ports.validateCheckpoint;
 +  await validateCheckpoint({ checkpoint });
@@ -2785,11 +3161,18 @@ index 0000000..ae1eb1e
 +    // Never force a claim: a live owner or another recovery wins over this candidate.
 +    await inbox.claimSessionHooks(sessionHookTokens(checkpoint));
 +    let cancel;
-+    const cancelled = new Promise((resolve) => { cancel = resolve; });
++    const cancelled = new Promise((resolve) => {
++      cancel = resolve;
++    });
 +    stopInterrupt = inbox.onInterrupt(() => cancel(undefined));
 +    const acceptedBeforeActivation = inbox.drain();
 +    inbox.restore(acceptedBeforeActivation);
-+    if (acceptedBeforeActivation.some((payload) => ["cancel", "reset", "session-timeout"].includes(payload.kind))) return;
++    if (
++      acceptedBeforeActivation.some((payload) =>
++        ["cancel", "reset", "session-timeout"].includes(payload.kind),
++      )
++    )
++      return;
 +    activation = ports.createHook({
 +      token: input.activationToken,
 +      metadata: {
@@ -2799,10 +3182,16 @@ index 0000000..ae1eb1e
 +    if (await activation.getConflict()) return;
 +    const accepted = await Promise.race([activation, cancelled]);
 +    if (accepted === undefined) return;
-+    if (accepted?.kind !== "activate-terminal-recovery" ||
-+        accepted.operationId !== descriptor.operationId || accepted.ownerRunId !== ownerRunId) {
++    if (
++      accepted?.kind !== "activate-terminal-recovery" ||
++      accepted.operationId !== descriptor.operationId ||
++      accepted.ownerRunId !== ownerRunId
++    ) {
 +      throw new Error("Terminal recovery activation does not match its durable receipt.");
 +    }
++    // Historical accepted commands are not new-owner preactivation interrupts.
++    // Preserve their FIFO ahead of live arrivals, then use ordinary admission.
++    inbox.restore(carriedInbox.map((item) => item.payload));
 +    const boot = {
 +      inbox,
 +      session: {
@@ -2947,7 +3336,6 @@ index 0000000..a3f1892
 +export declare function observeTerminalSession(input: TerminalRecoveryAuthorityInput & { readonly ports: Pick<TerminalRecoveryPorts, "authorize" | "readReceipt" | "observeCandidateFacts" | "observeRecoveryHolderBinding"> }, dependencies: TerminalRecoveryObservationDependencies): Promise<{ readonly kind: "accepted"; readonly sessionId: string }>;
 diff --git a/dist/src/execution/session/terminal-recovery.js b/dist/src/execution/session/terminal-recovery.js
 new file mode 100644
-index 0000000..07e326f
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.js
 @@ -0,0 +1,442 @@
@@ -3107,7 +3495,7 @@ index 0000000..07e326f
 +    ready = await findReady("pre_start_ready");
 +    if (ready === undefined) {
 +      preparing("owner_start");
-+      await dependencies.start({ activationToken: token, checkpoint, descriptor, provenance, replayInput: reconciled.replayInput });
++      await dependencies.start({ activationToken: token, checkpoint, descriptor, provenance, replayInput: reconciled.replayInput, carriedInbox: reconciled.carriedInbox });
 +      // A start timeout remains unknown. A later exact request discovers the ready hook;
 +      // no checkpoint may execute until its canonical physical owner receipt is committed.
 +      preparing("owner_readiness_deadline");

@@ -6,11 +6,15 @@ import { pathToFileURL } from "node:url";
 import { test } from "vitest";
 
 const require = createRequire(import.meta.url);
-const eve = path.dirname(require.resolve("eve/package.json"));
-const load = (name) => import(pathToFileURL(path.join(eve, "dist/src", name)).href);
-const { createTerminalRecoveryCandidateCollector, readTerminalRecoveryCandidate } = await load(
-  "execution/session/recovery-candidate.js",
+const eve = path.resolve(
+  process.env.EVE_RECOVERY_NATIVE_ROOT ?? path.dirname(require.resolve("eve/package.json")),
 );
+const load = (name) => import(pathToFileURL(path.join(eve, "dist/src", name)).href);
+const {
+  createTerminalRecoveryCandidateCollector,
+  readTerminalRecoveryCandidate,
+  readTerminalNativeEventsSnapshot,
+} = await load("execution/session/recovery-candidate.js");
 const { reconcileTerminalRecoveryCandidate } = await load(
   "execution/session/recovery-reconciliation.js",
 );
@@ -37,7 +41,251 @@ const actualRuntimeResult = {
   output: { value: "actual-native-outcome" },
 };
 
+const attachHandoffWorld = async ({ options, sourcePair, world, events, steps }) => {
+  const boundOwnerRunId = options.handoff === true ? logicalSessionId : ownerRunId;
+  const readOperations = [];
+  if (options.handoff !== true) {
+    return { boundOwnerRunId, readOperations };
+  }
+  {
+    const anchorRunId = boundOwnerRunId;
+    const token = `${anchorRunId}:handoff`;
+    const checkpoint = {
+      ...sourcePair,
+      serializedContext: { ...sourcePair.serializedContext, "eve.sessionId": logicalSessionId },
+    };
+    const delivery = { kind: "deliver", payloads: [{ message: "retained approved intent" }] };
+    const startInput = {
+      anchorRunId,
+      logicalSessionId,
+      targetDeploymentId: "child-deployment",
+      activationToken: token,
+      checkpoint,
+      delivery,
+    };
+    const childEntry = {
+      kind: "handoff",
+      sessionId: logicalSessionId,
+      streamRunId: anchorRunId,
+      activationToken: token,
+      ownerDeploymentId: "child-deployment",
+      checkpoint,
+      delivery,
+    };
+    const makeStep = async (runId, id, name, value) => ({
+      runId,
+      stepId: id,
+      stepName: `step//eve//${name}`,
+      status: "completed",
+      input: await serialization.dehydrateStepArguments({ args: [value], closureVars: [] }, runId),
+    });
+    const startStep = await makeStep(
+      anchorRunId,
+      "start-owner",
+      "startSessionOwnerStep",
+      startInput,
+    );
+    const validation = await makeStep(
+      ownerRunId,
+      "validate-handoff",
+      "validateSessionCheckpointStep",
+      { checkpoint },
+    );
+    const activation = await makeStep(
+      ownerRunId,
+      "signal-handoff",
+      "signalSessionOwnerActivationStep",
+      { token, activation: { kind: "active" } },
+    );
+    const typedEvent = (runId, slot, eventType, correlationId, eventData = {}) => ({
+      runId,
+      eventId: eventId(slot),
+      eventType,
+      correlationId,
+      eventData,
+    });
+    const parentEvents = [
+      typedEvent(anchorRunId, 1, "hook_created", "handoff-hook", { token }),
+      typedEvent(anchorRunId, 2, "step_started", startStep.stepId, {
+        stepName: startStep.stepName,
+      }),
+      typedEvent(anchorRunId, 3, "step_completed", startStep.stepId, {
+        stepName: startStep.stepName,
+      }),
+      typedEvent(anchorRunId, 4, "hook_received", "handoff-hook", {
+        payload: await serialization.dehydrateStepReturnValue({ kind: "active" }, anchorRunId),
+      }),
+      typedEvent(anchorRunId, 5, "run_completed"),
+    ];
+    if (options.parentFrontierUnknown === true) {
+      parentEvents.push(
+        typedEvent(anchorRunId, 6, "step_started", "late-effect", {
+          stepName: "step//eve//dispatchCoordinationStep",
+        }),
+      );
+    }
+    const address = await load("execution/session-inbox/address.js");
+    const inbox = address.sessionInboxHookToken(address.sessionCommandHookToken(logicalSessionId));
+    const childEvents = [
+      typedEvent(ownerRunId, 1, "step_completed", validation.stepId, {
+        stepName: validation.stepName,
+      }),
+      typedEvent(ownerRunId, 2, "hook_created", "claimed-inbox", {
+        token: inbox,
+        metadata: await serialization.dehydrateStepReturnValue(
+          { sessionId: logicalSessionId },
+          ownerRunId,
+        ),
+      }),
+      typedEvent(ownerRunId, 3, "step_completed", activation.stepId, {
+        stepName: activation.stepName,
+      }),
+      ...events.map((event) => ({
+        ...event,
+        eventId: eventId(Number(event.eventId.slice(5)) + 3),
+      })),
+    ];
+    const runs = new Map([
+      [
+        anchorRunId,
+        {
+          runId: anchorRunId,
+          status: options.anchorStatus ?? "completed",
+          deploymentId: "anchor-deployment",
+          workflowName: "session-owner",
+          input: await serialization.dehydrateWorkflowArguments([{ kind: "initial" }], anchorRunId),
+        },
+      ],
+      [
+        ownerRunId,
+        {
+          runId: ownerRunId,
+          status: options.runStatus ?? "cancelled",
+          deploymentId: "child-deployment",
+          workflowName: "session-owner",
+          input: await serialization.dehydrateWorkflowArguments([childEntry], ownerRunId),
+        },
+      ],
+    ]);
+    world.runs.get = (id) => {
+      readOperations.push(["runs.get", id]);
+      return Promise.resolve(runs.get(id));
+    };
+    world.runs.list = () => {
+      readOperations.push(["runs.list"]);
+      return Promise.resolve({ data: [...runs.values()], hasMore: false });
+    };
+    let parentScans = 0;
+    world.events.list = ({ runId, resolveData }) => {
+      readOperations.push(["events.list", runId, resolveData]);
+      if (runId === anchorRunId) {
+        parentScans += 1;
+      }
+      const data = runId === anchorRunId ? parentEvents : childEvents;
+      const drifted = options.parentScanDrift === true && runId === anchorRunId && parentScans > 1;
+      const observed = drifted ? [...data, { ...data.at(-1), eventId: eventId(99) }] : data;
+      return Promise.resolve({
+        data: observed.map((event) => {
+          if (resolveData !== "none") {
+            return event;
+          }
+          const eventData = { ...event.eventData };
+          delete eventData.input;
+          delete eventData.result;
+          delete eventData.output;
+          delete eventData.error;
+          delete eventData.metadata;
+          delete eventData.payload;
+          return { ...event, eventData };
+        }),
+        hasMore: false,
+      });
+    };
+    world.events.get = (runId, id) => {
+      readOperations.push(["events.get", runId]);
+      return Promise.resolve(
+        (runId === anchorRunId ? parentEvents : childEvents).find((event) => event.eventId === id),
+      );
+    };
+    world.steps.get = (runId, id) => {
+      readOperations.push(["steps.get", runId]);
+      return Promise.resolve(
+        [startStep, validation, activation].find(
+          (step) => step.runId === runId && step.stepId === id,
+        ) ?? steps.get(id),
+      );
+    };
+  }
+  return { boundOwnerRunId, readOperations };
+};
+
+const attachNativeSnapshot = async (world, nativeEvents, enabled) => {
+  if (enabled !== true) {
+    return null;
+  }
+  const snapshotKey = await serialization.deriveRunPayloadKeys(new Uint8Array(32).fill(9));
+  const chunks = [];
+  const values = [...nativeEvents, { type: "text.delta", data: { text: "retained private tail" } }];
+  const readable = new ReadableStream({
+    start(controller) {
+      for (const nativeEvent of values) {
+        controller.enqueue(new TextEncoder().encode(`${JSON.stringify(nativeEvent)}\n`));
+      }
+      controller.close();
+    },
+  }).pipeThrough(
+    serialization.getSerializeStream(serialization.getWorkflowReducers(globalThis), snapshotKey),
+  );
+  for await (const data of readable) {
+    chunks.push({ index: chunks.length, data });
+  }
+  world.streams = {
+    getInfo: () => Promise.resolve({ tailIndex: chunks.length - 1, done: false }),
+    getChunks: () => {
+      throw new Error("Serial native snapshot pagination is forbidden.");
+    },
+    get: (_id, _name, startIndex) => {
+      assert.equal(startIndex, 0);
+      let index = 0;
+      return Promise.resolve(
+        new ReadableStream({
+          pull(controller) {
+            if (index < chunks.length) {
+              controller.enqueue(chunks[index].data);
+              index += 1;
+            }
+            // Leave the source open; the finite reader must stop at its captured tail.
+          },
+        }),
+      );
+    },
+  };
+  return snapshotKey;
+};
+
+const fixtureKey = (encrypted) =>
+  encrypted === true
+    ? serialization.deriveRunPayloadKeys(new Uint8Array(32).fill(3))
+    : Promise.resolve();
+const appendHistoricalInbox = async (events, event, output, suffix) => {
+  if (suffix === undefined || suffix.length === 0) {
+    return;
+  }
+  const encoded = await Promise.all(suffix.map((payload) => output(payload)));
+  events.pop();
+  events.push(
+    ...encoded.map((payload, index) =>
+      event(13 + index, "hook_received", "command-hook", {
+        token: `eve:session:${logicalSessionId}:inbox`,
+        payload,
+      }),
+    ),
+    event(13 + suffix.length, "run_cancelled"),
+  );
+};
+
 const fixture = async (options = {}) => {
+  const key = await fixtureKey(options.encrypted);
   const originalGrant = {
     sessionId: logicalSessionId,
     workspaceId: "original-private-workspace",
@@ -168,8 +416,8 @@ const fixture = async (options = {}) => {
       : {}),
   };
   const args = (value) =>
-    serialization.dehydrateStepArguments({ args: [value], closureVars: [] }, ownerRunId);
-  const output = (value) => serialization.dehydrateStepReturnValue(value, ownerRunId);
+    serialization.dehydrateStepArguments({ args: [value], closureVars: [] }, ownerRunId, key);
+  const output = (value) => serialization.dehydrateStepReturnValue(value, ownerRunId, key);
   const steps = new Map([
     [
       "prior",
@@ -254,8 +502,9 @@ const fixture = async (options = {}) => {
         : {}),
       payload: { untouchedNativeFact: true },
     }),
-    event(12, "run_completed"),
+    event(12, options.runStatus === "cancelled" ? "run_cancelled" : "run_completed"),
   ];
+  await appendHistoricalInbox(events, event, output, options.inboxSuffix);
   const nativeEvents = [
     { type: "action.result", data: { ...batchEvent, result: actualRuntimeResult } },
     ...(options.uncommittedWrite === true
@@ -301,11 +550,14 @@ const fixture = async (options = {}) => {
       get: async () =>
         await Promise.resolve({
           runId: ownerRunId,
-          status: options.failedTurn === true ? "failed" : "completed",
+          status: options.runStatus ?? (options.failedTurn === true ? "failed" : "completed"),
           input: "original-entry-retained",
         }),
     },
-    events: { list: async () => await Promise.resolve({ data: events, hasMore: false }) },
+    events: {
+      list: async () => await Promise.resolve({ data: events, hasMore: false }),
+      get: (_runId, id) => Promise.resolve(events.find((value) => value.eventId === id)),
+    },
     steps: {
       get: async (runId, id) => {
         assert.equal(runId, ownerRunId);
@@ -313,34 +565,52 @@ const fixture = async (options = {}) => {
       },
     },
   };
+  const { boundOwnerRunId, readOperations } = await attachHandoffWorld({
+    options,
+    sourcePair,
+    world,
+    events,
+    steps,
+  });
+  const snapshotKey = await attachNativeSnapshot(world, nativeEvents, options.snapshot);
   let authorized = false;
   const collect = createTerminalRecoveryCandidateCollector({
     getWorld: async () => await Promise.resolve(world),
     resolveRunEncryptionKey: async () => {
       await Promise.resolve();
+      return key;
     },
+    hydrateWorkflowArguments: (...values) => serialization.hydrateWorkflowArguments(...values),
+    hydrateHookPayload: async (value, _runId, payloadKey) =>
+      serialization.deserializePreparedReplayPayload(
+        await serialization.prepareReplayPayload(value, payloadKey),
+        globalThis,
+      ),
     hydrateStepArguments: (...values) => serialization.hydrateStepArguments(...values),
     hydrateStepReturnValue: (...values) => serialization.hydrateStepReturnValue(...values),
     readDurableSession,
     requireEventSlot: (id) => Number(id.slice(5)),
     now: () => 0,
-    async *readNativeEvents() {
-      yield* nativeEvents;
+    async *readNativeEvents(runId) {
+      yield* options.snapshot === true
+        ? readTerminalNativeEventsSnapshot(world, runId, snapshotKey)
+        : nativeEvents;
     },
   });
   const collected = await collect({
-    binding: { ownerRunId, logicalSessionId },
+    binding: { ownerRunId: boundOwnerRunId, logicalSessionId },
     authorizeOwner: async (currentBinding) => {
-      assert.deepEqual(currentBinding, { ownerRunId, logicalSessionId });
+      assert.deepEqual(currentBinding, { ownerRunId: boundOwnerRunId, logicalSessionId });
       assert.ok(Object.isFrozen(currentBinding));
       authorized = true;
       await Promise.resolve();
     },
   });
-  assert.equal(collected.kind, "candidate");
+  assert.equal(collected.kind, options.expectedUnavailable === true ? "unavailable" : "candidate");
   assert.equal(authorized, true);
   return {
     collected,
+    readOperations,
     source,
     latest,
     sourcePair,
@@ -483,4 +753,186 @@ test("historical failed step covered by a later committed turn does not block kn
   const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
   assert.equal(result.kind, "ready");
   assert.equal(result.provenance.coveredNativeEventIds.includes(eventId(2)), true);
+});
+
+test("provider-cancelled physical handoff reconciles latest native typed state without replay or effect execution", async () => {
+  const f = await fixture({ handoff: true, runStatus: "cancelled", snapshot: true });
+  const payload = readTerminalRecoveryCandidate(f.collected.candidate);
+  assert.equal(payload.run.status, "cancelled");
+  assert.equal(payload.checkpointOwnerRunId, ownerRunId);
+  assert.equal(payload.binding.ownerRunId, logicalSessionId);
+  assert.equal(payload.handoffChain.length, 1);
+  assert.equal(
+    f.readOperations.filter(
+      ([operation, id]) => operation === "events.list" && id === logicalSessionId,
+    ).length,
+    2,
+  );
+  assert.equal(
+    f.readOperations
+      .filter(([operation]) => operation === "events.list")
+      .every((call) => call[2] === "none"),
+    true,
+  );
+  assert.equal(payload.handoffChain[0].ownerRunId, ownerRunId);
+  const before = structuredClone(payload.candidates);
+  const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
+  assert.equal(result.kind, "ready");
+  const recovered = readDurableSession(result.checkpointCore.sessionState);
+  for (const key of ["fixture.program", "fixture.authority", "eve.runtime.hitl.approvedTools"]) {
+    assert.deepEqual(recovered.state[key], f.latest.state[key]);
+  }
+  const approvals = (history) =>
+    history
+      .flatMap(({ content }) => (Array.isArray(content) ? content : []))
+      .filter((part) => part.type === "tool-approval-response");
+  assert.deepEqual(approvals(recovered.history), approvals(f.source.history));
+  assert.equal(
+    approvals(recovered.history).some(
+      (approval) => approval.approvalId === "original-request" && approval.approved === true,
+    ),
+    true,
+  );
+  assert.deepEqual(recovered.sandboxState, f.latest.sandboxState);
+  assert.deepEqual(result.checkpointCore.serializedContext, f.latestPair.serializedContext);
+  assert.equal(result.provenance.logicalSessionId, logicalSessionId);
+  assert.deepEqual(payload.candidates, before);
+  assert.ok(
+    f.readOperations.every(([operation]) =>
+      ["runs.get", "runs.list", "events.get", "events.list", "steps.get"].includes(operation),
+    ),
+  );
+});
+
+for (const options of [
+  { handoff: true, runStatus: "running" },
+  { handoff: true, runStatus: "pending" },
+  { handoff: true, runStatus: "cancelled", anchorStatus: "running" },
+  { handoff: true, runStatus: "cancelled", parentFrontierUnknown: true },
+  { handoff: true, runStatus: "cancelled", parentScanDrift: true },
+]) {
+  test(`cancelled owner discovery preserves unavailable or uncertain handoff boundary ${JSON.stringify(options)}`, async () => {
+    const f = await fixture({ ...options, expectedUnavailable: true });
+    assert.equal(f.collected.kind, "unavailable");
+    assert.equal(
+      f.collected.reason,
+      options.parentFrontierUnknown === true || options.parentScanDrift === true
+        ? "handoff-parent-frontier-uncertain"
+        : "source-not-terminal",
+    );
+  });
+}
+for (const { options, reason } of [
+  { options: { cancelled: true }, reason: "cancelled-turn-replay" },
+  { options: { uncommittedDispatch: true }, reason: "uncommitted-action-dispatch" },
+  { options: { uncommittedWrite: true }, reason: "uncommitted-action-result" },
+]) {
+  test(`provider cancellation grants no replay authority for ${reason}`, async () => {
+    const f = await fixture({ handoff: true, runStatus: "cancelled", ...options });
+    const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
+    assert.equal(result.kind, "uncertain");
+    assert.equal(result.reason, reason);
+  });
+}
+
+const acceptedSuffix = () => [
+  { kind: "cancel", turnId: "turn-original" },
+  {
+    kind: "send",
+    requestId: "original-native-request",
+    auth: { principalId: "original-owner" },
+    payload: { message: "original accepted intent" },
+    delivery: { originalEvidence: true },
+  },
+  { kind: "cancel", turnId: "turn-original" },
+];
+
+test("exact encrypted post-checkpoint cancel/send/cancel is retained for ordinary owner admission", async () => {
+  const suffix = acceptedSuffix();
+  const f = await fixture({ runStatus: "cancelled", inboxSuffix: suffix, encrypted: true });
+  const payload = readTerminalRecoveryCandidate(f.collected.candidate);
+  assert.deepEqual(
+    payload.carriedInbox.map((entry) => entry.payload),
+    suffix,
+  );
+  const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
+  assert.equal(result.kind, "ready");
+  assert.deepEqual(result.carriedInbox, payload.carriedInbox);
+  assert.deepEqual(
+    result.carriedInbox.map((entry) => entry.slot),
+    [13, 14, 15],
+  );
+  assert.deepEqual(
+    readDurableSession(result.checkpointCore.sessionState).state["fixture.authority"],
+    f.latest.state["fixture.authority"],
+  );
+  assert.deepEqual(result.checkpointCore.serializedContext, f.latestPair.serializedContext);
+});
+for (const kind of ["reset", "session-timeout", "unknown"]) {
+  test(`unsupported historical inbox ${kind} remains uncertain`, async () => {
+    const f = await fixture({ runStatus: "cancelled", inboxSuffix: [{ kind }] });
+    const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
+    assert.deepEqual(result, { kind: "uncertain", reason: "unconsumed-native-inbox-input" });
+  });
+}
+for (const mutation of [
+  "foreign-run",
+  "duplicate-id",
+  "changed-correlation",
+  "wrong-turn",
+  "task-cancel",
+  "missing-envelope",
+]) {
+  test(`historical inbox cannot waive uncertainty with ${mutation}`, async () => {
+    const f = await fixture({ runStatus: "cancelled", inboxSuffix: acceptedSuffix() });
+    const payload = readTerminalRecoveryCandidate(f.collected.candidate);
+    const first = payload.carriedInbox[0];
+    if (mutation === "foreign-run") {
+      first.runId = "wrun-foreign";
+    }
+    if (mutation === "duplicate-id") {
+      payload.carriedInbox.push(first);
+    }
+    if (mutation === "changed-correlation") {
+      first.correlationId = "different-hook";
+    }
+    if (mutation === "wrong-turn") {
+      first.payload.turnId = "different-turn";
+    }
+    if (mutation === "task-cancel") {
+      first.payload.tasks = true;
+    }
+    if (mutation === "missing-envelope") {
+      payload.carriedInbox.splice(0, 1);
+    }
+    const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
+    assert.deepEqual(result, { kind: "uncertain", reason: "unconsumed-native-inbox-input" });
+  });
+}
+test("retained inbox commands never waive unknown native effects", async () => {
+  const f = await fixture({
+    runStatus: "cancelled",
+    inboxSuffix: acceptedSuffix(),
+    uncommittedWrite: true,
+  });
+  const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
+  assert.deepEqual(result, {
+    kind: "uncertain",
+    reason: "uncommitted-action-result",
+    callId: "original-native",
+  });
+});
+
+test("a later authored step leaves historical command admission uncertain", async () => {
+  const f = await fixture({ runStatus: "cancelled", inboxSuffix: acceptedSuffix() });
+  const payload = readTerminalRecoveryCandidate(f.collected.candidate);
+  payload.events.push({
+    runId: ownerRunId,
+    eventId: eventId(17),
+    eventType: "step_started",
+    correlationId: "later-authored-step",
+    eventData: { stepName: "turnStep" },
+  });
+  const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
+  assert.deepEqual(result, { kind: "uncertain", reason: "unconsumed-native-inbox-input" });
 });

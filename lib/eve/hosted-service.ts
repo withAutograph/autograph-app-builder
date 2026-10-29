@@ -2350,6 +2350,10 @@ export function createHostedEveSessionService(input: {
       });
       const { metadata } = page;
       rememberCheckpointInputs(record, metadata);
+      const status =
+        durable.status === "failed" && durable.resumability === "terminal"
+          ? "failed"
+          : metadata.status;
       return eveSessionResultSchema.parse({
         cursor: page.cursor,
         events: page.events,
@@ -2357,16 +2361,13 @@ export function createHostedEveSessionService(input: {
         ...(metadata.prototype === undefined ? {} : { prototype: metadata.prototype }),
         ...(metadata.prototypeRef === undefined ? {} : { prototypeRef: metadata.prototypeRef }),
         sessionId,
-        status:
-          metadata.status === "working" && durable.resumability === "checkpoint"
-            ? "waiting"
-            : metadata.status,
+        status: status === "working" && durable.resumability === "checkpoint" ? "waiting" : status,
         ...(metadata.uiPreview === undefined ? {} : { uiPreview: metadata.uiPreview }),
         ...(metadata.workingPreview === undefined
           ? {}
           : {
               workingPreview:
-                metadata.status === "failed" || metadata.status === "cancelled"
+                status === "failed" || status === "cancelled"
                   ? null
                   : currentWorkingPreview(metadata.workingPreview),
             }),
@@ -2871,6 +2872,9 @@ export function createHostedEveSessionService(input: {
             ? "terminal"
             : "live";
           const stage = stageForResult(summary);
+          // An unchanged native checkpoint cannot undo canonical terminal reconciliation.
+          const retainedTerminalFailure =
+            session.status === "failed" && session.resumability === "terminal";
           const unchangedObservation =
             continueWork &&
             explicitSendOperationId === undefined &&
@@ -2884,9 +2888,10 @@ export function createHostedEveSessionService(input: {
             observedNativeState.nextNativeIndex === nativeObservationState.nextNativeIndex &&
             (spool.observation.nativeTailIndex === undefined ||
               observedNativeState.nextNativeIndex === spool.observation.nativeTailIndex + 1) &&
-            session.status === summary.status &&
-            session.resumability === resumability &&
-            session.stage === stage &&
+            (retainedTerminalFailure ||
+              (session.status === summary.status &&
+                session.resumability === resumability &&
+                session.stage === stage)) &&
             (summary.uiPreview?.appId === undefined || session.appId === summary.uiPreview.appId) &&
             isDeepStrictEqual(
               checkpointObservationContent(checkpointMetadata),

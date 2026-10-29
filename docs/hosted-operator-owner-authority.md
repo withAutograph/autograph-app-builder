@@ -38,6 +38,43 @@ operations. Preserve the tenant, owner, adapter generation, operation, request,
 call, plan digest and cancellation checks. A recorded response or a tool
 invocation alone cannot substitute for the actual terminal approval receipt.
 
+## Failed native session recovery
+
+A failed terminal public session can retain a last successful checkpoint whose
+native status was working. A complete, unchanged observation of that same
+checkpoint must preserve the canonical failed state and its original bytes.
+This does not skip activation, current ownership, tenant or revocation checks.
+Fresh native evidence still uses the ordinary observation path, and a committed
+recovery child has its own current state and owner binding.
+
+Native checkpoint recovery accepts completed, failed and provider-cancelled
+owners only through the existing exact handoff provenance checks. Running or
+pending owners remain unavailable. Cancelling a worker does not establish that
+its separate parked coordinator finished, and does not authorize a fabricated
+completion signal or replacement checkpoint.
+
+A terminal worker can leave its native history stream open. Recovery reads a
+finite snapshot through the existing World stream API, validates complete
+encrypted frames and checks the unchanged stream boundary after decoding.
+Interrupted transport resumes at the next complete native frame, preserving
+the decoded prefix and rereading only the connection's partial frame. A
+missing, malformed, stalled or changing snapshot remains uncertain. Snapshot
+collection grants no execution permission: original owner,
+approval, cancellation, inbox and effect-frontier reconciliation still apply.
+Cancelled calls and unknown effects never acquire replay permission from a
+terminal status or a successful snapshot read.
+
+Accepted inbox commands beyond the latest authored checkpoint remain native
+frontier facts. Recovery may carry their exact encrypted-source envelopes,
+physical owner, event identities and order only when no later authored step
+could have admitted them. Unsupported or ambiguous control inputs remain
+uncertain. The private recovery entry binds this suffix to its existing
+receipt and activation. A fresh activation and its current interrupt checks
+run before historical commands enter ordinary FIFO admission. Historical
+cancels retain their original turn target; queued messages remain messages.
+Neither restoration nor an exact activation retry creates a tool result,
+approval, cancellation outcome or additional execution authority.
+
 ## Continuity Sandbox ownership
 
 Continuity reuses the fresh canonical realm restriction, tenant and public

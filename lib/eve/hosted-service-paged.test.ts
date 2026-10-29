@@ -343,6 +343,100 @@ const unchangedPollFixture = async () => {
 };
 
 describe("unchanged paged observation reuse", () => {
+  it.each(["terminal", "live"] as const)(
+    "preserves only canonical terminal failure when the same owner has an unchanged working checkpoint (resumability=%s)",
+    async (resumability) => {
+      const f = await unchangedPollFixture();
+      // Reconcile the public summary only; retained native/private bytes stay untouched.
+      Object.assign(f.saved, {
+        status: "failed",
+        resumability,
+        stage: "needs_attention",
+        cancellationRevision: 9,
+        resumedCancellationRevision: 6,
+      });
+      const before = structuredClone(f.saved);
+      const metadata = structuredClone(f.metadata);
+      const result = await f.service.get({ cursor: 1, limit: 1, sessionId: f.sessionId });
+      expect(result).toMatchObject({
+        cursor: 2,
+        events: [f.events[1]],
+        status: resumability === "terminal" ? "failed" : "working",
+      });
+      if (resumability === "terminal") {
+        expect(await f.getSession(principal, f.sessionId)).toEqual(before);
+        expect(f.metadata).toEqual(metadata);
+        expect(f.observeSessionPaged).toHaveBeenCalledOnce();
+        const again = await f.service.get({ cursor: 2, limit: 1, sessionId: f.sessionId });
+        expect(again).toMatchObject({ cursor: 3, events: [f.events[2]], status: "failed" });
+        expect(await f.getSession(principal, f.sessionId)).toEqual(before);
+      } else {
+        expect(f.observeSessionPaged).toHaveBeenCalledTimes(2);
+      }
+      expect(f.adapter.send).not.toHaveBeenCalled();
+      expect(f.adapter.respond).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not preserve a failed summary without a complete unchanged native observation", async () => {
+    const f = await unchangedPollFixture();
+    Object.assign(f.saved, {
+      status: "failed",
+      resumability: "terminal",
+      stage: "needs_attention",
+    });
+    const state = f.observation.nativeObservationState;
+    if (state === undefined) {
+      throw new Error("missing native state");
+    }
+    state.nextNativeIndex += 1;
+    f.observation.nextNativeIndex = state.nextNativeIndex;
+    f.observation.nativeTailIndex = state.nextNativeIndex - 1;
+    await f.service.get({ cursor: 0, limit: 1, sessionId: f.sessionId });
+    expect(f.observeSessionPaged).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects a changed tenant owner during the unchanged failed-source read", async () => {
+    const f = await unchangedPollFixture();
+    Object.assign(f.saved, {
+      status: "failed",
+      resumability: "terminal",
+      stage: "needs_attention",
+    });
+    f.observe.mockImplementationOnce(async () => {
+      f.getSession.mockResolvedValue({
+        ...f.saved,
+        principal: { ...principal, ownerUserId: "foreign-owner" },
+      });
+      return await Promise.resolve(structuredClone(f.observation));
+    });
+    await expect(
+      f.service.get({ cursor: 0, limit: 1, sessionId: f.sessionId }),
+    ).rejects.toBeInstanceOf(HostedSessionNotFoundError);
+    expect(f.observeSessionPaged).toHaveBeenCalledOnce();
+  });
+
+  it("still refuses a revoked owner before reading an unchanged failed source", async () => {
+    const f = await unchangedPollFixture();
+    Object.assign(f.saved, {
+      status: "failed",
+      resumability: "terminal",
+      stage: "needs_attention",
+    });
+    const revoked = new Error("owner revoked");
+    const service = createHostedEveSessionService({
+      principal,
+      store: f.store,
+      transport: f.adapter,
+      beforeRead: () => Promise.reject(revoked),
+    });
+    await expect(service.get({ cursor: 0, limit: 1, sessionId: f.sessionId })).rejects.toBe(
+      revoked,
+    );
+    expect(f.observe).not.toHaveBeenCalled();
+    expect(f.observeSessionPaged).toHaveBeenCalledOnce();
+  });
+
   it("serves the requested retained page without rewriting or traversing the history prefix", async () => {
     const f = await unchangedPollFixture();
     const result = await f.service.get({ cursor: 1, limit: 1, sessionId: f.sessionId });

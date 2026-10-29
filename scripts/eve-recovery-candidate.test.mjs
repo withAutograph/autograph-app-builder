@@ -2,6 +2,7 @@
 /* oxlint-disable typescript/no-unsafe-assignment, typescript/no-unsafe-call, typescript/no-unsafe-member-access, typescript/no-unsafe-return, typescript/no-unsafe-argument -- Synthetic regression loads private installed native SDK modules by package path. */
 /* oxlint-disable sonarjs/no-duplicate-string -- Exact native fixture identities are reused across provenance assertions. */
 import assert from "node:assert/strict";
+import { setImmediate as nextTurn } from "node:timers/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -23,6 +24,18 @@ const serialization = await load("dist/src/compiled/@workflow/core/serialization
 const { readDurableSession, createDurableSessionState } = await load(
   "dist/src/execution/durable-session-store.js",
 );
+// Model World's documented resolveData:none contract: retain event metadata,
+// leave opaque input/result/error/metadata/payload in the authoritative World.
+const eventMetadata = (event) => {
+  const data = { ...event.eventData };
+  delete data.input;
+  delete data.result;
+  delete data.output;
+  delete data.error;
+  delete data.metadata;
+  delete data.payload;
+  return { ...event, eventData: data };
+};
 const slotToEventId = (slot) => `evnt_${String(slot).padStart(26, "0")}`;
 const requireEventSlot = (id) => {
   assert.match(id, /^evnt_[0-9]{26}$/u);
@@ -196,7 +209,7 @@ const fixture = async function fixture(options = {}) {
     event(7, "step_started", "step-final"),
     event(8, "step_completed", "step-final"),
     event(9, "step_completed", "step-later"),
-    event(10, "run_failed"),
+    event(10, options.status === "cancelled" ? "run_cancelled" : "run_failed"),
   ];
   const originalEntry = {
     kind: "initial",
@@ -223,7 +236,11 @@ const fixture = async function fixture(options = {}) {
       list: async (params) => {
         calls.push(["events", params]);
         const start = params.pagination.cursor === undefined ? 0 : Number(params.pagination.cursor);
-        const data = events.slice(start, start + 3);
+        const data = events
+          .slice(start, start + 3)
+          .map((nativeEvent) =>
+            params.resolveData === "none" ? eventMetadata(nativeEvent) : nativeEvent,
+          );
         const end = start + data.length;
         return { data, hasMore: end < events.length, cursor: String(end) };
       },
@@ -231,7 +248,10 @@ const fixture = async function fixture(options = {}) {
     steps: {
       get: async (runId, stepId, params) => {
         calls.push(["step", runId, stepId, params]);
-        return steps.get(stepId);
+        const step = steps.get(stepId);
+        return params.resolveData === "none"
+          ? { ...step, input: undefined, output: undefined }
+          : step;
       },
     },
   };
@@ -307,18 +327,18 @@ test("native serialization preserves paired state, original approval, Drive and 
       .phase,
     "planned",
   );
-  assert.deepEqual(payload.events, f.events);
+  assert.deepEqual(payload.events, f.events.map(eventMetadata));
   assert.equal(payload.candidates[0].origin.slot, 7);
   assert.equal(payload.candidates[1].origin.slot, 5);
   assert.equal(payload.frontier[1].events[0].eventType, "step_failed");
-  assert.deepEqual(payload.frontier[2].events, f.events.slice(3));
+  assert.deepEqual(payload.frontier[2].events, f.events.slice(3).map(eventMetadata));
   assert.deepEqual(payload.nativeEvents, [protocolResult]);
   assert.equal(
     payload.steps.some(({ step }) => step.stepId === "step-later"),
     false,
   );
   assert.deepEqual(
-    await serialization.hydrateStepReturnValue(payload.events[8].eventData.result, ownerRunId),
+    await serialization.hydrateStepReturnValue(f.events[8].eventData.result, ownerRunId),
     { actual: "retained-later-output" },
   );
   assert.deepEqual(result.inspection.uncertaintyReasons, ["failed-turn-effects-unreconciled"]);
@@ -403,7 +423,9 @@ test("completed native terminal step preserves its original paired input and rea
   assert.deepEqual(original.incoming, f.inputs.failed.input);
   assert.equal(original.origin.slot, 5);
   assert.equal(
-    payload.frontier.find(({ origin }) => origin === original.origin).events.includes(f.events[5]),
+    payload.frontier
+      .find(({ origin }) => origin === original.origin)
+      .events.some((event) => event.eventId === f.events[5].eventId),
     true,
   );
   assert.equal(
@@ -516,11 +538,12 @@ test("unreadable final input retains the prior paired candidates and records unc
     ["failed-turn-input", "committed-turn-output"],
   );
   assert.equal(result.inspection.uncertaintyReasons.includes("native-step-input-unreadable"), true);
+  assert.equal(f.steps.get("step-final").input.length, 3);
   assert.equal(
     readTerminalRecoveryCandidate(result.candidate).steps.find(
       ({ step }) => step.stepId === "step-final",
-    ).step.input.length,
-    3,
+    ).step.input,
+    undefined,
   );
 });
 
@@ -533,7 +556,7 @@ test("partial native stream remains partial evidence with explicit uncertainty",
 });
 
 test("expired or non-failed runs return unavailable without decoding or stream reads", async () => {
-  for (const options of [{ expired: true }, { status: "running" }]) {
+  for (const options of [{ expired: true }, { status: "running" }, { status: "pending" }]) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- Each isolated SDK fixture is verified in sequence.
     const f = await fixture(options);
     // oxlint-disable-next-line eslint/no-await-in-loop -- Each isolated SDK fixture is verified in sequence.
@@ -578,4 +601,468 @@ test("inspection never exposes malformed authored phase text", async () => {
   const result = await f.collect(f.input);
   assert.equal(result.inspection.candidates[0].workflowPhase, "unavailable");
   assert.ok(!JSON.stringify(result).includes("private-untrusted-value"));
+});
+
+test("provider-cancelled terminal owner retains actual paired state and approval without effect authority", async () => {
+  const f = await fixture({ status: "cancelled", encrypted: true });
+  const result = await f.collect(f.input);
+  assert.equal(result.kind, "candidate");
+  const payload = readTerminalRecoveryCandidate(result.candidate);
+  assert.equal(payload.run.status, "cancelled");
+  assert.deepEqual(payload.candidates[0].sessionState, f.final.sessionState);
+  assert.deepEqual(payload.candidates[1].incoming, f.inputs.failed.input);
+  assert.deepEqual(payload.events, f.events.map(eventMetadata));
+  assert.deepEqual(
+    payload.issues.map(({ reason }) => reason),
+    ["failed-turn-effects-unreconciled"],
+  );
+  assert.deepEqual(
+    readDurableSession(payload.candidates[0].sessionState).sandboxState,
+    readDurableSession(f.final.sessionState).sandboxState,
+  );
+});
+
+const { readTerminalNativeEventsSnapshot } = await load(nativePath);
+const frameNativeHistory = async (values, key) => {
+  const frames = [];
+  const input = new ReadableStream({
+    start(controller) {
+      for (const value of values) {
+        controller.enqueue(value);
+      }
+      controller.close();
+    },
+  });
+  for await (const frame of input.pipeThrough(
+    serialization.getSerializeStream(serialization.getWorkflowReducers(globalThis), key),
+  )) {
+    frames.push(frame);
+  }
+  return frames.map((data, index) => ({ index, data }));
+};
+const snapshotFixture = async (fault, packing = "split") => {
+  const f = await fixture({ status: "cancelled", encrypted: true });
+  const native = Array.from({ length: 5 }, (_, index) => ({
+    type: "text.delta",
+    data: { text: `original private native text ${index}` },
+  }));
+  const chunks = await frameNativeHistory(
+    native.map((event) => new TextEncoder().encode(`${JSON.stringify(event)}\n`)),
+    f.key,
+  );
+  const framed = chunks.map(({ data }) => new Uint8Array(data));
+  if (fault === "missing") {
+    framed.splice(2, 1);
+  }
+  if (fault === "truncated") {
+    framed[4] = framed[4].slice(0, -1);
+  }
+  if (fault === "header-eof") {
+    framed[4] = framed[4].slice(0, 2);
+  }
+  if (fault === "ciphertext") {
+    framed[2][framed[2].length - 1] = (framed[2].at(-1) + 1) % 256;
+  }
+  if (fault === "zero-frame") {
+    framed[2].fill(0, 0, 4);
+  }
+  if (fault === "extra-frame") {
+    framed.push(framed[0]);
+  }
+  const size = framed.reduce((total, frame) => total + frame.length, 0);
+  const joined = new Uint8Array(size);
+  let offset = 0;
+  for (const frame of framed) {
+    joined.set(frame, offset);
+    offset += frame.length;
+  }
+  const wire = [];
+  if (packing === "coalesced") {
+    wire.push(fault === "transport" ? joined.subarray(0, Math.floor(joined.length / 2)) : joined);
+  } else {
+    for (let index = 0; index < joined.length; index += 3) {
+      wire.push(joined.subarray(index, index + 3));
+    }
+  }
+  let infos = 0;
+  let cancelled = false;
+  f.world.streams = {
+    async getInfo(id, name) {
+      f.calls.push(["snapshot-info", id, name]);
+      assert.equal(id, ownerRunId);
+      assert.equal(name, `${ownerRunId.replace("wrun_", "strm_")}_user`);
+      infos += 1;
+      return {
+        tailIndex: chunks.length - 1 + (fault === "changed-tail" && infos > 1 ? 1 : 0),
+        done: fault === "changed-done" && infos > 1,
+      };
+    },
+    async get(id, name, startIndex) {
+      f.calls.push(["snapshot-stream", id, name]);
+      assert.equal(startIndex, 0);
+      let index = 0;
+      return new ReadableStream({
+        pull(controller) {
+          if (index < wire.length) {
+            controller.enqueue(wire[index]);
+            index += 1;
+          } else if (fault === "transport") {
+            controller.error(new Error("private transport failure"));
+          } else if (
+            fault !== undefined &&
+            !["changed-tail", "changed-done", "cancel"].includes(fault)
+          ) {
+            controller.close();
+          }
+          // A successful source remains open forever: the finite reader must cancel it.
+        },
+        cancel() {
+          cancelled = true;
+          f.calls.push(["snapshot-cancel"]);
+          if (fault === "cancel") {
+            throw new Error("private cancellation failure");
+          }
+        },
+      });
+    },
+    getChunks() {
+      throw new Error("Serial pagination must not be used.");
+    },
+  };
+  f.dependencies.readNativeEvents = (id) => readTerminalNativeEventsSnapshot(f.world, id, f.key);
+  return { ...f, native, cancelled: () => cancelled };
+};
+
+for (const packing of ["split", "coalesced"]) {
+  test(`finite encrypted unclosed snapshot counts native frames across ${packing} network reads`, async () => {
+    const f = await snapshotFixture(undefined, packing);
+    const result = await f.collect(f.input);
+    const payload = readTerminalRecoveryCandidate(result.candidate);
+    assert.deepEqual(payload.nativeEvents, f.native);
+    assert.deepEqual(payload.candidates[0].sessionState, f.final.sessionState);
+    assert.deepEqual(payload.candidates[0].serializedContext, f.final.serializedContext);
+    assert.deepEqual(payload.candidates[1].incoming, f.inputs.failed.input);
+    assert.equal(f.calls.filter(([type]) => type === "snapshot-stream").length, 1);
+    assert.equal(f.calls.filter(([type]) => type === "snapshot-info").length, 2);
+    assert.equal(f.cancelled(), true);
+    assert.equal(
+      payload.issues.some(({ reason }) => reason === "native-stream-incomplete"),
+      false,
+    );
+  });
+}
+for (const fault of [
+  "truncated",
+  "header-eof",
+  "missing",
+  "changed-tail",
+  "changed-done",
+  "ciphertext",
+  "zero-frame",
+  "extra-frame",
+  "transport",
+  "cancel",
+]) {
+  test(`incomplete or changed native snapshot fails closed: ${fault}`, async () => {
+    const f = await snapshotFixture(fault, "coalesced");
+    const result = await f.collect(f.input);
+    const payload = readTerminalRecoveryCandidate(result.candidate);
+    assert.deepEqual(payload.nativeEvents, []);
+    assert.equal(
+      payload.issues.some(({ reason }) => reason === "native-stream-incomplete"),
+      true,
+    );
+  });
+}
+
+const reconnectingSnapshot = async (mode) => {
+  const native = Array.from({ length: 5 }, (_, index) => ({
+    type: "text.delta",
+    data: { text: index < 2 ? "same valid repeated value" : `private ${index}` },
+  }));
+  const key = await serialization.deriveRunPayloadKeys(new Uint8Array(32).fill(7));
+  const chunks = await frameNativeHistory(
+    native.map((event) => new TextEncoder().encode(`${JSON.stringify(event)}\n`)),
+    key,
+  );
+  const join = (parts) => {
+    const bytes = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
+    let offset = 0;
+    for (const part of parts) {
+      bytes.set(part, offset);
+      offset += part.length;
+    }
+    return bytes;
+  };
+  let partial = new Uint8Array();
+  if (mode === "partial-header") {
+    partial = chunks[2].data.subarray(0, 2);
+  }
+  if (mode === "partial-payload") {
+    partial = chunks[2].data.subarray(0, 12);
+  }
+  const first =
+    mode === "zero-progress"
+      ? chunks[0].data.subarray(0, 2)
+      : join([chunks[0].data, chunks[1].data, partial]);
+  const starts = [];
+  let infos = 0;
+  let cancelled = false;
+  const world = {
+    streams: {
+      async getInfo() {
+        infos += 1;
+        return {
+          tailIndex: chunks.length - 1 + (mode === "changed-tail" && infos > 1 ? 1 : 0),
+          done: mode === "changed-done" && infos > 1,
+        };
+      },
+      async get(_run, _name, startIndex) {
+        starts.push(startIndex);
+        assert.equal(startIndex, starts.length === 1 ? 0 : 2);
+        let sent = false;
+        return new ReadableStream({
+          async pull(controller) {
+            if (starts.length === 2 && mode === "stalled-resume") {
+              controller.close();
+              return;
+            }
+            if (!sent) {
+              sent = true;
+              controller.enqueue(
+                starts.length === 1
+                  ? first
+                  : join(chunks.slice(startIndex).map(({ data }) => data)),
+              );
+            } else if (starts.length === 1) {
+              await nextTurn();
+              if (mode === "transport-error") {
+                controller.error(new Error("private transport disconnect"));
+              } else {
+                controller.close();
+              }
+            }
+          },
+          cancel() {
+            cancelled = true;
+          },
+        });
+      },
+    },
+  };
+  return { native, key, world, starts, cancelled: () => cancelled };
+};
+for (const mode of ["clean-eof", "partial-header", "partial-payload", "transport-error"]) {
+  test(`finite reader resumes only the interrupted native frame after ${mode}`, async () => {
+    const f = await reconnectingSnapshot(mode);
+    const events = [];
+    for await (const event of readTerminalNativeEventsSnapshot(f.world, ownerRunId, f.key)) {
+      events.push(event);
+    }
+    assert.deepEqual(events, f.native);
+    assert.deepEqual(f.starts, [0, 2]);
+    assert.equal(f.cancelled(), true);
+  });
+}
+for (const mode of ["zero-progress", "stalled-resume", "changed-tail", "changed-done"]) {
+  test(`finite reconnect refuses ${mode} without yielding a partial native prefix`, async () => {
+    const f = await reconnectingSnapshot(mode);
+    const events = [];
+    await assert.rejects(async () => {
+      for await (const event of readTerminalNativeEventsSnapshot(f.world, ownerRunId, f.key)) {
+        events.push(event);
+      }
+    }, /Native stream made no progress|Changed native stream/u);
+    assert.deepEqual(events, []);
+    assert.deepEqual(f.starts, mode === "stalled-resume" ? [0, 2] : [0]);
+  });
+}
+
+test("reconnect preserves a UTF-8 NDJSON value split across complete native frames", async () => {
+  const native = { type: "text.delta", data: { text: "private 😃 value" } };
+  const bytes = new TextEncoder().encode(`${JSON.stringify(native)}\n`);
+  const cut = bytes.indexOf(240) + 2;
+  assert.ok(cut > 2);
+  const chunks = await frameNativeHistory([bytes.subarray(0, cut), bytes.subarray(cut)]);
+  const starts = [];
+  const world = {
+    streams: {
+      async getInfo() {
+        return { tailIndex: 1, done: false };
+      },
+      async get(_run, _name, startIndex) {
+        starts.push(startIndex);
+        assert.equal(startIndex, starts.length - 1);
+        let sent = false;
+        return new ReadableStream({
+          pull(controller) {
+            if (!sent) {
+              sent = true;
+              controller.enqueue(chunks[startIndex].data);
+            } else if (startIndex === 0) {
+              controller.close();
+            }
+          },
+        });
+      },
+    },
+  };
+  const events = [];
+  for await (const event of readTerminalNativeEventsSnapshot(world, ownerRunId)) {
+    events.push(event);
+  }
+  assert.deepEqual(events, [native]);
+  assert.deepEqual(starts, [0, 1]);
+});
+
+for (const interrupted of [false, true]) {
+  test(`finite reader retains all 171094 native frames across transport EOFs (interrupted=${interrupted})`, async () => {
+    const frameCount = 171_094;
+    const native = { type: "text.delta", data: { text: "private native content" } };
+    const [frame] = await frameNativeHistory([
+      new TextEncoder().encode(`${JSON.stringify(native)}\n`),
+    ]);
+    assert.notEqual(frame, undefined);
+    let cancelled = false;
+    let infos = 0;
+    const starts = [];
+    const world = {
+      streams: {
+        async getInfo() {
+          infos += 1;
+          return { tailIndex: frameCount - 1, done: false };
+        },
+        async get(_run, _name, startIndex) {
+          starts.push(startIndex);
+          assert.equal(startIndex, interrupted ? (starts.length - 1) * 75_274 : 0);
+          let sent = startIndex;
+          const end = interrupted ? Math.min(startIndex + 75_274, frameCount) : frameCount;
+          return new ReadableStream({
+            pull(controller) {
+              if (sent === end) {
+                if (end !== frameCount) {
+                  controller.close();
+                }
+                return;
+              }
+              const count = Math.min(256, end - sent);
+              const bytes = new Uint8Array(count * frame.data.length);
+              for (let index = 0; index < count; index += 1) {
+                bytes.set(frame.data, index * frame.data.length);
+              }
+              sent += count;
+              controller.enqueue(bytes);
+            },
+            cancel() {
+              cancelled = true;
+            },
+          });
+        },
+      },
+    };
+    let observed = 0;
+    for await (const event of readTerminalNativeEventsSnapshot(world, ownerRunId)) {
+      assert.deepEqual(event, native);
+      observed += 1;
+    }
+    assert.equal(observed, frameCount);
+    assert.equal(cancelled, true);
+    assert.deepEqual(starts, interrupted ? [0, 75_274, 150_548] : [0]);
+    assert.equal(infos, interrupted ? 4 : 2);
+  }, 30_000);
+}
+
+test("an empty unclosed captured tail never opens a live stream", async () => {
+  let infos = 0;
+  const world = {
+    streams: {
+      async getInfo() {
+        infos += 1;
+        return { tailIndex: -1, done: false };
+      },
+      get() {
+        throw new Error("empty tail must not follow stream");
+      },
+    },
+  };
+  const events = [];
+  for await (const event of readTerminalNativeEventsSnapshot(world, ownerRunId)) {
+    events.push(event);
+  }
+  assert.deepEqual(events, []);
+  assert.equal(infos, 2);
+});
+
+for (const status of ["running", "pending"]) {
+  test(`nonterminal ${status} owner never reads native snapshot`, async () => {
+    const f = await snapshotFixture();
+    const get = f.world.runs.get;
+    f.world.runs.get = async (...args) => ({ ...(await get(...args)), status });
+    const result = await f.collect(f.input);
+    assert.deepEqual(result, { kind: "unavailable", reason: "source-not-terminal" });
+    assert.equal(
+      f.calls.some(([type]) => type.startsWith("snapshot-") === true),
+      false,
+    );
+  });
+}
+
+test("metadata collection retains every frontier and hydrated checkpoint without duplicate step blobs", async () => {
+  const f = await fixture({ encrypted: true });
+  const rawInput = new Uint8Array(f.steps.get("step-final").input);
+  const rawOutput = new Uint8Array(f.steps.get("step-prior").output);
+  const result = await f.collect(f.input);
+  const payload = readTerminalRecoveryCandidate(result.candidate);
+  assert.deepEqual(
+    payload.events.map(({ eventId }) => eventId),
+    f.events.map(({ eventId }) => eventId),
+  );
+  assert.equal(
+    f.calls
+      .filter(([kind]) => kind === "events")
+      .every(([, params]) => params.resolveData === "none"),
+    true,
+  );
+  assert.equal(
+    payload.steps.every(({ step }) => step.input === undefined && step.output === undefined),
+    true,
+  );
+  assert.deepEqual(
+    payload.steps.find(({ step }) => step.stepId === "step-final").arguments.args[0],
+    f.final,
+  );
+  assert.deepEqual(
+    payload.steps.find(({ step }) => step.stepId === "step-prior").output.sessionState,
+    f.prior.sessionState,
+  );
+  assert.deepEqual(f.steps.get("step-final").input, rawInput);
+  assert.deepEqual(f.steps.get("step-prior").output, rawOutput);
+});
+
+test("legacy missing names read metadata before hydrating only relevant native steps", async () => {
+  const f = await fixture({ encrypted: true });
+  for (const nativeEvent of f.events) {
+    if (["step-prior", "step-later"].includes(nativeEvent.correlationId)) {
+      delete nativeEvent.eventData.stepName;
+    }
+  }
+  const result = await f.collect(f.input);
+  const payload = readTerminalRecoveryCandidate(result.candidate);
+  const relevantReads = f.calls
+    .filter((call) => call[0] === "step" && call[2] === "step-prior")
+    .map((call) => call[3].resolveData);
+  assert.equal(relevantReads[0], "none");
+  assert.equal(relevantReads.filter((mode) => mode === "all").length, 1);
+  const unrelatedReads = f.calls
+    .filter((call) => call[0] === "step" && call[2] === "step-later")
+    .map((call) => call[3].resolveData);
+  assert.equal(unrelatedReads.length > 0, true);
+  assert.equal(
+    unrelatedReads.every((mode) => mode === "none"),
+    true,
+  );
+  assert.deepEqual(
+    payload.candidates.find(({ kind }) => kind === "committed-turn-output").sessionState,
+    f.prior.sessionState,
+  );
 });
