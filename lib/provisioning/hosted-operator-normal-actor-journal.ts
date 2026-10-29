@@ -1,3 +1,4 @@
+import { readParticipantSuccessorPredecessor } from "./hosted-operator-participant-successor";
 /* oxlint-disable eslint/no-await-in-loop, sonarjs/expression-complexity -- CAS and encrypted capture require each exact approval, scope, nonce, proof and session binding. */
 import { createHash, randomUUID, randomBytes } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
@@ -10,6 +11,7 @@ import type { VercelTokenKeyringConfig } from "../integrations/vercel-installati
 import {
   hostedOperatorPlanSchema,
   normalActorPreparationSchema,
+  normalActorPredecessorSchema,
   operatorPlanDigest,
   operatorRealmIdentityLinkSchema,
   hostedOperatorOwnedOrganizationSpecSchema,
@@ -24,7 +26,10 @@ import {
   normalActorProgramSchema,
   normalActorSessionRefSchema,
 } from "./hosted-operator-normal-actor-program";
-import type { NormalActorState } from "./hosted-operator-normal-actor-program";
+import type {
+  NormalActorCheckpoint,
+  NormalActorState,
+} from "./hosted-operator-normal-actor-program";
 import {
   decryptNormalActorState,
   encryptNormalActorState,
@@ -105,6 +110,7 @@ export type NormalActorOrganizationProofBinding = Pick<
 > & { transportSource: NormalActorOrganizationProof["transportSource"] };
 export const normalActorAccountPreparationSchema = normalActorPreparationSchema.extend({
   program: normalActorProgramSchema,
+  predecessor: normalActorPredecessorSchema.optional(),
   accountPlan: hostedOperatorPlanSchema,
   sealedState: sealedNormalActorStateSchema,
   captures: z.array(captureReferenceSchema),
@@ -151,6 +157,7 @@ export interface NormalActorJournalPorts {
 }
 const provenance = (preparation: NormalActorAccountPreparation): NormalActorAccountProvenance => ({
   program: preparation.program,
+  ...(preparation.predecessor === undefined ? {} : { predecessor: preparation.predecessor }),
   programDigest: preparation.programDigest,
   accountOperationRef: preparation.accountOperationRef,
   accountPlan: preparation.accountPlan,
@@ -166,6 +173,7 @@ const validateProvenance = (
     input.programDigest !== normalActorProgramDigest(input.program) ||
     input.accountPlanDigest !== operatorPlanDigest(input.accountPlan) ||
     input.accountPlan.stage !== "auth-participants" ||
+    !isDeepStrictEqual(input.predecessor, input.accountPlan.normalActorPredecessor) ||
     input.accountPlan.normalActorProgram === undefined ||
     normalActorProgramDigest(input.accountPlan.normalActorProgram) !== input.programDigest ||
     !sameOperatorSelection(input.accountPlan.selection, context.target) ||
@@ -203,6 +211,48 @@ const captureAad = (
 export const normalActorCaptureCookieDigest = (
   cookie: Pick<NormalActorCaptureCookie, "name" | "value">,
 ) => createHash("sha256").update(`${cookie.name}=${cookie.value}`).digest("hex");
+
+const sameCarriedActor = (original: NormalActorCheckpoint, current: NormalActorCheckpoint) => {
+  const { session: originalSession, ...originalCheckpoint } = original;
+  const { session: currentSession, ...currentCheckpoint } = current;
+  if (originalSession === undefined || currentSession === undefined) {
+    return false;
+  }
+  const { activeOrganizationId: originalOrganization, ...originalIdentity } = originalSession;
+  const { activeOrganizationId: currentOrganization, ...currentIdentity } = currentSession;
+  return [
+    (originalOrganization ?? null) === (currentOrganization ?? null),
+    isDeepStrictEqual(originalIdentity, currentIdentity),
+    isDeepStrictEqual(originalCheckpoint, currentCheckpoint),
+  ].every(Boolean);
+};
+
+const assertCarriedActors = (
+  context: HostedOperatorContext,
+  row: HostedRuntimeJournalRow,
+  preparation: NormalActorAccountPreparation,
+  state: NormalActorState,
+  config: VercelTokenKeyringConfig,
+  now: number,
+) => {
+  if (preparation.predecessor === undefined) {
+    return;
+  }
+  const prior = readParticipantSuccessorPredecessor(row.record, preparation.accountPlan, now);
+  if (prior === undefined) {
+    throw new Error("normal_actor_journal_authority_mismatch");
+  }
+  const original = decryptNormalActorState({
+    ...stateScope(context, prior.preparation),
+    config,
+    sealed: prior.preparation.sealedState,
+  });
+  if (
+    !original.actors.every((actor) => state.actors.some((entry) => sameCarriedActor(actor, entry)))
+  ) {
+    throw new Error("normal_actor_journal_authority_mismatch");
+  }
+};
 
 const captureReference = (
   preparation: NormalActorAccountPreparation,
@@ -324,6 +374,25 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
     await guard?.();
     return result;
   };
+  const assertPredecessorApprovals = async (
+    context: HostedOperatorContext,
+    prior: NonNullable<HostedRuntimeJournalRow["record"]["participantPreparationHistory"]>[number],
+  ) => {
+    const approvalId = prior.operator.approvalId;
+    if (approvalId === undefined) {
+      throw new Error("normal_actor_journal_authority_mismatch");
+    }
+    validateProvenance(context, prior.preparation);
+    await ports.assertAccountApproval(context, provenance(prior.preparation));
+    await ports.assertAccountApproval(context, {
+      ...provenance(prior.preparation),
+      accountOperationRef: prior.operator.operationRef,
+      accountPlan: prior.operator.plan,
+      accountPlanDigest: prior.operator.planDigest,
+      accountApprovalId: approvalId,
+      accountApprovedByCallId: prior.approvedByCallId,
+    });
+  };
   const read = async (context: HostedOperatorContext, guard?: () => Promise<void>) => {
     await guarded(() => ports.assertAuthorized(context), guard);
     const row = await guarded(() => ports.store.read(context), guard);
@@ -336,11 +405,23 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
     }
     validateProvenance(context, preparation);
     await guarded(() => ports.assertAccountApproval(context, provenance(preparation)), guard);
+    if (preparation.predecessor !== undefined) {
+      const prior = readParticipantSuccessorPredecessor(
+        row.record,
+        preparation.accountPlan,
+        ports.now(),
+      );
+      if (prior === undefined) {
+        throw new Error("normal_actor_journal_authority_mismatch");
+      }
+      await guarded(() => assertPredecessorApprovals(context, prior), guard);
+    }
     const state = decryptNormalActorState({
       ...stateScope(context, preparation),
       config: ports.keyring,
       sealed: preparation.sealedState,
     });
+    assertCarriedActors(context, row, preparation, state, ports.keyring, ports.now());
     await guarded(() => ports.assertAuthorized(context), guard);
     const latest = await guarded(() => ports.store.read(context), guard);
     if (latest?.revision !== row.revision) {
@@ -384,6 +465,78 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
     }
   };
   return {
+    async initializeSuccessor(
+      context: HostedOperatorContext,
+      input: NormalActorAccountProvenance,
+      assertCurrent: () => Promise<void>,
+      verifyOriginal: (
+        preparation: NormalActorAccountPreparation,
+        state: NormalActorState,
+      ) => Promise<NormalActorState>,
+    ) {
+      validateProvenance(context, input);
+      await assertCurrent();
+      const original = await read(context, assertCurrent);
+      const prior = readParticipantSuccessorPredecessor(
+        original.row.record,
+        input.accountPlan,
+        ports.now(),
+      );
+      if (
+        prior === undefined ||
+        original.preparation === undefined ||
+        original.state === undefined ||
+        !isDeepStrictEqual(original.preparation, prior.preparation) ||
+        input.accountOperationRef === prior.preparation.accountOperationRef ||
+        input.accountOperationRef === prior.operator.operationRef
+      ) {
+        throw new Error("normal_actor_journal_authority_mismatch");
+      }
+      const guard = async () => {
+        await assertCurrent();
+        await assertPredecessorApprovals(context, prior);
+        await assertCurrent();
+      };
+      await guard();
+      const verified = await verifyOriginal(original.preparation, original.state);
+      if (!isDeepStrictEqual(verified, original.state)) {
+        throw new Error("normal_actor_journal_authority_mismatch");
+      }
+      await assertCurrent();
+      await ports.assertAccountApproval(context, input);
+      const carriedActors = new Map(verified.actors.map((actor) => [actor.actorKey, actor]));
+      return await mutate(
+        context,
+        (row) => {
+          const current = row.record.operator;
+          if (
+            !isDeepStrictEqual(row.record.accountPreparation, original.preparation) ||
+            readParticipantSuccessorPredecessor(row.record, input.accountPlan, ports.now()) ===
+              undefined ||
+            current?.operationRef !== input.accountOperationRef ||
+            current.planDigest !== input.accountPlanDigest ||
+            current.approvalId !== input.accountApprovalId ||
+            row.record.approvedByCallId !== input.accountApprovedByCallId
+          ) {
+            throw new Error("normal_actor_journal_authority_mismatch");
+          }
+          const state = initialNormalActorState(input.program, input.accountOperationRef);
+          state.actors = state.actors.map((actor) =>
+            structuredClone(carriedActors.get(actor.actorKey) ?? actor),
+          );
+          return {
+            ...input,
+            sealedState: encryptNormalActorState({
+              ...stateScope(context, input),
+              config: ports.keyring,
+              state,
+            }),
+            captures: [],
+          };
+        },
+        guard,
+      );
+    },
     async retain(context: HostedOperatorContext, input: NormalActorAccountProvenance) {
       validateProvenance(context, input);
       await ports.assertAccountApproval(context, input);
@@ -730,6 +883,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
           state,
           preparation.accountOperationRef,
         );
+        assertCarriedActors(context, row, preparation, checked, ports.keyring, ports.now());
         const baseAccountsComplete = checked.actors.every(
           (actor) =>
             actor.signup === "complete" &&
@@ -854,7 +1008,17 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
       reference: string,
     ): Promise<NormalActorCapturedPayload | undefined> {
       const result = await read(context);
-      const { preparation } = result;
+      let preparation = result.preparation;
+      if (preparation?.captures.some((entry) => entry.reference === reference) !== true) {
+        preparation = result.row.record.participantPreparationHistory
+          ?.map((entry) => entry.preparation)
+          .find((entry) => entry.captures.some((capture) => capture.reference === reference));
+        if (preparation !== undefined) {
+          validateProvenance(context, preparation);
+          await ports.assertAccountApproval(context, provenance(preparation));
+          await ports.assertAuthorized(context);
+        }
+      }
       const capture = preparation?.captures.find((entry) => entry.reference === reference);
       if (
         preparation === undefined ||

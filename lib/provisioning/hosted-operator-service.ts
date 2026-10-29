@@ -1,3 +1,7 @@
+import {
+  isParticipantProgramSuccessor,
+  readParticipantSuccessorPredecessor,
+} from "./hosted-operator-participant-successor";
 import { restorePendingAccountPreparation } from "./hosted-operator-pending-account-restoration";
 import { readOperatorPreparationProgress } from "./hosted-operator-preparation-progress";
 import {
@@ -842,6 +846,7 @@ const handlePlanOperation = async (
     async () => await deps.store.read(context),
   );
   const {
+    participantSuccessor,
     sharedHostSuccessor,
     installerSuccessor,
     appGatewaySuccessor,
@@ -849,6 +854,9 @@ const handlePlanOperation = async (
     retentionRenewal,
     readySuccessor,
   } = await observeOperatorPlanStage(context.target.sessionId, "successor_classification", () => ({
+    participantSuccessor:
+      successorPrior !== undefined &&
+      isParticipantProgramSuccessor(successorPrior.record, plan, now()),
     sharedHostSuccessor:
       successorPrior !== undefined &&
       isSharedHostProtectionSuccessor(successorPrior.record, plan, now()),
@@ -880,21 +888,43 @@ const handlePlanOperation = async (
     if (successorPrior === undefined) {
       throw new HostedOperatorError("authorization_required");
     }
-    const priorOperator = requireOperator(successorPrior.record);
+    const participantPrior = participantSuccessor
+      ? readParticipantSuccessorPredecessor(successorPrior.record, plan, now())
+      : undefined;
+    const priorOperator = participantPrior?.operator ?? requireOperator(successorPrior.record);
+    const priorCallId =
+      participantPrior?.approvedByCallId ?? successorPrior.record.approvedByCallId;
     const approval = await deps.readApproval({
       ...context,
       action: "prepare",
-      callId: successorPrior.record.approvedByCallId,
+      callId: priorCallId,
       planDigest: priorOperator.planDigest,
     });
     if (
       approval?.approved !== true ||
       approval.approvalId !== priorOperator.approvalId ||
-      approval.callId !== successorPrior.record.approvedByCallId ||
+      approval.callId !== priorCallId ||
       approval.planDigest !== priorOperator.planDigest ||
       approval.action !== "prepare"
     ) {
       throw new HostedOperatorError("authorization_required");
+    }
+    if (participantPrior !== undefined) {
+      const original = await deps.readApproval({
+        ...context,
+        action: "prepare",
+        callId: participantPrior.preparation.accountApprovedByCallId,
+        planDigest: participantPrior.preparation.accountPlanDigest,
+      });
+      if (
+        original?.approved !== true ||
+        original.approvalId !== participantPrior.preparation.accountApprovalId ||
+        original.callId !== participantPrior.preparation.accountApprovedByCallId ||
+        original.planDigest !== participantPrior.preparation.accountPlanDigest ||
+        original.action !== "prepare"
+      ) {
+        throw new HostedOperatorError("authorization_required");
+      }
     }
     if (readySuccessor && plan.appDeliveryReplacement !== undefined) {
       const predecessor = resolveReadyDeliveryReplacementPredecessor(
@@ -923,6 +953,7 @@ const handlePlanOperation = async (
     }
   };
   if (
+    participantSuccessor ||
     sharedHostSuccessor ||
     installerSuccessor ||
     appGatewaySuccessor ||
@@ -941,6 +972,7 @@ const handlePlanOperation = async (
     return response(restoredAccount);
   }
   const recovered =
+    participantSuccessor ||
     sharedHostSuccessor ||
     installerSuccessor ||
     appGatewaySuccessor ||
@@ -1024,6 +1056,7 @@ const handlePlanOperation = async (
         store: deps.store,
         beforeUpdate: async (record: HostedRuntimeJournalRecord) => {
           if (
+            participantSuccessor ||
             installerSuccessor ||
             appGatewaySuccessor ||
             sharedHostSuccessor ||
@@ -1062,6 +1095,18 @@ const handlePlanOperation = async (
           }
           if (record.operator.planDigest === planDigest) {
             return record;
+          }
+          const participantProgramSuccessor =
+            participantSuccessor && isParticipantProgramSuccessor(record, plan, now());
+          if (participantSuccessor && !participantProgramSuccessor) {
+            throw new HostedOperatorError("operation_in_progress");
+          }
+          if (
+            participantProgramSuccessor &&
+            successorPrior?.record.operator?.planDigest !== planDigest &&
+            !isDeepStrictEqual(record, successorPrior?.record)
+          ) {
+            throw new HostedOperatorError("operation_in_progress");
           }
           const authStageCompleted = hasCompletedAuthBootstrapEffects(record);
           const participantsCompleted =
@@ -1176,7 +1221,8 @@ const handlePlanOperation = async (
             const preparation = record.accountPreparation;
             if (
               plan.normalActorProgram === undefined ||
-              preparation.programDigest !== normalActorProgramDigest(plan.normalActorProgram)
+              (preparation.programDigest !== normalActorProgramDigest(plan.normalActorProgram) &&
+                !participantProgramSuccessor)
             ) {
               throw new HostedOperatorError("resource_mismatch");
             }
@@ -1192,6 +1238,16 @@ const handlePlanOperation = async (
                 throw new HostedOperatorError("resource_mismatch");
               }
             }
+          }
+          if (participantProgramSuccessor) {
+            const predecessor = readParticipantSuccessorPredecessor(record, plan, now());
+            if (predecessor === undefined) {
+              throw new HostedOperatorError("operation_in_progress");
+            }
+            record.participantPreparationHistory = [
+              ...(record.participantPreparationHistory ?? []),
+              structuredClone(predecessor),
+            ];
           }
           // Same-resource release changes keep credentials; old proof never attests the new plan.
           const nextOperator: ReturnType<typeof requireOperator> = { ...operator };
@@ -2016,7 +2072,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           ) {
             throw new HostedOperatorError("operation_in_progress");
           }
-          if (value.accountPreparation !== undefined) {
+          if (value.accountPreparation !== undefined && plan.normalActorPredecessor === undefined) {
             return value;
           }
           return {

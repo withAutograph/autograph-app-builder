@@ -208,6 +208,14 @@ export const normalActorPreparationSchema = z.strictObject({
   accountApprovedByCallId: id,
 });
 export type NormalActorPreparation = z.infer<typeof normalActorPreparationSchema>;
+/** Exact immutable predecessor of an additive participant preparation; never successor approval. */
+export const normalActorPredecessorSchema = z.strictObject({
+  preparation: normalActorPreparationSchema,
+  operationRef: z.uuid(),
+  planDigest: digest,
+  approvalId: id,
+  approvedByCallId: id,
+});
 const hostedOperatorAuthSignupPolicyFieldsSchema = z.strictObject({
   version: z.literal(1),
   policyId: id,
@@ -432,6 +440,7 @@ const hostedOperatorPlanDataSchema = z.strictObject({
   }),
   normalActorProgram: normalActorProgramSchema.optional(),
   normalActorPreparation: normalActorPreparationSchema.optional(),
+  normalActorPredecessor: normalActorPredecessorSchema.optional(),
   // Optional only when parsing persisted protected-operator-v1 records created before
   // native Gateway origins were part of the verified plan.
   publicGateway: z
@@ -523,6 +532,16 @@ const validateNormalActorPlan = (
 ) => {
   const program = plan.normalActorProgram;
   const participantStage = plan.stage === AUTH_PARTICIPANTS_STAGE;
+  if (
+    plan.normalActorPredecessor !== undefined &&
+    (plan.action !== "prepare" || !participantStage)
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message:
+        "A participant predecessor authorizes only a separately approved account preparation successor.",
+    });
+  }
   if (program === undefined) {
     if (participantStage || plan.normalActorPreparation !== undefined) {
       ctx.addIssue({

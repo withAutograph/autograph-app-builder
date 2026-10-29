@@ -118,6 +118,31 @@ preparation, and the subsequently resolved membership/access/app delivery plan
 retain their concrete effect approvals. Continue the original public session;
 the evaluator does not create fixture users, edit grants or invoke private stages.
 
+A completed personal capture-only program can receive an additive participant
+successor in the same Builder session and physical resource scope. This path
+requires a fully prepared, idle app operation with every effect receipted and
+no lease, pending effect, uncertain attempt or running acknowledgement. It
+supports predecessors whose actors all use `capture-existing` and whose
+organizations, memberships and app grants are empty. Original actor entries
+remain unchanged and personal: the successor cannot add organization membership
+or app grants for them. Programs with prior organization proofs require their
+own explicit migration capability and are refused by this path.
+
+The new account plan has a separate operation and concrete approval. Planning
+archives the original account preparation and completed app operation without
+switching account state. Only after that new approval, both canonical predecessor
+approvals and fresh GetSession checks can the unchanged original session state
+be carried into a newly encrypted successor state. Original sealed state,
+captures, nonces, AAD, plan, approval and app evidence remain immutable history.
+Historical capture reads retain their original authority and encryption scope;
+they never replay the archived app plan or approve current effects. New actors
+start pending and use the existing ordinary account flow. New organization and
+app-access effects still require the subsequently resolved app plan's approval,
+and runtime proof/handoff occurs only after that plan finishes normally. Account
+preparation does not authorize or inherit an app signup enrollment policy. An
+explicit signup-policy request at this account-only successor boundary refuses;
+request that policy on the subsequent resolved app-stage plan instead.
+
 Account preparation uses ordinary Auth sign-up/sign-in. An existing account uses
 the normal browser sign-in request. Its private session capture requires the
 configured native sender, canonical pending nonce, pinned Gateway proof and
@@ -133,10 +158,23 @@ organization's retained identity proof. Ordinary invitations, acceptance and
 active-organization selection establish membership. A single Realm session is
 not relabeled to represent multiple organizations.
 
+For an actor with no approved program memberships, the browser manifest keeps
+`organizationId: null` and `roles: []`. An existing normal Auth session may
+still have a selected organization. That actual session fact is retained; it
+does not become an approved organization or grant. Fresh reads and successor
+carry require the actual selection to equal the retained selection, treating
+missing and null selections alike. Organization-scoped identities still require
+the exact approved organization and live membership role.
+
 The private prepared-runtime handoff freshly reads GetSession for each selected
 session and the actual membership role for each organization, then rechecks the
 current plan approval. Only the authenticated private bindings response carries
 the resulting storage files; they are not environment variables or tool text.
+Runtime identity handoff refusals report only fixed stage and reason labels
+through the centralized consent diagnostic. Identity, session, cookie,
+organization, URL, header and raw exception values never enter that report;
+the original refusal and all authorization/readback behavior remain unchanged.
+
 Keep approval, credential, tenant, lease and physical-fence checks. Do not add
 source-layout, version, receipt-count, actor-count or regular-app-change gates.
 Legacy plans without a participant program retain their existing path.

@@ -1,3 +1,4 @@
+import { readParticipantSuccessorPredecessor } from "./hosted-operator-participant-successor";
 import { readAppGatewaySourcePredecessor } from "./hosted-operator-app-gateway-source-successor";
 import { sharedHostProtectionDeliveryProvenance } from "./hosted-operator-shared-host-protection-successor";
 import {
@@ -878,6 +879,49 @@ const accountApprovalCheckpoint = (
   };
 };
 
+/** Historical actor authority is selected only by the current explicit successor lineage. */
+const participantPredecessorApprovalCheckpoint = (
+  record: HostedRuntimeJournalRecord | undefined,
+  context: { action: "prepare" | "cleanup"; callId: string; planDigest: string },
+) => {
+  if (context.action !== "prepare" || record?.operator === undefined) {
+    return null;
+  }
+  const plan =
+    record.operator.plan.normalActorPredecessor === undefined
+      ? record.accountPreparation?.accountPlan
+      : record.operator.plan;
+  if (plan?.normalActorPredecessor === undefined) {
+    return null;
+  }
+  const prior = readParticipantSuccessorPredecessor(record, plan, Date.now());
+  if (prior === undefined) {
+    return null;
+  }
+  if (
+    prior.operator.planDigest === context.planDigest &&
+    prior.approvedByCallId === context.callId
+  ) {
+    return { current: prior.operator, retainedPrepare: true };
+  }
+  const accounts = prior.preparation;
+  if (
+    accounts.accountPlanDigest !== context.planDigest ||
+    accounts.accountApprovedByCallId !== context.callId
+  ) {
+    return null;
+  }
+  return {
+    current: {
+      approvalId: accounts.accountApprovalId,
+      operationRef: accounts.accountOperationRef,
+      plan: accounts.accountPlan,
+      planDigest: accounts.accountPlanDigest,
+    },
+    retainedPrepare: true,
+  };
+};
+
 const membershipInspectionApprovalCheckpoint = (
   record: HostedRuntimeJournalRecord | undefined,
   context: { action: "prepare" | "cleanup"; callId: string; planDigest: string },
@@ -914,7 +958,7 @@ const appGatewaySourceApprovalCheckpoint = (
   return { current: retained.operator, retainedPrepare: true };
 };
 
-const approvalCheckpoint = (
+const ordinaryApprovalCheckpoint = (
   record: HostedRuntimeJournalRecord | undefined,
   context: { action: "prepare" | "cleanup"; callId: string; planDigest: string },
 ) => {
@@ -971,6 +1015,13 @@ const approvalCheckpoint = (
     retainedPrepare,
   };
 };
+
+const approvalCheckpoint = (
+  record: HostedRuntimeJournalRecord | undefined,
+  context: { action: "prepare" | "cleanup"; callId: string; planDigest: string },
+) =>
+  participantPredecessorApprovalCheckpoint(record, context) ??
+  ordinaryApprovalCheckpoint(record, context);
 
 /** Owner-scoped terminal approval reader; the durable digest binds the closed plan. */
 export const createHostedOperatorReadApproval =
