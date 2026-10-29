@@ -125,7 +125,13 @@ const ambiguousCreateFailure = (error: unknown): boolean => {
       return retryableProviderFailure(error);
     }
     const status = error.response.status;
-    if (status === 409 || status >= 500) {
+    // Vercel reports an existing named sandbox as HTTP 400 as well as 409.
+    if (
+      (status === 400 &&
+        /sandbox with the name .+ already exists for this project/iu.test(error.message)) ||
+      status === 409 ||
+      status >= 500
+    ) {
       return true;
     }
     return status >= 200 && status < 300;
@@ -188,7 +194,24 @@ export const createBuilderVercelProvider = (
         ) {
           throw error;
         }
-        return { native, recovered: true };
+        if (native.status === "running") {
+          return { native, recovered: true };
+        }
+        const resumed = await Sandbox.get({
+          ...transport,
+          name: input.name,
+          projectId: input.drive.projectId,
+          resume: true,
+        });
+        if (
+          resumed.name !== input.name ||
+          resumed.region !== input.drive.region ||
+          !resumed.persistent ||
+          !matchesWorkspaceMount(resumed, { id: input.drive.driveId, name: input.drive.name })
+        ) {
+          throw error;
+        }
+        return { native: resumed, recovered: true };
       } catch {
         // A failed or foreign lookup never authorizes cleanup or hides create's failure.
         throw error;

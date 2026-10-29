@@ -594,6 +594,63 @@ describe("Builder Vercel provider", () => {
     expect(drive.delete).not.toHaveBeenCalled();
     await started.handle.onSessionStop();
   });
+  it("resumes an owned stopped sandbox after the provider's 400 name collision", async () => {
+    const stopped = { ...nativeFixture(), name: startedSandboxName, status: "stopped" };
+    const running = { ...nativeFixture(), name: startedSandboxName };
+    const files = seedStorage(running, [["/workspace/private.txt", Buffer.from("retained")]]);
+    sdk.create.mockRejectedValue(
+      new APIError(new Response("", { status: 400 }), {
+        message: `A sandbox with the name '${startedSandboxName}' already exists for this project. Use GET /sandboxes/:name to resume it or delete it first.`,
+      }),
+    );
+    sdk.get.mockResolvedValueOnce(stopped).mockResolvedValueOnce(running);
+    const started = await createBuilderVercelProvider().start(context, undefined, {
+      files: [{ path: "/workspace/private.txt", content: Buffer.from("seed").toString("base64") }],
+    });
+    expect(sdk.get.mock.calls.map(([options]) => options.resume)).toEqual([false, true]);
+    expect(files.get("/workspace/private.txt")).toEqual(Buffer.from("retained"));
+    expect(stopped.delete).not.toHaveBeenCalled();
+    expect(running.delete).not.toHaveBeenCalled();
+    await started.handle.onSessionStop();
+  });
+  it("does not resume a foreign sandbox after a 400 name collision", async () => {
+    const foreign = { ...nativeFixture(), name: startedSandboxName, status: "stopped" };
+    foreign.mounts["/workspace"].drive = "foreign";
+    const failure = new APIError(new Response("", { status: 400 }), {
+      message: `A sandbox with the name '${startedSandboxName}' already exists for this project.`,
+    });
+    sdk.create.mockRejectedValue(failure);
+    sdk.get.mockResolvedValue(foreign);
+    await expect(
+      createBuilderVercelProvider().start(context, undefined, { files: [] }),
+    ).rejects.toBe(failure);
+    expect(sdk.get).toHaveBeenCalledOnce();
+    expect(foreign.runCommand).not.toHaveBeenCalled();
+    expect(foreign.delete).not.toHaveBeenCalled();
+  });
+  it("does not use or delete a sandbox whose identity changes during resume", async () => {
+    const stopped = { ...nativeFixture(), name: startedSandboxName, status: "stopped" };
+    const foreign = { ...nativeFixture(), name: startedSandboxName };
+    foreign.mounts["/workspace"].drive = "foreign";
+    const failure = new APIError(new Response("", { status: 400 }), {
+      message: `A sandbox with the name '${startedSandboxName}' already exists for this project.`,
+    });
+    sdk.create.mockRejectedValue(failure);
+    sdk.get.mockResolvedValueOnce(stopped).mockResolvedValueOnce(foreign);
+    await expect(
+      createBuilderVercelProvider().start(context, undefined, { files: [] }),
+    ).rejects.toBe(failure);
+    expect(foreign.runCommand).not.toHaveBeenCalled();
+    expect(foreign.delete).not.toHaveBeenCalled();
+  });
+  it("does not recover an unrelated 400 create error", async () => {
+    const failure = new APIError(new Response("", { status: 400 }), { message: "Invalid image" });
+    sdk.create.mockRejectedValue(failure);
+    await expect(
+      createBuilderVercelProvider().start(context, undefined, { files: [] }),
+    ).rejects.toBe(failure);
+    expect(sdk.get).not.toHaveBeenCalled();
+  });
   it.each(["name", "region", "persistent", "drive", "mode"] as const)(
     "rejects a recovered Sandbox with a foreign %s before any I/O",
     async (field) => {
