@@ -1,3 +1,4 @@
+import { createParticipantSuccessorPlan } from "./hosted-operator-participant-successor";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { durableHostedSessionRecordSchema } from "../eve/hosted-store";
 import {
@@ -4767,4 +4768,160 @@ describe("normal actor plan with retained installation scope", () => {
       ),
     ).rejects.toThrow("retained scope unknown");
   });
+});
+
+it("resolves the completed additive participant successor into its newly approved app scope", async () => {
+  const f = participantResolutionFixture(true);
+  const originalApp = await resolveFullPlan(
+    f.base,
+    context,
+    f.configuration,
+    f.ports,
+    {},
+    true,
+    true,
+  );
+  const original = structuredClone(f.preparation);
+  const record = hostedRuntimeJournalRecordSchema.parse({
+    version: 1,
+    kind: "app-runtime",
+    request: context.target,
+    status: "prepared",
+    step: "bound",
+    approvedByCallId: "app-call",
+    accountPreparation: original,
+    privateState: { encryptedToken: "resource", keyVersion: "key", tokenIv: "iv", tokenTag: "tag" },
+    proof: {
+      actors: 0,
+      tenants: 1,
+      artifactHash: "a".repeat(64),
+      manifestSha256: originalApp.release.sha256,
+      releaseId: originalApp.release.id,
+      authenticatedBehavior: "unassessed",
+    },
+    operator: {
+      mode: "protected-operator-v1",
+      operationRef: "00000000-0000-4000-8000-000000000042",
+      plan: originalApp,
+      planDigest: operatorPlanDigest(originalApp),
+      approvalId: "app-approval",
+      fenceGeneration: 1,
+      receipts: originalApp.effects.map((effect) => ({
+        effectId: effect.id,
+        ...(effect.kind === "access" ? { fenceGeneration: 1 } : {}),
+        observedAt: "2026-10-20T00:00:00.000Z",
+        resourceVersion: "observed",
+      })),
+    },
+  });
+  const qa = participantResolutionFixture();
+  const program = normalActorProgramSchema.parse({
+    ...qa.program,
+    actors: [
+      ...original.program.actors,
+      ...qa.program.actors.map((actor) => ({
+        ...actor,
+        actorKey: "qa-owner",
+        email: "qa@example.test",
+      })),
+    ],
+    organizations: qa.program.organizations.map((organization) => ({
+      ...organization,
+      ownerActorKey: "qa-owner",
+    })),
+    memberships: qa.program.memberships.map((member) => ({ ...member, actorKey: "qa-owner" })),
+    appAccess: qa.program.appAccess.map((grant) => ({ ...grant, actorKey: "qa-owner" })),
+  });
+  const successor = createParticipantSuccessorPlan(record, program, Date.now());
+  if (successor === undefined || record.operator === undefined) {
+    throw new Error("missing successor fixture");
+  }
+  record.participantPreparationHistory = [
+    {
+      preparation: original,
+      operator: record.operator,
+      approvedByCallId: record.approvedByCallId,
+      proof: record.proof,
+    },
+  ];
+  const operation = "00000000-0000-4000-8000-000000000031";
+  Object.assign(f.preparation, {
+    program,
+    programDigest: normalActorProgramDigest(program),
+    accountOperationRef: operation,
+    accountPlan: successor,
+    accountPlanDigest: operatorPlanDigest(successor),
+    predecessor: successor.normalActorPredecessor,
+    accountApprovalId: "new-account-approval",
+    accountApprovedByCallId: "new-account-call",
+  });
+  const qaActor = qa.state.actors[0];
+  if (qaActor?.session === undefined) {
+    throw new Error("missing QA session");
+  }
+  Object.assign(f.state, initialNormalActorState(program, operation), {
+    actors: [
+      ...f.state.actors,
+      {
+        ...qaActor,
+        actorKey: "qa-owner",
+        session: {
+          ...qaActor.session,
+          reference: "00000000-0000-4000-8000-000000000051",
+          actorId: "normal-qa-from-session",
+          realmSessionId: "normal-qa-session",
+        },
+      },
+    ],
+    organizationSessions: qa.state.organizationSessions?.map((entry, index) => ({
+      ...entry,
+      actorKey: "qa-owner",
+      session: {
+        ...entry.session,
+        reference: `00000000-0000-4000-8000-00000000005${index + 2}`,
+        actorId: "normal-qa-from-session",
+      },
+    })),
+  });
+  f.ports.readNormalActorOrganizationProofs.mockResolvedValue(
+    qa.organizations.map((organization) => ({
+      ...organization,
+      actorId: "normal-qa-from-session",
+    })),
+  );
+  record.accountPreparation = f.preparation;
+  record.operator = {
+    ...record.operator,
+    operationRef: operation,
+    plan: successor,
+    planDigest: operatorPlanDigest(successor),
+    approvalId: f.preparation.accountApprovalId,
+    receipts: [
+      {
+        effectId: "normal-accounts",
+        observedAt: "2026-10-20T00:00:00.000Z",
+        resourceVersion: "accounts-observed",
+      },
+    ],
+  };
+  record.status = "participants-prepared";
+  record.step = "reserved";
+  const before = structuredClone(record.participantPreparationHistory);
+  expect(createParticipantSuccessorPlan(record, program, Date.now())).toBeUndefined();
+  const resolved = await resolveFullPlan(
+    hostedOperatorPlanSchema.parse({ ...f.base, normalActorProgram: program }),
+    context,
+    f.configuration,
+    f.ports,
+    {},
+    true,
+    true,
+  );
+  expect(resolved.stage).toBe("app");
+  expect(resolved.normalActorPreparation?.accountOperationRef).toBe(operation);
+  expect(resolved.normalActorPreparation?.accountPlanDigest).toBe(operatorPlanDigest(successor));
+  expect(resolved.normalActorPredecessor).toBeUndefined();
+  expect(resolved.access).toHaveLength(2);
+  expect(resolved.access.every((grant) => grant.actorId === "normal-qa-from-session")).toBe(true);
+  expect(record.participantPreparationHistory).toEqual(before);
 });

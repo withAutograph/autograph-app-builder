@@ -1,3 +1,4 @@
+import { createParticipantSuccessorPlan } from "./hosted-operator-participant-successor";
 import {
   readAppGatewaySourceContinuationPlan,
   readAppGatewaySourcePredecessor,
@@ -1389,6 +1390,18 @@ export const composeHostedOperatorDependencies = (
       "journal_read",
       async () => await controlPlane.store.read(context),
     );
+    if (context.action === "prepare") {
+      const participantSuccessor = createParticipantSuccessorPlan(
+        current?.record,
+        context.normalActorProgram,
+        Date.now(),
+        context.authSignupPolicy,
+      );
+      if (participantSuccessor !== undefined) {
+        await controlPlane.assertPlanningAuthorized(context);
+        return participantSuccessor;
+      }
+    }
     const planRetainedSuccessor = async (): Promise<HostedOperatorPlan | undefined> => {
       const configuredWorker = configuration.sandbox.workers[context.target.appId];
       const successor =

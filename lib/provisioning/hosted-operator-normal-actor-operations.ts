@@ -213,6 +213,7 @@ export const createHostedOperatorNormalActorOperations = (
     context: HostedOperatorContext,
     preparation: NormalActorAccountPreparation,
     stateInput: NormalActorState,
+    personalOnly = false,
   ) => {
     const state = assertNormalActorState(
       preparation.program,
@@ -236,12 +237,19 @@ export const createHostedOperatorNormalActorOperations = (
           storageState: checkpoint.storageState,
           fetch,
         });
-        assertSession(
+        const actual = assertSession(
           await client.getSession(),
           actor,
           checkpoint.session,
           deps.journalPorts.now(),
         );
+        if (
+          personalOnly &&
+          actual.activeOrganizationId !== null &&
+          actual.activeOrganizationId !== undefined
+        ) {
+          throw required();
+        }
       }),
     );
     return state;
@@ -481,7 +489,30 @@ export const createHostedOperatorNormalActorOperations = (
         throw mismatch();
       }
       const program = selectedProgram(input.plan);
-      let prepared = await read(input, input.plan);
+      let prepared = await read(input);
+      if (
+        prepared !== undefined &&
+        prepared.preparation.programDigest !== normalActorProgramDigest(program)
+      ) {
+        await journal.initializeSuccessor(
+          input,
+          {
+            program,
+            programDigest: normalActorProgramDigest(program),
+            accountOperationRef: input.operationRef,
+            accountPlan: input.plan,
+            accountPlanDigest: input.planDigest,
+            accountApprovalId: input.approvalId,
+            accountApprovedByCallId: input.callId,
+            predecessor: input.plan.normalActorPredecessor,
+          },
+          async () => {
+            await deps.assertCurrentPlan(input);
+          },
+          async (preparation, state) => await freshAccounts(input, preparation, state, true),
+        );
+        prepared = await readRequired(input, input.plan);
+      }
       if (prepared === undefined) {
         await journal.retain(input, {
           program,

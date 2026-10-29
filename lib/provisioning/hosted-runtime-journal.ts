@@ -63,6 +63,17 @@ export const retainedParticipantGatewaySchema = z.strictObject({
 const hostedRuntimeJournalRecordBaseSchema = z.strictObject({
   approvedByCallId: z.string().min(1),
   accountPreparation: normalActorAccountPreparationSchema.optional(),
+  /** Immutable prior account scope and completed app evidence; never current-plan approval. */
+  participantPreparationHistory: z
+    .array(
+      z.strictObject({
+        preparation: normalActorAccountPreparationSchema,
+        approvedByCallId: z.string().min(1),
+        operator: hostedOperatorRecordSchema,
+        proof: hostedRuntimeProofSchema.optional(),
+      }),
+    )
+    .optional(),
   cleanupApprovedByCallId: z.string().min(1).optional(),
   credentialReference: z
     .strictObject({
