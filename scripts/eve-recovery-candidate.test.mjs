@@ -196,7 +196,7 @@ const fixture = async function fixture(options = {}) {
     event(7, "step_started", "step-final"),
     event(8, "step_completed", "step-final"),
     event(9, "step_completed", "step-later"),
-    event(10, "run_failed"),
+    event(10, options.status === "cancelled" ? "run_cancelled" : "run_failed"),
   ];
   const originalEntry = {
     kind: "initial",
@@ -533,7 +533,7 @@ test("partial native stream remains partial evidence with explicit uncertainty",
 });
 
 test("expired or non-failed runs return unavailable without decoding or stream reads", async () => {
-  for (const options of [{ expired: true }, { status: "running" }]) {
+  for (const options of [{ expired: true }, { status: "running" }, { status: "pending" }]) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- Each isolated SDK fixture is verified in sequence.
     const f = await fixture(options);
     // oxlint-disable-next-line eslint/no-await-in-loop -- Each isolated SDK fixture is verified in sequence.
@@ -578,4 +578,23 @@ test("inspection never exposes malformed authored phase text", async () => {
   const result = await f.collect(f.input);
   assert.equal(result.inspection.candidates[0].workflowPhase, "unavailable");
   assert.ok(!JSON.stringify(result).includes("private-untrusted-value"));
+});
+
+test("provider-cancelled terminal owner retains actual paired state and approval without effect authority", async () => {
+  const f = await fixture({ status: "cancelled", encrypted: true });
+  const result = await f.collect(f.input);
+  assert.equal(result.kind, "candidate");
+  const payload = readTerminalRecoveryCandidate(result.candidate);
+  assert.equal(payload.run.status, "cancelled");
+  assert.deepEqual(payload.candidates[0].sessionState, f.final.sessionState);
+  assert.deepEqual(payload.candidates[1].incoming, f.inputs.failed.input);
+  assert.deepEqual(payload.events, f.events);
+  assert.deepEqual(
+    payload.issues.map(({ reason }) => reason),
+    ["failed-turn-effects-unreconciled"],
+  );
+  assert.deepEqual(
+    readDurableSession(payload.candidates[0].sessionState).sandboxState,
+    readDurableSession(f.final.sessionState).sandboxState,
+  );
 });

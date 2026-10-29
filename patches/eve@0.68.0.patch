@@ -877,7 +877,7 @@ index 0000000..9274615
 +      throw new Error("Native recovery run identity differs.");
 +    // Public Builder failure is checked by authorizeOwner. A terminal model
 +    // failure can settle the native workflow successfully with next.done.
-+    if (!["failed", "completed"].includes(anchor.status))
++    if (!["failed", "completed", "cancelled"].includes(anchor.status))
 +      return { kind: "unavailable", reason: "source-not-terminal" };
 +    if (
 +      anchor.expiredAt !== undefined &&
@@ -1690,7 +1690,7 @@ index 0000000..27307c0
 +    .split(/[/:#]/u)
 +    .at(-1);
 +const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
-+const terminal = (run) => ["completed", "failed"].includes(run.status);
++const terminal = (run) => ["completed", "failed", "cancelled"].includes(run.status);
 +const unavailable = (reason) => ({ kind: "unavailable", reason });
 +
 +/** Private discovery hints never authorize collection of a candidate's app state. */
