@@ -13,7 +13,7 @@ import {
 } from "../eve/private-native-target-approval";
 import type { PrivateNativeTargetApprovalObservation } from "../eve/private-native-target-approval";
 import { createSameOriginEveTransport } from "../eve/same-origin-http";
-import { createVercelWorkloadIdentity } from "../eve/vercel-workload-identity";
+import { createBuilderApprovalStreamFetch } from "./hosted-operator-approval-observer";
 import { readActiveVercelInstallationToken } from "../integrations/postgres-vercel-installation";
 import { readVercelTokenKeyringEnvironment } from "../integrations/vercel-installation";
 import { createOperatorArtifactPublication } from "./hosted-operator-artifacts";
@@ -204,6 +204,45 @@ export const createNativeTargetApprovalCheckpoint = (
   return { read, save };
 };
 
+export const createNativeTargetApprovalHistoryTransport = (input: {
+  builderOrigin: string;
+  owner: Current;
+  appId: string;
+  workload: { authorization: string | null; signal: AbortSignal };
+  assertCanonicalAppOwner: AppOwner["assertCanonicalAppOwner"];
+  fetch?: typeof fetch;
+}) => {
+  const carrier = input.workload.authorization;
+  if (carrier === null || !carrier.startsWith("Bearer ") || carrier.length === 7) {
+    throw denied();
+  }
+  return createSameOriginEveTransport({
+    config: { baseUrl: input.builderOrigin },
+    workloadIdentity: { token: () => Promise.resolve(carrier.slice(7)) },
+    fetchImplementation: createBuilderApprovalStreamFetch({
+      origin: input.builderOrigin,
+      adapterSessionId: input.owner.adapterSessionId,
+      signal: input.workload.signal,
+      fetchImplementation: input.fetch ?? fetch,
+    }),
+    verifyReadAuthority: async ({ adapterSessionId, principal, sessionId }) => {
+      if (
+        adapterSessionId !== input.owner.adapterSessionId ||
+        sessionId !== input.owner.publicSessionId ||
+        !isDeepStrictEqual(principal, input.owner.historyOwner.principal)
+      ) {
+        return false;
+      }
+      await input.assertCanonicalAppOwner({
+        authority: input.owner.authority,
+        ownerContext: input.owner.historyOwner,
+        target: { appId: input.appId, sessionId },
+      });
+      return true;
+    },
+  });
+};
+
 export const createNativeTargetOnboardingDeployment = (input: {
   database: Database;
   configuration: HostedOperatorSourceConfiguration;
@@ -366,7 +405,8 @@ export const createNativeTargetOnboardingDeployment = (input: {
   const readApproval = async (
     owner: Current,
     record: NativeTargetOnboardingRecord,
-    callId?: string,
+    callId: string | undefined,
+    workload: { authorization: string | null; signal: AbortSignal },
   ) => {
     await input.owner.assertCanonicalAppOwner({
       authority: owner.authority,
@@ -380,25 +420,13 @@ export const createNativeTargetOnboardingDeployment = (input: {
       record.planDigest,
     );
     const observation = await checkpoint.read();
-    const transport = createSameOriginEveTransport({
-      config: { baseUrl: input.builderOrigin },
-      workloadIdentity: createVercelWorkloadIdentity(),
-      ...(input.fetch === undefined ? {} : { fetchImplementation: input.fetch }),
-      verifyReadAuthority: async ({ adapterSessionId, principal, sessionId }) => {
-        if (
-          adapterSessionId !== owner.adapterSessionId ||
-          sessionId !== owner.publicSessionId ||
-          !isDeepStrictEqual(principal, owner.historyOwner.principal)
-        ) {
-          return false;
-        }
-        await input.owner.assertCanonicalAppOwner({
-          authority: owner.authority,
-          ownerContext: owner.historyOwner,
-          target: { appId: record.appId, sessionId },
-        });
-        return true;
-      },
+    const transport = createNativeTargetApprovalHistoryTransport({
+      builderOrigin: input.builderOrigin,
+      owner,
+      appId: record.appId,
+      workload,
+      assertCanonicalAppOwner: input.owner.assertCanonicalAppOwner,
+      ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
     });
     if (transport.observePrivateHistory === undefined) {
       throw unavailable();
