@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import type { MessageStreamEvent } from "eve/client";
 import { z } from "zod";
 
@@ -10,6 +11,8 @@ import {
   sameOperatorSelection,
 } from "../provisioning/hosted-operator-contract";
 import type { OperatorSelection } from "../provisioning/hosted-operator-contract";
+import { nativeTargetPreparationRequestSchema } from "../agent/native-target-onboarding-input-schema";
+import { nativeTargetOnboardingPlanDigest } from "../provisioning/native-target-onboarding-contract";
 
 const hostedRuntimeToolName = z.enum(["prepare-app-hosted-runtime", "cleanup-app-hosted-runtime"]);
 const planMismatchMessage =
@@ -79,11 +82,58 @@ export const privateHostedApprovalReceiptSchema = z
 
 export type PrivateHostedApprovalReceipt = z.infer<typeof privateHostedApprovalReceiptSchema>;
 
+const nativeTargetInputSchema = nativeTargetPreparationRequestSchema.superRefine(
+  (input, context) => {
+    if (
+      input.appId !== input.plan.appId ||
+      input.planDigest !== nativeTargetOnboardingPlanDigest(input.plan)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Native target approval must retain its exact plan.",
+      });
+    }
+  },
+);
+const nativePendingApprovalSchema = z.strictObject({
+  callId: z.string().min(1),
+  requestId: z.string().min(1),
+  toolInput: nativeTargetInputSchema,
+  toolName: z.literal("prepare-app-native-target"),
+});
+const nativeApprovalReceiptSchema = z.strictObject({
+  callId: z.string().min(1),
+  format: z.literal("autograph-hosted-approval-v1"),
+  outcome: z.enum(["approved", "cancelled"]),
+  requestId: z.string().min(1),
+  responderPrincipalId: z.string().min(1),
+  sequence: z.number().int().nonnegative(),
+  toolInput: nativeTargetInputSchema,
+  toolName: z.literal("prepare-app-native-target"),
+  turnId: z.union([z.string().min(1), z.literal("")]),
+});
+export const privateResourcePendingApprovalSchema = z.union([
+  privateHostedPendingApprovalSchema,
+  nativePendingApprovalSchema,
+]);
+export const privateResourceApprovalReceiptSchema = z.union([
+  privateHostedApprovalReceiptSchema,
+  nativeApprovalReceiptSchema,
+]);
+export type PrivateResourceApprovalReceipt = z.infer<typeof privateResourceApprovalReceiptSchema>;
+type PrivateResourcePendingApproval = z.infer<typeof privateResourcePendingApprovalSchema>;
+export const privateResourceApprovalSessionId = (
+  entry: PrivateResourcePendingApproval | PrivateResourceApprovalReceipt,
+) =>
+  entry.toolName === "prepare-app-native-target"
+    ? entry.toolInput.plan.origin.publicSessionId
+    : entry.toolInput.plan.selection.sessionId;
+
 /** Internal JSON checkpoint only; public session DTOs never receive the pending plan or receipts. */
 export const privateHostedApprovalCaptureStateSchema = z
   .strictObject({
-    pendingRequests: z.array(privateHostedPendingApprovalSchema),
-    receipts: z.array(privateHostedApprovalReceiptSchema),
+    pendingRequests: z.array(privateResourcePendingApprovalSchema),
+    receipts: z.array(privateResourceApprovalReceiptSchema),
     sessionId: z.string().min(1),
     version: z.literal(1),
   })
@@ -96,7 +146,7 @@ export const privateHostedApprovalCaptureStateSchema = z
       for (const entry of entries) {
         if (
           ids.has(entry.requestId) ||
-          entry.toolInput.plan.selection.sessionId !== state.sessionId
+          privateResourceApprovalSessionId(entry) !== state.sessionId
         ) {
           context.addIssue({
             code: "custom",
@@ -140,7 +190,7 @@ const samePrincipal = (session: HostedSessionRecord, principal: HostedPrincipal)
   session.principal.ownerUserId === principal.ownerUserId;
 
 const matchesApprovalScope = (
-  candidate: PrivateHostedApprovalReceipt,
+  candidate: PrivateResourceApprovalReceipt,
   input: {
     action: "prepare" | "cleanup";
     callId: string;
@@ -149,6 +199,9 @@ const matchesApprovalScope = (
     requestId?: string;
   },
 ) => {
+  if (candidate.toolName === "prepare-app-native-target") {
+    return false;
+  }
   const expectedTool =
     input.action === "prepare"
       ? hostedRuntimeToolName.enum["prepare-app-hosted-runtime"]
@@ -163,8 +216,17 @@ const matchesApprovalScope = (
   return matches.every(Boolean);
 };
 
-const sameReceipt = (left: PrivateHostedApprovalReceipt, right: PrivateHostedApprovalReceipt) =>
-  [
+const sameReceipt = (
+  left: PrivateResourceApprovalReceipt,
+  right: PrivateResourceApprovalReceipt,
+) => {
+  if (
+    left.toolName === "prepare-app-native-target" ||
+    right.toolName === "prepare-app-native-target"
+  ) {
+    return isDeepStrictEqual(left, right);
+  }
+  return [
     left.requestId === right.requestId,
     left.callId === right.callId,
     left.toolName === right.toolName,
@@ -179,13 +241,14 @@ const sameReceipt = (left: PrivateHostedApprovalReceipt, right: PrivateHostedApp
     left.toolInput.planDigest === right.toolInput.planDigest,
     left.toolInput.projectId === right.toolInput.projectId,
   ].every(Boolean);
+};
 
 const assertReceiptsMatchSession = (
   sessionId: string,
-  receipts: readonly PrivateHostedApprovalReceipt[],
+  receipts: readonly PrivateResourceApprovalReceipt[],
 ) => {
-  const parsed = receipts.map((receipt) => privateHostedApprovalReceiptSchema.parse(receipt));
-  if (parsed.some((receipt) => receipt.toolInput.plan.selection.sessionId !== sessionId)) {
+  const parsed = receipts.map((receipt) => privateResourceApprovalReceiptSchema.parse(receipt));
+  if (parsed.some((receipt) => privateResourceApprovalSessionId(receipt) !== sessionId)) {
     throw new Error("Hosted approval receipt belongs to another session.");
   }
   return parsed;
@@ -196,15 +259,15 @@ export const createPrivateHostedApprovalCapture = (
   sessionId: string,
   state?: PrivateHostedApprovalCaptureState,
 ) => {
-  const pending = new Map<
-    string,
-    {
-      callId: string;
-      toolInput: z.infer<typeof hostedRuntimeToolInputSchema>;
-      toolName: z.infer<typeof hostedRuntimeToolName>;
+  const pending = new Map<string, PrivateResourcePendingApproval>();
+  const receipts = new Map<string, PrivateResourceApprovalReceipt>();
+  let conflictingNativeSettlement = false;
+
+  const assertNoConflictingNativeSettlement = () => {
+    if (conflictingNativeSettlement) {
+      throw new Error("Eve returned conflicting native approval settlements.");
     }
-  >();
-  const receipts = new Map<string, PrivateHostedApprovalReceipt>();
+  };
 
   const hydrate = (value: PrivateHostedApprovalCaptureState | string) => {
     const saved = hydratePrivateHostedApprovalCaptureState(sessionId, value);
@@ -229,11 +292,7 @@ export const createPrivateHostedApprovalCapture = (
       }
     }
     for (const request of saved.pendingRequests) {
-      pending.set(request.requestId, {
-        callId: request.callId,
-        toolInput: request.toolInput,
-        toolName: request.toolName,
-      });
+      pending.set(request.requestId, request);
     }
     for (const receipt of saved.receipts) {
       receipts.set(receipt.requestId, receipt);
@@ -244,27 +303,27 @@ export const createPrivateHostedApprovalCapture = (
   }
   return {
     hydrate,
+    // oxlint-disable-next-line sonarjs/cognitive-complexity -- Approval events share one fail-closed state machine.
     observe: (event: MessageStreamEvent) => {
+      assertNoConflictingNativeSettlement();
       if (event.type === "input.requested") {
         for (const request of event.data.requests) {
           if (request.kind === "tool-approval") {
-            const toolName = hostedRuntimeToolName.safeParse(request.action.toolName);
-            if (toolName.success) {
-              const parsed = privateHostedPendingApprovalSchema.parse({
+            const toolName = request.action.toolName;
+            if (
+              hostedRuntimeToolName.safeParse(toolName).success ||
+              toolName === "prepare-app-native-target"
+            ) {
+              const parsed = privateResourcePendingApprovalSchema.parse({
                 callId: request.action.callId,
                 requestId: request.requestId,
                 toolInput: request.action.input,
-                toolName: toolName.data,
+                toolName,
               });
-              const { toolInput } = parsed;
-              if (toolInput.plan.selection.sessionId !== sessionId) {
+              if (privateResourceApprovalSessionId(parsed) !== sessionId) {
                 throw new Error("Eve returned a protected approval for another hosted session.");
               }
-              pending.set(request.requestId, {
-                callId: request.action.callId,
-                toolInput,
-                toolName: toolName.data,
-              });
+              pending.set(request.requestId, parsed);
             }
           }
         }
@@ -275,10 +334,22 @@ export const createPrivateHostedApprovalCapture = (
       }
       const request = pending.get(event.data.requestId);
       if (request === undefined) {
+        const previous = receipts.get(event.data.requestId);
+        if (
+          // oxlint-disable-next-line sonarjs/expression-complexity -- Every field is part of the settlement identity.
+          previous?.toolName === "prepare-app-native-target" &&
+          (previous.outcome !== event.data.outcome ||
+            previous.responderPrincipalId !== event.data.responderPrincipalId ||
+            previous.sequence !== event.data.sequence ||
+            previous.turnId !== event.data.turnId)
+        ) {
+          conflictingNativeSettlement = true;
+          assertNoConflictingNativeSettlement();
+        }
         return;
       }
       pending.delete(event.data.requestId);
-      const receipt = privateHostedApprovalReceiptSchema.parse({
+      const receipt = privateResourceApprovalReceiptSchema.parse({
         ...request,
         format: "autograph-hosted-approval-v1",
         outcome: event.data.outcome,
@@ -293,16 +364,19 @@ export const createPrivateHostedApprovalCapture = (
       }
       receipts.set(receipt.requestId, receipt);
     },
-    snapshot: (): PrivateHostedApprovalCaptureState =>
-      hydratePrivateHostedApprovalCaptureState(sessionId, {
+    snapshot: (): PrivateHostedApprovalCaptureState => {
+      assertNoConflictingNativeSettlement();
+      return hydratePrivateHostedApprovalCaptureState(sessionId, {
         pendingRequests: [...pending.entries()]
           .map(([requestId, request]) => ({ ...request, requestId }))
           .toSorted((left, right) => left.requestId.localeCompare(right.requestId)),
         receipts: [...receipts.values()].toSorted((left, right) => left.sequence - right.sequence),
         sessionId,
         version: 1,
-      }),
+      });
+    },
     values() {
+      assertNoConflictingNativeSettlement();
       return [...receipts.values()].toSorted((left, right) => left.sequence - right.sequence);
     },
   };
@@ -344,10 +418,10 @@ export const createPrivateHostedApprovalRecorder = (input: {
 /** Merge replayed event receipts without allowing a request to change its terminal outcome. */
 export const mergePrivateHostedApprovalReceipts = (
   sessionId: string,
-  existingInput: readonly PrivateHostedApprovalReceipt[] | undefined,
-  observedInput: readonly PrivateHostedApprovalReceipt[],
-): PrivateHostedApprovalReceipt[] => {
-  const merged = new Map<string, PrivateHostedApprovalReceipt>();
+  existingInput: readonly PrivateResourceApprovalReceipt[] | undefined,
+  observedInput: readonly PrivateResourceApprovalReceipt[],
+): PrivateResourceApprovalReceipt[] => {
+  const merged = new Map<string, PrivateResourceApprovalReceipt>();
   for (const receipt of assertReceiptsMatchSession(sessionId, [
     ...(existingInput ?? []),
     ...observedInput,
@@ -387,7 +461,10 @@ export const readPrivateHostedApproval = async (input: {
     return null;
   }
   const receipts = session.version === 2 ? session.privateApprovalReceipts : undefined;
-  const matches = receipts?.filter((candidate) => matchesApprovalScope(candidate, input));
+  const matches = receipts?.filter(
+    (candidate) =>
+      candidate.toolName !== "prepare-app-native-target" && matchesApprovalScope(candidate, input),
+  );
   if (matches === undefined || matches.length === 0) {
     return null;
   }

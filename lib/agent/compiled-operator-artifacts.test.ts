@@ -1011,9 +1011,11 @@ describe("owned compiled artifact workflow hook", () => {
     });
     const capturedRows = new Map(mocks.rows);
     const evidence = await store.getSession(principal, source.sessionId);
+    const savedReceipt =
+      evidence?.version === 2 ? evidence.privateApprovalReceipts?.[0] : undefined;
     expect(
-      evidence?.version === 2
-        ? evidence.privateApprovalReceipts?.[0]?.toolInput.plan.release
+      savedReceipt?.toolName === "prepare-app-hosted-runtime"
+        ? savedReceipt.toolInput.plan.release
         : undefined,
     ).toEqual(plan.release);
     await service.cancel({ sessionId: recovered.sessionId });

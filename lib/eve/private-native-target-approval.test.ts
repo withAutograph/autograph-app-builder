@@ -204,6 +204,18 @@ describe("private native target terminal approval", () => {
     },
   );
 
+  it("does not reuse one invocation's approval for a different pending invocation", () => {
+    const first = createPrivateNativeTargetApprovalCapture({ owner, record, callId: "call-one" });
+    const second = createPrivateNativeTargetApprovalCapture({ owner, record, callId: "call-two" });
+    for (const reader of [first, second]) {
+      reader.observe(requested({ requestId: "request-one", callId: "call-one" }));
+      reader.observe(requested({ requestId: "request-two", callId: "call-two" }));
+      reader.observe(settled("approved", authority.ownerUserId, "request-one"));
+    }
+    expect(first.read()).toMatchObject({ requestId: "request-one", outcome: "approved" });
+    expect(second.read()).toBeNull();
+  });
+
   it("returns the original cancelled settlement proof, and never promotes a later approval", () => {
     const reader = capture();
     reader.observe(requested());
