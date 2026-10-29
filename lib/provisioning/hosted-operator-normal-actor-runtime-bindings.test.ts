@@ -63,7 +63,7 @@ const program = normalActorProgramSchema.parse({
       actorKey: "unassigned",
       email: "unassigned@example.com",
       name: "Unassigned",
-      account: "create-email-password",
+      account: "capture-existing",
     },
   ],
   organizations: [
@@ -156,6 +156,7 @@ const faults = [
   "wrong-actor",
   "wrong-email",
   "wrong-organization",
+  "changed-unassigned-organization",
   "wrong-role",
   "expired",
 ] as const;
@@ -165,20 +166,28 @@ interface RuntimeSession {
   actorKey: string;
   organizationId: string | null;
 }
-const normalSessionResponse = (saved: RuntimeSession, email: string, fault: Fault | undefined) =>
-  Response.json({
+const normalSessionResponse = (saved: RuntimeSession, email: string, fault: Fault | undefined) => {
+  let activeOrganizationId = saved.session.activeOrganizationId ?? saved.organizationId;
+  if (
+    fault === "wrong-organization" ||
+    (fault === "changed-unassigned-organization" && saved.actorKey === "unassigned")
+  ) {
+    activeOrganizationId = "changed-outside-program";
+  }
+  return Response.json({
     session: {
       id: fault === "wrong-session" ? "wrong-session" : saved.session.realmSessionId,
       userId: fault === "wrong-actor" ? "wrong-actor" : saved.session.actorId,
       expiresAt: fault === "expired" ? "2020-01-01T00:00:00.000Z" : saved.session.expiresAt,
-      activeOrganizationId: fault === "wrong-organization" ? "org-two" : saved.organizationId,
+      activeOrganizationId,
     },
     user: {
       id: fault === "wrong-actor" ? "wrong-actor" : saved.session.actorId,
       email: fault === "wrong-email" ? "different@example.com" : email,
     },
   });
-const fixture = async (fault?: Fault) => {
+};
+const fixture = async (fault?: Fault, opaqueOrganization?: string) => {
   let row: HostedRuntimeJournalRow = {
     revision: 1,
     record: hostedRuntimeJournalRecordSchema.parse({
@@ -266,14 +275,16 @@ const fixture = async (fault?: Fault) => {
   state.actors = program.actors.map((actor, index) => ({
     actorKey: actor.actorKey,
     signup: "complete",
-    credentials: { password: randomBytes(32).toString("base64url") },
+    ...(actor.account === "create-email-password"
+      ? { credentials: { password: randomBytes(32).toString("base64url") } }
+      : {}),
     session: {
       reference: `33333333-3333-4333-8333-${String(index + 1).padStart(12, "0")}`,
       actorId: `id-${actor.actorKey}`,
       realmSessionId: `base-${actor.actorKey}`,
       origin: program.origin,
       expiresAt: "2030-01-01T00:00:00.000Z",
-      activeOrganizationId: null,
+      activeOrganizationId: actor.actorKey === "unassigned" ? (opaqueOrganization ?? null) : null,
     },
     storageState: storage(`private-base-${actor.actorKey}`),
   }));
@@ -401,7 +412,9 @@ const fixture = async (fault?: Fault) => {
     if (actor === undefined) {
       throw new Error("fixture_missing_actor");
     }
-    const fail = saved.actorKey === "owner" && saved.organizationId === "org-one";
+    const fail =
+      (saved.actorKey === "owner" && saved.organizationId === "org-one") ||
+      (fault === "changed-unassigned-organization" && saved.actorKey === "unassigned");
     if (new URL(request.url).pathname === "/api/auth/get-session") {
       if (fail && fault === "revoked") {
         return Response.json(null);
@@ -529,6 +542,29 @@ describe("fresh authenticated normal actor runtime bindings", () => {
     const retained = await f.journal.read(context);
     expect(retained?.preparation.accountOperationRef).toBe(accountOperationRef);
   });
+  it("exports unassigned metadata while retaining an unchanged actual active organization", async () => {
+    const f = await fixture(undefined, "existing-outside-program");
+    const before = structuredClone(f.row.record.accountPreparation);
+    const projection = await f.runtime(f.input);
+    const actor = projection?.identities.actors.find(
+      (identity) => identity.actorKey === "unassigned",
+    );
+    expect(actor).toMatchObject({ organizationId: null, roles: [] });
+    expect(f.row.record.accountPreparation).toEqual(before);
+    expect(
+      f.requests.filter(
+        (request) => new URL(request.url).pathname === "/api/auth/organization/list-members",
+      ),
+    ).toHaveLength(5);
+  });
+
+  it("refuses a changed actual organization for an otherwise exact unassigned identity", async () => {
+    const f = await fixture("changed-unassigned-organization", "existing-outside-program");
+    const before = structuredClone(f.row.record.accountPreparation);
+    await denied(f.runtime(f.input), "auth_identity_required");
+    expect(f.row.record.accountPreparation).toEqual(before);
+  });
+
   it.each(faults)("denies live %s without returning runtime credentials", async (fault) => {
     const f = await fixture(fault);
     await denied(f.runtime(f.input), "auth_identity_required");

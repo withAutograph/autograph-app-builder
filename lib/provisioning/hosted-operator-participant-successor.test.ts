@@ -142,7 +142,7 @@ const requireFixture = <T>(value: T | undefined): T => {
   return value;
 };
 
-const fixture = async () => {
+const fixture = async (opaqueOrganization?: string) => {
   const keyring = { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" };
   const state = initialNormalActorState(program, accountOperationRef);
   state.actors[0] = {
@@ -154,6 +154,7 @@ const fixture = async () => {
       realmSessionId: "real-session",
       origin: program.origin,
       expiresAt: "2030-01-01T00:00:00.000Z",
+      ...(opaqueOrganization === undefined ? {} : { activeOrganizationId: opaqueOrganization }),
     },
     storageState: {
       cookies: [
@@ -379,7 +380,7 @@ const fixture = async () => {
         id: "real-session",
         userId: "real-owner",
         expiresAt: "2030-01-01T00:00:00.000Z",
-        activeOrganizationId: null,
+        activeOrganizationId: opaqueOrganization ?? null,
       },
     });
   });
@@ -452,6 +453,41 @@ describe("approved additive capture participant state", () => {
       }),
     ).toThrow();
     expect(f.fetchSession).toHaveBeenCalled();
+  });
+
+  it("carries the original opaque active organization without adding organization or role claims", async () => {
+    const f = await fixture("existing-outside-program");
+    f.approve();
+    await expect(f.operations.ensureNormalActorCapture(f.input)).resolves.toBe("ready");
+    const prepared = await f.journal.read(context);
+    expect(prepared?.state.actors[0]).toEqual(f.state.actors[0]);
+    expect(prepared?.state.actors[0]?.session?.activeOrganizationId).toBe(
+      "existing-outside-program",
+    );
+    expect(prepared?.preparation.program.memberships).toEqual([]);
+    expect(prepared?.preparation.program.appAccess).toEqual([]);
+    expect(f.row.record.participantPreparationHistory?.[0]?.preparation).toEqual(f.original);
+  });
+
+  it("refuses a changed actual organization before carrying an opaque original session", async () => {
+    const f = await fixture("existing-outside-program");
+    f.approve();
+    f.fetchSession.mockResolvedValue(
+      Response.json({
+        user: { id: "real-owner", email: "owner@example.test" },
+        session: {
+          id: "real-session",
+          userId: "real-owner",
+          expiresAt: "2030-01-01T00:00:00.000Z",
+          activeOrganizationId: "changed-outside-program",
+        },
+      }),
+    );
+    const before = structuredClone(f.row.record.accountPreparation);
+    await expect(f.operations.ensureNormalActorCapture(f.input)).rejects.toMatchObject({
+      code: "auth_identity_required",
+    });
+    expect(f.row.record.accountPreparation).toEqual(before);
   });
 
   it("runs the existing account worker for new QA without recapturing or signing up the original actor", async () => {
@@ -601,21 +637,29 @@ describe("approved additive capture participant state", () => {
     expect(f.row.record.participantPreparationHistory).toEqual(history);
   });
 
-  it("rejects changing a carried capture before checkpointing its successor state", async () => {
-    const f = await fixture();
-    f.approve();
-    await f.operations.ensureNormalActorCapture(f.input);
-    const prepared = await f.journal.read(context);
-    if (prepared === undefined) {
-      throw new Error("missing successor state");
-    }
-    requireFixture(prepared.state.actors[0]?.session).realmSessionId = "foreign-session";
-    const before = structuredClone(f.row.record);
-    await expect(f.journal.checkpoint(context, prepared.state)).rejects.toThrow(
-      "normal_actor_journal_authority_mismatch",
-    );
-    expect(f.row.record).toEqual(before);
-  });
+  it.each(["session", "active organization"])(
+    "rejects changing a carried capture %s before checkpointing its successor state",
+    async (changed) => {
+      const f = await fixture("existing-outside-program");
+      f.approve();
+      await f.operations.ensureNormalActorCapture(f.input);
+      const prepared = await f.journal.read(context);
+      if (prepared === undefined) {
+        throw new Error("missing successor state");
+      }
+      const session = requireFixture(prepared.state.actors[0]?.session);
+      if (changed === "session") {
+        session.realmSessionId = "foreign-session";
+      } else {
+        session.activeOrganizationId = "changed-outside-program";
+      }
+      const before = structuredClone(f.row.record);
+      await expect(f.journal.checkpoint(context, prepared.state)).rejects.toThrow(
+        "normal_actor_journal_authority_mismatch",
+      );
+      expect(f.row.record).toEqual(before);
+    },
+  );
 
   it("keeps predecessor approval authority after successor initialization", async () => {
     const f = await fixture();

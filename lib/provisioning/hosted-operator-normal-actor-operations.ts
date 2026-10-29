@@ -213,7 +213,7 @@ export const createHostedOperatorNormalActorOperations = (
     context: HostedOperatorContext,
     preparation: NormalActorAccountPreparation,
     stateInput: NormalActorState,
-    personalOnly = false,
+    preserveSelection = false,
   ) => {
     const state = assertNormalActorState(
       preparation.program,
@@ -244,9 +244,9 @@ export const createHostedOperatorNormalActorOperations = (
           deps.journalPorts.now(),
         );
         if (
-          personalOnly &&
-          actual.activeOrganizationId !== null &&
-          actual.activeOrganizationId !== undefined
+          preserveSelection &&
+          (actual.activeOrganizationId ?? null) !==
+            (checkpoint.session.activeOrganizationId ?? null)
         ) {
           throw required();
         }

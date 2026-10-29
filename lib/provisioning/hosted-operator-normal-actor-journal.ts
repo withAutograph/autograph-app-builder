@@ -221,8 +221,7 @@ const sameCarriedActor = (original: NormalActorCheckpoint, current: NormalActorC
   const { activeOrganizationId: originalOrganization, ...originalIdentity } = originalSession;
   const { activeOrganizationId: currentOrganization, ...currentIdentity } = currentSession;
   return [
-    (originalOrganization ?? null) === null,
-    (currentOrganization ?? null) === null,
+    (originalOrganization ?? null) === (currentOrganization ?? null),
     isDeepStrictEqual(originalIdentity, currentIdentity),
     isDeepStrictEqual(originalCheckpoint, currentCheckpoint),
   ].every(Boolean);

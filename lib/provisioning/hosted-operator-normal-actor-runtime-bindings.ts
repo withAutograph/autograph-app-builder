@@ -97,7 +97,7 @@ export const createNormalActorRuntimeBindings = (
         }
         const selectedOrganization =
           identity.organizationId === null
-            ? actual.activeOrganizationId === null || actual.activeOrganizationId === undefined
+            ? (actual.activeOrganizationId ?? null) === (expected.activeOrganizationId ?? null)
             : actual.activeOrganizationId === identity.organizationId;
         if (
           [
