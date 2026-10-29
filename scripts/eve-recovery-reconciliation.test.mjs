@@ -175,10 +175,29 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
       readOperations.push(["runs.list"]);
       return Promise.resolve({ data: [...runs.values()], hasMore: false });
     };
-    world.events.list = ({ runId }) => {
-      readOperations.push(["events.list", runId]);
+    let parentScans = 0;
+    world.events.list = ({ runId, resolveData }) => {
+      readOperations.push(["events.list", runId, resolveData]);
+      if (runId === anchorRunId) {
+        parentScans += 1;
+      }
+      const data = runId === anchorRunId ? parentEvents : childEvents;
+      const drifted = options.parentScanDrift === true && runId === anchorRunId && parentScans > 1;
+      const observed = drifted ? [...data, { ...data.at(-1), eventId: eventId(99) }] : data;
       return Promise.resolve({
-        data: runId === anchorRunId ? parentEvents : childEvents,
+        data: observed.map((event) => {
+          if (resolveData !== "none") {
+            return event;
+          }
+          const eventData = { ...event.eventData };
+          delete eventData.input;
+          delete eventData.result;
+          delete eventData.output;
+          delete eventData.error;
+          delete eventData.metadata;
+          delete eventData.payload;
+          return { ...event, eventData };
+        }),
         hasMore: false,
       });
     };
@@ -710,6 +729,18 @@ test("provider-cancelled physical handoff reconciles latest native typed state w
   assert.equal(payload.checkpointOwnerRunId, ownerRunId);
   assert.equal(payload.binding.ownerRunId, logicalSessionId);
   assert.equal(payload.handoffChain.length, 1);
+  assert.equal(
+    f.readOperations.filter(
+      ([operation, id]) => operation === "events.list" && id === logicalSessionId,
+    ).length,
+    2,
+  );
+  assert.equal(
+    f.readOperations
+      .filter(([operation]) => operation === "events.list")
+      .every((call) => call[2] === "none"),
+    true,
+  );
   assert.equal(payload.handoffChain[0].ownerRunId, ownerRunId);
   const before = structuredClone(payload.candidates);
   const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
@@ -745,13 +776,14 @@ for (const options of [
   { handoff: true, runStatus: "pending" },
   { handoff: true, runStatus: "cancelled", anchorStatus: "running" },
   { handoff: true, runStatus: "cancelled", parentFrontierUnknown: true },
+  { handoff: true, runStatus: "cancelled", parentScanDrift: true },
 ]) {
   test(`cancelled owner discovery preserves unavailable or uncertain handoff boundary ${JSON.stringify(options)}`, async () => {
     const f = await fixture({ ...options, expectedUnavailable: true });
     assert.equal(f.collected.kind, "unavailable");
     assert.equal(
       f.collected.reason,
-      options.parentFrontierUnknown === true
+      options.parentFrontierUnknown === true || options.parentScanDrift === true
         ? "handoff-parent-frontier-uncertain"
         : "source-not-terminal",
     );

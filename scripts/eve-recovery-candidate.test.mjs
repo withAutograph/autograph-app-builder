@@ -23,6 +23,18 @@ const serialization = await load("dist/src/compiled/@workflow/core/serialization
 const { readDurableSession, createDurableSessionState } = await load(
   "dist/src/execution/durable-session-store.js",
 );
+// Model World's documented resolveData:none contract: retain event metadata,
+// leave opaque input/result/error/metadata/payload in the authoritative World.
+const eventMetadata = (event) => {
+  const data = { ...event.eventData };
+  delete data.input;
+  delete data.result;
+  delete data.output;
+  delete data.error;
+  delete data.metadata;
+  delete data.payload;
+  return { ...event, eventData: data };
+};
 const slotToEventId = (slot) => `evnt_${String(slot).padStart(26, "0")}`;
 const requireEventSlot = (id) => {
   assert.match(id, /^evnt_[0-9]{26}$/u);
@@ -223,7 +235,11 @@ const fixture = async function fixture(options = {}) {
       list: async (params) => {
         calls.push(["events", params]);
         const start = params.pagination.cursor === undefined ? 0 : Number(params.pagination.cursor);
-        const data = events.slice(start, start + 3);
+        const data = events
+          .slice(start, start + 3)
+          .map((nativeEvent) =>
+            params.resolveData === "none" ? eventMetadata(nativeEvent) : nativeEvent,
+          );
         const end = start + data.length;
         return { data, hasMore: end < events.length, cursor: String(end) };
       },
@@ -231,7 +247,10 @@ const fixture = async function fixture(options = {}) {
     steps: {
       get: async (runId, stepId, params) => {
         calls.push(["step", runId, stepId, params]);
-        return steps.get(stepId);
+        const step = steps.get(stepId);
+        return params.resolveData === "none"
+          ? { ...step, input: undefined, output: undefined }
+          : step;
       },
     },
   };
@@ -307,18 +326,18 @@ test("native serialization preserves paired state, original approval, Drive and 
       .phase,
     "planned",
   );
-  assert.deepEqual(payload.events, f.events);
+  assert.deepEqual(payload.events, f.events.map(eventMetadata));
   assert.equal(payload.candidates[0].origin.slot, 7);
   assert.equal(payload.candidates[1].origin.slot, 5);
   assert.equal(payload.frontier[1].events[0].eventType, "step_failed");
-  assert.deepEqual(payload.frontier[2].events, f.events.slice(3));
+  assert.deepEqual(payload.frontier[2].events, f.events.slice(3).map(eventMetadata));
   assert.deepEqual(payload.nativeEvents, [protocolResult]);
   assert.equal(
     payload.steps.some(({ step }) => step.stepId === "step-later"),
     false,
   );
   assert.deepEqual(
-    await serialization.hydrateStepReturnValue(payload.events[8].eventData.result, ownerRunId),
+    await serialization.hydrateStepReturnValue(f.events[8].eventData.result, ownerRunId),
     { actual: "retained-later-output" },
   );
   assert.deepEqual(result.inspection.uncertaintyReasons, ["failed-turn-effects-unreconciled"]);
@@ -403,7 +422,9 @@ test("completed native terminal step preserves its original paired input and rea
   assert.deepEqual(original.incoming, f.inputs.failed.input);
   assert.equal(original.origin.slot, 5);
   assert.equal(
-    payload.frontier.find(({ origin }) => origin === original.origin).events.includes(f.events[5]),
+    payload.frontier
+      .find(({ origin }) => origin === original.origin)
+      .events.some((event) => event.eventId === f.events[5].eventId),
     true,
   );
   assert.equal(
@@ -516,11 +537,12 @@ test("unreadable final input retains the prior paired candidates and records unc
     ["failed-turn-input", "committed-turn-output"],
   );
   assert.equal(result.inspection.uncertaintyReasons.includes("native-step-input-unreadable"), true);
+  assert.equal(f.steps.get("step-final").input.length, 3);
   assert.equal(
     readTerminalRecoveryCandidate(result.candidate).steps.find(
       ({ step }) => step.stepId === "step-final",
-    ).step.input.length,
-    3,
+    ).step.input,
+    undefined,
   );
 });
 
@@ -588,7 +610,7 @@ test("provider-cancelled terminal owner retains actual paired state and approval
   assert.equal(payload.run.status, "cancelled");
   assert.deepEqual(payload.candidates[0].sessionState, f.final.sessionState);
   assert.deepEqual(payload.candidates[1].incoming, f.inputs.failed.input);
-  assert.deepEqual(payload.events, f.events);
+  assert.deepEqual(payload.events, f.events.map(eventMetadata));
   assert.deepEqual(
     payload.issues.map(({ reason }) => reason),
     ["failed-turn-effects-unreconciled"],
@@ -719,3 +741,63 @@ for (const status of ["running", "pending"]) {
     );
   });
 }
+
+test("metadata collection retains every frontier and hydrated checkpoint without duplicate step blobs", async () => {
+  const f = await fixture({ encrypted: true });
+  const rawInput = new Uint8Array(f.steps.get("step-final").input);
+  const rawOutput = new Uint8Array(f.steps.get("step-prior").output);
+  const result = await f.collect(f.input);
+  const payload = readTerminalRecoveryCandidate(result.candidate);
+  assert.deepEqual(
+    payload.events.map(({ eventId }) => eventId),
+    f.events.map(({ eventId }) => eventId),
+  );
+  assert.equal(
+    f.calls
+      .filter(([kind]) => kind === "events")
+      .every(([, params]) => params.resolveData === "none"),
+    true,
+  );
+  assert.equal(
+    payload.steps.every(({ step }) => step.input === undefined && step.output === undefined),
+    true,
+  );
+  assert.deepEqual(
+    payload.steps.find(({ step }) => step.stepId === "step-final").arguments.args[0],
+    f.final,
+  );
+  assert.deepEqual(
+    payload.steps.find(({ step }) => step.stepId === "step-prior").output.sessionState,
+    f.prior.sessionState,
+  );
+  assert.deepEqual(f.steps.get("step-final").input, rawInput);
+  assert.deepEqual(f.steps.get("step-prior").output, rawOutput);
+});
+
+test("legacy missing names read metadata before hydrating only relevant native steps", async () => {
+  const f = await fixture({ encrypted: true });
+  for (const nativeEvent of f.events) {
+    if (["step-prior", "step-later"].includes(nativeEvent.correlationId)) {
+      delete nativeEvent.eventData.stepName;
+    }
+  }
+  const result = await f.collect(f.input);
+  const payload = readTerminalRecoveryCandidate(result.candidate);
+  const relevantReads = f.calls
+    .filter((call) => call[0] === "step" && call[2] === "step-prior")
+    .map((call) => call[3].resolveData);
+  assert.equal(relevantReads[0], "none");
+  assert.equal(relevantReads.filter((mode) => mode === "all").length, 1);
+  const unrelatedReads = f.calls
+    .filter((call) => call[0] === "step" && call[2] === "step-later")
+    .map((call) => call[3].resolveData);
+  assert.equal(unrelatedReads.length > 0, true);
+  assert.equal(
+    unrelatedReads.every((mode) => mode === "none"),
+    true,
+  );
+  assert.deepEqual(
+    payload.candidates.find(({ kind }) => kind === "committed-turn-output").sessionState,
+    f.prior.sessionState,
+  );
+});

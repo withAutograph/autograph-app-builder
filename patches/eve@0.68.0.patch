@@ -638,7 +638,7 @@ index 0000000..7e0344b
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.d.ts
 @@ -0,0 +1,155 @@
-+import type { World, WorkflowRun, Step, Event } from "#compiled/@workflow/world/index.js";
++import type { World, WorkflowRun, StepWithoutData, Event } from "#compiled/@workflow/world/index.js";
 +import type { PayloadKey } from "#compiled/@workflow/core/serialization/encryption.js";
 +import type { DurableSession, DurableSessionState } from "#execution/durable-session-store.js";
 +import type { TurnStepPayload } from "#execution/session/turn-step-types.js";
@@ -700,15 +700,15 @@ index 0000000..7e0344b
 +  /** Native-only hydration capability for run.input; never serialize or expose publicly. */
 +  readonly nativeRunKey: PayloadKey | undefined;
 +  readonly candidates: readonly PairedNativeRecoveryCheckpoint[];
-+  /** Complete retained native event log; includes facts preceding the preferred candidate. */
++  /** Complete native event metadata; opaque payloads remain in the authoritative World. */
 +  readonly events: readonly Event[];
 +  readonly frontier: readonly {
 +    readonly origin: NativeRecoveryOrigin;
 +    readonly events: readonly Event[];
 +  }[];
-+  /** Relevant native steps fetched once; unrelated raw facts stay in events/frontier. */
++  /** Relevant native payloads fetched once; serialized blobs stay in the authoritative World. */
 +  readonly steps: readonly {
-+    readonly step: Step;
++    readonly step: StepWithoutData;
 +    readonly arguments?: unknown;
 +    readonly output?: unknown;
 +  }[];
@@ -798,7 +798,7 @@ new file mode 100644
 index 0000000..9274615
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.js
-@@ -0,0 +1,491 @@
+@@ -0,0 +1,508 @@
 +import { resolveTerminalCheckpointOwner } from "#execution/session/recovery-owner-provenance.js";
 +// Server-only native checkpoint inspection. This module never starts/resumes a run.
 +// The caller MUST supply canonical ownership authorization; model/client IDs are
@@ -907,7 +907,7 @@ index 0000000..9274615
 +      const page = await world.events.list({
 +        runId: run.runId,
 +        pagination: { limit: 128, sortOrder: "asc", ...(cursor === undefined ? {} : { cursor }) },
-+        resolveData: "all",
++        resolveData: "none",
 +      });
 +      for (const event of page.data) {
 +        if (seenEvents.has(event.eventId)) continue;
@@ -951,13 +951,30 @@ index 0000000..9274615
 +      "terminateChildSessionsStep",
 +      "dispatchCoordinationStep",
 +    ]);
-+    const readStep = async (stepId) => {
++    const readStep = async (stepId, knownName) => {
 +      if (steps.has(stepId)) return steps.get(stepId);
++      let metadata;
++      if (knownName === undefined) {
++        metadata = await world.steps.get(run.runId, stepId, { resolveData: "none" });
++        if (
++          metadata.runId !== run.runId ||
++          metadata.stepId !== stepId ||
++          typeof metadata.stepName !== "string"
++        )
++          throw new Error("Native recovery step owner differs.");
++        if (!relevantSteps.has(nativeFunction(metadata.stepName))) {
++          const retained = { step: { ...metadata, input: undefined, output: undefined } };
++          steps.set(stepId, retained);
++          return retained;
++        }
++      }
 +      const step = await world.steps.get(run.runId, stepId, { resolveData: "all" });
++      if (metadata !== undefined && step.stepName !== metadata.stepName)
++        throw new Error("Native recovery step name differs.");
 +      if (step.runId !== run.runId || step.stepId !== stepId) {
 +        throw new Error("Native recovery step owner differs.");
 +      }
-+      const retained = { step };
++      const retained = { step: { ...step, input: undefined, output: undefined } };
 +      steps.set(stepId, retained);
 +      const name = nativeFunction(step.stepName);
 +      if (!relevantSteps.has(name)) return retained;
@@ -1017,10 +1034,10 @@ index 0000000..9274615
 +    for (const { event, slot } of events) {
 +      if (!event.eventType.startsWith("step_") || !event.correlationId) continue;
 +      const knownName = stepNames.get(event.correlationId);
-+      // Unrelated steps already retain their raw resolved input/result/error
-+      // in the native log. Do not fetch or hydrate them a second time.
++      // The immutable World retains every raw payload. Keep its complete
++      // metadata frontier here; fetch only relevant checkpoint payloads.
 +      if (knownName !== undefined && !relevantSteps.has(knownName)) continue;
-+      const retained = await readStep(event.correlationId);
++      const retained = await readStep(event.correlationId, knownName);
 +      const name = nativeFunction(retained.step.stepName);
 +      const origin = coordinates(event, slot);
 +      const argument = retained.arguments?.args?.[0];
@@ -1782,7 +1799,7 @@ new file mode 100644
 index 0000000..27307c0
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-owner-provenance.js
-@@ -0,0 +1,450 @@
+@@ -0,0 +1,454 @@
 +import { isDeepStrictEqual } from "node:util";
 +import {
 +  sessionCommandHookToken,
@@ -1840,9 +1857,9 @@ index 0000000..27307c0
 +    }
 +    return entries.get(run.runId);
 +  };
-+  const eventsFor = async (runId, resolveData = "none") => {
++  const eventsFor = async (runId, resolveData = "none", refresh = false) => {
 +    const cacheKey = `${runId}:${resolveData}`;
-+    if (logs.has(cacheKey)) return logs.get(cacheKey);
++    if (!refresh && logs.has(cacheKey)) return logs.get(cacheKey);
 +    const events = [];
 +    const seen = new Set();
 +    const cursors = new Set();
@@ -1912,7 +1929,10 @@ index 0000000..27307c0
 +          step.input === undefined
 +            ? undefined
 +            : await dependencies.hydrateStepArguments(step.input, run.runId, await keyFor(run));
-+        retainedSteps.set(cacheKey, { step, input: args?.args?.[0] });
++        retainedSteps.set(cacheKey, {
++          step: { ...step, input: undefined, output: undefined },
++          input: args?.args?.[0],
++        });
 +      }
 +      selected.push(retainedSteps.get(cacheKey));
 +    }
@@ -2206,7 +2226,8 @@ index 0000000..27307c0
 +          return unavailable("handoff-parent-frontier-uncertain");
 +      }
 +    }
-+    const retainedEvents = await eventsFor(parent.runId, "all");
++    // A fresh metadata scan must independently certify the full parent frontier.
++    const retainedEvents = await eventsFor(parent.runId, "none", true);
 +    if (
 +      retainedEvents.length !== parentEvents.length ||
 +      retainedEvents.some((event, index) => event.eventId !== parentEvents[index].eventId)
