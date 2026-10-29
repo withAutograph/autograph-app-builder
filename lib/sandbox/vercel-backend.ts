@@ -180,10 +180,11 @@ export const createBuilderVercelProvider = (
         throw error;
       }
       try {
+        // Use the same project-scoped OIDC credentials as Drive.getOrCreate.
+        // Passing only projectId makes the SDK treat credentials as incomplete.
         const native = await Sandbox.get({
           ...transport,
           name: input.name,
-          projectId: input.drive.projectId,
           resume: false,
         });
         const sameTarget = native.name === input.name && native.region === input.drive.region;
@@ -200,7 +201,6 @@ export const createBuilderVercelProvider = (
         const resumed = await Sandbox.get({
           ...transport,
           name: input.name,
-          projectId: input.drive.projectId,
           resume: true,
         });
         if (

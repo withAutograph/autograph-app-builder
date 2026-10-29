@@ -584,7 +584,6 @@ describe("Builder Vercel provider", () => {
     expect(sdk.get).toHaveBeenCalledWith(
       expect.objectContaining({
         name: startedSandboxName,
-        projectId: drive.projectId,
         resume: false,
       }),
     );
@@ -603,7 +602,14 @@ describe("Builder Vercel provider", () => {
         message: `A sandbox with the name '${startedSandboxName}' already exists for this project. Use GET /sandboxes/:name to resume it or delete it first.`,
       }),
     );
-    sdk.get.mockResolvedValueOnce(stopped).mockResolvedValueOnce(running);
+    sdk.get.mockImplementation((options) => {
+      // The SDK rejects a projectId without matching teamId and token before
+      // consulting OIDC; both recovery lookups must use project-scoped OIDC.
+      if ("projectId" in options && options.projectId !== undefined) {
+        return Promise.reject(new Error("Missing credentials parameters"));
+      }
+      return Promise.resolve(options.resume === true ? running : stopped);
+    });
     const started = await createBuilderVercelProvider().start(context, undefined, {
       files: [{ path: "/workspace/private.txt", content: Buffer.from("seed").toString("base64") }],
     });
@@ -764,7 +770,6 @@ describe("Builder Vercel provider", () => {
       expect(sdk.get).toHaveBeenCalledWith(
         expect.objectContaining({
           name: startedSandboxName,
-          projectId: "project-owned",
           resume: false,
         }),
       );
