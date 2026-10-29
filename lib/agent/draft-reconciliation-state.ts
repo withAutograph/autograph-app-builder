@@ -1,3 +1,4 @@
+import type { CandidateDependencyCatalogIntent } from "../repository/candidate-dependency-catalog";
 import { defineState } from "eve/context";
 import type { PublishedDraftRepairSource } from "./published-draft-repair";
 import type { PublishedDraftRepairReview } from "../repository/published-draft-repair-review";
@@ -82,6 +83,7 @@ export interface PreservedDraftWorkspace {
 }
 
 interface DraftCandidateFields {
+  dependencyCatalogPending?: CandidateDependencyCatalogIntent;
   version: 1;
   appId: string;
   githubSourceDigest: string;
@@ -95,6 +97,11 @@ interface DraftCandidateFields {
   baseSha: string;
   baseTree: string;
   conflicts: readonly string[];
+  /** Server-produced exact catalog normalization, scoped to this retained candidate. */
+  dependencyCatalog?: {
+    files: readonly { path: string; digest: string }[];
+    nonAppIndexDigest: string;
+  };
   recoveryMode?: "reopen-current-owned-draft";
   preservedWorkspaces?: readonly PreservedDraftWorkspace[];
   validation?: {
@@ -196,7 +203,8 @@ export interface CandidateValidationAttempt {
   appId: string;
   baseSha: string;
   callId: string;
-  category: "check-build" | "test" | "local-preparation";
+  // oxlint-disable-next-line sonarjs/max-union-size -- Persisted command categories distinguish the supported diagnostic readback forms.
+  category: "check-build" | "test" | "local-preparation" | "additional-check";
   command: string;
   completion: "complete" | "interrupted" | "unavailable";
   durability: "available" | "unavailable";

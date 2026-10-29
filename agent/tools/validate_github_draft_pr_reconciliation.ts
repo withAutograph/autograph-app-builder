@@ -201,7 +201,9 @@ const runCandidateCommandWithLogs = async <
   sessionId: string;
   sessionAuth: unknown;
   resolvedTree: string;
-  run: () => Promise<Result>;
+  run: (
+    onChunk: (channel: "stdout" | "stderr", content: string) => Promise<void>,
+  ) => Promise<Result>;
 }): Promise<Result> => {
   const binding = {
     appId: input.candidate.appId,
@@ -318,8 +320,12 @@ const runCandidateCommandWithLogs = async <
     }
   };
   try {
-    const result = await input.run();
-    if (writers !== undefined) {
+    let streamed = false;
+    const result = await input.run(async (channel, content) => {
+      streamed = true;
+      await writers?.[channel].append(content);
+    });
+    if (writers !== undefined && !streamed) {
       try {
         if (result.stdout) {
           await writers.stdout.append(result.stdout);
@@ -335,6 +341,56 @@ const runCandidateCommandWithLogs = async <
     return result;
   } catch (error) {
     await finish("interrupted", null);
+    throw error;
+  }
+};
+
+/** Stream detached provider output before its bounded command response can truncate it. */
+const runAdditionalCandidateCheck = async (input: {
+  sandbox: SandboxSession;
+  command: string;
+  root: string;
+  signal?: AbortSignal;
+  onChunk: (channel: "stdout" | "stderr", content: string) => Promise<void>;
+}) => {
+  const process = await input.sandbox.spawn({
+    abortSignal: input.signal,
+    command: input.command,
+    workingDirectory: input.root,
+  });
+  const output = { stdout: "", stderr: "" };
+  const drain = async (channel: "stdout" | "stderr", stream: ReadableStream<Uint8Array>) => {
+    const reader = stream.getReader();
+    const decoder = new TextDecoder();
+    const append = async (content: string) => {
+      // The response is an excerpt; the durable writer retains the complete stream.
+      output[channel] = (output[channel] + content).slice(0, 2400);
+      await input.onChunk(channel, content);
+    };
+    try {
+      while (true) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Drain serially with durable-write backpressure.
+        const next = await reader.read();
+        if (next.done) {
+          break;
+        }
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Preserve ordered UTF-8 output in each channel.
+        await append(decoder.decode(next.value, { stream: true }));
+      }
+      await append(decoder.decode());
+    } finally {
+      reader.releaseLock();
+    }
+  };
+  try {
+    const results = await Promise.all([
+      drain("stdout", process.stdout),
+      drain("stderr", process.stderr),
+      process.wait(),
+    ]);
+    return { ...output, exitCode: results[2].exitCode };
+  } catch (error) {
+    await process.kill();
     throw error;
   }
 };
@@ -757,10 +813,22 @@ const runIncrementalValidation = async (
                   abortSignal: ctx.abortSignal,
                 }),
             })
-          : await sandbox.run({
-              abortSignal: ctx.abortSignal,
+          : await runCandidateCommandWithLogs({
+              category: "additional-check",
               command: step.command,
-              workingDirectory: candidate.root,
+              candidate,
+              callId: ctx.callId,
+              resolvedTree: before.resolvedTree,
+              sessionAuth: ctx.session.auth,
+              sessionId: ctx.session.id,
+              run: (onChunk) =>
+                runAdditionalCandidateCheck({
+                  sandbox,
+                  command: step.command,
+                  root: candidate.root,
+                  signal: ctx.abortSignal,
+                  onChunk,
+                }),
             });
       const checkedBuild =
         step.kind === "check" && planned?.name === "check-build" && execution.exitCode === 0;

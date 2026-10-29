@@ -303,6 +303,18 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    the complete candidate and review both diffs again. Run the selected app's schema,
    repository checks, browser tests, and applicable guard on the reconciled
    candidate with `validate_github_draft_pr_reconciliation`.
+   If an existing app dependency needs shared Bun catalog alignment, use
+   `normalize_github_draft_pr_dependency_catalog` with its package name. It operates
+   on this candidate, preserves the existing concrete version, normalizes its
+   declared workspace consumers, and generates lock metadata with pinned Bun and
+   install scripts disabled. Inspect its exact metadata paths and command outcome;
+   a lock failure is not success. Retain the candidate and retry the same operation
+   after resolving the actual failure. Do not hand-edit shared files, guess a
+   version, or misuse framework upgrades. Complete normal current-source validation
+   including `check:package-manifests`, then review all changed metadata before
+   publication approval. Additional check failures have durable, session-scoped
+   `additional-check` logs discoverable through `get_validation_log`; missing
+   excerpts are not a reason to rerun app tests or invent another readiness gate.
    If CI reports app formatting defects, run the repository-owned formatter
    with `format_github_draft_pr_candidate` on the isolated candidate before
    validation. It may change only the selected app. Revalidate and review both

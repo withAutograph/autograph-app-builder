@@ -91,6 +91,9 @@ export default defineTool({
       ...(candidate.publicationScope === undefined
         ? {}
         : { publicationScope: candidate.publicationScope }),
+      ...(candidate.dependencyCatalog === undefined
+        ? {}
+        : { dependencyCatalog: candidate.dependencyCatalog }),
       baseChanges: observed.baseChanges,
       baseSha: candidate.baseSha,
       baseTree: candidate.baseTree,
