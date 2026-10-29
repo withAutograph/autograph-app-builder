@@ -9,7 +9,9 @@ import { pathToFileURL } from "node:url";
 import { it } from "vitest";
 
 const require = createRequire(import.meta.url);
-const sdk = pathToFileURL(`${path.dirname(require.resolve("eve/package.json"))}/dist/src/`).href;
+const sdk = pathToFileURL(
+  `${path.resolve(process.env.EVE_RECOVERY_NATIVE_ROOT ?? path.dirname(require.resolve("eve/package.json")))}/dist/src/`,
+).href;
 const native = await import(`${sdk}execution/session/terminal-recovery.js`);
 const { createDurableSessionState } = await import(`${sdk}execution/durable-session-store.js`);
 const { bootTerminalRecoveryOwnerWithPorts } = await import(
@@ -82,7 +84,7 @@ const bootFixture = () => {
       return queue.splice(0);
     },
     restore(items) {
-      queue.push(...items);
+      queue.unshift(...items);
     },
     async dispose() {
       calls.push(["dispose-inbox"]);
@@ -602,4 +604,149 @@ it("two-phase preparation parks the actual native boot until canonical child act
   assert.equal(result.session.sessionId, descriptor.logicalSessionId);
   assert.deepEqual(result.session.initialTurnInput, inputFor().replayInput);
   assert.equal(boot.calls.filter(([name]) => name === "writable").length, 1);
+});
+
+const historicalInbox = () => [
+  {
+    runId: descriptor.sourceOwnerRunId,
+    eventId: `evnt_${String(8).padStart(26, "0")}`,
+    correlationId: "original-command-hook",
+    slot: 8,
+    payload: { kind: "cancel", turnId: "turn-original" },
+  },
+  {
+    runId: descriptor.sourceOwnerRunId,
+    eventId: `evnt_${String(9).padStart(26, "0")}`,
+    correlationId: "original-command-hook",
+    slot: 9,
+    payload: {
+      kind: "send",
+      requestId: "original-request",
+      auth: { principalId: "original-owner" },
+      payload: { message: "preserved accepted message" },
+    },
+  },
+  {
+    runId: descriptor.sourceOwnerRunId,
+    eventId: `evnt_${String(10).padStart(26, "0")}`,
+    correlationId: "original-command-hook",
+    slot: 10,
+    payload: { kind: "cancel", turnId: "turn-original" },
+  },
+];
+const historicalInput = () => {
+  const input = inputFor();
+  input.checkpoint.sessionState.emissionState.turnId = "turn-original";
+  return { ...input, carriedInbox: historicalInbox() };
+};
+it("receipt-bound historical FIFO reaches real ActiveTurn cancellation and retains the accepted SEND", async () => {
+  const { SessionExecution } = await import(`${sdk}execution/session/turn.js`);
+  const { SessionInputQueue } = await import(`${sdk}execution/session/input-queue.js`);
+  const f = bootFixture();
+  f.queue.splice(0);
+  const input = historicalInput();
+  const before = structuredClone(input);
+  const pending = bootTerminalRecoveryOwnerWithPorts(input, f.ports);
+  await delay(0);
+  assert.equal(
+    f.queue.length,
+    0,
+    "historical cancels must not become new-owner preactivation vetoes",
+  );
+  f.activate();
+  const boot = await pending;
+  assert.deepEqual(
+    f.queue,
+    input.carriedInbox.map((entry) => entry.payload),
+  );
+  assert.deepEqual(input, before);
+  let turnSteps = 0;
+  let cancellationBoundaries = 0;
+  f.inbox.onDelivery = () => () => {
+    f.calls.push(["unsubscribe-delivery"]);
+  };
+  const queue = new SessionInputQueue();
+  const execution = new SessionExecution({
+    sessionId: descriptor.logicalSessionId,
+    inbox: f.inbox,
+    queue,
+    cursor: { sessionState: boot.session.sessionState },
+  });
+  execution.runTurnSteps = async () => {
+    turnSteps += 1;
+    throw new Error("old cancelled turn must not execute");
+  };
+  execution.finishCancelledTurn = async () => {
+    cancellationBoundaries += 1;
+    return { kind: "park", cancelled: true };
+  };
+  assert.deepEqual(await execution.runTurn(boot.session.initialTurnInput, true), {
+    kind: "park",
+    cancelled: true,
+  });
+  assert.equal(turnSteps, 0);
+  assert.equal(cancellationBoundaries, 1);
+  const next = queue.takeNext(boot.session.sessionState.snapshot.session.state);
+  assert.equal(next.kind, "turn");
+  assert.deepEqual(next.delivery.payloads, [input.carriedInbox[1].payload.payload]);
+  assert.deepEqual(next.delivery.auth, input.carriedInbox[1].payload.auth);
+  assert.equal(next.delivery.requestId, "original-request");
+  assert.equal(queue.pendingCount, 0);
+});
+it("a newly accepted preactivation Stop vetoes boot without restoring historical commands", async () => {
+  const f = bootFixture();
+  f.queue.splice(0);
+  const pending = bootTerminalRecoveryOwnerWithPorts(historicalInput(), f.ports);
+  await delay(0);
+  f.cancel();
+  assert.equal(await pending, undefined);
+  assert.deepEqual(f.queue, []);
+  assert.equal(
+    f.calls.some(([name]) => name === "writable"),
+    false,
+  );
+});
+for (const mutation of ["foreign-owner", "duplicate-event", "wrong-turn"]) {
+  it(`historical command ${mutation} cannot enter a recovery owner`, async () => {
+    const f = bootFixture();
+    const input = historicalInput();
+    if (mutation === "foreign-owner") {
+      input.carriedInbox[0].runId = "foreign-owner";
+    }
+    if (mutation === "duplicate-event") {
+      input.carriedInbox[1].eventId = input.carriedInbox[0].eventId;
+    }
+    if (mutation === "wrong-turn") {
+      input.carriedInbox[0].payload.turnId = "another-turn";
+    }
+    await assert.rejects(
+      bootTerminalRecoveryOwnerWithPorts(input, f.ports),
+      /inbox binding changed/u,
+    );
+    assert.equal(f.calls.length, 0);
+  });
+}
+it("exact recovery retry preserves the immutable historical entry and starts only one owner", async () => {
+  const f = recoveryFixture();
+  const reconcile = f.deps.reconcile.bind(f.deps);
+  const carriedInbox = historicalInbox();
+  f.deps.reconcile = async (...args) => ({ ...(await reconcile(...args)), carriedInbox });
+  const start = f.deps.start.bind(f.deps);
+  const started = [];
+  f.deps.start = async (input) => {
+    started.push(input);
+    await start(input);
+  };
+  const first = await native.recoverTerminalSession({ auth, descriptor, ports: f.ports }, f.deps);
+  const second = await native.recoverTerminalSession({ auth, descriptor, ports: f.ports }, f.deps);
+  assert.deepEqual(second, first);
+  assert.equal(started.length, 1);
+  assert.deepEqual(started[0].carriedInbox, carriedInbox);
+  assert.equal(f.calls.includes("activate"), false);
+  f.revoke();
+  await assert.rejects(
+    native.activateTerminalSession({ auth, descriptor, ports: f.ports }, f.deps),
+    /cancelled/u,
+  );
+  assert.equal(f.calls.includes("activate"), false);
 });

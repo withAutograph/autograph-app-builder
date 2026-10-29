@@ -263,7 +263,29 @@ const attachNativeSnapshot = async (world, nativeEvents, enabled) => {
   return snapshotKey;
 };
 
+const fixtureKey = (encrypted) =>
+  encrypted === true
+    ? serialization.deriveRunPayloadKeys(new Uint8Array(32).fill(3))
+    : Promise.resolve();
+const appendHistoricalInbox = async (events, event, output, suffix) => {
+  if (suffix === undefined || suffix.length === 0) {
+    return;
+  }
+  const encoded = await Promise.all(suffix.map((payload) => output(payload)));
+  events.pop();
+  events.push(
+    ...encoded.map((payload, index) =>
+      event(13 + index, "hook_received", "command-hook", {
+        token: `eve:session:${logicalSessionId}:inbox`,
+        payload,
+      }),
+    ),
+    event(13 + suffix.length, "run_cancelled"),
+  );
+};
+
 const fixture = async (options = {}) => {
+  const key = await fixtureKey(options.encrypted);
   const originalGrant = {
     sessionId: logicalSessionId,
     workspaceId: "original-private-workspace",
@@ -394,8 +416,8 @@ const fixture = async (options = {}) => {
       : {}),
   };
   const args = (value) =>
-    serialization.dehydrateStepArguments({ args: [value], closureVars: [] }, ownerRunId);
-  const output = (value) => serialization.dehydrateStepReturnValue(value, ownerRunId);
+    serialization.dehydrateStepArguments({ args: [value], closureVars: [] }, ownerRunId, key);
+  const output = (value) => serialization.dehydrateStepReturnValue(value, ownerRunId, key);
   const steps = new Map([
     [
       "prior",
@@ -482,6 +504,7 @@ const fixture = async (options = {}) => {
     }),
     event(12, options.runStatus === "cancelled" ? "run_cancelled" : "run_completed"),
   ];
+  await appendHistoricalInbox(events, event, output, options.inboxSuffix);
   const nativeEvents = [
     { type: "action.result", data: { ...batchEvent, result: actualRuntimeResult } },
     ...(options.uncommittedWrite === true
@@ -531,7 +554,10 @@ const fixture = async (options = {}) => {
           input: "original-entry-retained",
         }),
     },
-    events: { list: async () => await Promise.resolve({ data: events, hasMore: false }) },
+    events: {
+      list: async () => await Promise.resolve({ data: events, hasMore: false }),
+      get: (_runId, id) => Promise.resolve(events.find((value) => value.eventId === id)),
+    },
     steps: {
       get: async (runId, id) => {
         assert.equal(runId, ownerRunId);
@@ -552,11 +578,12 @@ const fixture = async (options = {}) => {
     getWorld: async () => await Promise.resolve(world),
     resolveRunEncryptionKey: async () => {
       await Promise.resolve();
+      return key;
     },
     hydrateWorkflowArguments: (...values) => serialization.hydrateWorkflowArguments(...values),
-    hydrateHookPayload: async (value, _runId, key) =>
+    hydrateHookPayload: async (value, _runId, payloadKey) =>
       serialization.deserializePreparedReplayPayload(
-        await serialization.prepareReplayPayload(value, key),
+        await serialization.prepareReplayPayload(value, payloadKey),
         globalThis,
       ),
     hydrateStepArguments: (...values) => serialization.hydrateStepArguments(...values),
@@ -807,3 +834,105 @@ for (const { options, reason } of [
     assert.equal(result.reason, reason);
   });
 }
+
+const acceptedSuffix = () => [
+  { kind: "cancel", turnId: "turn-original" },
+  {
+    kind: "send",
+    requestId: "original-native-request",
+    auth: { principalId: "original-owner" },
+    payload: { message: "original accepted intent" },
+    delivery: { originalEvidence: true },
+  },
+  { kind: "cancel", turnId: "turn-original" },
+];
+
+test("exact encrypted post-checkpoint cancel/send/cancel is retained for ordinary owner admission", async () => {
+  const suffix = acceptedSuffix();
+  const f = await fixture({ runStatus: "cancelled", inboxSuffix: suffix, encrypted: true });
+  const payload = readTerminalRecoveryCandidate(f.collected.candidate);
+  assert.deepEqual(
+    payload.carriedInbox.map((entry) => entry.payload),
+    suffix,
+  );
+  const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
+  assert.equal(result.kind, "ready");
+  assert.deepEqual(result.carriedInbox, payload.carriedInbox);
+  assert.deepEqual(
+    result.carriedInbox.map((entry) => entry.slot),
+    [13, 14, 15],
+  );
+  assert.deepEqual(
+    readDurableSession(result.checkpointCore.sessionState).state["fixture.authority"],
+    f.latest.state["fixture.authority"],
+  );
+  assert.deepEqual(result.checkpointCore.serializedContext, f.latestPair.serializedContext);
+});
+for (const kind of ["reset", "session-timeout", "unknown"]) {
+  test(`unsupported historical inbox ${kind} remains uncertain`, async () => {
+    const f = await fixture({ runStatus: "cancelled", inboxSuffix: [{ kind }] });
+    const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
+    assert.deepEqual(result, { kind: "uncertain", reason: "unconsumed-native-inbox-input" });
+  });
+}
+for (const mutation of [
+  "foreign-run",
+  "duplicate-id",
+  "changed-correlation",
+  "wrong-turn",
+  "task-cancel",
+  "missing-envelope",
+]) {
+  test(`historical inbox cannot waive uncertainty with ${mutation}`, async () => {
+    const f = await fixture({ runStatus: "cancelled", inboxSuffix: acceptedSuffix() });
+    const payload = readTerminalRecoveryCandidate(f.collected.candidate);
+    const first = payload.carriedInbox[0];
+    if (mutation === "foreign-run") {
+      first.runId = "wrun-foreign";
+    }
+    if (mutation === "duplicate-id") {
+      payload.carriedInbox.push(first);
+    }
+    if (mutation === "changed-correlation") {
+      first.correlationId = "different-hook";
+    }
+    if (mutation === "wrong-turn") {
+      first.payload.turnId = "different-turn";
+    }
+    if (mutation === "task-cancel") {
+      first.payload.tasks = true;
+    }
+    if (mutation === "missing-envelope") {
+      payload.carriedInbox.splice(0, 1);
+    }
+    const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
+    assert.deepEqual(result, { kind: "uncertain", reason: "unconsumed-native-inbox-input" });
+  });
+}
+test("retained inbox commands never waive unknown native effects", async () => {
+  const f = await fixture({
+    runStatus: "cancelled",
+    inboxSuffix: acceptedSuffix(),
+    uncommittedWrite: true,
+  });
+  const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
+  assert.deepEqual(result, {
+    kind: "uncertain",
+    reason: "uncommitted-action-result",
+    callId: "original-native",
+  });
+});
+
+test("a later authored step leaves historical command admission uncertain", async () => {
+  const f = await fixture({ runStatus: "cancelled", inboxSuffix: acceptedSuffix() });
+  const payload = readTerminalRecoveryCandidate(f.collected.candidate);
+  payload.events.push({
+    runId: ownerRunId,
+    eventId: eventId(17),
+    eventType: "step_started",
+    correlationId: "later-authored-step",
+    eventData: { stepName: "turnStep" },
+  });
+  const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
+  assert.deepEqual(result, { kind: "uncertain", reason: "unconsumed-native-inbox-input" });
+});
