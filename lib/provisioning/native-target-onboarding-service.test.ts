@@ -95,8 +95,12 @@ const plan = nativeTargetOnboardingPlanSchema.parse({
   conflictPolicy: "stop-on-conflict",
 });
 const digest = nativeTargetOnboardingPlanDigest(plan);
-const request = () => new Request("https://operator.example/v1/runtime", { method: "POST" });
-const fixture = () => {
+const request = () =>
+  new Request("https://operator.example/v1/runtime", {
+    method: "POST",
+    headers: { authorization: "Bearer verified-builder-token" },
+  });
+const fixture = (workloadAuthorized = true) => {
   const store = createInMemoryNativeTargetOnboardingStore();
   let approved = false;
   let existingConfiguredTarget = false;
@@ -123,11 +127,12 @@ const fixture = () => {
       };
     },
   );
+  const approvals: Array<{ authorization: string | null; signal: AbortSignal }> = [];
   const service = createNativeTargetOnboardingService({
     store,
     verifyWorkload: () => {
       events.push("workload");
-      return Promise.resolve();
+      return workloadAuthorized ? Promise.resolve() : Promise.reject(new Error("unauthorized"));
     },
     authorize,
     readCapturedRelease: () =>
@@ -159,8 +164,9 @@ const fixture = () => {
       existingConfiguredTarget
         ? Promise.reject(new NativeTargetExistingConfiguredTargetError())
         : Promise.resolve(plan),
-    readApproval: () =>
-      Promise.resolve(
+    readApproval: (_owner, _record, _callId, workload) => {
+      approvals.push(workload);
+      return Promise.resolve(
         approved
           ? {
               requestId: "approval",
@@ -172,7 +178,8 @@ const fixture = () => {
               observedAt: "2026-10-21T15:00:00.000Z",
             }
           : null,
-      ),
+      );
+    },
     createProject,
     observeProject: () =>
       Promise.resolve({
@@ -211,6 +218,7 @@ const fixture = () => {
   };
   return {
     authorize,
+    approvals,
     common,
     createProject,
     events,
@@ -231,6 +239,14 @@ const fixture = () => {
 };
 
 describe("protected native target onboarding service", () => {
+  it("never reads approval history when workload verification fails", async () => {
+    const f = fixture(false);
+    await expect(f.planOnce()).rejects.toThrow("unauthorized");
+    expect(f.authorize).not.toHaveBeenCalled();
+    expect(f.approvals).toEqual([]);
+    expect(f.createProject).not.toHaveBeenCalled();
+  });
+
   it("requires current workload and owner, terminal native approval, then journals one accepted project ID", async () => {
     const f = fixture();
     const planned = await f.planOnce();
@@ -293,6 +309,8 @@ describe("protected native target onboarding service", () => {
       status: "pending",
     });
     expect(f.createProject).not.toHaveBeenCalled();
+    expect(f.approvals.at(-1)?.authorization).toBe("Bearer verified-builder-token");
+    expect(f.approvals.at(-1)?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it("stale current owner blocks work before another provider attempt", async () => {

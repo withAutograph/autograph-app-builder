@@ -53,7 +53,8 @@ export interface NativeTargetOnboardingServiceDependencies {
   readApproval: (
     owner: Current,
     record: NativeTargetOnboardingRecord,
-    callId?: string,
+    callId: string | undefined,
+    workload: { authorization: string | null; signal: AbortSignal },
   ) => Promise<NativeTargetOnboardingApproval | null>;
   createProject: (input: {
     owner: Current;
@@ -88,7 +89,12 @@ export class NativeTargetExistingConfiguredTargetError extends Error {
 export const createNativeTargetOnboardingService =
   (deps: NativeTargetOnboardingServiceDependencies) =>
   async (request: Request, input: Invocation): Promise<Response> => {
-    await deps.verifyWorkload(new Request(request.url, { headers: new Headers(request.headers) }));
+    const workloadHeaders = new Headers(request.headers);
+    await deps.verifyWorkload(new Request(request.url, { headers: workloadHeaders }));
+    const workload = {
+      authorization: workloadHeaders.get("authorization"),
+      signal: request.signal,
+    };
     const owner = await deps.authorize(request, input);
     const ownerMatches = [
       owner.adapterSessionId === input.adapterSessionId,
@@ -129,7 +135,14 @@ export const createNativeTargetOnboardingService =
         }
       },
       readApproval: async (_current, record) =>
-        readApprovalResult(await deps.readApproval(await authorize(input, record.appId), record)),
+        readApprovalResult(
+          await deps.readApproval(
+            await authorize(input, record.appId),
+            record,
+            undefined,
+            workload,
+          ),
+        ),
     });
     const runtime = createNativeTargetOnboardingRuntime({
       readCapturedRelease: async (_ctx, appId) => {
@@ -164,7 +177,12 @@ export const createNativeTargetOnboardingService =
           throw mismatch();
         }
         return readApprovalResult(
-          await deps.readApproval(await authorize(input, prepared.appId), row.record),
+          await deps.readApproval(
+            await authorize(input, prepared.appId),
+            row.record,
+            undefined,
+            workload,
+          ),
         );
       },
       createProject: async (_ctx, dispatch) => {
@@ -226,7 +244,7 @@ export const createNativeTargetOnboardingService =
         ) {
           throw mismatch();
         }
-        const proof = await deps.readApproval(owner, row.record, input.callId);
+        const proof = await deps.readApproval(owner, row.record, input.callId, workload);
         if (proof === null) {
           output = { status: "pending" };
         } else if (proof.outcome === "approved") {

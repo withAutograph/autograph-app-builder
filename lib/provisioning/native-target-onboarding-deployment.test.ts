@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertNoConfiguredNativeTarget,
   createNativeTargetApprovalCheckpoint,
+  createNativeTargetApprovalHistoryTransport,
   nativeTargetApprovalCheckpointId,
   nativeTargetDatabaseNames,
   selectNativeTargetInstaller,
@@ -173,5 +174,75 @@ describe("native target deployment-owned resource selection", () => {
     expect(insertCount).toBe(2);
     const saved = await checkpoint.read();
     expect(saved?.native.nextNativeIndex).toBe(2);
+  });
+});
+
+describe("native target approval history carrier", () => {
+  it("uses the verified Builder carrier only after owner and session scope checks", async () => {
+    const principal = { ...authority, scopes: ["autograph:session"] };
+    const historyOwner = {
+      kind: "direct" as const,
+      adapterGeneration: 1,
+      adapterSessionId: "wrun_fixture",
+      authority,
+      principal,
+      sessionId: "public-session",
+    };
+    const owner = {
+      authority,
+      adapterGeneration: 1,
+      adapterSessionId: historyOwner.adapterSessionId,
+      publicSessionId: historyOwner.sessionId,
+      historyOwner,
+    };
+    const calls: Array<{ resource: string; authorization: string | null }> = [];
+    const controller = new AbortController();
+    const transport = createNativeTargetApprovalHistoryTransport({
+      builderOrigin: "https://builder.example",
+      appId: "requests-app",
+      owner,
+      workload: { authorization: "Bearer verified-builder-token", signal: controller.signal },
+      assertCanonicalAppOwner: () => Promise.resolve(),
+      fetch: (resource, init) => {
+        calls.push({
+          resource: resource.toString(),
+          authorization: new Headers(init?.headers).get("authorization"),
+        });
+        return Promise.resolve(new Response("", { status: 401 }));
+      },
+    });
+    const read = transport.observePrivateHistory;
+    expect(read).toBeDefined();
+    await expect(
+      read?.({
+        principal,
+        adapterSessionId: "wrong",
+        sessionId: "public-session",
+        startIndex: 0,
+        onEvent: () => {},
+      }),
+    ).rejects.toThrow();
+    expect(calls).toEqual([]);
+    await expect(
+      read?.({
+        principal,
+        adapterSessionId: "wrun_fixture",
+        sessionId: "public-session",
+        startIndex: 0,
+        onEvent: () => {},
+      }),
+    ).rejects.toThrow();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.resource).toContain("/eve/v1/session/wrun_fixture/stream");
+    expect(calls[0]?.authorization).toBe("Bearer verified-builder-token");
+    expect(() =>
+      createNativeTargetApprovalHistoryTransport({
+        builderOrigin: "https://builder.example",
+        appId: "requests-app",
+        owner,
+        workload: { authorization: null, signal: controller.signal },
+        assertCanonicalAppOwner: () => Promise.resolve(),
+      }),
+    ).toThrow();
   });
 });
