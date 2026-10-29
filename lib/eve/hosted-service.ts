@@ -1506,18 +1506,19 @@ export function createHostedEveSessionService(input: {
     const responseIds = new Set(parsed.data.responses.map((entry) => entry.requestId));
     const observedState =
       metadata?.nativeObservationState?.privateInputState ?? metadata?.privateInputState;
-    const observedRequests = observedState === undefined
-      ? []
-      : [...observedState.pending, ...observedState.resolved.map((item) => item.batch)].flatMap(
-          (batch) => batch.requests,
-        );
+    const observedRequests =
+      observedState === undefined
+        ? []
+        : [...observedState.pending, ...observedState.resolved.map((item) => item.batch)].flatMap(
+            (batch) => batch.requests,
+          );
     const nativeApproval = [
       ...(operation.resourceApprovalResponse?.approvals ?? []),
       ...(metadata?.privateApprovalCaptureState?.pendingRequests ?? []),
       ...(metadata?.privateApprovalCaptureState?.receipts ?? []),
       ...observedRequests,
-    ].some((entry) =>
-      responseIds.has(entry.requestId) && entry.toolName === "prepare-app-native-target",
+    ].some(
+      (entry) => responseIds.has(entry.requestId) && entry.toolName === "prepare-app-native-target",
     );
     const replayed = await replayNativeApprovalHistory(current, [...responseIds]);
     // A stale native receipt may predate a later cancellation. Even exact retries
