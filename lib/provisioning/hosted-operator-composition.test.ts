@@ -41,6 +41,7 @@ import {
 import {
   createHostedOperatorControlPlane,
   createRetainedAppInstallationCustomerReader,
+  createRetainedAppInstallationScopeReader,
   matchesApprovedMembershipJwks,
   selectAuthPlanningResourceBindingRow,
 } from "./hosted-operator-deployment";
@@ -4179,8 +4180,62 @@ describe("retained active schema installation scope", () => {
       readApproval,
       readActiveCustomers,
     });
-    return { desired, prior, receipt, session, readOwner, readApproval, readActiveCustomers, read };
+    const readScopes = createRetainedAppInstallationScopeReader({ readOwner, readApproval });
+    return {
+      desired,
+      prior,
+      receipt,
+      session,
+      readOwner,
+      readApproval,
+      readActiveCustomers,
+      read,
+      readScopes,
+    };
   };
+
+  it("reads canonical retained actor metadata scopes without credentials or granting installation customers access", async () => {
+    const f = fixture();
+    f.desired.access = [];
+    f.desired.appInstallation = { customerIds: ["original-org"] };
+    await expect(f.readScopes(context, f.desired)).resolves.toEqual([
+      {
+        appId: context.target.appId,
+        actorId: "original-owner",
+        organizationId: "original-org",
+        role: "member",
+      },
+    ]);
+    expect(f.readApproval).toHaveBeenCalledWith(context, f.receipt(1));
+    expect(f.readActiveCustomers).not.toHaveBeenCalled();
+    expect(f.desired.access).toEqual([]);
+  });
+  it("does not return scope from a cancelled canonical historical approval", async () => {
+    const f = fixture();
+    f.readApproval.mockResolvedValueOnce(null);
+    await expect(f.readScopes(context, f.desired)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(f.readActiveCustomers).not.toHaveBeenCalled();
+  });
+  it("rechecks historical scope revocation during the scope read", async () => {
+    const f = fixture();
+    f.readOwner
+      .mockImplementationOnce(async () => ({ session: structuredClone(f.session) }))
+      .mockImplementationOnce(async () => ({
+        session: {
+          ...f.session,
+          privateApprovalReceipts: [
+            f.receipt(1),
+            { ...f.receipt(1), sequence: 2, outcome: "cancelled" },
+          ],
+        },
+      }));
+    await expect(f.readScopes(context, f.desired)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(f.readActiveCustomers).not.toHaveBeenCalled();
+  });
 
   const deploymentFixture = async (encrypted = false) => {
     const f = fixture();

@@ -1238,8 +1238,13 @@ export const composeHostedOperatorDependencies = (
       return observed.authDatabase.runtimeUrl;
     },
   });
+  const readInstallationScopes = controlPlane.readAppInstallationMetadataScopes;
   const appReadiness = createHostedOperatorAppReadiness({
     assertAuthorized: controlPlane.assertAuthorized,
+    readInstallationScopes:
+      readInstallationScopes === undefined
+        ? undefined
+        : (input) => readInstallationScopes(input, input.plan),
     readReleaseManifest: async (input) => {
       const release = await readRelease(controlPlane, input);
       return release.files["release-manifest.json"];

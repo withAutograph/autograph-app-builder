@@ -214,6 +214,18 @@ lease, owner and journal revision checks still apply. This read does not approve
 the app proposal or install a release. Refusals report the closed
 `retained_installation_targets` planning stage without private provider details.
 
+An approved installation-only app plan may request zero new access grants while
+retaining explicit `appInstallation.customerIds`. Final runtime readiness uses
+canonically reread prior app approvals for the same owned database to identify
+actor, organization and role metadata scopes. Customer IDs alone never grant
+access or authorize credentials. Under the current approved execution and its
+resource lease, the restricted runtime reader must observe an active positive
+native fence and the exact desired release and artifact for every frozen
+installation target. Closed inactive historical scopes may be skipped; missing
+active coverage or unknown metadata refuses readiness. Historical scopes and
+current authority are rechecked after the read. This does not mutate grants,
+actors or installation metadata and does not prove signed-in app behavior.
+
 The app's normal signup or sign-in establishes the user's Auth session. A
 protected server-side enrollment path idempotently applies only the approved
 organization membership and app roles, including when an eligible account
