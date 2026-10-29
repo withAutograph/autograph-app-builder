@@ -128,6 +128,17 @@ update to an existing deployment. The caller can still time out earlier and
 record `submission_unknown`; the longer function window does not prove a receipt
 was committed or authorize a retry with different operation bytes.
 
+Recovery retains the complete native history and checkpoint provenance. Within
+one authorized collection, it shares equal primitive context strings and isolated
+immutable history-message values. Original mutable context and permission objects
+retain their identities and values; message copies are isolated from aliased
+session state. Repeatability policies validate every
+candidate and native event sequentially, retaining only the latest parsed history
+and the evidence used by their existing approval/result checks. These allocation
+changes grant no replay authority and never waive cancellation, ownership,
+approval or unknown-effect guards. A local reconciliation result remains separate
+from hosted activation and app acceptance.
+
 `start`, `send`, and `respond` reserve a tenant-bound operation before dispatch.
 The client request ID is bound to a canonical request digest. A completed retry
 returns the stored public result. Reusing the ID for different request bytes is
