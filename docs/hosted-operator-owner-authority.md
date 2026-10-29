@@ -170,6 +170,11 @@ The private prepared-runtime handoff freshly reads GetSession for each selected
 session and the actual membership role for each organization, then rechecks the
 current plan approval. Only the authenticated private bindings response carries
 the resulting storage files; they are not environment variables or tool text.
+Runtime identity handoff refusals report only fixed stage and reason labels
+through the centralized consent diagnostic. Identity, session, cookie,
+organization, URL, header and raw exception values never enter that report;
+the original refusal and all authorization/readback behavior remain unchanged.
+
 Keep approval, credential, tenant, lease and physical-fence checks. Do not add
 source-layout, version, receipt-count, actor-count or regular-app-change gates.
 Legacy plans without a participant program retain their existing path.

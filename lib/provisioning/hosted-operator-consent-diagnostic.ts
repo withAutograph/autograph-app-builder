@@ -283,6 +283,33 @@ const normalActorProofFailure = z.strictObject({
 });
 export type OperatorNormalActorProofFailure = z.infer<typeof normalActorProofFailure>;
 
+const runtimeIdentityFailure = z.strictObject({
+  stage: z.enum([
+    "authority",
+    "journal",
+    "preparation",
+    "projection",
+    "transport",
+    "session_binding",
+    "get_session",
+    "identity",
+    "membership",
+    "final_authority",
+  ]),
+  reason: z.enum([
+    "read_failed",
+    "unavailable",
+    "scope_mismatch",
+    "actor_mismatch",
+    "session_mismatch",
+    "email_mismatch",
+    "expired",
+    "selected_organization_mismatch",
+    "membership_mismatch",
+  ]),
+});
+export type OperatorRuntimeIdentityFailure = z.infer<typeof runtimeIdentityFailure>;
+
 const operatorExecutionStage = z.enum([
   "owner_authorization",
   "journal_read",
@@ -1077,6 +1104,7 @@ const metadata = z.strictObject({
   continuityPlanningFailure: continuityPlanningFailure.optional(),
   exportPlanningFailure: exportPlanningFailure.optional(),
   normalActorProofFailure: normalActorProofFailure.optional(),
+  runtimeIdentityFailure: runtimeIdentityFailure.optional(),
   executionFailure: operatorExecutionFailure.optional(),
   hostedEnvironmentBindingFailure: hostedEnvironmentBindingFailure.optional(),
   gatewayBindings: gatewayBindingsDiagnostic.optional(),
@@ -1224,6 +1252,36 @@ export const reportOperatorNormalActorProofFailure = (
     });
   } catch {
     /* Reporting cannot change collection, authority or error behavior. */
+  }
+};
+
+/** Own closed enum descriptors only; exceptions and private session values are never accepted. */
+export const reportOperatorRuntimeIdentityFailure = (
+  sessionId: string,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Untrusted advisory metadata is projected from own data descriptors without invoking accessors.
+  failure: unknown,
+  sink?: HostedOperatorConsentDiagnosticSink,
+): void => {
+  try {
+    const projected = runtimeIdentityFailure.safeParse({
+      stage: ownDiagnosticValue(failure, "stage"),
+      reason: ownDiagnosticValue(failure, "reason"),
+    });
+    if (!projected.success) {
+      return;
+    }
+    createHostedOperatorConsentDiagnostic(
+      sessionId,
+      sink,
+    )({
+      boundary: "operator",
+      phase: "inline",
+      stage: "operator_request",
+      outcome: "setup_unavailable",
+      runtimeIdentityFailure: projected.data,
+    });
+  } catch {
+    /* Reporting cannot change the original runtime handoff rejection. */
   }
 };
 

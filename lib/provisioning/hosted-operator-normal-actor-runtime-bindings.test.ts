@@ -1,6 +1,9 @@
 /* oxlint-disable eslint/require-await, unicorn/no-useless-undefined -- Fixture authority and CAS preserve the asynchronous real journal interfaces. */
 import { randomBytes } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Observe the maintained diagnostic boundary without changing runtime authority.
+import * as diagnostics from "./hosted-operator-consent-diagnostic";
+import type { HostedOperatorConsentDiagnosticSink } from "./hosted-operator-consent-diagnostic";
 import {
   hostedOperatorPlanSchema,
   operatorPlanDigest,
@@ -211,6 +214,8 @@ const fixture = async (fault?: Fault, opaqueOrganization?: string) => {
   let currentPlan = true;
   let finalDenied = false;
   let currentChecks = 0;
+  let journalFailure: Error | undefined;
+  let transportFailure: Error | undefined;
   const assertOwner = async () => {
     if (!currentPlan) {
       throw new HostedOperatorError("authorization_required");
@@ -233,7 +238,12 @@ const fixture = async (fault?: Fault, opaqueOrganization?: string) => {
       expect(current.record.leaseId).toBeUndefined();
     },
     store: {
-      read: async () => structuredClone(row),
+      read: async () => {
+        if (journalFailure !== undefined) {
+          throw journalFailure;
+        }
+        return structuredClone(row);
+      },
       compareAndSet: async (input) => {
         if (input.expectedRevision !== row.revision) {
           return undefined;
@@ -456,6 +466,9 @@ const fixture = async (fault?: Fault, opaqueOrganization?: string) => {
       }
     },
     normalRealmFetch: async (input) => {
+      if (transportFailure !== undefined) {
+        throw transportFailure;
+      }
       expect(input.origin).toBe(program.origin);
       return fetch;
     },
@@ -468,6 +481,12 @@ const fixture = async (fault?: Fault, opaqueOrganization?: string) => {
   return {
     runtime,
     input,
+    failJournal(error: Error) {
+      journalFailure = error;
+    },
+    failTransport(error: Error) {
+      transportFailure = error;
+    },
     state,
     journal,
     requests,
@@ -628,5 +647,94 @@ describe("fresh authenticated normal actor runtime bindings", () => {
     expect(await f.runtime({ ...f.input, plan: legacy })).toBeUndefined();
     expect(f.requests).toHaveLength(0);
     expect(f.currentChecks).toBe(0);
+  });
+});
+
+describe("closed runtime identity refusal diagnostics", () => {
+  afterEach(() => vi.restoreAllMocks());
+  const observe = () => {
+    const report = diagnostics.reportOperatorRuntimeIdentityFailure;
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    vi.spyOn(diagnostics, "reportOperatorRuntimeIdentityFailure").mockImplementation(
+      (sessionId, failure) => {
+        report(sessionId, failure, sink);
+      },
+    );
+    return sink;
+  };
+  it.each([
+    ["revoked", "get_session", "unavailable"],
+    ["wrong-actor", "identity", "actor_mismatch"],
+    ["wrong-session", "identity", "session_mismatch"],
+    ["wrong-email", "identity", "email_mismatch"],
+    ["expired", "identity", "expired"],
+    ["wrong-organization", "identity", "selected_organization_mismatch"],
+    ["changed-unassigned-organization", "identity", "selected_organization_mismatch"],
+    ["wrong-role", "membership", "membership_mismatch"],
+  ] as const)(
+    "reports the actual %s refusal while preserving its public error",
+    async (fault, stage, reason) => {
+      const sink = observe();
+      const f = await fixture(fault);
+      await denied(f.runtime(f.input), "auth_identity_required");
+      expect(sink).toHaveBeenCalledTimes(1);
+      expect(sink.mock.calls[0]?.[0].runtimeIdentityFailure).toEqual({ stage, reason });
+    },
+  );
+  it.each(["journal", "transport"] as const)(
+    "rethrows the same secret-bearing %s error without emitting its text",
+    async (stage) => {
+      const sink = observe();
+      const f = await fixture();
+      const secret = "private-cookie-url-organization-error";
+      const error = new Error(secret);
+      if (stage === "journal") {
+        f.failJournal(error);
+      } else {
+        f.failTransport(error);
+      }
+      await expect(f.runtime(f.input)).rejects.toBe(error);
+      expect(sink.mock.calls[0]?.[0].runtimeIdentityFailure).toEqual({
+        stage,
+        reason: "read_failed",
+      });
+      expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+    },
+  );
+  it.each(["authority", "preparation", "projection", "final_authority"] as const)(
+    "distinguishes the real %s refusal without additional network reads",
+    async (stage) => {
+      const sink = observe();
+      const f = await fixture();
+      if (stage === "authority") {
+        f.revokeCurrent();
+      }
+      if (stage === "preparation" && f.input.plan.normalActorPreparation !== undefined) {
+        f.input.plan.normalActorPreparation.accountPlanDigest = "f".repeat(64);
+      }
+      if (stage === "projection") {
+        const actor = f.state.actors[0];
+        if (actor === undefined) {
+          throw new Error("missing fixture actor");
+        }
+        actor.signup = "pending";
+        await f.journal.checkpoint(context, f.state);
+      }
+      if (stage === "final_authority") {
+        f.denyFinal();
+      }
+      await expect(f.runtime(f.input)).rejects.toBeDefined();
+      expect(sink.mock.calls[0]?.[0].runtimeIdentityFailure).toEqual({
+        stage,
+        reason: stage === "preparation" ? "scope_mismatch" : "read_failed",
+      });
+      expect(f.requests).toHaveLength(stage === "final_authority" ? 11 : 0);
+    },
+  );
+  it("returns successful runtime credentials without emitting a failure", async () => {
+    const sink = observe();
+    const f = await fixture();
+    await expect(f.runtime(f.input)).resolves.toBeDefined();
+    expect(sink).not.toHaveBeenCalled();
   });
 });

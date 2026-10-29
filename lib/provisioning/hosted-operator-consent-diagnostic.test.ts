@@ -10,6 +10,7 @@ import {
 import {
   createHostedOperatorConsentDiagnostic,
   reportOperatorNormalActorProofFailure,
+  reportOperatorRuntimeIdentityFailure,
   reportOperatorInventoryReadFailure,
   operatorOwnerStoreImportErrorCodeSchema,
   reportOperatorPlanningMismatch,
@@ -2117,5 +2118,63 @@ describe("closed export planning diagnostics", () => {
       sink,
     )({ ...value, exportPlanningFailure: failure });
     expect(sink).not.toHaveBeenCalled();
+  });
+});
+
+describe("runtime identity failure diagnostics", () => {
+  it("emits only own fixed stage and reason labels without private values or errors", () => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    reportOperatorRuntimeIdentityFailure(
+      secret,
+      {
+        stage: "identity",
+        reason: "selected_organization_mismatch",
+        actorId: secret,
+        organizationId: secret,
+        cookie: secret,
+        headers: secret,
+        url: secret,
+        error: new Error(secret),
+      },
+      sink,
+    );
+    expect(sink.mock.calls[0]?.[0].runtimeIdentityFailure).toEqual({
+      stage: "identity",
+      reason: "selected_organization_mismatch",
+    });
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
+  it("discards foreign labels, inherited properties, accessors and hostile proxies", () => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    const getter = vi.fn(() => {
+      throw new Error(secret);
+    });
+    reportOperatorRuntimeIdentityFailure(secret, { stage: "identity", reason: secret }, sink);
+    reportOperatorRuntimeIdentityFailure(
+      secret,
+      Object.create({ stage: "identity", reason: "actor_mismatch" }),
+      sink,
+    );
+    reportOperatorRuntimeIdentityFailure(
+      secret,
+      Object.defineProperties({}, { stage: { get: getter }, reason: { get: getter } }),
+      sink,
+    );
+    const proxy = Proxy.revocable({}, {});
+    proxy.revoke();
+    expect(() => {
+      reportOperatorRuntimeIdentityFailure(secret, proxy.proxy, sink);
+    }).not.toThrow();
+    expect(getter).not.toHaveBeenCalled();
+    expect(sink).not.toHaveBeenCalled();
+    expect(() => {
+      reportOperatorRuntimeIdentityFailure(
+        secret,
+        { stage: "authority", reason: "read_failed" },
+        () => {
+          throw new Error(secret);
+        },
+      );
+    }).not.toThrow();
   });
 });
