@@ -134,8 +134,13 @@ switching account state. Only after that new approval, both canonical predecesso
 approvals and fresh GetSession checks can the unchanged original session state
 be carried into a newly encrypted successor state. Original sealed state,
 captures, nonces, AAD, plan, approval and app evidence remain immutable history.
-Historical capture reads retain their original authority and encryption scope;
-they never replay the archived app plan or approve current effects. New actors
+Historical capture reads retain their original authority and encryption scope.
+Completed account and app history does not expire with its old plan's execution
+retention: reuse still requires canonical original approvals, current approved
+plan authority and fresh actual session validity. Initial successor proposals
+require the currently prepared app plan to remain unexpired. No historical
+expiry, ciphertext or approval is rewritten, and history never replays the old
+app plan or approves current effects. New actors
 start pending and use the existing ordinary account flow. New organization and
 app-access effects still require the subsequently resolved app plan's approval,
 and runtime proof/handoff occurs only after that plan finishes normally. Account

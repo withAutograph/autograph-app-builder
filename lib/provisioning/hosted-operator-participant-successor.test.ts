@@ -1,10 +1,11 @@
+import { createNormalActorRuntimeBindings } from "./hosted-operator-normal-actor-runtime-bindings";
 import { createHostedOperatorReadApproval } from "./hosted-operator-owner";
 import { durableHostedSessionRecordSchema } from "../eve/hosted-store";
 import { privateHostedApprovalReceiptSchema } from "../eve/private-hosted-approval";
 import { z } from "zod";
 import { createHash } from "node:crypto";
 /* oxlint-disable eslint/require-await, unicorn/no-useless-undefined -- Controlled authority and CAS ports retain the asynchronous production boundary. */
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   hostedOperatorPlanSchema,
   operatorPlanDigest,
@@ -142,7 +143,17 @@ const requireFixture = <T>(value: T | undefined): T => {
   return value;
 };
 
-const fixture = async (opaqueOrganization?: string) => {
+const fixture = async (
+  opaqueOrganization?: string,
+  timing?: { accountExpiresAt: string; appExpiresAt: string; beforeProposal?: () => void },
+) => {
+  const accountPlan = hostedOperatorPlanSchema.parse({
+    ...plan,
+    retention: {
+      ...plan.retention,
+      expiresAt: timing?.accountExpiresAt ?? plan.retention.expiresAt,
+    },
+  });
   const keyring = { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" };
   const state = initialNormalActorState(program, accountOperationRef);
   state.actors[0] = {
@@ -176,8 +187,8 @@ const fixture = async (opaqueOrganization?: string) => {
     program,
     programDigest: normalActorProgramDigest(program),
     accountOperationRef,
-    accountPlan: plan,
-    accountPlanDigest: operatorPlanDigest(plan),
+    accountPlan,
+    accountPlanDigest: operatorPlanDigest(accountPlan),
     accountApprovalId: "original-approval",
     accountApprovedByCallId: "original-call",
     sealedState: encryptNormalActorState({
@@ -210,8 +221,8 @@ const fixture = async (opaqueOrganization?: string) => {
       operator: {
         mode: "protected-operator-v1",
         operationRef: accountOperationRef,
-        plan,
-        planDigest: operatorPlanDigest(plan),
+        plan: accountPlan,
+        planDigest: operatorPlanDigest(accountPlan),
         approvalId: "original-approval",
         receipts: [],
       },
@@ -219,7 +230,7 @@ const fixture = async (opaqueOrganization?: string) => {
   };
   let owned = true;
   const approvals = new Map([
-    ["original-call", { digest: operatorPlanDigest(plan), id: "original-approval" }],
+    ["original-call", { digest: operatorPlanDigest(accountPlan), id: "original-approval" }],
   ]);
   const owner = async () => {
     if (!owned) {
@@ -281,7 +292,11 @@ const fixture = async (opaqueOrganization?: string) => {
   await journal.checkpoint(context, state);
   const original = structuredClone(requireFixture(row.record.accountPreparation));
   const appPlan = hostedOperatorPlanSchema.parse({
-    ...plan,
+    ...accountPlan,
+    retention: {
+      ...accountPlan.retention,
+      expiresAt: timing?.appExpiresAt ?? accountPlan.retention.expiresAt,
+    },
     stage: "app",
     effects: ["resources", "install", "access", "bindings"].map((kind) => ({
       id: kind,
@@ -323,6 +338,7 @@ const fixture = async (opaqueOrganization?: string) => {
       { actorKey: "qa", email: "qa@example.test", name: "QA", account: "create-email-password" },
     ],
   });
+  timing?.beforeProposal?.();
   const nextPlan = createParticipantSuccessorPlan(row.record, nextProgram, Date.now());
   if (nextPlan === undefined) {
     throw new Error("missing successor");
@@ -423,6 +439,311 @@ const fixture = async (opaqueOrganization?: string) => {
 };
 
 describe("approved additive capture participant state", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("reuses an expired historical account approval through fresh current authority and actual session verification", async () => {
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-29T03:01:00.000Z"));
+    const f = await fixture(undefined, {
+      accountExpiresAt: "2026-10-29T03:02:00.000Z",
+      appExpiresAt: "2026-10-29T22:19:00.000Z",
+      beforeProposal: () => {
+        clock.mockReturnValue(Date.parse("2026-10-29T03:03:00.000Z"));
+      },
+    });
+    const history = structuredClone(f.row.record.participantPreparationHistory);
+    f.approve();
+    await expect(f.operations.ensureNormalActorCapture(f.input)).resolves.toBe("ready");
+    const retained = await f.journal.read(context);
+    expect(retained?.state.actors[0]).toEqual(f.state.actors[0]);
+    expect(f.row.record.participantPreparationHistory).toEqual(history);
+    expect(f.original.accountPlan.retention.expiresAt).toBe("2026-10-29T03:02:00.000Z");
+    expect(f.fetchSession).toHaveBeenCalled();
+    const current = {
+      ...f.row.record,
+      accountPreparation: f.original,
+      operator: f.predecessor.operator,
+      approvedByCallId: f.predecessor.approvedByCallId,
+      status: "prepared" as const,
+      step: "bound" as const,
+    };
+    clock.mockReturnValue(Date.parse("2026-10-29T22:20:00.000Z"));
+    expect(
+      createParticipantSuccessorPlan(current, f.input.plan.normalActorProgram, Date.now()),
+    ).toBeUndefined();
+  });
+
+  it.each([
+    "valid",
+    "cancelled original",
+    "cancelled app history",
+    "cancelled successor",
+    "cancelled current",
+    "expired actual session",
+    "expired current",
+  ] as const)(
+    "keeps historical completion after app expiry while %s controls runtime reuse",
+    async (outcome) => {
+      const clock = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-29T03:01:00.000Z"));
+      const f = await fixture(undefined, {
+        accountExpiresAt: "2026-10-29T03:02:00.000Z",
+        appExpiresAt: "2026-10-29T22:19:00.000Z",
+      });
+      f.approve();
+      await f.operations.ensureNormalActorCapture(f.input);
+      const prepared = await f.journal.read(context);
+      if (prepared === undefined) {
+        throw new Error("missing successor state");
+      }
+      prepared.state.actors[1] = {
+        actorKey: "qa",
+        signup: "complete",
+        session: {
+          reference: "66666666-6666-4666-8666-666666666666",
+          actorId: "qa-actor",
+          realmSessionId: "qa-session",
+          origin: program.origin,
+          expiresAt: "2030-01-01T00:00:00.000Z",
+        },
+        storageState: {
+          cookies: [
+            {
+              name: "__Secure-session",
+              value: "qa-cookie",
+              domain: "apps.example.com",
+              path: "/",
+              expires: -1,
+              httpOnly: true,
+              secure: true,
+              sameSite: "Lax",
+            },
+          ],
+          origins: [],
+        },
+      };
+      await f.journal.checkpoint(context, prepared.state);
+      const historical = structuredClone(f.row.record.participantPreparationHistory);
+      const originalFetch = f.fetchSession.getMockImplementation();
+      if (originalFetch === undefined) {
+        throw new Error("missing session fixture");
+      }
+      f.fetchSession.mockImplementation(async (url, init) => {
+        if (new Request(url, init).headers.get("cookie")?.includes("qa-cookie") === true) {
+          return Response.json({
+            user: { id: "qa-actor", email: "qa@example.test" },
+            session: {
+              id: "qa-session",
+              userId: "qa-actor",
+              expiresAt: "2030-01-01T00:00:00.000Z",
+            },
+          });
+        }
+        return await originalFetch(url, init);
+      });
+      // A distinct, independently approved current app plan outlives completed history.
+      const { normalActorPredecessor, ...base } = f.input.plan;
+      void normalActorPredecessor;
+      const current = hostedOperatorPlanSchema.parse({
+        ...base,
+        stage: "app",
+        retention: { ...base.retention, expiresAt: "2026-10-30T22:19:00.000Z" },
+        normalActorPreparation: normalActorPreparationSchema
+          .strip()
+          .parse(f.row.record.accountPreparation),
+        effects: ["resources", "install", "access", "bindings"].map((kind) => ({
+          id: kind,
+          kind,
+          description: "Approved current phase",
+        })),
+      });
+      const currentOperation = "77777777-7777-4777-8777-777777777777";
+      f.row.record.status = "prepared";
+      f.row.record.step = "bound";
+      f.row.record.approvedByCallId = "current-app-call";
+      Object.assign(requireFixture(f.row.record.operator), {
+        operationRef: currentOperation,
+        plan: current,
+        planDigest: operatorPlanDigest(current),
+        approvalId: "current-app-approval",
+        fenceGeneration: 2,
+        receipts: current.effects.map((effect) => ({
+          effectId: effect.id,
+          observedAt: "2026-10-29T03:01:00.000Z",
+          resourceVersion: "observed",
+          ...(effect.kind === "access" ? { fenceGeneration: 2 } : {}),
+        })),
+      });
+      f.approvals.set("current-app-call", {
+        id: "current-app-approval",
+        digest: operatorPlanDigest(current),
+      });
+      clock.mockReturnValue(
+        Date.parse(
+          outcome === "expired current" ? "2026-10-30T22:20:00.000Z" : "2026-10-29T22:20:00.000Z",
+        ),
+      );
+      if (outcome === "cancelled original") {
+        f.approvals.delete("original-call");
+      }
+      if (outcome === "cancelled app history") {
+        f.approvals.delete("app-call");
+      }
+      if (outcome === "cancelled successor") {
+        f.approvals.delete("successor-call");
+      }
+      if (outcome === "cancelled current") {
+        f.approvals.delete("current-app-call");
+      }
+      if (outcome === "expired actual session") {
+        f.fetchSession.mockImplementation(async (url, init) => {
+          const qa = new Request(url, init).headers.get("cookie")?.includes("qa-cookie") === true;
+          const actorId = qa ? "qa-actor" : "real-owner";
+          return Response.json({
+            user: { id: actorId, email: qa ? "qa@example.test" : "owner@example.test" },
+            session: {
+              id: qa ? "qa-session" : "real-session",
+              userId: actorId,
+              expiresAt: "2026-10-29T22:19:00.000Z",
+            },
+          });
+        });
+      }
+      const ownerContext = operatorOwnerContextSchema.parse({
+        kind: "direct",
+        authority,
+        principal: { ...authority, scopes: ["autograph:send"] },
+        sessionId: target.sessionId,
+        adapterSessionId: "adapter",
+        adapterGeneration: 1,
+      });
+      const scopes = [
+        {
+          callId: f.original.accountApprovedByCallId,
+          approvalId: f.original.accountApprovalId,
+          operationRef: f.original.accountOperationRef,
+          plan: f.original.accountPlan,
+        },
+        {
+          callId: f.predecessor.approvedByCallId,
+          approvalId: f.predecessor.operator.approvalId,
+          operationRef: f.predecessor.operator.operationRef,
+          plan: f.predecessor.operator.plan,
+        },
+        {
+          callId: f.input.callId,
+          approvalId: f.input.approvalId,
+          operationRef: f.input.operationRef,
+          plan: f.input.plan,
+        },
+        {
+          callId: "current-app-call",
+          approvalId: "current-app-approval",
+          operationRef: currentOperation,
+          plan: current,
+        },
+      ];
+      const readApproval = createHostedOperatorReadApproval({
+        journal: f.ports.store,
+        eve: {
+          getSession: async () =>
+            durableHostedSessionRecordSchema.parse({
+              version: 2,
+              sessionId: target.sessionId,
+              appId: target.appId,
+              principal: ownerContext.principal,
+              adapterGeneration: 1,
+              adapterSessionId: "adapter",
+              originAdapterSessionId: "adapter",
+              createdAtEpochMs: 100,
+              updatedAtEpochMs: 100,
+              lastProgressAtEpochMs: 100,
+              resumability: "live",
+              stage: "ready",
+              status: "waiting",
+              title: "Controlled clock-boundary authority",
+              privateApprovalReceipts: scopes.map((scope, sequence) =>
+                privateHostedApprovalReceiptSchema.parse({
+                  callId: scope.callId,
+                  requestId: scope.approvalId,
+                  format: "autograph-hosted-approval-v1",
+                  outcome: f.approvals.has(scope.callId) ? "approved" : "cancelled",
+                  responderPrincipalId: authority.ownerUserId,
+                  sequence,
+                  turnId: "",
+                  toolName: "prepare-app-hosted-runtime",
+                  toolInput: {
+                    appId: target.appId,
+                    branch: target.branch,
+                    projectId: target.projectId,
+                    environment: target.environment,
+                    operationRef: scope.operationRef,
+                    plan: scope.plan,
+                    planDigest: operatorPlanDigest(scope.plan),
+                  },
+                }),
+              ),
+            }),
+          recordPrivateApprovalReceipts: async () => {},
+        },
+        observe: async () => {
+          throw new HostedOperatorError("authorization_required");
+        },
+      });
+      const canonical = createNormalActorJournalAuthority({
+        store: f.ports.store,
+        keyring: f.ports.keyring,
+        now: Date.now,
+        assertCanonicalOwner: f.ports.assertAuthorized,
+        assertApprovedOwner: f.ports.assertAuthorized,
+        readApproval,
+      });
+      const runtime = createNormalActorRuntimeBindings({
+        journalPorts: canonical,
+        normalRealmFetch: async () => f.fetchSession,
+        assertCurrentPlan: async (input) => {
+          if (
+            input.operationRef !== currentOperation ||
+            operatorPlanDigest(input.plan) !== requireFixture(f.row.record.operator).planDigest ||
+            Date.parse(input.plan.retention.expiresAt) <= Date.now()
+          ) {
+            throw new HostedOperatorError("authorization_required");
+          }
+          await canonical.assertAccountApproval(
+            { ...context, ownerContext },
+            {
+              ...prepared.preparation,
+              accountOperationRef: currentOperation,
+              accountPlan: current,
+              accountPlanDigest: operatorPlanDigest(current),
+              accountApprovalId: "current-app-approval",
+              accountApprovedByCallId: "current-app-call",
+            },
+          );
+        },
+      });
+      if (outcome === "valid") {
+        const projection = await runtime({
+          ...context,
+          ownerContext,
+          plan: current,
+          operationRef: currentOperation,
+        });
+        expect(projection?.identities.actors).toHaveLength(2);
+        const retained = await f.journal.read(context);
+        expect(retained?.state.actors[0]).toEqual(f.state.actors[0]);
+      } else {
+        await expect(
+          runtime({ ...context, ownerContext, plan: current, operationRef: currentOperation }),
+        ).rejects.toMatchObject({
+          code:
+            outcome === "expired actual session"
+              ? "auth_identity_required"
+              : "authorization_required",
+        });
+      }
+      expect(f.row.record.participantPreparationHistory).toEqual(historical);
+    },
+  );
+
   it("reseals verified session state while preserving original ciphertext, capture AAD and app evidence", async () => {
     const f = await fixture();
     const before = structuredClone(f.row.record);

@@ -75,7 +75,6 @@ const completed = (record: HostedRuntimeJournalRecord, now: number): Predecessor
         normalActorPreparationSchema.strip().parse(preparation),
       ),
     Date.parse(operator.plan.retention.expiresAt) > now,
-    Date.parse(preparation.accountPlan.retention.expiresAt) > now,
     record.privateState !== undefined,
     operator.plan.effects.every((effect) =>
       operator.receipts.some(
@@ -128,8 +127,6 @@ export const readParticipantSuccessorPredecessor = (
         samePhysicalScope(prior.operator.plan, plan),
         record.operator !== undefined &&
           samePhysicalScope(prior.operator.plan, record.operator.plan),
-        Date.parse(prior.operator.plan.retention.expiresAt) > now,
-        Date.parse(prior.preparation.accountPlan.retention.expiresAt) > now,
       ].every(Boolean),
   );
 };
