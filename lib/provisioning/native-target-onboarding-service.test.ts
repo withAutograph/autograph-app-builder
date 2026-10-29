@@ -127,7 +127,7 @@ const fixture = (workloadAuthorized = true) => {
       };
     },
   );
-  const approvals: Array<{ authorization: string | null; signal: AbortSignal }> = [];
+  const approvals: { authorization: string | null; signal: AbortSignal }[] = [];
   const service = createNativeTargetOnboardingService({
     store,
     verifyWorkload: () => {

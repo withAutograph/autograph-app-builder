@@ -195,7 +195,7 @@ describe("native target approval history carrier", () => {
       publicSessionId: historyOwner.sessionId,
       historyOwner,
     };
-    const calls: Array<{ resource: string; authorization: string | null }> = [];
+    const calls: { resource: string; authorization: string | null }[] = [];
     const controller = new AbortController();
     const transport = createNativeTargetApprovalHistoryTransport({
       builderOrigin: "https://builder.example",
@@ -204,8 +204,10 @@ describe("native target approval history carrier", () => {
       workload: { authorization: "Bearer verified-builder-token", signal: controller.signal },
       assertCanonicalAppOwner: () => Promise.resolve(),
       fetch: (resource, init) => {
+        const requested = resource instanceof Request ? resource.url : resource;
+        const url = requested instanceof URL ? requested.href : requested;
         calls.push({
-          resource: resource.toString(),
+          resource: url,
           authorization: new Headers(init?.headers).get("authorization"),
         });
         return Promise.resolve(new Response("", { status: 401 }));
