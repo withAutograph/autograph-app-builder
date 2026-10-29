@@ -172,6 +172,18 @@ const prepareNormalActorStage = async (input: StageInput) => {
     if (checkpoint.session && checkpoint.session.actorId !== session.actorId) {
       throw new Error("normal_actor_identity_mismatch");
     }
+    if (
+      actor.account === CAPTURE_EXISTING &&
+      checkpoint.signup === "complete" &&
+      !program.memberships.some((membership) => membership.actorKey === actor.actorKey)
+    ) {
+      if (checkpoint.session?.realmSessionId !== session.sessionId) {
+        throw new Error("normal_actor_identity_mismatch");
+      }
+      // This opaque capture is immutable provenance; live organization selection is app-owned scope.
+      await assertCurrent();
+      return;
+    }
     checkpoint.session = normalActorSessionRefSchema.parse({
       actorId: session.actorId,
       realmSessionId: session.sessionId,

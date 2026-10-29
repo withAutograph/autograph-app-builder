@@ -134,8 +134,13 @@ switching account state. Only after that new approval, both canonical predecesso
 approvals and fresh GetSession checks can the unchanged original session state
 be carried into a newly encrypted successor state. Original sealed state,
 captures, nonces, AAD, plan, approval and app evidence remain immutable history.
-Historical capture reads retain their original authority and encryption scope;
-they never replay the archived app plan or approve current effects. New actors
+Historical capture reads retain their original authority and encryption scope.
+Completed account and app history does not expire with its old plan's execution
+retention: reuse still requires canonical original approvals, current approved
+plan authority and fresh actual session validity. Initial successor proposals
+require the currently prepared app plan to remain unexpired. No historical
+expiry, ciphertext or approval is rewritten, and history never replays the old
+app plan or approves current effects. New actors
 start pending and use the existing ordinary account flow. New organization and
 app-access effects still require the subsequently resolved app plan's approval,
 and runtime proof/handoff occurs only after that plan finishes normally. Account
@@ -162,9 +167,11 @@ For an actor with no approved program memberships, the browser manifest keeps
 `organizationId: null` and `roles: []`. An existing normal Auth session may
 still have a selected organization. That actual session fact is retained; it
 does not become an approved organization or grant. Fresh reads and successor
-carry require the actual selection to equal the retained selection, treating
-missing and null selections alike. Organization-scoped identities still require
-the exact approved organization and live membership role.
+carry verify the exact actor, session, email and live expiry without constraining
+that unscoped session’s mutable selection. Carry and account-worker retries keep
+the original checkpoint and storage unchanged; the normal app authorizer resolves
+the current actual scope. Organization-scoped identities still require the exact
+approved organization and live membership role.
 
 The private prepared-runtime handoff freshly reads GetSession for each selected
 session and the actual membership role for each organization, then rechecks the

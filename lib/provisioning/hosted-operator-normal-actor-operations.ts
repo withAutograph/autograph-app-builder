@@ -213,7 +213,6 @@ export const createHostedOperatorNormalActorOperations = (
     context: HostedOperatorContext,
     preparation: NormalActorAccountPreparation,
     stateInput: NormalActorState,
-    preserveSelection = false,
   ) => {
     const state = assertNormalActorState(
       preparation.program,
@@ -237,19 +236,12 @@ export const createHostedOperatorNormalActorOperations = (
           storageState: checkpoint.storageState,
           fetch,
         });
-        const actual = assertSession(
+        assertSession(
           await client.getSession(),
           actor,
           checkpoint.session,
           deps.journalPorts.now(),
         );
-        if (
-          preserveSelection &&
-          (actual.activeOrganizationId ?? null) !==
-            (checkpoint.session.activeOrganizationId ?? null)
-        ) {
-          throw required();
-        }
       }),
     );
     return state;
@@ -509,7 +501,7 @@ export const createHostedOperatorNormalActorOperations = (
           async () => {
             await deps.assertCurrentPlan(input);
           },
-          async (preparation, state) => await freshAccounts(input, preparation, state, true),
+          async (preparation, state) => await freshAccounts(input, preparation, state),
         );
         prepared = await readRequired(input, input.plan);
       }
