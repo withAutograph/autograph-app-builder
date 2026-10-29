@@ -241,17 +241,23 @@ const attachNativeSnapshot = async (world, nativeEvents, enabled) => {
   }
   world.streams = {
     getInfo: () => Promise.resolve({ tailIndex: chunks.length - 1, done: false }),
-    getChunks: (_id, _name, pagination) => {
-      const index = pagination.cursor === undefined ? 0 : Number(pagination.cursor);
-      return Promise.resolve({
-        data: chunks.slice(index, index + 1),
-        cursor: String(index + 1),
-        hasMore: index + 1 < chunks.length,
-        done: false,
-      });
+    getChunks: () => {
+      throw new Error("Serial native snapshot pagination is forbidden.");
     },
-    get: () => {
-      throw new Error("Live native streams must not be followed.");
+    get: (_id, _name, startIndex) => {
+      assert.equal(startIndex, 0);
+      let index = 0;
+      return Promise.resolve(
+        new ReadableStream({
+          pull(controller) {
+            if (index < chunks.length) {
+              controller.enqueue(chunks[index].data);
+              index += 1;
+            }
+            // Leave the source open; the finite reader must stop at its captured tail.
+          },
+        }),
+      );
     },
   };
   return snapshotKey;

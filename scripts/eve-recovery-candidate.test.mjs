@@ -639,7 +639,7 @@ const frameNativeHistory = async (values, key) => {
   }
   return frames.map((data, index) => ({ index, data }));
 };
-const snapshotFixture = async (fault) => {
+const snapshotFixture = async (fault, packing = "split") => {
   const f = await fixture({ status: "cancelled", encrypted: true });
   const native = Array.from({ length: 5 }, (_, index) => ({
     type: "text.delta",
@@ -649,7 +649,42 @@ const snapshotFixture = async (fault) => {
     native.map((event) => new TextEncoder().encode(`${JSON.stringify(event)}\n`)),
     f.key,
   );
+  const framed = chunks.map(({ data }) => new Uint8Array(data));
+  if (fault === "missing") {
+    framed.splice(2, 1);
+  }
+  if (fault === "truncated") {
+    framed[4] = framed[4].slice(0, -1);
+  }
+  if (fault === "header-eof") {
+    framed[4] = framed[4].slice(0, 2);
+  }
+  if (fault === "ciphertext") {
+    framed[2][framed[2].length - 1] = (framed[2].at(-1) + 1) % 256;
+  }
+  if (fault === "zero-frame") {
+    framed[2].fill(0, 0, 4);
+  }
+  if (fault === "extra-frame") {
+    framed.push(framed[0]);
+  }
+  const size = framed.reduce((total, frame) => total + frame.length, 0);
+  const joined = new Uint8Array(size);
+  let offset = 0;
+  for (const frame of framed) {
+    joined.set(frame, offset);
+    offset += frame.length;
+  }
+  const wire = [];
+  if (packing === "coalesced") {
+    wire.push(fault === "transport" ? joined.subarray(0, Math.floor(joined.length / 2)) : joined);
+  } else {
+    for (let index = 0; index < joined.length; index += 3) {
+      wire.push(joined.subarray(index, index + 3));
+    }
+  }
   let infos = 0;
+  let cancelled = false;
   f.world.streams = {
     async getInfo(id, name) {
       f.calls.push(["snapshot-info", id, name]);
@@ -661,64 +696,74 @@ const snapshotFixture = async (fault) => {
         done: fault === "changed-done" && infos > 1,
       };
     },
-    async getChunks(id, name, options) {
-      f.calls.push(["snapshot-page", id, name]);
-      const start = options.cursor === undefined ? 0 : Number(options.cursor);
-      let data = chunks.slice(start, start + 2).map((chunk) => ({ ...chunk }));
-      if (fault === "gap" && start === 2) {
-        data[0].index += 1;
-      }
-      if (fault === "truncated" && start === 2) {
-        data[0].data = data[0].data.slice(0, -1);
-      }
-      if (fault === "ciphertext" && start === 2) {
-        data[0].data = new Uint8Array(data[0].data);
-        data[0].data[data[0].data.length - 1] = (data[0].data.at(-1) + 1) % 256;
-      }
-      if (fault === "missing" && start === 4) {
-        data = [];
-      }
-      const end = start + data.length;
-      return {
-        data,
-        done: false,
-        hasMore: end < chunks.length && fault !== "missing",
-        cursor: fault === "repeated-cursor" ? "0" : String(end),
-      };
+    async get(id, name, startIndex) {
+      f.calls.push(["snapshot-stream", id, name]);
+      assert.equal(startIndex, 0);
+      let index = 0;
+      return new ReadableStream({
+        pull(controller) {
+          if (index < wire.length) {
+            controller.enqueue(wire[index]);
+            index += 1;
+          } else if (fault === "transport") {
+            controller.error(new Error("private transport failure"));
+          } else if (
+            fault !== undefined &&
+            !["changed-tail", "changed-done", "cancel"].includes(fault)
+          ) {
+            controller.close();
+          }
+          // A successful source remains open forever: the finite reader must cancel it.
+        },
+        cancel() {
+          cancelled = true;
+          f.calls.push(["snapshot-cancel"]);
+          if (fault === "cancel") {
+            throw new Error("private cancellation failure");
+          }
+        },
+      });
     },
-    get() {
-      throw new Error("Recovery must never follow a live stream.");
+    getChunks() {
+      throw new Error("Serial pagination must not be used.");
     },
   };
   f.dependencies.readNativeEvents = (id) => readTerminalNativeEventsSnapshot(f.world, id, f.key);
-  return { ...f, native };
+  return { ...f, native, cancelled: () => cancelled };
 };
 
-test("finite encrypted unclosed multi-page snapshot retains full native prefix and private checkpoint", async () => {
-  const f = await snapshotFixture();
-  const result = await f.collect(f.input);
-  const payload = readTerminalRecoveryCandidate(result.candidate);
-  assert.deepEqual(payload.nativeEvents, f.native);
-  assert.deepEqual(payload.candidates[0].sessionState, f.final.sessionState);
-  assert.deepEqual(payload.candidates[0].serializedContext, f.final.serializedContext);
-  assert.deepEqual(payload.candidates[1].incoming, f.inputs.failed.input);
-  assert.equal(f.calls.filter(([type]) => type === "snapshot-page").length, 3);
-  assert.equal(
-    payload.issues.some(({ reason }) => reason === "native-stream-incomplete"),
-    false,
-  );
-});
+for (const packing of ["split", "coalesced"]) {
+  test(`finite encrypted unclosed snapshot counts native frames across ${packing} network reads`, async () => {
+    const f = await snapshotFixture(undefined, packing);
+    const result = await f.collect(f.input);
+    const payload = readTerminalRecoveryCandidate(result.candidate);
+    assert.deepEqual(payload.nativeEvents, f.native);
+    assert.deepEqual(payload.candidates[0].sessionState, f.final.sessionState);
+    assert.deepEqual(payload.candidates[0].serializedContext, f.final.serializedContext);
+    assert.deepEqual(payload.candidates[1].incoming, f.inputs.failed.input);
+    assert.equal(f.calls.filter(([type]) => type === "snapshot-stream").length, 1);
+    assert.equal(f.calls.filter(([type]) => type === "snapshot-info").length, 2);
+    assert.equal(f.cancelled(), true);
+    assert.equal(
+      payload.issues.some(({ reason }) => reason === "native-stream-incomplete"),
+      false,
+    );
+  });
+}
 for (const fault of [
-  "gap",
   "truncated",
+  "header-eof",
   "missing",
   "changed-tail",
   "changed-done",
   "ciphertext",
-  "repeated-cursor",
+  "zero-frame",
+  "extra-frame",
+  "transport",
+  "cancel",
 ]) {
   test(`incomplete or changed native snapshot fails closed: ${fault}`, async () => {
-    const f = await snapshotFixture(fault);
+    const f = await snapshotFixture(fault, "coalesced");
     const result = await f.collect(f.input);
     const payload = readTerminalRecoveryCandidate(result.candidate);
     assert.deepEqual(payload.nativeEvents, []);
@@ -728,6 +773,76 @@ for (const fault of [
     );
   });
 }
+
+test("finite streaming snapshot consumes the entire 171094-frame captured tail then cancels an unclosed source", async () => {
+  const frameCount = 171_094;
+  const native = { type: "text.delta", data: { text: "private native content" } };
+  const [frame] = await frameNativeHistory([
+    new TextEncoder().encode(`${JSON.stringify(native)}\n`),
+  ]);
+  assert.ok(frame);
+  let sent = 0;
+  let cancelled = false;
+  let infos = 0;
+  const world = {
+    streams: {
+      async getInfo() {
+        infos += 1;
+        return { tailIndex: frameCount - 1, done: false };
+      },
+      async get(_run, _name, startIndex) {
+        assert.equal(startIndex, 0);
+        return new ReadableStream({
+          pull(controller) {
+            if (sent === frameCount) {
+              return;
+            }
+            const count = Math.min(256, frameCount - sent);
+            const bytes = new Uint8Array(count * frame.data.length);
+            for (let index = 0; index < count; index += 1) {
+              bytes.set(frame.data, index * frame.data.length);
+            }
+            sent += count;
+            controller.enqueue(bytes);
+          },
+          cancel() {
+            cancelled = true;
+          },
+        });
+      },
+    },
+  };
+  let observed = 0;
+  for await (const event of readTerminalNativeEventsSnapshot(world, ownerRunId)) {
+    assert.deepEqual(event, native);
+    observed += 1;
+  }
+  assert.equal(observed, frameCount);
+  assert.equal(cancelled, true);
+  assert.equal(infos, 2);
+}, 30_000);
+
+test("an empty unclosed captured tail never opens a live stream", async () => {
+  let infos = 0;
+  const world = {
+    streams: {
+      async getInfo() {
+        infos += 1;
+        return { tailIndex: -1, done: false };
+      },
+      get() {
+        throw new Error("empty tail must not follow stream");
+      },
+    },
+  };
+  const events = [];
+  for await (const event of readTerminalNativeEventsSnapshot(world, ownerRunId)) {
+    events.push(event);
+  }
+  assert.deepEqual(events, []);
+  assert.equal(infos, 2);
+});
+
 for (const status of ["running", "pending"]) {
   test(`nonterminal ${status} owner never reads native snapshot`, async () => {
     const f = await snapshotFixture();

@@ -798,7 +798,7 @@ new file mode 100644
 index 0000000..9274615
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.js
-@@ -0,0 +1,508 @@
+@@ -0,0 +1,530 @@
 +import { resolveTerminalCheckpointOwner } from "#execution/session/recovery-owner-provenance.js";
 +// Server-only native checkpoint inspection. This module never starts/resumes a run.
 +// The caller MUST supply canonical ownership authorization; model/client IDs are
@@ -1172,7 +1172,6 @@ index 0000000..9274615
 +    import("#execution/ndjson-stream.js"),
 +    import("#protocol/message-version.js"),
 +  ]);
-+  // Native Run.getReadable()'s default user-stream namespace.
 +  const name = `${runId.replace("wrun_", "strm_")}_user`;
 +  const before = await world.streams.getInfo(runId, name);
 +  if (
@@ -1181,44 +1180,58 @@ index 0000000..9274615
 +    typeof before.done !== "boolean"
 +  )
 +    throw new Error("Incomplete native stream.");
-+  let index = 0;
-+  let cursor;
-+  const cursors = new Set();
-+  const chunks = [];
-+  do {
-+    const page = await world.streams.getChunks(runId, name, {
-+      limit: 128,
-+      ...(cursor === undefined ? {} : { cursor }),
-+    });
-+    if (page.done !== before.done || typeof page.hasMore !== "boolean")
-+      throw new Error("Changed native stream.");
-+    for (const chunk of page.data) {
-+      if (
-+        chunk.index !== index ||
-+        index > before.tailIndex ||
-+        !(chunk.data instanceof Uint8Array) ||
-+        chunk.data.byteLength < 4
-+      )
-+        throw new Error("Incomplete native stream.");
-+      // Native framed serialization writes exactly one complete frame per index.
-+      // getDeserializeStream alone silently retains incomplete frame bytes at EOF.
-+      const length = new DataView(
-+        chunk.data.buffer,
-+        chunk.data.byteOffset,
-+        chunk.data.byteLength,
-+      ).getUint32(0, false);
-+      if (length === 0 || length + 4 !== chunk.data.byteLength)
-+        throw new Error("Incomplete native stream frame.");
-+      chunks.push(chunk.data);
-+      index++;
++  const count = before.tailIndex + 1;
++  // The SDK producer writes one framed value per native chunk index. World's
++  // get(..., 0) reads that ordered prefix, but network reads may split/coalesce
++  // frames. Count complete length-prefixed frames, never transport chunks.
++  const reader = count === 0 ? undefined : (await world.streams.get(runId, name, 0)).getReader();
++  let cancelled = false;
++  const cancel = async () => {
++    if (reader !== undefined && !cancelled) {
++      cancelled = true;
++      await reader.cancel();
 +    }
-+    if (!page.hasMore) break;
-+    if (page.data.length === 0 || !page.cursor || cursors.has(page.cursor))
-+      throw new Error("Incomplete native stream pagination.");
-+    cursors.add(page.cursor);
-+    cursor = page.cursor;
-+  } while (true);
-+  if (index !== before.tailIndex + 1) throw new Error("Incomplete native stream.");
++  };
++  let frames = 0;
++  let headerSize = 0;
++  let remaining = 0;
++  const header = new Uint8Array(4);
++  const finite = new ReadableStream({
++    start(controller) {
++      if (count === 0) controller.close();
++    },
++    async pull(controller) {
++      const { value, done } = await reader.read();
++      if (done || !(value instanceof Uint8Array)) throw new Error("Incomplete native stream.");
++      let offset = 0;
++      while (offset < value.byteLength) {
++        if (remaining === 0) {
++          const take = Math.min(4 - headerSize, value.byteLength - offset);
++          header.set(value.subarray(offset, offset + take), headerSize);
++          headerSize += take;
++          offset += take;
++          if (headerSize !== 4) continue;
++          remaining = new DataView(header.buffer).getUint32(0, false);
++          headerSize = 0;
++          if (remaining === 0) throw new Error("Incomplete native stream frame.");
++        }
++        const take = Math.min(remaining, value.byteLength - offset);
++        remaining -= take;
++        offset += take;
++        if (remaining === 0) {
++          frames++;
++          if (frames === count && offset !== value.byteLength)
++            throw new Error("Changed native stream.");
++        }
++      }
++      controller.enqueue(value);
++      if (frames === count) {
++        await cancel();
++        controller.close();
++      }
++    },
++    cancel,
++  });
 +  const inert = Object.fromEntries(
 +    ["ReadableStream", "WritableStream", "AbortController", "AbortSignal"].map((type) => [
 +      type,
@@ -1226,18 +1239,21 @@ index 0000000..9274615
 +    ]),
 +  );
 +  let decodedFrames = 0;
-+  const bytes = new ReadableStream({
-+    start(controller) {
-+      for (const chunk of chunks) controller.enqueue(chunk);
-+      controller.close();
-+    },
-+  })
++  const bytes = finite
++    .pipeThrough(serialization.getByteUnframingStream())
++    .pipeThrough(new TransformStream({
++      transform(payload, controller) {
++        // Keep the native decoder's framed path even when the network split
++        // the first header; its legacy auto-detection otherwise treats <4 bytes as text.
++        const frame = new Uint8Array(payload.byteLength + 4);
++        new DataView(frame.buffer).setUint32(0, payload.byteLength, false);
++        frame.set(payload, 4);
++        controller.enqueue(frame);
++      },
++    }))
 +    .pipeThrough(
 +      serialization.getDeserializeStream(
-+        {
-+          ...serialization.getCommonRevivers(globalThis),
-+          ...inert,
-+        },
++        { ...serialization.getCommonRevivers(globalThis), ...inert },
 +        key,
 +      ),
 +    )
@@ -1251,15 +1267,21 @@ index 0000000..9274615
 +      }),
 +    );
 +  const events = [];
-+  for await (const event of stream.parseNdjsonStream(
-+    () => bytes,
-+    protocol.normalizePersistedMessageStreamEvent,
-+  ))
-+    events.push(event);
-+  if (decodedFrames !== chunks.length) throw new Error("Incomplete native stream decoding.");
-+  const after = await world.streams.getInfo(runId, name);
-+  if (after.tailIndex !== before.tailIndex || after.done !== before.done)
-+    throw new Error("Changed native stream.");
++  try {
++    for await (const event of stream.parseNdjsonStream(
++      () => bytes,
++      protocol.normalizePersistedMessageStreamEvent,
++    ))
++      events.push(event);
++    if (frames !== count || decodedFrames !== count || remaining !== 0 || headerSize !== 0)
++      throw new Error("Incomplete native stream decoding.");
++    const after = await world.streams.getInfo(runId, name);
++    if (after.tailIndex !== before.tailIndex || after.done !== before.done)
++      throw new Error("Changed native stream.");
++  } finally {
++    try { await cancel(); }
++    finally { reader?.releaseLock(); }
++  }
 +  yield* events;
 +}
 +
