@@ -3,6 +3,8 @@ import { randomBytes } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Observe the maintained diagnostic boundary without changing runtime authority.
 import * as diagnostics from "./hosted-operator-consent-diagnostic";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Exercise concurrent client failures without changing the runtime reader.
+import * as normalAuthClient from "./hosted-operator-normal-auth-client";
 import type { HostedOperatorConsentDiagnosticSink } from "./hosted-operator-consent-diagnostic";
 import {
   hostedOperatorPlanSchema,
@@ -731,6 +733,42 @@ describe("closed runtime identity refusal diagnostics", () => {
       expect(f.requests).toHaveLength(stage === "final_authority" ? 11 : 0);
     },
   );
+  it("keeps the first causal label when concurrent identity phases reject with one shared error", async () => {
+    const sink = observe();
+    const f = await fixture();
+    const shared = new Error("private shared abort reason");
+    const rejected = Promise.withResolvers<never>();
+    const createClient = normalAuthClient.createHostedOperatorNormalAuthClient;
+    vi.spyOn(normalAuthClient, "createHostedOperatorNormalAuthClient").mockImplementation(
+      (options) => {
+        const client = createClient(options);
+        const cookie = options.storageState?.cookies[0]?.value;
+        if (cookie === "private-base-unassigned") {
+          return {
+            ...client,
+            getSession: () => rejected.promise,
+          };
+        }
+        if (cookie === "private-scoped-0") {
+          return {
+            ...client,
+            listMembers: () => {
+              rejected.reject(shared);
+              return rejected.promise;
+            },
+          };
+        }
+        return client;
+      },
+    );
+    await expect(f.runtime(f.input)).rejects.toBe(shared);
+    expect(sink.mock.calls[0]?.[0].runtimeIdentityFailure).toEqual({
+      stage: "get_session",
+      reason: "read_failed",
+    });
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(shared.message);
+  });
+
   it("returns successful runtime credentials without emitting a failure", async () => {
     const sink = observe();
     const f = await fixture();

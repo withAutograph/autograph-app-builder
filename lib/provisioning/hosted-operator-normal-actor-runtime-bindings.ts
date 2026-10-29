@@ -10,6 +10,17 @@ import { projectNormalActorRuntime } from "./hosted-operator-normal-actor-runtim
 import type { HostedOperatorPlan } from "./hosted-operator-contract";
 import type { HostedOperatorContext } from "./hosted-operator-service";
 
+const retainFirstIdentityFailure = (
+  failures: Map<unknown, OperatorRuntimeIdentityFailure>,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Arbitrary original rejections are opaque map keys, never inspected or emitted.
+  error: unknown,
+  failure: OperatorRuntimeIdentityFailure,
+) => {
+  if (!failures.has(error)) {
+    failures.set(error, failure);
+  }
+};
+
 const matchesMember = (
   member:
     | Awaited<
@@ -166,7 +177,7 @@ export const createNormalActorRuntimeBindings = (
               }
             }
           } catch (error) {
-            identityFailures.set(error, identityFailure);
+            retainFirstIdentityFailure(identityFailures, error, identityFailure);
             throw error;
           }
         }),
