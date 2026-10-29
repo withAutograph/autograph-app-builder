@@ -142,8 +142,10 @@ const setup = async (
   expect(ingested.kind).toBe("continue-coordination");
   return {
     authorizer,
+    tools,
     session: ingested.session,
-    run: () => run({ now: 2, session: ingested.session, tools, abortSignal }),
+    run: (prepareTools?: CoordinatorInput["prepareTools"]) =>
+      run({ now: 2, session: ingested.session, tools, abortSignal, prepareTools }),
   };
 };
 
@@ -174,6 +176,19 @@ describe("native approval coordinator recovery", () => {
     });
     const result = await f.run();
     expect(approvals.getApprovalAuditState(result.session.state).settlements).toHaveLength(0);
+  });
+  it("does not invoke the authorizer when tool preparation cancels the turn", async () => {
+    const controller = new AbortController();
+    const f = await setup(() => Promise.resolve({ status: "allowed" }), controller.signal);
+    const cancelled = new Error("cancelled during preparation");
+    await expect(
+      f.run(() => {
+        controller.abort(cancelled);
+        return Promise.resolve(f.tools);
+      }),
+    ).rejects.toBe(cancelled);
+    expect(f.authorizer).not.toHaveBeenCalled();
+    expect(approvals.getApprovalAuditState(f.session.state).settlements).toHaveLength(0);
   });
   it("interrupts on actual cancellation and cannot settle a late authorizer success", async () => {
     const controller = new AbortController();
