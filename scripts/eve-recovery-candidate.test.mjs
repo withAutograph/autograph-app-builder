@@ -2,6 +2,7 @@
 /* oxlint-disable typescript/no-unsafe-assignment, typescript/no-unsafe-call, typescript/no-unsafe-member-access, typescript/no-unsafe-return, typescript/no-unsafe-argument -- Synthetic regression loads private installed native SDK modules by package path. */
 /* oxlint-disable sonarjs/no-duplicate-string -- Exact native fixture identities are reused across provenance assertions. */
 import assert from "node:assert/strict";
+import { setImmediate as nextTurn } from "node:timers/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -767,43 +768,77 @@ for (const fault of [
     const result = await f.collect(f.input);
     const payload = readTerminalRecoveryCandidate(result.candidate);
     assert.deepEqual(payload.nativeEvents, []);
-    assert.equal(
-      payload.issues.some(({ reason }) => reason === "native-stream-incomplete"),
-      true,
-    );
+    assert.ok(payload.issues.some(({ reason }) => reason === "native-stream-incomplete"));
   });
 }
 
-test("finite streaming snapshot consumes the entire 171094-frame captured tail then cancels an unclosed source", async () => {
-  const frameCount = 171_094;
-  const native = { type: "text.delta", data: { text: "private native content" } };
-  const [frame] = await frameNativeHistory([
-    new TextEncoder().encode(`${JSON.stringify(native)}\n`),
-  ]);
-  assert.notEqual(frame, undefined);
-  let sent = 0;
-  let cancelled = false;
+const reconnectingSnapshot = async (mode) => {
+  const native = Array.from({ length: 5 }, (_, index) => ({
+    type: "text.delta",
+    data: { text: index < 2 ? "same valid repeated value" : `private ${index}` },
+  }));
+  const key = await serialization.deriveRunPayloadKeys(new Uint8Array(32).fill(7));
+  const chunks = await frameNativeHistory(
+    native.map((event) => new TextEncoder().encode(`${JSON.stringify(event)}\n`)),
+    key,
+  );
+  const join = (parts) => {
+    const bytes = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
+    let offset = 0;
+    for (const part of parts) {
+      bytes.set(part, offset);
+      offset += part.length;
+    }
+    return bytes;
+  };
+  let partial = new Uint8Array();
+  if (mode === "partial-header") {
+    partial = chunks[2].data.subarray(0, 2);
+  }
+  if (mode === "partial-payload") {
+    partial = chunks[2].data.subarray(0, 12);
+  }
+  const first =
+    mode === "zero-progress"
+      ? chunks[0].data.subarray(0, 2)
+      : join([chunks[0].data, chunks[1].data, partial]);
+  const starts = [];
   let infos = 0;
+  let cancelled = false;
   const world = {
     streams: {
       async getInfo() {
         infos += 1;
-        return { tailIndex: frameCount - 1, done: false };
+        return {
+          tailIndex: chunks.length - 1 + (mode === "changed-tail" && infos > 1 ? 1 : 0),
+          done: mode === "changed-done" && infos > 1,
+        };
       },
       async get(_run, _name, startIndex) {
-        assert.equal(startIndex, 0);
+        starts.push(startIndex);
+        assert.equal(startIndex, starts.length === 1 ? 0 : 2);
+        let sent = false;
         return new ReadableStream({
-          pull(controller) {
-            if (sent === frameCount) {
+          async pull(controller) {
+            if (starts.length === 2 && mode === "stalled-resume") {
+              controller.close();
               return;
             }
-            const count = Math.min(256, frameCount - sent);
-            const bytes = new Uint8Array(count * frame.data.length);
-            for (let index = 0; index < count; index += 1) {
-              bytes.set(frame.data, index * frame.data.length);
+            if (!sent) {
+              sent = true;
+              controller.enqueue(
+                starts.length === 1
+                  ? first
+                  : join(chunks.slice(startIndex).map(({ data }) => data)),
+              );
+            } else if (starts.length === 1) {
+              await nextTurn();
+              if (mode === "transport-error") {
+                controller.error(new Error("private transport disconnect"));
+              } else {
+                controller.close();
+              }
             }
-            sent += count;
-            controller.enqueue(bytes);
           },
           cancel() {
             cancelled = true;
@@ -812,15 +847,127 @@ test("finite streaming snapshot consumes the entire 171094-frame captured tail t
       },
     },
   };
-  let observed = 0;
+  return { native, key, world, starts, cancelled: () => cancelled };
+};
+for (const mode of ["clean-eof", "partial-header", "partial-payload", "transport-error"]) {
+  test(`finite reader resumes only the interrupted native frame after ${mode}`, async () => {
+    const f = await reconnectingSnapshot(mode);
+    const events = [];
+    for await (const event of readTerminalNativeEventsSnapshot(f.world, ownerRunId, f.key)) {
+      events.push(event);
+    }
+    assert.deepEqual(events, f.native);
+    assert.deepEqual(f.starts, [0, 2]);
+    assert.equal(f.cancelled(), true);
+  });
+}
+for (const mode of ["zero-progress", "stalled-resume", "changed-tail", "changed-done"]) {
+  test(`finite reconnect refuses ${mode} without yielding a partial native prefix`, async () => {
+    const f = await reconnectingSnapshot(mode);
+    const events = [];
+    await assert.rejects(async () => {
+      for await (const event of readTerminalNativeEventsSnapshot(f.world, ownerRunId, f.key)) {
+        events.push(event);
+      }
+    }, /Native stream made no progress|Changed native stream/u);
+    assert.deepEqual(events, []);
+    assert.deepEqual(f.starts, mode === "stalled-resume" ? [0, 2] : [0]);
+  });
+}
+
+test("reconnect preserves a UTF-8 NDJSON value split across complete native frames", async () => {
+  const native = { type: "text.delta", data: { text: "private 😃 value" } };
+  const bytes = new TextEncoder().encode(`${JSON.stringify(native)}\n`);
+  const cut = bytes.indexOf(240) + 2;
+  assert.ok(cut > 2);
+  const chunks = await frameNativeHistory([bytes.subarray(0, cut), bytes.subarray(cut)]);
+  const starts = [];
+  const world = {
+    streams: {
+      async getInfo() {
+        return { tailIndex: 1, done: false };
+      },
+      async get(_run, _name, startIndex) {
+        starts.push(startIndex);
+        assert.equal(startIndex, starts.length - 1);
+        let sent = false;
+        return new ReadableStream({
+          pull(controller) {
+            if (!sent) {
+              sent = true;
+              controller.enqueue(chunks[startIndex].data);
+            } else if (startIndex === 0) {
+              controller.close();
+            }
+          },
+        });
+      },
+    },
+  };
+  const events = [];
   for await (const event of readTerminalNativeEventsSnapshot(world, ownerRunId)) {
-    assert.deepEqual(event, native);
-    observed += 1;
+    events.push(event);
   }
-  assert.equal(observed, frameCount);
-  assert.equal(cancelled, true);
-  assert.equal(infos, 2);
-}, 30_000);
+  assert.deepEqual(events, [native]);
+  assert.deepEqual(starts, [0, 1]);
+});
+
+for (const interrupted of [false, true]) {
+  test(`finite reader retains all 171094 native frames across transport EOFs (interrupted=${interrupted})`, async () => {
+    const frameCount = 171_094;
+    const native = { type: "text.delta", data: { text: "private native content" } };
+    const [frame] = await frameNativeHistory([
+      new TextEncoder().encode(`${JSON.stringify(native)}\n`),
+    ]);
+    assert.ok(frame);
+    let cancelled = false;
+    let infos = 0;
+    const starts = [];
+    const world = {
+      streams: {
+        async getInfo() {
+          infos += 1;
+          return { tailIndex: frameCount - 1, done: false };
+        },
+        async get(_run, _name, startIndex) {
+          starts.push(startIndex);
+          assert.equal(startIndex, interrupted ? (starts.length - 1) * 75_274 : 0);
+          let sent = startIndex;
+          const end = interrupted ? Math.min(startIndex + 75_274, frameCount) : frameCount;
+          return new ReadableStream({
+            pull(controller) {
+              if (sent === end) {
+                if (end !== frameCount) {
+                  controller.close();
+                }
+                return;
+              }
+              const count = Math.min(256, end - sent);
+              const bytes = new Uint8Array(count * frame.data.length);
+              for (let index = 0; index < count; index += 1) {
+                bytes.set(frame.data, index * frame.data.length);
+              }
+              sent += count;
+              controller.enqueue(bytes);
+            },
+            cancel() {
+              cancelled = true;
+            },
+          });
+        },
+      },
+    };
+    let observed = 0;
+    for await (const event of readTerminalNativeEventsSnapshot(world, ownerRunId)) {
+      assert.deepEqual(event, native);
+      observed += 1;
+    }
+    assert.equal(observed, frameCount);
+    assert.equal(cancelled, true);
+    assert.deepEqual(starts, interrupted ? [0, 75_274, 150_548] : [0]);
+    assert.equal(infos, interrupted ? 4 : 2);
+  }, 30_000);
+}
 
 test("an empty unclosed captured tail never opens a live stream", async () => {
   let infos = 0;
