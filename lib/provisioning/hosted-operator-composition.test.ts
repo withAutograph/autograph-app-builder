@@ -4349,7 +4349,7 @@ describe("retained active schema installation scope", () => {
     f.resume.resolve(undefined);
     const result = await f.result;
     expect(result).not.toHaveProperty("error");
-    if (!("bindings" in result)) {
+    if (result.bindings === undefined) {
       throw new Error("expected decrypted bindings");
     }
     expect(new URL(result.bindings.appDatabase.runtimeUrl).username).toBe(
