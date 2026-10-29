@@ -780,7 +780,7 @@ test("finite streaming snapshot consumes the entire 171094-frame captured tail t
   const [frame] = await frameNativeHistory([
     new TextEncoder().encode(`${JSON.stringify(native)}\n`),
   ]);
-  assert.ok(frame);
+  assert.notEqual(frame, undefined);
   let sent = 0;
   let cancelled = false;
   let infos = 0;
