@@ -518,7 +518,7 @@ const inspectDependencyCatalog = async (
   await checked(
     sandbox,
     "verify normalized dependency catalog files",
-    `node -e ${quote(catalogFilesProgram)} ${quote(prepared.root)} ${quote(JSON.stringify(receipt.files))}`,
+    `node -e ${quote(catalogFilesProgram)} ${quote(prepared.root)} ${quote(JSON.stringify(receipt.files.filter((file) => !appPath(prepared.appId, file.path))))}`,
   );
   if (
     receipt.nonAppIndexDigest !== (await nonAppIndexDigest(sandbox, prepared.root, prepared.appId))

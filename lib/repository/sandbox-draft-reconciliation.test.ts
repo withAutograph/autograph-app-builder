@@ -273,6 +273,34 @@ describe("isolated draft reconciliation", () => {
     expect(retainedInspection.resolvedTree).toBe(inspected.resolvedTree);
   });
 
+  it("allows ordinary selected-app manifest edits after catalog normalization", async () => {
+    const { f, prepared } = await catalogCandidate();
+    const appManifest = "apps/demo/package.json";
+    const normalized = '{"name":"demo","devDependencies":{"probe":"catalog:"}}\n';
+    writeFileSync(path.join(prepared.root, appManifest), normalized);
+    git(prepared.root, "add", "--", appManifest);
+    const candidate = {
+      ...prepared,
+      dependencyCatalog: {
+        ...prepared.dependencyCatalog,
+        files: [
+          ...prepared.dependencyCatalog.files,
+          { path: appManifest, digest: digest(normalized) },
+        ],
+      },
+    };
+    const changed =
+      '{"name":"demo","devDependencies":{"probe":"catalog:"},"scripts":{"test":"existing task --run"}}\n';
+    writeFileSync(path.join(prepared.root, appManifest), changed);
+    const observed = await inspectDraftReconciliation({ sandbox: f.sandbox, prepared: candidate });
+    expect(
+      observed.baseChanges.some(
+        (change) => change.path === appManifest && change.after?.digest === digest(changed),
+      ),
+    ).toBe(true);
+    expect(observed.unresolvedConflicts).toEqual([]);
+  });
+
   it.each([
     "unstaged bytes",
     "staged bytes",
