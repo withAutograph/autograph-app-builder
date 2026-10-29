@@ -790,10 +790,10 @@ describe("approved additive capture participant state", () => {
     expect(f.row.record.participantPreparationHistory?.[0]?.preparation).toEqual(f.original);
   });
 
-  it("refuses a changed actual organization before carrying an opaque original session", async () => {
+  it("carries an opaque original session without rewriting its retained organization after live drift", async () => {
     const f = await fixture("existing-outside-program");
     f.approve();
-    f.fetchSession.mockResolvedValue(
+    f.fetchSession.mockImplementation(async () =>
       Response.json({
         user: { id: "real-owner", email: "owner@example.test" },
         session: {
@@ -805,14 +805,36 @@ describe("approved additive capture participant state", () => {
       }),
     );
     const before = structuredClone(f.row.record.accountPreparation);
-    await expect(f.operations.ensureNormalActorCapture(f.input)).rejects.toMatchObject({
-      code: "auth_identity_required",
-    });
-    expect(f.row.record.accountPreparation).toEqual(before);
+    await expect(f.operations.ensureNormalActorCapture(f.input)).resolves.toBe("ready");
+    const prepared = await f.journal.read(context);
+    expect(prepared?.state.actors[0]).toEqual(f.state.actors[0]);
+    expect(f.row.record.participantPreparationHistory?.[0]?.preparation).toEqual(before);
   });
 
-  it("runs the existing account worker for new QA without recapturing or signing up the original actor", async () => {
-    const f = await fixture();
+  it("runs the existing account worker for new QA without recapturing or rewriting the original mutable-organization session", async () => {
+    const f = await fixture("original-selected-organization");
+    const existingFetch = f.fetchSession.getMockImplementation();
+    if (existingFetch === undefined) {
+      throw new Error("missing retained session transport");
+    }
+    f.fetchSession.mockImplementation(async (url, init) => {
+      const response = await existingFetch(url, init);
+      const value = z
+        .object({
+          user: z.object({ id: z.string(), email: z.string() }),
+          session: z.object({
+            id: z.string(),
+            userId: z.string(),
+            expiresAt: z.string(),
+            activeOrganizationId: z.string().nullable().optional(),
+          }),
+        })
+        .parse(await response.json());
+      return Response.json({
+        ...value,
+        session: { ...value.session, activeOrganizationId: "different-live-organization" },
+      });
+    });
     f.approve();
     await f.operations.ensureNormalActorCapture(f.input);
     const originalFetch = f.fetchSession.getMockImplementation();

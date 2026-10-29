@@ -125,9 +125,8 @@ export const createNormalActorRuntimeBindings = (
               throw new HostedOperatorError("auth_identity_required");
             }
             const selectedOrganization =
-              identity.organizationId === null
-                ? (actual.activeOrganizationId ?? null) === (expected.activeOrganizationId ?? null)
-                : actual.activeOrganizationId === identity.organizationId;
+              identity.organizationId === null ||
+              actual.activeOrganizationId === identity.organizationId;
             const checks: { reason: OperatorRuntimeIdentityFailure["reason"]; matches: boolean }[] =
               [
                 { reason: "actor_mismatch", matches: actual.actorId === expected.actorId },

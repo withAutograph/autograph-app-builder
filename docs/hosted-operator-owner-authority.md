@@ -167,9 +167,11 @@ For an actor with no approved program memberships, the browser manifest keeps
 `organizationId: null` and `roles: []`. An existing normal Auth session may
 still have a selected organization. That actual session fact is retained; it
 does not become an approved organization or grant. Fresh reads and successor
-carry require the actual selection to equal the retained selection, treating
-missing and null selections alike. Organization-scoped identities still require
-the exact approved organization and live membership role.
+carry verify the exact actor, session, email and live expiry without constraining
+that unscoped session’s mutable selection. Carry and account-worker retries keep
+the original checkpoint and storage unchanged; the normal app authorizer resolves
+the current actual scope. Organization-scoped identities still require the exact
+approved organization and live membership role.
 
 The private prepared-runtime handoff freshly reads GetSession for each selected
 session and the actual membership role for each organization, then rechecks the

@@ -161,23 +161,30 @@ const faults = [
   "wrong-actor",
   "wrong-email",
   "wrong-organization",
-  "changed-unassigned-organization",
   "wrong-role",
   "expired",
 ] as const;
-type Fault = (typeof faults)[number];
+type Fault = (typeof faults)[number] | "changed-unassigned-organization";
 interface RuntimeSession {
   session: NormalActorSessionRef;
   actorKey: string;
   organizationId: string | null;
 }
-const normalSessionResponse = (saved: RuntimeSession, email: string, fault: Fault | undefined) => {
+const normalSessionResponse = (
+  saved: RuntimeSession,
+  email: string,
+  fault: Fault | undefined,
+  observedOrganization?: string | null,
+) => {
   let activeOrganizationId = saved.session.activeOrganizationId ?? saved.organizationId;
   if (
     fault === "wrong-organization" ||
     (fault === "changed-unassigned-organization" && saved.actorKey === "unassigned")
   ) {
     activeOrganizationId = "changed-outside-program";
+  }
+  if (saved.actorKey === "unassigned" && observedOrganization !== undefined) {
+    activeOrganizationId = observedOrganization;
   }
   return Response.json({
     session: {
@@ -192,7 +199,11 @@ const normalSessionResponse = (saved: RuntimeSession, email: string, fault: Faul
     },
   });
 };
-const fixture = async (fault?: Fault, opaqueOrganization?: string) => {
+const fixture = async (
+  fault?: Fault,
+  opaqueOrganization?: string,
+  observedOrganization?: string | null,
+) => {
   let row: HostedRuntimeJournalRow = {
     revision: 1,
     record: hostedRuntimeJournalRecordSchema.parse({
@@ -431,7 +442,12 @@ const fixture = async (fault?: Fault, opaqueOrganization?: string) => {
       if (fail && fault === "revoked") {
         return Response.json(null);
       }
-      return normalSessionResponse(saved, actor.email, fail ? fault : undefined);
+      return normalSessionResponse(
+        saved,
+        actor.email,
+        fail ? fault : undefined,
+        observedOrganization,
+      );
     }
     const url = new URL(request.url);
     expect(url.pathname).toBe("/api/auth/organization/list-members");
@@ -579,12 +595,35 @@ describe("fresh authenticated normal actor runtime bindings", () => {
     ).toHaveLength(5);
   });
 
-  it("refuses a changed actual organization for an otherwise exact unassigned identity", async () => {
-    const f = await fixture("changed-unassigned-organization", "existing-outside-program");
-    const before = structuredClone(f.row.record.accountPreparation);
-    await denied(f.runtime(f.input), "auth_identity_required");
-    expect(f.row.record.accountPreparation).toEqual(before);
-  });
+  it.each([
+    [undefined, "existing-live-organization"],
+    ["retained-organization", "different-live-organization"],
+    ["retained-organization", null],
+  ] as const)(
+    "exports the unchanged opaque capture despite selected-organization drift from %s to %s",
+    async (retained, actual) => {
+      const f = await fixture(undefined, retained, actual);
+      const before = structuredClone(f.row.record.accountPreparation);
+      const projection = await f.runtime(f.input);
+      const identity = projection?.identities.actors.find(
+        (actor) => actor.actorKey === "unassigned",
+      );
+      expect(identity).toMatchObject({ organizationId: null, roles: [] });
+      expect(f.row.record.accountPreparation).toEqual(before);
+      expect(
+        f.requests.filter(
+          (request) => new URL(request.url).pathname === "/api/auth/organization/list-members",
+        ),
+      ).toHaveLength(5);
+      const saved = f.state.actors.find((actor) => actor.actorKey === "unassigned");
+      if (identity === undefined || projection === undefined) {
+        throw new Error("missing opaque identity");
+      }
+      expect(JSON.parse(projection.files[identity.storageState] ?? "null")).toEqual(
+        saved?.storageState,
+      );
+    },
+  );
 
   it.each(faults)("denies live %s without returning runtime credentials", async (fault) => {
     const f = await fixture(fault);
@@ -671,7 +710,6 @@ describe("closed runtime identity refusal diagnostics", () => {
     ["wrong-email", "identity", "email_mismatch"],
     ["expired", "identity", "expired"],
     ["wrong-organization", "identity", "selected_organization_mismatch"],
-    ["changed-unassigned-organization", "identity", "selected_organization_mismatch"],
     ["wrong-role", "membership", "membership_mismatch"],
   ] as const)(
     "reports the actual %s refusal while preserving its public error",
