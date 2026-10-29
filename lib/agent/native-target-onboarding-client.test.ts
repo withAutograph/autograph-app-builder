@@ -306,6 +306,24 @@ describe("native target protected client", () => {
     await expect(f.client.prepare(f.input, f.ctx)).rejects.toThrow();
     expect(f.request).toHaveBeenCalledTimes(1);
   });
+  it("reports a failed approval read without exposing its request or credentials", async () => {
+    const f = fixture();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      f.request.mockResolvedValueOnce(new Response("unavailable", { status: 503 }));
+      await expect(f.client.hasApproval(f.input, f.ctx)).rejects.toThrow("operator_unavailable");
+      expect(f.request).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith("[builder:native-target-transport]", {
+        action: "native-target-approval-read",
+        failure: "http",
+        status: 503,
+      });
+      expect(JSON.stringify(warn.mock.calls)).not.toContain("synthetic-oidc");
+      expect(JSON.stringify(warn.mock.calls)).not.toContain(f.input.operationRef);
+    } finally {
+      warn.mockRestore();
+    }
+  });
   it("accepts only exact terminal approval, with explicit pending and cancellation", async () => {
     const f = fixture();
     f.setOutput({ status: "pending" });

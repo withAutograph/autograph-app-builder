@@ -77,10 +77,19 @@ export const createNativeTargetOnboardingClient = (options: {
     } catch {
       signal?.throwIfAborted();
       // Never repeat an uncertain request here. The protected journal owns recovery.
+      console.warn("[builder:native-target-transport]", {
+        action: body.action,
+        failure: "transport",
+      });
       throw unavailable();
     }
     signal?.throwIfAborted();
     if (response.status === 401 || response.status === 403) {
+      console.warn("[builder:native-target-transport]", {
+        action: body.action,
+        failure: "authorization",
+        status: response.status,
+      });
       throw denied();
     }
     if (body.action === "native-target-plan" && response.status === 409) {
@@ -104,16 +113,29 @@ export const createNativeTargetOnboardingClient = (options: {
       throw unavailable();
     }
     if (!response.ok) {
+      console.warn("[builder:native-target-transport]", {
+        action: body.action,
+        failure: "http",
+        status: response.status,
+      });
       throw unavailable();
     }
     let raw: unknown;
     try {
       raw = await response.json();
     } catch {
+      console.warn("[builder:native-target-transport]", {
+        action: body.action,
+        failure: "invalid_json",
+      });
       throw unavailable();
     }
     const parsed = schema.safeParse(raw);
     if (!parsed.success) {
+      console.warn("[builder:native-target-transport]", {
+        action: body.action,
+        failure: "invalid_response",
+      });
       throw unavailable();
     }
     return parsed.data;
