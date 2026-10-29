@@ -723,10 +723,11 @@ test("provider-cancelled physical handoff reconciles latest native typed state w
       .flatMap(({ content }) => (Array.isArray(content) ? content : []))
       .filter((part) => part.type === "tool-approval-response");
   assert.deepEqual(approvals(recovered.history), approvals(f.source.history));
-  assert.ok(
+  assert.equal(
     approvals(recovered.history).some(
       (approval) => approval.approvalId === "original-request" && approval.approved === true,
     ),
+    true,
   );
   assert.deepEqual(recovered.sandboxState, f.latest.sandboxState);
   assert.deepEqual(result.checkpointCore.serializedContext, f.latestPair.serializedContext);

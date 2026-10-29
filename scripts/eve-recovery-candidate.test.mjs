@@ -700,7 +700,10 @@ for (const fault of [
     const result = await f.collect(f.input);
     const payload = readTerminalRecoveryCandidate(result.candidate);
     assert.deepEqual(payload.nativeEvents, []);
-    assert.ok(payload.issues.some(({ reason }) => reason === "native-stream-incomplete"));
+    assert.equal(
+      payload.issues.some(({ reason }) => reason === "native-stream-incomplete"),
+      true,
+    );
   });
 }
 for (const status of ["running", "pending"]) {
