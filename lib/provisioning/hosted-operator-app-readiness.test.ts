@@ -466,3 +466,136 @@ it.each(["before", "after"] as const)(
     }
   },
 );
+
+const installationOnlyFixture = () => {
+  const f = fixture();
+  const retained: OperatorAppMetadataScope[] = [
+    {
+      appId: selection.appId,
+      actorId: "original-actor",
+      organizationId: "synthetic-org",
+      role: "reviewer",
+    },
+  ];
+  const readInstallationScopes = vi.fn(async () => structuredClone(retained));
+  const readActiveOrganization = vi.fn<
+    NonNullable<AppRuntimeSnapshotReader["readActiveOrganization"]>
+  >(async (_scope) => f.observation);
+  f.reader.readActiveOrganization = readActiveOrganization;
+  const input = {
+    ...f.input,
+    plan: hostedOperatorPlanSchema.parse({
+      ...plan,
+      access: [],
+      appInstallation: { customerIds: ["synthetic-org"] },
+    }),
+  };
+  const verify = createHostedOperatorAppReadiness({ ...f.deps, readInstallationScopes });
+  return { ...f, retained, readInstallationScopes, readActiveOrganization, input, verify };
+};
+it("verifies an installation-only release through its retained active actor scope without granting access", async () => {
+  const f = installationOnlyFixture();
+  const before = structuredClone(f.input.plan);
+  const result = await f.verify(f.input);
+  expect(result).toMatchObject({ tenants: 1, releaseId: plan.release.id, actors: 0 });
+  expect(f.readActiveOrganization).toHaveBeenCalledWith(f.retained[0]);
+  expect(f.readInstallationScopes).toHaveBeenCalledTimes(2);
+  expect(f.scopes).toEqual([]);
+  expect(f.input.plan).toEqual(before);
+});
+it("skips a closed inactive historical actor while requiring one current scope per exact installation target", async () => {
+  const f = installationOnlyFixture();
+  f.retained.unshift({ ...f.retained[0], actorId: "inactive-historical-actor" });
+  f.readActiveOrganization.mockImplementation(async (scope) =>
+    scope.actorId === "inactive-historical-actor" ? null : f.observation,
+  );
+  const result = await f.verify(f.input);
+  expect(result.tenants).toBe(1);
+  expect(f.readActiveOrganization).toHaveBeenCalledTimes(2);
+});
+it("checks every distinct frozen installation target without observing unrelated historical tenants", async () => {
+  const f = installationOnlyFixture();
+  f.input.plan.appInstallation = { customerIds: ["synthetic-org", "second-org"] };
+  f.retained.push(
+    { ...f.retained[0], organizationId: "second-org" },
+    { ...f.retained[0], organizationId: "unrelated-org" },
+  );
+  f.readActiveOrganization.mockImplementation(async (scope) => ({
+    ...f.observation,
+    data: { ...f.observation.data, customer_id: scope.organizationId },
+  }));
+  const result = await f.verify(f.input);
+  expect(result.tenants).toBe(2);
+  expect(f.readActiveOrganization.mock.calls.map(([scope]) => scope.organizationId)).toEqual([
+    "second-org",
+    "synthetic-org",
+  ]);
+});
+it.each([
+  "missing-targets",
+  "missing-scopes",
+  "wrong-app",
+  "uncovered-target",
+  "inactive",
+  "unknown",
+  "wrong-tenant",
+  "wrong-release",
+  "wrong-artifact",
+  "scope-revoked",
+  "scope-changed",
+  "owner-revoked",
+  "lost-lease",
+] as const)("refuses installation-only readiness with %s", async (changed) => {
+  const f = installationOnlyFixture();
+  if (changed === "missing-targets") {
+    delete f.input.plan.appInstallation;
+  }
+  if (changed === "missing-scopes") {
+    f.retained.splice(0);
+  }
+  if (changed === "wrong-app") {
+    f.retained[0].appId = "foreign-app";
+  }
+  if (changed === "uncovered-target") {
+    f.input.plan.appInstallation = { customerIds: ["synthetic-org", "uncovered-org"] };
+  }
+  if (changed === "inactive") {
+    f.reader.readActiveOrganization = async () => null;
+  }
+  if (changed === "unknown") {
+    f.readActiveOrganization.mockRejectedValue(new Error("private-provider-secret"));
+  }
+  if (changed === "wrong-tenant") {
+    f.observation.data.customer_id = "foreign-org";
+  }
+  if (changed === "wrong-release") {
+    f.observation.data.active_base_revision = "previous-release";
+  }
+  if (changed === "wrong-artifact") {
+    f.observation.data.releases[0].artifact_hashes.base = "f".repeat(64);
+  }
+  if (changed === "scope-revoked") {
+    f.readInstallationScopes
+      .mockResolvedValueOnce(f.retained)
+      .mockRejectedValueOnce(new Error("approval-revoked"));
+  }
+  if (changed === "scope-changed") {
+    f.readInstallationScopes
+      .mockResolvedValueOnce(f.retained)
+      .mockResolvedValueOnce([{ ...f.retained[0], actorId: "replacement-actor" }]);
+  }
+  if (changed === "owner-revoked") {
+    f.readActiveOrganization.mockImplementation(async () => {
+      f.deps.assertAuthorized.mockRejectedValue(new Error("owner-revoked"));
+      return f.observation;
+    });
+  }
+  if (changed === "lost-lease") {
+    f.readActiveOrganization.mockImplementation(async () => {
+      f.input.assertCurrent.mockRejectedValue(new Error("lease-revoked"));
+      return f.observation;
+    });
+  }
+  await expect(f.verify(f.input)).rejects.toThrow("hosted_app_runtime_readiness_unconfirmed");
+  expect(f.input.plan.access).toEqual([]);
+});

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import postgres from "postgres";
 import { z } from "zod";
 import { hostedOperatorPlanSchema } from "./hosted-operator-contract";
@@ -361,11 +362,48 @@ export interface AppReadinessDependencies {
   /** Trusted connection adapter; production uses fixed metadata queries and binding row locks. */
   readRuntimeSnapshot?: ReadAppRuntimeSnapshot;
   assertAuthorized: (input: HostedOperatorContext & { plan: HostedOperatorPlan }) => Promise<void>;
+  /** Canonically approved historical actor scopes, never installation customer IDs treated as grants. */
+  readInstallationScopes?: (input: AppReadinessInput) => Promise<OperatorAppMetadataScope[]>;
   /** Owner-bound private credential reader; never a caller/model URL. */
   readRuntimeUrl: (input: AppReadinessInput) => Promise<string>;
   /** Source-owned artifact reader. Its bytes must match the frozen manifest digest. */
   readReleaseManifest: (input: AppReadinessInput) => Promise<Uint8Array>;
 }
+
+const readInstallationReadinessScopes = async (
+  deps: AppReadinessDependencies,
+  input: AppReadinessInput,
+) => {
+  if (deps.readInstallationScopes === undefined) {
+    throw reject();
+  }
+  return await deps.readInstallationScopes(input);
+};
+const canonicalMetadataScopes = (scopes: readonly OperatorAppMetadataScope[]) =>
+  scopes
+    .map((scope) => JSON.stringify([scope.appId, scope.actorId, scope.organizationId, scope.role]))
+    .toSorted();
+
+const readInstalledAppOrganization = async (
+  reader: AppRuntimeSnapshotReader,
+  scopes: readonly OperatorAppMetadataScope[],
+  organizationId: string,
+  guard: () => Promise<void>,
+) => {
+  if (reader.readActiveOrganization === undefined) {
+    throw reject();
+  }
+  for (const scope of scopes.filter((candidate) => candidate.organizationId === organizationId)) {
+    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Recheck authority before each actor scope on the same locking snapshot.
+    await guard();
+    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Only closed inactive bindings may be skipped; unknown metadata must fail.
+    const result = await reader.readActiveOrganization(scope);
+    if (result !== null) {
+      return result;
+    }
+  }
+  throw reject();
+};
 
 /** Independent restricted-runtime readback; does not establish app business behavior. */
 export const createHostedOperatorAppReadiness =
@@ -404,8 +442,19 @@ export const createHostedOperatorAppReadiness =
           approvedByOrganization.set(access.organizationId, access);
         }
       }
+      const installationOnly = plan.access.length === 0;
+      const installationScopes = installationOnly
+        ? await readInstallationReadinessScopes(deps, input)
+        : [];
+      if (installationScopes.some((scope) => scope.appId !== plan.selection.appId)) {
+        throw reject();
+      }
       const organizations = [
-        ...new Set(plan.access.map((access) => access.organizationId)),
+        ...new Set(
+          installationOnly
+            ? (plan.appInstallation?.customerIds ?? [])
+            : plan.access.map((access) => access.organizationId),
+        ),
       ].toSorted();
       if (organizations.length === 0) {
         throw reject();
@@ -437,22 +486,34 @@ export const createHostedOperatorAppReadiness =
             await guard();
             observeStage("approved_access");
             // eslint-disable-next-line no-await-in-loop, react-doctor/async-await-in-loop -- One runtime transaction provides a consistent release observation for the approved tenant batch.
-            const approved = approvedByOrganization.get(organizationId);
-            const [role] = approved?.roles.toSorted() ?? [];
-            if (approved === undefined || role === undefined) {
-              throw reject();
-            }
-            observeStage("runtime_release");
-            // eslint-disable-next-line no-await-in-loop, react-doctor/async-await-in-loop -- Keep approved tenant contexts sequential on one locking metadata transaction.
-            const result = await reader.readOrganization(
-              {
-                actorId: approved.actorId,
-                appId: plan.selection.appId,
+            let result: z.infer<typeof observationSchema> | null = null;
+            if (installationOnly) {
+              observeStage("runtime_release");
+              // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Each exact installed tenant needs its own current actor-bound release observation.
+              result = await readInstalledAppOrganization(
+                reader,
+                installationScopes,
                 organizationId,
-                role,
-              },
-              observeStage,
-            );
+                guard,
+              );
+            } else {
+              const approved = approvedByOrganization.get(organizationId);
+              const [role] = approved?.roles.toSorted() ?? [];
+              if (approved === undefined || role === undefined) {
+                throw reject();
+              }
+              observeStage("runtime_release");
+              // eslint-disable-next-line no-await-in-loop, react-doctor/async-await-in-loop -- Keep approved tenant contexts sequential on one locking metadata transaction.
+              result = await reader.readOrganization(
+                {
+                  actorId: approved.actorId,
+                  appId: plan.selection.appId,
+                  organizationId,
+                  role,
+                },
+                observeStage,
+              );
+            }
             const { data: observation } = result;
             const active = observation.releases.filter(
               (release) => release.schema_revision_id === observation.active_schema_revision_id,
@@ -488,6 +549,18 @@ export const createHostedOperatorAppReadiness =
         },
       );
       await guard();
+      if (installationOnly) {
+        const latestScopes = await readInstallationReadinessScopes(deps, input);
+        if (
+          !isDeepStrictEqual(
+            canonicalMetadataScopes(latestScopes),
+            canonicalMetadataScopes(installationScopes),
+          )
+        ) {
+          throw reject();
+        }
+        await guard();
+      }
       return {
         // SQL release observation does not authenticate any human actor.
         actors: 0,

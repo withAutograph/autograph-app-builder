@@ -53,6 +53,7 @@ import { createTenantExportDispatcher } from "./hosted-operator-export-transport
 import { resolveExportOwnerOrganization } from "./hosted-operator-export-customer";
 import { createPrivateTenantExportApprovalCapture } from "../eve/private-export-approval";
 import {
+  isFinalResourceBindingLeaseRenewal,
   requireFinalResourceBindingPhase,
   selectAuthPlanningResourceBindingRow,
 } from "./hosted-operator-resource-binding-phase";
@@ -491,6 +492,10 @@ const membershipSpecForEffect = (input: HostedOperatorEffectContext) => {
 };
 
 interface AppInstallationPlanningPort {
+  readAppInstallationMetadataScopes?: (
+    context: HostedOperatorContext,
+    plan: HostedOperatorPlan,
+  ) => Promise<OperatorAppMetadataScope[]>;
   readAppInstallationCustomerIds?: (
     context: HostedOperatorContext,
     plan: HostedOperatorPlan,
@@ -523,21 +528,26 @@ const unselectedInstallationScopes = (
   return selected;
 };
 
-/** Prior approvals identify retained scope; only live actor-bound metadata makes it a schema target. */
-export const createRetainedAppInstallationCustomerReader =
-  (deps: {
-    readOwner: (context: HostedOperatorContext) => Promise<{ session: HostedSessionRecord }>;
-    readApproval: (
-      context: HostedOperatorContext,
-      receipt: PrivateHostedApprovalReceipt,
-    ) => Promise<PrivateHostedApprovalReceipt | null>;
-    readActiveCustomers: (
-      context: HostedOperatorContext,
-      plan: HostedOperatorPlan,
-      scopes: readonly OperatorAppMetadataScope[],
-    ) => Promise<string[]>;
-  }) =>
-  async (context: HostedOperatorContext, plan: HostedOperatorPlan): Promise<string[]> => {
+interface RetainedAppScopeDependencies {
+  readOwner: (context: HostedOperatorContext) => Promise<{ session: HostedSessionRecord }>;
+  readApproval: (
+    context: HostedOperatorContext,
+    receipt: PrivateHostedApprovalReceipt,
+  ) => Promise<PrivateHostedApprovalReceipt | null>;
+}
+
+/** Prior approvals identify metadata scope only; they do not grant access or authorize credentials. */
+const createRetainedAppScopeObservationReader =
+  <T>(
+    deps: RetainedAppScopeDependencies & {
+      observeScopes: (
+        context: HostedOperatorContext,
+        plan: HostedOperatorPlan,
+        scopes: readonly OperatorAppMetadataScope[],
+      ) => Promise<T>;
+    },
+  ) =>
+  async (context: HostedOperatorContext, plan: HostedOperatorPlan): Promise<T> => {
     const candidates = (canonicalSession: HostedSessionRecord) => {
       const currentOwner = operatorOwnerContextSchema.parse(context.ownerContext);
       if (
@@ -614,8 +624,8 @@ export const createRetainedAppInstallationCustomerReader =
         scopes.set(JSON.stringify(scope), scope);
       }
     }
-    const active =
-      scopes.size === 0 ? [] : await deps.readActiveCustomers(context, plan, [...scopes.values()]);
+    const observed = await deps.observeScopes(context, plan, [...scopes.values()]);
+    // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Recheck canonical ownership and revocation after the observed scoped read.
     const freshOwner = await deps.readOwner(context);
     const latest = candidates(freshOwner.session);
     if (
@@ -623,12 +633,38 @@ export const createRetainedAppInstallationCustomerReader =
     ) {
       throw new HostedOperatorError("authorization_required");
     }
-    const allowed = new Set([...scopes.values()].map((scope) => scope.organizationId));
-    if (active.some((customerId) => !allowed.has(customerId))) {
-      throw new HostedOperatorError("resource_mismatch");
-    }
-    return [...new Set(active)];
+    return observed;
   };
+
+/** Retained scopes remain observations; callers must verify current active bindings and the desired release. */
+export const createRetainedAppInstallationScopeReader = (deps: RetainedAppScopeDependencies) =>
+  createRetainedAppScopeObservationReader({
+    ...deps,
+    observeScopes: (_context, _plan, scopes) => Promise.resolve([...scopes]),
+  });
+
+/** Prior approvals identify retained scope; only live actor-bound metadata makes it a schema target. */
+export const createRetainedAppInstallationCustomerReader = (
+  deps: RetainedAppScopeDependencies & {
+    readActiveCustomers: (
+      context: HostedOperatorContext,
+      plan: HostedOperatorPlan,
+      scopes: readonly OperatorAppMetadataScope[],
+    ) => Promise<string[]>;
+  },
+) =>
+  createRetainedAppScopeObservationReader({
+    ...deps,
+    observeScopes: async (context, plan, scopes) => {
+      const active =
+        scopes.length === 0 ? [] : await deps.readActiveCustomers(context, plan, scopes);
+      const allowed = new Set(scopes.map((scope) => scope.organizationId));
+      if (active.some((customerId) => !allowed.has(customerId))) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+      return [...new Set(active)];
+    },
+  });
 
 export const createHostedOperatorControlPlane = async (input: {
   environment?: Readonly<Record<string, string | undefined>>;
@@ -1468,7 +1504,8 @@ export const createHostedOperatorControlPlane = async (input: {
         effectInput,
       );
       if (
-        latest.revision !== current.revision ||
+        (latest.revision !== current.revision &&
+          !isFinalResourceBindingLeaseRenewal(current, latest)) ||
         JSON.stringify(latest.record.operator) !== JSON.stringify(operator)
       ) {
         throw new HostedOperatorError("operation_in_progress");
@@ -1476,20 +1513,25 @@ export const createHostedOperatorControlPlane = async (input: {
       return bindings;
     };
 
+    const retainedAppScopeAuthority: RetainedAppScopeDependencies = {
+      readOwner: owner.readCurrentPlanningOwner,
+      readApproval: async (context, receipt) =>
+        await readPrivateHostedApproval({
+          store: eve,
+          principal: operatorOwnerContextSchema.parse(context.ownerContext).principal,
+          sessionId: context.target.sessionId,
+          callId: receipt.callId,
+          action: "prepare",
+          planDigest: receipt.toolInput.planDigest,
+          selection: receipt.toolInput.plan.selection,
+          requestId: receipt.requestId,
+        }),
+    };
     const installationPlanning: AppInstallationPlanningPort = {
+      readAppInstallationMetadataScopes:
+        createRetainedAppInstallationScopeReader(retainedAppScopeAuthority),
       readAppInstallationCustomerIds: createRetainedAppInstallationCustomerReader({
-        readOwner: owner.readCurrentPlanningOwner,
-        readApproval: async (context, receipt) =>
-          await readPrivateHostedApproval({
-            store: eve,
-            principal: operatorOwnerContextSchema.parse(context.ownerContext).principal,
-            sessionId: context.target.sessionId,
-            callId: receipt.callId,
-            action: "prepare",
-            planDigest: receipt.toolInput.planDigest,
-            selection: receipt.toolInput.plan.selection,
-            requestId: receipt.requestId,
-          }),
+        ...retainedAppScopeAuthority,
         readActiveCustomers: createAppInstallationPlanningResourceReader({
           assertPlanningAuthorized: owner.assertPlanningAuthorized,
           store,

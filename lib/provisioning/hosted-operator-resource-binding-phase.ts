@@ -7,6 +7,28 @@ import {
 import type { HostedOperatorPlan } from "./hosted-operator-contract";
 import type { HostedRuntimeJournalRecord, HostedRuntimeJournalRow } from "./hosted-runtime-journal";
 
+/** A heartbeat may advance the revision without changing the approved read checkpoint. */
+export const isFinalResourceBindingLeaseRenewal = (
+  current: HostedRuntimeJournalRow,
+  latest: HostedRuntimeJournalRow,
+) => {
+  const { leaseExpiresAt: currentExpiry, ...currentCheckpoint } = current.record;
+  const { leaseExpiresAt: latestExpiry, ...latestCheckpoint } = latest.record;
+  if (
+    currentExpiry === undefined ||
+    latestExpiry === undefined ||
+    current.record.leaseId === undefined
+  ) {
+    return false;
+  }
+  return [
+    current.record.leaseId.length > 0,
+    latest.revision > current.revision,
+    Date.parse(latestExpiry) > Date.parse(currentExpiry),
+    isDeepStrictEqual(currentCheckpoint, latestCheckpoint),
+  ].every(Boolean);
+};
+
 interface ResourceBindingReadInput {
   plan: HostedOperatorPlan;
   privateState?: HostedRuntimeJournalRecord["privateState"];
