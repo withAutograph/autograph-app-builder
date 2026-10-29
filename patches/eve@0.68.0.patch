@@ -806,7 +806,8 @@ diff --git a/dist/src/execution/session/recovery-candidate.js b/dist/src/executi
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.js
-@@ -0,0 +1,630 @@
+@@ -0,0 +1,632 @@
++import { createRecoveryHistoryInterner } from "#execution/session/recovery-history-interning.js";
 +import {
 +  sessionCommandHookToken,
 +  sessionInboxHookToken,
@@ -911,6 +912,7 @@ new file mode 100644
 +    });
 +    if (owner.kind !== "resolved") return owner;
 +    const { run, key } = owner;
++    const history = createRecoveryHistoryInterner(binding.logicalSessionId);
 +    const events = [];
 +    const seenEvents = new Set();
 +    let cursor;
@@ -996,7 +998,7 @@ new file mode 100644
 +        name !== "terminateChildSessionsStep"
 +      ) {
 +        try {
-+          retained.output = await dependencies.hydrateStepReturnValue(step.output, run.runId, key);
++          retained.output = history.checkpoint(await dependencies.hydrateStepReturnValue(step.output, run.runId, key));
 +        } catch {
 +          issues.push({ reason: "native-step-output-unreadable", stepId });
 +        }
@@ -1007,7 +1009,7 @@ new file mode 100644
 +        (name !== "turnStep" || step.status === "failed" || completedTerminalError)
 +      ) {
 +        try {
-+          retained.arguments = await dependencies.hydrateStepArguments(step.input, run.runId, key);
++          retained.arguments = history.stepArguments(await dependencies.hydrateStepArguments(step.input, run.runId, key));
 +        } catch {
 +          issues.push({ reason: "native-step-input-unreadable", stepId });
 +        }
@@ -1926,10 +1928,10 @@ index 0000000..a320829
 +}): Promise<TerminalCheckpointOwnerResolution>;
 diff --git a/dist/src/execution/session/recovery-owner-provenance.js b/dist/src/execution/session/recovery-owner-provenance.js
 new file mode 100644
-index 0000000..27307c0
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-owner-provenance.js
-@@ -0,0 +1,454 @@
+@@ -0,0 +1,456 @@
++import { createRecoveryHistoryInterner } from "#execution/session/recovery-history-interning.js";
 +import { isDeepStrictEqual } from "node:util";
 +import {
 +  sessionCommandHookToken,
@@ -1953,6 +1955,7 @@ index 0000000..27307c0
 +  dependencies,
 +}) {
 +  const authorize = () => authorizeOwner(binding);
++  const history = createRecoveryHistoryInterner(binding.logicalSessionId);
 +  const runs = new Map([[anchor.runId, anchor]]);
 +  const entries = new Map();
 +  const logs = new Map();
@@ -1983,7 +1986,7 @@ index 0000000..27307c0
 +        run.runId,
 +        await keyFor(run),
 +      );
-+      entries.set(run.runId, Array.isArray(args) && args.length === 1 ? args[0] : undefined);
++      entries.set(run.runId, Array.isArray(args) && args.length === 1 ? history.checkpoint(args[0]) : undefined);
 +    }
 +    return entries.get(run.runId);
 +  };
@@ -2061,7 +2064,7 @@ index 0000000..27307c0
 +            : await dependencies.hydrateStepArguments(step.input, run.runId, await keyFor(run));
 +        retainedSteps.set(cacheKey, {
 +          step: { ...step, input: undefined, output: undefined },
-+          input: args?.args?.[0],
++          input: history.checkpoint(args?.args?.[0]),
 +        });
 +      }
 +      selected.push(retainedSteps.get(cacheKey));
@@ -5021,3 +5024,232 @@ diff --git a/dist/src/internal/workflow-bundle/eve-service-route-output.js b/dis
 \ No newline at end of file
 +const EVE_SHARED_SERVER_FUNCTION_PATH=`eve/__server.func`,EVE_WORKFLOW_FLOW_ROUTE_PATH=`/.well-known/workflow/v1/flow`,EVE_VERCEL_FUNCTION_PREFIXES=[`eve/`,`.well-known/workflow/`];function isRecord(e){return typeof e==`object`&&!!e&&!Array.isArray(e)}function isEveVercelFunctionPath(e){return EVE_VERCEL_FUNCTION_PREFIXES.some(t=>e.startsWith(t))}function normalizeEveVercelRoutes(e,t){return e.filter(isEveVercelRoute).map(normalizeEveVercelRoute)}function isEveVercelRoute(e){if(!isRecord(e)||`handle`in e)return!0;let t=typeof e.src==`string`?e.src:``,n=typeof e.dest==`string`?e.dest:``;return isEveVercelRoutePath(t)||isEveVercelRoutePath(n)}function isEveVercelRoutePath(e){return e.includes(`/eve/v1`)||e.includes(`/.well-known/workflow/`)}function isEveProtocolRoutePath(e){return e.includes(`/eve/v1`)}function normalizeEveVercelRoute(e){if(!isRecord(e)||`handle`in e||typeof e.src!=`string`)return e;let t=isEveProtocolRoutePath(e.src)||typeof e.dest==`string`&&isEveProtocolRoutePath(e.dest),n={...e};return t&&!(e.src===`/eve/v1/session`&&e.dest===`/eve/v1/session`)&&(n.dest=`/eve/__server`),n}export{EVE_SHARED_SERVER_FUNCTION_PATH,EVE_WORKFLOW_FLOW_ROUTE_PATH,isEveVercelFunctionPath,normalizeEveVercelRoutes};
 \ No newline at end of file
+diff --git a/dist/src/execution/session/recovery-history-interning.js b/dist/src/execution/session/recovery-history-interning.js
+new file mode 100644
+--- /dev/null
++++ b/dist/src/execution/session/recovery-history-interning.js
+@@ -0,0 +1,214 @@
++import { createHash } from "node:crypto";
++import { isDeepStrictEqual, types } from "node:util";
++
++const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
++const plain = (value) => {
++  if (types.isProxy(value)) return false;
++  const prototype = Object.getPrototypeOf(value);
++  return Array.isArray(value)
++    ? prototype === Array.prototype
++    : prototype === Object.prototype || prototype === null;
++};
++const dataRecord = (value) =>
++  record(value) &&
++  plain(value) &&
++  Reflect.ownKeys(value).every((key) => {
++    const descriptor = Object.getOwnPropertyDescriptor(value, key);
++    return typeof key === "string" && descriptor.enumerable && "value" in descriptor;
++  });
++// No rendered JSON copies, getters, branded values, cycles or alias rewriting.
++const messageHash = (message) => {
++  const hash = createHash("sha256");
++  const seen = new WeakSet();
++  const pending = [message];
++  while (pending.length > 0) {
++    const value = pending.pop();
++    if (value === null) {
++      hash.update("null;");
++      continue;
++    }
++    switch (typeof value) {
++      case "string":
++        hash.update(`s${value.length}:`);
++        hash.update(value);
++        continue;
++      case "boolean":
++        hash.update(value ? "true;" : "false;");
++        continue;
++      case "number":
++        if (!Number.isFinite(value)) return;
++        hash.update(Object.is(value, -0) ? "n-0;" : `n${value};`);
++        continue;
++      case "object":
++        break;
++      default:
++        return;
++    }
++    if (
++      seen.has(value) ||
++      !plain(value) ||
++      Object.getOwnPropertyDescriptor(value, "kind")?.value ===
++        "native-recovery-transport-reference"
++    )
++      return;
++    seen.add(value);
++    const keys = Reflect.ownKeys(value);
++    const array = Array.isArray(value);
++    if (
++      array &&
++      (keys.length !== value.length + 1 ||
++        !keys.slice(0, -1).every((key, index) => key === String(index)))
++    )
++      return;
++    hash.update(
++      array
++        ? `a${value.length}:`
++        : Object.getPrototypeOf(value) === null
++          ? "null-object:"
++          : "object:",
++    );
++    const children = [];
++    for (const key of keys) {
++      if (array && key === "length") continue;
++      if (typeof key !== "string") return;
++      const descriptor = Object.getOwnPropertyDescriptor(value, key);
++      if (!descriptor.enumerable || !("value" in descriptor)) return;
++      hash.update(`k${key.length}:`);
++      hash.update(key);
++      children.push(descriptor.value);
++    }
++    for (let index = children.length - 1; index >= 0; index--) pending.push(children[index]);
++    hash.update(";");
++  }
++  return hash.digest("hex");
++};
++const immutableCopy = (message) => {
++  const container = (source) =>
++    Array.isArray(source) ? [] : Object.create(Object.getPrototypeOf(source));
++  const result = container(message);
++  const pending = [[message, result]];
++  const copies = [];
++  while (pending.length > 0) {
++    const [source, target] = pending.pop();
++    copies.push(target);
++    for (const key of Object.keys(source)) {
++      const value = Object.getOwnPropertyDescriptor(source, key).value;
++      const copy = value !== null && typeof value === "object" ? container(value) : value;
++      Object.defineProperty(target, key, {
++        value: copy,
++        enumerable: true,
++        writable: true,
++        configurable: true,
++      });
++      if (copy !== value) pending.push([value, copy]);
++    }
++  }
++  for (const copy of copies) Object.freeze(copy);
++  return result;
++};
++
++/** Per-authorized-collection value sharing only; mutable authority and context stay untouched. */
++export function createRecoveryHistoryInterner(logicalSessionId) {
++  const strings = new Map();
++  const canonicalizeContext = (context) => {
++    const seen = new WeakSet();
++    const pending = [context];
++    while (pending.length > 0) {
++      const value = pending.pop();
++      if (value === null || typeof value !== "object" || !plain(value) || seen.has(value)) continue;
++      seen.add(value);
++      for (const key of Reflect.ownKeys(value)) {
++        if (typeof key !== "string") continue;
++        const descriptor = Object.getOwnPropertyDescriptor(value, key);
++        if (!descriptor.enumerable || !descriptor.writable || !("value" in descriptor)) continue;
++        const child = descriptor.value;
++        if (typeof child === "string") {
++          let canonical = strings.get(child);
++          if (canonical === undefined) {
++            canonical = child;
++            strings.set(child, child);
++          }
++          // Same primitive value, existing writable own data property: no
++          // context/permission identity, descriptor, ordering or value changes.
++          value[key] = canonical;
++        } else if (child !== null && typeof child === "object") pending.push(child);
++      }
++    }
++  };
++  const messages = new Map();
++  const messageMemo = new WeakMap();
++  const stateMemo = new WeakMap();
++  const internMessage = (message) => {
++    if (!record(message)) return message;
++    if (messageMemo.has(message)) return messageMemo.get(message);
++    try {
++      const digest = messageHash(message);
++      if (digest === undefined) return message;
++      const bucket = messages.get(digest) ?? [];
++      let shared = bucket.find((candidate) => isDeepStrictEqual(candidate, message));
++      if (shared === undefined) {
++        shared = immutableCopy(message);
++        bucket.push(shared);
++        messages.set(digest, bucket);
++      }
++      messageMemo.set(message, shared);
++      messageMemo.set(shared, shared);
++      return shared;
++    } catch {
++      // Optional value sharing cannot turn a readable checkpoint into a refusal.
++      return message;
++    }
++  };
++  const internState = (state) => {
++    if (!dataRecord(state)) return state;
++    if (stateMemo.has(state)) return stateMemo.get(state);
++    if (!dataRecord(state.snapshot)) return state;
++    const session = state.snapshot.session;
++    if (
++      state.version !== 1 ||
++      state.sessionId !== logicalSessionId ||
++      !dataRecord(session) ||
++      session.sessionId !== logicalSessionId ||
++      !Array.isArray(session.history) ||
++      !plain(session.history) ||
++      Reflect.ownKeys(session.history).length !== session.history.length + 1 ||
++      !Reflect.ownKeys(session.history)
++        .slice(0, -1)
++        .every((key, index) => {
++          const descriptor = Object.getOwnPropertyDescriptor(session.history, key);
++          return key === String(index) && descriptor.enumerable && "value" in descriptor;
++        })
++    )
++      return state;
++    // Never mutate a history array/session also aliased by state or context.
++    const history = session.history.map(internMessage);
++    const result = { ...state, snapshot: { ...state.snapshot, session: { ...session, history } } };
++    stateMemo.set(state, result);
++    return result;
++  };
++  const checkpoint = (value) => {
++    if (!dataRecord(value)) return value;
++    canonicalizeContext(value.serializedContext);
++    canonicalizeContext(value.backgroundTaskContext);
++    let result = value;
++    for (const key of ["sessionState", "backgroundTaskState"]) {
++      if (value[key] === undefined) continue;
++      const state = internState(value[key]);
++      if (state !== value[key]) result = { ...result, [key]: state };
++    }
++    if (dataRecord(value.checkpoint)) {
++      const previous = value.checkpoint;
++      canonicalizeContext(previous.serializedContext);
++      const state = internState(previous.sessionState);
++      if (state !== previous.sessionState)
++        result = { ...result, checkpoint: { ...previous, sessionState: state } };
++    }
++    return result;
++  };
++  const stepArguments = (value) => {
++    if (!dataRecord(value) || !Array.isArray(value.args) || value.args.length === 0) return value;
++    const first = checkpoint(value.args[0]);
++    return first === value.args[0] ? value : { ...value, args: [first, ...value.args.slice(1)] };
++  };
++  return { checkpoint, stepArguments };
++}
+diff --git a/dist/src/execution/session/recovery-history-interning.d.ts b/dist/src/execution/session/recovery-history-interning.d.ts
+new file mode 100644
+--- /dev/null
++++ b/dist/src/execution/session/recovery-history-interning.d.ts
+@@ -0,0 +1,5 @@
++/** Private, per-collection immutable history-value sharing; never shares mutable authority. */
++export declare function createRecoveryHistoryInterner(logicalSessionId: string): {
++  readonly checkpoint: <T>(value: T) => T;
++  readonly stepArguments: <T>(value: T) => T;
++};

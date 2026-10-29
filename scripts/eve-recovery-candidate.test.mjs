@@ -2,6 +2,7 @@
 /* oxlint-disable typescript/no-unsafe-assignment, typescript/no-unsafe-call, typescript/no-unsafe-member-access, typescript/no-unsafe-return, typescript/no-unsafe-argument -- Synthetic regression loads private installed native SDK modules by package path. */
 /* oxlint-disable sonarjs/no-duplicate-string -- Exact native fixture identities are reused across provenance assertions. */
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -1065,4 +1066,249 @@ test("legacy missing names read metadata before hydrating only relevant native s
     payload.candidates.find(({ kind }) => kind === "committed-turn-output").sessionState,
     f.prior.sessionState,
   );
+});
+
+const { createRecoveryHistoryInterner } = await load(
+  "dist/src/execution/session/recovery-history-interning.js",
+);
+const memoryCheckpoint = (history, state = {}) => ({
+  serializedContext: { "eve.sessionId": logicalSessionId },
+  sessionState: {
+    version: 1,
+    sessionId: logicalSessionId,
+    emissionState: { sequence: 1, stepIndex: 1, turnId: "original" },
+    snapshot: { session: { sessionId: logicalSessionId, history, state } },
+  },
+});
+test("646 independent checkpoint histories retain every value while sharing immutable equal message nodes", () => {
+  const intern = createRecoveryHistoryInterner(logicalSessionId);
+  const history = Array.from({ length: 16 }, (_, index) => ({
+    role: "tool",
+    content: [
+      {
+        type: "tool-result",
+        toolCallId: `original-${index}`,
+        output: { type: "json", value: "x".repeat(1024) },
+      },
+    ],
+  }));
+  const records = Array.from({ length: 646 }, (_, index) => {
+    const original = memoryCheckpoint(structuredClone(history), {
+      grant: { original: index },
+    });
+    const shared = intern.checkpoint(original);
+    assert.deepEqual(shared, original);
+    assert.equal(shared.serializedContext, original.serializedContext);
+    assert.equal(
+      shared.sessionState.snapshot.session.state,
+      original.sessionState.snapshot.session.state,
+    );
+    assert.notEqual(
+      shared.sessionState.snapshot.session.history,
+      original.sessionState.snapshot.session.history,
+    );
+    return shared;
+  });
+  assert.equal(records.length, 646);
+  const uniqueMessages = new Set(
+    records.flatMap((value) => value.sessionState.snapshot.session.history),
+  );
+  assert.equal(uniqueMessages.size, history.length);
+  const shared = records[0].sessionState.snapshot.session.history[0];
+  assert.equal(Object.isFrozen(shared), true);
+  assert.equal(Object.isFrozen(shared.content[0].output), true);
+  assert.throws(() => {
+    shared.content[0].output.value = "changed";
+  }, TypeError);
+  assert.equal(
+    records[645].sessionState.snapshot.session.history[0].content[0].output.value,
+    "x".repeat(1024),
+  );
+});
+test("mutable context, session and permission aliases remain untouched while historical evidence is immutable", () => {
+  const message = {
+    role: "tool",
+    content: [{ type: "tool-approval-response", approvalId: "original", approved: true }],
+  };
+  const history = [message];
+  const permission = { historicalMessage: message, mutableGrant: true };
+  const original = memoryCheckpoint(history, permission);
+  original.serializedContext.originalSession = original.sessionState.snapshot.session;
+  original.serializedContext.originalHistory = history;
+  const shared = createRecoveryHistoryInterner(logicalSessionId).checkpoint(original);
+  assert.equal(shared.serializedContext, original.serializedContext);
+  assert.equal(shared.sessionState.snapshot.session.state, permission);
+  assert.equal(original.sessionState.snapshot.session.history, history);
+  assert.equal(shared.serializedContext.originalHistory, history);
+  assert.notEqual(shared.sessionState.snapshot.session, original.sessionState.snapshot.session);
+  assert.notEqual(shared.sessionState.snapshot.session.history[0], message);
+  permission.mutableGrant = false;
+  permission.historicalMessage.content[0].approved = false;
+  history.push({ role: "user", content: "later live state" });
+  assert.equal(Object.isFrozen(permission), false);
+  assert.equal(Object.isFrozen(message), false);
+  assert.equal(shared.sessionState.snapshot.session.state.mutableGrant, false);
+  assert.equal(shared.sessionState.snapshot.session.history.length, 1);
+  assert.equal(shared.sessionState.snapshot.session.history[0].content[0].approved, true);
+});
+test("different approvals and results never share a canonical history node", () => {
+  const intern = createRecoveryHistoryInterner(logicalSessionId);
+  const values = [
+    {
+      role: "tool",
+      content: [{ type: "tool-approval-response", approvalId: "original", approved: true }],
+    },
+    {
+      role: "tool",
+      content: [{ type: "tool-approval-response", approvalId: "original", approved: false }],
+    },
+    {
+      role: "tool",
+      content: [{ type: "tool-result", toolCallId: "original", output: { value: "one" } }],
+    },
+    {
+      role: "tool",
+      content: [{ type: "tool-result", toolCallId: "original", output: { value: "two" } }],
+    },
+  ];
+  const shared = values.map(
+    (message) =>
+      intern.checkpoint(memoryCheckpoint([message])).sessionState.snapshot.session.history[0],
+  );
+  assert.equal(new Set(shared).size, values.length);
+  assert.deepEqual(shared, values);
+});
+test("unsupported branded, cyclic and non-JSON-safe history values stay unchanged without invoking accessors", () => {
+  let accessed = 0;
+  const getter = {
+    role: "assistant",
+    get content() {
+      accessed += 1;
+      return "must-not-read";
+    },
+  };
+  const proxy = new Proxy(
+    {},
+    {
+      getPrototypeOf() {
+        accessed += 1;
+        throw new Error("must-not-read");
+      },
+    },
+  );
+  const cyclic = { role: "assistant" };
+  cyclic.content = cyclic;
+  class Branded {
+    role = "assistant";
+    content = "branded";
+  }
+  const messages = [
+    getter,
+    proxy,
+    cyclic,
+    new Branded(),
+    { role: "tool", content: new Map() },
+    { role: "tool", content: undefined },
+    { role: "tool", content: new Uint8Array([1]) },
+    { role: "tool", content: { kind: "native-recovery-transport-reference", value: "private" } },
+  ];
+  const shared = createRecoveryHistoryInterner(logicalSessionId).checkpoint(
+    memoryCheckpoint(messages),
+  );
+  for (const [index, message] of messages.entries()) {
+    assert.equal(shared.sessionState.snapshot.session.history[index], message);
+  }
+  assert.equal(accessed, 0);
+});
+test("real encrypted checkpoint hydration shares history but preserves all paired origins and authority", async () => {
+  const f = await fixture({ encrypted: true });
+  const result = await f.collect(f.input);
+  const payload = readTerminalRecoveryCandidate(result.candidate);
+  const messages = payload.candidates.map(
+    (value) => readDurableSession(value.sessionState).history[0],
+  );
+  assert.equal(new Set(messages).size, 1);
+  assert.equal(Object.isFrozen(messages[0]), true);
+  assert.deepEqual(payload.candidates[0].sessionState, f.final.sessionState);
+  assert.deepEqual(payload.candidates[0].serializedContext, f.final.serializedContext);
+  assert.deepEqual(payload.candidates[1].incoming, f.inputs.failed.input);
+});
+
+test("context primitive canonicalization preserves mutable identities, descriptors and unsupported branches", () => {
+  const sharedPermission = { issuer: "same-issuer", scope: "original" };
+  let getterReads = 0;
+  const context = { permission: sharedPermission, array: ["same-issuer"], readonly: "same-issuer" };
+  Object.defineProperty(context, "readonly", {
+    value: "same-issuer",
+    writable: false,
+    enumerable: true,
+  });
+  Object.defineProperty(context, "accessor", {
+    get() {
+      getterReads += 1;
+      return "must-not-read";
+    },
+    enumerable: true,
+  });
+  context.self = context;
+  context.branded = new Map([["issuer", "same-issuer"]]);
+  const beforeKeys = Reflect.ownKeys(context);
+  const readonly = Object.getOwnPropertyDescriptor(context, "readonly");
+  const value = memoryCheckpoint([], { grant: sharedPermission });
+  value.serializedContext = context;
+  const intern = createRecoveryHistoryInterner(logicalSessionId);
+  const result = intern.checkpoint(value);
+  assert.equal(result.serializedContext, context);
+  assert.equal(result.serializedContext.permission, sharedPermission);
+  assert.equal(result.sessionState.snapshot.session.state.grant, sharedPermission);
+  assert.deepEqual(Reflect.ownKeys(context), beforeKeys);
+  assert.deepEqual(Object.getOwnPropertyDescriptor(context, "readonly"), readonly);
+  assert.equal(context.self, context);
+  assert.equal(getterReads, 0);
+  sharedPermission.scope = "revoked";
+  assert.equal(result.serializedContext.permission.scope, "revoked");
+  assert.equal(Object.isFrozen(sharedPermission), false);
+});
+
+test("independently decoded retained contexts use less heap after exact primitive replacement", () => {
+  const moduleUrl = pathToFileURL(
+    path.resolve(eve, "dist/src/execution/session/recovery-history-interning.js"),
+  ).href;
+  const script = `
+    import { createRecoveryHistoryInterner } from ${JSON.stringify(moduleUrl)};
+    const optimized = process.argv[1] === "optimized";
+    const intern = createRecoveryHistoryInterner("synthetic");
+    const wire = JSON.stringify({ source: "synthetic-fixture-" + "x".repeat(262144), grant: { issuer: "synthetic-owner", active: true } });
+    global.gc(); const before = process.memoryUsage().heapUsed;
+    const contexts = [];
+    for (let index = 0; index < 192; index++) {
+      const context = JSON.parse(wire);
+      const grant = context.grant;
+      if (optimized) {
+        const output = intern.checkpoint({ serializedContext: context });
+        if (output.serializedContext !== context || context.grant !== grant) throw new Error("identity changed");
+      }
+      contexts.push(context);
+    }
+    global.gc(); global.gc();
+    console.log(JSON.stringify({ count: contexts.length, bytes: process.memoryUsage().heapUsed - before,
+      valuesEqual: contexts[0].source === contexts.at(-1).source, writable: !Object.isFrozen(contexts[0].grant) }));
+  `;
+  const run = (mode) => {
+    const result = spawnSync(
+      process.execPath,
+      ["--expose-gc", "--max-old-space-size=128", "--input-type=module", "-e", script, mode],
+      { env: { NODE_NO_WARNINGS: "1" }, encoding: "utf-8" },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    return JSON.parse(result.stdout);
+  };
+  const baseline = run("baseline");
+  const optimized = run("optimized");
+  assert.equal(baseline.count, 192);
+  assert.equal(optimized.count, 192);
+  assert.equal(optimized.valuesEqual, true);
+  assert.equal(optimized.writable, true);
+  assert.equal(baseline.bytes > 32 * 1024 * 1024, true);
+  assert.equal(optimized.bytes < baseline.bytes * 0.4, true);
 });
