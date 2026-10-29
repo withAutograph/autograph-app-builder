@@ -118,6 +118,16 @@ age-based deletion path.
 
 ## Idempotency and uncertain submissions
 
+The embedded Next integration routes `/eve/v1/*` directly to its separate Eve
+Vercel service. Its build emits a dedicated function with `maxDuration: 1800`
+for the exact `/eve/v1/session` endpoint and preserves that function destination
+through Eve output normalization. Other protocol routes retain their shared
+function; workflow queue triggers and duration remain unchanged. This is
+per-function deployment output, not a project-wide timeout change or an in-place
+update to an existing deployment. The caller can still time out earlier and
+record `submission_unknown`; the longer function window does not prove a receipt
+was committed or authorize a retry with different operation bytes.
+
 `start`, `send`, and `respond` reserve a tenant-bound operation before dispatch.
 The client request ID is bound to a canonical request digest. A completed retry
 returns the stored public result. Reusing the ID for different request bytes is
