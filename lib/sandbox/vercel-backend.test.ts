@@ -608,7 +608,7 @@ describe("Builder Vercel provider", () => {
       if ("projectId" in options && options.projectId !== undefined) {
         return Promise.reject(new Error("Missing credentials parameters"));
       }
-      return Promise.resolve(options.resume ? running : stopped);
+      return Promise.resolve(options.resume === true ? running : stopped);
     });
     const started = await createBuilderVercelProvider().start(context, undefined, {
       files: [{ path: "/workspace/private.txt", content: Buffer.from("seed").toString("base64") }],
