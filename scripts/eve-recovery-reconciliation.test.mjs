@@ -10,9 +10,11 @@ const eve = path.resolve(
   process.env.EVE_RECOVERY_NATIVE_ROOT ?? path.dirname(require.resolve("eve/package.json")),
 );
 const load = (name) => import(pathToFileURL(path.join(eve, "dist/src", name)).href);
-const { createTerminalRecoveryCandidateCollector, readTerminalRecoveryCandidate } = await load(
-  "execution/session/recovery-candidate.js",
-);
+const {
+  createTerminalRecoveryCandidateCollector,
+  readTerminalRecoveryCandidate,
+  readTerminalNativeEventsSnapshot,
+} = await load("execution/session/recovery-candidate.js");
 const { reconcileTerminalRecoveryCandidate } = await load(
   "execution/session/recovery-reconciliation.js",
 );
@@ -196,6 +198,44 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
     };
   }
   return { boundOwnerRunId, readOperations };
+};
+
+const attachNativeSnapshot = async (world, nativeEvents, enabled) => {
+  if (enabled !== true) {
+    return null;
+  }
+  const snapshotKey = await serialization.deriveRunPayloadKeys(new Uint8Array(32).fill(9));
+  const chunks = [];
+  const values = [...nativeEvents, { type: "text.delta", data: { text: "retained private tail" } }];
+  const readable = new ReadableStream({
+    start(controller) {
+      for (const nativeEvent of values) {
+        controller.enqueue(new TextEncoder().encode(`${JSON.stringify(nativeEvent)}\n`));
+      }
+      controller.close();
+    },
+  }).pipeThrough(
+    serialization.getSerializeStream(serialization.getWorkflowReducers(globalThis), snapshotKey),
+  );
+  for await (const data of readable) {
+    chunks.push({ index: chunks.length, data });
+  }
+  world.streams = {
+    getInfo: () => Promise.resolve({ tailIndex: chunks.length - 1, done: false }),
+    getChunks: (_id, _name, pagination) => {
+      const index = pagination.cursor === undefined ? 0 : Number(pagination.cursor);
+      return Promise.resolve({
+        data: chunks.slice(index, index + 1),
+        cursor: String(index + 1),
+        hasMore: index + 1 < chunks.length,
+        done: false,
+      });
+    },
+    get: () => {
+      throw new Error("Live native streams must not be followed.");
+    },
+  };
+  return snapshotKey;
 };
 
 const fixture = async (options = {}) => {
@@ -481,6 +521,7 @@ const fixture = async (options = {}) => {
     events,
     steps,
   });
+  const snapshotKey = await attachNativeSnapshot(world, nativeEvents, options.snapshot);
   let authorized = false;
   const collect = createTerminalRecoveryCandidateCollector({
     getWorld: async () => await Promise.resolve(world),
@@ -498,8 +539,10 @@ const fixture = async (options = {}) => {
     readDurableSession,
     requireEventSlot: (id) => Number(id.slice(5)),
     now: () => 0,
-    async *readNativeEvents() {
-      yield* nativeEvents;
+    async *readNativeEvents(runId) {
+      yield* options.snapshot === true
+        ? readTerminalNativeEventsSnapshot(world, runId, snapshotKey)
+        : nativeEvents;
     },
   });
   const collected = await collect({
@@ -661,7 +704,7 @@ test("historical failed step covered by a later committed turn does not block kn
 });
 
 test("provider-cancelled physical handoff reconciles latest native typed state without replay or effect execution", async () => {
-  const f = await fixture({ handoff: true, runStatus: "cancelled" });
+  const f = await fixture({ handoff: true, runStatus: "cancelled", snapshot: true });
   const payload = readTerminalRecoveryCandidate(f.collected.candidate);
   assert.equal(payload.run.status, "cancelled");
   assert.equal(payload.checkpointOwnerRunId, ownerRunId);

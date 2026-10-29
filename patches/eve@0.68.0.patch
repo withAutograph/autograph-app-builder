@@ -637,13 +637,18 @@ new file mode 100644
 index 0000000..7e0344b
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.d.ts
-@@ -0,0 +1,150 @@
+@@ -0,0 +1,155 @@
 +import type { World, WorkflowRun, Step, Event } from "#compiled/@workflow/world/index.js";
 +import type { PayloadKey } from "#compiled/@workflow/core/serialization/encryption.js";
 +import type { DurableSession, DurableSessionState } from "#execution/durable-session-store.js";
 +import type { TurnStepPayload } from "#execution/session/turn-step-types.js";
 +import type { NativeHandoffProvenance } from "#execution/session/recovery-owner-provenance.js";
 +import type { MessageStreamEvent } from "#protocol/message.js";
++
++/** Private finite reader; caller must first authorize the canonical native owner. */
++export declare function readTerminalNativeEventsSnapshot(
++  world: World, runId: string, key: PayloadKey | undefined,
++): AsyncIterable<MessageStreamEvent>;
 +
 +/** Obtained from a canonical tenant-scoped server reservation, never model/client authority. */
 +export interface NativeRecoveryOwnerBinding {
@@ -793,7 +798,7 @@ new file mode 100644
 index 0000000..9274615
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.js
-@@ -0,0 +1,392 @@
+@@ -0,0 +1,491 @@
 +import { resolveTerminalCheckpointOwner } from "#execution/session/recovery-owner-provenance.js";
 +// Server-only native checkpoint inspection. This module never starts/resumes a run.
 +// The caller MUST supply canonical ownership authorization; model/client IDs are
@@ -1143,14 +1148,110 @@ index 0000000..9274615
 +  };
 +}
 +
++/** Read a finite, unchanged prefix without following an unclosed terminal stream. */
++export async function* readTerminalNativeEventsSnapshot(world, runId, key) {
++  const [serialization, stream, protocol] = await Promise.all([
++    import("#compiled/@workflow/core/serialization.js"),
++    import("#execution/ndjson-stream.js"),
++    import("#protocol/message-version.js"),
++  ]);
++  // Native Run.getReadable()'s default user-stream namespace.
++  const name = `${runId.replace("wrun_", "strm_")}_user`;
++  const before = await world.streams.getInfo(runId, name);
++  if (
++    !Number.isSafeInteger(before.tailIndex) ||
++    before.tailIndex < -1 ||
++    typeof before.done !== "boolean"
++  )
++    throw new Error("Incomplete native stream.");
++  let index = 0;
++  let cursor;
++  const cursors = new Set();
++  const chunks = [];
++  do {
++    const page = await world.streams.getChunks(runId, name, {
++      limit: 128,
++      ...(cursor === undefined ? {} : { cursor }),
++    });
++    if (page.done !== before.done || typeof page.hasMore !== "boolean")
++      throw new Error("Changed native stream.");
++    for (const chunk of page.data) {
++      if (
++        chunk.index !== index ||
++        index > before.tailIndex ||
++        !(chunk.data instanceof Uint8Array) ||
++        chunk.data.byteLength < 4
++      )
++        throw new Error("Incomplete native stream.");
++      // Native framed serialization writes exactly one complete frame per index.
++      // getDeserializeStream alone silently retains incomplete frame bytes at EOF.
++      const length = new DataView(
++        chunk.data.buffer,
++        chunk.data.byteOffset,
++        chunk.data.byteLength,
++      ).getUint32(0, false);
++      if (length === 0 || length + 4 !== chunk.data.byteLength)
++        throw new Error("Incomplete native stream frame.");
++      chunks.push(chunk.data);
++      index++;
++    }
++    if (!page.hasMore) break;
++    if (page.data.length === 0 || !page.cursor || cursors.has(page.cursor))
++      throw new Error("Incomplete native stream pagination.");
++    cursors.add(page.cursor);
++    cursor = page.cursor;
++  } while (true);
++  if (index !== before.tailIndex + 1) throw new Error("Incomplete native stream.");
++  const inert = Object.fromEntries(
++    ["ReadableStream", "WritableStream", "AbortController", "AbortSignal"].map((type) => [
++      type,
++      (value) => Object.freeze({ kind: "native-recovery-transport-reference", type, value }),
++    ]),
++  );
++  let decodedFrames = 0;
++  const bytes = new ReadableStream({
++    start(controller) {
++      for (const chunk of chunks) controller.enqueue(chunk);
++      controller.close();
++    },
++  })
++    .pipeThrough(
++      serialization.getDeserializeStream(
++        {
++          ...serialization.getCommonRevivers(globalThis),
++          ...inert,
++        },
++        key,
++      ),
++    )
++    .pipeThrough(
++      new TransformStream({
++        transform(value, controller) {
++          if (!(value instanceof Uint8Array)) throw new Error("Invalid native stream bytes.");
++          decodedFrames++;
++          controller.enqueue(value);
++        },
++      }),
++    );
++  const events = [];
++  for await (const event of stream.parseNdjsonStream(
++    () => bytes,
++    protocol.normalizePersistedMessageStreamEvent,
++  ))
++    events.push(event);
++  if (decodedFrames !== chunks.length) throw new Error("Incomplete native stream decoding.");
++  const after = await world.streams.getInfo(runId, name);
++  if (after.tailIndex !== before.tailIndex || after.done !== before.done)
++    throw new Error("Changed native stream.");
++  yield* events;
++}
++
 +/** Production wiring stays inside the native framework, after owner authorization. */
 +export async function collectTerminalRecoveryCandidate(input) {
-+  const [runtime, serialization, durable, stream, protocol] = await Promise.all([
++  const [runtime, serialization, durable] = await Promise.all([
 +    import("#internal/workflow/runtime.js"),
 +    import("#compiled/@workflow/core/serialization.js"),
 +    import("#execution/durable-session-store.js"),
-+    import("#execution/ndjson-stream.js"),
-+    import("#protocol/message-version.js"),
 +  ]);
 +  // Hydration for inspection must not start stream forwarding, lock polling,
 +  // or live AbortSignal readers. Keep transport refs inert; their original
@@ -1178,14 +1279,18 @@ index 0000000..9274615
 +      serialization.hydrateStepReturnValue(value, runId, key, globalThis, transportRevivers),
 +    readDurableSession: durable.readDurableSession,
 +    requireEventSlot: nativeEventSlot,
-+    readNativeEvents: (runId) =>
-+      stream.parseNdjsonStream(
-+        () => runtime.getRun(runId).getReadable(),
-+        protocol.normalizePersistedMessageStreamEvent,
-+      ),
++    async *readNativeEvents(runId) {
++      const world = await runtime.getWorld();
++      const run = await world.runs.get(runId, { resolveData: "none" });
++      if (run.runId !== runId || !["failed", "completed", "cancelled"].includes(run.status))
++        throw new Error("Native stream owner is not terminal.");
++      const key = await runtime.resolveRunEncryptionKey(world, run);
++      yield* readTerminalNativeEventsSnapshot(world, runId, key);
++    },
 +    now: Date.now,
 +  })(input);
 +}
+
 diff --git a/dist/src/execution/session/recovery-holder-closure.d.ts b/dist/src/execution/session/recovery-holder-closure.d.ts
 new file mode 100644
 index 0000000..4c40bdc

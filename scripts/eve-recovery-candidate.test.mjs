@@ -598,3 +598,121 @@ test("provider-cancelled terminal owner retains actual paired state and approval
     readDurableSession(f.final.sessionState).sandboxState,
   );
 });
+
+const { readTerminalNativeEventsSnapshot } = await load(nativePath);
+const frameNativeHistory = async (values, key) => {
+  const frames = [];
+  const input = new ReadableStream({
+    start(controller) {
+      for (const value of values) {
+        controller.enqueue(value);
+      }
+      controller.close();
+    },
+  });
+  for await (const frame of input.pipeThrough(
+    serialization.getSerializeStream(serialization.getWorkflowReducers(globalThis), key),
+  )) {
+    frames.push(frame);
+  }
+  return frames.map((data, index) => ({ index, data }));
+};
+const snapshotFixture = async (fault) => {
+  const f = await fixture({ status: "cancelled", encrypted: true });
+  const native = Array.from({ length: 5 }, (_, index) => ({
+    type: "text.delta",
+    data: { text: `original private native text ${index}` },
+  }));
+  const chunks = await frameNativeHistory(
+    native.map((event) => new TextEncoder().encode(`${JSON.stringify(event)}\n`)),
+    f.key,
+  );
+  let infos = 0;
+  f.world.streams = {
+    async getInfo(id, name) {
+      f.calls.push(["snapshot-info", id, name]);
+      assert.equal(id, ownerRunId);
+      assert.equal(name, `${ownerRunId.replace("wrun_", "strm_")}_user`);
+      infos += 1;
+      return {
+        tailIndex: chunks.length - 1 + (fault === "changed-tail" && infos > 1 ? 1 : 0),
+        done: fault === "changed-done" && infos > 1,
+      };
+    },
+    async getChunks(id, name, options) {
+      f.calls.push(["snapshot-page", id, name]);
+      const start = options.cursor === undefined ? 0 : Number(options.cursor);
+      let data = chunks.slice(start, start + 2).map((chunk) => ({ ...chunk }));
+      if (fault === "gap" && start === 2) {
+        data[0].index += 1;
+      }
+      if (fault === "truncated" && start === 2) {
+        data[0].data = data[0].data.slice(0, -1);
+      }
+      if (fault === "ciphertext" && start === 2) {
+        data[0].data = new Uint8Array(data[0].data);
+        data[0].data[data[0].data.length - 1] = (data[0].data.at(-1) + 1) % 256;
+      }
+      if (fault === "missing" && start === 4) {
+        data = [];
+      }
+      const end = start + data.length;
+      return {
+        data,
+        done: false,
+        hasMore: end < chunks.length && fault !== "missing",
+        cursor: fault === "repeated-cursor" ? "0" : String(end),
+      };
+    },
+    get() {
+      throw new Error("Recovery must never follow a live stream.");
+    },
+  };
+  f.dependencies.readNativeEvents = (id) => readTerminalNativeEventsSnapshot(f.world, id, f.key);
+  return { ...f, native };
+};
+
+test("finite encrypted unclosed multi-page snapshot retains full native prefix and private checkpoint", async () => {
+  const f = await snapshotFixture();
+  const result = await f.collect(f.input);
+  const payload = readTerminalRecoveryCandidate(result.candidate);
+  assert.deepEqual(payload.nativeEvents, f.native);
+  assert.deepEqual(payload.candidates[0].sessionState, f.final.sessionState);
+  assert.deepEqual(payload.candidates[0].serializedContext, f.final.serializedContext);
+  assert.deepEqual(payload.candidates[1].incoming, f.inputs.failed.input);
+  assert.equal(f.calls.filter(([type]) => type === "snapshot-page").length, 3);
+  assert.equal(
+    payload.issues.some(({ reason }) => reason === "native-stream-incomplete"),
+    false,
+  );
+});
+for (const fault of [
+  "gap",
+  "truncated",
+  "missing",
+  "changed-tail",
+  "changed-done",
+  "ciphertext",
+  "repeated-cursor",
+]) {
+  test(`incomplete or changed native snapshot fails closed: ${fault}`, async () => {
+    const f = await snapshotFixture(fault);
+    const result = await f.collect(f.input);
+    const payload = readTerminalRecoveryCandidate(result.candidate);
+    assert.deepEqual(payload.nativeEvents, []);
+    assert.ok(payload.issues.some(({ reason }) => reason === "native-stream-incomplete"));
+  });
+}
+for (const status of ["running", "pending"]) {
+  test(`nonterminal ${status} owner never reads native snapshot`, async () => {
+    const f = await snapshotFixture();
+    const get = f.world.runs.get;
+    f.world.runs.get = async (...args) => ({ ...(await get(...args)), status });
+    const result = await f.collect(f.input);
+    assert.deepEqual(result, { kind: "unavailable", reason: "source-not-terminal" });
+    assert.equal(
+      f.calls.some(([type]) => type.startsWith("snapshot-") === true),
+      false,
+    );
+  });
+}
