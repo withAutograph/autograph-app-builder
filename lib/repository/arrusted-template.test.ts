@@ -48,6 +48,66 @@ describe("canonical Arrusted source preparation", () => {
     expect(written).toContain(".app-builder/prepare-intent.json");
   });
 
+  it("materializes the template into an empty resumed sandbox", async () => {
+    const sourceSha = "a".repeat(40);
+    const sourceTree = "b".repeat(40);
+    let acquired = false;
+    const materializeGitSource = vi.fn(async () => {
+      await Promise.resolve();
+      acquired = true;
+    });
+    const run = vi.fn(async ({ command }: { command: string }) => {
+      await Promise.resolve();
+      if (command.startsWith("test -e ") || command.startsWith("test -L ")) {
+        return { exitCode: 1, stderr: "", stdout: "" };
+      }
+      if (command.includes("rev-parse")) {
+        return acquired
+          ? {
+              exitCode: 0,
+              stderr: "",
+              stdout: `${sourceSha}\n${sourceTree}\nhttps://github.com/withAutograph/arrusted-development.git\n`,
+            }
+          : { exitCode: 1, stderr: "missing", stdout: "" };
+      }
+      return { exitCode: 0, stderr: "", stdout: "" };
+    });
+    await acquireCanonicalArrustedTemplate({
+      callId: "prepare",
+      reader: { acquire: async () => await Promise.resolve({ token: "test-token" }) },
+      sandbox: {
+        id: "sandbox",
+        materializeGitSource,
+        readTextFile: async () => await Promise.resolve(null),
+        run,
+        writeTextFile: async () => {
+          await Promise.resolve();
+        },
+      } as never,
+    });
+    expect(materializeGitSource).toHaveBeenCalledOnce();
+    expect(materializeGitSource).toHaveBeenCalledWith({
+      token: "test-token",
+      url: "https://github.com/withAutograph/arrusted-development.git",
+    });
+  });
+
+  it("does not materialize over an occupied workspace", async () => {
+    const materializeGitSource = vi.fn();
+    const run = vi.fn(async ({ command }: { command: string }) => {
+      await Promise.resolve();
+      return { exitCode: command.startsWith("test -e ") ? 0 : 1, stderr: "missing", stdout: "" };
+    });
+    await expect(
+      acquireCanonicalArrustedTemplate({
+        callId: "prepare",
+        reader: { acquire: async () => await Promise.resolve({ token: "test-token" }) },
+        sandbox: { id: "sandbox", materializeGitSource, run } as never,
+      }),
+    ).rejects.toThrow("occupied");
+    expect(materializeGitSource).not.toHaveBeenCalled();
+  });
+
   it("reuses the recorded session workspace without legacy reinspection", async () => {
     const receipt = inspectCanonicalTemplateSnapshotReceipt({
       readinessDigest: "c".repeat(64),

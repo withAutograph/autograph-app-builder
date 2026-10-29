@@ -1,4 +1,7 @@
-import { getBuilderSandboxId } from "../sandbox/builder-sandbox";
+import {
+  getBuilderSandboxId,
+  materializeBuilderSandboxGitSource,
+} from "../sandbox/builder-sandbox";
 import { createHash } from "node:crypto";
 
 import type { SandboxSession } from "eve/sandbox";
@@ -87,9 +90,12 @@ export async function acquireCanonicalArrustedTemplate(input: {
   }
   const sandbox = typeof input.sandbox === "function" ? await input.sandbox() : input.sandbox;
   const snapshot = await acquisitionStage("sandbox_clone", () =>
-    readSandboxGitHubSourceSnapshot(sandbox, {
-      repository: ARRUSTED_TEMPLATE_REPOSITORY,
-    }),
+    readSandboxGitHubSourceSnapshot(sandbox, { repository: ARRUSTED_TEMPLATE_REPOSITORY }, () =>
+      materializeBuilderSandboxGitSource(sandbox, {
+        token: access.token,
+        url: ARRUSTED_TEMPLATE_REPOSITORY,
+      }),
+    ),
   );
   const workspaceDigest = receiptReadinessDigest({
     sourceSha: snapshot.sourceSha,
