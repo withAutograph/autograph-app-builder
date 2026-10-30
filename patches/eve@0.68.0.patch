@@ -636,12 +636,12 @@ diff --git a/dist/src/execution/session/recovery-candidate.d.ts b/dist/src/execu
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.d.ts
-@@ -0,0 +1,167 @@
+@@ -0,0 +1,168 @@
 +import type { World, WorkflowRun, StepWithoutData, Event } from "#compiled/@workflow/world/index.js";
 +import type { PayloadKey } from "#compiled/@workflow/core/serialization/encryption.js";
 +import type { DurableSession, DurableSessionState } from "#execution/durable-session-store.js";
 +import type { TurnStepPayload } from "#execution/session/turn-step-types.js";
-+import type { NativeHandoffProvenance } from "#execution/session/recovery-owner-provenance.js";
++import type { NativeHandoffProvenance, NativeRecoveryBoundary } from "#execution/session/recovery-owner-provenance.js";
 +import type { MessageStreamEvent } from "#protocol/message.js";
 +
 +/** Private finite reader; caller must first authorize the canonical native owner. */
@@ -754,6 +754,7 @@ new file mode 100644
 +    }
 +  | {
 +      readonly kind: "unavailable";
++      readonly boundary?: NativeRecoveryBoundary;
 +      readonly reason:
 +        | "source-not-terminal"
 +        | "native-data-expired"
@@ -814,7 +815,7 @@ new file mode 100644
 +  sessionCommandHookToken,
 +  sessionInboxHookToken,
 +} from "#execution/session-inbox/address.js";
-+import { resolveTerminalCheckpointOwner } from "#execution/session/recovery-owner-provenance.js";
++import { resolveTerminalCheckpointOwner, nativeRecoveryBoundary } from "#execution/session/recovery-owner-provenance.js";
 +// Server-only native checkpoint inspection. This module never starts/resumes a run.
 +// The caller MUST supply canonical ownership authorization; model/client IDs are
 +// not authority. Payloads remain behind an in-process opaque handle.
@@ -898,7 +899,7 @@ new file mode 100644
 +    // Public Builder failure is checked by authorizeOwner. A terminal model
 +    // failure can settle the native workflow successfully with next.done.
 +    if (!["failed", "completed", "cancelled"].includes(anchor.status) && !(input.allowParked === true && ["pending", "running"].includes(anchor.status)))
-+      return { kind: "unavailable", reason: "source-not-terminal" };
++      return { kind: "unavailable", reason: "source-not-terminal", boundary: nativeRecoveryBoundary("authority_anchor", anchor, input.allowParked === true) };
 +    if (
 +      anchor.expiredAt !== undefined &&
 +      new Date(anchor.expiredAt).getTime() <= dependencies.now()
@@ -1889,7 +1890,7 @@ new file mode 100644
 index 0000000..a320829
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-owner-provenance.d.ts
-@@ -0,0 +1,40 @@
+@@ -0,0 +1,48 @@
 +import type { Event, World, WorkflowRun } from "#compiled/@workflow/world/index.js";
 +import type { PayloadKey } from "#compiled/@workflow/core/serialization/encryption.js";
 +import type {
@@ -1904,6 +1905,13 @@ index 0000000..a320829
 +  readonly activationEventId: string;
 +  readonly events: readonly Event[];
 +}
++export interface NativeRecoveryBoundary {
++  readonly stage: "authority_anchor" | "handoff_parent" | "handoff_successor" | "final_owner";
++  readonly status: "pending" | "running" | "completed" | "failed" | "cancelled" | "waiting" | "queued" | "suspended" | "other";
++  readonly parentStatus?: "pending" | "running" | "completed" | "failed" | "cancelled" | "waiting" | "queued" | "suspended" | "other";
++  readonly allowParked: boolean;
++}
++export declare function nativeRecoveryBoundary(stage: NativeRecoveryBoundary["stage"], run: Pick<WorkflowRun, "status">, allowParked: boolean, parent?: Pick<WorkflowRun, "status">): NativeRecoveryBoundary;
 +export type TerminalCheckpointOwnerResolution =
 +  | {
 +      readonly kind: "resolved";
@@ -1914,6 +1922,7 @@ index 0000000..a320829
 +    }
 +  | {
 +      readonly kind: "unavailable";
++      readonly boundary?: NativeRecoveryBoundary;
 +      readonly reason:
 +        | "source-not-terminal"
 +        | "native-data-expired"
@@ -1934,7 +1943,7 @@ diff --git a/dist/src/execution/session/recovery-owner-provenance.js b/dist/src/
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-owner-provenance.js
-@@ -0,0 +1,457 @@
+@@ -0,0 +1,460 @@
 +import { createRecoveryHistoryInterner } from "#execution/session/recovery-history-interning.js";
 +import { isDeepStrictEqual } from "node:util";
 +import {
@@ -1949,6 +1958,8 @@ new file mode 100644
 +const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 +const terminal = (run) => ["completed", "failed", "cancelled"].includes(run.status);
 +const unavailable = (reason) => ({ kind: "unavailable", reason });
++const statusLabel = (value) => ["pending", "running", "completed", "failed", "cancelled", "waiting", "queued", "suspended"].includes(value) ? value : "other";
++export const nativeRecoveryBoundary = (stage, run, allowParked, parent) => ({ stage, status: statusLabel(run.status), ...(parent === undefined ? {} : { parentStatus: statusLabel(parent.status) }), allowParked: allowParked === true });
 +
 +/** Private discovery hints never authorize collection of a candidate's app state. */
 +export async function resolveTerminalCheckpointOwner({
@@ -2332,7 +2343,8 @@ new file mode 100644
 +    }
 +    if (candidates.length !== 1) return unavailable("handoff-owner-ambiguous");
 +    const child = candidates[0];
-+    if (!terminal(parent) || (!terminal(child.run) && !(allowParked && ["pending", "running"].includes(child.run.status)))) return unavailable("source-not-terminal");
++    if (!terminal(parent)) return { ...unavailable("source-not-terminal"), boundary: nativeRecoveryBoundary("handoff_parent", parent, allowParked) };
++    if (!terminal(child.run) && !(allowParked && ["pending", "running"].includes(child.run.status))) return { ...unavailable("source-not-terminal"), boundary: nativeRecoveryBoundary("handoff_successor", child.run, allowParked, parent) };
 +    // After successful transfer a parent may only finish handoff bookkeeping.
 +    // Retain each complete physical frontier separately; never compare its slots
 +    // with the successor's slots or silently discard late authored work.
@@ -2380,7 +2392,7 @@ new file mode 100644
 +    });
 +    parent = child.run;
 +  }
-+  if (!terminal(parent) && !(allowParked && ["pending", "running"].includes(parent.status))) return unavailable("source-not-terminal");
++  if (!terminal(parent) && !(allowParked && ["pending", "running"].includes(parent.status))) return { ...unavailable("source-not-terminal"), boundary: nativeRecoveryBoundary("final_owner", parent, allowParked) };
 +  if (parent.expiredAt !== undefined && new Date(parent.expiredAt).getTime() <= dependencies.now())
 +    return unavailable("native-data-expired");
 +  await authorize();
@@ -3353,7 +3365,7 @@ diff --git a/dist/src/execution/session/terminal-recovery.js b/dist/src/executio
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.js
-@@ -0,0 +1,573 @@
+@@ -0,0 +1,580 @@
 +import { createHash } from "node:crypto";
 +import { DEFAULT_SESSION_TIMEOUT_MS } from "#execution/session/timeout.js";
 +import { SESSION_CHECKPOINT_VERSION } from "#execution/session/handoff.js";
@@ -3367,6 +3379,9 @@ new file mode 100644
 +const refusalStages = new Set(["dependencies", "source_authorization", "receipt_read", "receipt_validate", "live_transfer_preflight", "candidate_collect", "candidate_authorization", "candidate_read", "candidate_reconcile", "source_policy", "checkpoint_prepare", "pre_start_authorization", "pre_start_receipt_read", "pre_start_receipt_validate", "owner_start", "owner_readiness_wait", "owner_readiness_deadline", "receipt_authorization", "receipt_commit", "holder_authorization", "holder_receipt_read", "holder_closure", "post_holder_authorization", "post_holder_receipt_read", "post_holder_receipt_validate", "candidate_receipt_read"]);
 +const refusalReason = (value) => typeof value === "string" && refusalReasons.has(value) ? value : "other";
 +const refusalStage = (value) => typeof value === "string" && refusalStages.has(value) ? value : "other";
++const nativeStatusLabel = (value) => ["pending", "running", "completed", "failed", "cancelled", "waiting", "queued", "suspended"].includes(value) ? value : "other";
++const diagnosticCount = (value) => Number.isSafeInteger(value) && value >= 0 ? value : null;
++const refusalBoundary = (value) => value === null || typeof value !== "object" || Array.isArray(value) ? null : ({ stage: ["authority_anchor", "handoff_parent", "handoff_successor", "final_owner"].includes(value.stage) ? value.stage : "other", status: nativeStatusLabel(value.status), ...(value.parentStatus === undefined ? {} : { parentStatus: nativeStatusLabel(value.parentStatus) }), allowParked: typeof value.allowParked === "boolean" ? value.allowParked : null });
 +
 +const candidateKinds = ["terminal-finalizer-input", "completed-terminal-turn-input", "failed-turn-input", "committed-turn-output"];
 +const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -3782,7 +3797,7 @@ new file mode 100644
 +  const authorize = async () => { await ports.authorize(call); if (await ports.readReceipt(call) != null) throw new Error("Recovery receipt changed during execution transfer."); };
 +  await authorize();
 +  const collected = await dependencies.collect({ binding, allowParked: true, authorizeOwner: async (observed) => { if (observed.ownerRunId !== binding.ownerRunId || observed.logicalSessionId !== binding.logicalSessionId) throw new Error("Execution transfer binding changed."); await authorize(); } });
-+  if (collected.kind !== "candidate") return { kind: "unavailable", reason: collected.reason };
++  if (collected.kind !== "candidate") return { kind: "unavailable", reason: collected.reason, ...(collected.boundary === undefined ? {} : { boundary: collected.boundary }) };
 +  const reconciled = await dependencies.reconcile(collected.candidate);
 +  if (reconciled.kind !== "ready") return reconciled;
 +  const retainedPayload = dependencies.readCandidate(collected.candidate);
@@ -3890,6 +3905,10 @@ new file mode 100644
 +      const authorize = async () => await ports.authorizeSourceObservation({ auth, source });
 +      const binding = await authorize();
 +      const dependencies = await loadDependencies();
++      await authorize();
++      const anchor = await dependencies.inspectSource(binding.ownerRunId);
++      if (anchor.runId !== binding.ownerRunId) throw new Error("Source observation anchor changed.");
++      await authorize();
 +      const collected = await dependencies.collect({ binding, allowParked: true, authorizeOwner: async (observed) => { const current = await authorize(); if (current.ownerRunId !== observed.ownerRunId || current.logicalSessionId !== observed.logicalSessionId) throw new Error("Source observation changed."); } });
 +      const current = await authorize();
 +      if (current.ownerRunId !== binding.ownerRunId || current.logicalSessionId !== binding.logicalSessionId) throw new Error("Source observation changed.");
@@ -3900,7 +3919,7 @@ new file mode 100644
 +      const observed = observedRuns.at(-1);
 +      const lineageUnsettledStepCount = observedRuns.reduce((sum, run) => sum + run.unsettledStepIds.length, 0);
 +      await authorize();
-+      console.info(JSON.stringify({ event: "builder.native_source_observation", collectionKind: collected.kind === "candidate" ? "candidate" : collected.kind === "unavailable" ? "unavailable" : "other", collectionReason: collected.kind === "candidate" ? null : refusalReason(collected.reason), collectionStage: "candidate_collect", candidate: candidate !== undefined, lineageResolved: candidate !== undefined, lineageRunCount: observedRuns.length, lineageUnsettledStepCount, pendingStepCount: observed?.stepCounts?.pending ?? null, runningStepCount: observed?.stepCounts?.running ?? null, failedStepCount: observed?.stepCounts?.failed ?? null, cancelledStepCount: observed?.stepCounts?.cancelled ?? null, unknownStepCount: observed?.stepCounts?.unknown ?? null, physicalOwnerMatchesAnchor: candidate === undefined ? null : candidate.checkpointOwnerRunId === binding.ownerRunId, unsettledStepCount: observed?.unsettledStepIds.length ?? null, sourceParked: observed === undefined ? null : ["pending", "running"].includes(observed.status) }));
++      console.info(JSON.stringify({ event: "builder.native_source_observation", collectionKind: collected.kind === "candidate" ? "candidate" : collected.kind === "unavailable" ? "unavailable" : "other", collectionReason: collected.kind === "candidate" ? null : refusalReason(collected.reason), collectionStage: "candidate_collect", collectionBoundary: refusalBoundary(collected.boundary), anchorStatus: nativeStatusLabel(anchor.status), anchorUnsettledStepCount: diagnosticCount(anchor.unsettledStepIds.length), anchorStepCounts: Object.fromEntries(["completed", "pending", "running", "failed", "cancelled", "unknown"].map((status) => [status, diagnosticCount(anchor.stepCounts?.[status])])), candidate: candidate !== undefined, lineageResolved: candidate !== undefined, lineageRunCount: observedRuns.length, lineageUnsettledStepCount, pendingStepCount: observed?.stepCounts?.pending ?? null, runningStepCount: observed?.stepCounts?.running ?? null, failedStepCount: observed?.stepCounts?.failed ?? null, cancelledStepCount: observed?.stepCounts?.cancelled ?? null, unknownStepCount: observed?.stepCounts?.unknown ?? null, physicalOwnerMatchesAnchor: candidate === undefined ? null : candidate.checkpointOwnerRunId === binding.ownerRunId, unsettledStepCount: observed?.unsettledStepIds.length ?? null, sourceParked: observed === undefined ? null : ["pending", "running"].includes(observed.status) }));
 +      return Response.json({ ok: true, status: "accepted", sessionId: binding.ownerRunId }, { status: 202, headers: { "cache-control": "no-store", "x-eve-session-id": binding.ownerRunId } });
 +    } catch { return Response.json({ ok: false, code: "native_source_observation_unavailable" }, { status: 409 }); }
 +  }
@@ -3916,7 +3935,7 @@ new file mode 100644
 +    const execute = payload.recoveryPhase === "activate" ? activateTerminalSession : recoverTerminalSession;
 +    const result = await execute({ auth, descriptor, ports }, await loadDependencies(), (stage) => { prepareStage = stage; });
 +    if (result.kind !== "accepted") {
-+      try { console.info(JSON.stringify({ event: "builder.native_recovery_refusal", outcome: result.kind === "uncertain" ? "uncertain" : result.kind === "unavailable" ? "unavailable" : "other", reason: refusalReason(result.reason), stage: refusalStage(prepareStage) })); } catch { /* Advisory diagnostics never change the refusal. */ }
++      try { console.info(JSON.stringify({ event: "builder.native_recovery_refusal", outcome: result.kind === "uncertain" ? "uncertain" : result.kind === "unavailable" ? "unavailable" : "other", reason: refusalReason(result.reason), stage: refusalStage(prepareStage), boundary: refusalBoundary(result.boundary) })); } catch { /* Advisory diagnostics never change the refusal. */ }
 +      return Response.json({ ok: false, code: result.kind === "uncertain" ? "terminal_recovery_uncertain" : "terminal_recovery_unavailable" }, { status: 409 });
 +    }
 +    return Response.json({ ok: true, status: "accepted", sessionId: result.recoveryBinding.ownerRunId, recoveryBinding: result.recoveryBinding }, { status: 202, headers: { "cache-control": "no-store", "x-eve-session-id": result.recoveryBinding.ownerRunId } });
