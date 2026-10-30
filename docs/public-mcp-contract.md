@@ -88,8 +88,12 @@ The existing `autograph_start` tool accepts `resumeMode: "recover"` only with
 `resumeSessionId`. This explicit owner request transfers a parked hosted native
 execution through the existing structured recovery path; ordinary resume is
 unchanged and discovery still returns five tools. Admission requires the complete
-retained pending-approval checkpoint and independently closed native effect steps
-across the entire verified handoff lineage.
+retained checkpoint and independently closed native effect steps across the entire
+verified handoff lineage. A source with pending approvals retains those exact
+requests. A separately proven idle source resumes into its inbox wait without
+starting a model turn or replaying an earlier response. The server derives this
+resume phase from native state and verifies it again after stopping the source;
+a public status or stale approval control cannot select it.
 Builder fences source mutations. A separate opaque read-only preflight may inspect
 running handoff ancestors using the retained activation, checkpoint and inbox
 proofs. It cannot boot a child. Builder proves effect closure across the complete
@@ -103,6 +107,8 @@ Active, cancelled, or unproven failed effect steps cause refusal before stop or
 prevent adoption.
 Pending approvals retain their original request identity and authority; an earlier
 `submission_unknown` response remains retained and is never implicitly resent.
+An idle checkpoint does not prove that an absent approval was allowed, denied,
+or cancelled; it cannot settle an uncertain response or manufacture a grant.
 Any uncertainty, including a refusal after a stop may have occurred, retains the
 operation and source fence for exact retry. A verified pre-effect refusal may
 reject recovery without stopping an owner.
