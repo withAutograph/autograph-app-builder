@@ -92,7 +92,10 @@ const record = [
   },
 ];
 const complete = [{ name: "completeReview", input: { remainingRuntimeChecks: [] } }];
-const reads = [{ name: "readRequirements", input: { id: "original" } }, { name: "readSource", input: { path: "app/save.ts" } }];
+const reads = [
+  { name: "readRequirements", input: { id: "original" } },
+  { name: "readSource", input: { path: "app/save.ts" } },
+];
 
 describe("durable application reviewer fallback", () => {
   it("starts fallback with fresh messages and independent evidence", async () => {
@@ -131,7 +134,11 @@ describe("durable application reviewer fallback", () => {
       // eslint-disable-next-line no-await-in-loop
       round = await assessApplicationSourceRound(input, evidence, options, round.continuation);
     }
-    expect(round.assessment).toMatchObject({ reviewCompleted: false, status: "failed", modelId: "terra" });
+    expect(round.assessment).toMatchObject({
+      reviewCompleted: false,
+      status: "failed",
+      modelId: "terra",
+    });
     expect(round.assessment?.findings).toHaveLength(1);
     expect(round.continuation.priorReviewerEvidence?.reviewer.modelId).toBe("terra");
     expect(round.continuation.priorReviewerEvidence?.findings).toHaveLength(1);
@@ -139,33 +146,76 @@ describe("durable application reviewer fallback", () => {
   });
   it("attributes findings from both reviewers as incomplete mixed evidence", async () => {
     const primary = model("terra", [record, new Error("first")]);
-    const otherFinding = { ...finding, requirementQuote: "Save the record", explanation: "A second independent finding." };
-    const fallback = model("sol", [[{ name: "recordReviewEvidence", input: { findings: [otherFinding], remainingRuntimeChecks: [] } }], complete]);
-    const result = await assessApplicationSource(input, evidence, { policy, testModels: { terra: primary, sol: fallback } });
+    const otherFinding = {
+      ...finding,
+      requirementQuote: "Save the record",
+      explanation: "A second independent finding.",
+    };
+    const fallback = model("sol", [
+      [
+        {
+          name: "recordReviewEvidence",
+          input: { findings: [otherFinding], remainingRuntimeChecks: [] },
+        },
+      ],
+      complete,
+    ]);
+    const result = await assessApplicationSource(input, evidence, {
+      policy,
+      testModels: { terra: primary, sol: fallback },
+    });
     expect(result).toMatchObject({ reviewCompleted: false, status: "failed", modelId: "multiple" });
     expect(result.findings).toHaveLength(2);
     expect(result.evidenceNote).toContain("terra and sol");
   });
   it("preserves primary runtime unknowns when fallback omits them", async () => {
-    const primary = model("terra", [[{ name: "recordReviewEvidence", input: { findings: [], remainingRuntimeChecks: ["Verify server persistence."] } }], new Error("first")]);
+    const primary = model("terra", [
+      [
+        {
+          name: "recordReviewEvidence",
+          input: { findings: [], remainingRuntimeChecks: ["Verify server persistence."] },
+        },
+      ],
+      new Error("first"),
+    ]);
     const fallback = model("sol", [complete]);
-    const result = await assessApplicationSource(input, evidence, { policy, testModels: { terra: primary, sol: fallback } });
+    const result = await assessApplicationSource(input, evidence, {
+      policy,
+      testModels: { terra: primary, sol: fallback },
+    });
     expect(result).toMatchObject({ reviewCompleted: true, modelId: "sol" });
     expect(result.remainingRuntimeChecks).toContain("Verify server persistence.");
     expect(result.evidenceNote).toContain("from terra");
   });
   it("reports checks-only evidence as blocked if fallback fails", async () => {
-    const primary = model("terra", [[{ name: "recordReviewEvidence", input: { findings: [], remainingRuntimeChecks: ["Verify server persistence."] } }], new Error("first")]);
+    const primary = model("terra", [
+      [
+        {
+          name: "recordReviewEvidence",
+          input: { findings: [], remainingRuntimeChecks: ["Verify server persistence."] },
+        },
+      ],
+      new Error("first"),
+    ]);
     const fallback = model("sol", [new Error("second")]);
-    const result = await assessApplicationSource(input, evidence, { policy, testModels: { terra: primary, sol: fallback } });
+    const result = await assessApplicationSource(input, evidence, {
+      policy,
+      testModels: { terra: primary, sol: fallback },
+    });
     expect(result).toMatchObject({ reviewCompleted: false, status: "blocked", modelId: "terra" });
     expect(result.remainingRuntimeChecks).toContain("Verify server persistence.");
   });
   it("preserves prior findings when fallback evidence access fails", async () => {
     const primary = model("terra", [record, new Error("first")]);
     const fallback = model("sol", [[{ name: "readSource", input: { path: "app/save.ts" } }]]);
-    const failedEvidence = { ...evidence, readSource: () => Promise.reject(new Error("unavailable")) };
-    const result = await assessApplicationSource(input, failedEvidence, { policy, testModels: { terra: primary, sol: fallback } });
+    const failedEvidence = {
+      ...evidence,
+      readSource: () => Promise.reject(new Error("unavailable")),
+    };
+    const result = await assessApplicationSource(input, failedEvidence, {
+      policy,
+      testModels: { terra: primary, sol: fallback },
+    });
     expect(result).toMatchObject({ reviewCompleted: false, status: "failed", modelId: "terra" });
     expect(result.findings).toHaveLength(1);
   });

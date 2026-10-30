@@ -527,7 +527,11 @@ describe("independent application source review", () => {
       evidence: applicationEvidence(),
       currentDigest: () => Promise.resolve(input.sourceDigest),
       journal,
-      options: { sessionId, cacheSessionId: "caller-metadata-is-not-authority", testModels: { [sourceReviewPolicy().primary.modelId]: model } },
+      options: {
+        sessionId,
+        cacheSessionId: "caller-metadata-is-not-authority",
+        testModels: { [sourceReviewPolicy().primary.modelId]: model },
+      },
     };
     const result = await reviewApplicationWithJournal(request);
     expect(result.reviewCompleted).toBe(true);
@@ -583,7 +587,10 @@ describe("independent application source review", () => {
           evidence: applicationEvidence(),
           currentDigest: () => Promise.resolve(scope.reviewInput.sourceDigest),
           journal,
-          options: { sessionId: scope.sessionId, testModels: { [sourceReviewPolicy().primary.modelId]: model } },
+          options: {
+            sessionId: scope.sessionId,
+            testModels: { [sourceReviewPolicy().primary.modelId]: model },
+          },
         });
         expect(result.reviewCompleted).toBe(true);
         const session = model.doGenerateCalls[0].providerOptions?.gateway?.sessionId;

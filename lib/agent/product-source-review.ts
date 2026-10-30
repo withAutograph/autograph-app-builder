@@ -41,10 +41,16 @@ export const sourceReviewPolicy = (): SourceReviewPolicy => ({
   id: "terra-low-sol-fallback-v1",
   primary: { modelId: "openai/gpt-6.1-terra", reasoningEffort: "low" },
 });
-type SourceReviewProviderOptions = { gateway: { only: string[] }; openai: { reasoningEffort: "low" | "medium" } } | { gateway: { only: string[] } };
-export const sourceReviewProviderOptions = (reviewer: SourceReviewer): SourceReviewProviderOptions => {
+type SourceReviewProviderOptions =
+  | { gateway: { only: string[] }; openai: { reasoningEffort: "low" | "medium" } }
+  | { gateway: { only: string[] } };
+export const sourceReviewProviderOptions = (
+  reviewer: SourceReviewer,
+): SourceReviewProviderOptions => {
   const gateway = { only: ["openai"] };
-  if (reviewer.reasoningEffort === null) { return { gateway }; }
+  if (reviewer.reasoningEffort === null) {
+    return { gateway };
+  }
   return { gateway, openai: { reasoningEffort: reviewer.reasoningEffort } };
 };
 /** A caller must additionally bind its own rubric and evidence identity. */
@@ -52,9 +58,13 @@ export const matchesSourceReviewPolicy = (
   assessment: ProductSourceAssessment,
   policy: SourceReviewPolicy = sourceReviewPolicy(),
 ): boolean => {
-  if (assessment.reviewPolicyId !== policy.id) { return false; }
-  return [policy.primary, policy.fallback].some((reviewer) =>
-    reviewer.modelId === assessment.modelId && reviewer.reasoningEffort === (assessment.reasoningEffort ?? null),
+  if (assessment.reviewPolicyId !== policy.id) {
+    return false;
+  }
+  return [policy.primary, policy.fallback].some(
+    (reviewer) =>
+      reviewer.modelId === assessment.modelId &&
+      reviewer.reasoningEffort === (assessment.reasoningEffort ?? null),
   );
 };
 
@@ -213,7 +223,8 @@ export const sanitizeSourceJudgment = (
     ...unavailableSourceAssessment(
       input,
       "Source review cannot establish runtime product success.",
-      "unassessed", reviewer,
+      "unassessed",
+      reviewer,
     ),
     findings: judgment.findings.map((finding) => ({
       citations: finding.citations.map(({ path, startLine, endLine, excerpt }) => ({

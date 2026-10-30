@@ -365,7 +365,12 @@ export interface ApplicationReviewContinuation {
   reviewer?: SourceReviewer;
   reviewPolicyId?: string;
   fallbackUsed?: boolean;
-  priorReviewerEvidence?: { reviewer: SourceReviewer; findings: ApplicationReviewContinuation["findings"]; runtimeChecks: string[]; references: ApplicationReviewContinuation["references"] };
+  priorReviewerEvidence?: {
+    reviewer: SourceReviewer;
+    findings: ApplicationReviewContinuation["findings"];
+    runtimeChecks: string[];
+    references: ApplicationReviewContinuation["references"];
+  };
   messages: ModelMessage[];
   findings: [string, SourceJudgment["findings"][number]][];
   runtimeChecks: string[];
@@ -812,7 +817,12 @@ const canFallback = ({
   policyId,
   fallbackUsed,
 }: ReviewPolicyContext): boolean => {
-  if (fallbackUsed || policy.id === "fixture-sol" || policy.fallback === undefined || policyId !== policy.id) {
+  if (
+    fallbackUsed ||
+    policy.id === "fixture-sol" ||
+    policy.fallback === undefined ||
+    policyId !== policy.id
+  ) {
     return false;
   }
   return (
@@ -839,7 +849,12 @@ const restartReviewWithFallback = async (
       reviewer: current.policy.fallback,
       fallbackUsed: true,
       // Keep the prior reviewer’s partial evidence separate from the fresh review.
-      priorReviewerEvidence: { reviewer: current.reviewer, findings: saved.findings, runtimeChecks: saved.runtimeChecks, references: saved.references },
+      priorReviewerEvidence: {
+        reviewer: current.reviewer,
+        findings: saved.findings,
+        runtimeChecks: saved.runtimeChecks,
+        references: saved.references,
+      },
       findings: [],
       runtimeChecks: [],
       references: [],
@@ -925,8 +940,10 @@ const preserveVerifiedFindings = async (
   context: PartialReviewContext,
   reason: string,
 ): Promise<ApplicationReviewRoundResult> => {
-  const noCurrentEvidence = context.state.findings.size === 0 && context.state.runtimeChecks.size === 0;
-  const noPriorEvidence = (context.prior?.findings.length ?? 0) === 0 && (context.prior?.runtimeChecks.length ?? 0) === 0;
+  const noCurrentEvidence =
+    context.state.findings.size === 0 && context.state.runtimeChecks.size === 0;
+  const noPriorEvidence =
+    (context.prior?.findings.length ?? 0) === 0 && (context.prior?.runtimeChecks.length ?? 0) === 0;
   if (noCurrentEvidence && noPriorEvidence) {
     return context.blocked(reason);
   }
@@ -935,14 +952,17 @@ const preserveVerifiedFindings = async (
     return context.blocked("Primary review document redaction is unavailable.");
   }
   const prior = context.prior;
-  const hasPrior = prior !== undefined && (prior.findings.length > 0 || prior.runtimeChecks.length > 0);
+  const hasPrior =
+    prior !== undefined && (prior.findings.length > 0 || prior.runtimeChecks.length > 0);
   const hasCurrent = context.state.findings.size > 0 || context.state.runtimeChecks.size > 0;
-  const combined = hasPrior ? {
-    ...context.state,
-    findings: new Map([...prior.findings, ...context.state.findings]),
-    runtimeChecks: new Set([...prior.runtimeChecks, ...context.state.runtimeChecks]),
-    references: new Map([...prior.references, ...context.state.references]),
-  } : context.state;
+  const combined = hasPrior
+    ? {
+        ...context.state,
+        findings: new Map([...prior.findings, ...context.state.findings]),
+        runtimeChecks: new Set([...prior.runtimeChecks, ...context.state.runtimeChecks]),
+        references: new Map([...prior.references, ...context.state.references]),
+      }
+    : context.state;
   const attribution = hasPrior && !hasCurrent ? prior.reviewer : context.reviewer;
   const partial = assessmentFor(
     context.input,
@@ -952,10 +972,19 @@ const preserveVerifiedFindings = async (
     attribution,
     context.policyId,
   );
-  return context.finish({ ...partial,
-    ...(hasPrior && hasCurrent ? { modelId: "multiple", reasoningEffort: null,
-      evidenceNote: `${partial.evidenceNote} Review evidence includes independent contributions from ${prior.reviewer.modelId} and ${context.reviewer.modelId}.` } : {}),
-    reason, reviewCompleted: false, status: combined.findings.size > 0 ? "failed" : "blocked" });
+  return context.finish({
+    ...partial,
+    ...(hasPrior && hasCurrent
+      ? {
+          modelId: "multiple",
+          reasoningEffort: null,
+          evidenceNote: `${partial.evidenceNote} Review evidence includes independent contributions from ${prior.reviewer.modelId} and ${context.reviewer.modelId}.`,
+        }
+      : {}),
+    reason,
+    reviewCompleted: false,
+    status: combined.findings.size > 0 ? "failed" : "blocked",
+  });
 };
 
 const settleReviewWithFallback = async (
@@ -997,7 +1026,9 @@ export const assessApplicationSourceRound = async (
       reviewer,
       reviewPolicyId: policyId,
       fallbackUsed,
-      ...(continuation?.priorReviewerEvidence === undefined ? {} : { priorReviewerEvidence: continuation.priorReviewerEvidence }),
+      ...(continuation?.priorReviewerEvidence === undefined
+        ? {}
+        : { priorReviewerEvidence: continuation.priorReviewerEvidence }),
       messages,
       findings: [...state.findings],
       runtimeChecks: [...state.runtimeChecks],
@@ -1057,7 +1088,17 @@ export const assessApplicationSourceRound = async (
     };
     const blockedWithVerifiedFindings = async (reason: string) =>
       await preserveVerifiedFindings(
-        { input, state, invocation, reviewer, policyId, prior: continuation?.priorReviewerEvidence, readRedactions, finish, blocked },
+        {
+          input,
+          state,
+          invocation,
+          reviewer,
+          policyId,
+          prior: continuation?.priorReviewerEvidence,
+          readRedactions,
+          finish,
+          blocked,
+        },
         reason,
       );
     const completedReview = async () => {
@@ -1072,11 +1113,21 @@ export const assessApplicationSourceRound = async (
       }
       const prior = continuation?.priorReviewerEvidence;
       if (prior !== undefined && prior.runtimeChecks.length > 0) {
-        const assessment = assessmentFor(input, {
-          ...state,
-          runtimeChecks: new Set([...prior.runtimeChecks, ...state.runtimeChecks]),
-        }, invocation, texts, reviewer, policyId);
-        return finish({ ...assessment, evidenceNote: `${assessment.evidenceNote} Runtime checks include unresolved observations from ${prior.reviewer.modelId}.` });
+        const assessment = assessmentFor(
+          input,
+          {
+            ...state,
+            runtimeChecks: new Set([...prior.runtimeChecks, ...state.runtimeChecks]),
+          },
+          invocation,
+          texts,
+          reviewer,
+          policyId,
+        );
+        return finish({
+          ...assessment,
+          evidenceNote: `${assessment.evidenceNote} Runtime checks include unresolved observations from ${prior.reviewer.modelId}.`,
+        });
       }
       return finish(assessmentFor(input, state, invocation, texts, reviewer, policyId));
     };
@@ -1176,7 +1227,9 @@ export const assessApplicationSourceRound = async (
     }
     options.abortSignal?.throwIfAborted();
     if (state.evidenceFailed) {
-      return await blockedWithVerifiedFindings("Application source evidence became unavailable during review.");
+      return await blockedWithVerifiedFindings(
+        "Application source evidence became unavailable during review.",
+      );
     }
     if (hasCompletedReview(state)) {
       return await completedReview();

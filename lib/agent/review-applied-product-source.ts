@@ -144,10 +144,16 @@ export const completedReviewForInput = (
   record: SourceReviewJournalRecord | undefined,
   input: ProductSourceReviewInput,
 ): record is Extract<SourceReviewJournalRecord, { kind: "application-completed" }> => {
-  if (record?.kind !== applicationCompletedKind || !record.assessment.reviewCompleted) { return false; }
-  if (!matchesSourceReviewPolicy(record.assessment)) { return false; }
-  return record.assessment.bindingDigest === sourceReviewBindingDigest(input) &&
-    record.assessment.reviewRubricDigest === applicationSourceReviewRubricDigest();
+  if (record?.kind !== applicationCompletedKind || !record.assessment.reviewCompleted) {
+    return false;
+  }
+  if (!matchesSourceReviewPolicy(record.assessment)) {
+    return false;
+  }
+  return (
+    record.assessment.bindingDigest === sourceReviewBindingDigest(input) &&
+    record.assessment.reviewRubricDigest === applicationSourceReviewRubricDigest()
+  );
 };
 
 const incompatibleRetainedReview = (
@@ -175,7 +181,11 @@ export const reviewApplicationWithJournal = async (
   assertNotStopped();
   const reusable = completedReviewForInput(retained, input.reviewInput);
   if (incompatibleRetainedReview(retained, input.reviewInput)) {
-    return unavailableSourceAssessment(input.reviewInput, "The retained application review does not match the current review policy or evidence.", "blocked");
+    return unavailableSourceAssessment(
+      input.reviewInput,
+      "The retained application review does not match the current review policy or evidence.",
+      "blocked",
+    );
   }
   const options: ApplicationSourceReviewOptions = {
     ...input.options,
@@ -205,8 +215,17 @@ export const reviewApplicationWithJournal = async (
     return assessment;
   }
   const { invocation, ...durableAssessment } = assessment;
-  if (!completedReviewForInput({ kind: applicationCompletedKind, assessment: durableAssessment }, input.reviewInput)) {
-    return unavailableSourceAssessment(input.reviewInput, "The application review does not match the current review policy or evidence.", "blocked");
+  if (
+    !completedReviewForInput(
+      { kind: applicationCompletedKind, assessment: durableAssessment },
+      input.reviewInput,
+    )
+  ) {
+    return unavailableSourceAssessment(
+      input.reviewInput,
+      "The application review does not match the current review policy or evidence.",
+      "blocked",
+    );
   }
   const recorded = await input.journal.put(key, {
     kind: applicationCompletedKind,
@@ -439,7 +458,9 @@ export const prepareAppliedProductSourceReview = async (
     const retained = await journal.read(reviewKey);
     assertNotStopped();
     if (incompatibleRetainedReview(retained, reviewInput)) {
-      return unavailable("The retained application review does not match the current review policy or evidence.");
+      return unavailable(
+        "The retained application review does not match the current review policy or evidence.",
+      );
     }
     if (completedReviewForInput(retained, reviewInput)) {
       const current = await inspectApplyOverlay(
@@ -575,7 +596,12 @@ export const finalizeAppliedProductSourceReview = async (
     if (!outcome.assessment.reviewCompleted) {
       return outcome.assessment;
     }
-    if (!completedReviewForInput({ kind: applicationCompletedKind, assessment: outcome.assessment }, current)) {
+    if (
+      !completedReviewForInput(
+        { kind: applicationCompletedKind, assessment: outcome.assessment },
+        current,
+      )
+    ) {
       return unavailable();
     }
     const journal = await sourceReviewJournalForSession({
