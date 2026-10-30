@@ -90,12 +90,22 @@ execution through the existing structured recovery path; ordinary resume is
 unchanged and discovery still returns five tools. Admission requires the complete
 retained pending-approval checkpoint and independently closed native effect steps
 across the entire verified handoff lineage.
-Builder fences source mutations, confirms its exact native cancellation receipt,
-and recollects terminal state before adopting a child. Active, cancelled, or
-unproven failed effect steps cause refusal before stop or prevent adoption.
+Builder fences source mutations. A separate opaque read-only preflight may inspect
+running handoff ancestors using the retained activation, checkpoint and inbox
+proofs. It cannot boot a child. Builder proves effect closure across the complete
+verified lineage, stops each active owner from root to current inbox owner, and
+independently verifies an operation-bound native cancellation receipt for every
+stopped run. Completed ancestors are observed without stopping them. Exact retries
+reconstruct partial progress from those native receipts. A newly discovered
+handoff refuses adoption until the same operation rechecks and quiesces that
+lineage. Only terminal-only collection and reconciliation can boot a successor.
+Active, cancelled, or unproven failed effect steps cause refusal before stop or
+prevent adoption.
 Pending approvals retain their original request identity and authority; an earlier
 `submission_unknown` response remains retained and is never implicitly resent.
-Unavailable or uncertain recovery preserves its operation for exact retry.
+Any uncertainty, including a refusal after a stop may have occurred, retains the
+operation and source fence for exact retry. A verified pre-effect refusal may
+reject recovery without stopping an owner.
 An authorized GET for a parked source may run a separate advisory native inspection.
 It rechecks exact tenant, owner, adapter generation and cancellation coordinates,
 then reports only fixed structural categories and counts. Inspection does not

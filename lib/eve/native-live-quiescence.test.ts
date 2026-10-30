@@ -2,6 +2,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createSameOriginEveTransport } from "./same-origin-http";
+import { createHostedEveSessionService, HostedSubmissionUnknownError } from "./hosted-service";
+import type { HostedEveTransport } from "./hosted-service";
+import { InMemoryHostedEveStore, hostedOperationRecordSchema } from "./hosted-store";
+import { hostedEveOperationScopes } from "./hosted-auth";
 import type {
   TerminalRecoveryDependencies,
   TerminalRecoveryDescriptor,
@@ -11,9 +15,14 @@ import type {
   observeTerminalSession as RuntimeObserve,
   handleTerminalRecoveryRequest as RuntimeHandle,
   inspectNativeRecoverySource as RuntimeInspect,
+  createNativeTerminalRecoveryDependencies as RuntimeDependencies,
+  quiesceLiveRecoverySource as RuntimeQuiesce,
   TerminalRecoveryObservationDependencies,
 } from "../../node_modules/eve/dist/src/execution/session/terminal-recovery";
-import type { PrivateNativeRecoveryCandidate } from "../../node_modules/eve/dist/src/execution/session/recovery-candidate";
+import type {
+  PrivateNativeRecoveryCandidate,
+  PrivateOwnedLineagePreflight,
+} from "../../node_modules/eve/dist/src/execution/session/recovery-candidate";
 import type { createDurableSessionState as RuntimeDurable } from "../../node_modules/eve/dist/src/execution/durable-session-store";
 import type { appendPendingInputBatch as RuntimeAppend } from "../../node_modules/eve/dist/src/harness/pending-input-batches";
 import type { HarnessSession } from "../../node_modules/eve/dist/src/harness/types";
@@ -23,6 +32,8 @@ const runtime = await vi.importActual<{
   observeTerminalSession: typeof RuntimeObserve;
   handleTerminalRecoveryRequest: typeof RuntimeHandle;
   inspectNativeRecoverySource: typeof RuntimeInspect;
+  createNativeTerminalRecoveryDependencies: typeof RuntimeDependencies;
+  quiesceLiveRecoverySource: typeof RuntimeQuiesce;
 }>(
   new URL("../../node_modules/eve/dist/src/execution/session/terminal-recovery.js", import.meta.url)
     .href,
@@ -66,6 +77,9 @@ const actor = {
 const fixture = () => {
   let nativeStatus = "running";
   let physicalOwner = "old-native";
+  let lineageParents: string[] = [];
+  const ancestorStatuses = new Map<string, string>();
+  const stopReceipts = new Set<string>();
   let currentOwner = true;
   let unsettledStepIds: string[] = [];
   let receipt: TerminalRecoveryBinding | undefined;
@@ -159,8 +173,13 @@ const fixture = () => {
     return Promise.resolve();
   });
   const stopSource = vi.fn<NonNullable<TerminalRecoveryDependencies["stopSource"]>>(
-    (_id, _reason) => {
-      nativeStatus = "cancelled";
+    (id, _reason) => {
+      if (id === physicalOwner) {
+        nativeStatus = "cancelled";
+      } else {
+        ancestorStatuses.set(id, "cancelled");
+      }
+      stopReceipts.add(id);
       return Promise.resolve();
     },
   );
@@ -169,10 +188,16 @@ const fixture = () => {
     reconcile,
     start,
     stopSource,
-    inspectSource: vi.fn(() =>
-      Promise.resolve({ runId: physicalOwner, status: nativeStatus, unsettledStepIds }),
+    inspectSource: vi.fn<NonNullable<TerminalRecoveryDependencies["inspectSource"]>>((id) =>
+      Promise.resolve({
+        runId: id,
+        status: id === physicalOwner ? nativeStatus : (ancestorStatuses.get(id) ?? "completed"),
+        unsettledStepIds,
+      }),
     ),
-    readStopReceipt: vi.fn(() => Promise.resolve(nativeStatus === "cancelled")),
+    readStopReceipt: vi.fn<NonNullable<TerminalRecoveryDependencies["readStopReceipt"]>>((id) =>
+      Promise.resolve(stopReceipts.has(id)),
+    ),
     readCandidate: vi.fn(() => {
       throw new Error("unused synthetic native payload");
     }),
@@ -197,7 +222,13 @@ const fixture = () => {
     version: 1,
     binding: { ownerRunId: "old-native", logicalSessionId: "logical" },
     checkpointOwnerRunId: physicalOwner,
-    handoffChain: [],
+    handoffChain: lineageParents.map((id, index) => ({
+      parentRunId: id,
+      ownerRunId: lineageParents[index + 1] ?? physicalOwner,
+      startStepId: `start-${id}`,
+      activationEventId: `activation-${id}`,
+      events: [],
+    })),
     run: {
       runId: physicalOwner,
       status: "cancelled",
@@ -224,6 +255,28 @@ const fixture = () => {
     carriedInbox: [],
     issues: [],
   }));
+  const opaquePreflight = { kind: "private-native-lineage-preflight", version: 1 };
+  // SAFETY: Only these injected native ports consume this synthetic capability.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The real collector's separate WeakMap brand is behaviorally tested.
+  const lineagePreflight = opaquePreflight as PrivateOwnedLineagePreflight;
+  dependencies.collectLineagePreflight = async (input) => {
+    const result = await collect({ ...input, allowParked: true });
+    return result.kind === "candidate"
+      ? { kind: "preflight", preflight: lineagePreflight }
+      : result;
+  };
+  dependencies.readLineagePreflight = () => dependencies.readCandidate(candidate);
+  dependencies.reconcileLineagePreflight = () => reconcile(candidate);
+  dependencies.readLogicalInboxOwner = () => {
+    if (ready) {
+      return Promise.resolve({ runId: ready.ownerRunId, logicalSessionId: "logical" });
+    }
+    if (nativeStatus === "cancelled") {
+      const absent: undefined = ready;
+      return Promise.resolve(absent);
+    }
+    return Promise.resolve({ runId: physicalOwner, logicalSessionId: "logical" });
+  };
   return {
     ports,
     dependencies,
@@ -234,6 +287,16 @@ const fixture = () => {
     before,
     after,
     run: () => runtime.recoverTerminalSession({ auth: actor, descriptor, ports }, dependencies),
+    getNativeStatus: () => nativeStatus,
+    setLineage: (parents: string[]) => {
+      lineageParents = parents;
+    },
+    setAncestorStatus: (id: string, status: string) => {
+      ancestorStatuses.set(id, status);
+    },
+    markStopReceipt: (id: string) => {
+      stopReceipts.add(id);
+    },
     setPhysicalOwner: (id: string) => {
       physicalOwner = id;
     },
@@ -267,7 +330,7 @@ describe("live native execution transfer", () => {
       return Promise.resolve({ runId: "old-native", status: "running", unsettledStepIds: [] });
     });
     expect(await f.run()).toMatchObject({
-      kind: "unavailable",
+      kind: "uncertain",
       reason: "source-physical-owner-changed",
     });
     expect(f.stopSource).not.toHaveBeenCalled();
@@ -306,7 +369,7 @@ describe("live native execution transfer", () => {
         ? await collect(input)
         : { kind: "unavailable", reason: "source-not-terminal" },
     );
-    expect(await f.run()).toMatchObject({ kind: "unavailable", reason: "source-not-terminal" });
+    expect(await f.run()).toMatchObject({ kind: "uncertain", reason: "source-not-terminal" });
     expect(f.stopSource).toHaveBeenCalledTimes(1);
     expect(f.collect.mock.calls.at(-1)?.[0].allowParked).toBeUndefined();
     expect(f.start).not.toHaveBeenCalled();
@@ -409,11 +472,7 @@ describe("live native execution transfer", () => {
       "old-native",
       "Builder native execution transfer transfer",
     );
-    expect(f.collect.mock.calls.map(([input]) => input.allowParked)).toEqual([
-      true,
-      true,
-      undefined,
-    ]);
+    expect(f.collect.mock.calls.filter(([input]) => input.allowParked !== true)).toHaveLength(1);
     expect(f.start.mock.calls[0]?.[0].checkpoint.sessionState).toEqual(f.after);
     expect(f.start.mock.calls[0]?.[0].checkpoint.sessionState).not.toEqual(f.before);
     expect(await f.run()).toMatchObject({ kind: "accepted" });
@@ -422,27 +481,15 @@ describe("live native execution transfer", () => {
   });
   it("refuses unresolved effects discovered after execution stop", async () => {
     const f = fixture();
-    f.reconcile.mockResolvedValueOnce({
-      kind: "ready",
-      checkpointCore: { sessionState: f.before, serializedContext: { "eve.sessionId": "logical" } },
-      provenance: {
-        version: 1,
-        sourceOwnerRunId: "old-native",
-        checkpointOwnerRunId: "old-native",
-        logicalSessionId: "logical",
-        selectedOrigin: {
-          kind: "committed-turn-output",
-          stepId: "step",
-          eventId: "event",
-          slot: 1,
-        },
-        coveredNativeEventIds: [],
-        frontierEventIds: [],
-        nativeProtocolFactCount: 0,
-        reconstructedCoordination: false,
-      },
-    });
-    f.reconcile.mockResolvedValueOnce({ kind: "uncertain", reason: "uncommitted-action-dispatch" });
+    const reconcile = f.reconcile.getMockImplementation();
+    if (reconcile === undefined) {
+      throw new Error("Missing reconciliation fixture");
+    }
+    f.reconcile.mockImplementation((candidate) =>
+      f.getNativeStatus() === "cancelled"
+        ? Promise.resolve({ kind: "uncertain", reason: "uncommitted-action-dispatch" })
+        : reconcile(candidate),
+    );
     expect(await f.run()).toMatchObject({ kind: "uncertain" });
     expect(f.stopSource).toHaveBeenCalledTimes(1);
     expect(f.start).not.toHaveBeenCalled();
@@ -924,4 +971,484 @@ it("relays dependency-load failure only after successful exact source authorizat
   } finally {
     info.mockRestore();
   }
+});
+
+it("composes real native lineage ports and reaches canonical validation before any World read", async () => {
+  const f = fixture();
+  const dependencies = await runtime.createNativeTerminalRecoveryDependencies();
+  await expect(
+    runtime.quiesceLiveRecoverySource(
+      { auth: actor, descriptor: { ...descriptor, logicalSessionId: "" }, ports: f.ports },
+      dependencies,
+    ),
+  ).rejects.toThrow("Canonical server ownership authorization is required.");
+  expect(f.stopSource).not.toHaveBeenCalled();
+  expect(f.start).not.toHaveBeenCalled();
+});
+
+describe("owned running-lineage execution transfer", () => {
+  const twoOwners = () => {
+    const f = fixture();
+    f.setLineage(["old-native"]);
+    f.setAncestorStatus("old-native", "running");
+    f.setPhysicalOwner("physical-child");
+    return f;
+  };
+  it("stops every active verified owner root first, verifies all receipts and adopts one terminal checkpoint", async () => {
+    const f = twoOwners();
+    expect(await f.run()).toMatchObject({ kind: "accepted" });
+    expect(f.stopSource.mock.calls.map(([id]) => id)).toEqual(["old-native", "physical-child"]);
+    expect(f.start).toHaveBeenCalledOnce();
+    expect(f.start.mock.calls[0]?.[0].checkpoint.sessionState).toEqual(f.after);
+    expect(await f.run()).toMatchObject({ kind: "accepted" });
+    expect(f.start).toHaveBeenCalledOnce();
+    expect(f.stopSource).toHaveBeenCalledTimes(2);
+  });
+  it("observes a naturally completed ancestor without cancelling it", async () => {
+    const f = twoOwners();
+    f.setAncestorStatus("old-native", "completed");
+    expect(await f.run()).toMatchObject({ kind: "accepted" });
+    expect(f.stopSource.mock.calls.map(([id]) => id)).toEqual(["physical-child"]);
+  });
+  it.each(["running", "failed", "cancelled"])(
+    "refuses an unresolved %s effect anywhere before any stop",
+    async (status) => {
+      const f = twoOwners();
+      f.dependencies.inspectSource = (id) =>
+        Promise.resolve({
+          runId: id,
+          status: "running",
+          unsettledStepIds: id === "physical-child" ? [`${status}-effect`] : [],
+          stepCounts: { [status]: 1 },
+        });
+      expect(await f.run()).toMatchObject({
+        kind: "unavailable",
+        reason: "source-lineage-effects-unsettled",
+      });
+      expect(f.stopSource).not.toHaveBeenCalled();
+      expect(f.start).not.toHaveBeenCalled();
+    },
+  );
+  it("reconstructs a partial stop from exact native receipts without stopping the ancestor twice", async () => {
+    const f = twoOwners();
+    const read = f.dependencies.readStopReceipt?.bind(f.dependencies);
+    if (read === undefined) {
+      throw new Error("Missing receipt fixture");
+    }
+    f.dependencies.readStopReceipt = vi
+      .fn<NonNullable<TerminalRecoveryDependencies["readStopReceipt"]>>((id, reason) =>
+        read(id, reason),
+      )
+      .mockResolvedValueOnce(false);
+    expect(await f.run()).toMatchObject({ kind: "uncertain", reason: "source-stop-unconfirmed" });
+    expect(f.stopSource.mock.calls.map(([id]) => id)).toEqual(["old-native"]);
+    expect(f.start).not.toHaveBeenCalled();
+    expect(await f.run()).toMatchObject({ kind: "accepted" });
+    expect(f.stopSource.mock.calls.map(([id]) => id)).toEqual(["old-native", "physical-child"]);
+    expect(f.start).toHaveBeenCalledOnce();
+  });
+  it("refuses a late handoff before boot and rediscovers it on the same operation retry", async () => {
+    const f = twoOwners();
+    const stop = f.stopSource.getMockImplementation();
+    if (stop === undefined) {
+      throw new Error("Missing stop fixture");
+    }
+    f.stopSource.mockImplementationOnce(async (id, reason) => {
+      await stop(id, reason);
+      f.setLineage(["old-native", "physical-child"]);
+      f.setAncestorStatus("physical-child", "running");
+      f.setPhysicalOwner("late-child");
+    });
+    expect(await f.run()).toMatchObject({
+      kind: "uncertain",
+      reason: "source-physical-owner-changed",
+    });
+    expect(f.start).not.toHaveBeenCalled();
+    expect(f.stopSource).toHaveBeenCalledOnce();
+    expect(await f.run()).toMatchObject({ kind: "accepted" });
+    expect(f.stopSource.mock.calls.map(([id]) => id)).toEqual([
+      "old-native",
+      "physical-child",
+      "late-child",
+    ]);
+    expect(f.start).toHaveBeenCalledOnce();
+  });
+  it("honors owner revocation between ancestor and final-owner stops", async () => {
+    const f = twoOwners();
+    const stop = f.stopSource.getMockImplementation();
+    if (stop === undefined) {
+      throw new Error("Missing stop fixture");
+    }
+    f.stopSource.mockImplementationOnce(async (id, reason) => {
+      await stop(id, reason);
+      f.revoke();
+    });
+    await expect(f.run()).rejects.toThrow("owner revoked");
+    expect(f.stopSource.mock.calls.map(([id]) => id)).toEqual(["old-native"]);
+    expect(f.start).not.toHaveBeenCalled();
+  });
+  it("refuses an inbox owned outside the reconstructed verified lineage", async () => {
+    const f = twoOwners();
+    f.dependencies.readLogicalInboxOwner = () =>
+      Promise.resolve({ runId: "unverified-owner", logicalSessionId: "logical" });
+    expect(await f.run()).toMatchObject({
+      kind: "uncertain",
+      reason: "source-physical-owner-changed",
+    });
+    expect(f.stopSource).not.toHaveBeenCalled();
+    expect(f.start).not.toHaveBeenCalled();
+  });
+});
+
+it("uses server-default bulk pagination and exhausts all step pages", async () => {
+  const pages: unknown[] = [];
+  const world = {
+    runs: { get: () => Promise.resolve({ runId: "old-native", status: "running" }) },
+    steps: {
+      list: (input: { pagination?: { cursor?: string; limit?: number } }) => {
+        pages.push(input);
+        expect(input.pagination).not.toHaveProperty("limit");
+        return Promise.resolve(
+          input.pagination?.cursor === undefined
+            ? {
+                data: [{ runId: "old-native", stepId: "one", status: "completed" }],
+                hasMore: true,
+                cursor: "page-two",
+              }
+            : { data: [{ runId: "old-native", stepId: "two", status: "failed" }], hasMore: false },
+        );
+      },
+    },
+  };
+  const inspect = runtime.inspectNativeRecoverySource;
+  // @ts-expect-error Synthetic World intentionally implements only the native read methods exercised here.
+  const result = await inspect(world, "old-native");
+  expect(pages).toHaveLength(2);
+  expect(result).toMatchObject({
+    runId: "old-native",
+    status: "running",
+    unsettledStepIds: ["two"],
+    stepCounts: { completed: 1, failed: 1 },
+  });
+});
+
+it("terminal-only recollection refuses a newly visible handoff before any successor", async () => {
+  const f = fixture();
+  f.setLineage(["old-native"]);
+  f.setAncestorStatus("old-native", "running");
+  f.setPhysicalOwner("physical-child");
+  const collect = f.collect.getMockImplementation();
+  if (collect === undefined) {
+    throw new Error("Missing collector fixture");
+  }
+  let injected = false;
+  f.collect.mockImplementation((input) => {
+    if (input.allowParked !== true && !injected) {
+      injected = true;
+      f.setLineage(["old-native", "physical-child"]);
+      f.setAncestorStatus("physical-child", "cancelled");
+      f.setPhysicalOwner("late-child");
+      f.setNativeStatus("running");
+    }
+    return collect(input);
+  });
+  expect(await f.run()).toMatchObject({
+    kind: "uncertain",
+    reason: "source-physical-owner-changed",
+  });
+  expect(f.start).not.toHaveBeenCalled();
+  expect(f.stopSource.mock.calls.map(([id]) => id)).toEqual(["old-native", "physical-child"]);
+  expect(await f.run()).toMatchObject({ kind: "accepted" });
+  expect(f.stopSource.mock.calls.map(([id]) => id)).toEqual([
+    "old-native",
+    "physical-child",
+    "late-child",
+  ]);
+  expect(f.start).toHaveBeenCalledOnce();
+});
+
+it("retains the canonical unknown operation and source fence after a partial native stop through HTTP", async () => {
+  const f = fixture();
+  f.setLineage(["logical"]);
+  f.setAncestorStatus("logical", "running");
+  const principal = {
+    issuer: "https://owner.example",
+    audience: "builder",
+    workspaceId: "workspace",
+    ownerUserId: "owner",
+    scopes: Object.values(hostedEveOperationScopes),
+  };
+  const store = new InMemoryHostedEveStore();
+  let afterRootStop = false;
+  const stop = f.stopSource.getMockImplementation();
+  if (stop === undefined) {
+    throw new Error("Missing stop fixture");
+  }
+  f.stopSource.mockImplementationOnce(async (id, reason) => {
+    await stop(id, reason);
+    afterRootStop = true;
+  });
+  const preflight = f.dependencies.collectLineagePreflight?.bind(f.dependencies);
+  if (preflight === undefined) {
+    throw new Error("Missing preflight fixture");
+  }
+  f.dependencies.collectLineagePreflight = (input) =>
+    afterRootStop
+      ? Promise.resolve({ kind: "unavailable", reason: "paired-native-checkpoint-unavailable" })
+      : preflight(input);
+  const operationIds: string[] = [];
+  const statuses: number[] = [];
+  const nativeTransport = createSameOriginEveTransport({
+    config: { baseUrl: "https://builder.example.test" },
+    workloadIdentity: { token: () => Promise.resolve("synthetic-token") },
+    fetchImplementation: async (_url, init) => {
+      const payload = z
+        .record(z.string(), z.unknown())
+        .parse(JSON.parse(z.string().parse(init?.body)));
+      operationIds.push(z.string().parse(payload.operationId));
+      const response = await runtime.handleTerminalRecoveryRequest(
+        { payload, auth: actor, forwarded: true, ports: f.ports },
+        () => Promise.resolve(f.dependencies),
+      );
+      statuses.push(response.status);
+      return response;
+    },
+  });
+  const adapter: HostedEveTransport = {
+    start: (input) =>
+      input.recovery === undefined
+        ? Promise.resolve({
+            adapterSessionId: "logical",
+            snapshot: { events: [], status: "input_required" },
+          })
+        : nativeTransport.start(input),
+    get: () => Promise.resolve({ events: [], status: "input_required" }),
+    send: vi.fn(),
+    respond: vi.fn(),
+    cancel: vi.fn(),
+  };
+  const service = createHostedEveSessionService({
+    principal,
+    store,
+    transport: adapter,
+    assertNativeRecoveryOwner: () => Promise.resolve(),
+  });
+  const first = await service.start({ clientRequestId: "initial", prompt: "Build isolated app" });
+  const originalResponse = hostedOperationRecordSchema.parse({
+    version: 1,
+    kind: "respond",
+    clientRequestId: "original-approval",
+    operationId: "original-approval",
+    sessionId: first.sessionId,
+    principal,
+    state: "reserved",
+    requestDigest: `sha256:${"c".repeat(64)}`,
+    createdAtEpochMs: 1,
+    updatedAtEpochMs: 1,
+  });
+  await store.reserveOperation(principal, originalResponse);
+  await store.settleUnsuccessful({
+    principal,
+    operationId: originalResponse.operationId,
+    requestDigest: originalResponse.requestDigest,
+    state: "submission_unknown",
+    safeErrorCode: "submission_unknown",
+    nowEpochMs: 2,
+  });
+  const request = {
+    clientRequestId: "owned-recovery",
+    resumeSessionId: first.sessionId,
+    resumeMode: "recover" as const,
+  };
+  const info = vi.spyOn(console, "info").mockImplementation(() => {});
+  try {
+    await expect(service.start(request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    const unknown = await store.getStartOperation(principal, request.clientRequestId);
+    expect(unknown).toMatchObject({ state: "submission_unknown" });
+    expect(statuses).toEqual([503]);
+    expect(f.stopSource.mock.calls.map(([id]) => id)).toEqual(["logical"]);
+    const fenced = await store.reserveOperation(principal, {
+      ...originalResponse,
+      operationId: "later-approval",
+      clientRequestId: "later-approval",
+    });
+    expect(fenced).toMatchObject({ disposition: "rejected", reason: "session_busy" });
+    await expect(service.start(request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    expect(statuses).toEqual([503, 409]);
+    expect(operationIds[0]).toBe(operationIds[1]);
+    const retained = await store.getStartOperation(principal, request.clientRequestId);
+    expect(retained).toMatchObject({
+      state: "submission_unknown",
+      operationId: unknown?.operationId,
+    });
+    const approval = await store.getPrivateOperation(principal, originalResponse.operationId);
+    expect(approval).toMatchObject({ state: "submission_unknown" });
+    expect(f.stopSource).toHaveBeenCalledOnce();
+    expect(f.start).not.toHaveBeenCalled();
+  } finally {
+    info.mockRestore();
+  }
+});
+
+it("GET-only opaque preflight relays complete owned-lineage facts without stopping any owner", async () => {
+  const f = fixture();
+  f.setLineage(["old-native"]);
+  f.setAncestorStatus("old-native", "running");
+  f.setPhysicalOwner("physical-child");
+  f.dependencies.inspectSource = (id) =>
+    Promise.resolve({
+      runId: id,
+      status: "running",
+      unsettledStepIds: [],
+      stepCounts: {
+        completed: id === "old-native" ? 20 : 6,
+        pending: 0,
+        running: 0,
+        failed: 0,
+        cancelled: 0,
+        unknown: 0,
+      },
+    });
+  const adapter = createSameOriginEveTransport({
+    config: { baseUrl: "https://builder.example.test" },
+    workloadIdentity: { token: () => Promise.resolve("synthetic-token") },
+    fetchImplementation: () =>
+      runtime.handleTerminalRecoveryRequest(
+        {
+          payload: { recoveryPhase: "inspect-source", sourceObservation: {} },
+          auth: actor,
+          forwarded: true,
+          ports: {
+            ...f.ports,
+            authorizeSourceObservation: () =>
+              Promise.resolve({ ownerRunId: "old-native", logicalSessionId: "logical" }),
+          },
+        },
+        () => Promise.resolve(f.dependencies),
+      ),
+  });
+  const info = vi.spyOn(console, "info").mockImplementation(() => {});
+  try {
+    await adapter.observeSource?.({
+      principal: {
+        issuer: "https://owner.example",
+        audience: "builder",
+        workspaceId: "workspace",
+        ownerUserId: "owner",
+        scopes: ["autograph:get"],
+      },
+      source: {
+        sourcePublicSessionId: "source",
+        sourceAdapterSessionId: "old-native",
+        sourceAdapterGeneration: 1,
+        cancellationRevision: 0,
+      },
+    });
+    expect(loggedEvent(info.mock.calls, "builder.native_source_observation_relay")).toMatchObject({
+      outcome: "available",
+      diagnostic: {
+        collectionKind: "preflight",
+        reconciliation: { kind: "ready" },
+        lineageRead: {
+          outcome: "succeeded",
+          provenRunCount: 2,
+          unsettledStepCount: 0,
+          stepCounts: {
+            completed: 26,
+            pending: 0,
+            running: 0,
+            failed: 0,
+            cancelled: 0,
+            unknown: 0,
+          },
+        },
+      },
+    });
+    expect(f.stopSource).not.toHaveBeenCalled();
+    expect(f.start).not.toHaveBeenCalled();
+    expect(JSON.stringify(info.mock.calls)).not.toContain("physical-child");
+    expect(JSON.stringify(info.mock.calls)).not.toContain("old-native");
+  } finally {
+    info.mockRestore();
+  }
+});
+
+it("adopts the same parked ready child after receipt failure without a second start or stopping that child", async () => {
+  const f = fixture();
+  f.setLineage(["old-native"]);
+  f.setAncestorStatus("old-native", "running");
+  f.setPhysicalOwner("physical-child");
+  const commit = f.ports.commitReceipt.bind(f.ports);
+  f.ports.commitReceipt = vi
+    .fn<TerminalRecoveryPorts["commitReceipt"]>((input) => commit(input))
+    .mockRejectedValueOnce(new Error("private-ready-receipt-failure"));
+  const info = vi.spyOn(console, "info").mockImplementation(() => {});
+  try {
+    await expect(f.run()).rejects.toThrow("private-ready-receipt-failure");
+    expect(f.start).toHaveBeenCalledOnce();
+    expect(await f.run()).toMatchObject({
+      kind: "accepted",
+      recoveryBinding: { ownerRunId: "new-native" },
+    });
+    expect(f.start).toHaveBeenCalledOnce();
+    expect(f.stopSource.mock.calls.map(([id]) => id)).toEqual(["old-native", "physical-child"]);
+    expect(f.collect.mock.calls.filter(([input]) => input.allowParked !== true)).toHaveLength(2);
+  } finally {
+    info.mockRestore();
+  }
+});
+it("refuses another operation's ready hook before stopping any owner", async () => {
+  const f = fixture();
+  f.dependencies.getHook = () =>
+    Promise.resolve({
+      runId: "foreign-ready",
+      metadata: Promise.resolve({
+        recoveryBinding: {
+          ...descriptor,
+          operationId: "another-operation",
+          ownerRunId: "foreign-ready",
+          provenance: {
+            kind: "committed-turn-output",
+            sourceStepId: "step",
+            sourceEventId: "event",
+            sourceSlot: 1,
+            checkpointVersion: 1,
+          },
+        },
+      }),
+    });
+  const info = vi.spyOn(console, "info").mockImplementation(() => {});
+  try {
+    await expect(f.run()).rejects.toThrow("Recovery activation owner changed");
+    expect(f.stopSource).not.toHaveBeenCalled();
+    expect(f.start).not.toHaveBeenCalled();
+  } finally {
+    info.mockRestore();
+  }
+});
+it("does not accept a caller-supplied parked owner without its exact native ready hook", async () => {
+  const f = fixture();
+  f.dependencies.readLogicalInboxOwner = () =>
+    Promise.resolve({ runId: "forged-ready", logicalSessionId: "logical" });
+  const forged: TerminalRecoveryBinding = {
+    ...descriptor,
+    ownerRunId: "forged-ready",
+    provenance: {
+      kind: "committed-turn-output",
+      sourceStepId: "step",
+      sourceEventId: "event",
+      sourceSlot: 1,
+      checkpointVersion: 1,
+    },
+  };
+  expect(
+    await runtime.quiesceLiveRecoverySource(
+      { auth: actor, descriptor, ports: f.ports },
+      f.dependencies,
+      undefined,
+      forged,
+    ),
+  ).toMatchObject({ kind: "uncertain", reason: "source-physical-owner-changed" });
+  expect(f.stopSource).not.toHaveBeenCalled();
+  expect(f.start).not.toHaveBeenCalled();
 });
