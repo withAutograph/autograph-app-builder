@@ -1,4 +1,5 @@
 import { readParticipantSuccessorPredecessor } from "./hosted-operator-participant-successor";
+import { readUnapprovedCapturePredecessor } from "./hosted-operator-unapproved-capture-history";
 import { readAppGatewaySourcePredecessor } from "./hosted-operator-app-gateway-source-successor";
 import { sharedHostProtectionDeliveryProvenance } from "./hosted-operator-shared-host-protection-successor";
 import {
@@ -922,6 +923,48 @@ const participantPredecessorApprovalCheckpoint = (
   };
 };
 
+/** Resolve only real account and bootstrap approvals in an explicit capture successor.
+ * The archived app proposal itself is unapproved and can never be approval authority. */
+const capturePredecessorApprovalCheckpoint = (
+  record: HostedRuntimeJournalRecord | undefined,
+  context: { action: "prepare" | "cleanup"; callId: string; planDigest: string },
+) => {
+  if (context.action !== "prepare" || record?.operator === undefined) {
+    return null;
+  }
+  const plan =
+    record.operator.plan.normalActorCapturePredecessor === undefined
+      ? record.accountPreparation?.accountPlan
+      : record.operator.plan;
+  if (plan?.normalActorCapturePredecessor === undefined) {
+    return null;
+  }
+  const prior = readUnapprovedCapturePredecessor(record, plan, Date.now());
+  if (prior === undefined) {
+    return null;
+  }
+  const accounts = prior.account;
+  if (
+    accounts.accountPlanDigest === context.planDigest &&
+    accounts.accountApprovedByCallId === context.callId
+  ) {
+    return {
+      current: {
+        approvalId: accounts.accountApprovalId,
+        operationRef: accounts.accountOperationRef,
+        plan: accounts.accountPlan,
+        planDigest: accounts.accountPlanDigest,
+      },
+      retainedPrepare: true,
+    };
+  }
+  const original = [prior.bootstrap.auth, prior.bootstrap.gateway].find(
+    (value) =>
+      value?.planDigest === context.planDigest && value.approvedByCallId === context.callId,
+  );
+  return original === undefined ? null : { current: original, retainedPrepare: true };
+};
+
 const membershipInspectionApprovalCheckpoint = (
   record: HostedRuntimeJournalRecord | undefined,
   context: { action: "prepare" | "cleanup"; callId: string; planDigest: string },
@@ -1021,6 +1064,7 @@ const approvalCheckpoint = (
   context: { action: "prepare" | "cleanup"; callId: string; planDigest: string },
 ) =>
   participantPredecessorApprovalCheckpoint(record, context) ??
+  capturePredecessorApprovalCheckpoint(record, context) ??
   ordinaryApprovalCheckpoint(record, context);
 
 /** Owner-scoped terminal approval reader; the durable digest binds the closed plan. */

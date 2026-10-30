@@ -1,3 +1,9 @@
+import {
+  captureFixture,
+  context as captureContext,
+} from "./hosted-operator-unapproved-app-successor.test-support";
+import { inspectUnapprovedAppSuccessor } from "./hosted-operator-unapproved-app-successor";
+import { createUnapprovedParticipantPlan } from "./hosted-operator-unapproved-participant-plan";
 import { createParticipantSuccessorPlan } from "./hosted-operator-participant-successor";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { durableHostedSessionRecordSchema } from "../eve/hosted-store";
@@ -51,6 +57,7 @@ import {
   composeHostedOperatorDependencies,
   createDependencies,
   createConfiguredPreviewTargetResolver,
+  readCompletedCaptureBootstrap,
   resolveFullPlan,
 } from "./hosted-operator-composition";
 import { readHostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
@@ -4924,4 +4931,102 @@ it("resolves the completed additive participant successor into its newly approve
   expect(resolved.access).toHaveLength(2);
   expect(resolved.access.every((grant) => grant.actorId === "normal-qa-from-session")).toBe(true);
   expect(record.participantPreparationHistory).toEqual(before);
+});
+
+it("selects the account-only successor from an unapproved app proposal before composing a delivery", async () => {
+  const f = publicationFixture();
+  const { record, added } = captureFixture();
+  const untouched = structuredClone(record);
+  const unused = unusedCompositionControlPlane();
+  const authorized = vi.fn(async () => {
+    await Promise.resolve();
+  });
+  const dependencies = composeHostedOperatorDependencies(f.configuration, {
+    ...unused,
+    assertPlanningAuthorized: authorized,
+    store: {
+      ...unused.store,
+      read: async () => await Promise.resolve({ record: structuredClone(record), revision: 7 }),
+    },
+  });
+  const plan = await dependencies.plan({
+    ...context,
+    action: "prepare",
+    normalActorProgram: added,
+  });
+  expect(plan.stage).toBe("auth-participants");
+  expect(plan.normalActorProgram).toEqual(added);
+  expect(plan.normalActorCapturePredecessor?.preparation.accountApprovalId).toBe(
+    "account-approval",
+  );
+  expect(plan.effects.map((effect) => effect.kind)).toEqual(["normal-accounts"]);
+  expect(plan.delivery).toBeUndefined();
+  expect(authorized).toHaveBeenCalled();
+  expect(record).toEqual(untouched);
+});
+
+it("uses only the same approved completed additive capture successor for app planning", () => {
+  const { record, added } = captureFixture();
+  const before = inspectUnapprovedAppSuccessor(record, captureContext.target, added, Date.now());
+  if (before === undefined) {
+    throw new Error("missing predecessor fixture");
+  }
+  const successor = createUnapprovedParticipantPlan(before, added);
+  const old = structuredClone(record.operator);
+  if (
+    old === undefined ||
+    record.retainedAuth === undefined ||
+    record.accountPreparation === undefined
+  ) {
+    throw new Error("missing retained fixture");
+  }
+  record.unapprovedAppProposalHistory = [
+    {
+      approvedByCallId: "operator:unapproved-plan",
+      operator: old,
+      preparation: record.accountPreparation,
+      retainedAuth: record.retainedAuth,
+      retainedParticipantGateway: record.retainedParticipantGateway,
+    },
+  ];
+  const operation = "00000000-0000-4000-8000-000000000022";
+  const digest = operatorPlanDigest(successor);
+  record.accountPreparation = {
+    ...record.accountPreparation,
+    program: added,
+    programDigest: normalActorProgramDigest(added),
+    accountPlan: successor,
+    accountPlanDigest: digest,
+    accountOperationRef: operation,
+    accountApprovalId: "new-approval",
+    accountApprovedByCallId: "new-call",
+    capturePredecessor: successor.normalActorCapturePredecessor,
+    accountsCompletedAt: "2026-10-20T00:00:00.000Z",
+  };
+  record.operator = {
+    ...old,
+    plan: successor,
+    planDigest: digest,
+    operationRef: operation,
+    approvalId: "new-approval",
+    receipts: [
+      {
+        effectId: "normal-accounts",
+        observedAt: "2026-10-20T00:00:00.000Z",
+        resourceVersion: "verified",
+      },
+    ],
+  };
+  record.approvedByCallId = "new-call";
+  record.status = "participants-prepared";
+  const snapshot = structuredClone(record);
+  expect(readCompletedCaptureBootstrap(successor, record)?.bootstrap.auth.approvalId).toBe(
+    "actual-approval",
+  );
+  expect(record).toEqual(snapshot);
+  record.operator.approvalId = "wrong";
+  expect(readCompletedCaptureBootstrap(successor, record)).toBeUndefined();
+  record.operator.approvalId = "new-approval";
+  record.operator.pendingEffectId = "normal-accounts";
+  expect(readCompletedCaptureBootstrap(successor, record)).toBeUndefined();
 });

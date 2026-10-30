@@ -216,6 +216,23 @@ export const normalActorPredecessorSchema = z.strictObject({
   approvalId: id,
   approvedByCallId: id,
 });
+/** Exact account and Auth prerequisites for adding participants before the app is delivered.
+ * This reference is provenance only: callers must independently re-read both approvals. */
+export const normalActorCapturePredecessorSchema = z.strictObject({
+  preparation: normalActorPreparationSchema,
+  bootstrapOperationRef: z.uuid(),
+  bootstrapPlanDigest: digest,
+  bootstrapApprovalId: id,
+  bootstrapApprovedByCallId: id,
+  gateway: z
+    .strictObject({
+      operationRef: z.uuid(),
+      planDigest: digest,
+      approvalId: id,
+      approvedByCallId: id,
+    })
+    .optional(),
+});
 const hostedOperatorAuthSignupPolicyFieldsSchema = z.strictObject({
   version: z.literal(1),
   policyId: id,
@@ -441,6 +458,7 @@ const hostedOperatorPlanDataSchema = z.strictObject({
   normalActorProgram: normalActorProgramSchema.optional(),
   normalActorPreparation: normalActorPreparationSchema.optional(),
   normalActorPredecessor: normalActorPredecessorSchema.optional(),
+  normalActorCapturePredecessor: normalActorCapturePredecessorSchema.optional(),
   // Optional only when parsing persisted protected-operator-v1 records created before
   // native Gateway origins were part of the verified plan.
   publicGateway: z
@@ -532,6 +550,19 @@ const validateNormalActorPlan = (
 ) => {
   const program = plan.normalActorProgram;
   const participantStage = plan.stage === AUTH_PARTICIPANTS_STAGE;
+  if (
+    plan.normalActorCapturePredecessor !== undefined &&
+    (plan.action !== "prepare" ||
+      !participantStage ||
+      plan.normalActorPredecessor !== undefined ||
+      program === undefined)
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message:
+        "A captured-account predecessor is exclusive to an approved participant preparation.",
+    });
+  }
   if (
     plan.normalActorPredecessor !== undefined &&
     (plan.action !== "prepare" || !participantStage)

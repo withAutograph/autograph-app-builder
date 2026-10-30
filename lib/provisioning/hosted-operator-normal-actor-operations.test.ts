@@ -1175,6 +1175,67 @@ describe("normal actor operations", () => {
     expect(f.captures).toEqual([{ actorKey: "owner", organizationId: undefined }]);
     expect(f.requests).toHaveLength(0);
   });
+  it.each(["expired", "different-actor"] as const)(
+    "requests an ordinary reconnect for an %s captured session without weakening identity checks",
+    async (outcome) => {
+      const capturedProgram = normalActorProgramSchema.parse({
+        ...program,
+        actors: [{ ...program.actors[0], account: "capture-existing" }],
+        organizations: [],
+        memberships: [],
+        appAccess: [],
+      });
+      const f = fixture(false, capturedProgram);
+      await expect(f.operations.ensureNormalActorCapture(f.preflight)).rejects.toThrow(
+        "fixture_capture_required",
+      );
+      const client = createHostedOperatorNormalAuthClient({
+        origin: capturedProgram.origin,
+        assertApprovedEffect: f.effect.assertCurrent,
+        fetch: async (url, init) => await f.auth.handler(new Request(url, init)),
+      });
+      await client.signUp({ email: "owner@example.com", name: "Owner", password: randomUUID() });
+      const session = await client.getSession();
+      if (session === null) {
+        throw new Error("fixture_missing_session");
+      }
+      const state = initialNormalActorState(capturedProgram, accountOperationRef);
+      state.actors = [
+        {
+          actorKey: "owner",
+          signup: "complete",
+          session: {
+            reference: randomUUID(),
+            actorId: outcome === "different-actor" ? "foreign" : session.actorId,
+            realmSessionId: session.sessionId,
+            origin: capturedProgram.origin,
+            expiresAt: session.expiresAt,
+          },
+          storageState: client.exportStorageState(),
+        },
+      ];
+      await f.journal.checkpoint(context, state);
+      if (outcome === "expired") {
+        f.journalPorts.now = () => Date.parse(session.expiresAt) + 1;
+      }
+      const beforeRequests = f.requests.length;
+      const beforeCaptures = f.captures.length;
+      if (outcome === "expired") {
+        await expect(f.operations.ensureNormalActorCapture(f.preflight)).rejects.toThrow(
+          "fixture_capture_required",
+        );
+        expect(f.captures.slice(beforeCaptures)).toEqual([
+          { actorKey: "owner", organizationId: undefined },
+        ]);
+        expect(f.requests).toHaveLength(beforeRequests);
+      } else {
+        await expect(f.operations.ensureNormalActorCapture(f.preflight)).rejects.toMatchObject({
+          code: "auth_identity_required",
+        });
+        expect(f.captures).toHaveLength(beforeCaptures);
+      }
+    },
+  );
   it("rechecks actual owner authority before a retained private read", async () => {
     const f = fixture();
     await f.operations.ensureNormalActorCapture(f.preflight);
