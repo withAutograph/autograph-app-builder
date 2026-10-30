@@ -26,6 +26,38 @@ import type {
   SourceReviewRequest,
 } from "./product-source-review-batches";
 
+/** Source review is configured independently from design-quality validation. */
+export interface SourceReviewer {
+  modelId: string;
+  reasoningEffort: "low" | "medium" | null;
+}
+export interface SourceReviewPolicy {
+  id: string;
+  primary: SourceReviewer;
+  fallback: SourceReviewer;
+}
+export const sourceReviewPolicy = (): SourceReviewPolicy => ({
+  fallback: { modelId: builderValidationModelId, reasoningEffort: null },
+  id: "terra-low-sol-fallback-v1",
+  primary: { modelId: "openai/gpt-6.1-terra", reasoningEffort: "low" },
+});
+type SourceReviewProviderOptions = { gateway: { only: string[] }; openai: { reasoningEffort: "low" | "medium" } } | { gateway: { only: string[] } };
+export const sourceReviewProviderOptions = (reviewer: SourceReviewer): SourceReviewProviderOptions => {
+  const gateway = { only: ["openai"] };
+  if (reviewer.reasoningEffort === null) { return { gateway }; }
+  return { gateway, openai: { reasoningEffort: reviewer.reasoningEffort } };
+};
+/** A caller must additionally bind its own rubric and evidence identity. */
+export const matchesSourceReviewPolicy = (
+  assessment: ProductSourceAssessment,
+  policy: SourceReviewPolicy = sourceReviewPolicy(),
+): boolean => {
+  if (assessment.reviewPolicyId !== policy.id) { return false; }
+  return [policy.primary, policy.fallback].some((reviewer) =>
+    reviewer.modelId === assessment.modelId && reviewer.reasoningEffort === (assessment.reasoningEffort ?? null),
+  );
+};
+
 export interface ReviewSourceFile {
   path: string;
   content: string;
@@ -75,6 +107,9 @@ export interface ProductSourceAssessment {
   bindingDigest: string;
   evidenceNote: string;
   modelId: string;
+  reasoningEffort?: "low" | "medium" | null;
+  reviewPolicyId?: string;
+  reviewRubricDigest?: string;
   status: "failed" | "unassessed" | "blocked";
   findings: {
     requirement: string;
@@ -115,6 +150,7 @@ export const unavailableSourceAssessment = (
   input: ProductSourceReviewInput,
   reason: string,
   status: "unassessed" | "blocked" = "unassessed",
+  reviewer?: SourceReviewer,
 ): ProductSourceAssessment => ({
   basis: "source-review",
   bindingDigest: sourceReviewBindingDigest(input),
@@ -122,7 +158,8 @@ export const unavailableSourceAssessment = (
   evidenceNote:
     "Source citations are mechanically checked; conclusions are independent model assessments, not executed runtime observations.",
   findings: [],
-  modelId: builderValidationModelId,
+  modelId: reviewer?.modelId ?? builderValidationModelId,
+  reasoningEffort: reviewer?.reasoningEffort,
   omissions: input.omissions,
   reason,
   remainingRuntimeChecks: [],
@@ -148,6 +185,7 @@ export const sanitizeSourceJudgment = (
   input: ProductSourceReviewInput,
   judgment: SourceJudgment,
   redactionTexts: readonly string[] = [],
+  reviewer?: SourceReviewer,
 ): ProductSourceAssessment => {
   const redactReviewProse = (text: string): string => {
     let safe = safeReviewText(text);
@@ -175,6 +213,7 @@ export const sanitizeSourceJudgment = (
     ...unavailableSourceAssessment(
       input,
       "Source review cannot establish runtime product success.",
+      "unassessed", reviewer,
     ),
     findings: judgment.findings.map((finding) => ({
       citations: finding.citations.map(({ path, startLine, endLine, excerpt }) => ({
@@ -296,6 +335,7 @@ export const recordSourceReviewRequest = (
     onRequest?: (request: SourceReviewRequest) => void;
   },
   event: LanguageModelCallEndEvent,
+  reviewer?: SourceReviewer,
 ): void => {
   if (options.invocation !== undefined) {
     options.invocation.successfulRequests += 1;
@@ -314,7 +354,8 @@ export const recordSourceReviewRequest = (
     cacheReadTokens: event.usage.inputTokenDetails.cacheReadTokens,
     cacheWriteTokens: event.usage.inputTokenDetails.cacheWriteTokens,
     gatewayGenerationId: idSchema.safeParse(event.providerMetadata?.gateway?.generationId).data,
-    modelId: builderValidationModelId,
+    modelId: reviewer?.modelId ?? builderValidationModelId,
+    reasoningEffort: reviewer?.reasoningEffort,
     noCacheTokens: event.usage.inputTokenDetails.noCacheTokens,
     reasoningTokens: event.usage.outputTokenDetails.reasoningTokens,
     responseId: idSchema.safeParse(event.responseId).data,

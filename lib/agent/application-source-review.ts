@@ -13,12 +13,15 @@ import {
   sanitizeSourceJudgment,
   sourceJudgmentSchema,
   sourceReviewBindingDigest,
+  sourceReviewPolicy,
   unavailableSourceAssessment,
 } from "./product-source-review";
 import type {
   ProductSourceAssessment,
   ProductSourceReviewInput,
   SourceJudgment,
+  SourceReviewer,
+  SourceReviewPolicy,
 } from "./product-source-review";
 import { emptySourceReviewInvocation } from "./product-source-review-batches";
 import type { SourceReviewInvocation, SourceReviewRequest } from "./product-source-review-batches";
@@ -107,6 +110,9 @@ export interface ApplicationSourceReviewOptions {
   mockModel?: boolean;
   /** Internal SDK fixture; never accepted from a public tool. */
   testModel?: LanguageModel;
+  /** Internal test seam; public inputs cannot select review policy. */
+  policy?: SourceReviewPolicy;
+  testModels?: Readonly<Record<string, LanguageModel>>;
 }
 
 const hash = (value: string): string => createHash("sha256").update(value).digest("hex");
@@ -115,15 +121,18 @@ Review actual application action, data, authorization and execution paths in log
 Report only concrete source-demonstrated contradictions. Every finding needs an exact requirement quote with its document ID and exact source excerpts with absolute 1-based inclusive file lines. Quotes and citations are checked locally. Unread dependencies, ambiguous scope, missing evidence and runtime claims belong in remainingRuntimeChecks, not failed findings. Do not ban technologies or infer missing functionality from an isolated file.
 Record findings and runtime unknowns incrementally through recordReviewEvidence. Call completeReview only after your application-level review is finished. Do not compare every source page with every request excerpt. Older exact duplicate source or read-evidence bodies become references to the first identical full result retained in this context; these are not summaries or evidence of absence. Re-read relevant ranges whenever their full content is needed together. The newest parallel read group and primary requirement documents remain intact. Do not claim runtime success or a passing score: authentication, persistence, tenant isolation, recovery and deployment need executed behavior. Never reproduce credentials or whole user messages in your explanations. Read tools use pagination/ranges; a page boundary is not a source or requirement limit.`;
 
+/** The application review cache is bound to its actual instructions. */
+export const applicationSourceReviewRubricDigest = (): string => hash(applicationReviewRubric);
+
 export const applicationSourceReviewKey = (
   input: Parameters<typeof sourceReviewBindingDigest>[0],
   normalizedChanges: readonly OverlayChange[],
 ): string =>
   hash(
     JSON.stringify([
-      "application-source-review-v1",
-      builderValidationModelId,
-      hash(applicationReviewRubric),
+      "application-source-review-v2",
+      sourceReviewPolicy(),
+      applicationSourceReviewRubricDigest(),
       sourceReviewBindingDigest(input),
       normalizedChanges,
     ]),
@@ -353,6 +362,10 @@ export type ApplicationReviewEvidenceReference =
 /** Private Workflow step state, never a public review or sanitized journal record. */
 export interface ApplicationReviewContinuation {
   version: 1;
+  reviewer?: SourceReviewer;
+  reviewPolicyId?: string;
+  fallbackUsed?: boolean;
+  priorReviewerEvidence?: { reviewer: SourceReviewer; findings: ApplicationReviewContinuation["findings"]; runtimeChecks: string[]; references: ApplicationReviewContinuation["references"] };
   messages: ModelMessage[];
   findings: [string, SourceJudgment["findings"][number]][];
   runtimeChecks: string[];
@@ -603,12 +616,18 @@ const assessmentFor = (
   state: ReviewState,
   invocation: SourceReviewInvocation,
   redactionTexts: readonly string[],
+  reviewer: SourceReviewer,
+  policyId: string,
 ): ProductSourceAssessment => ({
   ...sanitizeSourceJudgment(
     input,
     { findings: [...state.findings.values()], remainingRuntimeChecks: [...state.runtimeChecks] },
     redactionTexts,
+    reviewer,
   ),
+  reasoningEffort: reviewer.reasoningEffort,
+  reviewPolicyId: policyId,
+  reviewRubricDigest: applicationSourceReviewRubricDigest(),
   evidenceDigest: hash(
     JSON.stringify([
       sourceReviewBindingDigest(input),
@@ -756,6 +775,209 @@ const settleIncompleteReviewRound = async (
   return finish();
 };
 
+interface ReviewPolicyContext {
+  policy: SourceReviewPolicy;
+  reviewer: SourceReviewer;
+  policyId: string;
+  fallbackUsed: boolean;
+}
+
+const resolveReviewPolicy = (
+  options: ApplicationSourceReviewOptions,
+  continuation?: ApplicationReviewContinuation,
+): ReviewPolicyContext => {
+  const policy: SourceReviewPolicy =
+    options.policy ??
+    (options.testModel === undefined
+      ? sourceReviewPolicy()
+      : {
+          id: "fixture-sol",
+          fallback: { modelId: builderValidationModelId, reasoningEffort: null },
+          primary: { modelId: builderValidationModelId, reasoningEffort: null },
+        });
+  // A legacy checkpoint may contain Sol-generated messages; never resume those with a different model.
+  const reviewer =
+    continuation?.reviewer ??
+    (continuation === undefined
+      ? policy.primary
+      : { modelId: builderValidationModelId, reasoningEffort: null });
+  const policyId =
+    continuation?.reviewPolicyId ?? (continuation === undefined ? policy.id : "legacy-sol");
+  return { policy, reviewer, policyId, fallbackUsed: continuation?.fallbackUsed === true };
+};
+
+const canFallback = ({
+  policy,
+  reviewer,
+  policyId,
+  fallbackUsed,
+}: ReviewPolicyContext): boolean => {
+  if (fallbackUsed || policy.id === "fixture-sol" || policy.fallback === undefined || policyId !== policy.id) {
+    return false;
+  }
+  return (
+    reviewer.modelId === policy.primary.modelId &&
+    reviewer.reasoningEffort === policy.primary.reasoningEffort
+  );
+};
+
+const restartReviewWithFallback = async (
+  input: ProductSourceReviewInput,
+  evidence: ApplicationReviewEvidence,
+  current: ReviewPolicyContext,
+  guard: () => Promise<void>,
+  finish: () => ApplicationReviewRoundResult,
+): Promise<ApplicationReviewRoundResult | undefined> => {
+  if (!canFallback(current) || current.policy.fallback === undefined) {
+    return undefined;
+  }
+  await guard();
+  const saved = finish().continuation;
+  return {
+    continuation: {
+      ...saved,
+      reviewer: current.policy.fallback,
+      fallbackUsed: true,
+      // Keep the prior reviewer’s partial evidence separate from the fresh review.
+      priorReviewerEvidence: { reviewer: current.reviewer, findings: saved.findings, runtimeChecks: saved.runtimeChecks, references: saved.references },
+      findings: [],
+      runtimeChecks: [],
+      references: [],
+      messages: [
+        {
+          role: "user",
+          content: JSON.stringify({
+            requirements: evidence.requirements,
+            changedPaths: evidence.changedPaths,
+            sourceDigest: input.sourceDigest,
+            appSpecDigest: input.appSpecDigest,
+          }),
+        },
+      ],
+      reusableReads: [],
+      completionRequested: false,
+      invalidEvidence: false,
+      evidenceFailed: false,
+      outputRejected: false,
+      lastRecovery: undefined,
+    },
+  };
+};
+
+const finishAfterFallback = async (
+  restart: () => Promise<ApplicationReviewRoundResult | undefined>,
+  fallbackUsed: boolean,
+  preserve: (reason: string) => Promise<ApplicationReviewRoundResult>,
+  blocked: (reason: string) => ApplicationReviewRoundResult,
+  reason: string,
+): Promise<ApplicationReviewRoundResult> => {
+  const retried = await restart();
+  if (retried !== undefined) {
+    return retried;
+  }
+  if (fallbackUsed) {
+    return await preserve(reason);
+  }
+  return blocked(reason);
+};
+
+const retryableReviewerStop = (reason: string | undefined): boolean =>
+  reason === "The independent reviewer stopped before completing the application review." ||
+  reason === "The provider rejected the compact application review context." ||
+  reason ===
+    "The provider could not complete application review after capacity recovery. Saved completed assessments remain available; this incomplete review is not complete evidence.";
+
+const selectApplicationReviewModel = async (
+  options: ApplicationSourceReviewOptions,
+  reviewer: SourceReviewer,
+): Promise<LanguageModel> =>
+  options.testModels?.[reviewer.modelId] ??
+  options.testModel ??
+  createGateway({ apiKey: await getVercelOidcToken() })(reviewer.modelId);
+
+const applicationProviderOptions = (
+  options: ApplicationSourceReviewOptions,
+  reviewer: SourceReviewer,
+) => {
+  const gateway = {
+    only: ["openai"],
+    ...(options.cacheSessionId === undefined ? {} : { sessionId: options.cacheSessionId }),
+  };
+  const provider: Parameters<typeof withBuilderGatewayReporting>[0] = { gateway };
+  if (reviewer.reasoningEffort !== null) {
+    provider.openai = { reasoningEffort: reviewer.reasoningEffort };
+  }
+  return withBuilderGatewayReporting(provider, () => options.sessionId, "source-review");
+};
+
+interface PartialReviewContext {
+  input: ProductSourceReviewInput;
+  state: ReviewState;
+  invocation: SourceReviewInvocation;
+  reviewer: SourceReviewer;
+  policyId: string;
+  prior?: ApplicationReviewContinuation["priorReviewerEvidence"];
+  readRedactions: () => Promise<readonly string[] | undefined>;
+  finish: (assessment?: ProductSourceAssessment) => ApplicationReviewRoundResult;
+  blocked: (reason: string) => ApplicationReviewRoundResult;
+}
+const preserveVerifiedFindings = async (
+  context: PartialReviewContext,
+  reason: string,
+): Promise<ApplicationReviewRoundResult> => {
+  const noCurrentEvidence = context.state.findings.size === 0 && context.state.runtimeChecks.size === 0;
+  const noPriorEvidence = (context.prior?.findings.length ?? 0) === 0 && (context.prior?.runtimeChecks.length ?? 0) === 0;
+  if (noCurrentEvidence && noPriorEvidence) {
+    return context.blocked(reason);
+  }
+  const texts = await context.readRedactions();
+  if (texts === undefined) {
+    return context.blocked("Primary review document redaction is unavailable.");
+  }
+  const prior = context.prior;
+  const hasPrior = prior !== undefined && (prior.findings.length > 0 || prior.runtimeChecks.length > 0);
+  const hasCurrent = context.state.findings.size > 0 || context.state.runtimeChecks.size > 0;
+  const combined = hasPrior ? {
+    ...context.state,
+    findings: new Map([...prior.findings, ...context.state.findings]),
+    runtimeChecks: new Set([...prior.runtimeChecks, ...context.state.runtimeChecks]),
+    references: new Map([...prior.references, ...context.state.references]),
+  } : context.state;
+  const attribution = hasPrior && !hasCurrent ? prior.reviewer : context.reviewer;
+  const partial = assessmentFor(
+    context.input,
+    combined,
+    context.invocation,
+    texts,
+    attribution,
+    context.policyId,
+  );
+  return context.finish({ ...partial,
+    ...(hasPrior && hasCurrent ? { modelId: "multiple", reasoningEffort: null,
+      evidenceNote: `${partial.evidenceNote} Review evidence includes independent contributions from ${prior.reviewer.modelId} and ${context.reviewer.modelId}.` } : {}),
+    reason, reviewCompleted: false, status: combined.findings.size > 0 ? "failed" : "blocked" });
+};
+
+const settleReviewWithFallback = async (
+  settled: ApplicationReviewRoundResult,
+  restart: () => Promise<ApplicationReviewRoundResult | undefined>,
+  fallbackUsed: boolean,
+  preserve: (reason: string) => Promise<ApplicationReviewRoundResult>,
+  blocked: (reason: string) => ApplicationReviewRoundResult,
+): Promise<ApplicationReviewRoundResult> => {
+  const reason = settled.assessment?.reason;
+  if (!retryableReviewerStop(reason)) {
+    return settled;
+  }
+  return await finishAfterFallback(
+    restart,
+    fallbackUsed,
+    preserve,
+    blocked,
+    reason ?? "Independent review was unavailable.",
+  );
+};
+
 /** One provider/tool round; the caller checkpoints its private continuation before proceeding. */
 export const assessApplicationSourceRound = async (
   input: ProductSourceReviewInput,
@@ -763,6 +985,8 @@ export const assessApplicationSourceRound = async (
   options: ApplicationSourceReviewOptions = {},
   continuation?: ApplicationReviewContinuation,
 ): Promise<ApplicationReviewRoundResult> => {
+  const currentPolicy = resolveReviewPolicy(options, continuation);
+  const { reviewer, policyId, fallbackUsed } = currentPolicy;
   const restored = restoreReviewRound(input, evidence, continuation);
   const { invocation, state } = restored;
   let { messages, requestOrdinal, stepNumber, lastRecovery } = restored;
@@ -770,6 +994,10 @@ export const assessApplicationSourceRound = async (
   const finish = (assessment?: ProductSourceAssessment): ApplicationReviewRoundResult => ({
     continuation: {
       version: 1,
+      reviewer,
+      reviewPolicyId: policyId,
+      fallbackUsed,
+      ...(continuation?.priorReviewerEvidence === undefined ? {} : { priorReviewerEvidence: continuation.priorReviewerEvidence }),
       messages,
       findings: [...state.findings],
       runtimeChecks: [...state.runtimeChecks],
@@ -788,7 +1016,10 @@ export const assessApplicationSourceRound = async (
   });
   const blocked = (reason: string) =>
     finish({
-      ...unavailableSourceAssessment(input, reason, "blocked"),
+      ...unavailableSourceAssessment(input, reason, "blocked", reviewer),
+      reasoningEffort: reviewer.reasoningEffort,
+      reviewPolicyId: policyId,
+      reviewRubricDigest: applicationSourceReviewRubricDigest(),
       invocation,
     });
   try {
@@ -824,10 +1055,33 @@ export const assessApplicationSourceRound = async (
         return undefined;
       }
     };
+    const blockedWithVerifiedFindings = async (reason: string) =>
+      await preserveVerifiedFindings(
+        { input, state, invocation, reviewer, policyId, prior: continuation?.priorReviewerEvidence, readRedactions, finish, blocked },
+        reason,
+      );
+    const completedReview = async () => {
+      const texts = await readRedactions();
+      if (texts === undefined) {
+        return blocked("Primary review document redaction is unavailable.");
+      }
+      if ((continuation?.priorReviewerEvidence?.findings.length ?? 0) > 0) {
+        return await blockedWithVerifiedFindings(
+          "The initial reviewer recorded findings or runtime checks before fallback. The fallback review cannot resolve that independently attributed evidence automatically.",
+        );
+      }
+      const prior = continuation?.priorReviewerEvidence;
+      if (prior !== undefined && prior.runtimeChecks.length > 0) {
+        const assessment = assessmentFor(input, {
+          ...state,
+          runtimeChecks: new Set([...prior.runtimeChecks, ...state.runtimeChecks]),
+        }, invocation, texts, reviewer, policyId);
+        return finish({ ...assessment, evidenceNote: `${assessment.evidenceNote} Runtime checks include unresolved observations from ${prior.reviewer.modelId}.` });
+      }
+      return finish(assessmentFor(input, state, invocation, texts, reviewer, policyId));
+    };
     const tools = reviewTools(evidence, state, guard, options.abortSignal);
-    const model =
-      options.testModel ??
-      createGateway({ apiKey: await getVercelOidcToken() })(builderValidationModelId);
+    const model = await selectApplicationReviewModel(options, reviewer);
     let preparedMessageMeasurements: ApplicationSourceReviewMessageMeasurements | undefined;
     let preparedStepNumber = stepNumber;
     const agent = new ToolLoopAgent({
@@ -836,16 +1090,7 @@ export const assessApplicationSourceRound = async (
       tools,
       toolChoice: "required",
       maxRetries: 0,
-      providerOptions: withBuilderGatewayReporting(
-        {
-          gateway: {
-            only: ["openai"],
-            ...(options.cacheSessionId === undefined ? {} : { sessionId: options.cacheSessionId }),
-          },
-        },
-        () => options.sessionId,
-        "source-review",
-      ),
+      providerOptions: applicationProviderOptions(options, reviewer),
       // This is a durable execution unit, never a limit on the complete review.
       stopWhen: isStepCount(1),
       prepareStep: async ({ messages: nextMessages }) => {
@@ -893,7 +1138,7 @@ export const assessApplicationSourceRound = async (
         }
       },
       onLanguageModelCallEnd: (event) => {
-        recordSourceReviewRequest({ invocation, onRequest: options.onRequest }, event);
+        recordSourceReviewRequest({ invocation, onRequest: options.onRequest }, event, reviewer);
       },
       onStepEnd: (step) => {
         if (step.finishReason === "length") {
@@ -901,6 +1146,8 @@ export const assessApplicationSourceRound = async (
         }
       },
     });
+    const fallback = async () =>
+      await restartReviewWithFallback(input, evidence, currentPolicy, guard, finish);
     let contextRejected = false;
     let result: Awaited<ReturnType<typeof agent.generate>> | undefined;
     try {
@@ -916,22 +1163,25 @@ export const assessApplicationSourceRound = async (
       contextRejected = rejectedContext;
       state.outputRejected ||= outputRejected;
       if (!contextRejected && !state.outputRejected) {
-        return blocked(
-          "Independent application source review was unavailable. No provider details or runtime verdict were inferred.",
+        const reason =
+          "Independent application source review was unavailable. No provider details or runtime verdict were inferred.";
+        return await finishAfterFallback(
+          fallback,
+          fallbackUsed,
+          blockedWithVerifiedFindings,
+          blocked,
+          reason,
         );
       }
     }
     options.abortSignal?.throwIfAborted();
     if (state.evidenceFailed) {
-      return blocked("Application source evidence became unavailable during review.");
+      return await blockedWithVerifiedFindings("Application source evidence became unavailable during review.");
     }
     if (hasCompletedReview(state)) {
-      const texts = await readRedactions();
-      return texts === undefined
-        ? blocked("Primary review document redaction is unavailable.")
-        : finish(assessmentFor(input, state, invocation, texts));
+      return await completedReview();
     }
-    return await settleIncompleteReviewRound({
+    const settled = await settleIncompleteReviewRound({
       input,
       state,
       contextRejected,
@@ -949,6 +1199,13 @@ export const assessApplicationSourceRound = async (
         invocation.splits += 1;
       },
     });
+    return await settleReviewWithFallback(
+      settled,
+      fallback,
+      fallbackUsed,
+      blockedWithVerifiedFindings,
+      blocked,
+    );
   } finally {
     options.onInvocation?.(invocation);
   }

@@ -1,7 +1,10 @@
 import type { HookEvent } from "eve/hooks";
+import { applicationSourceReviewRubricDigest } from "./application-source-review";
+import { builderValidationModelId } from "../integrations/active-model";
 import { defineState } from "eve/context";
 import {
   assessProductSource,
+  matchesSourceReviewPolicy,
   sourceReviewEvidenceDigest,
   sourceReviewBindingDigest,
   unavailableSourceAssessment,
@@ -217,8 +220,9 @@ export const reviewCurrentProductSource = async (
   assess: typeof assessProductSource = assessProductSource,
 ): Promise<ProductSourceAssessment> => {
   const cached = store.get();
+  const legacySolReview = cached?.reviewPolicyId === undefined && cached?.modelId === builderValidationModelId;
   const assessment =
-    cached?.reviewCompleted === true && cached.evidenceDigest === sourceReviewEvidenceDigest(input)
+    cached?.reviewCompleted === true && legacySolReview && cached.evidenceDigest === sourceReviewEvidenceDigest(input)
       ? cached
       : await assess(input, { abortSignal, mockModel });
   if ((await currentDigest()) !== input.sourceDigest) {
@@ -233,6 +237,10 @@ export const reviewCurrentProductSource = async (
   return assessment;
 };
 
+/** Application reviews must match both the active policy and its exact rubric. */
+const applicableApplicationAssessment = (assessment: ProductSourceAssessment | null): boolean =>
+  assessment?.reviewCompleted === true && matchesSourceReviewPolicy(assessment) && assessment.reviewRubricDigest === applicationSourceReviewRubricDigest();
+
 /** Return retained findings only when all current requirements and observed source still match. */
 export const currentProductSourceAssessment = (
   input: Pick<
@@ -242,13 +250,14 @@ export const currentProductSourceAssessment = (
   store: SourceAssessmentStore = sessionAssessmentStore,
 ): ProductSourceAssessment | undefined => {
   const current = store.get();
-  return current?.bindingDigest === sourceReviewBindingDigest(input) ? current : undefined;
+  return applicableApplicationAssessment(current) && current?.bindingDigest === sourceReviewBindingDigest(input) ? current : undefined;
 };
 
 /** This lookup never crosses the active owner/session context or accepts another session ID. */
 export const retainedProductSourceAssessmentForReference = (
   bindingDigest: string,
+  store: SourceAssessmentStore = sessionAssessmentStore,
 ): ProductSourceAssessment | undefined => {
-  const current = sessionAssessmentStore.get();
-  return current?.bindingDigest === bindingDigest ? current : undefined;
+  const current = store.get();
+  return applicableApplicationAssessment(current) && current?.bindingDigest === bindingDigest ? current : undefined;
 };

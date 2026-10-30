@@ -23,6 +23,7 @@ import {
   assessProductSource,
   sourceReviewEvidenceDigest,
   sourceReviewBindingDigest,
+  sourceReviewPolicy,
   validateSourceJudgment,
 } from "./product-source-review";
 import type { ProductSourceReviewInput } from "./product-source-review";
@@ -526,7 +527,7 @@ describe("independent application source review", () => {
       evidence: applicationEvidence(),
       currentDigest: () => Promise.resolve(input.sourceDigest),
       journal,
-      options: { sessionId, cacheSessionId: "caller-metadata-is-not-authority", testModel: model },
+      options: { sessionId, cacheSessionId: "caller-metadata-is-not-authority", testModels: { [sourceReviewPolicy().primary.modelId]: model } },
     };
     const result = await reviewApplicationWithJournal(request);
     expect(result.reviewCompleted).toBe(true);
@@ -543,7 +544,7 @@ describe("independent application source review", () => {
           "builder-callsite:source-review",
         ],
       });
-      expect(call.providerOptions?.openai).toBeUndefined();
+      expect(call.providerOptions?.openai).toEqual({ reasoningEffort: "low" });
       const metadata = JSON.stringify(call.providerOptions);
       for (const privateValue of [sessionId, key, input.originalRequest, changes[0].path]) {
         expect(metadata).not.toContain(privateValue);
@@ -582,7 +583,7 @@ describe("independent application source review", () => {
           evidence: applicationEvidence(),
           currentDigest: () => Promise.resolve(scope.reviewInput.sourceDigest),
           journal,
-          options: { sessionId: scope.sessionId, testModel: model },
+          options: { sessionId: scope.sessionId, testModels: { [sourceReviewPolicy().primary.modelId]: model } },
         });
         expect(result.reviewCompleted).toBe(true);
         const session = model.doGenerateCalls[0].providerOptions?.gateway?.sessionId;
@@ -604,7 +605,7 @@ describe("independent application source review", () => {
         evidence: applicationEvidence(),
         currentDigest: () => Promise.resolve(input.sourceDigest),
         journal,
-        options: { sessionId, testModel: model },
+        options: { sessionId, testModels: { [sourceReviewPolicy().primary.modelId]: model } },
       });
       expect(result.reviewCompleted).toBe(true);
       expect(model.doGenerateCalls[0].providerOptions?.gateway).toEqual({ only: ["openai"] });

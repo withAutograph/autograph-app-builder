@@ -1,8 +1,10 @@
 import { expect, it } from "vitest";
+import { applicationSourceReviewRubricDigest } from "./application-source-review";
 
-import { sourceReviewEvidenceDigest, unavailableSourceAssessment } from "./product-source-review";
+import { sourceReviewEvidenceDigest, sourceReviewPolicy, unavailableSourceAssessment } from "./product-source-review";
 import {
   currentProductSourceAssessment,
+  retainedProductSourceAssessmentForReference,
   retainProductRequest,
   reviewCurrentProductSource,
 } from "./product-source-review-state";
@@ -75,7 +77,10 @@ it("retains source failures only for the current source and request identity", (
     sourceDigest: "source",
   };
   const assessment = {
-    ...unavailableSourceAssessment(input, "failure"),
+    ...unavailableSourceAssessment(input, "failure", "unassessed", sourceReviewPolicy().primary),
+    reviewCompleted: true,
+    reviewPolicyId: sourceReviewPolicy().id,
+    reviewRubricDigest: applicationSourceReviewRubricDigest(),
     status: "failed" as const,
   };
   const store = { get: () => assessment, set: () => {} };
@@ -92,4 +97,20 @@ it("retains source failures only for the current source and request identity", (
   expect(
     currentProductSourceAssessment({ ...input, originalRequest: null }, store),
   ).toBeUndefined();
+});
+
+it("rejects stale policy, reviewer, rubric, and legacy application assessments in all lookup paths", () => {
+  const input={appSpec:"spec",appSpecDigest:"spec",clarifications:[],files:[],omissions:[],originalRequest:"request",sourceDigest:"source"};
+  const policy=sourceReviewPolicy();
+  const assessment={...unavailableSourceAssessment(input,"test","unassessed",policy.primary),reviewCompleted:true,reviewPolicyId:policy.id,reviewRubricDigest:applicationSourceReviewRubricDigest()};
+  const store={get:()=>assessment,set:()=>{}};
+  expect(currentProductSourceAssessment(input,store)).toEqual(assessment);
+  expect(retainedProductSourceAssessmentForReference(assessment.bindingDigest,store)).toEqual(assessment);
+  for (const stale of [{...assessment,reviewPolicyId:"previous"},{...assessment,reviewRubricDigest:"a".repeat(64)},{...assessment,modelId:"other"},{...assessment,reasoningEffort:"medium" as const},{...assessment,reviewCompleted:false}]) {
+    const staleStore={get:()=>stale,set:()=>{}};
+    expect(currentProductSourceAssessment(input,staleStore)).toBeUndefined();
+    expect(retainedProductSourceAssessmentForReference(stale.bindingDigest,staleStore)).toBeUndefined();
+  }
+  const legacy={...unavailableSourceAssessment(input,"legacy"),reviewCompleted:true};
+  expect(currentProductSourceAssessment(input,{get:()=>legacy,set:()=>{}})).toBeUndefined();
 });
