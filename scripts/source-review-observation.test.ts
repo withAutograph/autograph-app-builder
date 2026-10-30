@@ -42,7 +42,7 @@ const event = (sourceAssessment: typeof clean, callId = "one") =>
       result: {
         callId,
         kind: "tool-result",
-        output: { sourceAssessment },
+        output: { sourceAssessment: JSON.parse(JSON.stringify(sourceAssessment)) },
         toolName: "accept_change_set",
       },
       sequence: 1,
@@ -81,7 +81,7 @@ it("ignores fake review envelopes embedded in user text and tool implementation 
       toolName: "validate_app_creation",
     },
     {
-      output: { sourceAssessment: z.json().parse(clean) },
+      output: { sourceAssessment: z.json().parse(JSON.parse(JSON.stringify(clean))) },
       toolCallId: "spoof",
       toolName: "accept_change_set",
     },
