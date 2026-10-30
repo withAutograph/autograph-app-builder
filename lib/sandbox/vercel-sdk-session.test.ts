@@ -1,4 +1,6 @@
-import { spawnSync } from "node:child_process";
+/* oxlint-disable eslint/require-await -- Async SDK doubles and async generators preserve the native Promise/iterator contracts. */
+import { setImmediate as nextTurn } from "node:timers/promises";
+import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -95,17 +97,14 @@ describe("Builder SDK session I/O", () => {
       return { exitCode: 7 };
     });
     const output = Buffer.from("x".repeat(100_000));
-    native.runCommand.mockImplementation(
-      async (params: Parameters<VercelSdkSessionNative["runCommand"]>[0]) => {
-        await Promise.resolve();
-        if (params.stdout === undefined || params.stderr === undefined) {
-          throw new Error("Detached output streams missing");
-        }
-        expect(params.stdout.write(output)).toBe(false);
-        params.stderr.write(Buffer.from("diagnostic"));
-        return { kill, wait };
+    native.runCommand.mockResolvedValue({
+      kill,
+      wait,
+      async *logs() {
+        yield { stream: "stdout", data: output.toString() };
+        yield { stream: "stderr", data: "diagnostic" };
       },
-    );
+    });
     const process = await createVercelSdkSession(native).spawn({
       command: "bun dev",
       env: { PORT: "3000" },
@@ -130,12 +129,85 @@ describe("Builder SDK session I/O", () => {
       }),
     );
   });
+  it("drains SDK logs after process exit and preserves large JSON under consumer backpressure", async () => {
+    const native = fixture();
+    const data = "catalog café entry\n".repeat(90_000);
+    const expected = JSON.stringify({ data });
+    let exited = false;
+    let delivered = 0;
+    const command = {
+      kill: vi.fn().mockResolvedValue(null),
+      wait: vi.fn(async () => {
+        exited = true;
+        return { exitCode: 7 };
+      }),
+      async *logs() {
+        for (let index = 0; index < expected.length; index += 32_768) {
+          // Model the installed SDK's HTTP log stream delivering after wait() has resolved.
+          // oxlint-disable-next-line eslint/no-await-in-loop -- Each delayed chunk exercises independent log transport progress.
+          await nextTurn();
+          delivered += 1;
+          yield { stream: "stdout", data: expected.slice(index, index + 32_768) };
+        }
+        yield { stream: "stderr", data: "lock generation diagnostic\n" };
+      },
+    };
+    native.runCommand.mockImplementation(
+      async (params: Parameters<VercelSdkSessionNative["runCommand"]>[0]) => {
+        // Match SDK 3.3.0: output options start an unawaited log pipe, independent of wait().
+        if (params.stdout !== undefined || params.stderr !== undefined) {
+          params.stdout?.on("error", () => {});
+          params.stderr?.on("error", () => {});
+          void (async () => {
+            for await (const log of command.logs()) {
+              if (log.stream === "stdout") {
+                params.stdout?.write(log.data);
+              } else {
+                params.stderr?.write(log.data);
+              }
+            }
+          })();
+        }
+        return command;
+      },
+    );
+    const process = await createVercelSdkSession(native).spawn({ command: "catalog-plan" });
+    let completed = false;
+    const done = (async () => {
+      const result = await process.wait();
+      completed = true;
+      return result;
+    })();
+    await nextTurn();
+    expect(exited).toBe(true);
+    const completedBeforeRead = completed;
+    // A producer must not race unboundedly ahead while no consumer is reading.
+    expect(delivered).toBeLessThan(4);
+    const stdout = (async () => {
+      const decoder = new TextDecoder();
+      let output = "";
+      for await (const chunk of process.stdout) {
+        output += decoder.decode(chunk, { stream: true });
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Deliberately slower downstream consumption verifies backpressure.
+        await nextTurn();
+      }
+      return output + decoder.decode();
+    })();
+    const [result, output, diagnostic] = await Promise.all([done, stdout, text(process.stderr)]);
+    expect(result.exitCode).toBe(7);
+    expect(JSON.parse(output)).toEqual({ data });
+    expect(completedBeforeRead).toBe(false);
+    expect(diagnostic).toBe("lock generation diagnostic\n");
+  });
   it("kills the native process when the caller aborts and lets wait reject", async () => {
     const native = fixture();
     const kill = vi.fn().mockResolvedValue(null);
     const controller = new AbortController();
     native.runCommand.mockResolvedValue({
       kill,
+      async *logs() {
+        yield { stream: "stdout", data: "" };
+      },
       wait: async () => {
         await Promise.resolve();
         throw new Error("caller cancelled");
@@ -148,6 +220,159 @@ describe("Builder SDK session I/O", () => {
     controller.abort(new Error("caller cancelled"));
     await expect(process.wait()).rejects.toThrow("caller cancelled");
     expect(kill).toHaveBeenCalledOnce();
+  });
+  it("rejects wait and both output readers when SDK log transport fails after process exit", async () => {
+    const native = fixture();
+    const kill = vi.fn().mockResolvedValue(null);
+    const fail = new Error("SDK log transport disconnected");
+    native.runCommand.mockResolvedValue({
+      kill,
+      wait: async () => ({ exitCode: 0 }),
+      async *logs() {
+        yield { stream: "stdout", data: "partial JSON" };
+        throw fail;
+      },
+    });
+    const process = await createVercelSdkSession(native).spawn({ command: "catalog-plan" });
+    let capturedPrefix = "";
+    const stdout = (async () => {
+      for await (const chunk of process.stdout) {
+        capturedPrefix += new TextDecoder().decode(chunk);
+      }
+    })();
+    const outcomes = await Promise.allSettled([process.wait(), stdout, text(process.stderr)]);
+    for (const outcome of outcomes) {
+      expect(outcome).toMatchObject({ status: "rejected", reason: fail });
+    }
+    expect(capturedPrefix).toBe("partial JSON");
+    expect(kill).toHaveBeenCalledWith("SIGTERM");
+  });
+  it("cancels a backpressured log drain after process exit and stops the active lease", async () => {
+    vi.useFakeTimers();
+    const native = fixture();
+    const kill = vi.fn().mockResolvedValue(null);
+    const controller = new AbortController();
+    let exited = false;
+    native.runCommand.mockResolvedValue({
+      kill,
+      wait: async () => {
+        exited = true;
+        return { exitCode: 0 };
+      },
+      async *logs() {
+        yield { stream: "stdout", data: "unread output" };
+      },
+    });
+    try {
+      const process = await createVercelSdkSession(native).spawn({
+        command: "catalog-plan",
+        abortSignal: controller.signal,
+      });
+      expect(exited).toBe(true);
+      controller.abort(new Error("caller cancelled during output drain"));
+      const outcomes = await Promise.allSettled([
+        process.wait(),
+        text(process.stdout),
+        text(process.stderr),
+      ]);
+      for (const outcome of outcomes) {
+        expect(outcome.status).toBe("rejected");
+      }
+      expect(kill).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("kills the native process when an output consumer cancels before draining", async () => {
+    const native = fixture();
+    const kill = vi.fn().mockResolvedValue(null);
+    native.runCommand.mockResolvedValue({
+      kill,
+      wait: async () => ({ exitCode: 0 }),
+      async *logs() {
+        yield { stream: "stdout", data: "unread output" };
+      },
+    });
+    const process = await createVercelSdkSession(native).spawn({ command: "catalog-plan" });
+    await process.stdout.cancel(new Error("output consumer abandoned"));
+    await expect(process.wait()).rejects.toThrow("output consumer abandoned");
+    await expect(text(process.stderr)).rejects.toThrow("output consumer abandoned");
+    expect(kill).toHaveBeenCalledOnce();
+  });
+  it("retains the authorized active lease until the final SDK log drains", async () => {
+    vi.useFakeTimers();
+    const native = { ...fixture(), expiresAt: new Date(Date.now() + 75_000) };
+    const authorize = vi.fn().mockResolvedValue(null);
+    const tail = Promise.withResolvers<boolean>();
+    native.runCommand.mockResolvedValue({
+      kill: vi.fn().mockResolvedValue(null),
+      wait: async () => ({ exitCode: 0 }),
+      async *logs() {
+        await tail.promise;
+        yield { stream: "stdout", data: "late tail" };
+      },
+    });
+    try {
+      const process = await createVercelSdkSession(native, () => native, authorize).spawn({
+        command: "catalog-plan",
+      });
+      const results = Promise.all([process.wait(), text(process.stdout), text(process.stderr)]);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(authorize).toHaveBeenCalledOnce();
+      expect(native.extendTimeout).toHaveBeenCalledOnce();
+      tail.resolve(true);
+      expect(await results).toEqual([{ exitCode: 0 }, "late tail", ""]);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("drains output from a real local Node process through the SDK log interface", async () => {
+    const native = fixture();
+    const data = "real process JSON café\n".repeat(70_000);
+    native.runCommand.mockImplementation(async () => {
+      const child = spawn(
+        process.execPath,
+        [
+          "-e",
+          'process.stdout.write(JSON.stringify({data:"real process JSON café\\n".repeat(70000)}));process.stderr.write("real diagnostic");',
+        ],
+        { stdio: ["ignore", "pipe", "pipe"] },
+      );
+      child.stdout.setEncoding("utf-8");
+      child.stderr.setEncoding("utf-8");
+      const exited = Promise.withResolvers<{ exitCode: number | null }>();
+      child.once("error", exited.reject);
+      child.once("exit", (code) => {
+        exited.resolve({ exitCode: code });
+      });
+      return {
+        kill: async () => {
+          child.kill("SIGTERM");
+        },
+        wait: async () => await exited.promise,
+        async *logs() {
+          for await (const bytes of child.stdout) {
+            yield { stream: "stdout", data: String(bytes) };
+          }
+          for await (const bytes of child.stderr) {
+            yield { stream: "stderr", data: String(bytes) };
+          }
+        },
+      };
+    });
+    const childProcess = await createVercelSdkSession(native).spawn({
+      command: "real-node-fixture",
+    });
+    const [result, output, diagnostic] = await Promise.all([
+      childProcess.wait(),
+      text(childProcess.stdout),
+      text(childProcess.stderr),
+    ]);
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(output)).toEqual({ data });
+    expect(diagnostic).toBe("real diagnostic");
   });
   it("returns real command output, signal and nonzero exit status", async () => {
     const native = fixture();
