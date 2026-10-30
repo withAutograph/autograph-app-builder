@@ -5,6 +5,7 @@ import { nativeTargetOnboardingPlanSchema } from "../provisioning/native-target-
 const appId = nativeTargetOnboardingPlanSchema.shape.appId;
 export const nativeTargetPlanRequestSchema = z.strictObject({
   appId,
+  resourceProfileId: nativeTargetOnboardingPlanSchema.shape.resourceProfileId,
   project: nativeTargetOnboardingPlanSchema.shape.project.omit({ protection: true }),
   branch: nativeTargetOnboardingPlanSchema.shape.branch,
   conflictPolicy: nativeTargetOnboardingPlanSchema.shape.conflictPolicy,

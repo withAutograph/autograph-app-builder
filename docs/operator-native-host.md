@@ -219,3 +219,15 @@ separate metadata-only guard and the fixed project/branch/endpoint/database/role
 read tools. It neither manufactures an approved SQL effect nor calls the
 connection-string tool. Actual approved maintenance credentials remain confined
 to the leased private resource effect.
+
+### Resource profile qualification
+
+Do not change the shared default Neon/Auth/Gateway configuration to redirect one
+app. Qualify an owner/app-scoped resource profile instead: verify the native store
+belongs to the intended Neon project and has the approved operator-project
+connection, the exact branch/endpoint and maintenance scope, the restricted Auth
+runtime and enrolled realm, and the protected Preview Gateway deployment. Bind
+credentials only to those verified development targets. A native target plan
+reserves app database names; it does not approve database provisioning, identity
+enrollment or provider activation. A retained plan naming a Production-bound
+resource must not be treated as authorization for development database effects.

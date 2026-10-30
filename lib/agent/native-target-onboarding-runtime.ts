@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import type { ApprovalResponseContext } from "eve/tools/approval";
 import type { AppDescription } from "../repository/app-description";
 import type { AppBuilderWorkflowState } from "./workflow-state";
@@ -72,6 +73,7 @@ export interface NativeTargetOnboardingRuntimePorts {
   readCapturedRelease: (
     ctx: NativeTargetInvocation,
     appId: string,
+    retainedPlan?: NativeTargetOnboardingPlan,
   ) => Promise<NativeTargetCapturedRelease>;
   /** Resolves provider grant, native Neon approval, worker, costs and retention from trusted state. */
   resolvePlan: (
@@ -88,6 +90,11 @@ export interface NativeTargetOnboardingRuntimePorts {
       ctx: NativeTargetInvocation,
       appId: string,
     ) => Promise<NativeTargetOnboardingRow | undefined>;
+    supersedePlannedScope: (
+      ctx: NativeTargetInvocation,
+      plan: NativeTargetOnboardingPlan,
+      expectedPlanDigest: string,
+    ) => Promise<NativeTargetOnboardingRow>;
     reservePlan: (
       ctx: NativeTargetInvocation,
       plan: NativeTargetOnboardingPlan,
@@ -341,6 +348,69 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
     }
     return await settleObservation(ctx, row, result);
   };
+  const planRetainedResourceSelection = async (
+    proposal: NativeTargetPlanRequest,
+    ctx: NativeTargetInvocation,
+    retained: NativeTargetOnboardingRow,
+  ): Promise<NativeTargetOnboardingResult> => {
+    if (proposal.resourceProfileId === undefined) {
+      return publicResult(retained);
+    }
+    const prior = retained.record;
+    if (prior.stage !== "planned" || prior.previousAttempts.length !== 0) {
+      if (proposal.resourceProfileId === prior.plan.resourceProfileId) {
+        return publicResult(retained);
+      }
+      throw invalid();
+    }
+    // A resource selection revises only the undispatched intent. It does not
+    // manufacture cancellation or settle the previous public response.
+    if (
+      !isDeepStrictEqual(proposal.project, {
+        name: prior.plan.project.name,
+        teamId: prior.plan.project.teamId,
+        installationId: prior.plan.project.installationId,
+        projectSettings: prior.plan.project.projectSettings,
+      }) ||
+      proposal.branch !== prior.plan.branch ||
+      proposal.conflictPolicy !== prior.plan.conflictPolicy
+    ) {
+      throw invalid();
+    }
+    const captured = await ports.readCapturedRelease(ctx, proposal.appId, prior.plan);
+    if (!isDeepStrictEqual(captured.release, prior.plan.origin.release)) {
+      throw invalid();
+    }
+    const candidate = nativeTargetOnboardingPlanSchema.parse(
+      await ports.resolvePlan(ctx, proposal, {
+        appSpecDigest: prior.plan.origin.appSpecDigest,
+        captured,
+      }),
+    );
+    if (candidate.resourceProfileId !== proposal.resourceProfileId) {
+      throw invalid();
+    }
+    const resourceIdentity = (plan: NativeTargetOnboardingPlan) => ({
+      profile: plan.resourceProfileId,
+      authority: plan.resourceProfileAuthorityDigest,
+      nativeNeon: plan.nativeNeon,
+      resourceId: plan.appDatabase.resourceId,
+    });
+    if (isDeepStrictEqual(resourceIdentity(candidate), resourceIdentity(prior.plan))) {
+      return publicResult(retained);
+    }
+    ctx.abortSignal.throwIfAborted();
+    return publicResult(
+      await ports.journal.supersedePlannedScope(
+        ctx,
+        {
+          ...candidate,
+          resourceSelectionRevision: (prior.plan.resourceSelectionRevision ?? 0) + 1,
+        },
+        prior.planDigest,
+      ),
+    );
+  };
   return {
     async plan(
       raw: NativeTargetPlanRequest,
@@ -355,7 +425,7 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
       // Read retained operations first: source edits do not redefine their resource authority.
       const retained = await ports.journal.read(ctx, proposal.appId);
       if (retained !== undefined && retained.record.stage !== "cancelled") {
-        return publicResult(retained);
+        return await planRetainedResourceSelection(proposal, ctx, retained);
       }
       // A retained operation keeps its frozen resource authority even if a later
       // source/planning transition cleared the local selected specification.
@@ -381,6 +451,7 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
       );
       const matches = [
         plan.appId === proposal.appId,
+        plan.resourceProfileId === proposal.resourceProfileId,
         plan.origin.appSpecDigest === state.appSpec.digest,
         JSON.stringify([...plan.productRoles].toSorted()) ===
           JSON.stringify([...description.backend.roles].toSorted()),

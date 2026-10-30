@@ -638,3 +638,35 @@ owner-authorized, noncancelled operation is already retained. It returns that
 operation unchanged, including its original plan and approval scope. If no such
 operation exists, a selected app specification remains mandatory before capture,
 planning or reservation. This read never grants approval or creates a target.
+
+### Owner-scoped native resource selection
+
+A native target may select `resourceProfileId` from the deployment-owned
+`PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES` inventory. Each entry contains an
+ID, exact Builder authority (issuer, audience, workspace and owner), app ID and a
+complete operator source configuration. Model input selects only the ID; it
+cannot supply a scope, credential or replacement configuration. Profiles retain
+the trusted Builder workload, operator and team boundaries and must pass the
+same coherent configuration checks as the deployment base. Calls without a
+selector retain the existing base behavior for other apps.
+
+The plan binds an authority digest of the selected Auth resource and roles,
+Neon store/scope and connector authority, protected Gateway identity and
+origins, operator/callback identity and bootstrap capabilities. Ordinary Git
+SHAs, deployment IDs, source snapshots, worker bytes and descriptive metadata
+are excluded; the app installer remains separately frozen in `plan.worker`.
+Ready projection reselects this exact owner/app profile and verifies the bound
+authority rather than mixing its app database with the base Auth/Gateway scope.
+Actual provider, grant, database/login and deployment readback remain mandatory;
+a profile entry is not evidence that these resources work.
+
+An explicit changed resource selection may supersede only a planned operation
+with no creation attempts. The physical target, captured app release, database
+and role names and retention/cost policy stay the same. Revision CAS archives
+the complete previous plan without claiming its pending approval was cancelled
+or its unknown response settled. A monotonically increasing resource-selection
+revision changes the approval digest even if a later selection returns to an
+older resource. Late old approvals cannot authorize the revised intent. Creating,
+uncertain and ready operations retain their existing reconciliation rules and
+cannot be replaced through this path. The revised plan requires fresh normal
+in-product approval before any provider creation.

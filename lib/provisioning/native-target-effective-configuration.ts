@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from "node:util";
+import { nativeTargetResourceProfileAuthorityDigest } from "./native-target-resource-profile";
 import { HostedOperatorError } from "./hosted-operator-contract";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
 import type { NativeTargetReadyRegistration } from "./native-target-onboarding-contract";
@@ -28,14 +30,37 @@ export const resolveNativeTargetEffectiveConfiguration = async <Invocation>(inpu
   invocation: Invocation;
   appId: string;
   readReady: ReadReadyNativeTarget<Invocation>;
+  selectResourceConfiguration?: (
+    ready: NativeTargetReadyRegistration,
+  ) => HostedOperatorSourceConfiguration;
 }): Promise<HostedOperatorSourceConfiguration> => {
-  const configuration = structuredClone(input.configuration);
   const ready = await input.readReady(input.invocation, input.appId);
   if (ready === undefined) {
-    return freezeConfiguration(configuration);
+    return freezeConfiguration(structuredClone(input.configuration));
   }
 
   const { plan, registration } = ready;
+  if (plan.resourceProfileId !== undefined && input.selectResourceConfiguration === undefined) {
+    throw new HostedOperatorError("resource_mismatch");
+  }
+  const configuration = structuredClone(
+    input.selectResourceConfiguration?.(ready) ?? input.configuration,
+  );
+  if (
+    plan.resourceProfileId !== undefined &&
+    ![
+      plan.resourceProfileAuthorityDigest ===
+        nativeTargetResourceProfileAuthorityDigest(configuration),
+      isDeepStrictEqual(plan.nativeNeon.scope, configuration.nativeNeon.scope),
+      isDeepStrictEqual(
+        plan.nativeNeon.nativeStore,
+        configuration.nativeNeon.configuration.nativeStore,
+      ),
+      plan.appDatabase.resourceId === configuration.nativeNeon.configuration.nativeStore.resourceId,
+    ].every(Boolean)
+  ) {
+    throw new HostedOperatorError("resource_mismatch");
+  }
   const observed = registration.observed;
   const targetMatches = [
     ready.appId === input.appId,
@@ -65,7 +90,7 @@ export const resolveNativeTargetEffectiveConfiguration = async <Invocation>(inpu
   configuration.gateway.protectedApplicationIds = [
     ...new Set([...configuration.gateway.protectedApplicationIds, input.appId]),
   ];
-  // Shared Auth/Neon custody remains the deployment's approved configuration. A target
-  // registration supplies app resource names, never replacement grants or credentials.
+  // Auth/Neon/Gateway custody comes from the exact deployment-approved owner/app
+  // profile (or the legacy base). A registration never supplies credentials or grants.
   return freezeConfiguration(configuration);
 };

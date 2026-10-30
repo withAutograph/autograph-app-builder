@@ -1,4 +1,8 @@
 import { createHash } from "node:crypto";
+import {
+  resolveNativeTargetResourceProfile,
+  nativeTargetResourceProfileAuthorityDigest,
+} from "./native-target-resource-profile";
 import { isDeepStrictEqual } from "node:util";
 import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -349,16 +353,38 @@ export const createNativeTargetOnboardingDeployment = (input: {
       captured: NativeTargetCapturedRelease;
     },
   ): Promise<NativeTargetOnboardingPlan> => {
-    assertNoConfiguredNativeTarget(configuration.applications, proposal.appId);
-    if (proposal.project.teamId !== configuration.teamId) {
+    let selectedConfiguration: HostedOperatorSourceConfiguration;
+    try {
+      selectedConfiguration = resolveNativeTargetResourceProfile({
+        base: configuration,
+        resourceProfileId: proposal.resourceProfileId,
+        authority: owner.authority,
+        appId: proposal.appId,
+        environment: input.environment,
+      });
+    } catch {
+      throw mismatch();
+    }
+    assertNoConfiguredNativeTarget(selectedConfiguration.applications, proposal.appId);
+    if (proposal.project.teamId !== selectedConfiguration.teamId) {
       throw mismatch();
     }
     await readInstallation(owner, proposal.project.installationId, proposal.project.teamId);
-    const worker = selectNativeTargetInstaller(configuration.sandbox.workers, proposal.appId);
-    const nativeNeon = configuration.nativeNeon;
+    const worker = selectNativeTargetInstaller(
+      selectedConfiguration.sandbox.workers,
+      proposal.appId,
+    );
+    const nativeNeon = selectedConfiguration.nativeNeon;
     return nativeTargetOnboardingPlanSchema.parse({
       version: 1,
       appId: proposal.appId,
+      ...(proposal.resourceProfileId === undefined
+        ? {}
+        : {
+            resourceProfileId: proposal.resourceProfileId,
+            resourceProfileAuthorityDigest:
+              nativeTargetResourceProfileAuthorityDigest(selectedConfiguration),
+          }),
       origin: {
         publicSessionId: owner.publicSessionId,
         adapterSessionId: owner.adapterSessionId,

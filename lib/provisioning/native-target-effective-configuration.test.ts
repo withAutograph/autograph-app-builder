@@ -1,6 +1,7 @@
 /* oxlint-disable unicorn/no-useless-undefined -- Explicit empty registry results and void async mocks preserve the production port contracts. */
 import { describe, expect, it, vi } from "vitest";
 import { resolveNativeTargetEffectiveConfiguration } from "./native-target-effective-configuration";
+import { nativeTargetResourceProfileAuthorityDigest } from "./native-target-resource-profile";
 import type { NativeTargetReadyRegistration } from "./native-target-onboarding-contract";
 import { createHostedOperatorNativeHandler } from "./hosted-operator-native";
 import {
@@ -81,7 +82,13 @@ const configuration = (): HostedOperatorSourceConfiguration => ({
         resourceId: "store",
         sourceProjectId: "operator",
       },
-      operator: { ...workload, projectId: "operator" },
+      operator: {
+        audience: workload.audience,
+        environment: workload.environment,
+        issuer: workload.issuer,
+        ownerId: workload.ownerId,
+        projectId: "operator",
+      },
     },
     scope: {
       branchId: "br-shared",
@@ -513,3 +520,230 @@ describe("owner-authorized native target configuration", () => {
     expect(current).toHaveBeenCalled();
   });
 });
+
+const resourceProfileFixture = () => {
+  const base = configuration();
+  const selected = configuration();
+  selected.authDatabase = resource("isolated_auth");
+  selected.nativeNeon = {
+    ...selected.nativeNeon,
+    scope: {
+      ...selected.nativeNeon.scope,
+      projectId: "isolated-neon",
+      branchId: "br-isolated",
+      endpointId: "ep-isolated",
+      hostname: "ep-isolated.neon.tech",
+    },
+    configuration: {
+      ...selected.nativeNeon.configuration,
+      nativeStore: {
+        ...selected.nativeNeon.configuration.nativeStore,
+        resourceId: "isolated-store",
+      },
+    },
+  };
+  selected.gateway = {
+    ...selected.gateway,
+    projectId: "isolated-gateway",
+    authBrowserOrigin: "https://isolated-auth.example",
+    gatewayOrigin: "https://isolated-gateway.example",
+    publicOrigin: "https://isolated-apps.example",
+    workload: { ...selected.gateway.workload, projectId: "isolated-gateway" },
+  };
+  const registration = ready();
+  registration.plan.resourceProfileId = "isolated-development";
+  registration.plan.resourceProfileAuthorityDigest =
+    nativeTargetResourceProfileAuthorityDigest(selected);
+  registration.plan.resourceSelectionRevision = 1;
+  registration.plan.nativeNeon = {
+    ...registration.plan.nativeNeon,
+    scope: structuredClone(selected.nativeNeon.scope),
+    nativeStore: structuredClone(selected.nativeNeon.configuration.nativeStore),
+  };
+  registration.plan.appDatabase = {
+    ...registration.plan.appDatabase,
+    resourceId: "isolated-store",
+  };
+  registration.planDigest = nativeTargetOnboardingPlanDigest(registration.plan);
+  registration.approval.planDigest = registration.planDigest;
+  const verified = nativeTargetOnboardingRecordSchema.parse(registration);
+  if (verified.stage !== "ready") {
+    throw new Error("Expected ready resource profile fixture.");
+  }
+  return { base, selected, registration: verified };
+};
+
+describe("ready target selected resource custody", () => {
+  it("uses one selected Auth, Gateway and Neon configuration together with the current app registration", async () => {
+    const f = resourceProfileFixture();
+    const selectResourceConfiguration = vi.fn(() => f.selected);
+    const effective = await resolveNativeTargetEffectiveConfiguration({
+      configuration: f.base,
+      invocation: ownerContext,
+      appId: "new-app",
+      readReady: () => Promise.resolve(f.registration),
+      selectResourceConfiguration,
+    });
+    expect(selectResourceConfiguration).toHaveBeenCalledExactlyOnceWith(f.registration);
+    expect(effective.authDatabase).toEqual(f.selected.authDatabase);
+    expect(effective.nativeNeon).toEqual(f.selected.nativeNeon);
+    expect(effective.gateway).toMatchObject({
+      projectId: "isolated-gateway",
+      authBrowserOrigin: "https://isolated-auth.example",
+      gatewayOrigin: "https://isolated-gateway.example",
+      publicOrigin: "https://isolated-apps.example",
+    });
+    expect(effective.applications["new-app"]).toMatchObject({
+      nativeTargetRegistration: true,
+      projectId: f.registration.registration.observed.projectId,
+      appDatabase: f.registration.plan.appDatabase,
+      branch: f.registration.plan.branch,
+    });
+    expect(effective.sandbox.workers["new-app"]).toEqual(f.registration.plan.worker);
+    expect(effective.gateway.protectedApplicationIds).toContain("new-app");
+    expect(f.base.authDatabase).toEqual(resource("auth"));
+    expect(f.base.applications["new-app"]).toBeUndefined();
+  });
+
+  it("never falls back to base custody for a ready plan whose resource profile cannot be resolved", async () => {
+    const f = resourceProfileFixture();
+    await expect(
+      resolveNativeTargetEffectiveConfiguration({
+        configuration: f.base,
+        invocation: ownerContext,
+        appId: "new-app",
+        readReady: () => Promise.resolve(f.registration),
+      }),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
+    expect(f.base.applications["new-app"]).toBeUndefined();
+  });
+
+  it.each(["native-store", "scope", "app-resource"] as const)(
+    "rejects a selected %s that differs from the approved ready plan",
+    async (boundary) => {
+      const f = resourceProfileFixture();
+      if (boundary === "native-store") {
+        f.selected.nativeNeon.configuration.nativeStore.resourceId = "different-store";
+      } else if (boundary === "scope") {
+        f.selected.nativeNeon.scope.branchId = "different-branch";
+      } else {
+        f.registration.plan.appDatabase.resourceId = "different-app-resource";
+        f.registration.planDigest = nativeTargetOnboardingPlanDigest(f.registration.plan);
+        f.registration.approval.planDigest = f.registration.planDigest;
+      }
+      await expect(
+        resolveNativeTargetEffectiveConfiguration({
+          configuration: f.base,
+          invocation: ownerContext,
+          appId: "new-app",
+          readReady: () => Promise.resolve(f.registration),
+          selectResourceConfiguration: () => f.selected,
+        }),
+      ).rejects.toMatchObject({ code: "resource_mismatch" });
+      expect(f.base.applications["new-app"]).toBeUndefined();
+    },
+  );
+});
+
+it.each(["auth-database", "gateway-origin"] as const)(
+  "refuses changed %s authority under the same profile and Neon target",
+  async (boundary) => {
+    const f = resourceProfileFixture();
+    if (boundary === "auth-database") {
+      f.selected.authDatabase = {
+        ...f.selected.authDatabase,
+        database: "another_auth",
+        runtimeRole: "another_auth_runtime",
+      };
+    } else {
+      f.selected.gateway.publicOrigin = "https://other-isolated-apps.example";
+    }
+    expect(f.selected.nativeNeon.scope).toEqual(f.registration.plan.nativeNeon.scope);
+    expect(f.selected.nativeNeon.configuration.nativeStore).toEqual(
+      f.registration.plan.nativeNeon.nativeStore,
+    );
+    await expect(
+      resolveNativeTargetEffectiveConfiguration({
+        configuration: f.base,
+        invocation: ownerContext,
+        appId: "new-app",
+        readReady: () => Promise.resolve(f.registration),
+        selectResourceConfiguration: () => f.selected,
+      }),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
+    expect(f.base.applications["new-app"]).toBeUndefined();
+  },
+);
+
+it("accepts ordinary source, deployment and worker-byte changes while retaining the approved app worker", async () => {
+  const f = resourceProfileFixture();
+  f.selected.gateway.gitSha = "e".repeat(40);
+  f.selected.gateway.deploymentId = "later-gateway-deployment";
+  const operator = {
+    ...f.selected.operator,
+    deploymentId: "later-operator-deployment",
+  };
+  f.selected.operator = operator;
+  f.base.operator = { ...operator };
+  if ("image" in f.selected.sandbox) {
+    f.selected.sandbox.image = "later-trusted-image";
+  }
+  const updatedWorker = {
+    ...worker,
+    executablePath: "/trusted/updated-install",
+    sha256: "f".repeat(64),
+  };
+  f.selected.sandbox.resourcesWorker = {
+    ...f.selected.sandbox.resourcesWorker,
+    executablePath: updatedWorker.executablePath,
+    sha256: updatedWorker.sha256,
+  };
+  f.selected.sandbox.authWorker = {
+    ...f.selected.sandbox.authWorker,
+    executablePath: updatedWorker.executablePath,
+    sha256: updatedWorker.sha256,
+  };
+  f.selected.sandbox.accessWorker = {
+    ...f.selected.sandbox.accessWorker,
+    executablePath: updatedWorker.executablePath,
+    sha256: updatedWorker.sha256,
+  };
+  f.selected.sandbox.workers["new-app"] = updatedWorker;
+  const effective = await resolveNativeTargetEffectiveConfiguration({
+    configuration: f.base,
+    invocation: ownerContext,
+    appId: "new-app",
+    readReady: () => Promise.resolve(f.registration),
+    selectResourceConfiguration: () => f.selected,
+  });
+  expect(effective.gateway.gitSha).toBe("e".repeat(40));
+  expect(effective.operator.deploymentId).toBe("later-operator-deployment");
+  expect(effective.sandbox.resourcesWorker.sha256).toBe("f".repeat(64));
+  expect(effective.sandbox.workers["new-app"]).toEqual(f.registration.plan.worker);
+  expect(effective.applications["new-app"].projectId).toBe(
+    f.registration.registration.observed.projectId,
+  );
+});
+
+it.each(["operator", "builder-callback"] as const)(
+  "rejects a changed %s authority endpoint even when the deployment base changes with it",
+  async (kind) => {
+    const f = resourceProfileFixture();
+    if (kind === "operator") {
+      f.selected.operator.origin = "https://other-operator.example";
+      f.base.operator.origin = f.selected.operator.origin;
+    } else {
+      f.selected.builderCallbackOrigin = "https://other-builder.example";
+      f.base.builderCallbackOrigin = f.selected.builderCallbackOrigin;
+    }
+    await expect(
+      resolveNativeTargetEffectiveConfiguration({
+        configuration: f.base,
+        invocation: ownerContext,
+        appId: "new-app",
+        readReady: () => Promise.resolve(f.registration),
+        selectResourceConfiguration: () => f.selected,
+      }),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
+  },
+);

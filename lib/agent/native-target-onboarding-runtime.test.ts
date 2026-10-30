@@ -8,6 +8,7 @@ import {
 } from "./native-target-onboarding-runtime";
 import type {
   NativeTargetSelectedAppState,
+  NativeTargetOnboardingResult,
   NativeTargetPreparationRequest,
   NativeTargetOnboardingRuntimePorts,
 } from "./native-target-onboarding-runtime";
@@ -583,4 +584,177 @@ describe("native target workflow runtime", () => {
     expect((await f.runtime.prepare(replanned, f.ctx)).status).toBe("ready");
     expect(f.ports.createProject).toHaveBeenCalledTimes(1);
   });
+});
+
+const scopedPlan = (
+  before: NativeTargetOnboardingPlan,
+  resourceProfileId = "isolated-development",
+): NativeTargetOnboardingPlan => ({
+  ...structuredClone(before),
+  resourceProfileId,
+  resourceProfileAuthorityDigest: "e".repeat(64),
+  appDatabase: { ...before.appDatabase, resourceId: `${resourceProfileId}-store` },
+  nativeNeon: {
+    ...before.nativeNeon,
+    nativeStore: { ...before.nativeNeon.nativeStore, resourceId: `${resourceProfileId}-store` },
+    scope: {
+      ...before.nativeNeon.scope,
+      projectId: `${resourceProfileId}-project`,
+      branchId: `${resourceProfileId}-branch`,
+      endpointId: `${resourceProfileId}-endpoint`,
+      hostname: `ep-${resourceProfileId}.neon.tech`,
+    },
+  },
+});
+const preparation = (result: NativeTargetOnboardingResult) =>
+  nativeTargetPreparationRequestSchema.parse({
+    appId: result.appId,
+    operationRef: result.operationRef,
+    planDigest: result.planDigest,
+    plan: result.plan,
+  });
+
+describe("native target explicit resource selection", () => {
+  it("revises an undispatched retained plan without local selection and requires fresh exact-plan approval", async () => {
+    const f = fixture();
+    const original = await f.planned();
+    f.approve(original);
+    vi.mocked(f.ports.resolvePlan).mockResolvedValue(scopedPlan(original.plan));
+    const changed = preparation(
+      await f.runtime.plan({ ...f.proposal, resourceProfileId: "isolated-development" }, f.ctx, {
+        phase: "prepared",
+      }),
+    );
+    expect(changed.planDigest).not.toBe(original.planDigest);
+    expect(changed.plan.resourceSelectionRevision).toBe(1);
+    expect(changed.plan.origin).toEqual(original.plan.origin);
+    expect(changed.plan.project).toEqual(original.plan.project);
+    expect(changed.plan.nativeNeon.scope.projectId).toBe("isolated-development-project");
+    expect(f.ports.readCapturedRelease).toHaveBeenLastCalledWith(
+      f.ctx,
+      f.plan.appId,
+      original.plan,
+    );
+    const retained = await f.read();
+    expect(retained?.record.stage).toBe("planned");
+    expect(retained?.record).not.toHaveProperty("approval");
+    await expect(f.runtime.prepare(original, f.ctx)).rejects.toThrow();
+    await expect(f.runtime.prepare(changed, f.ctx)).rejects.toThrow();
+    expect(f.ports.createProject).not.toHaveBeenCalled();
+    f.approve(changed, "fresh-resource-approval");
+    expect((await f.runtime.prepare(changed, f.ctx)).status).toBe("ready");
+    expect(f.ports.createProject).toHaveBeenCalledOnce();
+  });
+
+  it("returns an unchanged resource selection without rewriting the retained operation", async () => {
+    const f = fixture();
+    const original = await f.planned();
+    vi.mocked(f.ports.resolvePlan).mockResolvedValue(scopedPlan(original.plan));
+    const proposal = { ...f.proposal, resourceProfileId: "isolated-development" };
+    await f.runtime.plan(proposal, f.ctx, { phase: "prepared" });
+    const before = await f.read();
+    if (before === undefined) {
+      throw new Error("Expected retained plan.");
+    }
+    vi.mocked(f.ports.resolvePlan).mockResolvedValue(before.record.plan);
+    const supersede = vi.spyOn(f.ports.journal, "supersedePlannedScope");
+    const result = await f.runtime.plan(proposal, f.ctx, { phase: "prepared" });
+    expect(result.planDigest).toBe(before.record.planDigest);
+    expect(await f.read()).toEqual(before);
+    expect(supersede).not.toHaveBeenCalled();
+    expect(f.ports.createProject).not.toHaveBeenCalled();
+  });
+
+  it("leaves the retained operation unchanged when the trusted profile resolver denies selection", async () => {
+    const f = fixture();
+    await f.planned();
+    const before = await f.read();
+    vi.mocked(f.ports.resolvePlan).mockRejectedValue(new Error("profile-not-authorized"));
+    await expect(
+      f.runtime.plan({ ...f.proposal, resourceProfileId: "unavailable-profile" }, f.ctx, {
+        phase: "prepared",
+      }),
+    ).rejects.toThrow("profile-not-authorized");
+    expect(await f.read()).toEqual(before);
+    expect(f.ports.createProject).not.toHaveBeenCalled();
+  });
+
+  it.each(["project", "release"] as const)(
+    "does not change retained %s authority through a resource selection",
+    async (boundary) => {
+      const f = fixture();
+      await f.planned();
+      const before = await f.read();
+      const proposal = { ...f.proposal, resourceProfileId: "isolated-development" };
+      if (boundary === "project") {
+        proposal.project = { ...proposal.project, name: "replacement-project" };
+      } else {
+        const captured = await f.ports.readCapturedRelease(f.ctx, f.plan.appId);
+        vi.mocked(f.ports.readCapturedRelease).mockResolvedValue({
+          ...captured,
+          release: { ...captured.release, artifactRef: "another-release" },
+        });
+      }
+      await expect(f.runtime.plan(proposal, f.ctx, { phase: "prepared" })).rejects.toThrow();
+      expect(await f.read()).toEqual(before);
+      expect(f.ports.createProject).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["approved", "creating", "unknown", "ready"] as const)(
+    "never supersedes %s target work",
+    async (stage) => {
+      const f = fixture();
+      const original = await f.planned();
+      f.approve(original);
+      if (stage === "ready") {
+        await f.runtime.prepare(original, f.ctx);
+      } else {
+        await f.ports.journal.recordApproval(f.ctx, f.plan.appId);
+        if (stage !== "approved") {
+          const attempt = {
+            attemptId: "11111111-1111-4111-8111-111111111111",
+            candidateName: f.plan.project.name,
+            leaseId: "22222222-2222-4222-8222-222222222222",
+            startedAt: "2026-10-21T16:00:00.000Z",
+            leaseExpiresAt: "2026-10-21T16:10:00.000Z",
+          };
+          await f.ports.journal.claimAttempt(f.ctx, f.plan.appId, attempt);
+          if (stage === "unknown") {
+            await f.ports.journal.recordUnknown(f.ctx, f.plan.appId, attempt.attemptId);
+          }
+        }
+      }
+      const before = await f.read();
+      vi.mocked(f.ports.resolvePlan).mockClear();
+      await expect(
+        f.runtime.plan({ ...f.proposal, resourceProfileId: "isolated-development" }, f.ctx, {
+          phase: "prepared",
+        }),
+      ).rejects.toThrow();
+      expect(await f.read()).toEqual(before);
+      expect(f.ports.resolvePlan).not.toHaveBeenCalled();
+    },
+  );
+});
+
+it("requires fresh approval when the same profile's non-Neon resource authority changes", async () => {
+  const f = fixture();
+  const original = await f.planned();
+  const proposal = { ...f.proposal, resourceProfileId: "isolated-development" };
+  vi.mocked(f.ports.resolvePlan).mockResolvedValue(scopedPlan(original.plan));
+  const first = preparation(await f.runtime.plan(proposal, f.ctx, { phase: "prepared" }));
+  f.approve(first);
+  vi.mocked(f.ports.resolvePlan).mockResolvedValue({
+    ...first.plan,
+    resourceProfileAuthorityDigest: "f".repeat(64),
+  });
+  const changed = preparation(await f.runtime.plan(proposal, f.ctx, { phase: "prepared" }));
+  expect(changed.plan.nativeNeon).toEqual(first.plan.nativeNeon);
+  expect(changed.plan.resourceProfileId).toBe(first.plan.resourceProfileId);
+  expect(changed.plan.resourceSelectionRevision).toBe(2);
+  expect(changed.planDigest).not.toBe(first.planDigest);
+  await expect(f.runtime.prepare(first, f.ctx)).rejects.toThrow();
+  await expect(f.runtime.prepare(changed, f.ctx)).rejects.toThrow();
+  expect(f.ports.createProject).not.toHaveBeenCalled();
 });

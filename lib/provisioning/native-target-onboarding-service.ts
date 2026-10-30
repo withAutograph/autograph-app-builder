@@ -145,9 +145,21 @@ export const createNativeTargetOnboardingService =
         ),
     });
     const runtime = createNativeTargetOnboardingRuntime({
-      readCapturedRelease: async (_ctx, appId) => {
+      readCapturedRelease: async (_ctx, appId, retainedPlan) => {
         if (input.action !== "native-target-plan") {
           throw mismatch();
+        }
+        if (retainedPlan !== undefined) {
+          const row = await registry.read(input, appId);
+          if (
+            input.input.resourceProfileId === undefined ||
+            row?.record.stage !== "planned" ||
+            row.record.previousAttempts.length !== 0 ||
+            row.record.planDigest !== nativeTargetOnboardingPlanDigest(retainedPlan)
+          ) {
+            throw mismatch();
+          }
+          return await deps.readCapturedRelease(owner, appId, row.record.plan.origin.appSpecDigest);
         }
         if (input.selectedApp === undefined) {
           throw denied();
@@ -157,6 +169,8 @@ export const createNativeTargetOnboardingService =
       resolvePlan: async (_ctx, proposal, source) =>
         await deps.resolvePlan(owner, proposal, source),
       journal: {
+        supersedePlannedScope: async (_ctx, plan, expectedPlanDigest) =>
+          await registry.supersedePlannedScope(input, plan, expectedPlanDigest),
         read: async (_ctx, appId) => await registry.read(input, appId),
         reservePlan: async (_ctx, plan) => await registry.reservePlan(input, plan),
         recordApproval: async (_ctx, appId) => await registry.recordApproval(input, appId),
