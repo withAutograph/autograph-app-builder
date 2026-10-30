@@ -569,6 +569,7 @@ export const createNativeTargetOnboardingRegistry = <Invocation>(
       "approval" in record &&
       record.approval.outcome === "approved" &&
       receipt.outcome === "approved" &&
+      record.approval.callId === receipt.callId &&
       !isDeepStrictEqual(record.approval, receipt)
     ) {
       throw unavailable();
@@ -731,6 +732,11 @@ export const createNativeTargetOnboardingRegistry = <Invocation>(
         return await save(row, { ...row.record, stage: "unknown", cancelledBy: receipt });
       }
       if (row.record.stage !== "planned" && row.record.stage !== "approved") {
+        return row;
+      }
+      // The stored approval is the immutable initial plan approval. A later
+      // invocation must independently authorize every effect, without rewriting it.
+      if (row.record.stage === "approved" && receipt.outcome === "approved") {
         return row;
       }
       return await save(row, {
