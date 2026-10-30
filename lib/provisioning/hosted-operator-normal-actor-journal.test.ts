@@ -18,6 +18,7 @@ import {
 } from "./hosted-runtime-journal";
 import type { HostedRuntimeJournalRow } from "./hosted-runtime-journal";
 import { createNormalActorJournalAuthority } from "./hosted-operator-normal-actor-authority";
+import { confirmNormalActorCapture } from "./hosted-operator-normal-actor-confirmation";
 
 const accountOperationRef = "11111111-1111-4111-8111-111111111111";
 const authority = {
@@ -491,6 +492,54 @@ describe("retained actual normal actor journal", () => {
     expect(value.writes).toBe(0);
   });
 
+  it("permits only capture writes for the exact idle approved pending account attempt", async () => {
+    const value = fixture();
+    await value.journal.retain(context, preparationInput);
+    delete value.row.record.leaseId;
+    if (value.row.record.operator === undefined) {
+      throw new Error("missing operator");
+    }
+    value.row.record.operator.pendingEffectId = "normal-accounts";
+    value.row.record.operator.pendingEffectAttempt = {
+      id: "00000000-0000-4000-8000-000000000004",
+    };
+    const guard = createNormalActorJournalAuthority({
+      store: { read: async () => structuredClone(value.row), compareAndSet: async () => undefined },
+      keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
+      now: Date.now,
+      assertCanonicalOwner: async () => undefined,
+      assertApprovedOwner: async () => undefined,
+      readApproval: async () => null,
+    });
+    await expect(
+      guard.assertMutationAuthority(context, structuredClone(value.row), "capture"),
+    ).resolves.toBeUndefined();
+    await expect(
+      guard.assertMutationAuthority(context, structuredClone(value.row)),
+    ).rejects.toThrow();
+    const before = structuredClone(value.row);
+    if (value.row.record.operator === undefined) {
+      throw new Error("missing operator");
+    }
+    value.row.record.operator.approvalId = "different";
+    await expect(
+      guard.assertMutationAuthority(context, structuredClone(value.row), "capture"),
+    ).rejects.toThrow();
+    value.row = structuredClone(before);
+    if (value.row.record.operator === undefined) {
+      throw new Error("missing operator");
+    }
+    value.row.record.operator.pendingEffectId = "other";
+    await expect(
+      guard.assertMutationAuthority(context, structuredClone(value.row), "capture"),
+    ).rejects.toThrow();
+    value.row = structuredClone(before);
+    value.row.record.leaseExpiresAt = new Date(Date.now() + 60_000).toISOString();
+    await expect(
+      guard.assertMutationAuthority(context, structuredClone(value.row), "capture"),
+    ).rejects.toThrow();
+  });
+
   it("waits for every approved organization session before recording account completion", async () => {
     const selectedProgram = normalActorProgramSchema.parse({
       ...program,
@@ -607,6 +656,75 @@ describe("retained actual normal actor journal", () => {
     await expect(
       value.journal.registerPendingCapture(context, { ...input, nonceSha256: "d".repeat(64) }),
     ).rejects.toThrow("normal_actor_capture_pending_mismatch");
+    // Continue the same capture with the production journal guard while an account attempt is pending.
+    if (value.row.record.operator === undefined) {
+      throw new Error("missing operator");
+    }
+    value.row.record.operator.pendingEffectId = "normal-accounts";
+    value.row.record.operator.pendingEffectAttempt = { id: "00000000-0000-4000-8000-000000000004" };
+    const store = {
+      read: async () => structuredClone(value.row),
+      compareAndSet: async (request: {
+        expectedRevision: number;
+        record: typeof value.row.record;
+      }) => {
+        if (request.expectedRevision !== value.row.revision) {
+          return undefined;
+        }
+        value.row = { revision: value.row.revision + 1, record: request.record };
+        return structuredClone(value.row);
+      },
+    };
+    const keyring = { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" };
+    const guarded = createNormalActorJournal(
+      createNormalActorJournalAuthority({
+        store,
+        keyring,
+        now: Date.now,
+        assertCanonicalOwner: async () => undefined,
+        assertApprovedOwner: async () => undefined,
+        readApproval: async (request) => ({
+          ...request,
+          approvalId: "initial-approval",
+          approved: true,
+        }),
+      }),
+    );
+    await guarded.registerPendingCapture(context, input);
+    const proof = "controlled-proof";
+    const proofSha256 = createHash("sha256").update(proof).digest("hex");
+    const reference = await guarded.authorizeCapture(context, { ...input, proofSha256 });
+    const session = {
+      reference,
+      actorId: "same-owner",
+      realmSessionId: "new-session",
+      origin: program.origin,
+      expiresAt,
+    };
+    const payload = {
+      version: 1 as const,
+      actorKey: "owner",
+      nonceSha256,
+      proofSha256,
+      proof,
+      session,
+      normalCookie,
+    };
+    await guarded.capture(context, payload);
+    const result = confirmNormalActorCapture({
+      context,
+      record: value.row.record,
+      nonceSha256,
+      proofSha256,
+      payload,
+      keyring,
+      now: Date.now(),
+      proofRef: `_protected-operator/artifacts/realm-identity-proof/${target.appId}/${proofSha256}`,
+    });
+    expect(result.operator?.pendingEffectAttempt).toEqual(
+      value.row.record.operator?.pendingEffectAttempt,
+    );
+    expect(result.operator?.identityLink?.consumedAt).toBeDefined();
     value.row = {
       revision: value.row.revision + 1,
       record: hostedRuntimeJournalRecordSchema.parse({

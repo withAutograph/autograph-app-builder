@@ -1,3 +1,7 @@
+import {
+  canReserveIdentityLink,
+  isIdlePendingAccountCapture,
+} from "./hosted-operator-pending-account-capture";
 import { readPrivateOperatorApproval } from "../eve/private-operator-approval-observation";
 import { createHostedOperatorSandboxFetch } from "./hosted-operator-sandbox-fetch";
 import {
@@ -881,7 +885,11 @@ export const createHostedOperatorControlPlane = async (input: {
       readApproval,
     });
     const normalActorJournal = createNormalActorJournal(normalActorJournalPorts);
-    const readKnownAuthBootstrap = async (context: HostedOperatorContext) => {
+    // oxlint-disable-next-line eslint/complexity -- Bootstrap and exact pending-capture recovery share the same retained Auth verification.
+    const readKnownAuthBootstrap = async (
+      context: HostedOperatorContext,
+      allowPendingCapture = false,
+    ) => {
       const owned = await owner.readCurrentPlanningOwner(context);
       if (["cancelled", "completed"].includes(owned.session.status)) {
         throw new HostedOperatorError("authorization_required");
@@ -893,8 +901,8 @@ export const createHostedOperatorControlPlane = async (input: {
       const { operator } = current.record;
       const idle = [
         operator.authPreparation !== undefined,
-        operator.pendingEffectId === undefined,
-        operator.pendingEffectAttempt === undefined,
+        (operator.pendingEffectId === undefined && operator.pendingEffectAttempt === undefined) ||
+          (allowPendingCapture && isIdlePendingAccountCapture(current.record)),
         current.record.leaseId === undefined,
         current.record.leaseExpiresAt === undefined,
       ].every(Boolean);
@@ -1015,7 +1023,10 @@ export const createHostedOperatorControlPlane = async (input: {
         link: z.infer<typeof operatorRealmIdentityLinkSchema>;
       },
     ) => {
-      const known = await readKnownAuthBootstrap(linkInput.context);
+      const known = await readKnownAuthBootstrap(
+        linkInput.context,
+        linkInput.browserSession !== undefined,
+      );
       if (
         expectedOrganizationRefresh !== undefined &&
         (known.operator.operationRef !== expectedOrganizationRefresh.operationRef ||
@@ -1073,13 +1084,11 @@ export const createHostedOperatorControlPlane = async (input: {
         now: Date.now,
         store,
         update: (record) => {
-          const currentLinkScope = [
-            record.operator?.planDigest === known.operator.planDigest,
-            record.operator?.operationRef === known.operator.operationRef,
-            record.leaseId === undefined,
-            record.operator?.pendingEffectId === undefined,
-            record.operator?.pendingEffectAttempt === undefined,
-          ].every(Boolean);
+          const currentLinkScope = canReserveIdentityLink(record, {
+            planDigest: known.operator.planDigest,
+            operationRef: known.operator.operationRef,
+            participantCapture: linkInput.browserSession !== undefined,
+          });
           if (!currentLinkScope || record.operator === undefined) {
             throw new HostedOperatorError("operation_in_progress");
           }
@@ -1105,7 +1114,10 @@ export const createHostedOperatorControlPlane = async (input: {
         "nonceSha256" | "sealedNonce"
       >,
     ) => {
-      const known = await readKnownAuthBootstrap(linkInput.context);
+      const known = await readKnownAuthBootstrap(
+        linkInput.context,
+        linkInput.browserSession !== undefined,
+      );
       const existing = known.operator.identityLink;
       const expectedOrganizationRefresh =
         existing !== undefined &&
@@ -1248,7 +1260,10 @@ export const createHostedOperatorControlPlane = async (input: {
       });
       const record = hostedRuntimeJournalRecordSchema.parse(saved.record);
       const context = { authority, ownerContext, target: record.request };
-      const known = await readKnownAuthBootstrap(context);
+      const known = await readKnownAuthBootstrap(
+        context,
+        record.operator?.identityLink?.browserSession !== undefined,
+      );
       const link = known.operator.identityLink;
       const current = [
         record.request.sessionId === sessionId,
@@ -1960,7 +1975,7 @@ export const createHostedOperatorControlPlane = async (input: {
         if (!exactPreparation || actor?.account !== "capture-existing" || !approvedTarget) {
           throw new HostedOperatorError("authorization_required");
         }
-        const known = await readKnownAuthBootstrap(captureInput);
+        const known = await readKnownAuthBootstrap(captureInput, true);
         const { operator } = known;
         if (
           operator.plan.stage !== PARTICIPANT_STAGE ||

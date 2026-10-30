@@ -155,6 +155,7 @@ export interface NormalActorJournalPorts {
   assertMutationAuthority: (
     context: HostedOperatorContext,
     row: HostedRuntimeJournalRow,
+    mode?: "capture",
   ) => Promise<void>;
   now: () => number;
 }
@@ -547,15 +548,16 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
     context: HostedOperatorContext,
     change: (row: HostedRuntimeJournalRow) => NormalActorAccountPreparation,
     guard?: () => Promise<void>,
+    mode?: "capture",
   ) => {
     for (;;) {
       const { row } = await read(context, guard);
-      await guarded(() => ports.assertMutationAuthority(context, row), guard);
+      await guarded(() => ports.assertMutationAuthority(context, row, mode), guard);
       const preparation = normalActorAccountPreparationSchema.parse(change(row));
       validateProvenance(context, preparation);
       await guarded(() => ports.assertAccountApproval(context, provenance(preparation)), guard);
       await guarded(() => ports.assertAuthorized(context), guard);
-      await guarded(() => ports.assertMutationAuthority(context, row), guard);
+      await guarded(() => ports.assertMutationAuthority(context, row, mode), guard);
       if (JSON.stringify(preparation) === JSON.stringify(row.record.accountPreparation)) {
         const latest = await guarded(() => ports.store.read(context), guard);
         if (latest?.revision === row.revision) {
@@ -578,6 +580,10 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
       }
     }
   };
+  const mutateCapture = async (
+    context: HostedOperatorContext,
+    change: (row: HostedRuntimeJournalRow) => NormalActorAccountPreparation,
+  ) => await mutate(context, change, undefined, "capture");
   return {
     async initializeSuccessor(
       context: HostedOperatorContext,
@@ -721,7 +727,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
     },
     async registerPendingCapture(context: HostedOperatorContext, input: NormalActorPendingCapture) {
       const pending = normalActorPendingCaptureSchema.parse(input);
-      const preparation = await mutate(context, (row) => {
+      const preparation = await mutateCapture(context, (row) => {
         const current = row.record.accountPreparation;
         const link = row.record.operator?.identityLink;
         if (current === undefined || link === undefined) {
@@ -1071,7 +1077,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
         expiresAt: string;
       },
     ) {
-      const preparation = await mutate(context, (row) => {
+      const preparation = await mutateCapture(context, (row) => {
         const prior = row.record.accountPreparation;
         if (
           prior === undefined ||
@@ -1111,7 +1117,7 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
     async capture(context: HostedOperatorContext, payloadInput: NormalActorCapturedPayload) {
       const payload = normalActorCapturedPayloadSchema.parse(payloadInput);
       const cookieDigest = normalActorCaptureCookieDigest(payload.normalCookie);
-      const preparation = await mutate(context, (row) => {
+      const preparation = await mutateCapture(context, (row) => {
         const prior = row.record.accountPreparation;
         const capture = prior?.captures.find((entry) => entry.nonceSha256 === payload.nonceSha256);
         if (
