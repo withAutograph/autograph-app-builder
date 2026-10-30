@@ -412,6 +412,86 @@ const currentBootstrapFixture = async () => {
 };
 
 describe("retained actual normal actor journal", () => {
+  it("reads the same authorized preparation across a lease-only renewal", async () => {
+    const value = fixture();
+    await value.journal.retain(context, preparationInput);
+    value.row.record.leaseExpiresAt = new Date(Date.now() + 40_000).toISOString();
+    let reads = 0;
+    const journal = createNormalActorJournal({
+      keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
+      now: Date.now,
+      assertAuthorized: async () => undefined,
+      assertAccountApproval: async () => undefined,
+      assertMutationAuthority: async () => undefined,
+      store: {
+        read: async () => {
+          reads += 1;
+          if (reads === 2) {
+            value.row = {
+              ...value.row,
+              revision: value.row.revision + 1,
+              record: {
+                ...value.row.record,
+                leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+              },
+            };
+          }
+          return structuredClone(value.row);
+        },
+        compareAndSet: async () => undefined,
+      },
+    });
+    const retained = await journal.read(context);
+    expect(retained?.preparation.accountOperationRef).toBe(accountOperationRef);
+    expect(reads).toBe(2);
+  });
+  it.each(["fence", "pending effect", "preparation", "lease", "expired renewal"] as const)(
+    "rejects a concurrent %s change during the authorized read",
+    async (change) => {
+      const value = fixture();
+      await value.journal.retain(context, preparationInput);
+      value.row.record.leaseExpiresAt = new Date(Date.now() + 40_000).toISOString();
+      let reads = 0;
+      const journal = createNormalActorJournal({
+        keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
+        now: Date.now,
+        assertAuthorized: async () => undefined,
+        assertAccountApproval: async () => undefined,
+        assertMutationAuthority: async () => undefined,
+        store: {
+          read: async () => {
+            reads += 1;
+            if (reads === 2) {
+              const record = structuredClone(value.row.record);
+              record.leaseExpiresAt = new Date(Date.now() + 60_000).toISOString();
+              if (record.operator === undefined || record.accountPreparation === undefined) {
+                throw new Error("missing test state");
+              }
+              if (change === "fence") {
+                record.operator.fenceGeneration = 2;
+              }
+              if (change === "pending effect") {
+                record.operator.pendingEffectId = "other";
+              }
+              if (change === "preparation") {
+                record.accountPreparation.accountsCompletedAt = new Date().toISOString();
+              }
+              if (change === "lease") {
+                record.leaseId = "00000000-0000-4000-8000-000000000099";
+              }
+              if (change === "expired renewal") {
+                record.leaseExpiresAt = new Date(Date.now() - 1000).toISOString();
+              }
+              value.row = { revision: value.row.revision + 1, record };
+            }
+            return structuredClone(value.row);
+          },
+          compareAndSet: async () => undefined,
+        },
+      });
+      await expect(journal.read(context)).rejects.toThrow("normal_actor_journal_changed");
+    },
+  );
   it("rejects participant preparation when captured-account provenance is omitted or changed", async () => {
     const pointer = {
       preparation: {
@@ -490,6 +570,97 @@ describe("retained actual normal actor journal", () => {
     await expect(guard.assertMutationAuthority(changedFence, snapshot)).rejects.toThrow();
     await expect(guard.assertMutationAuthority(context, snapshot)).rejects.toThrow();
     expect(value.writes).toBe(0);
+  });
+
+  it("accepts a lease-only renewal during effect authority checks but rejects a changed fence", async () => {
+    const value = fixture();
+    const now = Date.now();
+    value.row.record.leaseExpiresAt = new Date(now + 40_000).toISOString();
+    if (value.row.record.operator === undefined || value.row.record.leaseId === undefined) {
+      throw new Error("missing lease");
+    }
+    value.row.record.operator.fenceGeneration = 1;
+    const effect = {
+      ...context,
+      effect: plan.effects[0],
+      operationRef: accountOperationRef,
+      plan,
+      fenceGeneration: 1,
+      leaseId: value.row.record.leaseId,
+    };
+    const snapshot = structuredClone(value.row);
+    value.row = {
+      revision: value.row.revision + 1,
+      record: { ...value.row.record, leaseExpiresAt: new Date(now + 60_000).toISOString() },
+    };
+    const guard = createNormalActorJournalAuthority({
+      store: { read: async () => structuredClone(value.row), compareAndSet: async () => undefined },
+      keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
+      now: () => now,
+      assertCanonicalOwner: async () => undefined,
+      assertApprovedOwner: async () => undefined,
+      readApproval: async () => ({
+        approvalId: "initial-approval",
+        callId: "initial-call",
+        planDigest: operatorPlanDigest(plan),
+        action: "prepare",
+        approved: true,
+      }),
+    });
+    await expect(guard.assertMutationAuthority(effect, snapshot)).resolves.toBeUndefined();
+    if (value.row.record.operator === undefined) {
+      throw new Error("missing operator");
+    }
+    value.row.record.operator.fenceGeneration = 2;
+    await expect(guard.assertMutationAuthority(effect, snapshot)).rejects.toThrow(
+      "operation_in_progress",
+    );
+  });
+
+  it("checkpoints against the renewed revision without discarding the pending effect", async () => {
+    const value = fixture();
+    await value.journal.retain(context, preparationInput);
+    const initial = await value.journal.read(context);
+    if (initial === undefined || value.row.record.operator === undefined) {
+      throw new Error("missing fixture");
+    }
+    value.row.record.leaseExpiresAt = new Date(Date.now() + 40_000).toISOString();
+    value.row.record.operator.pendingEffectId = "normal-accounts";
+    let checks = 0;
+    let writes = 0;
+    const journal = createNormalActorJournal({
+      keyring: { tokenKey: Buffer.alloc(32, 7), tokenKeyVersion: "v1" },
+      now: Date.now,
+      assertAuthorized: async () => undefined,
+      assertAccountApproval: async () => undefined,
+      assertMutationAuthority: async () => {
+        checks += 1;
+        if (checks === 2) {
+          value.row = {
+            revision: value.row.revision + 1,
+            record: {
+              ...value.row.record,
+              leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+            },
+          };
+        }
+      },
+      store: {
+        read: async () => structuredClone(value.row),
+        compareAndSet: async (input) => {
+          if (input.expectedRevision !== value.row.revision) {
+            return undefined;
+          }
+          writes += 1;
+          value.row = { revision: value.row.revision + 1, record: input.record };
+          return structuredClone(value.row);
+        },
+      },
+    });
+    await journal.checkpoint(context, initial.state);
+    expect(writes).toBe(1);
+    expect(value.row.record.operator?.pendingEffectId).toBe("normal-accounts");
+    expect(Date.parse(value.row.record.leaseExpiresAt ?? "")).toBeGreaterThan(Date.now() + 40_000);
   });
 
   it("permits only capture writes for the exact idle approved pending account attempt", async () => {
