@@ -79,7 +79,12 @@ const setup = async (
   authorize: () => Promise<ApprovalResponseDecision>,
   abortSignal?: AbortSignal,
 ) => {
-  const actor = { authenticator: "fixture", principalId: "owner", principalType: "user" };
+  const actor = {
+    authenticator: "fixture",
+    principalId: "owner",
+    principalType: "user",
+    attributes: {},
+  };
   const request = {
     kind: "tool-approval",
     requestId: "pending-request",
@@ -90,7 +95,7 @@ const setup = async (
       callId: "pending-call",
       input: { plan: "same-plan" },
     },
-  };
+  } satisfies Parameters<typeof batches.appendPendingInputBatch>[0]["requests"][number];
   const initial = batches.appendPendingInputBatch({
     session: {
       sessionId: "session",
