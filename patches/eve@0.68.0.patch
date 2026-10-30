@@ -88,7 +88,7 @@ index 6c2fb72..1bda13d 100644
 @@ -1 +1 @@
 -import{EVE_ACTIVITY_ROUTE_PATTERN,EVE_CALLBACK_ROUTE_PATTERN,EVE_CONNECTION_CALLBACK_ROUTE_PATTERN,EVE_HEALTH_ROUTE_PATH,EVE_INFO_ROUTE_PATH,EVE_ROUTE_PREFIX,EVE_SESSION_CANCEL_ROUTE_PATTERN,EVE_SESSION_CLEAR_ROUTE_PATTERN,EVE_SESSION_COMPACT_ROUTE_PATTERN,EVE_SESSION_RESET_ROUTE_PATTERN,EVE_SESSION_ROUTE_PATH,EVE_SESSION_ROUTE_PATTERN,EVE_SESSION_STREAM_ROUTE_PATTERN,EVE_SUBAGENT_STREAM_ROUTE_PATTERN,EVE_TASK_INPUT_ROUTE_PATTERN,createEveSessionStreamRoutePath,createEveSubagentStreamRoutePath}from"#protocol/routes.js";import{attachClientContext}from"#internal/client-context.js";import{createLogger,logError}from"#internal/logging.js";import{FAIL_CLOSED_FORWARDED_TRACE_ASSERTION,formatTraceContentCeiling}from"#shared/forwarded-trace-policy.js";import{EVE_SESSION_ID_HEADER,EVE_STREAM_CONTROL_VERSION_QUERY,EVE_STREAM_FORMAT_HEADER,EVE_STREAM_TAIL_INDEX_HEADER,EVE_STREAM_VERSION_HEADER}from"#protocol/message.js";import{DELETE,GET,HEAD,PATCH,POST,PUT,defineChannel}from"#public/definitions/channel.js";import{handleExpiredLegacyAuthorization}from"#execution/legacy-session/authorization.js";import{resolveForwardedPrincipal}from"#channel/forwarded-principal.js";import{handleConnectionCallbackRequest}from"#execution/connections/callback-route.js";import{handleActivityRequest}from"#execution/activity-route.js";import{handleSessionCallbackRequest}from"#subagents/callback-route.js";import{handleTaskInputResponseRequest}from"#execution/task-input-response-route.js";import{WORKFLOW_WEBHOOK_ROUTE_PATTERN,handleWorkflowWebhookRequest}from"#execution/workflow-webhook-route.js";import{readAgentInfoRouteResponse,readRemoteAgentStreamHeadersResolver,readRouteSessionCreator}from"#internal/nitro/routes/channel-route-context.js";import{parseTraceparent,readAgentDispatchTraceContext}from"#protocol/traceparent.js";import{readForwardedAudienceBaggage,readForwardedParentSessionBaggage}from"#protocol/baggage.js";import{readConversationBaggage}from"#tracing/conversation-context.js";import{routeAuth}from"#public/channels/auth.js";import{defaultEveAudience}from"#eve-channel/audience.js";import{mergeUploadPolicy}from"#public/channels/upload-policy.js";import{checkUploadPolicy,createSessionStreamResponse,deriveOperationContinuationToken,parseCancelTurnBody,parseCreateBody,parseIncludeTailIndex,parseJsonRequest,parseOptionalJsonRequest,parseResetBody,parseSessionControlBody,parseSessionMessageBody,parseStartIndex,rejectSessionContinuationToken,requireSessionId}from"#eve-channel/request.js";import{findRemoteSubagentBinding,healthResponse,normalizeEveCors,resolveOnMessage}from"#eve-channel/support.js";export*from"#eve-channel/types.js";const log=createLogger(`eve.channel`);function eveChannel(e){let t=mergeUploadPolicy(e.uploadPolicy);return defineChannel({cors:normalizeEveCors(e.cors),turnPolicy:e.turnPolicy,audience:t=>{let n=e.audience??defaultEveAudience;return typeof n==`function`?n(t):n},routes:[GET(EVE_HEALTH_ROUTE_PATH,async()=>healthResponse()),HEAD(EVE_HEALTH_ROUTE_PATH,async()=>healthResponse()),GET(EVE_INFO_ROUTE_PATH,async(t,n)=>{let r=await routeAuth(t,e.auth);if(r instanceof Response)return r;let i=readAgentInfoRouteResponse(n);return i===void 0?Response.json({error:`Agent info route requires internal channel dispatch context.`,ok:!1},{status:500}):await i()}),GET(`${EVE_ROUTE_PREFIX}/connections/:name/callback/:token`,handleExpiredLegacyAuthorization),POST(`${EVE_ROUTE_PREFIX}/connections/:name/callback/:token`,handleExpiredLegacyAuthorization),GET(EVE_CONNECTION_CALLBACK_ROUTE_PATTERN,handleConnectionCallbackRequest),POST(EVE_CONNECTION_CALLBACK_ROUTE_PATTERN,handleConnectionCallbackRequest),POST(EVE_ACTIVITY_ROUTE_PATTERN,handleActivityRequest),POST(EVE_CALLBACK_ROUTE_PATTERN,handleSessionCallbackRequest),POST(EVE_TASK_INPUT_ROUTE_PATTERN,handleTaskInputResponseRequest),GET(WORKFLOW_WEBHOOK_ROUTE_PATTERN,handleWorkflowWebhookRequest),POST(WORKFLOW_WEBHOOK_ROUTE_PATTERN,handleWorkflowWebhookRequest),PUT(WORKFLOW_WEBHOOK_ROUTE_PATTERN,handleWorkflowWebhookRequest),PATCH(WORKFLOW_WEBHOOK_ROUTE_PATTERN,handleWorkflowWebhookRequest),DELETE(WORKFLOW_WEBHOOK_ROUTE_PATTERN,handleWorkflowWebhookRequest),POST(EVE_SESSION_ROUTE_PATH,async(n,r)=>{let i=await routeAuth(n,e.auth);if(i instanceof Response)return i;let a=await parseOptionalJsonRequest(n);if(a instanceof Response)return a;let o=rejectSessionContinuationToken(a);if(o!==null)return o;let s=await resolveForwardedPrincipal({trustedForwarders:e.trustedForwarders,forwarder:i,payload:a});if(s instanceof Response)return s;let c=parseCreateBody(a);if(c instanceof Response)return c;let l=c.callback===void 0?`absent`:readForwardedParentSessionBaggage(n.headers.get(`baggage`)),u;if(typeof l==`object`){if(l.callId!==c.callback?.callId)log.warn(`ignoring remote parent lineage with a mismatched callback`,{forwarder:i.principalId});else{let t=s.accepted;if(!t&&e.trustedForwarders!==void 0)try{t=await e.trustedForwarders(i,{})}catch(e){let t=logError(log,`trustedForwarders handler failed`,e,{forwarder:i.principalId});return Response.json({error:`trustedForwarders handler failed.`,errorId:t,ok:!1},{status:500})}t?u=l:log.warn(`ignoring remote parent lineage from an untrusted forwarder`,{forwarder:i.principalId})}}else l===`malformed`&&log.warn(`ignoring malformed remote parent lineage`,{forwarder:i.principalId});let d=c.callback===void 0?void 0:parseTraceparent(n.headers.get(`traceparent`)),f=c.callback===void 0?void 0:readAgentDispatchTraceContext(n.headers.get(`tracestate`),d)??d,p=checkUploadPolicy(c,t);if(p!==null)return p;if(c.operationId!==void 0&&s.auth.principalType===`anonymous`)return Response.json({error:`operationId requires an authenticated principal.`,ok:!1},{status:400});let m=c.operationId===void 0?void 0:await deriveOperationContinuationToken({auth:s.auth,operationId:c.operationId});if(m!==void 0){let e=await r.resolveSession(m);if(e!==void 0)return Response.json({ok:!0,sessionId:e.id,status:`accepted`},{headers:{"cache-control":`no-store`,[EVE_SESSION_ID_HEADER]:e.id},status:202})}let h=d===void 0?`absent`:readForwardedAudienceBaggage(n.headers.get(`baggage`)),g=s.accepted&&d!==void 0&&(d.traceFlags&1)==1?typeof h==`object`?h:h===`malformed`?FAIL_CLOSED_FORWARDED_TRACE_ASSERTION:void 0:void 0,_=f;g!==void 0&&f!==void 0&&(_={...f,forwardedTracePolicy:g}),h===`malformed`?log.warn(`using metadata-only policy for malformed forwarded audience baggage`,{forwarder:i.principalId}):typeof h==`object`&&(g===void 0?log.warn(`ignoring forwarded trace policy without an accepted sampled principal`,{forwarder:i.principalId}):log.info(`accepted forwarded trace policy`,{audience:h.originAudience,ceiling:formatTraceContentCeiling(h.ceiling),forwarder:i.principalId}));let v=c.message===void 0?{auth:s.auth}:await resolveOnMessage({auth:s.auth,config:e,message:c.message,request:n});if(v instanceof Response)return v;let y=readRouteSessionCreator(r);if(y===void 0)return Response.json({error:`Session creation requires internal channel dispatch context.`,ok:!1},{status:500});let b;try{b=await y({taskDeliveryPolicy:c.taskDeliveryPolicy,activityObserver:c.activityObserver,audienceAuth:i,auth:v.auth,capabilities:c.capabilities??{requestInput:!0},callback:c.callback,continuationToken:m,initiatorAuth:s.accepted?s.initiatorAuth:void 0,input:attachClientContext({message:c.message,context:v.context,outputSchema:c.outputSchema},c.context),conversationId:c.callback===void 0?void 0:readConversationBaggage(n.headers.get(`baggage`)),parent:u,parentTraceContext:_,title:v.title})}catch(e){let t=logError(log,`session-create request failed`,e);return Response.json({error:`Failed to create the session.`,errorId:t,ok:!1},{status:500})}return Response.json({ok:!0,sessionId:b.sessionId,status:`accepted`},{headers:{"cache-control":`no-store`,[EVE_SESSION_ID_HEADER]:b.sessionId},status:202})}),POST(EVE_SESSION_ROUTE_PATTERN,async(n,{attachSession:r,params:i})=>{let a=await routeAuth(n,e.auth);if(a instanceof Response)return a;let o=requireSessionId(i);if(o instanceof Response)return o;let s=await parseJsonRequest(n);if(s instanceof Response)return s;let c=await resolveForwardedPrincipal({trustedForwarders:e.trustedForwarders,forwarder:a,payload:s});if(c instanceof Response)return c;let l=parseSessionMessageBody(s);if(l instanceof Response)return l;let u=checkUploadPolicy(l,t);if(u!==null)return u;let d,f,p=c.auth;if(l.message!==void 0){let t=await resolveOnMessage({auth:c.auth,config:e,message:l.message,request:n,sessionId:o});if(t instanceof Response)return t;d=t.context,f=t.title,p=t.auth}let m;try{let e=r(o),t=attachClientContext({taskDeliveryPolicy:l.taskDeliveryPolicy,activityObserver:l.activityObserver,auth:p,callback:l.callback,context:d,outputSchema:l.outputSchema,turnPolicy:l.turnPolicy,title:f},l.context);m=l.inputResponses===void 0?await e.send(l.message,t):await e.respond(l.inputResponses,t)}catch(e){let t=logError(log,`session-message request failed`,e,{sessionId:o});return Response.json({error:`Failed to send the session message.`,errorId:t,ok:!1},{status:500})}return m.status===`accepted`?Response.json({ok:!0,sessionId:m.sessionId,status:`accepted`,deliveryId:m.deliveryId},{headers:{"cache-control":`no-store`,[EVE_SESSION_ID_HEADER]:m.sessionId},status:202}):Response.json({code:m.retryable?`session_not_ready`:`session_not_active`,error:m.retryable===!0?`The session is not ready to accept messages yet.`:`The session is no longer active.`,ok:!1},{headers:{"cache-control":`no-store`},status:409})}),POST(EVE_SESSION_CANCEL_ROUTE_PATTERN,async(t,{attachSession:n,params:r})=>{let i=await routeAuth(t,e.auth);if(i instanceof Response)return i;let a=requireSessionId(r);if(a instanceof Response)return a;let o=await parseCancelTurnBody(t);if(o instanceof Response)return o;let s;try{s=await n(a).cancel({taskId:o.taskId,tasks:o.tasks,turnId:o.turnId})}catch(e){let t=logError(log,`cancel-turn request failed`,e,{sessionId:a});return Response.json({error:`Failed to cancel the turn.`,errorId:t,ok:!1},{status:500})}return Response.json(s.status===`accepted`?{ok:!0,sessionId:s.sessionId,status:`accepted`}:{ok:!0,status:`no_active_turn`},{headers:{"cache-control":`no-store`},status:s.status===`accepted`?202:200})}),POST(EVE_SESSION_COMPACT_ROUTE_PATTERN,async(t,{attachSession:n,params:r})=>{let i=await routeAuth(t,e.auth);if(i instanceof Response)return i;let a=requireSessionId(r);if(a instanceof Response)return a;let o=await parseSessionControlBody(t);if(o instanceof Response)return o;let s;try{s=await n(a).compact()}catch(e){let t=logError(log,`session-compaction request failed`,e,{sessionId:a});return Response.json({error:`Failed to compact the session.`,errorId:t,ok:!1},{status:500})}return Response.json(s.status===`accepted`?{ok:!0,sessionId:s.sessionId,status:`accepted`}:{ok:!0,status:`no_active_session`},{headers:{"cache-control":`no-store`},status:s.status===`accepted`?202:200})}),POST(EVE_SESSION_CLEAR_ROUTE_PATTERN,async(t,{attachSession:n,params:r})=>{let i=await routeAuth(t,e.auth);if(i instanceof Response)return i;let a=requireSessionId(r);if(a instanceof Response)return a;let o=await parseSessionControlBody(t);if(o instanceof Response)return o;let s;try{s=await n(a).clear()}catch(e){let t=logError(log,`session-clear request failed`,e,{sessionId:a});return Response.json({error:`Failed to clear the session context.`,errorId:t,ok:!1},{status:500})}return Response.json(s.status===`accepted`?{ok:!0,sessionId:s.sessionId,status:`accepted`}:{ok:!0,status:`no_active_session`},{headers:{"cache-control":`no-store`},status:s.status===`accepted`?202:200})}),POST(EVE_SESSION_RESET_ROUTE_PATTERN,async(t,{attachSession:n,params:r})=>{let i=await routeAuth(t,e.auth);if(i instanceof Response)return i;let a=requireSessionId(r);if(a instanceof Response)return a;let o=await parseResetBody(t);if(o instanceof Response)return o;let s;try{s=await n(a).reset({reason:o.reason})}catch(e){let t=logError(log,`session-reset request failed`,e,{sessionId:a});return Response.json({error:`Failed to reset the session.`,errorId:t,ok:!1},{status:500})}return Response.json(s.status===`reset`?{ok:!0,previousSessionId:s.previousSessionId,status:`reset`}:{ok:!0,status:`no_active_session`},{headers:{"cache-control":`no-store`}})}),GET(EVE_SESSION_STREAM_ROUTE_PATTERN,async(t,{attachSession:n,params:r})=>{let i=await routeAuth(t,e.auth);if(i instanceof Response)return i;let a=requireSessionId(r);return a instanceof Response?a:await createSessionStreamResponse(t,n(a))}),GET(EVE_SUBAGENT_STREAM_ROUTE_PATTERN,async(t,n)=>{let r=await routeAuth(t,e.auth);if(r instanceof Response)return r;let i=n.params.parentSessionId,a=n.params.callId,o=n.params.childSessionId;if(!i||!a||!o)return Response.json({error:`Missing subagent stream coordinates.`,ok:!1},{status:400});let s=parseStartIndex(t);if(s instanceof Response)return s;let c=parseIncludeTailIndex(t),l=createEveSubagentStreamRoutePath({callId:a,childSessionId:o,parentSessionId:i}),u;try{let e=n.attachSession(i),t=await findRemoteSubagentBinding({callId:a,childSessionId:o,childStreamPath:l,parentSessionId:i,parent:e});if(t===void 0)throw Error(`Remote subagent binding not found.`);u=t}catch{return Response.json({error:`Subagent stream not found.`,ok:!1},{status:404})}let d=readRemoteAgentStreamHeadersResolver(n);if(d===void 0)return Response.json({error:`Subagent stream proxy requires internal channel dispatch context.`,ok:!1},{status:500});let f;try{f=await d({name:u.data.toolName,resolverId:u.data.remote.resolverId,url:u.data.remote.url})}catch{return Response.json({error:`Subagent stream not found.`,ok:!1},{status:404})}let p=new URL(createEveSessionStreamRoutePath(o).replace(/^\/+/,``),`${u.data.remote.url.replace(/\/+$/,``)}/`);s!==void 0&&p.searchParams.set(`startIndex`,String(s));let m=new URL(t.url).searchParams.get(EVE_STREAM_CONTROL_VERSION_QUERY);m!==null&&p.searchParams.set(EVE_STREAM_CONTROL_VERSION_QUERY,m),c&&p.searchParams.set(`includeTailIndex`,`1`);let h=await fetch(p,{cache:`no-store`,headers:f,redirect:`manual`,signal:t.signal}),g=new Headers;for(let e of[`cache-control`,`content-type`,`x-accel-buffering`,EVE_SESSION_ID_HEADER,EVE_STREAM_FORMAT_HEADER,EVE_STREAM_TAIL_INDEX_HEADER,EVE_STREAM_VERSION_HEADER]){let t=h.headers.get(e);t!==null&&g.set(e,t)}return new Response(h.body,{headers:g,status:h.status,statusText:h.statusText})})],events:e.events})}export{eveChannel};
 \ No newline at end of file
-+import{handleTerminalRecoveryRequest}from"#execution/session/terminal-recovery.js";import{EVE_ACTIVITY_ROUTE_PATTERN,EVE_CALLBACK_ROUTE_PATTERN,EVE_CONNECTION_CALLBACK_ROUTE_PATTERN,EVE_HEALTH_ROUTE_PATH,EVE_INFO_ROUTE_PATH,EVE_ROUTE_PREFIX,EVE_SESSION_CANCEL_ROUTE_PATTERN,EVE_SESSION_CLEAR_ROUTE_PATTERN,EVE_SESSION_COMPACT_ROUTE_PATTERN,EVE_SESSION_RESET_ROUTE_PATTERN,EVE_SESSION_ROUTE_PATH,EVE_SESSION_ROUTE_PATTERN,EVE_SESSION_STREAM_ROUTE_PATTERN,EVE_SUBAGENT_STREAM_ROUTE_PATTERN,EVE_TASK_INPUT_ROUTE_PATTERN,createEveSessionStreamRoutePath,createEveSubagentStreamRoutePath}from"#protocol/routes.js";import{attachClientContext}from"#internal/client-context.js";import{createLogger,logError}from"#internal/logging.js";import{FAIL_CLOSED_FORWARDED_TRACE_ASSERTION,formatTraceContentCeiling}from"#shared/forwarded-trace-policy.js";import{EVE_SESSION_ID_HEADER,EVE_STREAM_CONTROL_VERSION_QUERY,EVE_STREAM_FORMAT_HEADER,EVE_STREAM_TAIL_INDEX_HEADER,EVE_STREAM_VERSION_HEADER}from"#protocol/message.js";import{DELETE,GET,HEAD,PATCH,POST,PUT,defineChannel}from"#public/definitions/channel.js";import{handleExpiredLegacyAuthorization}from"#execution/legacy-session/authorization.js";import{resolveForwardedPrincipal}from"#channel/forwarded-principal.js";import{handleConnectionCallbackRequest}from"#execution/connections/callback-route.js";import{handleActivityRequest}from"#execution/activity-route.js";import{handleSessionCallbackRequest}from"#subagents/callback-route.js";import{handleTaskInputResponseRequest}from"#execution/task-input-response-route.js";import{WORKFLOW_WEBHOOK_ROUTE_PATTERN,handleWorkflowWebhookRequest}from"#execution/workflow-webhook-route.js";import{readAgentInfoRouteResponse,readRemoteAgentStreamHeadersResolver,readRouteSessionCreator}from"#internal/nitro/routes/channel-route-context.js";import{parseTraceparent,readAgentDispatchTraceContext}from"#protocol/traceparent.js";import{readForwardedAudienceBaggage,readForwardedParentSessionBaggage}from"#protocol/baggage.js";import{readConversationBaggage}from"#tracing/conversation-context.js";import{routeAuth}from"#public/channels/auth.js";import{defaultEveAudience}from"#eve-channel/audience.js";import{mergeUploadPolicy}from"#public/channels/upload-policy.js";import{checkUploadPolicy,createSessionStreamResponse,deriveOperationContinuationToken,parseCancelTurnBody,parseCreateBody,parseIncludeTailIndex,parseJsonRequest,parseOptionalJsonRequest,parseResetBody,parseSessionControlBody,parseSessionMessageBody,parseStartIndex,rejectSessionContinuationToken,requireSessionId}from"#eve-channel/request.js";import{findRemoteSubagentBinding,healthResponse,normalizeEveCors,resolveOnMessage}from"#eve-channel/support.js";export*from"#eve-channel/types.js";const log=createLogger(`eve.channel`);function eveChannel(e){let t=mergeUploadPolicy(e.uploadPolicy);return defineChannel({cors:normalizeEveCors(e.cors),turnPolicy:e.turnPolicy,audience:t=>{let n=e.audience??defaultEveAudience;return typeof n==`function`?n(t):n},routes:[GET(EVE_HEALTH_ROUTE_PATH,async()=>healthResponse()),HEAD(EVE_HEALTH_ROUTE_PATH,async()=>healthResponse()),GET(EVE_INFO_ROUTE_PATH,async(t,n)=>{let r=await routeAuth(t,e.auth);if(r instanceof Response)return r;let i=readAgentInfoRouteResponse(n);return i===void 0?Response.json({error:`Agent info route requires internal channel dispatch context.`,ok:!1},{status:500}):await i()}),GET(`${EVE_ROUTE_PREFIX}/connections/:name/callback/:token`,handleExpiredLegacyAuthorization),POST(`${EVE_ROUTE_PREFIX}/connections/:name/callback/:token`,handleExpiredLegacyAuthorization),GET(EVE_CONNECTION_CALLBACK_ROUTE_PATTERN,handleConnectionCallbackRequest),POST(EVE_CONNECTION_CALLBACK_ROUTE_PATTERN,handleConnectionCallbackRequest),POST(EVE_ACTIVITY_ROUTE_PATTERN,handleActivityRequest),POST(EVE_CALLBACK_ROUTE_PATTERN,handleSessionCallbackRequest),POST(EVE_TASK_INPUT_ROUTE_PATTERN,handleTaskInputResponseRequest),GET(WORKFLOW_WEBHOOK_ROUTE_PATTERN,handleWorkflowWebhookRequest),POST(WORKFLOW_WEBHOOK_ROUTE_PATTERN,handleWorkflowWebhookRequest),PUT(WORKFLOW_WEBHOOK_ROUTE_PATTERN,handleWorkflowWebhookRequest),PATCH(WORKFLOW_WEBHOOK_ROUTE_PATTERN,handleWorkflowWebhookRequest),DELETE(WORKFLOW_WEBHOOK_ROUTE_PATTERN,handleWorkflowWebhookRequest),POST(EVE_SESSION_ROUTE_PATH,async(n,r)=>{let i=await routeAuth(n,e.auth);if(i instanceof Response)return i;let a=await parseOptionalJsonRequest(n);if(a instanceof Response)return a;let o=rejectSessionContinuationToken(a);if(o!==null)return o;let s=await resolveForwardedPrincipal({trustedForwarders:e.trustedForwarders,forwarder:i,payload:a});if(s instanceof Response)return s;if(a.recovery!==void 0)return await handleTerminalRecoveryRequest({payload:a,auth:s.auth,forwarded:s.accepted,ports:e.terminalRecovery});let c=parseCreateBody(a);if(c instanceof Response)return c;let l=c.callback===void 0?`absent`:readForwardedParentSessionBaggage(n.headers.get(`baggage`)),u;if(typeof l==`object`){if(l.callId!==c.callback?.callId)log.warn(`ignoring remote parent lineage with a mismatched callback`,{forwarder:i.principalId});else{let t=s.accepted;if(!t&&e.trustedForwarders!==void 0)try{t=await e.trustedForwarders(i,{})}catch(e){let t=logError(log,`trustedForwarders handler failed`,e,{forwarder:i.principalId});return Response.json({error:`trustedForwarders handler failed.`,errorId:t,ok:!1},{status:500})}t?u=l:log.warn(`ignoring remote parent lineage from an untrusted forwarder`,{forwarder:i.principalId})}}else l===`malformed`&&log.warn(`ignoring malformed remote parent lineage`,{forwarder:i.principalId});let d=c.callback===void 0?void 0:parseTraceparent(n.headers.get(`traceparent`)),f=c.callback===void 0?void 0:readAgentDispatchTraceContext(n.headers.get(`tracestate`),d)??d,p=checkUploadPolicy(c,t);if(p!==null)return p;if(c.operationId!==void 0&&s.auth.principalType===`anonymous`)return Response.json({error:`operationId requires an authenticated principal.`,ok:!1},{status:400});let m=c.operationId===void 0?void 0:await deriveOperationContinuationToken({auth:s.auth,operationId:c.operationId});if(m!==void 0){let e=await r.resolveSession(m);if(e!==void 0)return Response.json({ok:!0,sessionId:e.id,status:`accepted`},{headers:{"cache-control":`no-store`,[EVE_SESSION_ID_HEADER]:e.id},status:202})}let h=d===void 0?`absent`:readForwardedAudienceBaggage(n.headers.get(`baggage`)),g=s.accepted&&d!==void 0&&(d.traceFlags&1)==1?typeof h==`object`?h:h===`malformed`?FAIL_CLOSED_FORWARDED_TRACE_ASSERTION:void 0:void 0,_=f;g!==void 0&&f!==void 0&&(_={...f,forwardedTracePolicy:g}),h===`malformed`?log.warn(`using metadata-only policy for malformed forwarded audience baggage`,{forwarder:i.principalId}):typeof h==`object`&&(g===void 0?log.warn(`ignoring forwarded trace policy without an accepted sampled principal`,{forwarder:i.principalId}):log.info(`accepted forwarded trace policy`,{audience:h.originAudience,ceiling:formatTraceContentCeiling(h.ceiling),forwarder:i.principalId}));let v=c.message===void 0?{auth:s.auth}:await resolveOnMessage({auth:s.auth,config:e,message:c.message,request:n});if(v instanceof Response)return v;let y=readRouteSessionCreator(r);if(y===void 0)return Response.json({error:`Session creation requires internal channel dispatch context.`,ok:!1},{status:500});let b;try{b=await y({taskDeliveryPolicy:c.taskDeliveryPolicy,activityObserver:c.activityObserver,audienceAuth:i,auth:v.auth,capabilities:c.capabilities??{requestInput:!0},callback:c.callback,continuationToken:m,initiatorAuth:s.accepted?s.initiatorAuth:void 0,input:attachClientContext({message:c.message,context:v.context,outputSchema:c.outputSchema},c.context),conversationId:c.callback===void 0?void 0:readConversationBaggage(n.headers.get(`baggage`)),parent:u,parentTraceContext:_,title:v.title})}catch(e){let t=logError(log,`session-create request failed`,e);return Response.json({error:`Failed to create the session.`,errorId:t,ok:!1},{status:500})}return Response.json({ok:!0,sessionId:b.sessionId,status:`accepted`},{headers:{"cache-control":`no-store`,[EVE_SESSION_ID_HEADER]:b.sessionId},status:202})}),POST(EVE_SESSION_ROUTE_PATTERN,async(n,{attachSession:r,params:i})=>{let a=await routeAuth(n,e.auth);if(a instanceof Response)return a;let o=requireSessionId(i);if(o instanceof Response)return o;let s=await parseJsonRequest(n);if(s instanceof Response)return s;let c=await resolveForwardedPrincipal({trustedForwarders:e.trustedForwarders,forwarder:a,payload:s});if(c instanceof Response)return c;let l=parseSessionMessageBody(s);if(l instanceof Response)return l;let u=checkUploadPolicy(l,t);if(u!==null)return u;let d,f,p=c.auth;if(l.message!==void 0){let t=await resolveOnMessage({auth:c.auth,config:e,message:l.message,request:n,sessionId:o});if(t instanceof Response)return t;d=t.context,f=t.title,p=t.auth}let m;try{let e=r(o),t=attachClientContext({taskDeliveryPolicy:l.taskDeliveryPolicy,activityObserver:l.activityObserver,auth:p,callback:l.callback,context:d,outputSchema:l.outputSchema,turnPolicy:l.turnPolicy,title:f},l.context);m=l.inputResponses===void 0?await e.send(l.message,t):await e.respond(l.inputResponses,t)}catch(e){let t=logError(log,`session-message request failed`,e,{sessionId:o});return Response.json({error:`Failed to send the session message.`,errorId:t,ok:!1},{status:500})}return m.status===`accepted`?Response.json({ok:!0,sessionId:m.sessionId,status:`accepted`,deliveryId:m.deliveryId},{headers:{"cache-control":`no-store`,[EVE_SESSION_ID_HEADER]:m.sessionId},status:202}):Response.json({code:m.retryable?`session_not_ready`:`session_not_active`,error:m.retryable===!0?`The session is not ready to accept messages yet.`:`The session is no longer active.`,ok:!1},{headers:{"cache-control":`no-store`},status:409})}),POST(EVE_SESSION_CANCEL_ROUTE_PATTERN,async(t,{attachSession:n,params:r})=>{let i=await routeAuth(t,e.auth);if(i instanceof Response)return i;let a=requireSessionId(r);if(a instanceof Response)return a;let o=await parseCancelTurnBody(t);if(o instanceof Response)return o;let s;try{s=await n(a).cancel({taskId:o.taskId,tasks:o.tasks,turnId:o.turnId})}catch(e){let t=logError(log,`cancel-turn request failed`,e,{sessionId:a});return Response.json({error:`Failed to cancel the turn.`,errorId:t,ok:!1},{status:500})}return Response.json(s.status===`accepted`?{ok:!0,sessionId:s.sessionId,status:`accepted`}:{ok:!0,status:`no_active_turn`},{headers:{"cache-control":`no-store`},status:s.status===`accepted`?202:200})}),POST(EVE_SESSION_COMPACT_ROUTE_PATTERN,async(t,{attachSession:n,params:r})=>{let i=await routeAuth(t,e.auth);if(i instanceof Response)return i;let a=requireSessionId(r);if(a instanceof Response)return a;let o=await parseSessionControlBody(t);if(o instanceof Response)return o;let s;try{s=await n(a).compact()}catch(e){let t=logError(log,`session-compaction request failed`,e,{sessionId:a});return Response.json({error:`Failed to compact the session.`,errorId:t,ok:!1},{status:500})}return Response.json(s.status===`accepted`?{ok:!0,sessionId:s.sessionId,status:`accepted`}:{ok:!0,status:`no_active_session`},{headers:{"cache-control":`no-store`},status:s.status===`accepted`?202:200})}),POST(EVE_SESSION_CLEAR_ROUTE_PATTERN,async(t,{attachSession:n,params:r})=>{let i=await routeAuth(t,e.auth);if(i instanceof Response)return i;let a=requireSessionId(r);if(a instanceof Response)return a;let o=await parseSessionControlBody(t);if(o instanceof Response)return o;let s;try{s=await n(a).clear()}catch(e){let t=logError(log,`session-clear request failed`,e,{sessionId:a});return Response.json({error:`Failed to clear the session context.`,errorId:t,ok:!1},{status:500})}return Response.json(s.status===`accepted`?{ok:!0,sessionId:s.sessionId,status:`accepted`}:{ok:!0,status:`no_active_session`},{headers:{"cache-control":`no-store`},status:s.status===`accepted`?202:200})}),POST(EVE_SESSION_RESET_ROUTE_PATTERN,async(t,{attachSession:n,params:r})=>{let i=await routeAuth(t,e.auth);if(i instanceof Response)return i;let a=requireSessionId(r);if(a instanceof Response)return a;let o=await parseResetBody(t);if(o instanceof Response)return o;let s;try{s=await n(a).reset({reason:o.reason})}catch(e){let t=logError(log,`session-reset request failed`,e,{sessionId:a});return Response.json({error:`Failed to reset the session.`,errorId:t,ok:!1},{status:500})}return Response.json(s.status===`reset`?{ok:!0,previousSessionId:s.previousSessionId,status:`reset`}:{ok:!0,status:`no_active_session`},{headers:{"cache-control":`no-store`}})}),GET(EVE_SESSION_STREAM_ROUTE_PATTERN,async(t,{attachSession:n,params:r})=>{let i=await routeAuth(t,e.auth);if(i instanceof Response)return i;let a=requireSessionId(r);return a instanceof Response?a:await createSessionStreamResponse(t,n(a))}),GET(EVE_SUBAGENT_STREAM_ROUTE_PATTERN,async(t,n)=>{let r=await routeAuth(t,e.auth);if(r instanceof Response)return r;let i=n.params.parentSessionId,a=n.params.callId,o=n.params.childSessionId;if(!i||!a||!o)return Response.json({error:`Missing subagent stream coordinates.`,ok:!1},{status:400});let s=parseStartIndex(t);if(s instanceof Response)return s;let c=parseIncludeTailIndex(t),l=createEveSubagentStreamRoutePath({callId:a,childSessionId:o,parentSessionId:i}),u;try{let e=n.attachSession(i),t=await findRemoteSubagentBinding({callId:a,childSessionId:o,childStreamPath:l,parentSessionId:i,parent:e});if(t===void 0)throw Error(`Remote subagent binding not found.`);u=t}catch{return Response.json({error:`Subagent stream not found.`,ok:!1},{status:404})}let d=readRemoteAgentStreamHeadersResolver(n);if(d===void 0)return Response.json({error:`Subagent stream proxy requires internal channel dispatch context.`,ok:!1},{status:500});let f;try{f=await d({name:u.data.toolName,resolverId:u.data.remote.resolverId,url:u.data.remote.url})}catch{return Response.json({error:`Subagent stream not found.`,ok:!1},{status:404})}let p=new URL(createEveSessionStreamRoutePath(o).replace(/^\/+/,``),`${u.data.remote.url.replace(/\/+$/,``)}/`);s!==void 0&&p.searchParams.set(`startIndex`,String(s));let m=new URL(t.url).searchParams.get(EVE_STREAM_CONTROL_VERSION_QUERY);m!==null&&p.searchParams.set(EVE_STREAM_CONTROL_VERSION_QUERY,m),c&&p.searchParams.set(`includeTailIndex`,`1`);let h=await fetch(p,{cache:`no-store`,headers:f,redirect:`manual`,signal:t.signal}),g=new Headers;for(let e of[`cache-control`,`content-type`,`x-accel-buffering`,EVE_SESSION_ID_HEADER,EVE_STREAM_FORMAT_HEADER,EVE_STREAM_TAIL_INDEX_HEADER,EVE_STREAM_VERSION_HEADER]){let t=h.headers.get(e);t!==null&&g.set(e,t)}return new Response(h.body,{headers:g,status:h.status,statusText:h.statusText})})],events:e.events})}export{eveChannel};
++import{handleTerminalRecoveryRequest}from"#execution/session/terminal-recovery.js";import{EVE_ACTIVITY_ROUTE_PATTERN,EVE_CALLBACK_ROUTE_PATTERN,EVE_CONNECTION_CALLBACK_ROUTE_PATTERN,EVE_HEALTH_ROUTE_PATH,EVE_INFO_ROUTE_PATH,EVE_ROUTE_PREFIX,EVE_SESSION_CANCEL_ROUTE_PATTERN,EVE_SESSION_CLEAR_ROUTE_PATTERN,EVE_SESSION_COMPACT_ROUTE_PATTERN,EVE_SESSION_RESET_ROUTE_PATTERN,EVE_SESSION_ROUTE_PATH,EVE_SESSION_ROUTE_PATTERN,EVE_SESSION_STREAM_ROUTE_PATTERN,EVE_SUBAGENT_STREAM_ROUTE_PATTERN,EVE_TASK_INPUT_ROUTE_PATTERN,createEveSessionStreamRoutePath,createEveSubagentStreamRoutePath}from"#protocol/routes.js";import{attachClientContext}from"#internal/client-context.js";import{createLogger,logError}from"#internal/logging.js";import{FAIL_CLOSED_FORWARDED_TRACE_ASSERTION,formatTraceContentCeiling}from"#shared/forwarded-trace-policy.js";import{EVE_SESSION_ID_HEADER,EVE_STREAM_CONTROL_VERSION_QUERY,EVE_STREAM_FORMAT_HEADER,EVE_STREAM_TAIL_INDEX_HEADER,EVE_STREAM_VERSION_HEADER}from"#protocol/message.js";import{DELETE,GET,HEAD,PATCH,POST,PUT,defineChannel}from"#public/definitions/channel.js";import{handleExpiredLegacyAuthorization}from"#execution/legacy-session/authorization.js";import{resolveForwardedPrincipal}from"#channel/forwarded-principal.js";import{handleConnectionCallbackRequest}from"#execution/connections/callback-route.js";import{handleActivityRequest}from"#execution/activity-route.js";import{handleSessionCallbackRequest}from"#subagents/callback-route.js";import{handleTaskInputResponseRequest}from"#execution/task-input-response-route.js";import{WORKFLOW_WEBHOOK_ROUTE_PATTERN,handleWorkflowWebhookRequest}from"#execution/workflow-webhook-route.js";import{readAgentInfoRouteResponse,readRemoteAgentStreamHeadersResolver,readRouteSessionCreator}from"#internal/nitro/routes/channel-route-context.js";import{parseTraceparent,readAgentDispatchTraceContext}from"#protocol/traceparent.js";import{readForwardedAudienceBaggage,readForwardedParentSessionBaggage}from"#protocol/baggage.js";import{readConversationBaggage}from"#tracing/conversation-context.js";import{routeAuth}from"#public/channels/auth.js";import{defaultEveAudience}from"#eve-channel/audience.js";import{mergeUploadPolicy}from"#public/channels/upload-policy.js";import{checkUploadPolicy,createSessionStreamResponse,deriveOperationContinuationToken,parseCancelTurnBody,parseCreateBody,parseIncludeTailIndex,parseJsonRequest,parseOptionalJsonRequest,parseResetBody,parseSessionControlBody,parseSessionMessageBody,parseStartIndex,rejectSessionContinuationToken,requireSessionId}from"#eve-channel/request.js";import{findRemoteSubagentBinding,healthResponse,normalizeEveCors,resolveOnMessage}from"#eve-channel/support.js";export*from"#eve-channel/types.js";const log=createLogger(`eve.channel`);function eveChannel(e){let t=mergeUploadPolicy(e.uploadPolicy);return defineChannel({cors:normalizeEveCors(e.cors),turnPolicy:e.turnPolicy,audience:t=>{let n=e.audience??defaultEveAudience;return typeof n==`function`?n(t):n},routes:[GET(EVE_HEALTH_ROUTE_PATH,async()=>healthResponse()),HEAD(EVE_HEALTH_ROUTE_PATH,async()=>healthResponse()),GET(EVE_INFO_ROUTE_PATH,async(t,n)=>{let r=await routeAuth(t,e.auth);if(r instanceof Response)return r;let i=readAgentInfoRouteResponse(n);return i===void 0?Response.json({error:`Agent info route requires internal channel dispatch context.`,ok:!1},{status:500}):await i()}),GET(`${EVE_ROUTE_PREFIX}/connections/:name/callback/:token`,handleExpiredLegacyAuthorization),POST(`${EVE_ROUTE_PREFIX}/connections/:name/callback/:token`,handleExpiredLegacyAuthorization),GET(EVE_CONNECTION_CALLBACK_ROUTE_PATTERN,handleConnectionCallbackRequest),POST(EVE_CONNECTION_CALLBACK_ROUTE_PATTERN,handleConnectionCallbackRequest),POST(EVE_ACTIVITY_ROUTE_PATTERN,handleActivityRequest),POST(EVE_CALLBACK_ROUTE_PATTERN,handleSessionCallbackRequest),POST(EVE_TASK_INPUT_ROUTE_PATTERN,handleTaskInputResponseRequest),GET(WORKFLOW_WEBHOOK_ROUTE_PATTERN,handleWorkflowWebhookRequest),POST(WORKFLOW_WEBHOOK_ROUTE_PATTERN,handleWorkflowWebhookRequest),PUT(WORKFLOW_WEBHOOK_ROUTE_PATTERN,handleWorkflowWebhookRequest),PATCH(WORKFLOW_WEBHOOK_ROUTE_PATTERN,handleWorkflowWebhookRequest),DELETE(WORKFLOW_WEBHOOK_ROUTE_PATTERN,handleWorkflowWebhookRequest),POST(EVE_SESSION_ROUTE_PATH,async(n,r)=>{let i=await routeAuth(n,e.auth);if(i instanceof Response)return i;let a=await parseOptionalJsonRequest(n);if(a instanceof Response)return a;let o=rejectSessionContinuationToken(a);if(o!==null)return o;let s=await resolveForwardedPrincipal({trustedForwarders:e.trustedForwarders,forwarder:i,payload:a});if(s instanceof Response)return s;if(a.recovery!==void 0||a.sourceObservation!==void 0)return await handleTerminalRecoveryRequest({payload:a,auth:s.auth,forwarded:s.accepted,ports:e.terminalRecovery});let c=parseCreateBody(a);if(c instanceof Response)return c;let l=c.callback===void 0?`absent`:readForwardedParentSessionBaggage(n.headers.get(`baggage`)),u;if(typeof l==`object`){if(l.callId!==c.callback?.callId)log.warn(`ignoring remote parent lineage with a mismatched callback`,{forwarder:i.principalId});else{let t=s.accepted;if(!t&&e.trustedForwarders!==void 0)try{t=await e.trustedForwarders(i,{})}catch(e){let t=logError(log,`trustedForwarders handler failed`,e,{forwarder:i.principalId});return Response.json({error:`trustedForwarders handler failed.`,errorId:t,ok:!1},{status:500})}t?u=l:log.warn(`ignoring remote parent lineage from an untrusted forwarder`,{forwarder:i.principalId})}}else l===`malformed`&&log.warn(`ignoring malformed remote parent lineage`,{forwarder:i.principalId});let d=c.callback===void 0?void 0:parseTraceparent(n.headers.get(`traceparent`)),f=c.callback===void 0?void 0:readAgentDispatchTraceContext(n.headers.get(`tracestate`),d)??d,p=checkUploadPolicy(c,t);if(p!==null)return p;if(c.operationId!==void 0&&s.auth.principalType===`anonymous`)return Response.json({error:`operationId requires an authenticated principal.`,ok:!1},{status:400});let m=c.operationId===void 0?void 0:await deriveOperationContinuationToken({auth:s.auth,operationId:c.operationId});if(m!==void 0){let e=await r.resolveSession(m);if(e!==void 0)return Response.json({ok:!0,sessionId:e.id,status:`accepted`},{headers:{"cache-control":`no-store`,[EVE_SESSION_ID_HEADER]:e.id},status:202})}let h=d===void 0?`absent`:readForwardedAudienceBaggage(n.headers.get(`baggage`)),g=s.accepted&&d!==void 0&&(d.traceFlags&1)==1?typeof h==`object`?h:h===`malformed`?FAIL_CLOSED_FORWARDED_TRACE_ASSERTION:void 0:void 0,_=f;g!==void 0&&f!==void 0&&(_={...f,forwardedTracePolicy:g}),h===`malformed`?log.warn(`using metadata-only policy for malformed forwarded audience baggage`,{forwarder:i.principalId}):typeof h==`object`&&(g===void 0?log.warn(`ignoring forwarded trace policy without an accepted sampled principal`,{forwarder:i.principalId}):log.info(`accepted forwarded trace policy`,{audience:h.originAudience,ceiling:formatTraceContentCeiling(h.ceiling),forwarder:i.principalId}));let v=c.message===void 0?{auth:s.auth}:await resolveOnMessage({auth:s.auth,config:e,message:c.message,request:n});if(v instanceof Response)return v;let y=readRouteSessionCreator(r);if(y===void 0)return Response.json({error:`Session creation requires internal channel dispatch context.`,ok:!1},{status:500});let b;try{b=await y({taskDeliveryPolicy:c.taskDeliveryPolicy,activityObserver:c.activityObserver,audienceAuth:i,auth:v.auth,capabilities:c.capabilities??{requestInput:!0},callback:c.callback,continuationToken:m,initiatorAuth:s.accepted?s.initiatorAuth:void 0,input:attachClientContext({message:c.message,context:v.context,outputSchema:c.outputSchema},c.context),conversationId:c.callback===void 0?void 0:readConversationBaggage(n.headers.get(`baggage`)),parent:u,parentTraceContext:_,title:v.title})}catch(e){let t=logError(log,`session-create request failed`,e);return Response.json({error:`Failed to create the session.`,errorId:t,ok:!1},{status:500})}return Response.json({ok:!0,sessionId:b.sessionId,status:`accepted`},{headers:{"cache-control":`no-store`,[EVE_SESSION_ID_HEADER]:b.sessionId},status:202})}),POST(EVE_SESSION_ROUTE_PATTERN,async(n,{attachSession:r,params:i})=>{let a=await routeAuth(n,e.auth);if(a instanceof Response)return a;let o=requireSessionId(i);if(o instanceof Response)return o;let s=await parseJsonRequest(n);if(s instanceof Response)return s;let c=await resolveForwardedPrincipal({trustedForwarders:e.trustedForwarders,forwarder:a,payload:s});if(c instanceof Response)return c;let l=parseSessionMessageBody(s);if(l instanceof Response)return l;let u=checkUploadPolicy(l,t);if(u!==null)return u;let d,f,p=c.auth;if(l.message!==void 0){let t=await resolveOnMessage({auth:c.auth,config:e,message:l.message,request:n,sessionId:o});if(t instanceof Response)return t;d=t.context,f=t.title,p=t.auth}let m;try{let e=r(o),t=attachClientContext({taskDeliveryPolicy:l.taskDeliveryPolicy,activityObserver:l.activityObserver,auth:p,callback:l.callback,context:d,outputSchema:l.outputSchema,turnPolicy:l.turnPolicy,title:f},l.context);m=l.inputResponses===void 0?await e.send(l.message,t):await e.respond(l.inputResponses,t)}catch(e){let t=logError(log,`session-message request failed`,e,{sessionId:o});return Response.json({error:`Failed to send the session message.`,errorId:t,ok:!1},{status:500})}return m.status===`accepted`?Response.json({ok:!0,sessionId:m.sessionId,status:`accepted`,deliveryId:m.deliveryId},{headers:{"cache-control":`no-store`,[EVE_SESSION_ID_HEADER]:m.sessionId},status:202}):Response.json({code:m.retryable?`session_not_ready`:`session_not_active`,error:m.retryable===!0?`The session is not ready to accept messages yet.`:`The session is no longer active.`,ok:!1},{headers:{"cache-control":`no-store`},status:409})}),POST(EVE_SESSION_CANCEL_ROUTE_PATTERN,async(t,{attachSession:n,params:r})=>{let i=await routeAuth(t,e.auth);if(i instanceof Response)return i;let a=requireSessionId(r);if(a instanceof Response)return a;let o=await parseCancelTurnBody(t);if(o instanceof Response)return o;let s;try{s=await n(a).cancel({taskId:o.taskId,tasks:o.tasks,turnId:o.turnId})}catch(e){let t=logError(log,`cancel-turn request failed`,e,{sessionId:a});return Response.json({error:`Failed to cancel the turn.`,errorId:t,ok:!1},{status:500})}return Response.json(s.status===`accepted`?{ok:!0,sessionId:s.sessionId,status:`accepted`}:{ok:!0,status:`no_active_turn`},{headers:{"cache-control":`no-store`},status:s.status===`accepted`?202:200})}),POST(EVE_SESSION_COMPACT_ROUTE_PATTERN,async(t,{attachSession:n,params:r})=>{let i=await routeAuth(t,e.auth);if(i instanceof Response)return i;let a=requireSessionId(r);if(a instanceof Response)return a;let o=await parseSessionControlBody(t);if(o instanceof Response)return o;let s;try{s=await n(a).compact()}catch(e){let t=logError(log,`session-compaction request failed`,e,{sessionId:a});return Response.json({error:`Failed to compact the session.`,errorId:t,ok:!1},{status:500})}return Response.json(s.status===`accepted`?{ok:!0,sessionId:s.sessionId,status:`accepted`}:{ok:!0,status:`no_active_session`},{headers:{"cache-control":`no-store`},status:s.status===`accepted`?202:200})}),POST(EVE_SESSION_CLEAR_ROUTE_PATTERN,async(t,{attachSession:n,params:r})=>{let i=await routeAuth(t,e.auth);if(i instanceof Response)return i;let a=requireSessionId(r);if(a instanceof Response)return a;let o=await parseSessionControlBody(t);if(o instanceof Response)return o;let s;try{s=await n(a).clear()}catch(e){let t=logError(log,`session-clear request failed`,e,{sessionId:a});return Response.json({error:`Failed to clear the session context.`,errorId:t,ok:!1},{status:500})}return Response.json(s.status===`accepted`?{ok:!0,sessionId:s.sessionId,status:`accepted`}:{ok:!0,status:`no_active_session`},{headers:{"cache-control":`no-store`},status:s.status===`accepted`?202:200})}),POST(EVE_SESSION_RESET_ROUTE_PATTERN,async(t,{attachSession:n,params:r})=>{let i=await routeAuth(t,e.auth);if(i instanceof Response)return i;let a=requireSessionId(r);if(a instanceof Response)return a;let o=await parseResetBody(t);if(o instanceof Response)return o;let s;try{s=await n(a).reset({reason:o.reason})}catch(e){let t=logError(log,`session-reset request failed`,e,{sessionId:a});return Response.json({error:`Failed to reset the session.`,errorId:t,ok:!1},{status:500})}return Response.json(s.status===`reset`?{ok:!0,previousSessionId:s.previousSessionId,status:`reset`}:{ok:!0,status:`no_active_session`},{headers:{"cache-control":`no-store`}})}),GET(EVE_SESSION_STREAM_ROUTE_PATTERN,async(t,{attachSession:n,params:r})=>{let i=await routeAuth(t,e.auth);if(i instanceof Response)return i;let a=requireSessionId(r);return a instanceof Response?a:await createSessionStreamResponse(t,n(a))}),GET(EVE_SUBAGENT_STREAM_ROUTE_PATTERN,async(t,n)=>{let r=await routeAuth(t,e.auth);if(r instanceof Response)return r;let i=n.params.parentSessionId,a=n.params.callId,o=n.params.childSessionId;if(!i||!a||!o)return Response.json({error:`Missing subagent stream coordinates.`,ok:!1},{status:400});let s=parseStartIndex(t);if(s instanceof Response)return s;let c=parseIncludeTailIndex(t),l=createEveSubagentStreamRoutePath({callId:a,childSessionId:o,parentSessionId:i}),u;try{let e=n.attachSession(i),t=await findRemoteSubagentBinding({callId:a,childSessionId:o,childStreamPath:l,parentSessionId:i,parent:e});if(t===void 0)throw Error(`Remote subagent binding not found.`);u=t}catch{return Response.json({error:`Subagent stream not found.`,ok:!1},{status:404})}let d=readRemoteAgentStreamHeadersResolver(n);if(d===void 0)return Response.json({error:`Subagent stream proxy requires internal channel dispatch context.`,ok:!1},{status:500});let f;try{f=await d({name:u.data.toolName,resolverId:u.data.remote.resolverId,url:u.data.remote.url})}catch{return Response.json({error:`Subagent stream not found.`,ok:!1},{status:404})}let p=new URL(createEveSessionStreamRoutePath(o).replace(/^\/+/,``),`${u.data.remote.url.replace(/\/+$/,``)}/`);s!==void 0&&p.searchParams.set(`startIndex`,String(s));let m=new URL(t.url).searchParams.get(EVE_STREAM_CONTROL_VERSION_QUERY);m!==null&&p.searchParams.set(EVE_STREAM_CONTROL_VERSION_QUERY,m),c&&p.searchParams.set(`includeTailIndex`,`1`);let h=await fetch(p,{cache:`no-store`,headers:f,redirect:`manual`,signal:t.signal}),g=new Headers;for(let e of[`cache-control`,`content-type`,`x-accel-buffering`,EVE_SESSION_ID_HEADER,EVE_STREAM_FORMAT_HEADER,EVE_STREAM_TAIL_INDEX_HEADER,EVE_STREAM_VERSION_HEADER]){let t=h.headers.get(e);t!==null&&g.set(e,t)}return new Response(h.body,{headers:g,status:h.status,statusText:h.statusText})})],events:e.events})}export{eveChannel};
 \ No newline at end of file
 diff --git a/dist/src/eve-channel/types.d.ts b/dist/src/eve-channel/types.d.ts
 index a293195..92fc16d 100644
@@ -636,7 +636,7 @@ diff --git a/dist/src/execution/session/recovery-candidate.d.ts b/dist/src/execu
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.d.ts
-@@ -0,0 +1,165 @@
+@@ -0,0 +1,167 @@
 +import type { World, WorkflowRun, StepWithoutData, Event } from "#compiled/@workflow/world/index.js";
 +import type { PayloadKey } from "#compiled/@workflow/core/serialization/encryption.js";
 +import type { DurableSession, DurableSessionState } from "#execution/durable-session-store.js";
@@ -656,6 +656,8 @@ new file mode 100644
 +}
 +export interface CollectTerminalRecoveryCandidateInput {
 +  readonly binding: NativeRecoveryOwnerBinding;
++  /** Trusted execution-transfer preflight only; waiting state is never permission to execute. */
++  readonly allowParked?: boolean;
 +  /** Re-resolve current owner/membership and the canonical source binding. Called before private I/O. */
 +  readonly authorizeOwner: (binding: NativeRecoveryOwnerBinding) => Promise<void>;
 +}
@@ -806,7 +808,7 @@ diff --git a/dist/src/execution/session/recovery-candidate.js b/dist/src/executi
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.js
-@@ -0,0 +1,632 @@
+@@ -0,0 +1,633 @@
 +import { createRecoveryHistoryInterner } from "#execution/session/recovery-history-interning.js";
 +import {
 +  sessionCommandHookToken,
@@ -895,7 +897,7 @@ new file mode 100644
 +      throw new Error("Native recovery run identity differs.");
 +    // Public Builder failure is checked by authorizeOwner. A terminal model
 +    // failure can settle the native workflow successfully with next.done.
-+    if (!["failed", "completed", "cancelled"].includes(anchor.status))
++    if (!["failed", "completed", "cancelled"].includes(anchor.status) && !(input.allowParked === true && ["pending", "running"].includes(anchor.status)))
 +      return { kind: "unavailable", reason: "source-not-terminal" };
 +    if (
 +      anchor.expiredAt !== undefined &&
@@ -906,6 +908,7 @@ new file mode 100644
 +    const owner = await resolveTerminalCheckpointOwner({
 +      world,
 +      anchor,
++      allowParked: input.allowParked === true,
 +      binding,
 +      authorizeOwner,
 +      dependencies,
@@ -1431,7 +1434,7 @@ new file mode 100644
 +    async *readNativeEvents(runId) {
 +      const world = await runtime.getWorld();
 +      const run = await world.runs.get(runId, { resolveData: "none" });
-+      if (run.runId !== runId || !["failed", "completed", "cancelled"].includes(run.status))
++      if (run.runId !== runId || (!["failed", "completed", "cancelled"].includes(run.status) && !(input.allowParked === true && ["pending", "running"].includes(run.status))))
 +        throw new Error("Native stream owner is not terminal.");
 +      const key = await runtime.resolveRunEncryptionKey(world, run);
 +      yield* readTerminalNativeEventsSnapshot(world, runId, key);
@@ -1886,7 +1889,7 @@ new file mode 100644
 index 0000000..a320829
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-owner-provenance.d.ts
-@@ -0,0 +1,39 @@
+@@ -0,0 +1,40 @@
 +import type { Event, World, WorkflowRun } from "#compiled/@workflow/world/index.js";
 +import type { PayloadKey } from "#compiled/@workflow/core/serialization/encryption.js";
 +import type {
@@ -1922,6 +1925,7 @@ index 0000000..a320829
 +export declare function resolveTerminalCheckpointOwner(input: {
 +  readonly world: World;
 +  readonly anchor: WorkflowRun;
++  readonly allowParked?: boolean;
 +  readonly binding: NativeRecoveryOwnerBinding;
 +  readonly authorizeOwner: (binding: NativeRecoveryOwnerBinding) => Promise<void>;
 +  readonly dependencies: NativeRecoveryCollectorDependencies;
@@ -1930,7 +1934,7 @@ diff --git a/dist/src/execution/session/recovery-owner-provenance.js b/dist/src/
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-owner-provenance.js
-@@ -0,0 +1,456 @@
+@@ -0,0 +1,457 @@
 +import { createRecoveryHistoryInterner } from "#execution/session/recovery-history-interning.js";
 +import { isDeepStrictEqual } from "node:util";
 +import {
@@ -1950,6 +1954,7 @@ new file mode 100644
 +export async function resolveTerminalCheckpointOwner({
 +  world,
 +  anchor,
++  allowParked = false,
 +  binding,
 +  authorizeOwner,
 +  dependencies,
@@ -2327,7 +2332,7 @@ new file mode 100644
 +    }
 +    if (candidates.length !== 1) return unavailable("handoff-owner-ambiguous");
 +    const child = candidates[0];
-+    if (!terminal(parent) || !terminal(child.run)) return unavailable("source-not-terminal");
++    if (!terminal(parent) || (!terminal(child.run) && !(allowParked && ["pending", "running"].includes(child.run.status)))) return unavailable("source-not-terminal");
 +    // After successful transfer a parent may only finish handoff bookkeeping.
 +    // Retain each complete physical frontier separately; never compare its slots
 +    // with the successor's slots or silently discard late authored work.
@@ -2375,7 +2380,7 @@ new file mode 100644
 +    });
 +    parent = child.run;
 +  }
-+  if (!terminal(parent)) return unavailable("source-not-terminal");
++  if (!terminal(parent) && !(allowParked && ["pending", "running"].includes(parent.status))) return unavailable("source-not-terminal");
 +  if (parent.expiredAt !== undefined && new Date(parent.expiredAt).getTime() <= dependencies.now())
 +    return unavailable("native-data-expired");
 +  await authorize();
@@ -3229,7 +3234,7 @@ new file mode 100644
 index 0000000..a3f1892
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.d.ts
-@@ -0,0 +1,107 @@
+@@ -0,0 +1,114 @@
 +import type { SessionAuthContext } from "#channel/types.js";
 +import type { SessionCheckpoint } from "#execution/session/handoff.js";
 +import type { TerminalRecoveryWorkflowEntryInput } from "#execution/session/entry-input.js";
@@ -3245,6 +3250,7 @@ index 0000000..a3f1892
 +  readonly originalAuthoritySessionId: string;
 +  readonly parentCancellationRevision: number;
 +  readonly sourceHandoffId?: string;
++  readonly executionTransfer?: { readonly kind: "pending-approval"; readonly sourceCheckpointDigest: string };
 +}
 +export interface TerminalRecoveryProvenance {
 +  readonly kind: "terminal-finalizer-input" | "completed-terminal-turn-input" | "failed-turn-input" | "committed-turn-output";
@@ -3279,7 +3285,9 @@ index 0000000..a3f1892
 +  readonly payload: PrivateNativeRecoveryPayload;
 +}
 +/** Trusted server-local app ports. Private candidate payloads stay local; only sanitized facts are logged, never raw checkpoints or grants in HTTP/public responses. */
++export interface NativeSourceObservation { readonly sourcePublicSessionId: string; readonly sourceAdapterSessionId: string; readonly sourceAdapterGeneration: number; readonly cancellationRevision: number; }
 +export interface TerminalRecoveryPorts {
++  authorizeSourceObservation?(input: { auth: SessionAuthContext; source: NativeSourceObservation }): Promise<{ readonly ownerRunId: string; readonly logicalSessionId: string }>;
 +  authorize(input: TerminalRecoveryAuthorityInput): Promise<void>;
 +  /** Authorizes exact retained calls using app-owned call-bound repeatability proof; missing or failed decisions grant no calls. */
 +  authorizeRepeatableRecoveryCalls?(input: TerminalRecoveryRepeatableCallsInput): Promise<readonly string[] | undefined>;
@@ -3296,6 +3304,9 @@ index 0000000..a3f1892
 +}
 +export interface TerminalRecoveryDependencies {
 +  collect(input: CollectTerminalRecoveryCandidateInput): Promise<TerminalRecoveryCandidateResult>;
++  inspectSource?(ownerRunId: string): Promise<{ readonly runId: string; readonly status: string; readonly unsettledStepIds: readonly string[]; readonly stepCounts?: Readonly<Record<string, number>> }>;
++  stopSource?(ownerRunId: string, reason: string): Promise<void>;
++  readStopReceipt?(ownerRunId: string, reason: string): Promise<boolean>;
 +  reconcile: typeof import("#execution/session/recovery-reconciliation.js").reconcileTerminalRecoveryCandidate;
 +  /** Native prepare always loads the fresh exact-holder closure; optional for injected legacy dependencies. */
 +  closeHolder?: typeof import("#execution/session/recovery-holder-closure.js").closeNoncanonicalRecoveryInboxHolder;
@@ -3311,6 +3322,7 @@ index 0000000..a3f1892
 +export declare function parseTerminalRecoveryDescriptor(value: unknown, operationId: unknown): TerminalRecoveryDescriptor | undefined;
 +export declare function terminalRecoveryActivationToken(auth: SessionAuthContext, descriptor: TerminalRecoveryDescriptor): string;
 +export declare function terminalRecoveryPolicy(entry: unknown): Pick<SessionCheckpoint, "capabilities" | "retention" | "sessionTimeoutMs"> | undefined;
++export declare function quiesceLiveRecoverySource(input: TerminalRecoveryAuthorityInput & { readonly ports: TerminalRecoveryPorts }, dependencies: TerminalRecoveryDependencies): Promise<{ readonly kind: "ready" } | { readonly kind: "unavailable" | "uncertain"; readonly reason: string }>;
 +export declare function recoverTerminalSession(input: TerminalRecoveryAuthorityInput & { readonly ports: TerminalRecoveryPorts }, dependencies: TerminalRecoveryDependencies): Promise<{ readonly kind: "accepted"; readonly recoveryBinding: TerminalRecoveryBinding } | { readonly kind: "unavailable" | "uncertain"; readonly reason: string }>;
 +export declare function activateTerminalSession(input: TerminalRecoveryAuthorityInput & { readonly ports: TerminalRecoveryPorts }, dependencies: Pick<TerminalRecoveryDependencies, "getHook" | "resumeHook" | "isHookNotFound">): Promise<{ readonly kind: "accepted"; readonly recoveryBinding: TerminalRecoveryBinding }>;
 +export declare function handleTerminalRecoveryRequest(input: {
@@ -3341,13 +3353,14 @@ diff --git a/dist/src/execution/session/terminal-recovery.js b/dist/src/executio
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.js
-@@ -0,0 +1,442 @@
+@@ -0,0 +1,562 @@
 +import { createHash } from "node:crypto";
 +import { DEFAULT_SESSION_TIMEOUT_MS } from "#execution/session/timeout.js";
 +import { SESSION_CHECKPOINT_VERSION } from "#execution/session/handoff.js";
 +
-+const descriptorKeys = ["version", "operationId", "sourcePublicSessionId", "sourceOwnerRunId", "sourceAdapterGeneration", "logicalSessionId", "originalAuthoritySessionId", "parentCancellationRevision", "sourceHandoffId"];
++const descriptorKeys = ["version", "operationId", "sourcePublicSessionId", "sourceOwnerRunId", "sourceAdapterGeneration", "logicalSessionId", "originalAuthoritySessionId", "parentCancellationRevision", "sourceHandoffId", "executionTransfer"];
 +const provenanceKeys = ["kind", "sourceStepId", "sourceEventId", "sourceSlot", "checkpointVersion", "checkpointOwnerRunId"];
++const sameTransfer = (left, right) => left === undefined && right === undefined || record(left) && record(right) && left.kind === right.kind && left.sourceCheckpointDigest === right.sourceCheckpointDigest;
 +const candidateKinds = ["terminal-finalizer-input", "completed-terminal-turn-input", "failed-turn-input", "committed-turn-output"];
 +const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 +
@@ -3358,6 +3371,7 @@ new file mode 100644
 +  }
 +  if (!Number.isSafeInteger(value.sourceAdapterGeneration) || value.sourceAdapterGeneration < 1 || !Number.isSafeInteger(value.parentCancellationRevision) || value.parentCancellationRevision < 0) return;
 +  if (value.sourceHandoffId !== undefined && (typeof value.sourceHandoffId !== "string" || value.sourceHandoffId.length === 0 || value.sourceHandoffId.length > 200)) return;
++  if (value.executionTransfer !== undefined && (!record(value.executionTransfer) || Object.keys(value.executionTransfer).some((key) => !["kind", "sourceCheckpointDigest"].includes(key)) || value.executionTransfer.kind !== "pending-approval" || !/^sha256:[a-f0-9]{64}$/.test(value.executionTransfer.sourceCheckpointDigest))) return;
 +  return Object.fromEntries(descriptorKeys.filter((key) => value[key] !== undefined).map((key) => [key, value[key]]));
 +}
 +
@@ -3367,7 +3381,7 @@ new file mode 100644
 +}
 +
 +function matchesDescriptor(binding, descriptor) {
-+  return record(binding) && descriptorKeys.every((key) => binding[key] === descriptor[key]) &&
++  return record(binding) && descriptorKeys.every((key) => key === "executionTransfer" ? sameTransfer(binding[key], descriptor[key]) : binding[key] === descriptor[key]) &&
 +    typeof binding.ownerRunId === "string" && binding.ownerRunId.length > 0 && record(binding.provenance) &&
 +    candidateKinds.includes(binding.provenance.kind) && binding.provenance.checkpointVersion === 1 &&
 +    (binding.provenance.checkpointOwnerRunId === undefined || (typeof binding.provenance.checkpointOwnerRunId === "string" && binding.provenance.checkpointOwnerRunId.length > 0)) &&
@@ -3408,6 +3422,10 @@ new file mode 100644
 +    if (!matchesDescriptor(existing, descriptor)) throw new Error("Recovery receipt binding changed.");
 +    return { kind: "accepted", recoveryBinding: existing };
 +  }
++  if (descriptor.executionTransfer !== undefined) {
++    const stopped = await quiesceLiveRecoverySource(input, dependencies);
++    if (stopped.kind !== "ready") return stopped;
++  }
 +  let ready = await findReady("initial_ready");
 +  if (ready === undefined && dependencies.closeHolder !== undefined) {
 +    const authorizeCurrent = async () => {
@@ -3445,6 +3463,7 @@ new file mode 100644
 +    if (collected.kind !== "candidate") return { kind: "unavailable", reason: collected.reason };
 +    preparing("candidate_read");
 +    const payload = dependencies.readCandidate(collected.candidate);
++    if (descriptor.executionTransfer !== undefined && !await executionTransferLineageClosed(payload, dependencies, async () => await ports.authorize(call), true)) return { kind: "uncertain", reason: "source-lineage-effects-unsettled" };
 +    let repeatableCallIds;
 +    if (ports.authorizeRepeatableRecoveryCalls !== undefined) {
 +      const binding = { ownerRunId: descriptor.sourceOwnerRunId, logicalSessionId: descriptor.logicalSessionId };
@@ -3679,7 +3698,7 @@ new file mode 100644
 +    if (cached === undefined) {
 +      const entry = {};
 +      entry.pending = (async () => {
-+        const collected = await dependencies.collect({ binding, authorizeOwner: authorizeSelected });
++        const collected = await dependencies.collect({ binding, ...(descriptor.executionTransfer === undefined ? {} : { allowParked: true }), authorizeOwner: authorizeSelected });
 +        await authorizeSelected();
 +        let payload;
 +        try {
@@ -3733,6 +3752,65 @@ new file mode 100644
 +  };
 +}
 +
++async function executionTransferLineageClosed(payload, dependencies, authorize, requireTerminalOwner = false) {
++  if (dependencies.inspectSource === undefined) return false;
++  const parents = new Set(payload.handoffChain.map((entry) => entry.parentRunId));
++  for (const ownerRunId of [...parents, payload.checkpointOwnerRunId]) {
++    await authorize();
++    const observed = await dependencies.inspectSource(ownerRunId);
++    if (observed.runId !== ownerRunId || observed.unsettledStepIds.length > 0) return false;
++    if ((parents.has(ownerRunId) || requireTerminalOwner) && !["completed", "failed", "cancelled"].includes(observed.status)) return false;
++  }
++  await authorize();
++  return true;
++}
++
++/** Transfer an owned parked execution only after complete retained-state preflight. */
++export async function quiesceLiveRecoverySource(input, dependencies) {
++  const { auth, descriptor, ports } = input;
++  if (descriptor.executionTransfer === undefined || dependencies.inspectSource === undefined || dependencies.stopSource === undefined || dependencies.readStopReceipt === undefined) return { kind: "unavailable", reason: "live-transfer-unsupported" };
++  const call = { auth, descriptor };
++  const binding = { ownerRunId: descriptor.sourceOwnerRunId, logicalSessionId: descriptor.logicalSessionId };
++  const authorize = async () => { await ports.authorize(call); if (await ports.readReceipt(call) != null) throw new Error("Recovery receipt changed during execution transfer."); };
++  await authorize();
++  const collected = await dependencies.collect({ binding, allowParked: true, authorizeOwner: async (observed) => { if (observed.ownerRunId !== binding.ownerRunId || observed.logicalSessionId !== binding.logicalSessionId) throw new Error("Execution transfer binding changed."); await authorize(); } });
++  if (collected.kind !== "candidate") return { kind: "unavailable", reason: collected.reason };
++  const reconciled = await dependencies.reconcile(collected.candidate);
++  if (reconciled.kind !== "ready") return reconciled;
++  const retainedPayload = dependencies.readCandidate(collected.candidate);
++  if (!await executionTransferLineageClosed(retainedPayload, dependencies, authorize)) return { kind: "unavailable", reason: "source-lineage-effects-unsettled" };
++  const physicalOwnerRunId = retainedPayload.checkpointOwnerRunId;
++  const source = await dependencies.inspectSource(physicalOwnerRunId);
++  if (source.runId !== physicalOwnerRunId) throw new Error("Execution transfer source changed.");
++  const reason = `Builder native execution transfer ${descriptor.operationId}`;
++  if (source.unsettledStepIds.length > 0) return { kind: "unavailable", reason: "source-effect-steps-unsettled" };
++  if (source.status === "cancelled") {
++    if (!await dependencies.readStopReceipt(physicalOwnerRunId, reason)) return { kind: "unavailable", reason: "source-stop-not-owned" };
++    await authorize();
++    return { kind: "ready" };
++  }
++  if (!["pending", "running"].includes(source.status)) return { kind: "unavailable", reason: "source-not-parked" };
++  const { readDurableSession } = await import("#execution/durable-session-store.js");
++  const { getPendingInputBatches } = await import("#harness/pending-input-batches.js");
++  const { getApprovalAuditState } = await import("#harness/approval-candidates.js");
++  const state = readDurableSession(reconciled.checkpointCore.sessionState).state;
++  const pending = getPendingInputBatches(state);
++  if (pending.length === 0 || pending.some((batch) => batch.requests.some((request) => request.kind !== "tool-approval")) || getApprovalAuditState(state).activeCandidates.length > 0) return { kind: "unavailable", reason: "source-approval-not-parked" };
++  await authorize();
++  const ownerCheck = await dependencies.collect({ binding, allowParked: true, authorizeOwner: async (observed) => { if (observed.ownerRunId !== binding.ownerRunId || observed.logicalSessionId !== binding.logicalSessionId) throw new Error("Execution transfer binding changed."); await authorize(); } });
++  if (ownerCheck.kind !== "candidate" || dependencies.readCandidate(ownerCheck.candidate).checkpointOwnerRunId !== physicalOwnerRunId) return { kind: "unavailable", reason: "source-physical-owner-changed" };
++  if (!await executionTransferLineageClosed(dependencies.readCandidate(ownerCheck.candidate), dependencies, authorize)) return { kind: "unavailable", reason: "source-lineage-effects-unsettled" };
++  const beforeStop = await dependencies.inspectSource(physicalOwnerRunId);
++  if (beforeStop.runId !== physicalOwnerRunId || !["pending", "running"].includes(beforeStop.status) || beforeStop.unsettledStepIds.length > 0) return { kind: "unavailable", reason: "source-not-parked" };
++  await authorize();
++  await dependencies.stopSource(physicalOwnerRunId, reason);
++  await authorize();
++  const stopped = await dependencies.inspectSource(physicalOwnerRunId);
++  if (stopped.runId !== physicalOwnerRunId || stopped.status !== "cancelled" || stopped.unsettledStepIds.length > 0 || !await dependencies.readStopReceipt(physicalOwnerRunId, reason)) return { kind: "uncertain", reason: "source-stop-unconfirmed" };
++  await authorize();
++  return { kind: "ready" };
++}
++
 +async function nativeDependencies() {
 +  const [collector, reconciler, runtime, workflow, serialization, errors, closure] = await Promise.all([
 +    import("#execution/session/recovery-candidate.js"),
@@ -3753,6 +3831,38 @@ new file mode 100644
 +      const args = await serialization.hydrateWorkflowArguments(payload.run.input, payload.run.runId, payload.nativeRunKey, globalThis, revivers);
 +      return Array.isArray(args) && args.length === 1 ? args[0] : undefined;
 +    },
++    async inspectSource(ownerRunId) {
++      const world = await runtime.getWorld();
++      const unsettledStepIds = [];
++      const stepCounts = { completed: 0, pending: 0, running: 0, failed: 0, cancelled: 0, unknown: 0 };
++      let cursor;
++      do {
++        const page = await world.steps.list({ runId: ownerRunId, pagination: { limit: 128, sortOrder: "asc", ...(cursor === undefined ? {} : { cursor }) }, resolveData: "none" });
++        for (const step of page.data) {
++          if (step.runId !== ownerRunId) throw new Error("Execution transfer step owner changed.");
++          if (Object.hasOwn(stepCounts, step.status)) stepCounts[step.status] += 1; else stepCounts.unknown += 1;
++          if (step.status !== "completed") unsettledStepIds.push(step.stepId);
++        }
++        if (!page.hasMore) break;
++        if (typeof page.cursor !== "string" || page.cursor === cursor) throw new Error("Execution transfer step pagination did not advance.");
++        cursor = page.cursor;
++      } while (cursor !== undefined);
++      const run = await world.runs.get(ownerRunId, { resolveData: "none" });
++      return { runId: run.runId, status: run.status, unsettledStepIds, stepCounts };
++    },
++    async stopSource(ownerRunId, reason) { await runtime.cancelRun(await runtime.getWorld(), ownerRunId, { cancelReason: reason }); },
++    async readStopReceipt(ownerRunId, reason) {
++      const world = await runtime.getWorld();
++      let cursor;
++      do {
++        const page = await world.events.list({ runId: ownerRunId, pagination: { limit: 128, sortOrder: "desc", ...(cursor === undefined ? {} : { cursor }) }, resolveData: "all" });
++        for (const event of page.data) { if (event.runId !== ownerRunId) throw new Error("Execution transfer stop receipt owner changed."); if (event.eventType === "run_cancelled") return event.eventData?.cancelReason === reason; }
++        if (!page.hasMore) return false;
++        if (typeof page.cursor !== "string" || page.cursor === cursor) throw new Error("Execution transfer receipt pagination did not advance.");
++        cursor = page.cursor;
++      } while (cursor !== undefined);
++      return false;
++    },
 +    start: workflow.startTerminalRecoveryOwner,
 +    getHook: runtime.getHookByToken,
 +    resumeHook: runtime.resumeHook,
@@ -3764,6 +3874,28 @@ new file mode 100644
 +
 +export async function handleTerminalRecoveryRequest({ payload, auth, forwarded, ports }) {
 +  if (!forwarded || ports === undefined || auth?.principalType === "anonymous") return Response.json({ ok: false, code: "terminal_recovery_forbidden" }, { status: 403 });
++  if (payload.recoveryPhase === "inspect-source") {
++    if (ports.authorizeSourceObservation === undefined || Object.keys(payload).some((key) => !["recoveryPhase", "sourceObservation", "forwardedPrincipal"].includes(key))) return Response.json({ ok: false, code: "native_source_observation_invalid" }, { status: 400 });
++    try {
++      const source = payload.sourceObservation;
++      if (source === null || typeof source !== "object" || Array.isArray(source) || Object.keys(source).some((key) => !["sourcePublicSessionId", "sourceAdapterSessionId", "sourceAdapterGeneration", "cancellationRevision"].includes(key))) throw new Error("Invalid source coordinates.");
++      const authorize = async () => await ports.authorizeSourceObservation({ auth, source });
++      const binding = await authorize();
++      const dependencies = await nativeDependencies();
++      const collected = await dependencies.collect({ binding, allowParked: true, authorizeOwner: async (observed) => { const current = await authorize(); if (current.ownerRunId !== observed.ownerRunId || current.logicalSessionId !== observed.logicalSessionId) throw new Error("Source observation changed."); } });
++      const current = await authorize();
++      if (current.ownerRunId !== binding.ownerRunId || current.logicalSessionId !== binding.logicalSessionId) throw new Error("Source observation changed.");
++      const candidate = collected.kind === "candidate" ? dependencies.readCandidate(collected.candidate) : undefined;
++      const lineage = candidate === undefined ? [] : [...new Set([...candidate.handoffChain.map((entry) => entry.parentRunId), candidate.checkpointOwnerRunId])];
++      const observedRuns = [];
++      for (const ownerRunId of lineage) { await authorize(); observedRuns.push(await dependencies.inspectSource(ownerRunId)); }
++      const observed = observedRuns.at(-1);
++      const lineageUnsettledStepCount = observedRuns.reduce((sum, run) => sum + run.unsettledStepIds.length, 0);
++      await authorize();
++      console.info(JSON.stringify({ event: "builder.native_source_observation", candidate: candidate !== undefined, lineageResolved: candidate !== undefined, lineageRunCount: observedRuns.length, lineageUnsettledStepCount, pendingStepCount: observed?.stepCounts?.pending ?? null, runningStepCount: observed?.stepCounts?.running ?? null, failedStepCount: observed?.stepCounts?.failed ?? null, cancelledStepCount: observed?.stepCounts?.cancelled ?? null, unknownStepCount: observed?.stepCounts?.unknown ?? null, physicalOwnerMatchesAnchor: candidate === undefined ? null : candidate.checkpointOwnerRunId === binding.ownerRunId, unsettledStepCount: observed?.unsettledStepIds.length ?? null, sourceParked: observed === undefined ? null : ["pending", "running"].includes(observed.status) }));
++      return Response.json({ ok: true, status: "accepted", sessionId: binding.ownerRunId }, { status: 202, headers: { "cache-control": "no-store", "x-eve-session-id": binding.ownerRunId } });
++    } catch { return Response.json({ ok: false, code: "native_source_observation_unavailable" }, { status: 409 }); }
++  }
 +  if (Object.keys(payload).some((key) => !["operationId", "recovery", "recoveryPhase", "forwardedPrincipal"].includes(key))) return Response.json({ ok: false, code: "terminal_recovery_invalid" }, { status: 400 });
 +  const descriptor = parseTerminalRecoveryDescriptor(payload.recovery, payload.operationId);
 +  if (descriptor === undefined || (payload.recoveryPhase !== undefined && !["activate", "observe"].includes(payload.recoveryPhase))) return Response.json({ ok: false, code: "terminal_recovery_invalid" }, { status: 400 });

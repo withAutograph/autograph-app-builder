@@ -567,6 +567,21 @@ test("expired or non-failed runs return unavailable without decoding or stream r
   }
 });
 
+test("explicit parked preflight traverses the real collector and owner resolver", async () => {
+  await Promise.all(
+    ["pending", "running"].map(async (status) => {
+      const f = await fixture({ status });
+      const result = await f.collect({ ...f.input, allowParked: true });
+      assert.equal(result.kind, "candidate");
+      assert.equal(
+        readTerminalRecoveryCandidate(result.candidate).checkpointOwnerRunId,
+        ownerRunId,
+      );
+      assert.ok(f.calls.some(([kind]) => kind === "step"));
+    }),
+  );
+});
+
 test("unknown/missing pairs are unavailable and never trigger a replay", async () => {
   const f = await fixture();
   for (const step of f.steps.values()) {

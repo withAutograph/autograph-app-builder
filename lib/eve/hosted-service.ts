@@ -34,8 +34,12 @@ import {
   nativeRecoveryBindingSchema,
   assertNativeRecoveryReceipt,
 } from "./native-recovery-contract";
-import type { NativeRecoveryDescriptor, NativeRecoveryBinding } from "./native-recovery-contract";
-import { observeNativeRecoveryOperation } from "./native-recovery-observation";
+import type {
+  NativeRecoveryDescriptor,
+  NativeRecoveryBinding,
+  NativeSourceObservation,
+} from "./native-recovery-contract";
+import { observeNativeRecoveryOperation, observeNativeSource } from "./native-recovery-observation";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdtemp, open, rm } from "node:fs/promises";
@@ -209,7 +213,12 @@ export interface HostedEveTransport {
     recovery: NativeRecoveryDescriptor;
     sourceHandoffId?: string;
   }) => Promise<NativeRecoveryBinding>;
-  /** Reads the existing terminal owner only; never creates, activates or settles recovery. */
+  /** Read-only current physical owner/lineage inspection for a parked source; never dispatches recovery. */
+  observeSource?: (input: {
+    principal: HostedPrincipal;
+    source: NativeSourceObservation;
+    sourceHandoffId?: string;
+  }) => Promise<void>;
   observeRecovery?: (input: {
     principal: HostedPrincipal;
     operationId: string;
@@ -4076,6 +4085,30 @@ export function createHostedEveSessionService(input: {
     async get({ sessionId, cursor, limit }) {
       requireHostedOperationScope(principal, "get");
       const result = await readSession({ cursor, limit, sessionId });
+      if (result.status === "input_required" && input.transport.observeSource !== undefined) {
+        try {
+          const source = await input.store.getSession(principal, sessionId);
+          if (source !== null) {
+            const durable = toDurableHostedSessionRecord(source);
+            await (input.assertNativeRecoveryOwner ?? assertHostedBuildDecisionOwner)(durable);
+            await observeNativeSource({
+              transport: input.transport,
+              checkpointDigest: durable.checkpointDigest,
+              principal,
+              source: {
+                sourcePublicSessionId: sessionId,
+                sourceAdapterSessionId: durable.adapterSessionId,
+                sourceAdapterGeneration: durable.adapterGeneration,
+                cancellationRevision: durable.cancellationRevision ?? 0,
+              },
+              sourceHandoffId: durable.sourceHandoffId,
+            });
+          }
+        } catch {
+          /* Advisory source inspection never changes an authorized GET. */
+        }
+      }
+
       try {
         return await reconcileNativeResponsesOnGet(sessionId, result, cursor, limit);
       } catch {
@@ -4521,11 +4554,24 @@ export function createHostedEveSessionService(input: {
             }
           }
         }
+        const retainedRecovery =
+          prior === undefined || prior === null
+            ? undefined
+            : hostedOperationRecordSchema.parse(prior).nativeRecovery;
+        const executionTransfer = request.resumeMode === "recover";
+        if (
+          executionTransfer &&
+          retainedRecovery?.executionTransfer === undefined &&
+          (existing.status !== "input_required" || existing.checkpointDigest === undefined)
+        ) {
+          throw new HostedSessionRecoveryUnavailableError();
+        }
         const terminal = ["completed", "failed", "cancelled"].includes(existing.status);
         const interrupted = existing.status === "working" && existing.resumability === "checkpoint";
-        if (terminal || interrupted) {
+        if (terminal || interrupted || executionTransfer) {
           const recoverySource =
-            existing.status === "failed"
+            retainedRecovery ??
+            (existing.status === "failed" || executionTransfer
               ? {
                   version: 1 as const,
                   sourcePublicSessionId: existing.sessionId,
@@ -4537,11 +4583,19 @@ export function createHostedEveSessionService(input: {
                     existing.nativeRecoveryBinding?.originalAuthoritySessionId ??
                     existing.sessionId,
                   parentCancellationRevision: existing.cancellationRevision ?? 0,
+                  ...(executionTransfer && existing.checkpointDigest !== undefined
+                    ? {
+                        executionTransfer: {
+                          kind: "pending-approval" as const,
+                          sourceCheckpointDigest: existing.checkpointDigest,
+                        },
+                      }
+                    : {}),
                   ...(existing.sourceHandoffId === undefined
                     ? {}
                     : { sourceHandoffId: existing.sourceHandoffId }),
                 }
-              : undefined;
+              : undefined);
           if (recoverySource !== undefined) {
             await (input.assertNativeRecoveryOwner ?? assertHostedBuildDecisionOwner)(existing);
           }

@@ -7,14 +7,19 @@ import {
   sourceHandoffIdForSessionAuth,
 } from "../hosted/session-authority";
 import { assertHostedBuildDecisionOwner } from "./approved-build-owner";
-import { requireHostedOperationScope } from "./hosted-auth";
+import { requireHostedOperationScope, tenantKeyFor } from "./hosted-auth";
 import {
   assertNativeRecoveryReceipt,
   nativeRecoveryBindingSchema,
+  nativeSourceObservationSchema,
   nativeRecoveryDescriptorSchema,
   sameNativeRecoveryDescriptor,
 } from "./native-recovery-contract";
-import type { NativeRecoveryBinding, NativeRecoveryDescriptor } from "./native-recovery-contract";
+import type {
+  NativeRecoveryBinding,
+  NativeRecoveryDescriptor,
+  NativeSourceObservation,
+} from "./native-recovery-contract";
 import { createPostgresHostedEveStore } from "./postgres-hosted-store";
 import {
   assertNativeRecoverySourceBinding,
@@ -178,6 +183,42 @@ export function createNativeRecoveryBinding(input: {
   };
 
   return {
+    async authorizeSourceObservation(call: { auth: unknown; source: NativeSourceObservation }) {
+      const sourceCoordinates = nativeSourceObservationSchema.parse(call.source);
+      const { principal } = exactForwardedSessionAuthority({
+        current: call.auth,
+        initiator: call.auth,
+      });
+      requireHostedOperationScope(principal, "get");
+      const source = await input.store.getSession(
+        principal,
+        sourceCoordinates.sourcePublicSessionId,
+      );
+      if (source === null || tenantKeyFor(source.principal) !== tenantKeyFor(principal)) {
+        throw new Error("Native source observation unavailable.");
+      }
+      const durable = toDurableHostedSessionRecord(source);
+      if (durable.sessionId !== sourceCoordinates.sourcePublicSessionId) {
+        throw new Error("Native source observation session changed.");
+      }
+      if (
+        durable.adapterSessionId !== sourceCoordinates.sourceAdapterSessionId ||
+        durable.adapterGeneration !== sourceCoordinates.sourceAdapterGeneration ||
+        (durable.cancellationRevision ?? 0) !== sourceCoordinates.cancellationRevision
+      ) {
+        throw new Error("Native source observation changed.");
+      }
+      const handoffId = sourceHandoffIdForSessionAuth({ current: call.auth, initiator: call.auth });
+      if (handoffId !== durable.sourceHandoffId) {
+        throw new Error("Native source observation handoff changed.");
+      }
+      await (input.assertOwner ?? assertHostedBuildDecisionOwner)(durable);
+      return {
+        ownerRunId: durable.adapterSessionId,
+        logicalSessionId:
+          durable.nativeRecoveryBinding?.logicalSessionId ?? durable.adapterSessionId,
+      };
+    },
     /** Positive immutable-winner proof, freshly re-read before each native closure effect. */
     async authorizeRecoveryHolderClosure(
       call: RecoveryHolderClosureCall,
@@ -396,6 +437,8 @@ export function createHostedNativeRecoveryBinding(
     return binding;
   };
   return {
+    authorizeSourceObservation: (call: { auth: unknown; source: NativeSourceObservation }) =>
+      get().authorizeSourceObservation(call),
     authorizeRecoveryHolderClosure: (call: RecoveryHolderClosureCall) =>
       get().authorizeRecoveryHolderClosure(call),
     observeRecoveryHolderBinding: (call: RecoveryHolderCall) =>
