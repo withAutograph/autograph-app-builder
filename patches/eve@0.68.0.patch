@@ -3246,7 +3246,7 @@ new file mode 100644
 index 0000000..a3f1892
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.d.ts
-@@ -0,0 +1,114 @@
+@@ -0,0 +1,115 @@
 +import type { SessionAuthContext } from "#channel/types.js";
 +import type { SessionCheckpoint } from "#execution/session/handoff.js";
 +import type { TerminalRecoveryWorkflowEntryInput } from "#execution/session/entry-input.js";
@@ -3331,6 +3331,7 @@ index 0000000..a3f1892
 +  now(): number;
 +  wait(ms: number): Promise<void>;
 +}
++export declare function inspectNativeRecoverySource(world: Pick<import("#compiled/@workflow/world/index.js").World, "runs" | "steps">, ownerRunId: string): Promise<{ readonly runId: string; readonly status: string; readonly unsettledStepIds: readonly string[]; readonly stepCounts: Readonly<Record<string, number>> }>;
 +export declare function parseTerminalRecoveryDescriptor(value: unknown, operationId: unknown): TerminalRecoveryDescriptor | undefined;
 +export declare function terminalRecoveryActivationToken(auth: SessionAuthContext, descriptor: TerminalRecoveryDescriptor): string;
 +export declare function terminalRecoveryPolicy(entry: unknown): Pick<SessionCheckpoint, "capabilities" | "retention" | "sessionTimeoutMs"> | undefined;
@@ -3365,7 +3366,7 @@ diff --git a/dist/src/execution/session/terminal-recovery.js b/dist/src/executio
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.js
-@@ -0,0 +1,580 @@
+@@ -0,0 +1,666 @@
 +import { createHash } from "node:crypto";
 +import { DEFAULT_SESSION_TIMEOUT_MS } from "#execution/session/timeout.js";
 +import { SESSION_CHECKPOINT_VERSION } from "#execution/session/handoff.js";
@@ -3382,6 +3383,60 @@ new file mode 100644
 +const nativeStatusLabel = (value) => ["pending", "running", "completed", "failed", "cancelled", "waiting", "queued", "suspended"].includes(value) ? value : "other";
 +const diagnosticCount = (value) => Number.isSafeInteger(value) && value >= 0 ? value : null;
 +const refusalBoundary = (value) => value === null || typeof value !== "object" || Array.isArray(value) ? null : ({ stage: ["authority_anchor", "handoff_parent", "handoff_successor", "final_owner"].includes(value.stage) ? value.stage : "other", status: nativeStatusLabel(value.status), ...(value.parentStatus === undefined ? {} : { parentStatus: nativeStatusLabel(value.parentStatus) }), allowParked: typeof value.allowParked === "boolean" ? value.allowParked : null });
++
++const diagnosticErrorCategory = (error) => {
++  try {
++    if (error instanceof NativeSourceAuthorizationFailure) return "authorization";
++    if (error instanceof NativeInspectionFailure) return error.category;
++    if (error?.status === 401) return "http_unauthorized";
++    if (error?.status === 403) return "http_forbidden";
++    if (error?.status === 404) return "http_not_found";
++    if (error?.status === 409) return "http_conflict";
++    if (error?.status === 429) return "http_throttled";
++    if (Number.isInteger(error?.status) && error.status >= 500 && error.status <= 599) return "http_server";
++    if (Number.isInteger(error?.status) && error.status >= 400 && error.status <= 499) return "http_other";
++    if (error?.code === "INVALID_ARGUMENT") return "invalid_argument";
++    if (error?.name === "TypeError") return "type";
++    if (error?.name === "ReferenceError") return "reference";
++    if (error?.name === "SyntaxError") return "syntax";
++    if (error?.name === "ZodError") return "schema";
++    return "other";
++  } catch { return "other"; }
++};
++class NativeSourceAuthorizationFailure extends Error {}
++class NativeInspectionFailure extends Error {
++  constructor(stage, error, status, category) { super("Native source inspection unavailable."); this.stage = stage; this.category = category ?? diagnosticErrorCategory(error); this.nativeStatus = status === undefined ? null : nativeStatusLabel(status); }
++}
++const reportNativeDiagnostic = (value) => { try { console.info(JSON.stringify(value)); } catch { /* Advisory telemetry never controls execution. */ } };
++const inspectionStage = (value) => ["dependencies", "world", "run_read", "run_identity", "steps_list", "step_identity", "step_pagination"].includes(value) ? value : "other";
++
++export async function inspectNativeRecoverySource(world, ownerRunId) {
++  let stage = "run_read";
++  let run;
++  try {
++    run = await world.runs.get(ownerRunId, { resolveData: "none" });
++    stage = "run_identity";
++    if (run.runId !== ownerRunId) throw new NativeInspectionFailure(stage, undefined, run.status, "identity");
++    const unsettledStepIds = [];
++    const stepCounts = { completed: 0, pending: 0, running: 0, failed: 0, cancelled: 0, unknown: 0 };
++    let cursor;
++    do {
++      stage = "steps_list";
++      const page = await world.steps.list({ runId: ownerRunId, pagination: { limit: 128, sortOrder: "asc", ...(cursor === undefined ? {} : { cursor }) }, resolveData: "none" });
++      for (const step of page.data) {
++        stage = "step_identity";
++        if (step.runId !== ownerRunId) throw new NativeInspectionFailure(stage, undefined, run.status, "identity");
++        if (Object.hasOwn(stepCounts, step.status)) stepCounts[step.status] += 1; else stepCounts.unknown += 1;
++        if (step.status !== "completed") unsettledStepIds.push(step.stepId);
++      }
++      if (!page.hasMore) break;
++      stage = "step_pagination";
++      if (typeof page.cursor !== "string" || page.cursor === cursor) throw new NativeInspectionFailure(stage, undefined, run.status, "pagination");
++      cursor = page.cursor;
++    } while (cursor !== undefined);
++    return { runId: run.runId, status: run.status, unsettledStepIds, stepCounts };
++  } catch (error) { if (error instanceof NativeInspectionFailure) throw error; throw new NativeInspectionFailure(stage, error, run?.status); }
++}
 +
 +const candidateKinds = ["terminal-finalizer-input", "completed-terminal-turn-input", "failed-turn-input", "committed-turn-output"];
 +const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -3855,23 +3910,9 @@ new file mode 100644
 +      return Array.isArray(args) && args.length === 1 ? args[0] : undefined;
 +    },
 +    async inspectSource(ownerRunId) {
-+      const world = await runtime.getWorld();
-+      const unsettledStepIds = [];
-+      const stepCounts = { completed: 0, pending: 0, running: 0, failed: 0, cancelled: 0, unknown: 0 };
-+      let cursor;
-+      do {
-+        const page = await world.steps.list({ runId: ownerRunId, pagination: { limit: 128, sortOrder: "asc", ...(cursor === undefined ? {} : { cursor }) }, resolveData: "none" });
-+        for (const step of page.data) {
-+          if (step.runId !== ownerRunId) throw new Error("Execution transfer step owner changed.");
-+          if (Object.hasOwn(stepCounts, step.status)) stepCounts[step.status] += 1; else stepCounts.unknown += 1;
-+          if (step.status !== "completed") unsettledStepIds.push(step.stepId);
-+        }
-+        if (!page.hasMore) break;
-+        if (typeof page.cursor !== "string" || page.cursor === cursor) throw new Error("Execution transfer step pagination did not advance.");
-+        cursor = page.cursor;
-+      } while (cursor !== undefined);
-+      const run = await world.runs.get(ownerRunId, { resolveData: "none" });
-+      return { runId: run.runId, status: run.status, unsettledStepIds, stepCounts };
++      let world;
++      try { world = await runtime.getWorld(); } catch (error) { throw new NativeInspectionFailure("world", error); }
++      return await inspectNativeRecoverySource(world, ownerRunId);
 +    },
 +    async stopSource(ownerRunId, reason) { await runtime.cancelRun(await runtime.getWorld(), ownerRunId, { cancelReason: reason }); },
 +    async readStopReceipt(ownerRunId, reason) {
@@ -3896,54 +3937,100 @@ new file mode 100644
 +}
 +
 +export async function handleTerminalRecoveryRequest({ payload, auth, forwarded, ports }, loadDependencies = nativeDependencies) {
-+  if (!forwarded || ports === undefined || auth?.principalType === "anonymous") return Response.json({ ok: false, code: "terminal_recovery_forbidden" }, { status: 403 });
++  const phase = payload.recoveryPhase === "inspect-source" ? "inspect_source" : payload.recoveryPhase === "observe" ? "observe" : payload.recoveryPhase === "activate" ? "activate" : payload.recoveryPhase === undefined ? "prepare" : "other";
++  let routeStage = "configuration";
++  let routeCategory = null;
++  reportNativeDiagnostic({ event: "builder.native_recovery_route", phase, stage: "handler_entered", outcome: "entered", forwarded: forwarded === true, portsConfigured: ports !== undefined, sourceInspectionConfigured: typeof ports?.authorizeSourceObservation === "function" });
++  const finish = (body, options) => { reportNativeDiagnostic({ event: "builder.native_recovery_route", phase, stage: routeStage, outcome: options.status < 400 ? "accepted" : "rejected", errorCategory: routeCategory, httpStatus: options.status }); return Response.json(body, options); };
++  if (!forwarded || ports === undefined || auth?.principalType === "anonymous") return finish({ ok: false, code: "terminal_recovery_forbidden" }, { status: 403 });
++  routeStage = "request_validation";
 +  if (payload.recoveryPhase === "inspect-source") {
-+    if (ports.authorizeSourceObservation === undefined || Object.keys(payload).some((key) => !["recoveryPhase", "sourceObservation", "forwardedPrincipal"].includes(key))) return Response.json({ ok: false, code: "native_source_observation_invalid" }, { status: 400 });
++    if (ports.authorizeSourceObservation === undefined || Object.keys(payload).some((key) => !["recoveryPhase", "sourceObservation", "forwardedPrincipal"].includes(key))) return finish({ ok: false, code: "native_source_observation_invalid" }, { status: 400 });
 +    try {
 +      const source = payload.sourceObservation;
 +      if (source === null || typeof source !== "object" || Array.isArray(source) || Object.keys(source).some((key) => !["sourcePublicSessionId", "sourceAdapterSessionId", "sourceAdapterGeneration", "cancellationRevision"].includes(key))) throw new Error("Invalid source coordinates.");
-+      const authorize = async () => await ports.authorizeSourceObservation({ auth, source });
-+      const binding = await authorize();
-+      const dependencies = await loadDependencies();
++      routeStage = "source_authorization";
++      let binding;
++      try { binding = await ports.authorizeSourceObservation({ auth, source }); } catch { throw new NativeSourceAuthorizationFailure(); }
++      const authorize = async () => {
++        let current;
++        try { current = await ports.authorizeSourceObservation({ auth, source }); } catch { throw new NativeSourceAuthorizationFailure(); }
++        if (current.ownerRunId !== binding.ownerRunId || current.logicalSessionId !== binding.logicalSessionId) throw new NativeSourceAuthorizationFailure();
++        return current;
++      };
++      routeStage = "dependencies";
++      let dependencies;
++      let dependencyFailure;
++      try { dependencies = await loadDependencies(); } catch (error) { dependencyFailure = new NativeInspectionFailure("dependencies", error); }
 +      await authorize();
-+      const anchor = await dependencies.inspectSource(binding.ownerRunId);
-+      if (anchor.runId !== binding.ownerRunId) throw new Error("Source observation anchor changed.");
++      routeStage = "anchor_inspection";
++      let anchor;
++      let anchorFailure;
++      try {
++        if (dependencies === undefined) throw dependencyFailure;
++        anchor = await dependencies.inspectSource(binding.ownerRunId);
++        if (anchor.runId !== binding.ownerRunId) throw new NativeInspectionFailure("run_identity", undefined, anchor.status, "identity");
++      } catch (error) { anchor = undefined; anchorFailure = error; }
 +      await authorize();
-+      const collected = await dependencies.collect({ binding, allowParked: true, authorizeOwner: async (observed) => { const current = await authorize(); if (current.ownerRunId !== observed.ownerRunId || current.logicalSessionId !== observed.logicalSessionId) throw new Error("Source observation changed."); } });
-+      const current = await authorize();
-+      if (current.ownerRunId !== binding.ownerRunId || current.logicalSessionId !== binding.logicalSessionId) throw new Error("Source observation changed.");
-+      const candidate = collected.kind === "candidate" ? dependencies.readCandidate(collected.candidate) : undefined;
++      routeStage = "candidate_collect";
++      let collected;
++      let collectionErrorCategory = null;
++      try {
++        if (dependencies === undefined) throw dependencyFailure;
++        collected = await dependencies.collect({ binding, allowParked: true, authorizeOwner: async (observed) => { await authorize(); if (observed.ownerRunId !== binding.ownerRunId || observed.logicalSessionId !== binding.logicalSessionId) throw new NativeSourceAuthorizationFailure(); } });
++      } catch (error) { if (error instanceof NativeSourceAuthorizationFailure) throw error; collectionErrorCategory = diagnosticErrorCategory(error); }
++      await authorize();
++      routeStage = "candidate_read";
++      let candidate;
++      if (collected?.kind === "candidate") {
++        try { candidate = dependencies.readCandidate(collected.candidate); } catch (error) { collectionErrorCategory = diagnosticErrorCategory(error); }
++      }
 +      const lineage = candidate === undefined ? [] : [...new Set([...candidate.handoffChain.map((entry) => entry.parentRunId), candidate.checkpointOwnerRunId])];
 +      const observedRuns = [];
-+      for (const ownerRunId of lineage) { await authorize(); observedRuns.push(await dependencies.inspectSource(ownerRunId)); }
++      routeStage = "lineage_inspection";
++      for (const ownerRunId of lineage) { await authorize(); try { observedRuns.push(await dependencies.inspectSource(ownerRunId)); } catch { /* Advisory lineage counts remain unassessed. */ } await authorize(); }
 +      const observed = observedRuns.at(-1);
-+      const lineageUnsettledStepCount = observedRuns.reduce((sum, run) => sum + run.unsettledStepIds.length, 0);
++      const lineageUnsettledStepCount = observedRuns.length === lineage.length ? observedRuns.reduce((sum, run) => sum + run.unsettledStepIds.length, 0) : null;
 +      await authorize();
-+      console.info(JSON.stringify({ event: "builder.native_source_observation", collectionKind: collected.kind === "candidate" ? "candidate" : collected.kind === "unavailable" ? "unavailable" : "other", collectionReason: collected.kind === "candidate" ? null : refusalReason(collected.reason), collectionStage: "candidate_collect", collectionBoundary: refusalBoundary(collected.boundary), anchorStatus: nativeStatusLabel(anchor.status), anchorUnsettledStepCount: diagnosticCount(anchor.unsettledStepIds.length), anchorStepCounts: Object.fromEntries(["completed", "pending", "running", "failed", "cancelled", "unknown"].map((status) => [status, diagnosticCount(anchor.stepCounts?.[status])])), candidate: candidate !== undefined, lineageResolved: candidate !== undefined, lineageRunCount: observedRuns.length, lineageUnsettledStepCount, pendingStepCount: observed?.stepCounts?.pending ?? null, runningStepCount: observed?.stepCounts?.running ?? null, failedStepCount: observed?.stepCounts?.failed ?? null, cancelledStepCount: observed?.stepCounts?.cancelled ?? null, unknownStepCount: observed?.stepCounts?.unknown ?? null, physicalOwnerMatchesAnchor: candidate === undefined ? null : candidate.checkpointOwnerRunId === binding.ownerRunId, unsettledStepCount: observed?.unsettledStepIds.length ?? null, sourceParked: observed === undefined ? null : ["pending", "running"].includes(observed.status) }));
-+      return Response.json({ ok: true, status: "accepted", sessionId: binding.ownerRunId }, { status: 202, headers: { "cache-control": "no-store", "x-eve-session-id": binding.ownerRunId } });
-+    } catch { return Response.json({ ok: false, code: "native_source_observation_unavailable" }, { status: 409 }); }
++      const sourceDiagnostic = {
++        version: 1,
++        collectionKind: collectionErrorCategory !== null ? "failed" : collected?.kind === "candidate" ? "candidate" : collected?.kind === "unavailable" ? "unavailable" : "other",
++        collectionReason: collected?.kind === "unavailable" ? refusalReason(collected.reason) : null,
++        collectionBoundary: refusalBoundary(collected?.boundary),
++        collectionErrorCategory,
++        collectionStage: dependencies === undefined ? "dependencies" : collected?.kind === "candidate" ? "candidate_read" : "candidate_collect",
++        anchorRead: { outcome: anchor === undefined ? "failed" : "succeeded", stage: anchor === undefined ? inspectionStage(anchorFailure?.stage) : "complete", errorCategory: anchor === undefined ? diagnosticErrorCategory(anchorFailure) : null, status: anchor === undefined ? anchorFailure instanceof NativeInspectionFailure ? anchorFailure.nativeStatus : null : nativeStatusLabel(anchor.status), unsettledStepCount: anchor === undefined ? null : diagnosticCount(anchor.unsettledStepIds.length), stepCounts: anchor === undefined ? null : Object.fromEntries(["completed", "pending", "running", "failed", "cancelled", "unknown"].map((status) => [status, diagnosticCount(anchor.stepCounts?.[status])])) },
++      };
++      reportNativeDiagnostic({ event: "builder.native_source_observation", ...sourceDiagnostic, candidate: candidate !== undefined, lineageResolved: candidate !== undefined, lineageRunCount: observedRuns.length, lineageUnsettledStepCount, anchorStatus: sourceDiagnostic.anchorRead.status, anchorUnsettledStepCount: sourceDiagnostic.anchorRead.unsettledStepCount, anchorStepCounts: sourceDiagnostic.anchorRead.stepCounts, physicalOwnerMatchesAnchor: candidate === undefined ? null : candidate.checkpointOwnerRunId === binding.ownerRunId, unsettledStepCount: observed?.unsettledStepIds.length ?? null });
++      routeStage = "completed";
++      return finish({ ok: true, status: "accepted", sessionId: binding.ownerRunId, sourceDiagnostic }, { status: 202, headers: { "cache-control": "no-store", "x-eve-session-id": binding.ownerRunId } });
++    } catch (error) { routeCategory = diagnosticErrorCategory(error); return finish({ ok: false, code: "native_source_observation_unavailable" }, { status: 409 }); }
 +  }
-+  if (Object.keys(payload).some((key) => !["operationId", "recovery", "recoveryPhase", "forwardedPrincipal"].includes(key))) return Response.json({ ok: false, code: "terminal_recovery_invalid" }, { status: 400 });
++  if (Object.keys(payload).some((key) => !["operationId", "recovery", "recoveryPhase", "forwardedPrincipal"].includes(key))) return finish({ ok: false, code: "terminal_recovery_invalid" }, { status: 400 });
 +  const descriptor = parseTerminalRecoveryDescriptor(payload.recovery, payload.operationId);
-+  if (descriptor === undefined || (payload.recoveryPhase !== undefined && !["activate", "observe"].includes(payload.recoveryPhase))) return Response.json({ ok: false, code: "terminal_recovery_invalid" }, { status: 400 });
++  if (descriptor === undefined || (payload.recoveryPhase !== undefined && !["activate", "observe"].includes(payload.recoveryPhase))) return finish({ ok: false, code: "terminal_recovery_invalid" }, { status: 400 });
 +  let prepareStage = "dependencies";
 +  try {
 +    if (payload.recoveryPhase === "observe") {
 +      const result = await observeTerminalSession({ auth, descriptor, ports }, await nativeObservationDependencies());
-+      return Response.json({ ok: true, status: "accepted", sessionId: result.sessionId }, { status: 202, headers: { "cache-control": "no-store", "x-eve-session-id": result.sessionId } });
++      return finish({ ok: true, status: "accepted", sessionId: result.sessionId }, { status: 202, headers: { "cache-control": "no-store", "x-eve-session-id": result.sessionId } });
 +    }
 +    const execute = payload.recoveryPhase === "activate" ? activateTerminalSession : recoverTerminalSession;
++    routeStage = "prepare";
 +    const result = await execute({ auth, descriptor, ports }, await loadDependencies(), (stage) => { prepareStage = stage; });
++    routeStage = refusalStage(prepareStage);
 +    if (result.kind !== "accepted") {
 +      try { console.info(JSON.stringify({ event: "builder.native_recovery_refusal", outcome: result.kind === "uncertain" ? "uncertain" : result.kind === "unavailable" ? "unavailable" : "other", reason: refusalReason(result.reason), stage: refusalStage(prepareStage), boundary: refusalBoundary(result.boundary) })); } catch { /* Advisory diagnostics never change the refusal. */ }
-+      return Response.json({ ok: false, code: result.kind === "uncertain" ? "terminal_recovery_uncertain" : "terminal_recovery_unavailable" }, { status: 409 });
++      return finish({ ok: false, code: result.kind === "uncertain" ? "terminal_recovery_uncertain" : "terminal_recovery_unavailable" }, { status: 409 });
 +    }
-+    return Response.json({ ok: true, status: "accepted", sessionId: result.recoveryBinding.ownerRunId, recoveryBinding: result.recoveryBinding }, { status: 202, headers: { "cache-control": "no-store", "x-eve-session-id": result.recoveryBinding.ownerRunId } });
++    return finish({ ok: true, status: "accepted", sessionId: result.recoveryBinding.ownerRunId, recoveryBinding: result.recoveryBinding }, { status: 202, headers: { "cache-control": "no-store", "x-eve-session-id": result.recoveryBinding.ownerRunId } });
 +  } catch (error) {
++    routeStage = refusalStage(prepareStage);
++    routeCategory = diagnosticErrorCategory(error);
 +    if (payload.recoveryPhase === undefined) reportPrepareFailure(prepareStage, error);
 +    // Acceptance may have happened. Do not turn a lost receipt/activation response
 +    // into a pre-dispatch rejection or expose checkpoint contents in diagnostics.
-+    return Response.json({ ok: false, code: "terminal_recovery_submission_unknown" }, { status: 503 });
++    return finish({ ok: false, code: "terminal_recovery_submission_unknown" }, { status: 503 });
 +  }
 +}
 diff --git a/dist/src/execution/session/turn-step-types.d.ts b/dist/src/execution/session/turn-step-types.d.ts

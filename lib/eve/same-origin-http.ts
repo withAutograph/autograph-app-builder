@@ -1,3 +1,4 @@
+import { reportNativeSourceDiagnostic } from "./native-source-diagnostic";
 import {
   emptyNativeDeliveryState,
   nativeDeliveryForEvents,
@@ -105,6 +106,10 @@ const acceptedTurnSchema = z
     status: z.literal("accepted"),
     recoveryBinding: nativeRecoveryBindingSchema.optional(),
   })
+  .strict();
+
+const sourceInspectionAcceptedSchema = acceptedTurnSchema
+  .extend({ sourceDiagnostic: z.unknown().optional() })
   .strict();
 
 const cancelResponseSchema = z.discriminatedUnion("status", [
@@ -264,7 +269,8 @@ async function postMutation(input: {
     // Only this private recovery response carries a structured receipt. The
     // ordinary session response remains on the bounded streaming reader.
     const body: unknown =
-      input.body.recovery !== undefined && response.status === 202
+      (input.body.recovery !== undefined || input.body.recoveryPhase === "inspect-source") &&
+      response.status === 202
         ? await response.json()
         : await readJson(response);
     if (response.status >= 400 && response.status < 500) {
@@ -276,7 +282,10 @@ async function postMutation(input: {
     if (response.status !== 202) {
       throw new Error("Unexpected response status.");
     }
-    const accepted = acceptedTurnSchema.parse(body);
+    const accepted =
+      input.body.recoveryPhase === "inspect-source"
+        ? sourceInspectionAcceptedSchema.parse(body)
+        : acceptedTurnSchema.parse(body);
     if (input.path !== "/eve/v1/session" && accepted.deliveryId === undefined) {
       throw new Error("Canonical Eve omitted the accepted delivery identity.");
     }
@@ -1783,19 +1792,29 @@ export function createSameOriginEveTransport(input: {
       await request.onAccepted?.(accepted.deliveryId);
     },
     async observeSource(request) {
-      const accepted = await postMutation({
-        ...common,
-        body: { recoveryPhase: "inspect-source", sourceObservation: request.source },
-        path: "/eve/v1/session",
-        principal: request.principal,
-        sourceHandoffId: request.sourceHandoffId,
-      });
+      let accepted: Awaited<ReturnType<typeof postMutation>>;
+      try {
+        accepted = await postMutation({
+          ...common,
+          body: { recoveryPhase: "inspect-source", sourceObservation: request.source },
+          path: "/eve/v1/session",
+          principal: request.principal,
+          sourceHandoffId: request.sourceHandoffId,
+        });
+      } catch (error) {
+        reportNativeSourceDiagnostic(undefined, "request_failed");
+        throw error;
+      }
       if (
         accepted.sessionId !== request.source.sourceAdapterSessionId ||
         accepted.recoveryBinding !== undefined
       ) {
+        reportNativeSourceDiagnostic(undefined, "identity_mismatch");
         throw new SubmissionOutcomeUnknownError();
       }
+      reportNativeSourceDiagnostic(
+        "sourceDiagnostic" in accepted ? accepted.sourceDiagnostic : undefined,
+      );
     },
     async observeRecovery(request) {
       const accepted = await postMutation({

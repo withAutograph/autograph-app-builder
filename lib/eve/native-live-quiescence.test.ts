@@ -1,5 +1,7 @@
 /* oxlint-disable sonarjs/no-internal-api-use -- Exercise the actual patched recovery entrypoint with synthetic native World ports. */
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
+import { createSameOriginEveTransport } from "./same-origin-http";
 import type {
   TerminalRecoveryDependencies,
   TerminalRecoveryDescriptor,
@@ -8,6 +10,7 @@ import type {
   recoverTerminalSession as RuntimeRecover,
   observeTerminalSession as RuntimeObserve,
   handleTerminalRecoveryRequest as RuntimeHandle,
+  inspectNativeRecoverySource as RuntimeInspect,
   TerminalRecoveryObservationDependencies,
 } from "../../node_modules/eve/dist/src/execution/session/terminal-recovery";
 import type { PrivateNativeRecoveryCandidate } from "../../node_modules/eve/dist/src/execution/session/recovery-candidate";
@@ -19,6 +22,7 @@ const runtime = await vi.importActual<{
   recoverTerminalSession: typeof RuntimeRecover;
   observeTerminalSession: typeof RuntimeObserve;
   handleTerminalRecoveryRequest: typeof RuntimeHandle;
+  inspectNativeRecoverySource: typeof RuntimeInspect;
 }>(
   new URL("../../node_modules/eve/dist/src/execution/session/terminal-recovery.js", import.meta.url)
     .href,
@@ -30,6 +34,15 @@ const durable = await vi.importActual<{ createDurableSessionState: typeof Runtim
 const batches = await vi.importActual<{ appendPendingInputBatch: typeof RuntimeAppend }>(
   new URL("../../node_modules/eve/dist/src/harness/pending-input-batches.js", import.meta.url).href,
 );
+const nativeDiagnosticLogSchema = z.looseObject({ event: z.string() });
+type NativeDiagnosticLog = z.infer<typeof nativeDiagnosticLogSchema>;
+const loggedEvent = (
+  calls: readonly (readonly unknown[])[],
+  event: string,
+): NativeDiagnosticLog | undefined => {
+  const values = calls.map(([value]) => nativeDiagnosticLogSchema.parse(JSON.parse(String(value))));
+  return values.find((value) => value.event === event);
+};
 const descriptor: TerminalRecoveryDescriptor = {
   version: 1,
   operationId: "transfer",
@@ -492,7 +505,10 @@ describe("native recovery refusal diagnostics", () => {
           () => Promise.resolve(f.dependencies),
         );
         expect(response.status).toBe(202);
-        const diagnostic: unknown = JSON.parse(String(info.mock.calls[0]?.[0]));
+        const diagnostic: unknown = loggedEvent(
+          info.mock.calls,
+          "builder.native_source_observation",
+        );
         expect(diagnostic).toMatchObject({
           event: "builder.native_source_observation",
           collectionKind: "unavailable",
@@ -533,7 +549,7 @@ describe("native recovery refusal diagnostics", () => {
       );
       expect(response.status).toBe(409);
       expect(await response.json()).toEqual({ ok: false, code: "terminal_recovery_unavailable" });
-      const diagnostic: unknown = JSON.parse(String(info.mock.calls[0]?.[0]));
+      const diagnostic: unknown = loggedEvent(info.mock.calls, "builder.native_recovery_refusal");
       expect(diagnostic).toEqual({
         event: "builder.native_recovery_refusal",
         outcome: "unavailable",
@@ -646,7 +662,10 @@ describe("native refusal boundary observation", () => {
         );
         expect(response.status).toBe(202);
         expect(inspectSource).toHaveBeenCalledWith("old-native");
-        const diagnostic: unknown = JSON.parse(String(info.mock.calls[0]?.[0]));
+        const diagnostic: unknown = loggedEvent(
+          info.mock.calls,
+          "builder.native_source_observation",
+        );
         expect(diagnostic).toMatchObject({
           collectionKind: "unavailable",
           collectionReason: "source-not-terminal",
@@ -677,4 +696,232 @@ describe("native refusal boundary observation", () => {
       }
     },
   );
+});
+
+it("continues exact-source collection after step inspection fails, retaining authoritative run status", async () => {
+  const f = fixture();
+  const reads: string[] = [];
+  const world = {
+    runs: {
+      get: () => {
+        reads.push("run");
+        return Promise.resolve({ runId: "old-native", status: "running" });
+      },
+    },
+    steps: {
+      list: () => {
+        reads.push("steps");
+        throw new TypeError("private-canary-provider-secret");
+      },
+    },
+  };
+  // @ts-expect-error The synthetic native World intentionally exposes only the methods exercised by this reader.
+  f.dependencies.inspectSource = (owner) => runtime.inspectNativeRecoverySource(world, owner);
+  f.collect.mockResolvedValueOnce({
+    kind: "unavailable",
+    reason: "source-not-terminal",
+    boundary: { stage: "handoff_parent", status: "running", allowParked: true },
+  });
+  const info = vi.spyOn(console, "info").mockImplementation(() => {});
+  try {
+    const response = await runtime.handleTerminalRecoveryRequest(
+      {
+        payload: { recoveryPhase: "inspect-source", sourceObservation: {} },
+        auth: actor,
+        forwarded: true,
+        ports: {
+          ...f.ports,
+          authorizeSourceObservation: () =>
+            Promise.resolve({ ownerRunId: "old-native", logicalSessionId: "logical" }),
+        },
+      },
+      () => Promise.resolve(f.dependencies),
+    );
+    expect(response.status).toBe(202);
+    const body: unknown = await response.json();
+    expect(body).toMatchObject({
+      sourceDiagnostic: {
+        collectionKind: "unavailable",
+        collectionReason: "source-not-terminal",
+        collectionBoundary: { stage: "handoff_parent", status: "running", allowParked: true },
+        anchorRead: {
+          outcome: "failed",
+          stage: "steps_list",
+          errorCategory: "type",
+          status: "running",
+          unsettledStepCount: null,
+          stepCounts: null,
+        },
+      },
+    });
+    expect(reads).toEqual(["run", "steps"]);
+    expect(f.collect).toHaveBeenCalledOnce();
+    expect(JSON.stringify(info.mock.calls)).not.toContain("private-canary");
+    expect(f.stopSource).not.toHaveBeenCalled();
+    expect(f.start).not.toHaveBeenCalled();
+  } finally {
+    info.mockRestore();
+  }
+});
+it("returns a safe private summary for collector errors after successful owner authorization", async () => {
+  const f = fixture();
+  f.collect.mockRejectedValueOnce(new ReferenceError("private-canary-history"));
+  const info = vi.spyOn(console, "info").mockImplementation(() => {});
+  try {
+    const response = await runtime.handleTerminalRecoveryRequest(
+      {
+        payload: { recoveryPhase: "inspect-source", sourceObservation: {} },
+        auth: actor,
+        forwarded: true,
+        ports: {
+          ...f.ports,
+          authorizeSourceObservation: () =>
+            Promise.resolve({ ownerRunId: "old-native", logicalSessionId: "logical" }),
+        },
+      },
+      () => Promise.resolve(f.dependencies),
+    );
+    expect(response.status).toBe(202);
+    expect(await response.json()).toMatchObject({
+      sourceDiagnostic: {
+        collectionKind: "failed",
+        collectionErrorCategory: "reference",
+        anchorRead: { outcome: "succeeded" },
+      },
+    });
+    expect(JSON.stringify(info.mock.calls)).not.toContain("private-canary");
+    expect(f.stopSource).not.toHaveBeenCalled();
+    expect(f.start).not.toHaveBeenCalled();
+  } finally {
+    info.mockRestore();
+  }
+});
+it("fails closed without a summary or private reads when owner authorization is revoked", async () => {
+  const f = fixture();
+  const authorizeSourceObservation = vi
+    .fn()
+    .mockResolvedValueOnce({ ownerRunId: "old-native", logicalSessionId: "logical" })
+    .mockRejectedValue(new Error("private-canary-owner"));
+  const info = vi.spyOn(console, "info").mockImplementation(() => {});
+  try {
+    const response = await runtime.handleTerminalRecoveryRequest(
+      {
+        payload: { recoveryPhase: "inspect-source", sourceObservation: {} },
+        auth: actor,
+        forwarded: true,
+        ports: { ...f.ports, authorizeSourceObservation },
+      },
+      () => Promise.resolve(f.dependencies),
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).not.toHaveProperty("sourceDiagnostic");
+    // oxlint-disable-next-line typescript/unbound-method -- The injected native reader is a standalone mock with no this binding.
+    expect(f.dependencies.inspectSource).not.toHaveBeenCalled();
+    expect(f.collect).not.toHaveBeenCalled();
+    expect(JSON.stringify(info.mock.calls)).not.toContain("private-canary");
+    expect(loggedEvent(info.mock.calls, "builder.native_recovery_route")).toMatchObject({
+      stage: "handler_entered",
+    });
+  } finally {
+    info.mockRestore();
+  }
+});
+
+it("relays the actual native diagnostic response through postMutation on the stable caller side", async () => {
+  const f = fixture();
+  f.collect.mockResolvedValueOnce({
+    kind: "unavailable",
+    reason: "source-not-terminal",
+    boundary: { stage: "handoff_parent", status: "running", allowParked: true },
+  });
+  f.dependencies.inspectSource = () => Promise.reject(new TypeError("private-canary-step-error"));
+  const adapter = createSameOriginEveTransport({
+    config: { baseUrl: "https://builder.example.test" },
+    workloadIdentity: { token: () => Promise.resolve("synthetic-token") },
+    fetchImplementation: () =>
+      runtime.handleTerminalRecoveryRequest(
+        {
+          payload: { recoveryPhase: "inspect-source", sourceObservation: {} },
+          auth: actor,
+          forwarded: true,
+          ports: {
+            ...f.ports,
+            authorizeSourceObservation: () =>
+              Promise.resolve({ ownerRunId: "old-native", logicalSessionId: "logical" }),
+          },
+        },
+        () => Promise.resolve(f.dependencies),
+      ),
+  });
+  const info = vi.spyOn(console, "info").mockImplementation(() => {});
+  try {
+    await adapter.observeSource?.({
+      principal: {
+        issuer: "https://owner.example",
+        audience: "builder",
+        workspaceId: "workspace",
+        ownerUserId: "owner",
+        scopes: ["autograph:get"],
+      },
+      source: {
+        sourcePublicSessionId: "source",
+        sourceAdapterSessionId: "old-native",
+        sourceAdapterGeneration: 1,
+        cancellationRevision: 0,
+      },
+    });
+    expect(loggedEvent(info.mock.calls, "builder.native_source_observation_relay")).toMatchObject({
+      outcome: "available",
+      diagnostic: {
+        collectionReason: "source-not-terminal",
+        collectionBoundary: { stage: "handoff_parent", status: "running" },
+        anchorRead: { outcome: "failed", errorCategory: "type" },
+      },
+    });
+    expect(JSON.stringify(info.mock.calls)).not.toContain("private-canary");
+    expect(f.stopSource).not.toHaveBeenCalled();
+    expect(f.start).not.toHaveBeenCalled();
+  } finally {
+    info.mockRestore();
+  }
+});
+
+it("relays dependency-load failure only after successful exact source authorization", async () => {
+  const f = fixture();
+  const info = vi.spyOn(console, "info").mockImplementation(() => {});
+  try {
+    const response = await runtime.handleTerminalRecoveryRequest(
+      {
+        payload: { recoveryPhase: "inspect-source", sourceObservation: {} },
+        auth: actor,
+        forwarded: true,
+        ports: {
+          ...f.ports,
+          authorizeSourceObservation: () =>
+            Promise.resolve({ ownerRunId: "old-native", logicalSessionId: "logical" }),
+        },
+      },
+      () => Promise.reject(new ReferenceError("private-canary-module")),
+    );
+    expect(response.status).toBe(202);
+    expect(await response.json()).toMatchObject({
+      sourceDiagnostic: {
+        collectionKind: "failed",
+        collectionStage: "dependencies",
+        collectionErrorCategory: "reference",
+        anchorRead: {
+          outcome: "failed",
+          stage: "dependencies",
+          errorCategory: "reference",
+          status: null,
+        },
+      },
+    });
+    expect(f.collect).not.toHaveBeenCalled();
+    expect(f.stopSource).not.toHaveBeenCalled();
+    expect(f.start).not.toHaveBeenCalled();
+    expect(JSON.stringify(info.mock.calls)).not.toContain("private-canary");
+  } finally {
+    info.mockRestore();
+  }
 });
