@@ -165,7 +165,7 @@ export const createNativeTargetOnboardingService =
           await deps.readApproval(
             await authorize(input, record.appId),
             record,
-            undefined,
+            input.callId,
             workload,
           ),
         ),
@@ -237,7 +237,7 @@ export const createNativeTargetOnboardingService =
           await deps.readApproval(
             await authorize(input, prepared.appId),
             row.record,
-            undefined,
+            input.callId,
             workload,
           ),
         );

@@ -694,6 +694,15 @@ fail by dropping its audit history. A lost rejection receipt still requires
 trusted attempt-specific evidence and normal CAS reconciliation; expiration
 or a project-name lookup alone never authorizes a second POST.
 
+Native-target preparation consumes positive approval for its current trusted
+tool-call identity, including every registry approval recheck. Multiple approved
+invocations of the same unchanged plan retain their separate receipts; an old
+approval cannot authorize a pending new invocation. Two approved requests for
+one call remain ambiguous. Cancellation for the exact plan remains dominant
+across invocations, and complete authenticated history plus current owner and
+plan checks are still required. No receipt or checkpoint is discarded to make
+approval selection succeed.
+
 Accepted app workflow facts survive internal notes and new design drafts. Recording
 a draft does not silently replace the selected specification or discard its build,
 validation, review or publication receipts. Explicitly accepting a different AppSpec
