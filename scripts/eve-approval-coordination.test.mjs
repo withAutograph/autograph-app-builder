@@ -676,3 +676,115 @@ it.each([400, 503])(
     }
   },
 );
+
+it.each(["generic", "typed"])(
+  "normalizes %s cancellation during the real response authorizer without settling or dispatching",
+  async (reasonKind) => {
+    const { createToolLoopHarness } = await import(`${sdk}harness/tool-loop.js`);
+    const { TurnCancelledError, isTurnCancellation } = await import(
+      `${sdk}harness/turn-cancellation.js`
+    );
+    const { appendPendingInputBatch } = await import(`${sdk}harness/pending-input-batches.js`);
+    const { createApprovalCandidate, getApprovalAuditState } = await import(
+      `${sdk}harness/approval-candidates.js`
+    );
+    const { ContextContainer, contextStorage } = await import(`${sdk}context/container.js`);
+    const { SessionKey } = await import(`${sdk}context/keys.js`);
+    const { z } = await import("zod");
+    const abort = new AbortController();
+    const reason =
+      reasonKind === "typed"
+        ? new TurnCancelledError("owner cancelled")
+        : new Error("owner cancelled");
+    const auth = { authenticator: "test", principalId: "owner", principalType: "user" };
+    const ctx = new ContextContainer();
+    ctx.set(SessionKey, {
+      sessionId: "cancel-authorizer",
+      auth: { current: auth, initiator: auth },
+      turn: { id: "cancel-turn" },
+    });
+    let authorizations = 0;
+    let executions = 0;
+    let models = 0;
+    const tools = new Map([
+      [
+        "protected",
+        {
+          name: "protected",
+          inputSchema: z.object({}),
+          approval: {
+            request: () => true,
+            response: async () => {
+              authorizations += 1;
+              abort.abort(reason);
+              await Promise.resolve();
+              return { status: "allowed" };
+            },
+          },
+          execute: () => {
+            executions += 1;
+            return "must not execute";
+          },
+        },
+      ],
+    ]);
+    let session = appendPendingInputBatch({
+      session: {
+        agent: { system: "", tools: [], modelReference: { id: "model", provider: "test" } },
+        sessionId: "cancel-authorizer",
+        continuationToken: "token",
+        history: [],
+        compaction: { threshold: 1e6, recentWindowSize: 10 },
+      },
+      requests: [
+        {
+          kind: "tool-approval",
+          requestId: "request-protected",
+          action: { kind: "tool-call", callId: "call-protected", toolName: "protected", input: {} },
+          options: [{ id: "approve", label: "Approve" }],
+          prompt: "Approve",
+          allowFreeform: false,
+          display: "confirmation",
+        },
+      ],
+      responseAuthRequiredRequestIds: ["request-protected"],
+      responseMessages: [],
+    });
+    session = {
+      ...session,
+      state: createApprovalCandidate({
+        state: session.state,
+        candidateIdPrefix: "candidate",
+        requestId: "request-protected",
+        responder: auth,
+        createdAt: Date.now(),
+        expiresAt: Number.MAX_SAFE_INTEGER,
+      }).state,
+    };
+    const before = JSON.stringify(session.state);
+    const run = createToolLoopHarness({
+      tools,
+      abortSignal: abort.signal,
+      resolveModel: () => {
+        models += 1;
+        return Promise.reject(new Error("must not resolve model"));
+      },
+    });
+    await assert.rejects(
+      contextStorage.run(ctx, () => run(session)),
+      (error) => {
+        assert.equal(error.name, "TurnCancelledError");
+        assert.equal(isTurnCancellation(error), true);
+        if (reasonKind === "typed") {
+          assert.equal(error, reason);
+        }
+        return true;
+      },
+    );
+    assert.equal(authorizations, 1);
+    assert.equal(executions, 0);
+    assert.equal(models, 0);
+    assert.equal(JSON.stringify(session.state), before);
+    assert.equal(getApprovalAuditState(session.state).settlements.length, 0);
+  },
+);

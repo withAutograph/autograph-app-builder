@@ -27,21 +27,45 @@ const { dehydrateStepArguments, hydrateStepArguments } = await import(
 const { bootTerminalRecoveryOwnerWithPorts } = await import(
   new URL("execution/session/terminal-recovery-boot.js", sdk).href
 );
+const { createDurableSessionState } = await import(
+  new URL("execution/durable-session-store.js", sdk).href
+);
 const checkpoint = {
   version: 9,
   serializedContext: {
     "eve.sessionId": "logical-fixture",
     "eve.capabilities": { requestInput: true },
   },
-  sessionState: {
-    sessionId: "logical-fixture",
-    history: [],
-    state: { approval: "retained-fixture" },
-  },
+  sessionState: createDurableSessionState({
+    session: {
+      sessionId: "logical-fixture",
+      continuationToken: "fixture-continuation",
+      history: [],
+      state: { approval: "retained-fixture" },
+      agent: { system: "Synthetic serialization fixture", tools: new Map() },
+      compaction: {},
+    },
+  }),
   capabilities: { requestInput: true },
   sessionTimeoutMs: false,
 };
-const descriptor = { logicalSessionId: "logical-fixture" };
+const descriptor = {
+  version: 1,
+  operationId: "fixture-recovery",
+  sourcePublicSessionId: "fixture-source",
+  sourceOwnerRunId: "wrun-fixture-source",
+  sourceAdapterGeneration: 1,
+  logicalSessionId: "logical-fixture",
+  originalAuthoritySessionId: "fixture-source",
+  parentCancellationRevision: 0,
+};
+const provenance = {
+  kind: "committed-turn-output",
+  sourceStepId: "fixture-checkpoint-step",
+  sourceEventId: "evnt_00000000000000000000000001",
+  sourceSlot: 1,
+  checkpointVersion: 1,
+};
 
 const fixture = () => {
   const queue = new Map();
@@ -102,7 +126,17 @@ it("reproduces the member-step receiver failure through the real compiled Workfl
 
 it("serializes the actual terminal boot validation step without its function-bearing ports receiver", async () => {
   const f = fixture();
-  const suspended = bootTerminalRecoveryOwnerWithPorts({ checkpoint, descriptor }, f.ports);
+  const suspended = bootTerminalRecoveryOwnerWithPorts(
+    {
+      kind: "terminal-recovery",
+      checkpoint,
+      descriptor,
+      provenance,
+      activationToken: "fixture-activation",
+      ownerDeploymentId: "fixture-deployment",
+    },
+    f.ports,
+  );
   assert.ok(suspended instanceof Promise);
   const input = f.queuedArguments();
   const encoded = await dehydrateStepArguments(input, "wrun-synthetic", undefined);
