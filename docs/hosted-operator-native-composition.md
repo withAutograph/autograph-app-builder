@@ -703,6 +703,19 @@ across invocations, and complete authenticated history plus current owner and
 plan checks are still required. No receipt or checkpoint is discarded to make
 approval selection succeed.
 
+The journal's first approved plan receipt remains immutable when that exact
+plan is resumed by a later invocation. A fresh independently verified approval
+may have a different request and call ID; it authorizes the current invocation
+without replacing the original plan receipt or requiring an approved-to-approved
+CAS. Pending, foreign-owner, changed-plan or previously cancelled approvals
+remain insufficient. A changed receipt for the same original call is rejected.
+Each claim, dispatch authorization and ready registration still rechecks
+current approval through the trusted native-history port. Saving an accepted
+provider ID remains bound to its exact attempt, lease and prior dispatch
+authorization so a later approval change cannot erase an already-created resource.
+Fresh receipts remain in authenticated native history; prior scopes, attempt
+history and the original journal approval are preserved.
+
 Accepted app workflow facts survive internal notes and new design drafts. Recording
 a draft does not silently replace the selected specification or discard its build,
 validation, review or publication receipts. Explicitly accepting a different AppSpec

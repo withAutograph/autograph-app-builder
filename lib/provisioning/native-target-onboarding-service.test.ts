@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { MessageStreamEvent } from "eve/client";
 import { readPrivateNativeTargetApproval } from "../eve/private-native-target-approval";
-import { createInMemoryNativeTargetOnboardingStore } from "./native-target-onboarding-store";
+import {
+  createInMemoryNativeTargetOnboardingStore,
+  createNativeTargetOnboardingRegistry,
+} from "./native-target-onboarding-store";
 import {
   nativeTargetOnboardingPlanDigest,
   nativeTargetOnboardingPlanSchema,
@@ -97,13 +100,14 @@ const plan = nativeTargetOnboardingPlanSchema.parse({
   retention: { policy: "Until approved deletion" },
   conflictPolicy: "stop-on-conflict",
 });
-const digest = nativeTargetOnboardingPlanDigest(plan);
 const request = () =>
   new Request("https://operator.example/v1/runtime", {
     method: "POST",
     headers: { authorization: "Bearer verified-builder-token" },
   });
-const fixture = (workloadAuthorized = true) => {
+const fixture = (workloadAuthorized = true, selectedPlan = plan) => {
+  const fixturePlan = selectedPlan;
+  const fixtureDigest = nativeTargetOnboardingPlanDigest(fixturePlan);
   const store = createInMemoryNativeTargetOnboardingStore();
   let approved = false;
   let existingConfiguredTarget = false;
@@ -123,10 +127,10 @@ const fixture = (workloadAuthorized = true) => {
       return {
         status: "verified" as const,
         projectId: "project-id",
-        name: plan.project.name,
-        settings: plan.project.projectSettings,
-        protection: plan.project.protection,
-        scopeId: plan.project.teamId,
+        name: fixturePlan.project.name,
+        settings: fixturePlan.project.projectSettings,
+        protection: fixturePlan.project.protection,
+        scopeId: fixturePlan.project.teamId,
       };
     },
   );
@@ -140,10 +144,10 @@ const fixture = (workloadAuthorized = true) => {
     authorize,
     readCapturedRelease: () =>
       Promise.resolve({
-        release: plan.origin.release,
+        release: fixturePlan.origin.release,
         description: {
           version: 1,
-          app: { id: plan.appId, routes: [], workspacePath: "apps/requests" },
+          app: { id: fixturePlan.appId, routes: [], workspacePath: "apps/requests" },
           backend: {
             kind: "generated-postgres",
             authorization: "declared-policy",
@@ -151,8 +155,8 @@ const fixture = (workloadAuthorized = true) => {
             runtime: { databaseEnvironment: "DATABASE_URL" },
             schemaReceipt: null,
             release: {
-              id: plan.origin.release.id,
-              artifactHash: `sha256:${plan.origin.release.schemaSha256}`,
+              id: fixturePlan.origin.release.id,
+              artifactHash: `sha256:${fixturePlan.origin.release.schemaSha256}`,
               directory: "apps/requests",
             },
           },
@@ -166,7 +170,7 @@ const fixture = (workloadAuthorized = true) => {
     resolvePlan: () =>
       existingConfiguredTarget
         ? Promise.reject(new NativeTargetExistingConfiguredTargetError())
-        : Promise.resolve(plan),
+        : Promise.resolve(fixturePlan),
     readApproval: (_owner, _record, _callId, workload) => {
       approvals.push(workload);
       return Promise.resolve(
@@ -174,7 +178,7 @@ const fixture = (workloadAuthorized = true) => {
           ? {
               requestId: "approval",
               callId: "call-one",
-              planDigest: digest,
+              planDigest: fixtureDigest,
               responderPrincipalId: authority.ownerUserId,
               publicSessionId: current.publicSessionId,
               outcome: "approved" as const,
@@ -200,17 +204,22 @@ const fixture = (workloadAuthorized = true) => {
     callId: "call-one",
   };
   const proposal = {
-    appId: plan.appId,
+    appId: fixturePlan.appId,
     project: {
-      name: plan.project.name,
-      teamId: plan.project.teamId,
-      installationId: plan.project.installationId,
-      projectSettings: plan.project.projectSettings,
+      name: fixturePlan.project.name,
+      teamId: fixturePlan.project.teamId,
+      installationId: fixturePlan.project.installationId,
+      projectSettings: fixturePlan.project.projectSettings,
     },
-    branch: plan.branch,
-    conflictPolicy: plan.conflictPolicy,
+    branch: fixturePlan.branch,
+    conflictPolicy: fixturePlan.conflictPolicy,
   };
-  const prepared = { appId: plan.appId, plan, planDigest: digest, operationRef: "" };
+  const prepared = {
+    appId: fixturePlan.appId,
+    plan: fixturePlan,
+    planDigest: fixtureDigest,
+    operationRef: "",
+  };
   const send = async (body: NativeTargetTransportRequest) =>
     await service(request(), nativeTargetTransportRequestSchema.parse(body));
   const planOnce = async () => {
@@ -218,7 +227,7 @@ const fixture = (workloadAuthorized = true) => {
       ...common,
       action: "native-target-plan",
       input: proposal,
-      selectedApp: { appId: plan.appId, appSpecDigest: plan.origin.appSpecDigest },
+      selectedApp: { appId: fixturePlan.appId, appSpecDigest: fixturePlan.origin.appSpecDigest },
     });
     return nativeTargetTransportResponseSchemas["native-target-plan"].parse(await response.json());
   };
@@ -611,6 +620,193 @@ describe("exact native preparation invocation approval", () => {
         expect(f.createProject).toHaveBeenCalledTimes(1);
       } else {
         expect(result.status).toBe("approval-pending");
+        expect(f.createProject).not.toHaveBeenCalled();
+      }
+    },
+  );
+});
+
+describe("retired attempt preparation with immutable initial approval", () => {
+  it.each(["approved", "pending", "cancelled"] as const)(
+    "consumes fresh %s history from the exact revision-seven shape",
+    async (outcome) => {
+      const rescope = (prior: typeof plan, profile: string) =>
+        nativeTargetOnboardingPlanSchema.parse({
+          ...prior,
+          resourceProfileId: profile,
+          resourceProfileAuthorityDigest: (profile === "scope-b" ? "e" : "f").repeat(64),
+          resourceSelectionRevision: (prior.resourceSelectionRevision ?? 0) + 1,
+          appDatabase: { ...prior.appDatabase, resourceId: `${profile}-resource` },
+          nativeNeon: {
+            ...prior.nativeNeon,
+            scope: {
+              ...prior.nativeNeon.scope,
+              branchId: `${profile}-branch`,
+              endpointId: `${profile}-endpoint`,
+              hostname: `${profile}.neon.tech`,
+            },
+          },
+        });
+      const first = plan;
+      const second = rescope(first, "scope-b");
+      const selected = rescope(second, "scope-c");
+      const f = fixture(true, selected);
+      const history: MessageStreamEvent[] = [];
+      const freshHistory: MessageStreamEvent[] = [];
+      let operationRef = "";
+      const readActualApproval: NativeTargetOnboardingServiceDependencies["readApproval"] = async (
+        owner,
+        record,
+        callId,
+        _workload,
+      ) => {
+        const result = await readPrivateNativeTargetApproval({
+          owner,
+          record,
+          ...(callId === undefined ? {} : { callId }),
+          historyOwner: owner.historyOwner,
+          assertOwner: async () => {
+            await f.authorize();
+          },
+          readHistory: (start, observe) => {
+            for (const event of history.slice(start)) {
+              observe(event);
+            }
+            return Promise.resolve({
+              complete: true,
+              nativeTailIndex: history.length,
+              nextNativeIndex: history.length,
+            });
+          },
+        });
+        return result.status === "pending" ? null : result.proof;
+      };
+      const registry = createNativeTargetOnboardingRegistry({
+        store: f.store,
+        authorize: () => f.authorize(),
+        assertPlanOrigin: () => Promise.resolve(),
+        readApproval: async (_owner, record) =>
+          await readActualApproval(await f.authorize(), record, "old-call", {
+            authorization: "Bearer verified-builder-token",
+            signal: new AbortController().signal,
+          }),
+        now: () => new Date("2026-10-30T20:00:00.000Z"),
+      });
+      const reserved = await registry.reservePlan("seed", first);
+      operationRef = reserved.requestId;
+      await registry.supersedePlannedScope("seed", second, nativeTargetOnboardingPlanDigest(first));
+      await registry.supersedePlannedScope(
+        "seed",
+        selected,
+        nativeTargetOnboardingPlanDigest(second),
+      );
+      const prepared = {
+        appId: selected.appId,
+        plan: selected,
+        planDigest: nativeTargetOnboardingPlanDigest(selected),
+        operationRef,
+      };
+      for (const [requestId, callId, result] of [
+        ["old-request", "old-call", "approved"],
+        ["fresh-request", "fresh-call", outcome],
+      ] as const) {
+        const events = callId === "old-call" ? history : freshHistory;
+        events.push({
+          type: "input.requested",
+          meta: { id: `request-${requestId}`, at: "2026-10-30T20:00:00.000Z" },
+          data: {
+            sequence: 1,
+            stepIndex: 0,
+            turnId: "turn",
+            requests: [
+              {
+                kind: "tool-approval",
+                requestId,
+                prompt: "Approve saved plan",
+                action: {
+                  kind: "tool-call",
+                  toolName: "prepare-app-native-target",
+                  callId,
+                  input: prepared,
+                },
+              },
+            ],
+          },
+        });
+        if (result !== "pending") {
+          events.push({
+            type: "approval.settled",
+            meta: { id: `settled-${requestId}`, at: "2026-10-30T20:00:00.000Z" },
+            data: {
+              sequence: 2,
+              stepIndex: 0,
+              turnId: "turn",
+              requestId,
+              responderPrincipalId: authority.ownerUserId,
+              outcome: result,
+            },
+          });
+        }
+      }
+      await registry.recordApproval("seed", selected.appId);
+      const oldAttempt = {
+        attemptId: "11111111-1111-4111-8111-111111111111",
+        leaseId: "22222222-2222-4222-8222-222222222222",
+        candidateName: selected.project.name,
+        startedAt: "2026-10-30T20:00:00.000Z",
+        leaseExpiresAt: "2026-10-30T20:10:00.000Z",
+      };
+      await registry.claimAttempt("seed", selected.appId, oldAttempt);
+      await registry.authorizeAttempt(
+        "seed",
+        selected.appId,
+        oldAttempt.attemptId,
+        oldAttempt.leaseId,
+      );
+      await registry.recordNotCreated(
+        "seed",
+        selected.appId,
+        oldAttempt.attemptId,
+        "provider_validation_failed",
+      );
+      const before = await registry.read("seed", selected.appId);
+      expect(before?.revision).toBe(7);
+      expect(before?.record.stage).toBe("approved");
+      expect(before?.record.priorPlannedScopes).toHaveLength(2);
+      expect(before?.record.previousAttempts).toHaveLength(1);
+      history.push(...freshHistory);
+      f.dependencies.readApproval = readActualApproval;
+      const response = await f.send({
+        ...f.common,
+        callId: "fresh-call",
+        action: "native-target-prepare",
+        input: prepared,
+      });
+      const result = nativeTargetTransportResponseSchemas["native-target-prepare"].parse(
+        await response.json(),
+      );
+      const after = await registry.read("seed", selected.appId);
+      expect(after?.record.priorPlannedScopes).toEqual(before?.record.priorPlannedScopes);
+      expect(after?.record.previousAttempts).toEqual(before?.record.previousAttempts);
+      if (outcome === "approved") {
+        expect(result.status).toBe("ready");
+        expect(f.createProject).toHaveBeenCalledTimes(1);
+        expect(after?.record).toMatchObject({
+          approval: { requestId: "old-request", callId: "old-call" },
+        });
+        await f.send({
+          ...f.common,
+          callId: "fresh-call",
+          action: "native-target-prepare",
+          input: prepared,
+        });
+        expect(f.createProject).toHaveBeenCalledTimes(1);
+      } else if (outcome === "pending") {
+        expect(result.status).toBe("approval-pending");
+        expect(f.createProject).not.toHaveBeenCalled();
+        expect(after).toEqual(before);
+      } else {
+        expect(result.status).toBe("cancelled");
         expect(f.createProject).not.toHaveBeenCalled();
       }
     },
