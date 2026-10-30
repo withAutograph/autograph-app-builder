@@ -430,3 +430,31 @@ describe("planned native resource supersession", () => {
     expect(["creating", "planned"]).toContain(row?.record.stage);
   });
 });
+
+describe("retirement of rescope attempt", () => {
+  it("preserves prior planned scopes after a definitive rejected creation", async () => {
+    const f = fixture();
+    const old = plan();
+    const next = rescope(old);
+    await f.registry.reservePlan(invocation, old);
+    await f.registry.supersedePlannedScope(invocation, next, nativeTargetOnboardingPlanDigest(old));
+    f.approve(next);
+    await f.registry.recordApproval(invocation, old.appId);
+    await f.registry.claimAttempt(invocation, old.appId, attempt());
+    await f.registry.authorizeAttempt(
+      invocation,
+      old.appId,
+      attempt().attemptId,
+      attempt().leaseId,
+    );
+    const before = await f.read();
+    const result = await f.registry.recordNotCreated(
+      invocation,
+      old.appId,
+      attempt().attemptId,
+      "provider_validation_failed",
+    );
+    expect(result.record.stage).toBe("approved");
+    expect(result.record.priorPlannedScopes).toEqual(before?.record.priorPlannedScopes);
+  });
+});

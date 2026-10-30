@@ -844,6 +844,7 @@ export const createNativeTargetOnboardingRegistry = <Invocation>(
         approval: record.approval,
         previousAttempts: [...record.previousAttempts, { ...record.attempt, reason }],
         priorCancellations: record.priorCancellations,
+        priorPlannedScopes: record.priorPlannedScopes,
       });
     },
     /** Trusted independent GET adapter supplies proof; matching GET without a saved2xx cannot register. */

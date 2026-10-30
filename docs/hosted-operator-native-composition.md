@@ -679,6 +679,21 @@ uncertain and ready operations retain their existing reconciliation rules and
 cannot be replaced through this path. The revised plan requires fresh normal
 in-product approval before any provider creation.
 
+The Vercel create-project request contains only fields supported by `POST
+/v11/projects`. In particular, `sourceFilesOutsideRootDirectory` is an
+update-only field and must not be sent to creation. New Vercel projects default
+it to enabled; independent exact-ID readback still checks the requested value
+before registration. A missing or different value remains a candidate, never a
+ready target. This does not authorize patching or adopting an existing project.
+See the [create API](https://vercel.com/docs/rest-api/projects/create-a-new-project)
+and [monorepo defaults](https://vercel.com/docs/monorepos/monorepo-faq).
+
+A definitive rejected create retires its exact attempt while preserving all
+prior planned scopes and approvals. A rescope must not make this retirement
+fail by dropping its audit history. A lost rejection receipt still requires
+trusted attempt-specific evidence and normal CAS reconciliation; expiration
+or a project-name lookup alone never authorizes a second POST.
+
 Accepted app workflow facts survive internal notes and new design drafts. Recording
 a draft does not silently replace the selected specification or discard its build,
 validation, review or publication receipts. Explicitly accepting a different AppSpec
