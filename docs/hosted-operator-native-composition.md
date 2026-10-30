@@ -84,6 +84,11 @@ usable hosted Preview.
 Private planning failures report only a closed stage, error class, known code,
 and hashed session identity. They preserve the original result or error and never
 log error messages, stacks, provider responses, credentials, or app content.
+Native-target clients also recognize the existing typed `blocked` response from
+the shared operator error boundary, including its literal `unknown` app identity.
+They preserve its closed error code as a failure, never as an approval or readiness
+result. Malformed responses and concrete foreign-app responses remain unavailable;
+this handling does not resend a request or relax owner verification.
 Browser acceptance receives `APP_TEST_BASE_URL` only for `test-e2e`, from the same
 owner-verified native Preview projection used to prepare runtime execution. This
 URL handoff supplies no actors, sessions, roles, or authenticated behavior proof.

@@ -324,6 +324,122 @@ describe("native target protected client", () => {
       warn.mockRestore();
     }
   });
+  it.each([
+    "authorization_required",
+    "resource_mismatch",
+    "reconciliation_required",
+    "operator_unavailable",
+  ] as const)(
+    "preserves typed blocked operator code %s without repeating or exposing private data",
+    async (code) => {
+      const f = fixture();
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        f.request.mockResolvedValueOnce(
+          Response.json({
+            appId: f.input.appId,
+            authenticatedBehavior: "unassessed",
+            status: "blocked",
+            code,
+          }),
+        );
+        await expect(f.client.hasApproval(f.input, f.ctx)).rejects.toMatchObject({
+          name: "HostedOperatorError",
+          code,
+        });
+        expect(f.request).toHaveBeenCalledTimes(1);
+        expect(warn.mock.calls).toEqual([
+          [
+            "[builder:native-target-transport]",
+            { action: "native-target-approval-read", failure: code },
+          ],
+        ]);
+        expect(JSON.stringify(warn.mock.calls)).not.toContain(f.input.operationRef);
+        expect(JSON.stringify(warn.mock.calls)).not.toContain("synthetic-oidc");
+      } finally {
+        warn.mockRestore();
+      }
+    },
+  );
+  it("preserves the generic handler's typed blocked envelope with unknown app identity", async () => {
+    const f = fixture();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      f.request.mockResolvedValueOnce(
+        Response.json({
+          appId: "unknown",
+          authenticatedBehavior: "unassessed",
+          status: "blocked",
+          code: "resource_mismatch",
+        }),
+      );
+      await expect(f.client.prepare(f.input, f.ctx)).rejects.toMatchObject({
+        name: "HostedOperatorError",
+        code: "resource_mismatch",
+      });
+      expect(f.request).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls).toEqual([
+        [
+          "[builder:native-target-transport]",
+          { action: "native-target-prepare", failure: "resource_mismatch" },
+        ],
+      ]);
+      expect(JSON.stringify(warn.mock.calls)).not.toContain(f.input.operationRef);
+      expect(JSON.stringify(warn.mock.calls)).not.toContain("synthetic-oidc");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+  it.each([
+    { status: "blocked", code: "authorization_required" },
+    { authenticatedBehavior: "unassessed", status: "blocked", code: "unknown-private-code" },
+    {
+      authenticatedBehavior: "unassessed",
+      status: "blocked",
+      code: "resource_mismatch",
+      secret: "private-response",
+    },
+    { authenticatedBehavior: "unassessed", status: "blocked" },
+    { authenticatedBehavior: "unassessed", status: "ready", code: "resource_mismatch" },
+  ])("does not accept malformed, unknown or nonblocked operator results", async (result) => {
+    const f = fixture();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      f.request.mockResolvedValueOnce(Response.json({ appId: f.input.appId, ...result }));
+      await expect(f.client.prepare(f.input, f.ctx)).rejects.toMatchObject({
+        code: "operator_unavailable",
+      });
+      expect(f.request).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls).toEqual([
+        [
+          "[builder:native-target-transport]",
+          { action: "native-target-prepare", failure: "invalid_response" },
+        ],
+      ]);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+  it("does not propagate a blocked response for another app", async () => {
+    const f = fixture();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      f.request.mockResolvedValueOnce(
+        Response.json({
+          appId: "another-app",
+          authenticatedBehavior: "unassessed",
+          status: "blocked",
+          code: "resource_mismatch",
+        }),
+      );
+      await expect(f.client.prepare(f.input, f.ctx)).rejects.toMatchObject({
+        code: "operator_unavailable",
+      });
+      expect(f.request).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
+  });
   it("accepts only exact terminal approval, with explicit pending and cancellation", async () => {
     const f = fixture();
     f.setOutput({ status: "pending" });
