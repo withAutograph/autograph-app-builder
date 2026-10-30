@@ -3,6 +3,9 @@ import {
   readParticipantSuccessorPredecessor,
 } from "./hosted-operator-participant-successor";
 import { restorePendingAccountPreparation } from "./hosted-operator-pending-account-restoration";
+import { inspectUnapprovedAppSuccessor } from "./hosted-operator-unapproved-app-successor";
+import { createUnapprovedParticipantPlan } from "./hosted-operator-unapproved-participant-plan";
+import { readUnapprovedCapturePredecessor } from "./hosted-operator-unapproved-capture-history";
 import { readOperatorPreparationProgress } from "./hosted-operator-preparation-progress";
 import {
   retainCompletedParticipantGateway,
@@ -627,6 +630,62 @@ const handlePlanOperation = async (
       status: "planned",
     });
   }
+  if (input.operation === "prepare") {
+    const saved = await deps.store.read(context);
+    const current = saved?.record.operator;
+    const plan = current?.plan;
+    if (
+      saved !== undefined &&
+      current !== undefined &&
+      plan?.normalActorCapturePredecessor !== undefined &&
+      saved.record.approvedByCallId === UNAPPROVED_PLAN
+    ) {
+      const prior = readUnapprovedCapturePredecessor(saved.record, plan, now());
+      if (
+        prior === undefined ||
+        !sameOperatorSelection(plan.selection, input.selection) ||
+        (input.normalActorProgram !== undefined &&
+          !isDeepStrictEqual(input.normalActorProgram, plan.normalActorProgram)) ||
+        input.authSignupPolicy !== undefined
+      ) {
+        throw new HostedOperatorError("operation_in_progress");
+      }
+      await deps.assertAuthorized({ ...context, plan, purpose: "planning" });
+      await assertCompletedParticipantBootstrapApproval(
+        context,
+        prior.bootstrap,
+        deps.readApproval,
+      );
+      const account = prior.account;
+      const approved = await deps.readApproval({
+        ...context,
+        action: "prepare",
+        callId: account.accountApprovedByCallId,
+        planDigest: account.accountPlanDigest,
+      });
+      if (
+        approved?.approved !== true ||
+        approved.action !== "prepare" ||
+        approved.callId !== account.accountApprovedByCallId ||
+        approved.planDigest !== account.accountPlanDigest ||
+        approved.approvalId !== account.accountApprovalId
+      ) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      const fresh = await deps.store.read(context);
+      if (fresh?.revision !== saved.revision) {
+        throw new HostedOperatorError("operation_in_progress");
+      }
+      return response({
+        appId,
+        authenticatedBehavior: "unassessed",
+        operationRef: current.operationRef,
+        plan,
+        planDigest: current.planDigest,
+        status: "planned",
+      });
+    }
+  }
   // A saved unapproved profile repair is already a concrete proposal. Return it
   // before fresh composition; approval and all effects still use execute's checks.
   if (
@@ -845,6 +904,52 @@ const handlePlanOperation = async (
     "successor_prior_read",
     async () => await deps.store.read(context),
   );
+  const captureSuccessor =
+    plan.normalActorProgram === undefined || successorPrior === undefined
+      ? undefined
+      : inspectUnapprovedAppSuccessor(
+          successorPrior.record,
+          context.target,
+          plan.normalActorProgram,
+          now(),
+        );
+  if (plan.normalActorCapturePredecessor !== undefined) {
+    if (
+      captureSuccessor === undefined ||
+      plan.normalActorProgram === undefined ||
+      operatorPlanDigest(
+        createUnapprovedParticipantPlan(captureSuccessor, plan.normalActorProgram),
+      ) !== operatorPlanDigest(plan)
+    ) {
+      throw new HostedOperatorError("operation_in_progress");
+    }
+    await deps.assertAuthorized({
+      ...context,
+      plan: captureSuccessor.account.accountPlan,
+      purpose: "planning",
+    });
+    await assertCompletedParticipantBootstrapApproval(
+      context,
+      captureSuccessor.bootstrap,
+      deps.readApproval,
+    );
+    const account = captureSuccessor.account;
+    const approved = await deps.readApproval({
+      ...context,
+      action: "prepare",
+      callId: account.accountApprovedByCallId,
+      planDigest: account.accountPlanDigest,
+    });
+    if (
+      approved?.approved !== true ||
+      approved.action !== "prepare" ||
+      approved.callId !== account.accountApprovedByCallId ||
+      approved.planDigest !== account.accountPlanDigest ||
+      approved.approvalId !== account.accountApprovalId
+    ) {
+      throw new HostedOperatorError("authorization_required");
+    }
+  }
   const {
     participantSuccessor,
     sharedHostSuccessor,
@@ -1055,6 +1160,46 @@ const handlePlanOperation = async (
         now,
         store: deps.store,
         beforeUpdate: async (record: HostedRuntimeJournalRecord) => {
+          if (plan.normalActorCapturePredecessor !== undefined) {
+            const fresh =
+              plan.normalActorProgram === undefined
+                ? undefined
+                : inspectUnapprovedAppSuccessor(
+                    record,
+                    context.target,
+                    plan.normalActorProgram,
+                    now(),
+                  );
+            if (fresh === undefined || !isDeepStrictEqual(record, successorPrior?.record)) {
+              throw new HostedOperatorError("operation_in_progress");
+            }
+            await deps.assertAuthorized({
+              ...context,
+              plan: fresh.account.accountPlan,
+              purpose: "planning",
+            });
+            await assertCompletedParticipantBootstrapApproval(
+              context,
+              fresh.bootstrap,
+              deps.readApproval,
+            );
+            const account = fresh.account;
+            const approval = await deps.readApproval({
+              ...context,
+              action: "prepare",
+              callId: account.accountApprovedByCallId,
+              planDigest: account.accountPlanDigest,
+            });
+            if (
+              approval?.approved !== true ||
+              approval.action !== "prepare" ||
+              approval.callId !== account.accountApprovedByCallId ||
+              approval.planDigest !== account.accountPlanDigest ||
+              approval.approvalId !== account.accountApprovalId
+            ) {
+              throw new HostedOperatorError("authorization_required");
+            }
+          }
           if (
             participantSuccessor ||
             installerSuccessor ||
@@ -1095,6 +1240,20 @@ const handlePlanOperation = async (
           }
           if (record.operator.planDigest === planDigest) {
             return record;
+          }
+          const captureTransition =
+            plan.normalActorCapturePredecessor !== undefined &&
+            captureSuccessor !== undefined &&
+            isDeepStrictEqual(record, successorPrior?.record) &&
+            plan.normalActorProgram !== undefined &&
+            inspectUnapprovedAppSuccessor(
+              record,
+              context.target,
+              plan.normalActorProgram,
+              now(),
+            ) !== undefined;
+          if (plan.normalActorCapturePredecessor !== undefined && !captureTransition) {
+            throw new HostedOperatorError("operation_in_progress");
           }
           const participantProgramSuccessor =
             participantSuccessor && isParticipantProgramSuccessor(record, plan, now());
@@ -1187,6 +1346,7 @@ const handlePlanOperation = async (
             !projectSettingsSuccessor &&
             !retainedRenewalSuccessor &&
             !readyDeliverySuccessor &&
+            !captureTransition &&
             (record.leaseId !== undefined ||
               record.operator.pendingEffectId !== undefined ||
               record.operator.pendingEffectAttempt !== undefined ||
@@ -1222,7 +1382,8 @@ const handlePlanOperation = async (
             if (
               plan.normalActorProgram === undefined ||
               (preparation.programDigest !== normalActorProgramDigest(plan.normalActorProgram) &&
-                !participantProgramSuccessor)
+                !participantProgramSuccessor &&
+                !captureTransition)
             ) {
               throw new HostedOperatorError("resource_mismatch");
             }
@@ -1474,6 +1635,24 @@ const handlePlanOperation = async (
                 : undefined,
             status: "pending" as const,
             step: "reserved" as const,
+            ...(captureTransition &&
+            captureSuccessor !== undefined &&
+            record.retainedAuth !== undefined
+              ? {
+                  unapprovedAppProposalHistory: [
+                    ...(record.unapprovedAppProposalHistory ?? []),
+                    {
+                      approvedByCallId: "operator:unapproved-plan" as const,
+                      operator: record.operator,
+                      preparation: captureSuccessor.account,
+                      retainedAuth: record.retainedAuth,
+                      ...(record.retainedParticipantGateway === undefined
+                        ? {}
+                        : { retainedParticipantGateway: record.retainedParticipantGateway }),
+                    },
+                  ],
+                }
+              : {}),
           };
           delete next.proof;
           if (
@@ -1483,7 +1662,8 @@ const handlePlanOperation = async (
             installerSourceSuccessor ||
             projectSettingsSuccessor ||
             retainedRenewalSuccessor ||
-            readyDeliverySuccessor
+            readyDeliverySuccessor ||
+            captureTransition
           ) {
             delete next.leaseId;
             delete next.leaseExpiresAt;
@@ -2072,7 +2252,11 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           ) {
             throw new HostedOperatorError("operation_in_progress");
           }
-          if (value.accountPreparation !== undefined && plan.normalActorPredecessor === undefined) {
+          if (
+            value.accountPreparation !== undefined &&
+            plan.normalActorPredecessor === undefined &&
+            plan.normalActorCapturePredecessor === undefined
+          ) {
             return value;
           }
           return {

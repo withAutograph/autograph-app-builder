@@ -1,4 +1,7 @@
 import { createParticipantSuccessorPlan } from "./hosted-operator-participant-successor";
+import { inspectUnapprovedAppSuccessor } from "./hosted-operator-unapproved-app-successor";
+import { createUnapprovedParticipantPlan } from "./hosted-operator-unapproved-participant-plan";
+import { readUnapprovedCapturePredecessor } from "./hosted-operator-unapproved-capture-history";
 import {
   readAppGatewaySourceContinuationPlan,
   readAppGatewaySourcePredecessor,
@@ -741,6 +744,51 @@ const readAppGatewaySourcePlanningContinuation = async (
   return structuredClone(fresh);
 };
 
+/** Resolve retained bootstrap only for the exact completed additive account successor. */
+// oxlint-disable-next-line eslint/complexity -- Keep the exact account, scope and identity checks together.
+export const readCompletedCaptureBootstrap = (
+  desired: HostedOperatorPlan,
+  record: HostedRuntimeJournalRecord | undefined,
+) => {
+  const current = record?.operator;
+  const account = record?.accountPreparation;
+  /* oxlint-disable sonarjs/expression-complexity -- All retained successor scope checks are conjunctive. */
+  if (
+    record === undefined ||
+    current === undefined ||
+    account === undefined ||
+    record.status !== "participants-prepared" ||
+    account.accountsCompletedAt === undefined ||
+    record.leaseId !== undefined ||
+    record.executionObservation?.state === "running" ||
+    current.pendingEffectId !== undefined ||
+    current.pendingEffectAttempt !== undefined ||
+    current.approvalId === undefined ||
+    record.approvedByCallId !== account.accountApprovedByCallId ||
+    current.approvalId !== account.accountApprovalId ||
+    current.operationRef !== account.accountOperationRef ||
+    current.planDigest !== account.accountPlanDigest ||
+    current.planDigest !== operatorPlanDigest(current.plan) ||
+    operatorPlanDigest(account.accountPlan) !== current.planDigest ||
+    desired.normalActorProgram === undefined ||
+    normalActorProgramDigest(desired.normalActorProgram) !== account.programDigest ||
+    !sameOperatorSelection(desired.selection, record.request) ||
+    !isDeepStrictEqual(desired.appDatabase, current.plan.appDatabase) ||
+    !isDeepStrictEqual(desired.authDatabase, current.plan.authDatabase) ||
+    !isDeepStrictEqual(desired.neon, current.plan.neon) ||
+    !isDeepStrictEqual(desired.publicGateway, current.plan.publicGateway) ||
+    !isDeepStrictEqual(
+      desired.deploymentBoundary?.authority,
+      current.plan.deploymentBoundary?.authority,
+    ) ||
+    desired.deploymentBoundary?.teamId !== current.plan.deploymentBoundary?.teamId
+  ) {
+    return undefined;
+  }
+  /* oxlint-enable sonarjs/expression-complexity */
+  return readUnapprovedCapturePredecessor(record, account.accountPlan, Date.now());
+};
+
 const createCompletedParticipantBootstrapHandoff = (
   plan: HostedOperatorPlan,
   record: HostedRuntimeJournalRecord | undefined,
@@ -748,7 +796,10 @@ const createCompletedParticipantBootstrapHandoff = (
   controlPlane: Pick<ControlPlane, "assertCanonicalOwner" | "readApproval" | "store">,
   eligible: boolean,
 ) => {
-  const bootstrap = eligible ? inspectPlanningParticipantBootstrap(plan, record) : undefined;
+  const capture = eligible ? readCompletedCaptureBootstrap(plan, record) : undefined;
+  const bootstrap = eligible
+    ? (inspectPlanningParticipantBootstrap(plan, record) ?? capture?.bootstrap)
+    : undefined;
   return bootstrap === undefined
     ? undefined
     : {
@@ -760,9 +811,41 @@ const createCompletedParticipantBootstrapHandoff = (
             bootstrap,
             controlPlane.readApproval,
           );
+          if (capture !== undefined) {
+            const preparations = [capture.account, record?.accountPreparation];
+            await Promise.all(
+              preparations.map(async (preparation) => {
+                if (preparation === undefined) {
+                  throw new HostedOperatorError("authorization_required");
+                }
+                const approval = await controlPlane.readApproval({
+                  ...context,
+                  action: "prepare",
+                  callId: preparation.accountApprovedByCallId,
+                  planDigest: preparation.accountPlanDigest,
+                });
+                if (
+                  ![
+                    approval?.approved,
+                    approval?.action === "prepare",
+                    approval?.callId === preparation.accountApprovedByCallId,
+                    approval?.planDigest === preparation.accountPlanDigest,
+                    approval?.approvalId === preparation.accountApprovalId,
+                  ].every(Boolean)
+                ) {
+                  throw new HostedOperatorError("authorization_required");
+                }
+              }),
+            );
+          }
           const latest = await controlPlane.store.read(context);
+          const fresh =
+            inspectPlanningParticipantBootstrap(plan, latest?.record) ??
+            readCompletedCaptureBootstrap(plan, latest?.record)?.bootstrap;
           if (
-            !isDeepStrictEqual(inspectPlanningParticipantBootstrap(plan, latest?.record), bootstrap)
+            !isDeepStrictEqual(fresh, bootstrap) ||
+            (capture !== undefined &&
+              !isDeepStrictEqual(readCompletedCaptureBootstrap(plan, latest?.record), capture))
           ) {
             throw new HostedOperatorError(OPERATION_IN_PROGRESS);
           }
@@ -1391,6 +1474,18 @@ export const composeHostedOperatorDependencies = (
       async () => await controlPlane.store.read(context),
     );
     if (context.action === "prepare") {
+      if (context.normalActorProgram !== undefined && context.authSignupPolicy === undefined) {
+        const pending = inspectUnapprovedAppSuccessor(
+          current?.record,
+          context.target,
+          context.normalActorProgram,
+          Date.now(),
+        );
+        if (pending !== undefined) {
+          await controlPlane.assertPlanningAuthorized(context);
+          return createUnapprovedParticipantPlan(pending, context.normalActorProgram);
+        }
+      }
       const participantSuccessor = createParticipantSuccessorPlan(
         current?.record,
         context.normalActorProgram,
@@ -1858,15 +1953,20 @@ export const composeHostedOperatorDependencies = (
       gatewayPlan.normalActorProgram === undefined
         ? undefined
         : inspectPlanningParticipantBootstrapPreparation(gatewayPlan, current?.record);
+    const captureBootstrap = readCompletedCaptureBootstrap(gatewayPlan, current?.record);
+    let availableBootstrap = bootstrapPreparation;
+    if (availableBootstrap?.gatewayPrepared !== true && captureBootstrap !== undefined) {
+      availableBootstrap = { auth: captureBootstrap.bootstrap.auth, gatewayPrepared: true };
+    }
     if (
-      bootstrapPreparation?.gatewayPrepared === true &&
-      bootstrapPreparation.auth !== undefined &&
+      availableBootstrap?.gatewayPrepared === true &&
+      availableBootstrap.auth !== undefined &&
       current?.record.operator !== undefined
     ) {
       const verification = {
         ...context,
         // Read readiness under the completed original Auth approval, independent of unfinished app effects.
-        plan: bootstrapPreparation.auth.plan,
+        plan: availableBootstrap.auth.plan,
         privateState: current.record.privateState,
         assertCurrent: async () => {
           await controlPlane.assertPlanningAuthorized(context);

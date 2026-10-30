@@ -411,6 +411,42 @@ const currentBootstrapFixture = async () => {
 };
 
 describe("retained actual normal actor journal", () => {
+  it("rejects participant preparation when captured-account provenance is omitted or changed", async () => {
+    const pointer = {
+      preparation: {
+        accountOperationRef,
+        programDigest: preparationInput.programDigest,
+        accountPlanDigest: preparationInput.accountPlanDigest,
+        accountApprovalId: preparationInput.accountApprovalId,
+        accountApprovedByCallId: preparationInput.accountApprovedByCallId,
+      },
+      bootstrapOperationRef: "33333333-3333-4333-8333-333333333333",
+      bootstrapPlanDigest: "a".repeat(64),
+      bootstrapApprovalId: "bootstrap-approval",
+      bootstrapApprovedByCallId: "bootstrap-call",
+    };
+    const successorPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      normalActorCapturePredecessor: pointer,
+    });
+    const successor = {
+      ...preparationInput,
+      accountPlan: successorPlan,
+      accountPlanDigest: operatorPlanDigest(successorPlan),
+    };
+    const value = fixture();
+    await expect(value.journal.retain(context, successor)).rejects.toThrow(
+      "normal_actor_journal_authority_mismatch",
+    );
+    await expect(
+      value.journal.retain(context, {
+        ...successor,
+        capturePredecessor: { ...pointer, bootstrapApprovalId: "other-approval" },
+      }),
+    ).rejects.toThrow("normal_actor_journal_authority_mismatch");
+    expect(value.writes).toBe(0);
+  });
+
   it("checks the actual lease and fence without renewing or mutating the CAS snapshot", async () => {
     const value = fixture();
     const now = Date.now();

@@ -162,6 +162,19 @@ const hostedRuntimeJournalRecordBaseSchema = z.strictObject({
 });
 
 export const hostedRuntimeJournalRecordSchema = hostedRuntimeJournalRecordBaseSchema.extend({
+  /** Immutable unapproved app proposal and its real approved prerequisites. This history
+   * never grants approval to the app proposal or implies its effects were absent. */
+  unapprovedAppProposalHistory: z
+    .array(
+      z.strictObject({
+        approvedByCallId: z.literal("operator:unapproved-plan"),
+        operator: hostedOperatorRecordSchema,
+        preparation: normalActorAccountPreparationSchema,
+        retainedAuth: retainedOperatorAuthSchema,
+        retainedParticipantGateway: retainedParticipantGatewaySchema.optional(),
+      }),
+    )
+    .optional(),
   /** Immutable prerequisites displaced only by exact pending-account restoration. */
   pendingAccountRestorations: z
     .array(
