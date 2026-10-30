@@ -342,4 +342,30 @@ describe("protected native target onboarding service", () => {
     });
     expect(f.createProject).not.toHaveBeenCalled();
   });
+  it("returns the exact retained plan through the service when selectedApp is absent", async () => {
+    const f = fixture();
+    const retained = await f.planOnce();
+    const response = await f.send({ ...f.common, action: "native-target-plan", input: f.proposal });
+    const result = nativeTargetTransportResponseSchemas["native-target-plan"].parse(
+      await response.json(),
+    );
+    expect(result.operationRef).toBe(retained.operationRef);
+    expect(result.planDigest).toBe(retained.planDigest);
+    expect(f.createProject).not.toHaveBeenCalled();
+    expect(f.events).not.toContain("create");
+  });
+  it("does not create a missing plan or expose a retained plan after owner changes", async () => {
+    const empty = fixture();
+    await expect(
+      empty.send({ ...empty.common, action: "native-target-plan", input: empty.proposal }),
+    ).rejects.toThrow();
+    expect(empty.createProject).not.toHaveBeenCalled();
+    const retained = fixture();
+    await retained.planOnce();
+    retained.changeOwner();
+    await expect(
+      retained.send({ ...retained.common, action: "native-target-plan", input: retained.proposal }),
+    ).rejects.toThrow();
+    expect(retained.createProject).not.toHaveBeenCalled();
+  });
 });

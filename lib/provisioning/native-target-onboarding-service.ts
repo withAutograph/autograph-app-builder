@@ -149,6 +149,9 @@ export const createNativeTargetOnboardingService =
         if (input.action !== "native-target-plan") {
           throw mismatch();
         }
+        if (input.selectedApp === undefined) {
+          throw denied();
+        }
         return await deps.readCapturedRelease(owner, appId, input.selectedApp.appSpecDigest);
       },
       resolvePlan: async (_ctx, proposal, source) =>
@@ -214,7 +217,14 @@ export const createNativeTargetOnboardingService =
         try {
           output = await runtime.plan(input.input, context, {
             phase: "planned",
-            appSpec: { appId: input.selectedApp.appId, digest: input.selectedApp.appSpecDigest },
+            ...(input.selectedApp === undefined
+              ? {}
+              : {
+                  appSpec: {
+                    appId: input.selectedApp.appId,
+                    digest: input.selectedApp.appSpecDigest,
+                  },
+                }),
           });
         } catch (error) {
           if (error instanceof NativeTargetExistingConfiguredTargetError) {

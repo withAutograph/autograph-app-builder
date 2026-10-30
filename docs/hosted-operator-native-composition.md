@@ -632,3 +632,9 @@ no custody enrollment, Secret write or receiving key-injection refresh follows
 from this source repair alone. Hosted acceptance still requires the separately
 approved enrollment, original-owner form submission, approved receiver refresh,
 nonce-bound possession receipt and independent readback of that saved operation.
+
+A native-target plan read may omit the current selected specification when an
+owner-authorized, noncancelled operation is already retained. It returns that
+operation unchanged, including its original plan and approval scope. If no such
+operation exists, a selected app specification remains mandatory before capture,
+planning or reservation. This read never grants approval or creates a target.

@@ -224,6 +224,50 @@ describe("native target protected client", () => {
     ).rejects.toThrow("plan-app-hosted-runtime");
     expect(f.request).toHaveBeenCalledTimes(1);
   });
+  it("sends a missing-selection retained-plan read without forwarding unrelated workflow state", async () => {
+    const f = fixture();
+    const result = await f.client.plan(
+      {
+        appId: f.plan.appId,
+        project: {
+          name: f.plan.project.name,
+          teamId: f.plan.project.teamId,
+          installationId: f.plan.project.installationId,
+          projectSettings: f.plan.project.projectSettings,
+        },
+        branch: f.plan.branch,
+        conflictPolicy: f.plan.conflictPolicy,
+      },
+      f.ctx,
+      { phase: "prepared" },
+    );
+    expect(result.operationRef).toBe(f.input.operationRef);
+    expect(f.request).toHaveBeenCalledTimes(1);
+    expect(f.sent[0]?.body.action).toBe("native-target-plan");
+    expect(f.sent[0]?.body).not.toHaveProperty("selectedApp");
+    expect(f.sent[0]?.body).not.toHaveProperty("state");
+  });
+  it("still rejects an explicit foreign selected app before sending a retained read", async () => {
+    const f = fixture();
+    await expect(
+      f.client.plan(
+        {
+          appId: f.plan.appId,
+          project: {
+            name: f.plan.project.name,
+            teamId: f.plan.project.teamId,
+            installationId: f.plan.project.installationId,
+            projectSettings: f.plan.project.projectSettings,
+          },
+          branch: f.plan.branch,
+          conflictPolicy: f.plan.conflictPolicy,
+        },
+        f.ctx,
+        { phase: "prepared", appSpec: { appId: "other-app", digest: f.plan.origin.appSpecDigest } },
+      ),
+    ).rejects.toThrow();
+    expect(f.request).not.toHaveBeenCalled();
+  });
   it("describes the exact target approval without requiring declared product roles", () => {
     const f = fixture();
     const description = publicApprovalDescription(f.input, "prepare-app-native-target");
