@@ -15,6 +15,7 @@ import {
   createNativeTargetOnboardingService,
   NativeTargetExistingConfiguredTargetError,
 } from "./native-target-onboarding-service";
+import type { NativeTargetOnboardingServiceDependencies } from "./native-target-onboarding-service";
 
 const authority = {
   issuer: "https://builder.example/api/auth",
@@ -128,7 +129,7 @@ const fixture = (workloadAuthorized = true) => {
     },
   );
   const approvals: { authorization: string | null; signal: AbortSignal }[] = [];
-  const service = createNativeTargetOnboardingService({
+  const dependencies: NativeTargetOnboardingServiceDependencies = {
     store,
     verifyWorkload: () => {
       events.push("workload");
@@ -187,7 +188,10 @@ const fixture = (workloadAuthorized = true) => {
         projectId: "project-id",
         reason: "provider_unavailable" as const,
       }),
-  });
+  };
+  const readCapturedRelease = vi.spyOn(dependencies, "readCapturedRelease");
+  const resolvePlan = vi.spyOn(dependencies, "resolvePlan");
+  const service = createNativeTargetOnboardingService(dependencies);
   const common = {
     ownerContext: historyOwner,
     adapterSessionId: current.adapterSessionId,
@@ -218,6 +222,9 @@ const fixture = (workloadAuthorized = true) => {
   };
   return {
     authorize,
+    store,
+    readCapturedRelease,
+    resolvePlan,
     approvals,
     common,
     createProject,
@@ -367,5 +374,87 @@ describe("protected native target onboarding service", () => {
       retained.send({ ...retained.common, action: "native-target-plan", input: retained.proposal }),
     ).rejects.toThrow();
     expect(retained.createProject).not.toHaveBeenCalled();
+  });
+});
+
+const selectedProfilePlan = () =>
+  nativeTargetOnboardingPlanSchema.parse({
+    ...plan,
+    resourceProfileId: "isolated-development",
+    resourceProfileAuthorityDigest: "e".repeat(64),
+    appDatabase: { ...plan.appDatabase, resourceId: "isolated-store" },
+    nativeNeon: {
+      ...plan.nativeNeon,
+      nativeStore: { ...plan.nativeNeon.nativeStore, resourceId: "isolated-store" },
+      scope: {
+        ...plan.nativeNeon.scope,
+        projectId: "isolated-neon",
+        branchId: "isolated-branch",
+        endpointId: "isolated-endpoint",
+        hostname: "ep-isolated.neon.tech",
+      },
+    },
+  });
+
+describe("protected retained native resource selection", () => {
+  it("reads the frozen captured release for an HTTP rescope without selectedApp, ignoring a later selected digest", async () => {
+    const f = fixture();
+    const original = await f.planOnce();
+    f.readCapturedRelease.mockClear();
+    f.resolvePlan.mockImplementation((_owner, proposal, source) => {
+      expect(proposal.resourceProfileId).toBe("isolated-development");
+      expect(source.appSpecDigest).toBe(plan.origin.appSpecDigest);
+      return Promise.resolve(selectedProfilePlan());
+    });
+    const input = { ...f.proposal, resourceProfileId: "isolated-development" };
+    const response = await f.send({ ...f.common, action: "native-target-plan", input });
+    const changed = nativeTargetTransportResponseSchemas["native-target-plan"].parse(
+      await response.json(),
+    );
+    expect(changed.planDigest).not.toBe(original.planDigest);
+    expect(changed.plan.origin).toEqual(plan.origin);
+    expect(changed.plan.project).toEqual(plan.project);
+    expect(f.readCapturedRelease).toHaveBeenLastCalledWith(
+      current,
+      plan.appId,
+      plan.origin.appSpecDigest,
+    );
+    const same = await f.send({
+      ...f.common,
+      action: "native-target-plan",
+      input,
+      selectedApp: { appId: plan.appId, appSpecDigest: "f".repeat(64) },
+    });
+    expect(
+      nativeTargetTransportResponseSchemas["native-target-plan"].parse(await same.json())
+        .planDigest,
+    ).toBe(changed.planDigest);
+    expect(f.readCapturedRelease).toHaveBeenLastCalledWith(
+      current,
+      plan.appId,
+      plan.origin.appSpecDigest,
+    );
+    expect(f.createProject).not.toHaveBeenCalled();
+  });
+
+  it("denies a changed owner or unavailable resource profile without altering retained scope", async () => {
+    const f = fixture();
+    await f.planOnce();
+    const key = { authority, appId: plan.appId };
+    const before = await f.store.read(key);
+    f.resolvePlan.mockRejectedValue(new Error("profile-not-authorized"));
+    const message = {
+      ...f.common,
+      action: "native-target-plan" as const,
+      input: { ...f.proposal, resourceProfileId: "isolated-development" },
+    };
+    await expect(f.send(message)).rejects.toThrow("profile-not-authorized");
+    expect(await f.store.read(key)).toEqual(before);
+    f.changeOwner();
+    f.readCapturedRelease.mockClear();
+    await expect(f.send(message)).rejects.toThrow();
+    expect(f.readCapturedRelease).not.toHaveBeenCalled();
+    expect(await f.store.read(key)).toEqual(before);
+    expect(f.createProject).not.toHaveBeenCalled();
   });
 });

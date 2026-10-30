@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { resolveNativeTargetResourceProfile } from "./native-target-resource-profile";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- The existing Drizzle stores share the complete database schema.
@@ -115,6 +116,7 @@ export const createNativeTargetConfigurationResolver =
   (input: {
     configuration: HostedOperatorSourceConfiguration;
     openResources: () => Promise<NativeTargetConfigurationResources>;
+    environment?: Readonly<Record<string, string | undefined>>;
   }) =>
   async (request: Request): Promise<HostedOperatorSourceConfiguration> => {
     let stage: Parameters<typeof reportHostedOperatorNativeFailure>[0] = "resolver_configuration";
@@ -159,6 +161,19 @@ export const createNativeTargetConfigurationResolver =
           configuration: input.configuration,
           invocation: { request, ownerContext, sessionId: selected.sessionId },
           appId: selected.appId,
+          selectResourceConfiguration: (ready) => {
+            try {
+              return resolveNativeTargetResourceProfile({
+                base: input.configuration,
+                resourceProfileId: ready.plan.resourceProfileId,
+                authority: ownerContext.authority,
+                appId: selected.appId,
+                environment: input.environment,
+              });
+            } catch {
+              throw new HostedOperatorError("resource_mismatch");
+            }
+          },
           readReady: async (invocation, appId) => {
             const ready = await reader.readReady(invocation, appId);
             stage = "resolver_effective_config";
@@ -274,6 +289,7 @@ export const createNativeTargetRequestDependencies =
       environment,
       resolveConfiguration: createNativeTargetConfigurationResolver({
         configuration,
+        environment,
         openResources: async () =>
           await openNativeTargetConfigurationResources(configuration, environment),
       }),

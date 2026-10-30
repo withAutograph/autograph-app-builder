@@ -283,6 +283,32 @@ describe("native target protected client", () => {
       ),
     ).toBeUndefined();
   });
+  it("shows the changed resource scope and fresh approval requirement", () => {
+    const f = fixture();
+    const plan = {
+      ...f.plan,
+      resourceProfileId: "isolated-development",
+      resourceProfileAuthorityDigest: "a".repeat(64),
+      resourceSelectionRevision: 1,
+    };
+    const description = publicApprovalDescription(
+      { ...f.input, plan, planDigest: nativeTargetOnboardingPlanDigest(plan) },
+      "prepare-app-native-target",
+    );
+    for (const reference of [
+      plan.resourceProfileId,
+      plan.nativeNeon.scope.projectId,
+      plan.nativeNeon.scope.branchId,
+      plan.appDatabase.resourceId,
+      plan.appDatabase.database,
+      plan.appDatabase.runtimeRole,
+      plan.appDatabase.migratorRole,
+    ]) {
+      expect(description).toContain(reference);
+    }
+    expect(description).toContain("needs a new approval");
+    expect(description).toContain("No database or app-user access is created now");
+  });
   it("uses protected runtime and project OIDC without forwarding raw state/auth", async () => {
     const f = fixture();
     await f.client.plan(

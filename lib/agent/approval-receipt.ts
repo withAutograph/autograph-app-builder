@@ -551,6 +551,12 @@ const nativeTargetApprovalDescription = (input: unknown): string | undefined => 
       : ` (expires ${formatUtcExpiry(plan.retention.expiresAt)})`;
   return [
     `Create the Preview project ${plan.project.name} for app ${plan.appId}, then register its Preview branch.`,
+    `Resource selection:\n- ${plan.resourceProfileId === undefined ? "The configured resource" : `Approved profile ${plan.resourceProfileId}`} uses Neon project ${plan.nativeNeon.scope.projectId}, branch ${plan.nativeNeon.scope.branchId}, store ${plan.appDatabase.resourceId}.\n- Reserve database ${plan.appDatabase.database} and roles ${plan.appDatabase.migratorRole} / ${plan.appDatabase.runtimeRole}.`,
+    ...((plan.resourceSelectionRevision ?? 0) > 0
+      ? [
+          "This revised resource selection needs a new approval. Earlier approvals do not authorize this plan; their audit remains retained.",
+        ]
+      : []),
     `Access and setup:\n- Require Vercel sign-in for deployments and enable this project's workload identity before registration.\n- ${conflict}\n- This reserves the app database name for a later, separately approved setup. No database or app-user access is created now.`,
     `Cost and retention:\n- ${plan.cost.description} Billing responsibility follows the current owner recorded in this plan. Check the provider's billing page for amounts.\n- ${plan.retention.policy}${retentionExpiry}.`,
     "This does not deploy the app or activate Production.",

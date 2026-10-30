@@ -146,11 +146,99 @@ const assertUndispatchedReplan = (
   }
 };
 
+const assertPlannedScopeSupersession = (
+  before: Extract<NativeTargetOnboardingRecord, { stage: "planned" }>,
+  after: Extract<NativeTargetOnboardingRecord, { stage: "planned" }>,
+) => {
+  const target = (plan: NativeTargetOnboardingPlan) => ({
+    appId: plan.appId,
+    project: plan.project,
+    branch: plan.branch,
+    productRoles: plan.productRoles,
+    release: plan.origin.release,
+    appSpecDigest: plan.origin.appSpecDigest,
+    publicSessionId: plan.origin.publicSessionId,
+    database: plan.appDatabase.database,
+    migratorRole: plan.appDatabase.migratorRole,
+    runtimeRole: plan.appDatabase.runtimeRole,
+    cost: plan.cost,
+    retention: plan.retention,
+    conflictPolicy: plan.conflictPolicy,
+  });
+  const prior = after.priorPlannedScopes?.at(-1);
+  if (
+    before.previousAttempts.length !== 0 ||
+    after.previousAttempts.length !== 0 ||
+    after.plan.resourceProfileId === undefined ||
+    (after.plan.resourceSelectionRevision ?? 0) !==
+      (before.plan.resourceSelectionRevision ?? 0) + 1 ||
+    isDeepStrictEqual(
+      {
+        profile: before.plan.resourceProfileId,
+        authority: before.plan.resourceProfileAuthorityDigest,
+        nativeNeon: before.plan.nativeNeon,
+        resourceId: before.plan.appDatabase.resourceId,
+      },
+      {
+        profile: after.plan.resourceProfileId,
+        authority: after.plan.resourceProfileAuthorityDigest,
+        nativeNeon: after.plan.nativeNeon,
+        resourceId: after.plan.appDatabase.resourceId,
+      },
+    ) ||
+    !isDeepStrictEqual(target(before.plan), target(after.plan)) ||
+    !isDeepStrictEqual(before.priorCancellations, after.priorCancellations) ||
+    !isDeepStrictEqual(before.priorPlannedScopes ?? [], after.priorPlannedScopes?.slice(0, -1)) ||
+    prior === undefined ||
+    !isDeepStrictEqual(prior.plan, before.plan) ||
+    prior.planDigest !== before.planDigest
+  ) {
+    throw conflict();
+  }
+};
+
+/** A planned rescope completes its transition; other paths preserve its scope audit. */
+const assertPlannedScopeTransition = (
+  before: NativeTargetOnboardingRecord,
+  after: NativeTargetOnboardingRecord,
+): boolean => {
+  if (
+    before.stage === "planned" &&
+    after.stage === "planned" &&
+    before.planDigest !== after.planDigest
+  ) {
+    assertPlannedScopeSupersession(before, after);
+    return true;
+  }
+  if (!isDeepStrictEqual(before.priorPlannedScopes, after.priorPlannedScopes)) {
+    throw conflict();
+  }
+  return false;
+};
+
+const assertRetainedTargetUnchanged = (
+  before: NativeTargetOnboardingRecord,
+  after: NativeTargetOnboardingRecord,
+) => {
+  if (
+    !isDeepStrictEqual(before.plan, after.plan) ||
+    before.planDigest !== after.planDigest ||
+    before.appId !== after.appId ||
+    before.stage === "ready" ||
+    before.stage === "cancelled"
+  ) {
+    throw conflict();
+  }
+};
+
 /** Terminal targets and effect provenance cannot be replaced through the CAS adapter. */
 const assertTransition = (
   before: NativeTargetOnboardingRecord,
   after: NativeTargetOnboardingRecord,
 ) => {
+  if (assertPlannedScopeTransition(before, after)) {
+    return;
+  }
   if (before.stage === "cancelled" && after.stage === "planned") {
     assertUndispatchedReplan(before, after);
     return;
@@ -161,15 +249,7 @@ const assertTransition = (
   if (isDeepStrictEqual(before, after)) {
     return;
   }
-  if (
-    !isDeepStrictEqual(before.plan, after.plan) ||
-    before.planDigest !== after.planDigest ||
-    before.appId !== after.appId ||
-    before.stage === "ready" ||
-    before.stage === "cancelled"
-  ) {
-    throw conflict();
-  }
+  assertRetainedTargetUnchanged(before, after);
   if (
     "approval" in before &&
     "approval" in after &&
@@ -541,6 +621,41 @@ export const createNativeTargetOnboardingRegistry = <Invocation>(
       }
       return await save(row, { ...record, dispatchAuthorizedAt: now().toISOString() });
     },
+    async supersedePlannedScope(
+      invocation: Invocation,
+      rawPlan: NativeTargetOnboardingPlan,
+      expectedPlanDigest: string,
+    ) {
+      const plan = nativeTargetOnboardingPlanSchema.parse(rawPlan);
+      const { owner, row } = await load(invocation, plan.appId);
+      if (
+        row.record.stage !== "planned" ||
+        row.record.planDigest !== expectedPlanDigest ||
+        row.record.previousAttempts.length !== 0 ||
+        plan.origin.publicSessionId !== owner.publicSessionId ||
+        plan.origin.adapterSessionId !== owner.adapterSessionId ||
+        plan.origin.adapterGeneration !== owner.adapterGeneration
+      ) {
+        throw conflict();
+      }
+      await ports.assertPlanOrigin(owner, plan);
+      const latest = await current(invocation, plan.appId);
+      if (!isDeepStrictEqual(latest.owner, owner)) {
+        throw unavailable();
+      }
+      return await save(row, {
+        ...initialRecord(plan),
+        priorCancellations: row.record.priorCancellations,
+        priorPlannedScopes: [
+          ...(row.record.priorPlannedScopes ?? []),
+          {
+            plan: row.record.plan,
+            planDigest: row.record.planDigest,
+            supersededAt: now().toISOString(),
+          },
+        ],
+      });
+    },
     async reservePlan(invocation: Invocation, rawPlan: NativeTargetOnboardingPlan) {
       const plan = nativeTargetOnboardingPlanSchema.parse(rawPlan);
       const { owner, key } = await current(invocation, plan.appId);
@@ -566,6 +681,7 @@ export const createNativeTargetOnboardingRegistry = <Invocation>(
         const prior = existing.record;
         return await save(existing, {
           ...initialRecord(plan),
+          priorPlannedScopes: prior.priorPlannedScopes,
           priorCancellations: [
             ...(prior.priorCancellations ?? []),
             {
@@ -603,6 +719,7 @@ export const createNativeTargetOnboardingRegistry = <Invocation>(
           return await save(row, {
             ...initialRecord(row.record.plan),
             priorCancellations: row.record.priorCancellations,
+            priorPlannedScopes: row.record.priorPlannedScopes,
             stage: "cancelled",
             approval: receipt,
             previousAttempts: [
