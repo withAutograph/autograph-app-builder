@@ -6,6 +6,7 @@ import {
 } from "./hosted-operator-contract";
 import { inspectUnapprovedAppSuccessor } from "./hosted-operator-unapproved-app-successor";
 import { readUnapprovedCapturePredecessor } from "./hosted-operator-unapproved-capture-history";
+import { createUnapprovedParticipantPlan } from "./hosted-operator-unapproved-participant-plan";
 import {
   captureFixture,
   context,
@@ -16,6 +17,18 @@ import {
 const operationRef = "00000000-0000-4000-8000-000000000001";
 
 describe("unapproved app successor eligibility", () => {
+  it("preserves a published app branch distinct from the session branch without delivering it", () => {
+    const { record, added } = captureFixture();
+    const candidate = requiredFixture(
+      inspectUnapprovedAppSuccessor(record, context.target, added, Date.parse(observedAt)),
+    );
+    const prior = candidate.priorOperator.plan;
+    requiredFixture(prior.deploymentBoundary).app.branch = "app-builder/published-draft";
+    const plan = createUnapprovedParticipantPlan(candidate, added);
+    expect(plan.stage).toBe("auth-participants");
+    expect(plan.delivery).toBeUndefined();
+    expect(plan.deploymentBoundary?.app.branch).toBe("app-builder/published-draft");
+  });
   it("retains real prior account and bootstrap authority with no old app approval", () => {
     const { record, added } = captureFixture();
     const before = structuredClone(record);
