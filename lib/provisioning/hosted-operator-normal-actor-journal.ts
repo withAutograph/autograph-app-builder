@@ -1,3 +1,4 @@
+import { sameJournalAfterLeaseRenewal } from "./hosted-operator-lease-renewal";
 import { readParticipantSuccessorPredecessor } from "./hosted-operator-participant-successor";
 import { readUnapprovedCapturePredecessor } from "./hosted-operator-unapproved-capture-history";
 /* oxlint-disable eslint/no-await-in-loop, sonarjs/expression-complexity -- CAS and encrypted capture require each exact approval, scope, nonce, proof and session binding. */
@@ -539,10 +540,10 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
     assertCarriedActors(context, row, preparation, state, ports.keyring, ports.now());
     await guarded(() => ports.assertAuthorized(context), guard);
     const latest = await guarded(() => ports.store.read(context), guard);
-    if (latest?.revision !== row.revision) {
+    if (!sameJournalAfterLeaseRenewal(row, latest, ports.now()) || latest === undefined) {
       throw new Error("normal_actor_journal_changed");
     }
-    return { row, preparation, state };
+    return { row: latest, preparation, state };
   };
   const mutate = async (
     context: HostedOperatorContext,
@@ -558,19 +559,19 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
       await guarded(() => ports.assertAccountApproval(context, provenance(preparation)), guard);
       await guarded(() => ports.assertAuthorized(context), guard);
       await guarded(() => ports.assertMutationAuthority(context, row, mode), guard);
-      if (JSON.stringify(preparation) === JSON.stringify(row.record.accountPreparation)) {
-        const latest = await guarded(() => ports.store.read(context), guard);
-        if (latest?.revision === row.revision) {
-          return preparation;
-        }
+      const latest = await guarded(() => ports.store.read(context), guard);
+      if (!sameJournalAfterLeaseRenewal(row, latest, ports.now()) || latest === undefined) {
         continue;
+      }
+      if (JSON.stringify(preparation) === JSON.stringify(latest.record.accountPreparation)) {
+        return preparation;
       }
       const saved = await guarded(
         () =>
           ports.store.compareAndSet({
             ...context,
-            record: { ...row.record, accountPreparation: preparation },
-            expectedRevision: row.revision,
+            record: { ...latest.record, accountPreparation: preparation },
+            expectedRevision: latest.revision,
             now: new Date(ports.now()),
           }),
         guard,
