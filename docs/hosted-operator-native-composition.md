@@ -638,3 +638,15 @@ owner-authorized, noncancelled operation is already retained. It returns that
 operation unchanged, including its original plan and approval scope. If no such
 operation exists, a selected app specification remains mandatory before capture,
 planning or reservation. This read never grants approval or creates a target.
+
+Accepted app workflow facts survive internal notes and new design drafts. Recording
+a draft does not silently replace the selected specification or discard its build,
+validation, review or publication receipts. Explicitly accepting a different AppSpec
+continues the normal planning path; accepting the same artifact reuses existing facts.
+
+Approval observation cursors are scoped to their native adapter epoch. A verified
+current recovered owner may checkpoint a lower cursor in its new stream, using
+the exact revision read before replay. Owner rechecks and revision CAS prevent a
+stale writer from restoring the prior epoch; same-epoch rewinds remain rejected.
+An observation checkpoint is not approval settlement and does not resolve an
+unknown public response.

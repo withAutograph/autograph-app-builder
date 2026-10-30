@@ -33,6 +33,10 @@ const expectedAppIdForWorkflow = (
   current: Exclude<ReturnType<typeof appBuilderWorkflowState.get>, { phase: "empty" }>,
 ) => ("appSpec" in current ? current.appSpec.appId : null);
 
+const preservesAcceptedWorkflow = (
+  current: Exclude<ReturnType<typeof appBuilderWorkflowState.get>, { phase: "empty" }>,
+) => "appSpec" in current || current.phase === "ui_previewed" || current.phase === "ui_accepted";
+
 export default defineTool({
   description:
     "Record internal product decisions and implementation design without pausing for approval. Use record_ui_preview for visual content composed from Arrusted components; never author replacement HTML controls here. Small content can use the original single-call shape. For larger content, split the exact UTF-8 text into chunks whose complete JSON tool-call envelope is below Eve's 10 MiB event ceiling; send chunkIndex 0 with expectedDigest equal to SHA-256 of the full UTF-8 content and finalChunk false unless it is the only chunk, then append each next chunk using the exact revision and nextChunkIndex from the prior receipt. Mark the last chunk finalChunk true. Retry only the same last chunk with the same call id after an uncertain response. Continue until complete is true. A complete design continues into planning automatically.",
@@ -106,7 +110,7 @@ export default defineTool({
               ...current.artifacts.filter((artifact) => artifact.path !== path),
               recorded.artifact,
             ].toSorted((left, right) => left.path.localeCompare(right.path));
-            if (current.phase === "ui_previewed" || current.phase === "ui_accepted") {
+            if (preservesAcceptedWorkflow(current)) {
               return { ...current, artifacts };
             }
             return {
@@ -127,6 +131,7 @@ export default defineTool({
         recorded.artifact,
       ];
       if (
+        !("appSpec" in current) &&
         recorded.complete &&
         path.endsWith("/app-spec.md") &&
         ["/index.html", "/decisions.md"].every((suffix) =>
@@ -181,7 +186,7 @@ export default defineTool({
         expected: current,
         operation: "prototype artifact recording",
         transition: () => {
-          if (current.phase === "ui_previewed" || current.phase === "ui_accepted") {
+          if (preservesAcceptedWorkflow(current)) {
             return { ...current, artifacts: recorded.artifacts };
           }
           return {
@@ -203,7 +208,7 @@ export default defineTool({
         })
       : undefined;
     let planning = {};
-    if (buildReadyAppSpec !== undefined) {
+    if (buildReadyAppSpec !== undefined && !("appSpec" in current)) {
       // The model has completed the product-facing design. Continue the
       // deterministic acceptance/planning transition here so a fourth model
       // continuation is not required merely to choose internal operations.
@@ -223,7 +228,9 @@ export default defineTool({
       complete,
       reused: recorded.reused,
       ...("nextChunkIndex" in recorded ? { nextChunkIndex: recorded.nextChunkIndex } : {}),
-      ...(recorded.reused ? {} : { invalidated: current.phase !== "prepared" }),
+      ...(recorded.reused
+        ? {}
+        : { invalidated: !preservesAcceptedWorkflow(current) && current.phase !== "prepared" }),
       ...planning,
     };
   },
