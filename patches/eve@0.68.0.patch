@@ -3330,7 +3330,7 @@ index 0000000..a3f1892
 +  readonly auth: SessionAuthContext;
 +  readonly forwarded: boolean;
 +  readonly ports?: TerminalRecoveryPorts;
-+}): Promise<Response>;
++}, loadDependencies?: () => Promise<TerminalRecoveryDependencies>): Promise<Response>;
 +
 +export interface TerminalRecoveryObservationInput {
 +  readonly descriptor: TerminalRecoveryDescriptor;
@@ -3353,7 +3353,7 @@ diff --git a/dist/src/execution/session/terminal-recovery.js b/dist/src/executio
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.js
-@@ -0,0 +1,562 @@
+@@ -0,0 +1,573 @@
 +import { createHash } from "node:crypto";
 +import { DEFAULT_SESSION_TIMEOUT_MS } from "#execution/session/timeout.js";
 +import { SESSION_CHECKPOINT_VERSION } from "#execution/session/handoff.js";
@@ -3361,6 +3361,13 @@ new file mode 100644
 +const descriptorKeys = ["version", "operationId", "sourcePublicSessionId", "sourceOwnerRunId", "sourceAdapterGeneration", "logicalSessionId", "originalAuthoritySessionId", "parentCancellationRevision", "sourceHandoffId", "executionTransfer"];
 +const provenanceKeys = ["kind", "sourceStepId", "sourceEventId", "sourceSlot", "checkpointVersion", "checkpointOwnerRunId"];
 +const sameTransfer = (left, right) => left === undefined && right === undefined || record(left) && record(right) && left.kind === right.kind && left.sourceCheckpointDigest === right.sourceCheckpointDigest;
++const refusalReasons = new Set([
++  "source-not-terminal", "native-data-expired", "handoff-discovery-unavailable", "handoff-owner-ambiguous", "handoff-parent-frontier-uncertain", "paired-native-checkpoint-unavailable", "native-checkpoint-identity-mismatch", "source-policy-unavailable", "checkpoint-origin-unavailable", "checkpoint-identity-mismatch", "live-transfer-unsupported", "source-approval-not-parked", "source-effect-steps-unsettled", "source-lineage-effects-unsettled", "source-not-parked", "source-physical-owner-changed", "source-stop-not-owned", "source-stop-unconfirmed", "approval-transcript-unavailable", "cancelled-call-history-unreconciled", "cancelled-turn-replay", "conflicting-retained-history", "coordination-results-incomplete", "delivery-consumption-unreconciled", "failed-turn-effects-unreconciled", "later-coordination-input-unreconciled", "native-stream-incomplete", "runtime-result-consumption-ambiguous", "runtime-result-owner-unreconciled", "unconsumed-native-inbox-input", "unreadable-native-effect-frontier",
++]);
++const refusalStages = new Set(["dependencies", "source_authorization", "receipt_read", "receipt_validate", "live_transfer_preflight", "candidate_collect", "candidate_authorization", "candidate_read", "candidate_reconcile", "source_policy", "checkpoint_prepare", "pre_start_authorization", "pre_start_receipt_read", "pre_start_receipt_validate", "owner_start", "owner_readiness_wait", "owner_readiness_deadline", "receipt_authorization", "receipt_commit", "holder_authorization", "holder_receipt_read", "holder_closure", "post_holder_authorization", "post_holder_receipt_read", "post_holder_receipt_validate", "candidate_receipt_read"]);
++const refusalReason = (value) => typeof value === "string" && refusalReasons.has(value) ? value : "other";
++const refusalStage = (value) => typeof value === "string" && refusalStages.has(value) ? value : "other";
++
 +const candidateKinds = ["terminal-finalizer-input", "completed-terminal-turn-input", "failed-turn-input", "committed-turn-output"];
 +const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 +
@@ -3423,6 +3430,7 @@ new file mode 100644
 +    return { kind: "accepted", recoveryBinding: existing };
 +  }
 +  if (descriptor.executionTransfer !== undefined) {
++    preparing("live_transfer_preflight");
 +    const stopped = await quiesceLiveRecoverySource(input, dependencies);
 +    if (stopped.kind !== "ready") return stopped;
 +  }
@@ -3872,7 +3880,7 @@ new file mode 100644
 +  };
 +}
 +
-+export async function handleTerminalRecoveryRequest({ payload, auth, forwarded, ports }) {
++export async function handleTerminalRecoveryRequest({ payload, auth, forwarded, ports }, loadDependencies = nativeDependencies) {
 +  if (!forwarded || ports === undefined || auth?.principalType === "anonymous") return Response.json({ ok: false, code: "terminal_recovery_forbidden" }, { status: 403 });
 +  if (payload.recoveryPhase === "inspect-source") {
 +    if (ports.authorizeSourceObservation === undefined || Object.keys(payload).some((key) => !["recoveryPhase", "sourceObservation", "forwardedPrincipal"].includes(key))) return Response.json({ ok: false, code: "native_source_observation_invalid" }, { status: 400 });
@@ -3881,7 +3889,7 @@ new file mode 100644
 +      if (source === null || typeof source !== "object" || Array.isArray(source) || Object.keys(source).some((key) => !["sourcePublicSessionId", "sourceAdapterSessionId", "sourceAdapterGeneration", "cancellationRevision"].includes(key))) throw new Error("Invalid source coordinates.");
 +      const authorize = async () => await ports.authorizeSourceObservation({ auth, source });
 +      const binding = await authorize();
-+      const dependencies = await nativeDependencies();
++      const dependencies = await loadDependencies();
 +      const collected = await dependencies.collect({ binding, allowParked: true, authorizeOwner: async (observed) => { const current = await authorize(); if (current.ownerRunId !== observed.ownerRunId || current.logicalSessionId !== observed.logicalSessionId) throw new Error("Source observation changed."); } });
 +      const current = await authorize();
 +      if (current.ownerRunId !== binding.ownerRunId || current.logicalSessionId !== binding.logicalSessionId) throw new Error("Source observation changed.");
@@ -3892,7 +3900,7 @@ new file mode 100644
 +      const observed = observedRuns.at(-1);
 +      const lineageUnsettledStepCount = observedRuns.reduce((sum, run) => sum + run.unsettledStepIds.length, 0);
 +      await authorize();
-+      console.info(JSON.stringify({ event: "builder.native_source_observation", candidate: candidate !== undefined, lineageResolved: candidate !== undefined, lineageRunCount: observedRuns.length, lineageUnsettledStepCount, pendingStepCount: observed?.stepCounts?.pending ?? null, runningStepCount: observed?.stepCounts?.running ?? null, failedStepCount: observed?.stepCounts?.failed ?? null, cancelledStepCount: observed?.stepCounts?.cancelled ?? null, unknownStepCount: observed?.stepCounts?.unknown ?? null, physicalOwnerMatchesAnchor: candidate === undefined ? null : candidate.checkpointOwnerRunId === binding.ownerRunId, unsettledStepCount: observed?.unsettledStepIds.length ?? null, sourceParked: observed === undefined ? null : ["pending", "running"].includes(observed.status) }));
++      console.info(JSON.stringify({ event: "builder.native_source_observation", collectionKind: collected.kind === "candidate" ? "candidate" : collected.kind === "unavailable" ? "unavailable" : "other", collectionReason: collected.kind === "candidate" ? null : refusalReason(collected.reason), collectionStage: "candidate_collect", candidate: candidate !== undefined, lineageResolved: candidate !== undefined, lineageRunCount: observedRuns.length, lineageUnsettledStepCount, pendingStepCount: observed?.stepCounts?.pending ?? null, runningStepCount: observed?.stepCounts?.running ?? null, failedStepCount: observed?.stepCounts?.failed ?? null, cancelledStepCount: observed?.stepCounts?.cancelled ?? null, unknownStepCount: observed?.stepCounts?.unknown ?? null, physicalOwnerMatchesAnchor: candidate === undefined ? null : candidate.checkpointOwnerRunId === binding.ownerRunId, unsettledStepCount: observed?.unsettledStepIds.length ?? null, sourceParked: observed === undefined ? null : ["pending", "running"].includes(observed.status) }));
 +      return Response.json({ ok: true, status: "accepted", sessionId: binding.ownerRunId }, { status: 202, headers: { "cache-control": "no-store", "x-eve-session-id": binding.ownerRunId } });
 +    } catch { return Response.json({ ok: false, code: "native_source_observation_unavailable" }, { status: 409 }); }
 +  }
@@ -3906,8 +3914,11 @@ new file mode 100644
 +      return Response.json({ ok: true, status: "accepted", sessionId: result.sessionId }, { status: 202, headers: { "cache-control": "no-store", "x-eve-session-id": result.sessionId } });
 +    }
 +    const execute = payload.recoveryPhase === "activate" ? activateTerminalSession : recoverTerminalSession;
-+    const result = await execute({ auth, descriptor, ports }, await nativeDependencies(), (stage) => { prepareStage = stage; });
-+    if (result.kind !== "accepted") return Response.json({ ok: false, code: result.kind === "uncertain" ? "terminal_recovery_uncertain" : "terminal_recovery_unavailable" }, { status: 409 });
++    const result = await execute({ auth, descriptor, ports }, await loadDependencies(), (stage) => { prepareStage = stage; });
++    if (result.kind !== "accepted") {
++      try { console.info(JSON.stringify({ event: "builder.native_recovery_refusal", outcome: result.kind === "uncertain" ? "uncertain" : result.kind === "unavailable" ? "unavailable" : "other", reason: refusalReason(result.reason), stage: refusalStage(prepareStage) })); } catch { /* Advisory diagnostics never change the refusal. */ }
++      return Response.json({ ok: false, code: result.kind === "uncertain" ? "terminal_recovery_uncertain" : "terminal_recovery_unavailable" }, { status: 409 });
++    }
 +    return Response.json({ ok: true, status: "accepted", sessionId: result.recoveryBinding.ownerRunId, recoveryBinding: result.recoveryBinding }, { status: 202, headers: { "cache-control": "no-store", "x-eve-session-id": result.recoveryBinding.ownerRunId } });
 +  } catch (error) {
 +    if (payload.recoveryPhase === undefined) reportPrepareFailure(prepareStage, error);

@@ -452,3 +452,126 @@ describe("live native execution transfer", () => {
     expect(f.start).not.toHaveBeenCalled();
   });
 });
+
+describe("native recovery refusal diagnostics", () => {
+  it.each([
+    { reason: "handoff-owner-ambiguous", expected: "handoff-owner-ambiguous" },
+    { reason: "source-not-terminal", expected: "source-not-terminal" },
+    {
+      reason: "paired-native-checkpoint-unavailable",
+      expected: "paired-native-checkpoint-unavailable",
+    },
+    { reason: "private-canary-native-reason-secret", expected: "other" },
+  ])(
+    "reports only fixed inspect-source collection labels: $expected",
+    async ({ reason, expected }) => {
+      const f = fixture();
+      // @ts-expect-error Deliberately exercise an unknown runtime native reason at the diagnostic boundary.
+      f.collect.mockResolvedValueOnce({ kind: "unavailable", reason });
+      const info = vi.spyOn(console, "info").mockImplementation(() => {});
+      try {
+        const response = await runtime.handleTerminalRecoveryRequest(
+          {
+            payload: {
+              recoveryPhase: "inspect-source",
+              sourceObservation: {
+                sourcePublicSessionId: "private-canary-source",
+                sourceAdapterSessionId: "old-native",
+                sourceAdapterGeneration: 1,
+                cancellationRevision: 0,
+              },
+            },
+            auth: actor,
+            forwarded: true,
+            ports: {
+              ...f.ports,
+              authorizeSourceObservation: () =>
+                Promise.resolve({ ownerRunId: "old-native", logicalSessionId: "logical" }),
+            },
+          },
+          () => Promise.resolve(f.dependencies),
+        );
+        expect(response.status).toBe(202);
+        const diagnostic: unknown = JSON.parse(String(info.mock.calls[0]?.[0]));
+        expect(diagnostic).toMatchObject({
+          event: "builder.native_source_observation",
+          collectionKind: "unavailable",
+          collectionReason: expected,
+          collectionStage: "candidate_collect",
+          candidate: false,
+          lineageResolved: false,
+        });
+        expect(JSON.stringify(info.mock.calls)).not.toContain("private-canary");
+        expect(JSON.stringify(info.mock.calls)).not.toContain("old-native");
+        expect(f.stopSource).not.toHaveBeenCalled();
+        expect(f.start).not.toHaveBeenCalled();
+      } finally {
+        info.mockRestore();
+      }
+    },
+  );
+  it.each([
+    {
+      reason: "paired-native-checkpoint-unavailable",
+      expected: "paired-native-checkpoint-unavailable",
+    },
+    { reason: "private-canary-native-reason-secret", expected: "other" },
+  ])("reports only fixed prepare refusal labels: $expected", async ({ reason, expected }) => {
+    const f = fixture();
+    // @ts-expect-error Deliberately exercise an unknown runtime native reason at the diagnostic boundary.
+    f.collect.mockResolvedValueOnce({ kind: "unavailable", reason });
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const response = await runtime.handleTerminalRecoveryRequest(
+        {
+          payload: { operationId: descriptor.operationId, recovery: descriptor },
+          auth: actor,
+          forwarded: true,
+          ports: f.ports,
+        },
+        () => Promise.resolve(f.dependencies),
+      );
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({ ok: false, code: "terminal_recovery_unavailable" });
+      const diagnostic: unknown = JSON.parse(String(info.mock.calls[0]?.[0]));
+      expect(diagnostic).toEqual({
+        event: "builder.native_recovery_refusal",
+        outcome: "unavailable",
+        reason: expected,
+        stage: "live_transfer_preflight",
+      });
+      expect(JSON.stringify(info.mock.calls)).not.toContain("private-canary");
+      expect(JSON.stringify(info.mock.calls)).not.toContain("old-native");
+      expect(JSON.stringify(info.mock.calls)).not.toContain("sha256:");
+      expect(f.stopSource).not.toHaveBeenCalled();
+      expect(f.start).not.toHaveBeenCalled();
+    } finally {
+      info.mockRestore();
+    }
+  });
+});
+
+it("preserves a native recovery refusal when its advisory sink fails", async () => {
+  const f = fixture();
+  f.collect.mockResolvedValueOnce({ kind: "unavailable", reason: "source-not-terminal" });
+  const info = vi.spyOn(console, "info").mockImplementation(() => {
+    throw new Error("private-canary-sink-error");
+  });
+  try {
+    const response = await runtime.handleTerminalRecoveryRequest(
+      {
+        payload: { operationId: descriptor.operationId, recovery: descriptor },
+        auth: actor,
+        forwarded: true,
+        ports: f.ports,
+      },
+      () => Promise.resolve(f.dependencies),
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ ok: false, code: "terminal_recovery_unavailable" });
+    expect(f.stopSource).not.toHaveBeenCalled();
+    expect(f.start).not.toHaveBeenCalled();
+  } finally {
+    info.mockRestore();
+  }
+});
