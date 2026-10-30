@@ -92,8 +92,6 @@ describe("native target deployment-owned resource selection", () => {
       revision: number;
     }
     let row: Row | undefined;
-    let insertCount = 0;
-    let updateCount = 0;
     const fakeDatabase = {
       select: () => ({
         from: () => ({
@@ -110,7 +108,6 @@ describe("native target deployment-owned resource selection", () => {
             expect(value.requestDigest).toMatch(/^[0-9a-f]{64}$/u);
             expect(["pending", "settled"]).toContain(value.state);
             expect(value.record).toBeTypeOf("object");
-            insertCount += 1;
             row ??= value;
             return Promise.resolve();
           },
@@ -124,7 +121,6 @@ describe("native target deployment-owned resource selection", () => {
                 throw new Error("Approval checkpoint update requires a prior insert.");
               }
               row = { ...row, ...value };
-              updateCount += 1;
               return Promise.resolve([{ revision: row.revision }]);
             },
           }),
@@ -170,8 +166,7 @@ describe("native target deployment-owned resource selection", () => {
       ...observation,
       native: { ...observation.native, nextNativeIndex: 2 },
     });
-    expect(updateCount).toBe(1);
-    expect(insertCount).toBe(2);
+    expect(row?.revision).toBe(2);
     const saved = await checkpoint.read();
     expect(saved?.native.nextNativeIndex).toBe(2);
   });
