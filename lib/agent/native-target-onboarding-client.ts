@@ -6,6 +6,7 @@ import { createVercelWorkloadIdentity } from "../eve/vercel-workload-identity";
 import {
   HostedOperatorError,
   operatorOwnerContextSchema,
+  operatorPublicResultSchema,
 } from "../provisioning/hosted-operator-contract";
 import type { OperatorOwnerContext } from "../provisioning/hosted-operator-contract";
 import { resolveHostedOperatorOwnerContext } from "../provisioning/hosted-operator-owner-context";
@@ -24,6 +25,8 @@ import type {
 
 const unavailable = () => new HostedOperatorError("operator_unavailable");
 const denied = () => new HostedOperatorError("authorization_required");
+const blockedAppMatches = (actual: string, expected: string) =>
+  actual === expected || actual === "unknown";
 
 export const createNativeTargetOnboardingClient = (options: {
   endpoint: string;
@@ -129,6 +132,19 @@ export const createNativeTargetOnboardingClient = (options: {
         failure: "invalid_json",
       });
       throw unavailable();
+    }
+    const blocked = operatorPublicResultSchema.safeParse(raw);
+    if (
+      blocked.success &&
+      blocked.data.status === "blocked" &&
+      blockedAppMatches(blocked.data.appId, body.input.appId) &&
+      blocked.data.code !== undefined
+    ) {
+      console.warn("[builder:native-target-transport]", {
+        action: body.action,
+        failure: blocked.data.code,
+      });
+      throw new HostedOperatorError(blocked.data.code);
     }
     const parsed = schema.safeParse(raw);
     if (!parsed.success) {
