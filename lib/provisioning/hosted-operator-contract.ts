@@ -478,7 +478,7 @@ const hostedOperatorPlanDataSchema = z.strictObject({
 export const plannedAppBranch = (plan: z.infer<typeof hostedOperatorPlanDataSchema>) =>
   plan.deploymentBoundary?.app.branch ?? plan.selection.branch;
 const boundaryAppBranch = (plan: z.infer<typeof hostedOperatorPlanDataSchema>) =>
-  plan.action === "cleanup"
+  plan.action === "cleanup" || plan.stage === AUTH_PARTICIPANTS_STAGE
     ? plannedAppBranch(plan)
     : (plan.delivery?.branch ?? plan.selection.branch);
 const validatePlanStage = (
