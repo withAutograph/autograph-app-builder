@@ -216,6 +216,51 @@ describe("private native target terminal approval", () => {
     expect(second.read()).toBeNull();
   });
 
+  it("reads a saved partial batch as approved for the plan and pending for its unanswered call", async () => {
+    const reader = capture();
+    reader.observe(requested({ requestId: "request-one", callId: "call-one" }));
+    reader.observe(requested({ requestId: "request-two", callId: "call-two" }));
+    reader.observe(settled("approved", authority.ownerUserId, "request-one"));
+    reader.proveComplete();
+    const saved: PrivateNativeTargetApprovalObservation = {
+      version: 1,
+      native: {
+        adapterSessionId: owner.adapterSessionId,
+        adapterGeneration: owner.adapterGeneration,
+        nextNativeIndex: 3,
+        capture: reader.snapshot(),
+      },
+      terminals: reader.terminalSnapshot(),
+    };
+    const readHistory = vi.fn((start: number) => {
+      expect(start).toBe(3);
+      return Promise.resolve({ nextNativeIndex: 3, nativeTailIndex: 2, complete: true });
+    });
+    const common = {
+      owner,
+      record,
+      historyOwner,
+      observation: { state: saved, save: vi.fn(() => Promise.resolve()) },
+      readHistory,
+      assertOwner: () => Promise.resolve(),
+    };
+    expect(await readPrivateNativeTargetApproval(common)).toEqual({
+      status: "approved",
+      proof: {
+        requestId: "request-one",
+        callId: "call-one",
+        planDigest,
+        responderPrincipalId: authority.ownerUserId,
+        publicSessionId: plan.origin.publicSessionId,
+        outcome: "approved",
+        observedAt: "2026-10-21T15:00:01.000Z",
+      },
+    });
+    expect(await readPrivateNativeTargetApproval({ ...common, callId: "call-two" })).toEqual({
+      status: "pending",
+    });
+  });
+
   it("returns the original cancelled settlement proof, and never promotes a later approval", () => {
     const reader = capture();
     reader.observe(requested());
