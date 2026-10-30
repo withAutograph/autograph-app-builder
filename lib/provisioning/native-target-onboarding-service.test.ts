@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
+import type { PrivateNativeTargetApprovalObservation } from "../eve/private-native-target-approval";
 import type { MessageStreamEvent } from "eve/client";
-import { readPrivateNativeTargetApproval } from "../eve/private-native-target-approval";
+import { HostedSessionReadTimeoutError } from "../eve/hosted-session-read-timeout-error";
+import { HostedOperatorError } from "./hosted-operator-contract";
+import {
+  createPrivateNativeTargetApprovalCapture,
+  readPrivateNativeTargetApproval,
+} from "../eve/private-native-target-approval";
 import {
   createInMemoryNativeTargetOnboardingStore,
   createNativeTargetOnboardingRegistry,
@@ -220,8 +226,8 @@ const fixture = (workloadAuthorized = true, selectedPlan = plan) => {
     planDigest: fixtureDigest,
     operationRef: "",
   };
-  const send = async (body: NativeTargetTransportRequest) =>
-    await service(request(), nativeTargetTransportRequestSchema.parse(body));
+  const send = async (body: NativeTargetTransportRequest, incoming = request()) =>
+    await service(incoming, nativeTargetTransportRequestSchema.parse(body));
   const planOnce = async () => {
     const response = await send({
       ...common,
@@ -811,4 +817,214 @@ describe("retired attempt preparation with immutable initial approval", () => {
       }
     },
   );
+});
+
+describe("side-effect-free approval peek with an incomplete durable tail", () => {
+  it.each(["approved", "cancelled"] as const)(
+    "returns pending without granting stale checkpoint authority before complete %s history",
+    async (outcome) => {
+      const f = fixture();
+      const planned = await f.planOnce();
+      const prepared = { ...f.prepared, operationRef: planned.operationRef };
+      const row = await f.store.read({ authority, appId: plan.appId });
+      if (row === undefined) {
+        throw new Error("missing plan");
+      }
+      const history: MessageStreamEvent[] = [];
+      const requested = (requestId: string, callId: string): MessageStreamEvent => ({
+        type: "input.requested",
+        meta: { id: `request-${requestId}`, at: "2026-10-30T20:00:00.000Z" },
+        data: {
+          sequence: 1,
+          stepIndex: 0,
+          turnId: "turn",
+          requests: [
+            {
+              kind: "tool-approval",
+              requestId,
+              prompt: "Approve exact saved plan",
+              action: {
+                kind: "tool-call",
+                toolName: "prepare-app-native-target",
+                callId,
+                input: prepared,
+              },
+            },
+          ],
+        },
+      });
+      history.push(requested("old-request", "old-call"), {
+        type: "approval.settled",
+        meta: { id: "settled-old", at: "2026-10-30T20:00:01.000Z" },
+        data: {
+          sequence: 2,
+          stepIndex: 0,
+          turnId: "turn",
+          requestId: "old-request",
+          responderPrincipalId: authority.ownerUserId,
+          outcome: "approved",
+        },
+      });
+      const capture = createPrivateNativeTargetApprovalCapture({
+        owner: current,
+        record: row.record,
+      });
+      for (const event of history) {
+        capture.observe(event);
+      }
+      capture.proveComplete();
+      let saved: PrivateNativeTargetApprovalObservation = {
+        version: 1,
+        native: {
+          adapterSessionId: current.adapterSessionId,
+          adapterGeneration: current.adapterGeneration,
+          nextNativeIndex: history.length,
+          capture: capture.snapshot(),
+        },
+        terminals: capture.terminalSnapshot(),
+      };
+      history.push(requested("fresh-request", "fresh-call"));
+      let complete = false;
+      let writes = 0;
+      f.dependencies.readApproval = async (owner, record, callId) => {
+        const result = await readPrivateNativeTargetApproval({
+          owner,
+          record,
+          ...(callId === undefined ? {} : { callId }),
+          historyOwner: owner.historyOwner,
+          observation: {
+            state: saved,
+            save: (next) => {
+              writes += 1;
+              saved = next;
+              return Promise.resolve();
+            },
+          },
+          assertOwner: async () => {
+            await f.authorize();
+          },
+          readHistory: (start, onEvent) => {
+            for (const event of history.slice(start)) {
+              onEvent(event);
+            }
+            return Promise.resolve({
+              complete,
+              nativeTailIndex: history.length,
+              nextNativeIndex: history.length,
+            });
+          },
+        });
+        return result.status === "pending" ? null : result.proof;
+      };
+      const common = { ...f.common, callId: "fresh-call", input: prepared };
+      const peek = await f.send({ ...common, action: "native-target-approval-read" });
+      expect(await peek.json()).toEqual({ status: "pending" });
+      expect(writes).toBe(1);
+      expect(saved.native.nextNativeIndex).toBe(3);
+      expect(saved.native.capture.entries).toHaveLength(2);
+      expect(saved.terminals).toHaveLength(1);
+      expect(await f.store.read({ authority, appId: plan.appId })).toEqual(row);
+      await expect(f.send({ ...common, action: "native-target-prepare" })).rejects.toBeInstanceOf(
+        HostedSessionReadTimeoutError,
+      );
+      expect(f.createProject).not.toHaveBeenCalled();
+      if (outcome === "cancelled") {
+        history.push({
+          type: "approval.settled",
+          meta: { id: "late-old-cancellation", at: "2026-10-30T20:00:02.000Z" },
+          data: {
+            sequence: 3,
+            stepIndex: 0,
+            turnId: "turn",
+            requestId: "old-request",
+            responderPrincipalId: authority.ownerUserId,
+            outcome: "cancelled",
+          },
+        });
+      }
+      history.push({
+        type: "approval.settled",
+        meta: { id: "settled-fresh", at: "2026-10-30T20:00:02.000Z" },
+        data: {
+          sequence: 3,
+          stepIndex: 0,
+          turnId: "turn",
+          requestId: "fresh-request",
+          responderPrincipalId: authority.ownerUserId,
+          outcome: "approved",
+        },
+      });
+      complete = true;
+      const preparedResponse = await f.send({ ...common, action: "native-target-prepare" });
+      expect(
+        nativeTargetTransportResponseSchemas["native-target-prepare"].parse(
+          await preparedResponse.json(),
+        ).status,
+      ).toBe(outcome === "approved" ? "ready" : "cancelled");
+      expect(f.createProject).toHaveBeenCalledTimes(outcome === "approved" ? 1 : 0);
+    },
+  );
+  it.each([
+    new HostedOperatorError("authorization_required"),
+    new HostedOperatorError("operator_unavailable"),
+    new Error("unknown read failure"),
+  ])("does not turn other history failures into pending", async (failure) => {
+    const f = fixture();
+    const planned = await f.planOnce();
+    f.dependencies.readApproval = () => {
+      throw failure;
+    };
+    await expect(
+      f.send({
+        ...f.common,
+        action: "native-target-approval-read",
+        input: { ...f.prepared, operationRef: planned.operationRef },
+      }),
+    ).rejects.toBe(failure);
+    expect(f.createProject).not.toHaveBeenCalled();
+  });
+  it("does not turn a cancelled caller into pending when a typed history timeout arrives", async () => {
+    const f = fixture();
+    const planned = await f.planOnce();
+    const abort = new AbortController();
+    const cancelled = new Error("caller cancelled");
+    abort.abort(cancelled);
+    f.dependencies.readApproval = () => Promise.reject(new HostedSessionReadTimeoutError());
+    await expect(
+      f.send(
+        {
+          ...f.common,
+          action: "native-target-approval-read",
+          input: { ...f.prepared, operationRef: planned.operationRef },
+        },
+        new Request(request(), { signal: abort.signal }),
+      ),
+    ).rejects.toBe(cancelled);
+    expect(f.createProject).not.toHaveBeenCalled();
+  });
+  it("keeps owner and exact registry checks outside the incomplete-history fallback", async () => {
+    const f = fixture();
+    const planned = await f.planOnce();
+    const read = vi.fn(() => Promise.reject(new HostedSessionReadTimeoutError()));
+    f.dependencies.readApproval = read;
+    await expect(
+      f.send({
+        ...f.common,
+        action: "native-target-approval-read",
+        input: { ...f.prepared, operationRef: "00000000-0000-5000-a000-000000000099" },
+      }),
+    ).rejects.toThrow();
+    expect(read).not.toHaveBeenCalled();
+    const revoked = new HostedSessionReadTimeoutError();
+    f.authorize.mockRejectedValueOnce(revoked);
+    await expect(
+      f.send({
+        ...f.common,
+        action: "native-target-approval-read",
+        input: { ...f.prepared, operationRef: planned.operationRef },
+      }),
+    ).rejects.toBe(revoked);
+    expect(read).not.toHaveBeenCalled();
+    expect(f.createProject).not.toHaveBeenCalled();
+  });
 });

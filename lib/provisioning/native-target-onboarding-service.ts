@@ -7,6 +7,7 @@ import type {
 } from "../agent/native-target-onboarding-runtime";
 import type { OperatorOwnerContext } from "./hosted-operator-contract";
 import { HostedOperatorError } from "./hosted-operator-contract";
+import { HostedSessionReadTimeoutError } from "../eve/hosted-session-read-timeout-error";
 import { reportHostedOperatorNativeFailure } from "./hosted-operator-native-diagnostic";
 import type { HostedOperatorNativeFailureStage } from "./hosted-operator-native-diagnostic";
 import {
@@ -101,6 +102,22 @@ const observeNativePlan = async <T>(
       } catch {
         // A diagnostic failure cannot alter the original operation.
       }
+    }
+    throw error;
+  }
+};
+
+/** A side-effect-free peek may report pending while its durable tail is incomplete. */
+const peekNativeApproval = async (
+  signal: AbortSignal,
+  read: () => Promise<NativeTargetOnboardingApproval | null>,
+): Promise<NativeTargetOnboardingApproval | null> => {
+  try {
+    return await read();
+  } catch (error) {
+    if (error instanceof HostedSessionReadTimeoutError) {
+      signal.throwIfAborted();
+      return null;
     }
     throw error;
   }
@@ -310,7 +327,9 @@ export const createNativeTargetOnboardingService =
         ) {
           throw mismatch();
         }
-        const proof = await deps.readApproval(owner, row.record, input.callId, workload);
+        const proof = await peekNativeApproval(request.signal, () =>
+          deps.readApproval(owner, row.record, input.callId, workload),
+        );
         if (proof === null) {
           output = { status: "pending" };
         } else if (proof.outcome === "approved") {
