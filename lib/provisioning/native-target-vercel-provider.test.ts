@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import type { VercelInstallationBinding } from "../integrations/vercel-installation";
 import { nativeTargetRequiredProjectProtection } from "./native-target-onboarding-contract";
@@ -159,7 +160,6 @@ describe("native target Vercel project provider", () => {
         name,
         framework: settings.framework,
         rootDirectory: settings.rootDirectory,
-        sourceFilesOutsideRootDirectory: settings.sourceFilesOutsideRootDirectory,
         buildCommand: settings.buildCommand,
         ssoProtection: nativeTargetRequiredProjectProtection.ssoProtection,
         oidcTokenConfig: nativeTargetRequiredProjectProtection.oidcTokenConfig,
@@ -176,6 +176,29 @@ describe("native target Vercel project provider", () => {
       ),
     ).not.toContain(token);
   });
+
+  it.each([true, false])(
+    "uses the create API contract and independently checks outside-root access (%s)",
+    async (outsideRoot) => {
+      const f = fixture();
+      f.request.mockImplementation((_url, options) => {
+        if (options?.method === "POST") {
+          const body = z.looseObject({}).parse(JSON.parse(z.string().parse(options.body)));
+          // Vercel POST /v11/projects has additionalProperties:false and does not
+          // accept sourceFilesOutsideRootDirectory (the PATCH endpoint does).
+          if (Object.hasOwn(body, "sourceFilesOutsideRootDirectory")) {
+            return Promise.resolve(json({ error: { code: "bad_request" } }, 400));
+          }
+          return Promise.resolve(json({ id: project.id }, 201));
+        }
+        return Promise.resolve(json({ ...project, sourceFilesOutsideRootDirectory: outsideRoot }));
+      });
+      const result = await createNativeTargetVercelProject(f.input);
+      expect(result.status).toBe(outsideRoot ? "verified" : "candidate");
+      expect(f.acceptProjectId).toHaveBeenCalledWith(project.id);
+      expect(f.request).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it("does not dispatch when the caller cannot authorize and durably record the attempt", async () => {
     const f = fixture();
