@@ -12,6 +12,9 @@ const eve = path.resolve(
 const load = (name) => import(pathToFileURL(path.join(eve, "dist/src", name)).href);
 const {
   createTerminalRecoveryCandidateCollector,
+  createOwnedLineagePreflightCollector,
+  readOwnedLineagePreflight,
+  reconcileOwnedLineagePreflight,
   readTerminalRecoveryCandidate,
   readTerminalNativeEventsSnapshot,
 } = await load("execution/session/recovery-candidate.js");
@@ -292,6 +295,11 @@ const appendHistoricalInbox = async (events, event, output, suffix) => {
     event(13 + suffix.length, "run_cancelled"),
   );
 };
+
+const collectorFor = (options) =>
+  options.collectFactory ?? createTerminalRecoveryCandidateCollector;
+const expectedCollectionKind = (options) =>
+  options.expectedKind ?? (options.expectedUnavailable === true ? "unavailable" : "candidate");
 
 const fixture = async (options = {}) => {
   const key = await fixtureKey(options.encrypted);
@@ -583,7 +591,7 @@ const fixture = async (options = {}) => {
   });
   const snapshotKey = await attachNativeSnapshot(world, nativeEvents, options.snapshot);
   let authorized = false;
-  const collect = createTerminalRecoveryCandidateCollector({
+  const collect = collectorFor(options)({
     getWorld: async () => await Promise.resolve(world),
     resolveRunEncryptionKey: async () => {
       await Promise.resolve();
@@ -616,7 +624,7 @@ const fixture = async (options = {}) => {
       await Promise.resolve();
     },
   });
-  assert.equal(collected.kind, options.expectedUnavailable === true ? "unavailable" : "candidate");
+  assert.equal(collected.kind, expectedCollectionKind(options));
   assert.equal(authorized, true);
   return {
     collected,
@@ -977,3 +985,30 @@ for (const item of [
     });
   });
 }
+
+test("running anchored-result parent is observable only through an opaque lineage preflight", async () => {
+  const options = {
+    handoff: true,
+    anchorStatus: "running",
+    runStatus: "running",
+    allowParked: true,
+  };
+  const terminal = await fixture({ ...options, expectedUnavailable: true });
+  assert.equal(terminal.collected.boundary.stage, "handoff_parent");
+  const observed = await fixture({
+    ...options,
+    collectFactory: createOwnedLineagePreflightCollector,
+    expectedKind: "preflight",
+  });
+  const payload = readOwnedLineagePreflight(observed.collected.preflight);
+  assert.equal(payload.handoffChain.length, 1);
+  assert.equal(payload.binding.ownerRunId, logicalSessionId);
+  assert.equal(payload.checkpointOwnerRunId, ownerRunId);
+  assert.throws(
+    () => readTerminalRecoveryCandidate(observed.collected.preflight),
+    /Unknown private native recovery candidate/u,
+  );
+  const reconciled = await reconcileOwnedLineagePreflight(observed.collected.preflight);
+  assert.equal(reconciled.kind, "ready");
+  assert.equal(reconciled.checkpointCore.sessionState.sessionId, logicalSessionId);
+});

@@ -636,7 +636,7 @@ diff --git a/dist/src/execution/session/recovery-candidate.d.ts b/dist/src/execu
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.d.ts
-@@ -0,0 +1,168 @@
+@@ -0,0 +1,175 @@
 +import type { World, WorkflowRun, StepWithoutData, Event } from "#compiled/@workflow/world/index.js";
 +import type { PayloadKey } from "#compiled/@workflow/core/serialization/encryption.js";
 +import type { DurableSession, DurableSessionState } from "#execution/durable-session-store.js";
@@ -794,6 +794,13 @@ new file mode 100644
 +  readonly readNativeEvents: (runId: string) => AsyncIterable<MessageStreamEvent>;
 +  readonly now: () => number;
 +}
++declare const privateLineagePreflightBrand: unique symbol;
++export interface PrivateOwnedLineagePreflight { readonly kind: "private-native-lineage-preflight"; readonly version: 1; readonly [privateLineagePreflightBrand]: true; }
++export type OwnedLineagePreflightResult = { readonly kind: "preflight"; readonly preflight: PrivateOwnedLineagePreflight } | Extract<TerminalRecoveryCandidateResult, { kind: "unavailable" }>;
++export declare function collectOwnedLineagePreflight(input: CollectTerminalRecoveryCandidateInput): Promise<OwnedLineagePreflightResult>;
++export declare function createOwnedLineagePreflightCollector(dependencies: NativeRecoveryCollectorDependencies): (input: CollectTerminalRecoveryCandidateInput) => Promise<OwnedLineagePreflightResult>;
++export declare function readOwnedLineagePreflight(preflight: PrivateOwnedLineagePreflight): PrivateNativeRecoveryPayload;
++export declare function reconcileOwnedLineagePreflight(preflight: PrivateOwnedLineagePreflight): ReturnType<typeof import("#execution/session/recovery-reconciliation.js").reconcileTerminalRecoveryCandidate>;
 +/** Native framework server wiring, with required app-owned authorization integration. No public route. */
 +export declare function collectTerminalRecoveryCandidate(
 +  input: CollectTerminalRecoveryCandidateInput,
@@ -809,17 +816,18 @@ diff --git a/dist/src/execution/session/recovery-candidate.js b/dist/src/executi
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-candidate.js
-@@ -0,0 +1,633 @@
+@@ -0,0 +1,658 @@
 +import { createRecoveryHistoryInterner } from "#execution/session/recovery-history-interning.js";
 +import {
 +  sessionCommandHookToken,
 +  sessionInboxHookToken,
 +} from "#execution/session-inbox/address.js";
-+import { resolveTerminalCheckpointOwner, nativeRecoveryBoundary } from "#execution/session/recovery-owner-provenance.js";
++import { resolveTerminalCheckpointOwner, discoverOwnedRecoveryLineage, nativeRecoveryBoundary } from "#execution/session/recovery-owner-provenance.js";
 +// Server-only native checkpoint inspection. This module never starts/resumes a run.
 +// The caller MUST supply canonical ownership authorization; model/client IDs are
 +// not authority. Payloads remain behind an in-process opaque handle.
 +const payloads = new WeakMap();
++const lineagePreflights = new WeakMap();
 +const isRecord = (value) => value !== null && typeof value === "object";
 +const nativeFunction = (name) =>
 +  String(name ?? "")
@@ -873,7 +881,29 @@ new file mode 100644
 +}
 +
 +/** Dependencies are native SDK operations, injectable for synthetic fixtures. */
-+export function createTerminalRecoveryCandidateCollector(dependencies) {
++export function createTerminalRecoveryCandidateCollector(dependencies) { return createCandidateCollector(dependencies, resolveTerminalCheckpointOwner); }
++export function createOwnedLineagePreflightCollector(dependencies) {
++  const collect = createCandidateCollector(dependencies, discoverOwnedRecoveryLineage);
++  return async (input) => {
++    const result = await collect({ ...input, allowParked: true });
++    if (result.kind !== "candidate") return result;
++    const preflight = Object.freeze({ kind: "private-native-lineage-preflight", version: 1 });
++    lineagePreflights.set(preflight, result.candidate);
++    return { kind: "preflight", preflight };
++  };
++}
++export function readOwnedLineagePreflight(preflight) {
++  const candidate = lineagePreflights.get(preflight);
++  if (candidate === undefined) throw new Error("Unknown private native lineage preflight.");
++  return readTerminalRecoveryCandidate(candidate);
++}
++export async function reconcileOwnedLineagePreflight(preflight) {
++  const candidate = lineagePreflights.get(preflight);
++  if (candidate === undefined) throw new Error("Unknown private native lineage preflight.");
++  const { reconcileTerminalRecoveryCandidate } = await import("#execution/session/recovery-reconciliation.js");
++  return await reconcileTerminalRecoveryCandidate(candidate);
++}
++function createCandidateCollector(dependencies, resolveOwner) {
 +  return async function collectTerminalRecoveryCandidate(input) {
 +    const { binding: suppliedBinding, authorizeOwner } = input;
 +    if (
@@ -906,7 +936,7 @@ new file mode 100644
 +    ) {
 +      return { kind: "unavailable", reason: "native-data-expired" };
 +    }
-+    const owner = await resolveTerminalCheckpointOwner({
++    const owner = await resolveOwner({
 +      world,
 +      anchor,
 +      allowParked: input.allowParked === true,
@@ -1400,7 +1430,9 @@ new file mode 100644
 +}
 +
 +/** Production wiring stays inside the native framework, after owner authorization. */
-+export async function collectTerminalRecoveryCandidate(input) {
++export async function collectTerminalRecoveryCandidate(input) { return await collectNativeCandidate(input, createTerminalRecoveryCandidateCollector); }
++export async function collectOwnedLineagePreflight(input) { return await collectNativeCandidate({ ...input, allowParked: true }, createOwnedLineagePreflightCollector); }
++async function collectNativeCandidate(input, collectorFactory) {
 +  const [runtime, serialization, durable] = await Promise.all([
 +    import("#internal/workflow/runtime.js"),
 +    import("#compiled/@workflow/core/serialization.js"),
@@ -1415,7 +1447,7 @@ new file mode 100644
 +      (value) => Object.freeze({ kind: "native-recovery-transport-reference", type, value }),
 +    ]),
 +  );
-+  return createTerminalRecoveryCandidateCollector({
++  return collectorFactory({
 +    getWorld: runtime.getWorld,
 +    resolveRunEncryptionKey: runtime.resolveRunEncryptionKey,
 +    hydrateWorkflowArguments: (value, runId, key) =>
@@ -1890,7 +1922,7 @@ new file mode 100644
 index 0000000..a320829
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-owner-provenance.d.ts
-@@ -0,0 +1,48 @@
+@@ -0,0 +1,56 @@
 +import type { Event, World, WorkflowRun } from "#compiled/@workflow/world/index.js";
 +import type { PayloadKey } from "#compiled/@workflow/core/serialization/encryption.js";
 +import type {
@@ -1939,11 +1971,19 @@ index 0000000..a320829
 +  readonly authorizeOwner: (binding: NativeRecoveryOwnerBinding) => Promise<void>;
 +  readonly dependencies: NativeRecoveryCollectorDependencies;
 +}): Promise<TerminalCheckpointOwnerResolution>;
++export declare function discoverOwnedRecoveryLineage(input: {
++  readonly world: World;
++  readonly anchor: WorkflowRun;
++  readonly allowParked?: boolean;
++  readonly binding: NativeRecoveryOwnerBinding;
++  readonly authorizeOwner: (binding: NativeRecoveryOwnerBinding) => Promise<void>;
++  readonly dependencies: NativeRecoveryCollectorDependencies;
++}): Promise<TerminalCheckpointOwnerResolution>;
 diff --git a/dist/src/execution/session/recovery-owner-provenance.js b/dist/src/execution/session/recovery-owner-provenance.js
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/recovery-owner-provenance.js
-@@ -0,0 +1,460 @@
+@@ -0,0 +1,463 @@
 +import { createRecoveryHistoryInterner } from "#execution/session/recovery-history-interning.js";
 +import { isDeepStrictEqual } from "node:util";
 +import {
@@ -1962,10 +2002,13 @@ new file mode 100644
 +export const nativeRecoveryBoundary = (stage, run, allowParked, parent) => ({ stage, status: statusLabel(run.status), ...(parent === undefined ? {} : { parentStatus: statusLabel(parent.status) }), allowParked: allowParked === true });
 +
 +/** Private discovery hints never authorize collection of a candidate's app state. */
-+export async function resolveTerminalCheckpointOwner({
++export async function resolveTerminalCheckpointOwner(input) { return await discoverCheckpointOwner({ ...input, allowLiveAncestors: false }); }
++export async function discoverOwnedRecoveryLineage(input) { return await discoverCheckpointOwner({ ...input, allowParked: true, allowLiveAncestors: true }); }
++async function discoverCheckpointOwner({
 +  world,
 +  anchor,
 +  allowParked = false,
++  allowLiveAncestors = false,
 +  binding,
 +  authorizeOwner,
 +  dependencies,
@@ -2343,7 +2386,7 @@ new file mode 100644
 +    }
 +    if (candidates.length !== 1) return unavailable("handoff-owner-ambiguous");
 +    const child = candidates[0];
-+    if (!terminal(parent)) return { ...unavailable("source-not-terminal"), boundary: nativeRecoveryBoundary("handoff_parent", parent, allowParked) };
++    if (!terminal(parent) && !(allowLiveAncestors && ["pending", "running"].includes(parent.status))) return { ...unavailable("source-not-terminal"), boundary: nativeRecoveryBoundary("handoff_parent", parent, allowParked) };
 +    if (!terminal(child.run) && !(allowParked && ["pending", "running"].includes(child.run.status))) return { ...unavailable("source-not-terminal"), boundary: nativeRecoveryBoundary("handoff_successor", child.run, allowParked, parent) };
 +    // After successful transfer a parent may only finish handoff bookkeeping.
 +    // Retain each complete physical frontier separately; never compare its slots
@@ -3246,7 +3289,7 @@ new file mode 100644
 index 0000000..a3f1892
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.d.ts
-@@ -0,0 +1,115 @@
+@@ -0,0 +1,120 @@
 +import type { SessionAuthContext } from "#channel/types.js";
 +import type { SessionCheckpoint } from "#execution/session/handoff.js";
 +import type { TerminalRecoveryWorkflowEntryInput } from "#execution/session/entry-input.js";
@@ -3316,6 +3359,10 @@ index 0000000..a3f1892
 +}
 +export interface TerminalRecoveryDependencies {
 +  collect(input: CollectTerminalRecoveryCandidateInput): Promise<TerminalRecoveryCandidateResult>;
++  collectLineagePreflight?: typeof import("#execution/session/recovery-candidate.js").collectOwnedLineagePreflight;
++  readLineagePreflight?: typeof import("#execution/session/recovery-candidate.js").readOwnedLineagePreflight;
++  reconcileLineagePreflight?: typeof import("#execution/session/recovery-candidate.js").reconcileOwnedLineagePreflight;
++  readLogicalInboxOwner?(logicalSessionId: string): Promise<{ readonly runId: string; readonly logicalSessionId: string } | undefined>;
 +  inspectSource?(ownerRunId: string): Promise<{ readonly runId: string; readonly status: string; readonly unsettledStepIds: readonly string[]; readonly stepCounts?: Readonly<Record<string, number>> }>;
 +  stopSource?(ownerRunId: string, reason: string): Promise<void>;
 +  readStopReceipt?(ownerRunId: string, reason: string): Promise<boolean>;
@@ -3331,11 +3378,12 @@ index 0000000..a3f1892
 +  now(): number;
 +  wait(ms: number): Promise<void>;
 +}
++export declare function createNativeTerminalRecoveryDependencies(): Promise<TerminalRecoveryDependencies>;
 +export declare function inspectNativeRecoverySource(world: Pick<import("#compiled/@workflow/world/index.js").World, "runs" | "steps">, ownerRunId: string): Promise<{ readonly runId: string; readonly status: string; readonly unsettledStepIds: readonly string[]; readonly stepCounts: Readonly<Record<string, number>> }>;
 +export declare function parseTerminalRecoveryDescriptor(value: unknown, operationId: unknown): TerminalRecoveryDescriptor | undefined;
 +export declare function terminalRecoveryActivationToken(auth: SessionAuthContext, descriptor: TerminalRecoveryDescriptor): string;
 +export declare function terminalRecoveryPolicy(entry: unknown): Pick<SessionCheckpoint, "capabilities" | "retention" | "sessionTimeoutMs"> | undefined;
-+export declare function quiesceLiveRecoverySource(input: TerminalRecoveryAuthorityInput & { readonly ports: TerminalRecoveryPorts }, dependencies: TerminalRecoveryDependencies): Promise<{ readonly kind: "ready" } | { readonly kind: "unavailable" | "uncertain"; readonly reason: string }>;
++export declare function quiesceLiveRecoverySource(input: TerminalRecoveryAuthorityInput & { readonly ports: TerminalRecoveryPorts }, dependencies: TerminalRecoveryDependencies, onStopMayHaveOccurred?: () => void, parkedRecoveryBinding?: TerminalRecoveryBinding): Promise<{ readonly kind: "ready"; readonly ownerRunIds: readonly string[]; readonly stopMayHaveOccurred: boolean } | { readonly kind: "unavailable" | "uncertain"; readonly reason: string }>;
 +export declare function recoverTerminalSession(input: TerminalRecoveryAuthorityInput & { readonly ports: TerminalRecoveryPorts }, dependencies: TerminalRecoveryDependencies): Promise<{ readonly kind: "accepted"; readonly recoveryBinding: TerminalRecoveryBinding } | { readonly kind: "unavailable" | "uncertain"; readonly reason: string }>;
 +export declare function activateTerminalSession(input: TerminalRecoveryAuthorityInput & { readonly ports: TerminalRecoveryPorts }, dependencies: Pick<TerminalRecoveryDependencies, "getHook" | "resumeHook" | "isHookNotFound">): Promise<{ readonly kind: "accepted"; readonly recoveryBinding: TerminalRecoveryBinding }>;
 +export declare function handleTerminalRecoveryRequest(input: {
@@ -3366,7 +3414,7 @@ diff --git a/dist/src/execution/session/terminal-recovery.js b/dist/src/executio
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.js
-@@ -0,0 +1,666 @@
+@@ -0,0 +1,748 @@
 +import { createHash } from "node:crypto";
 +import { DEFAULT_SESSION_TIMEOUT_MS } from "#execution/session/timeout.js";
 +import { SESSION_CHECKPOINT_VERSION } from "#execution/session/handoff.js";
@@ -3375,7 +3423,7 @@ new file mode 100644
 +const provenanceKeys = ["kind", "sourceStepId", "sourceEventId", "sourceSlot", "checkpointVersion", "checkpointOwnerRunId"];
 +const sameTransfer = (left, right) => left === undefined && right === undefined || record(left) && record(right) && left.kind === right.kind && left.sourceCheckpointDigest === right.sourceCheckpointDigest;
 +const refusalReasons = new Set([
-+  "source-not-terminal", "native-data-expired", "handoff-discovery-unavailable", "handoff-owner-ambiguous", "handoff-parent-frontier-uncertain", "paired-native-checkpoint-unavailable", "native-checkpoint-identity-mismatch", "source-policy-unavailable", "checkpoint-origin-unavailable", "checkpoint-identity-mismatch", "live-transfer-unsupported", "source-approval-not-parked", "source-effect-steps-unsettled", "source-lineage-effects-unsettled", "source-not-parked", "source-physical-owner-changed", "source-stop-not-owned", "source-stop-unconfirmed", "approval-transcript-unavailable", "cancelled-call-history-unreconciled", "cancelled-turn-replay", "conflicting-retained-history", "coordination-results-incomplete", "delivery-consumption-unreconciled", "failed-turn-effects-unreconciled", "later-coordination-input-unreconciled", "native-stream-incomplete", "runtime-result-consumption-ambiguous", "runtime-result-owner-unreconciled", "unconsumed-native-inbox-input", "unreadable-native-effect-frontier",
++  "source-not-terminal", "native-data-expired", "handoff-discovery-unavailable", "handoff-owner-ambiguous", "handoff-parent-frontier-uncertain", "paired-native-checkpoint-unavailable", "native-checkpoint-identity-mismatch", "source-policy-unavailable", "checkpoint-origin-unavailable", "checkpoint-identity-mismatch", "live-transfer-unsupported", "source-approval-not-parked", "source-effect-steps-unsettled", "source-lineage-effects-unsettled", "source-not-parked", "source-physical-owner-changed", "source-stop-not-owned", "source-stop-unconfirmed", "approval-transcript-unavailable", "cancelled-call-history-unreconciled", "cancelled-turn-replay", "conflicting-retained-history", "coordination-results-incomplete", "delivery-consumption-unreconciled", "failed-turn-effects-unreconciled", "later-coordination-input-unreconciled", "native-stream-incomplete", "runtime-result-consumption-ambiguous", "runtime-result-owner-unreconciled", "unconsumed-native-inbox-input", "unreadable-native-effect-frontier", "uncommitted-action-result", "uncommitted-action-dispatch", "cancelled-call-result-unreconciled",
 +]);
 +const refusalStages = new Set(["dependencies", "source_authorization", "receipt_read", "receipt_validate", "live_transfer_preflight", "candidate_collect", "candidate_authorization", "candidate_read", "candidate_reconcile", "source_policy", "checkpoint_prepare", "pre_start_authorization", "pre_start_receipt_read", "pre_start_receipt_validate", "owner_start", "owner_readiness_wait", "owner_readiness_deadline", "receipt_authorization", "receipt_commit", "holder_authorization", "holder_receipt_read", "holder_closure", "post_holder_authorization", "post_holder_receipt_read", "post_holder_receipt_validate", "candidate_receipt_read"]);
 +const refusalReason = (value) => typeof value === "string" && refusalReasons.has(value) ? value : "other";
@@ -3404,8 +3452,11 @@ new file mode 100644
 +  } catch { return "other"; }
 +};
 +class NativeSourceAuthorizationFailure extends Error {}
++const diagnosticHttpStatus = (error) => {
++  try { const status = error instanceof NativeInspectionFailure ? error.httpStatus : error?.status; return Number.isInteger(status) && status >= 400 && status <= 599 ? status : null; } catch { return null; }
++};
 +class NativeInspectionFailure extends Error {
-+  constructor(stage, error, status, category) { super("Native source inspection unavailable."); this.stage = stage; this.category = category ?? diagnosticErrorCategory(error); this.nativeStatus = status === undefined ? null : nativeStatusLabel(status); }
++  constructor(stage, error, status, category) { super("Native source inspection unavailable."); this.stage = stage; this.category = category ?? diagnosticErrorCategory(error); this.nativeStatus = status === undefined ? null : nativeStatusLabel(status); this.httpStatus = diagnosticHttpStatus(error); }
 +}
 +const reportNativeDiagnostic = (value) => { try { console.info(JSON.stringify(value)); } catch { /* Advisory telemetry never controls execution. */ } };
 +const inspectionStage = (value) => ["dependencies", "world", "run_read", "run_identity", "steps_list", "step_identity", "step_pagination"].includes(value) ? value : "other";
@@ -3422,7 +3473,7 @@ new file mode 100644
 +    let cursor;
 +    do {
 +      stage = "steps_list";
-+      const page = await world.steps.list({ runId: ownerRunId, pagination: { limit: 128, sortOrder: "asc", ...(cursor === undefined ? {} : { cursor }) }, resolveData: "none" });
++      const page = await world.steps.list({ runId: ownerRunId, pagination: { sortOrder: "asc", ...(cursor === undefined ? {} : { cursor }) }, resolveData: "none" });
 +      for (const step of page.data) {
 +        stage = "step_identity";
 +        if (step.runId !== ownerRunId) throw new NativeInspectionFailure(stage, undefined, run.status, "identity");
@@ -3480,6 +3531,11 @@ new file mode 100644
 +}
 +
 +export async function recoverTerminalSession(input, dependencies, onPrepareStage) {
++  let stopMayHaveOccurred = false;
++  const result = await recoverOwnedTerminalSession(input, dependencies, onPrepareStage, () => { stopMayHaveOccurred = true; });
++  return stopMayHaveOccurred && result.kind !== "accepted" ? { ...result, kind: "uncertain" } : result;
++}
++async function recoverOwnedTerminalSession(input, dependencies, onPrepareStage, markStopMayHaveOccurred) {
 +  let stage = "source_authorization";
 +  const preparing = (value) => {
 +    stage = value;
@@ -3499,12 +3555,15 @@ new file mode 100644
 +    if (!matchesDescriptor(existing, descriptor)) throw new Error("Recovery receipt binding changed.");
 +    return { kind: "accepted", recoveryBinding: existing };
 +  }
++  let transferOwnerRunIds;
++  let ready = await findReady("initial_ready");
++  if (ready !== undefined && descriptor.executionTransfer !== undefined) markStopMayHaveOccurred();
 +  if (descriptor.executionTransfer !== undefined) {
 +    preparing("live_transfer_preflight");
-+    const stopped = await quiesceLiveRecoverySource(input, dependencies);
++    const stopped = await quiesceLiveRecoverySource(input, dependencies, markStopMayHaveOccurred, ready);
 +    if (stopped.kind !== "ready") return stopped;
++    transferOwnerRunIds = stopped.ownerRunIds;
 +  }
-+  let ready = await findReady("initial_ready");
 +  if (ready === undefined && dependencies.closeHolder !== undefined) {
 +    const authorizeCurrent = async () => {
 +      preparing("holder_authorization");
@@ -3527,7 +3586,7 @@ new file mode 100644
 +    }
 +    ready = await findReady("post_holder_ready");
 +  }
-+  if (ready === undefined) {
++  if (ready === undefined || descriptor.executionTransfer !== undefined) {
 +    preparing("candidate_collect");
 +    const collected = await dependencies.collect({
 +      binding: { ownerRunId: descriptor.sourceOwnerRunId, logicalSessionId: descriptor.logicalSessionId },
@@ -3541,6 +3600,7 @@ new file mode 100644
 +    if (collected.kind !== "candidate") return { kind: "unavailable", reason: collected.reason };
 +    preparing("candidate_read");
 +    const payload = dependencies.readCandidate(collected.candidate);
++    if (transferOwnerRunIds !== undefined && !sameOwnerIds(transferOwnerRunIds, lineageOwnerIds(payload))) return { kind: "uncertain", reason: "source-physical-owner-changed" };
 +    if (descriptor.executionTransfer !== undefined && !await executionTransferLineageClosed(payload, dependencies, async () => await ports.authorize(call), true)) return { kind: "uncertain", reason: "source-lineage-effects-unsettled" };
 +    let repeatableCallIds;
 +    if (ports.authorizeRepeatableRecoveryCalls !== undefined) {
@@ -3593,6 +3653,7 @@ new file mode 100644
 +      return { kind: "accepted", recoveryBinding: current };
 +    }
 +    ready = await findReady("pre_start_ready");
++    if (ready !== undefined && (ready.provenance.kind !== provenance.kind || ready.provenance.sourceStepId !== provenance.sourceStepId || ready.provenance.sourceEventId !== provenance.sourceEventId || ready.provenance.sourceSlot !== provenance.sourceSlot || (ready.provenance.checkpointOwnerRunId ?? descriptor.sourceOwnerRunId) !== provenance.checkpointOwnerRunId)) return { kind: "uncertain", reason: "checkpoint-origin-unavailable" };
 +    if (ready === undefined) {
 +      preparing("owner_start");
 +      await dependencies.start({ activationToken: token, checkpoint, descriptor, provenance, replayInput: reconciled.replayInput, carriedInbox: reconciled.carriedInbox });
@@ -3844,51 +3905,91 @@ new file mode 100644
 +}
 +
 +/** Transfer an owned parked execution only after complete retained-state preflight. */
-+export async function quiesceLiveRecoverySource(input, dependencies) {
++const lineageOwnerIds = (payload) => [...new Set([...payload.handoffChain.map((entry) => entry.parentRunId), payload.checkpointOwnerRunId])];
++const sameOwnerIds = (left, right) => left.length === right.length && left.every((id, index) => id === right[index]);
++export async function quiesceLiveRecoverySource(input, dependencies, onStopMayHaveOccurred, parkedRecoveryBinding) {
++  let stopMayHaveOccurred = false;
++  const mark = () => { stopMayHaveOccurred = true; onStopMayHaveOccurred?.(); };
++  const result = await quiesceOwnedLineage(input, dependencies, mark, parkedRecoveryBinding);
++  if (result.kind === "ready") return { ...result, stopMayHaveOccurred };
++  return stopMayHaveOccurred ? { ...result, kind: "uncertain" } : result;
++}
++async function quiesceOwnedLineage(input, dependencies, markStopMayHaveOccurred, parkedRecoveryBinding) {
 +  const { auth, descriptor, ports } = input;
-+  if (descriptor.executionTransfer === undefined || dependencies.inspectSource === undefined || dependencies.stopSource === undefined || dependencies.readStopReceipt === undefined) return { kind: "unavailable", reason: "live-transfer-unsupported" };
++  if (descriptor.executionTransfer === undefined || dependencies.inspectSource === undefined || dependencies.stopSource === undefined || dependencies.readStopReceipt === undefined || dependencies.collectLineagePreflight === undefined || dependencies.readLineagePreflight === undefined || dependencies.reconcileLineagePreflight === undefined || dependencies.readLogicalInboxOwner === undefined) return { kind: "unavailable", reason: "live-transfer-unsupported" };
 +  const call = { auth, descriptor };
 +  const binding = { ownerRunId: descriptor.sourceOwnerRunId, logicalSessionId: descriptor.logicalSessionId };
 +  const authorize = async () => { await ports.authorize(call); if (await ports.readReceipt(call) != null) throw new Error("Recovery receipt changed during execution transfer."); };
-+  await authorize();
-+  const collected = await dependencies.collect({ binding, allowParked: true, authorizeOwner: async (observed) => { if (observed.ownerRunId !== binding.ownerRunId || observed.logicalSessionId !== binding.logicalSessionId) throw new Error("Execution transfer binding changed."); await authorize(); } });
-+  if (collected.kind !== "candidate") return { kind: "unavailable", reason: collected.reason, ...(collected.boundary === undefined ? {} : { boundary: collected.boundary }) };
-+  const reconciled = await dependencies.reconcile(collected.candidate);
-+  if (reconciled.kind !== "ready") return reconciled;
-+  const retainedPayload = dependencies.readCandidate(collected.candidate);
-+  if (!await executionTransferLineageClosed(retainedPayload, dependencies, authorize)) return { kind: "unavailable", reason: "source-lineage-effects-unsettled" };
-+  const physicalOwnerRunId = retainedPayload.checkpointOwnerRunId;
-+  const source = await dependencies.inspectSource(physicalOwnerRunId);
-+  if (source.runId !== physicalOwnerRunId) throw new Error("Execution transfer source changed.");
 +  const reason = `Builder native execution transfer ${descriptor.operationId}`;
-+  if (source.unsettledStepIds.length > 0) return { kind: "unavailable", reason: "source-effect-steps-unsettled" };
-+  if (source.status === "cancelled") {
-+    if (!await dependencies.readStopReceipt(physicalOwnerRunId, reason)) return { kind: "unavailable", reason: "source-stop-not-owned" };
++  const preflight = async () => {
 +    await authorize();
-+    return { kind: "ready" };
++    const result = await dependencies.collectLineagePreflight({ binding, authorizeOwner: async (observed) => { if (observed.ownerRunId !== binding.ownerRunId || observed.logicalSessionId !== binding.logicalSessionId) throw new Error("Execution transfer binding changed."); await authorize(); } });
++    if (result.kind !== "preflight") return result;
++    const reconciled = await dependencies.reconcileLineagePreflight(result.preflight);
++    if (reconciled.kind !== "ready") return reconciled;
++    const payload = dependencies.readLineagePreflight(result.preflight);
++    const { readDurableSession } = await import("#execution/durable-session-store.js");
++    const { getPendingInputBatches } = await import("#harness/pending-input-batches.js");
++    const { getApprovalAuditState } = await import("#harness/approval-candidates.js");
++    const state = readDurableSession(reconciled.checkpointCore.sessionState).state;
++    const pending = getPendingInputBatches(state);
++    if (pending.length === 0 || pending.some((batch) => batch.requests.some((request) => request.kind !== "tool-approval")) || getApprovalAuditState(state).activeCandidates.length > 0) return { kind: "unavailable", reason: "source-approval-not-parked" };
++    const ownerRunIds = lineageOwnerIds(payload);
++    const observations = [];
++    for (const runId of ownerRunIds) {
++      await authorize();
++      const observed = await dependencies.inspectSource(runId);
++      if (observed.runId !== runId || observed.unsettledStepIds.length > 0) return { kind: "unavailable", reason: "source-lineage-effects-unsettled" };
++      if (!["pending", "running", "completed", "failed", "cancelled"].includes(observed.status)) return { kind: "unavailable", reason: "source-not-parked" };
++      if (observed.status === "cancelled") {
++        if (!await dependencies.readStopReceipt(runId, reason)) return { kind: "unavailable", reason: "source-stop-not-owned" };
++        markStopMayHaveOccurred();
++      }
++      observations.push(observed);
++    }
++    await authorize();
++    const inbox = await dependencies.readLogicalInboxOwner(binding.logicalSessionId);
++    if (inbox !== undefined && inbox.logicalSessionId !== binding.logicalSessionId) return { kind: "uncertain", reason: "source-physical-owner-changed" };
++    if (inbox !== undefined && inbox.runId !== payload.checkpointOwnerRunId) {
++      if (parkedRecoveryBinding === undefined || !matchesDescriptor(parkedRecoveryBinding, descriptor) || inbox.runId !== parkedRecoveryBinding.ownerRunId) return { kind: "uncertain", reason: "source-physical-owner-changed" };
++      await authorize();
++      let hook;
++      try { hook = await dependencies.getHook(terminalRecoveryActivationToken(auth, descriptor)); } catch { return { kind: "uncertain", reason: "source-physical-owner-changed" }; }
++      const currentReady = (await hook.metadata)?.recoveryBinding;
++      if (!matchesDescriptor(currentReady, descriptor) || hook.runId !== parkedRecoveryBinding.ownerRunId || !sameReceipt(currentReady, parkedRecoveryBinding)) return { kind: "uncertain", reason: "source-physical-owner-changed" };
++      await authorize();
++    }
++    const final = observations.at(-1);
++    if (inbox === undefined && ["pending", "running"].includes(final.status)) return { kind: "unavailable", reason: "source-approval-not-parked" };
++    await authorize();
++    return { kind: "preflight", ownerRunIds, observations };
++  };
++  const initial = await preflight();
++  if (initial.kind !== "preflight") return initial;
++  const ownerRunIds = initial.ownerRunIds;
++  for (const runId of ownerRunIds) {
++    const current = await preflight();
++    if (current.kind !== "preflight") return current;
++    if (!sameOwnerIds(current.ownerRunIds, ownerRunIds)) return { kind: "uncertain", reason: "source-physical-owner-changed" };
++    const observed = current.observations.find((run) => run.runId === runId);
++    if (["completed", "failed", "cancelled"].includes(observed.status)) continue;
++    await authorize();
++    markStopMayHaveOccurred();
++    try { await dependencies.stopSource(runId, reason); }
++    catch { /* A lost stop response is settled only by its exact native receipt below. */ }
++    await authorize();
++    const stopped = await dependencies.inspectSource(runId);
++    if (stopped.runId !== runId || stopped.status !== "cancelled" || stopped.unsettledStepIds.length > 0 || !await dependencies.readStopReceipt(runId, reason)) return { kind: "uncertain", reason: "source-stop-unconfirmed" };
++    await authorize();
 +  }
-+  if (!["pending", "running"].includes(source.status)) return { kind: "unavailable", reason: "source-not-parked" };
-+  const { readDurableSession } = await import("#execution/durable-session-store.js");
-+  const { getPendingInputBatches } = await import("#harness/pending-input-batches.js");
-+  const { getApprovalAuditState } = await import("#harness/approval-candidates.js");
-+  const state = readDurableSession(reconciled.checkpointCore.sessionState).state;
-+  const pending = getPendingInputBatches(state);
-+  if (pending.length === 0 || pending.some((batch) => batch.requests.some((request) => request.kind !== "tool-approval")) || getApprovalAuditState(state).activeCandidates.length > 0) return { kind: "unavailable", reason: "source-approval-not-parked" };
++  const terminal = await preflight();
++  if (terminal.kind !== "preflight") return terminal;
++  if (!sameOwnerIds(terminal.ownerRunIds, ownerRunIds) || terminal.observations.some((run) => !["completed", "failed", "cancelled"].includes(run.status))) return { kind: "uncertain", reason: "source-physical-owner-changed" };
 +  await authorize();
-+  const ownerCheck = await dependencies.collect({ binding, allowParked: true, authorizeOwner: async (observed) => { if (observed.ownerRunId !== binding.ownerRunId || observed.logicalSessionId !== binding.logicalSessionId) throw new Error("Execution transfer binding changed."); await authorize(); } });
-+  if (ownerCheck.kind !== "candidate" || dependencies.readCandidate(ownerCheck.candidate).checkpointOwnerRunId !== physicalOwnerRunId) return { kind: "unavailable", reason: "source-physical-owner-changed" };
-+  if (!await executionTransferLineageClosed(dependencies.readCandidate(ownerCheck.candidate), dependencies, authorize)) return { kind: "unavailable", reason: "source-lineage-effects-unsettled" };
-+  const beforeStop = await dependencies.inspectSource(physicalOwnerRunId);
-+  if (beforeStop.runId !== physicalOwnerRunId || !["pending", "running"].includes(beforeStop.status) || beforeStop.unsettledStepIds.length > 0) return { kind: "unavailable", reason: "source-not-parked" };
-+  await authorize();
-+  await dependencies.stopSource(physicalOwnerRunId, reason);
-+  await authorize();
-+  const stopped = await dependencies.inspectSource(physicalOwnerRunId);
-+  if (stopped.runId !== physicalOwnerRunId || stopped.status !== "cancelled" || stopped.unsettledStepIds.length > 0 || !await dependencies.readStopReceipt(physicalOwnerRunId, reason)) return { kind: "uncertain", reason: "source-stop-unconfirmed" };
-+  await authorize();
-+  return { kind: "ready" };
++  return { kind: "ready", ownerRunIds };
 +}
 +
++export async function createNativeTerminalRecoveryDependencies() { return await nativeDependencies(); }
 +async function nativeDependencies() {
 +  const [collector, reconciler, runtime, workflow, serialization, errors, closure] = await Promise.all([
 +    import("#execution/session/recovery-candidate.js"),
@@ -3901,6 +4002,18 @@ new file mode 100644
 +  ]);
 +  return {
 +    collect: collector.collectTerminalRecoveryCandidate,
++    collectLineagePreflight: collector.collectOwnedLineagePreflight,
++    readLineagePreflight: collector.readOwnedLineagePreflight,
++    reconcileLineagePreflight: collector.reconcileOwnedLineagePreflight,
++    async readLogicalInboxOwner(logicalSessionId) {
++      const { sessionCommandHookToken, sessionInboxHookToken } = await import("#execution/session-inbox/address.js");
++      let hook;
++      try { hook = await runtime.getHookByToken(sessionInboxHookToken(sessionCommandHookToken(logicalSessionId))); }
++      catch (error) { if (errors.HookNotFoundError.is(error)) return undefined; throw error; }
++      const metadata = await hook.metadata;
++      if (metadata?.sessionId !== logicalSessionId || typeof hook.runId !== "string") throw new Error("Native logical inbox identity changed.");
++      return { runId: hook.runId, logicalSessionId };
++    },
 +    readCandidate: collector.readTerminalRecoveryCandidate,
 +    reconcile: reconciler.reconcileTerminalRecoveryCandidate,
 +    closeHolder: closure.closeNoncanonicalRecoveryInboxHolder,
@@ -3977,31 +4090,48 @@ new file mode 100644
 +      let collectionErrorCategory = null;
 +      try {
 +        if (dependencies === undefined) throw dependencyFailure;
-+        collected = await dependencies.collect({ binding, allowParked: true, authorizeOwner: async (observed) => { await authorize(); if (observed.ownerRunId !== binding.ownerRunId || observed.logicalSessionId !== binding.logicalSessionId) throw new NativeSourceAuthorizationFailure(); } });
++        collected = await dependencies.collectLineagePreflight({ binding, authorizeOwner: async (observed) => { await authorize(); if (observed.ownerRunId !== binding.ownerRunId || observed.logicalSessionId !== binding.logicalSessionId) throw new NativeSourceAuthorizationFailure(); } });
 +      } catch (error) { if (error instanceof NativeSourceAuthorizationFailure) throw error; collectionErrorCategory = diagnosticErrorCategory(error); }
 +      await authorize();
 +      routeStage = "candidate_read";
 +      let candidate;
-+      if (collected?.kind === "candidate") {
-+        try { candidate = dependencies.readCandidate(collected.candidate); } catch (error) { collectionErrorCategory = diagnosticErrorCategory(error); }
++      if (collected?.kind === "preflight") {
++        try { candidate = dependencies.readLineagePreflight(collected.preflight); } catch (error) { collectionErrorCategory = diagnosticErrorCategory(error); }
++      }
++      let reconciliation = { kind: "unassessed", reason: null, errorCategory: null };
++      if (candidate !== undefined) {
++        await authorize();
++        try { const result = await dependencies.reconcileLineagePreflight(collected.preflight); reconciliation = { kind: ["ready", "uncertain", "unavailable"].includes(result.kind) ? result.kind : "failed", reason: result.kind === "ready" ? null : refusalReason(result.reason), errorCategory: null }; }
++        catch (error) { reconciliation = { kind: "failed", reason: null, errorCategory: diagnosticErrorCategory(error) }; }
++        await authorize();
 +      }
 +      const lineage = candidate === undefined ? [] : [...new Set([...candidate.handoffChain.map((entry) => entry.parentRunId), candidate.checkpointOwnerRunId])];
 +      const observedRuns = [];
++      let lineageFailure;
 +      routeStage = "lineage_inspection";
-+      for (const ownerRunId of lineage) { await authorize(); try { observedRuns.push(await dependencies.inspectSource(ownerRunId)); } catch { /* Advisory lineage counts remain unassessed. */ } await authorize(); }
++      for (const ownerRunId of lineage) {
++        await authorize();
++        try { const observed = await dependencies.inspectSource(ownerRunId); if (observed.runId !== ownerRunId) throw new NativeInspectionFailure("run_identity", undefined, observed.status, "identity"); observedRuns.push(observed); }
++        catch (error) { lineageFailure ??= error; }
++        await authorize();
++      }
 +      const observed = observedRuns.at(-1);
-+      const lineageUnsettledStepCount = observedRuns.length === lineage.length ? observedRuns.reduce((sum, run) => sum + run.unsettledStepIds.length, 0) : null;
++      const allLineageRead = candidate !== undefined && observedRuns.length === lineage.length;
++      const lineageUnsettledStepCount = allLineageRead ? observedRuns.reduce((sum, run) => sum + run.unsettledStepIds.length, 0) : null;
++      const aggregateCounts = allLineageRead && observedRuns.every((run) => ["completed", "pending", "running", "failed", "cancelled", "unknown"].every((status) => diagnosticCount(run.stepCounts?.[status]) !== null)) ? Object.fromEntries(["completed", "pending", "running", "failed", "cancelled", "unknown"].map((status) => [status, observedRuns.reduce((sum, run) => sum + run.stepCounts[status], 0)])) : null;
 +      await authorize();
 +      const sourceDiagnostic = {
 +        version: 1,
-+        collectionKind: collectionErrorCategory !== null ? "failed" : collected?.kind === "candidate" ? "candidate" : collected?.kind === "unavailable" ? "unavailable" : "other",
++        collectionKind: collectionErrorCategory !== null ? "failed" : collected?.kind === "preflight" ? "preflight" : collected?.kind === "unavailable" ? "unavailable" : "other",
 +        collectionReason: collected?.kind === "unavailable" ? refusalReason(collected.reason) : null,
 +        collectionBoundary: refusalBoundary(collected?.boundary),
 +        collectionErrorCategory,
-+        collectionStage: dependencies === undefined ? "dependencies" : collected?.kind === "candidate" ? "candidate_read" : "candidate_collect",
-+        anchorRead: { outcome: anchor === undefined ? "failed" : "succeeded", stage: anchor === undefined ? inspectionStage(anchorFailure?.stage) : "complete", errorCategory: anchor === undefined ? diagnosticErrorCategory(anchorFailure) : null, status: anchor === undefined ? anchorFailure instanceof NativeInspectionFailure ? anchorFailure.nativeStatus : null : nativeStatusLabel(anchor.status), unsettledStepCount: anchor === undefined ? null : diagnosticCount(anchor.unsettledStepIds.length), stepCounts: anchor === undefined ? null : Object.fromEntries(["completed", "pending", "running", "failed", "cancelled", "unknown"].map((status) => [status, diagnosticCount(anchor.stepCounts?.[status])])) },
++        reconciliation,
++        lineageRead: { outcome: candidate === undefined ? "unassessed" : allLineageRead ? "succeeded" : "failed", provenRunCount: candidate === undefined ? null : lineage.length, unsettledStepCount: lineageUnsettledStepCount, stepCounts: aggregateCounts, errorCategory: lineageFailure === undefined ? null : diagnosticErrorCategory(lineageFailure), httpStatus: lineageFailure === undefined ? null : diagnosticHttpStatus(lineageFailure) },
++        collectionStage: dependencies === undefined ? "dependencies" : collected?.kind === "preflight" ? "candidate_read" : "candidate_collect",
++        anchorRead: { outcome: anchor === undefined ? "failed" : "succeeded", stage: anchor === undefined ? inspectionStage(anchorFailure?.stage) : "complete", errorCategory: anchor === undefined ? diagnosticErrorCategory(anchorFailure) : null, httpStatus: anchor === undefined ? diagnosticHttpStatus(anchorFailure) : null, status: anchor === undefined ? anchorFailure instanceof NativeInspectionFailure ? anchorFailure.nativeStatus : null : nativeStatusLabel(anchor.status), unsettledStepCount: anchor === undefined ? null : diagnosticCount(anchor.unsettledStepIds.length), stepCounts: anchor === undefined ? null : Object.fromEntries(["completed", "pending", "running", "failed", "cancelled", "unknown"].map((status) => [status, diagnosticCount(anchor.stepCounts?.[status])])) },
 +      };
-+      reportNativeDiagnostic({ event: "builder.native_source_observation", ...sourceDiagnostic, candidate: candidate !== undefined, lineageResolved: candidate !== undefined, lineageRunCount: observedRuns.length, lineageUnsettledStepCount, anchorStatus: sourceDiagnostic.anchorRead.status, anchorUnsettledStepCount: sourceDiagnostic.anchorRead.unsettledStepCount, anchorStepCounts: sourceDiagnostic.anchorRead.stepCounts, physicalOwnerMatchesAnchor: candidate === undefined ? null : candidate.checkpointOwnerRunId === binding.ownerRunId, unsettledStepCount: observed?.unsettledStepIds.length ?? null });
++      reportNativeDiagnostic({ event: "builder.native_source_observation", ...sourceDiagnostic, candidate: false, lineageResolved: candidate !== undefined, lineageRunCount: observedRuns.length, lineageUnsettledStepCount, anchorStatus: sourceDiagnostic.anchorRead.status, anchorUnsettledStepCount: sourceDiagnostic.anchorRead.unsettledStepCount, anchorStepCounts: sourceDiagnostic.anchorRead.stepCounts, physicalOwnerMatchesAnchor: candidate === undefined ? null : candidate.checkpointOwnerRunId === binding.ownerRunId, unsettledStepCount: observed?.unsettledStepIds.length ?? null });
 +      routeStage = "completed";
 +      return finish({ ok: true, status: "accepted", sessionId: binding.ownerRunId, sourceDiagnostic }, { status: 202, headers: { "cache-control": "no-store", "x-eve-session-id": binding.ownerRunId } });
 +    } catch (error) { routeCategory = diagnosticErrorCategory(error); return finish({ ok: false, code: "native_source_observation_unavailable" }, { status: 409 }); }
@@ -4021,7 +4151,7 @@ new file mode 100644
 +    routeStage = refusalStage(prepareStage);
 +    if (result.kind !== "accepted") {
 +      try { console.info(JSON.stringify({ event: "builder.native_recovery_refusal", outcome: result.kind === "uncertain" ? "uncertain" : result.kind === "unavailable" ? "unavailable" : "other", reason: refusalReason(result.reason), stage: refusalStage(prepareStage), boundary: refusalBoundary(result.boundary) })); } catch { /* Advisory diagnostics never change the refusal. */ }
-+      return finish({ ok: false, code: result.kind === "uncertain" ? "terminal_recovery_uncertain" : "terminal_recovery_unavailable" }, { status: 409 });
++      return finish({ ok: false, code: result.kind === "uncertain" ? "terminal_recovery_uncertain" : "terminal_recovery_unavailable" }, { status: result.kind === "uncertain" ? 503 : 409 });
 +    }
 +    return finish({ ok: true, status: "accepted", sessionId: result.recoveryBinding.ownerRunId, recoveryBinding: result.recoveryBinding }, { status: 202, headers: { "cache-control": "no-store", "x-eve-session-id": result.recoveryBinding.ownerRunId } });
 +  } catch (error) {

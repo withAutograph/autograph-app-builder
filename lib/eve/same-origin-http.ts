@@ -275,6 +275,9 @@ async function postMutation(input: {
         : await readJson(response);
     if (response.status >= 400 && response.status < 500) {
       const parsed = errorResponseSchema.safeParse(body);
+      if (parsed.success && parsed.data.code === "terminal_recovery_uncertain") {
+        throw new SubmissionOutcomeUnknownError();
+      }
       throw new SubmissionRejectedBeforeDispatchError(
         parsed.success ? parsed.data.code : "eve_request_rejected",
       );

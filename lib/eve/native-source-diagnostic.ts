@@ -54,7 +54,7 @@ const boundary = z.strictObject({
 /** Private, closed structural facts. Never checkpoint content or authority. */
 export const nativeSourceDiagnosticSchema = z.strictObject({
   version: z.literal(1),
-  collectionKind: z.enum(["candidate", "unavailable", "failed", "other"]),
+  collectionKind: z.enum(["candidate", "preflight", "unavailable", "failed", "other"]),
   collectionReason: z
     .enum([
       "source-not-terminal",
@@ -69,6 +69,43 @@ export const nativeSourceDiagnosticSchema = z.strictObject({
   collectionBoundary: boundary.nullable(),
   collectionErrorCategory: category.nullable(),
   collectionStage: z.enum(["dependencies", "candidate_collect", "candidate_read"]),
+  reconciliation: z.strictObject({
+    kind: z.enum(["ready", "uncertain", "unavailable", "failed", "unassessed"]),
+    reason: z
+      .enum([
+        "source-not-terminal",
+        "native-data-expired",
+        "paired-native-checkpoint-unavailable",
+        "native-checkpoint-identity-mismatch",
+        "approval-transcript-unavailable",
+        "cancelled-call-history-unreconciled",
+        "cancelled-call-result-unreconciled",
+        "cancelled-turn-replay",
+        "conflicting-retained-history",
+        "coordination-results-incomplete",
+        "delivery-consumption-unreconciled",
+        "failed-turn-effects-unreconciled",
+        "later-coordination-input-unreconciled",
+        "native-stream-incomplete",
+        "runtime-result-consumption-ambiguous",
+        "runtime-result-owner-unreconciled",
+        "unconsumed-native-inbox-input",
+        "unreadable-native-effect-frontier",
+        "uncommitted-action-result",
+        "uncommitted-action-dispatch",
+        "other",
+      ])
+      .nullable(),
+    errorCategory: category.nullable(),
+  }),
+  lineageRead: z.strictObject({
+    outcome: z.enum(["succeeded", "failed", "unassessed"]),
+    provenRunCount: count,
+    unsettledStepCount: count,
+    stepCounts: stepCounts.nullable(),
+    errorCategory: category.nullable(),
+    httpStatus: z.number().int().min(400).max(599).nullable(),
+  }),
   anchorRead: z.strictObject({
     outcome: z.enum(["succeeded", "failed"]),
     stage: z.enum([
@@ -83,6 +120,7 @@ export const nativeSourceDiagnosticSchema = z.strictObject({
       "other",
     ]),
     errorCategory: category.nullable(),
+    httpStatus: z.number().int().min(400).max(599).nullable().optional(),
     status: nativeStatus.nullable(),
     unsettledStepCount: count,
     stepCounts: stepCounts.nullable(),

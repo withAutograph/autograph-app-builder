@@ -22,6 +22,15 @@ const summary = nativeSourceDiagnosticSchema.parse({
   collectionBoundary: { stage: "handoff_parent", status: "running", allowParked: true },
   collectionErrorCategory: null,
   collectionStage: "candidate_collect",
+  reconciliation: { kind: "unassessed", reason: null, errorCategory: null },
+  lineageRead: {
+    outcome: "unassessed",
+    provenRunCount: null,
+    unsettledStepCount: null,
+    stepCounts: null,
+    errorCategory: null,
+    httpStatus: null,
+  },
   anchorRead: {
     outcome: "failed",
     stage: "steps_list",
