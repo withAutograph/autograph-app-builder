@@ -210,3 +210,63 @@ describe("native recovery authority", () => {
     activationLog.mockRestore();
   });
 });
+
+describe("read-only native source observation authority", () => {
+  it("uses GET authority without creating a recovery reservation and rejects coordinate changes", async () => {
+    const source = durableHostedSessionRecordSchema.parse({
+      adapterGeneration: 1,
+      adapterSessionId: "run_parent",
+      createdAtEpochMs: 1,
+      lastProgressAtEpochMs: 1,
+      stage: "needs_attention",
+      title: "App",
+      originAdapterSessionId: "run_parent",
+      principal,
+      resumability: "live",
+      sessionId: "ses_parent",
+      status: "input_required",
+      updatedAtEpochMs: 2,
+      version: 2,
+    });
+    const getPrivateOperation = vi.fn(() => Promise.resolve(null));
+    const commitNativeRecoveryReceipt = vi.fn(() => Promise.resolve(receipt));
+    const assertOwner = vi.fn(() => Promise.resolve());
+    const binding = createNativeRecoveryBinding({
+      assertOwner,
+      store: {
+        getSession: () => Promise.resolve(source),
+        getPrivateOperation,
+        commitNativeRecoveryReceipt,
+      },
+    });
+    const coordinates = {
+      sourcePublicSessionId: "ses_parent",
+      sourceAdapterSessionId: "run_parent",
+      sourceAdapterGeneration: 1,
+      cancellationRevision: 0,
+    };
+    const getOnlyAuth = {
+      ...auth,
+      attributes: { ...auth.attributes, "mcp:scopes": [hostedEveOperationScopes.get] },
+    };
+    await expect(
+      binding.authorizeSourceObservation({ auth: getOnlyAuth, source: coordinates }),
+    ).resolves.toEqual({ ownerRunId: "run_parent", logicalSessionId: "run_parent" });
+    for (const changed of [
+      { ...coordinates, sourceAdapterGeneration: 2 },
+      { ...coordinates, cancellationRevision: 1 },
+      { ...coordinates, sourceAdapterSessionId: "different" },
+    ]) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Sequential exact-coordinate authorization refusal checks.
+      await expect(binding.authorizeSourceObservation({ auth, source: changed })).rejects.toThrow(
+        "changed",
+      );
+    }
+    assertOwner.mockRejectedValueOnce(new Error("owner revoked"));
+    await expect(binding.authorizeSourceObservation({ auth, source: coordinates })).rejects.toThrow(
+      "owner revoked",
+    );
+    expect(getPrivateOperation).not.toHaveBeenCalled();
+    expect(commitNativeRecoveryReceipt).not.toHaveBeenCalled();
+  });
+});

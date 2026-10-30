@@ -1782,6 +1782,21 @@ export function createSameOriginEveTransport(input: {
       }
       await request.onAccepted?.(accepted.deliveryId);
     },
+    async observeSource(request) {
+      const accepted = await postMutation({
+        ...common,
+        body: { recoveryPhase: "inspect-source", sourceObservation: request.source },
+        path: "/eve/v1/session",
+        principal: request.principal,
+        sourceHandoffId: request.sourceHandoffId,
+      });
+      if (
+        accepted.sessionId !== request.source.sourceAdapterSessionId ||
+        accepted.recoveryBinding !== undefined
+      ) {
+        throw new SubmissionOutcomeUnknownError();
+      }
+    },
     async observeRecovery(request) {
       const accepted = await postMutation({
         ...common,

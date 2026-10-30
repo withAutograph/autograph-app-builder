@@ -1245,6 +1245,29 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
             ? { disposition: "existing" as const, operation: requestExisting }
             : { disposition: "conflict" as const };
         }
+        const targetSessionId = candidate.sessionId ?? candidate.resumeSessionId;
+        if (targetSessionId !== undefined) {
+          if ((await sessionById(transaction, principal, targetSessionId, true)) === null) {
+            return { disposition: "conflict" as const };
+          }
+          const transfer = await transaction
+            .select({ value: count() })
+            .from(agentOperations)
+            .where(
+              and(
+                tenantPredicate(principal),
+                sql`${agentOperations.record}->>'resumeSessionId' = ${targetSessionId}`,
+                sql`${agentOperations.record}->'nativeRecovery'->'executionTransfer' is not null`,
+                or(
+                  inArray(agentOperations.state, ["reserved", "submission_unknown"]),
+                  sql`${agentOperations.record}->'nativeRecoveryReceipt' is not null`,
+                ),
+              ),
+            );
+          if ((transfer[0]?.value ?? 0) > 0) {
+            return { disposition: "rejected" as const, reason: "session_busy" as const };
+          }
+        }
         if (candidate.kind !== "start") {
           if (
             candidate.sessionId === undefined ||
@@ -1275,8 +1298,31 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           if (source === null) {
             return { disposition: "conflict" as const };
           }
+          if (candidate.nativeRecovery?.executionTransfer !== undefined) {
+            const activeSource = await transaction
+              .select({ value: count() })
+              .from(agentOperations)
+              .where(
+                and(
+                  tenantPredicate(principal),
+                  eq(agentOperations.sessionId, candidate.resumeSessionId),
+                  eq(agentOperations.state, "reserved"),
+                ),
+              );
+            if ((activeSource[0]?.value ?? 0) > 0) {
+              return { disposition: "rejected" as const, reason: "session_busy" as const };
+            }
+          }
           if (candidate.nativeRecovery !== undefined) {
             assertNativeRecoverySourceBinding(candidate, source, candidate.nativeRecovery);
+          }
+          if (
+            candidate.nativeRecovery?.executionTransfer !== undefined &&
+            (source.status !== "input_required" ||
+              toDurableHostedSessionRecord(source).checkpointDigest !==
+                candidate.nativeRecovery.executionTransfer.sourceCheckpointDigest)
+          ) {
+            return { disposition: "conflict" as const };
           }
           const activeResume = await transaction
             .select({ value: count() })

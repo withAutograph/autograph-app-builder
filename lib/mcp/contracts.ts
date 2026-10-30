@@ -306,9 +306,13 @@ export const eveStartInputSchema = z
     handoffId: z.string().uuid().optional(),
     prompt: z.string().trim().min(1).max(32_000).optional(),
     resumeSessionId: z.string().min(1).max(200).optional(),
+    resumeMode: z.literal("recover").optional(),
   })
   .strict()
-  .superRefine(({ prompt, handoffId, resumeSessionId }, context) => {
+  .superRefine(({ prompt, handoffId, resumeSessionId, resumeMode }, context) => {
+    if (resumeMode !== undefined && resumeSessionId === undefined) {
+      context.addIssue({ code: "custom", message: "Recovery requires an existing session." });
+    }
     if ([prompt, handoffId, resumeSessionId].filter((value) => value !== undefined).length !== 1) {
       context.addIssue({
         code: "custom",

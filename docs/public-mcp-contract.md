@@ -84,6 +84,25 @@ missing adapter for otherwise-active work is fenced by adapter generation before
 the same public handle continues. User-visible sessions do not expire with
 their short-lived compute leases.
 
+The existing `autograph_start` tool accepts `resumeMode: "recover"` only with
+`resumeSessionId`. This explicit owner request transfers a parked hosted native
+execution through the existing structured recovery path; ordinary resume is
+unchanged and discovery still returns five tools. Admission requires the complete
+retained pending-approval checkpoint and independently closed native effect steps
+across the entire verified handoff lineage.
+Builder fences source mutations, confirms its exact native cancellation receipt,
+and recollects terminal state before adopting a child. Active, cancelled, or
+unproven failed effect steps cause refusal before stop or prevent adoption.
+Pending approvals retain their original request identity and authority; an earlier
+`submission_unknown` response remains retained and is never implicitly resent.
+Unavailable or uncertain recovery preserves its operation for exact retry.
+An authorized GET for a parked source may run a separate advisory native inspection.
+It rechecks exact tenant, owner, adapter generation and cancellation coordinates,
+then reports only fixed structural categories and counts. Inspection does not
+reserve recovery, stop or start execution, authorize approval, or settle the
+unknown response; duplicate observations may share diagnostic work. Local
+execution returns `session_recovery_unavailable` for this hosted-only mode.
+
 Failed hosted builds recover from authoritative native checkpoints and their
 actual retained delivery and tool results. Public conversation excerpts do not
 restore private workflow state or authorize a replacement build. Recovery keeps

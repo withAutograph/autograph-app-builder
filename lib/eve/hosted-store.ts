@@ -662,7 +662,7 @@ export const assertNativeRecoverySourceBinding = (
     // oxlint-disable-next-line sonarjs/expression-complexity -- These comparisons form one authorization boundary.
     source === null ||
     source.version !== 2 ||
-    source.status !== "failed" ||
+    (descriptor.executionTransfer === undefined && source.status !== "failed") ||
     operation.kind !== "start" ||
     operation.resumeSessionId !== descriptor.sourcePublicSessionId ||
     operation.operationId !== descriptor.operationId ||
@@ -1414,7 +1414,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     return operation === undefined ? null : structuredClone(operation);
   }
 
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+  // oxlint-disable-next-line eslint/require-await, eslint/complexity -- Reservation admission keeps exact retries, source fencing and successor routing in one synchronous atomic section.
   async reserveOperation(
     principal: z.infer<typeof hostedPrincipalSchema>,
     candidate: HostedOperationRecord,
@@ -1437,6 +1437,22 @@ export class InMemoryHostedEveStore implements HostedEveStore {
         existing.startAlias?.sourceHandoffId === parsed.startAlias?.sourceHandoffId
         ? { disposition: "existing", operation: structuredClone(existing) }
         : { disposition: "conflict" };
+    }
+    const targetSessionId = parsed.sessionId ?? parsed.resumeSessionId;
+    if (
+      targetSessionId !== undefined &&
+      [...this.operations.values()].some((record) => {
+        if (tenantKeyFor(record.principal) !== tenantKeyFor(principal)) return false;
+        if (record.resumeSessionId !== targetSessionId) return false;
+        if (record.nativeRecovery?.executionTransfer === undefined) return false;
+        return (
+          record.state === "reserved" ||
+          record.state === "submission_unknown" ||
+          record.nativeRecoveryReceipt !== undefined
+        );
+      })
+    ) {
+      return { disposition: "rejected", reason: "session_busy" };
     }
     if (
       parsed.kind !== "start" &&
@@ -1464,6 +1480,30 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       )
     ) {
       return { disposition: "rejected", reason: "session_busy" };
+    }
+    if (
+      parsed.nativeRecovery?.executionTransfer !== undefined &&
+      [...this.operations.values()].some(
+        (record) =>
+          tenantKeyFor(record.principal) === tenantKeyFor(principal) &&
+          record.sessionId === parsed.resumeSessionId &&
+          record.state === "reserved",
+      )
+    ) {
+      return { disposition: "rejected", reason: "session_busy" };
+    }
+    if (parsed.nativeRecovery?.executionTransfer !== undefined) {
+      const source = this.sessions.get(
+        InMemoryHostedEveStore.sessionKey(principal, parsed.nativeRecovery.sourcePublicSessionId),
+      );
+      if (
+        source === undefined ||
+        source.status !== "input_required" ||
+        toDurableHostedSessionRecord(source).checkpointDigest !==
+          parsed.nativeRecovery.executionTransfer.sourceCheckpointDigest
+      ) {
+        return { disposition: "conflict" };
+      }
     }
     if (parsed.nativeRecovery !== undefined) {
       assertNativeRecoverySourceBinding(
