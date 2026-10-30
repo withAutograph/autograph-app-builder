@@ -1015,7 +1015,7 @@ for (const status of ["running", "pending"]) {
     const get = f.world.runs.get;
     f.world.runs.get = async (...args) => ({ ...(await get(...args)), status });
     const result = await f.collect(f.input);
-    assert.deepEqual(result, { kind: "unavailable", reason: "source-not-terminal" });
+    assert.partialDeepStrictEqual(result, { kind: "unavailable", reason: "source-not-terminal" });
     assert.equal(
       f.calls.some(([type]) => type.startsWith("snapshot-") === true),
       false,
@@ -1326,4 +1326,23 @@ test("independently decoded retained contexts use less heap after exact primitiv
   assert.equal(optimized.writable, true);
   assert.equal(baseline.bytes > 32 * 1024 * 1024, true);
   assert.equal(optimized.bytes < baseline.bytes * 0.4, true);
+});
+
+test("actual collector identifies the exact authority-anchor status refusal without leaking unknown status", async () => {
+  await Promise.all(
+    ["waiting", "private-canary-status"].map(async (status) => {
+      const f = await fixture({ status });
+      const result = await f.collect({ ...f.input, allowParked: true });
+      assert.deepEqual(result, {
+        kind: "unavailable",
+        reason: "source-not-terminal",
+        boundary: {
+          stage: "authority_anchor",
+          status: status === "waiting" ? "waiting" : "other",
+          allowParked: true,
+        },
+      });
+      assert.equal(JSON.stringify(result).includes("private-canary"), false);
+    }),
+  );
 });

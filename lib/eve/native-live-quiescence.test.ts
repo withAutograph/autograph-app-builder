@@ -539,6 +539,7 @@ describe("native recovery refusal diagnostics", () => {
         outcome: "unavailable",
         reason: expected,
         stage: "live_transfer_preflight",
+        boundary: null,
       });
       expect(JSON.stringify(info.mock.calls)).not.toContain("private-canary");
       expect(JSON.stringify(info.mock.calls)).not.toContain("old-native");
@@ -574,4 +575,106 @@ it("preserves a native recovery refusal when its advisory sink fails", async () 
   } finally {
     info.mockRestore();
   }
+});
+
+describe("native refusal boundary observation", () => {
+  it.each([
+    {
+      stage: "handoff_parent",
+      status: "running",
+      anchorStatus: "queued",
+      expectedStage: "handoff_parent",
+      expectedStatus: "running",
+      expectedAnchor: "queued",
+    },
+    {
+      stage: "private-canary-boundary",
+      status: "private-canary-status",
+      anchorStatus: "private-canary-anchor",
+      expectedStage: "other",
+      expectedStatus: "other",
+      expectedAnchor: "other",
+    },
+  ])(
+    "observes canonical anchor even without a candidate and sanitizes $expectedStage",
+    async ({ stage, status, anchorStatus, expectedStage, expectedStatus, expectedAnchor }) => {
+      const f = fixture();
+      const nativeResult = {
+        kind: "unavailable" as const,
+        reason: "source-not-terminal" as const,
+        boundary: {
+          stage,
+          status,
+          parentStatus: "private-canary-parent",
+          allowParked: true,
+          privateContent: "private-canary-content",
+        },
+      };
+      // @ts-expect-error Unknown native runtime labels deliberately test the diagnostic boundary.
+      f.collect.mockResolvedValueOnce(nativeResult);
+      const inspectSource = vi.fn<NonNullable<TerminalRecoveryDependencies["inspectSource"]>>(() =>
+        Promise.resolve({
+          runId: "old-native",
+          status: anchorStatus,
+          unsettledStepIds: ["private-canary-step"],
+          stepCounts: { completed: 4, pending: 1, running: 2, failed: 3, cancelled: 0, unknown: 0 },
+        }),
+      );
+      f.dependencies.inspectSource = inspectSource;
+      const info = vi.spyOn(console, "info").mockImplementation(() => {});
+      try {
+        const response = await runtime.handleTerminalRecoveryRequest(
+          {
+            payload: {
+              recoveryPhase: "inspect-source",
+              sourceObservation: {
+                sourcePublicSessionId: "source",
+                sourceAdapterSessionId: "old-native",
+                sourceAdapterGeneration: 1,
+                cancellationRevision: 0,
+              },
+            },
+            auth: actor,
+            forwarded: true,
+            ports: {
+              ...f.ports,
+              authorizeSourceObservation: () =>
+                Promise.resolve({ ownerRunId: "old-native", logicalSessionId: "logical" }),
+            },
+          },
+          () => Promise.resolve(f.dependencies),
+        );
+        expect(response.status).toBe(202);
+        expect(inspectSource).toHaveBeenCalledWith("old-native");
+        const diagnostic: unknown = JSON.parse(String(info.mock.calls[0]?.[0]));
+        expect(diagnostic).toMatchObject({
+          collectionKind: "unavailable",
+          collectionReason: "source-not-terminal",
+          collectionBoundary: {
+            stage: expectedStage,
+            status: expectedStatus,
+            parentStatus: "other",
+            allowParked: true,
+          },
+          anchorStatus: expectedAnchor,
+          anchorUnsettledStepCount: 1,
+          anchorStepCounts: {
+            completed: 4,
+            pending: 1,
+            running: 2,
+            failed: 3,
+            cancelled: 0,
+            unknown: 0,
+          },
+          lineageResolved: false,
+        });
+        expect(JSON.stringify(info.mock.calls)).not.toContain("private-canary");
+        expect(JSON.stringify(info.mock.calls)).not.toContain("old-native");
+        expect(f.stopSource).not.toHaveBeenCalled();
+        expect(f.start).not.toHaveBeenCalled();
+      } finally {
+        info.mockRestore();
+      }
+    },
+  );
 });

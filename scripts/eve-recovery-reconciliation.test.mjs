@@ -167,6 +167,15 @@ const attachHandoffWorld = async ({ options, sourcePair, world, events, steps })
         },
       ],
     ]);
+    if (options.finalStatusTransition === true) {
+      let reads = 0;
+      Object.defineProperty(runs.get(ownerRunId), "status", {
+        get: () => {
+          reads += 1;
+          return reads === 1 ? "completed" : "suspended";
+        },
+      });
+    }
     world.runs.get = (id) => {
       readOperations.push(["runs.get", id]);
       return Promise.resolve(runs.get(id));
@@ -598,6 +607,7 @@ const fixture = async (options = {}) => {
     },
   });
   const collected = await collect({
+    allowParked: options.allowParked === true,
     binding: { ownerRunId: boundOwnerRunId, logicalSessionId },
     authorizeOwner: async (currentBinding) => {
       assert.deepEqual(currentBinding, { ownerRunId: boundOwnerRunId, logicalSessionId });
@@ -936,3 +946,34 @@ test("a later authored step leaves historical command admission uncertain", asyn
   const result = await reconcileTerminalRecoveryCandidate(f.collected.candidate);
   assert.deepEqual(result, { kind: "uncertain", reason: "unconsumed-native-inbox-input" });
 });
+
+for (const item of [
+  {
+    options: { anchorStatus: "running", runStatus: "completed" },
+    stage: "handoff_parent",
+    status: "running",
+  },
+  {
+    options: { runStatus: "waiting" },
+    stage: "handoff_successor",
+    status: "waiting",
+    parentStatus: "completed",
+  },
+  { options: { finalStatusTransition: true }, stage: "final_owner", status: "suspended" },
+]) {
+  test(`actual native handoff resolver identifies ${item.stage} refusal`, async () => {
+    const f = await fixture({
+      handoff: true,
+      allowParked: true,
+      expectedUnavailable: true,
+      ...item.options,
+    });
+    assert.equal(f.collected.reason, "source-not-terminal");
+    assert.deepEqual(f.collected.boundary, {
+      stage: item.stage,
+      status: item.status,
+      ...(item.parentStatus === undefined ? {} : { parentStatus: item.parentStatus }),
+      allowParked: true,
+    });
+  });
+}

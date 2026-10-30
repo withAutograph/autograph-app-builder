@@ -11,7 +11,7 @@ patchedDependencies:
   '@emulators/core@0.10.0': 9ac3119d77a193712462e1e8ecd4227b084a109c75be4de30d2fe09269c533b4
   '@emulators/github@0.10.0': 2e9510aa61981a6ca705851c19c8d72a8174cf4f19695e93923ab1796ee53282
   '@emulators/vercel@0.10.0': d51209b623d4600231afd907828a5cbaefea72f575ae88bd95509590b5bf8169
-  eve@0.68.0: 2ba36f8d07b29388f0f19346353eae09427b4ef2e5b9279caf031ee17093cb64
+  eve@0.68.0: 5a8bb3ddc91fd255092563c165acb494d0fd2696ca71893a6c49aa2e6b119f9c
 
 importers:
 
@@ -94,7 +94,7 @@ importers:
         version: 5.102.8(react@19.3.0)
       '@vercel/connect':
         specifier: 1.0.0
-        version: 1.0.0(@ai-sdk/mcp@2.0.71(zod@4.5.4))(ai@7.0.105(zod@4.5.4))(better-auth@1.7.2(@opentelemetry/api@1.9.1)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2))(next@16.3.4(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@types/node@26.4.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@4.1.10))(eve@0.68.0(patch_hash=2ba36f8d07b29388f0f19346353eae09427b4ef2e5b9279caf031ee17093cb64)(@opentelemetry/api@1.9.1)(ai@7.0.105(zod@4.5.4))(just-bash@3.4.2)(microsandbox@0.5.10))
+        version: 1.0.0(@ai-sdk/mcp@2.0.71(zod@4.5.4))(ai@7.0.105(zod@4.5.4))(better-auth@1.7.2(@opentelemetry/api@1.9.1)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2))(next@16.3.4(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@types/node@26.4.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@4.1.10))(eve@0.68.0(patch_hash=5a8bb3ddc91fd255092563c165acb494d0fd2696ca71893a6c49aa2e6b119f9c)(@opentelemetry/api@1.9.1)(ai@7.0.105(zod@4.5.4))(just-bash@3.4.2)(microsandbox@0.5.10))
       '@vercel/oidc':
         specifier: 3.8.5
         version: 3.8.5
@@ -121,7 +121,7 @@ importers:
         version: 0.45.2(@opentelemetry/api@1.9.1)(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2)
       eve:
         specifier: 0.68.0
-        version: 0.68.0(patch_hash=2ba36f8d07b29388f0f19346353eae09427b4ef2e5b9279caf031ee17093cb64)(@opentelemetry/api@1.9.1)(ai@7.0.105(zod@4.5.4))(just-bash@3.4.2)(microsandbox@0.5.10)
+        version: 0.68.0(patch_hash=5a8bb3ddc91fd255092563c165acb494d0fd2696ca71893a6c49aa2e6b119f9c)(@opentelemetry/api@1.9.1)(ai@7.0.105(zod@4.5.4))(just-bash@3.4.2)(microsandbox@0.5.10)
       flags:
         specifier: 4.3.0
         version: 4.3.0(@opentelemetry/api@1.9.1)(next@16.3.4(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@types/node@26.4.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -9246,14 +9246,14 @@ snapshots:
     dependencies:
       execa: 5.1.1
 
-  '@vercel/connect@1.0.0(@ai-sdk/mcp@2.0.71(zod@4.5.4))(ai@7.0.105(zod@4.5.4))(better-auth@1.7.2(@opentelemetry/api@1.9.1)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2))(next@16.3.4(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@types/node@26.4.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@4.1.10))(eve@0.68.0(patch_hash=2ba36f8d07b29388f0f19346353eae09427b4ef2e5b9279caf031ee17093cb64)(@opentelemetry/api@1.9.1)(ai@7.0.105(zod@4.5.4))(just-bash@3.4.2)(microsandbox@0.5.10))':
+  '@vercel/connect@1.0.0(@ai-sdk/mcp@2.0.71(zod@4.5.4))(ai@7.0.105(zod@4.5.4))(better-auth@1.7.2(@opentelemetry/api@1.9.1)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2))(next@16.3.4(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@types/node@26.4.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@4.1.10))(eve@0.68.0(patch_hash=5a8bb3ddc91fd255092563c165acb494d0fd2696ca71893a6c49aa2e6b119f9c)(@opentelemetry/api@1.9.1)(ai@7.0.105(zod@4.5.4))(just-bash@3.4.2)(microsandbox@0.5.10))':
     dependencies:
       '@vercel/oidc': 3.8.5
     optionalDependencies:
       '@ai-sdk/mcp': 2.0.71(zod@4.5.4)
       ai: 7.0.105(zod@4.5.4)
       better-auth: 1.7.2(@opentelemetry/api@1.9.1)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(kysely@0.29.5)(postgres@3.4.9)(sql.js@1.14.2))(next@16.3.4(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@types/node@26.4.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@4.1.10)
-      eve: 0.68.0(patch_hash=2ba36f8d07b29388f0f19346353eae09427b4ef2e5b9279caf031ee17093cb64)(@opentelemetry/api@1.9.1)(ai@7.0.105(zod@4.5.4))(just-bash@3.4.2)(microsandbox@0.5.10)
+      eve: 0.68.0(patch_hash=5a8bb3ddc91fd255092563c165acb494d0fd2696ca71893a6c49aa2e6b119f9c)(@opentelemetry/api@1.9.1)(ai@7.0.105(zod@4.5.4))(just-bash@3.4.2)(microsandbox@0.5.10)
 
   '@vercel/flags-core@1.7.1(next@16.3.4(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@types/node@26.4.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(ws@8.21.3)':
     dependencies:
@@ -10470,7 +10470,7 @@ snapshots:
 
   etag@1.8.1: {}
 
-  eve@0.68.0(patch_hash=2ba36f8d07b29388f0f19346353eae09427b4ef2e5b9279caf031ee17093cb64)(@opentelemetry/api@1.9.1)(ai@7.0.105(zod@4.5.4))(just-bash@3.4.2)(microsandbox@0.5.10):
+  eve@0.68.0(patch_hash=5a8bb3ddc91fd255092563c165acb494d0fd2696ca71893a6c49aa2e6b119f9c)(@opentelemetry/api@1.9.1)(ai@7.0.105(zod@4.5.4))(just-bash@3.4.2)(microsandbox@0.5.10):
     dependencies:
       ai: 7.0.105(zod@4.5.4)
       nitro: 3.0.260903-beta
