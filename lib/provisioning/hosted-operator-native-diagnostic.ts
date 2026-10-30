@@ -18,7 +18,14 @@ export type HostedOperatorNativeFailureStage =
   | "resolver_effective_config"
   | "resolver_dispose"
   | "control_plane"
-  | "composition";
+  | "composition"
+  | "native_plan_workload"
+  | "native_plan_owner"
+  | "native_plan_registry_read"
+  | "native_plan_captured_release"
+  | "native_plan_profile_resolution"
+  | "native_plan_supersede"
+  | "native_plan_dispatch";
 
 const nativeFailureSqlState = z.enum([
   "28P01",
