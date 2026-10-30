@@ -422,6 +422,38 @@ const participantAccountCompletion = (
 };
 
 describe("participant preparation service branch", () => {
+  it("reconciles a pending account attempt after a lost response", async () => {
+    const fixtureInput = participantServiceFixture();
+    const { f } = fixtureInput;
+    const execution = await prepared(f);
+    const { state, preparation } = participantAccountCompletion(
+      fixtureInput,
+      execution.operationRef,
+    );
+    delete preparation.accountsCompletedAt;
+    if (f.row?.record.operator === undefined) {
+      throw new Error("Missing operation");
+    }
+    f.row.record.approvedByCallId = execution.callId;
+    f.row.record.accountPreparation = preparation;
+    f.row.record.operator.approvalId = preparation.accountApprovalId;
+    f.row.record.operator.pendingEffectId = "normal-accounts";
+    f.row.record.operator.pendingEffectAttempt = { id: "00000000-0000-4000-8000-000000000004" };
+    f.deps.reconcile = vi.fn<ProtectedHostedOperatorDependencies["reconcile"]>(async (input) => ({
+      status: "applied",
+      receipt: {
+        effectId: input.effect.id,
+        observedAt: "2026-10-14T12:00:00.000Z",
+        resourceVersion: "verified",
+      },
+    }));
+    f.deps.verifyNormalActorAccounts = vi.fn(async () => state);
+    f.approve();
+    const result = await f.client.request(execution);
+    expect(result.status).toBe("participants-prepared");
+    expect(f.deps.reconcile).toHaveBeenCalled();
+    expect(f.deps.executeEffect).not.toHaveBeenCalled();
+  });
   it("passes the accepted participant program through the actual plan request", async () => {
     const { f, program } = participantServiceFixture();
     const result = await f.client.request({

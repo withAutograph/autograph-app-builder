@@ -1,3 +1,4 @@
+import { isIdlePendingAccountCapture } from "./hosted-operator-pending-account-capture";
 import {
   isParticipantProgramSuccessor,
   readParticipantSuccessorPredecessor,
@@ -2243,14 +2244,19 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
         // Retain real approval provenance before idle owner capture; no account-effect lease exists yet.
         await update((value) => {
           const savedOperator = requireOperator(value);
+          const pendingAccount = isIdlePendingAccountCapture(value);
           if (
             savedOperator.operationRef !== operationRef ||
             savedOperator.planDigest !== planDigest ||
             value.leaseId !== undefined ||
-            savedOperator.pendingEffectId !== undefined ||
-            savedOperator.pendingEffectAttempt !== undefined
+            (!pendingAccount &&
+              (savedOperator.pendingEffectId !== undefined ||
+                savedOperator.pendingEffectAttempt !== undefined))
           ) {
             throw new HostedOperatorError("operation_in_progress");
+          }
+          if (pendingAccount) {
+            return value;
           }
           if (
             value.accountPreparation !== undefined &&
