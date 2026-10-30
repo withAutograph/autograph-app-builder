@@ -349,13 +349,19 @@ export const createNativeTargetOnboardingRuntime = (ports: NativeTargetOnboardin
     ): Promise<NativeTargetOnboardingResult> {
       ctx.abortSignal.throwIfAborted();
       const proposal = nativeTargetPlanRequestSchema.parse(raw);
-      if (state.appSpec === undefined || state.appSpec.appId !== proposal.appId) {
+      if (state.appSpec !== undefined && state.appSpec.appId !== proposal.appId) {
         throw invalid();
       }
       // Read retained operations first: source edits do not redefine their resource authority.
       const retained = await ports.journal.read(ctx, proposal.appId);
       if (retained !== undefined && retained.record.stage !== "cancelled") {
         return publicResult(retained);
+      }
+      // A retained operation keeps its frozen resource authority even if a later
+      // source/planning transition cleared the local selected specification.
+      // Missing selection cannot admit a replacement or a fresh reservation.
+      if (state.appSpec === undefined) {
+        throw invalid();
       }
       const captured = await ports.readCapturedRelease(ctx, proposal.appId);
       const { description } = captured;

@@ -398,6 +398,65 @@ describe("native target workflow runtime", () => {
     ).rejects.toThrow();
     expect(f.ports.createProject).not.toHaveBeenCalled();
   });
+  it("reads the retained plan after selected app state is cleared without new planning or effects", async () => {
+    const f = fixture();
+    const retained = await f.planned();
+    const before = await f.read();
+    vi.mocked(f.ports.readCapturedRelease).mockClear();
+    vi.mocked(f.ports.resolvePlan).mockClear();
+    const reserve = vi.spyOn(f.ports.journal, "reservePlan");
+    const result = await f.runtime.plan(f.proposal, f.ctx, { phase: "prepared" });
+    expect(result.operationRef).toBe(retained.operationRef);
+    expect(result.planDigest).toBe(retained.planDigest);
+    expect(await f.read()).toEqual(before);
+    expect(f.ports.readCapturedRelease).not.toHaveBeenCalled();
+    expect(f.ports.resolvePlan).not.toHaveBeenCalled();
+    expect(reserve).not.toHaveBeenCalled();
+    expect(f.ports.createProject).not.toHaveBeenCalled();
+  });
+  it("does not create a plan without selected app state when no retained operation exists", async () => {
+    const f = fixture();
+    const reserve = vi.spyOn(f.ports.journal, "reservePlan");
+    await expect(f.runtime.plan(f.proposal, f.ctx, { phase: "prepared" })).rejects.toThrow();
+    expect(await f.read()).toBeUndefined();
+    expect(f.ports.readCapturedRelease).not.toHaveBeenCalled();
+    expect(f.ports.resolvePlan).not.toHaveBeenCalled();
+    expect(reserve).not.toHaveBeenCalled();
+    expect(f.ports.createProject).not.toHaveBeenCalled();
+  });
+  it("does not replan a cancelled operation without a newly selected app", async () => {
+    const f = fixture();
+    const input = await f.planned();
+    f.approve(input);
+    f.cancel();
+    await f.runtime.prepare(input, f.ctx);
+    const cancelled = await f.read();
+    vi.mocked(f.ports.readCapturedRelease).mockClear();
+    vi.mocked(f.ports.resolvePlan).mockClear();
+    const reserve = vi.spyOn(f.ports.journal, "reservePlan");
+    await expect(f.runtime.plan(f.proposal, f.ctx, { phase: "prepared" })).rejects.toThrow();
+    expect(await f.read()).toEqual(cancelled);
+    expect(f.ports.readCapturedRelease).not.toHaveBeenCalled();
+    expect(f.ports.resolvePlan).not.toHaveBeenCalled();
+    expect(reserve).not.toHaveBeenCalled();
+    expect(f.ports.createProject).not.toHaveBeenCalled();
+  });
+  it("keeps foreign app selection and revoked owner denied on retained reads", async () => {
+    const f = fixture();
+    await f.planned();
+    await expect(
+      f.runtime.plan(f.proposal, f.ctx, {
+        phase: "prepared",
+        appSpec: { appId: "other-app", digest: "a".repeat(64) },
+      }),
+    ).rejects.toThrow();
+    await expect(
+      f.runtime.plan({ ...f.proposal, appId: "other-app" }, f.ctx, { phase: "prepared" }),
+    ).rejects.toThrow();
+    f.revoke();
+    await expect(f.runtime.plan(f.proposal, f.ctx, { phase: "prepared" })).rejects.toThrow();
+    expect(f.ports.createProject).not.toHaveBeenCalled();
+  });
   it("allows ordinary later source changes to reuse the same ready target", async () => {
     const f = fixture();
     const input = await f.planned();

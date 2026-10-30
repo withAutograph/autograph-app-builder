@@ -193,7 +193,7 @@ export const createNativeTargetOnboardingClient = (options: {
   };
   return {
     async plan(input, ctx, state) {
-      if (state.appSpec === undefined || state.appSpec.appId !== input.appId) {
+      if (state.appSpec !== undefined && state.appSpec.appId !== input.appId) {
         throw denied();
       }
       const output = await send(
@@ -201,7 +201,9 @@ export const createNativeTargetOnboardingClient = (options: {
           ...common(ctx),
           action: "native-target-plan",
           input,
-          selectedApp: { appId: state.appSpec.appId, appSpecDigest: state.appSpec.digest },
+          ...(state.appSpec === undefined
+            ? {}
+            : { selectedApp: { appId: state.appSpec.appId, appSpecDigest: state.appSpec.digest } }),
         },
         nativeTargetTransportResponseSchemas["native-target-plan"],
         ctx.abortSignal,
