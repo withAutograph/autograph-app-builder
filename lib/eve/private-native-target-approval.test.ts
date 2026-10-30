@@ -216,6 +216,50 @@ describe("private native target terminal approval", () => {
     expect(second.read()).toBeNull();
   });
 
+  it("selects the current invocation from two approved calls without discarding either receipt", () => {
+    const all = capture();
+    for (const [requestId, callId] of [
+      ["request-one", "call-one"],
+      ["request-two", "call-two"],
+    ]) {
+      all.observe(requested({ requestId, callId }));
+      all.observe(settled("approved", authority.ownerUserId, requestId));
+    }
+    all.proveComplete();
+    expect(() => all.read()).toThrow("ambiguous");
+    const current = createPrivateNativeTargetApprovalCapture({
+      owner,
+      record,
+      callId: "call-two",
+      state: all.snapshot(),
+      terminals: all.terminalSnapshot(),
+    });
+    expect(current.read()).toMatchObject({ requestId: "request-two", callId: "call-two" });
+    expect(current.snapshot().entries).toHaveLength(2);
+  });
+
+  it("keeps a prior invocation's cancellation dominant over a fresh approved invocation", () => {
+    const current = createPrivateNativeTargetApprovalCapture({ owner, record, callId: "call-two" });
+    current.observe(requested({ requestId: "request-one", callId: "call-one" }));
+    current.observe(settled("cancelled", authority.ownerUserId, "request-one"));
+    current.observe(requested({ requestId: "request-two", callId: "call-two" }));
+    current.observe(settled("approved", authority.ownerUserId, "request-two"));
+    expect(current.read()).toMatchObject({
+      requestId: "request-one",
+      callId: "call-one",
+      outcome: "cancelled",
+    });
+  });
+
+  it("still rejects two approved requests for the same invocation", () => {
+    const current = createPrivateNativeTargetApprovalCapture({ owner, record, callId: "call-one" });
+    for (const requestId of ["request-one", "request-two"]) {
+      current.observe(requested({ requestId, callId: "call-one" }));
+      current.observe(settled("approved", authority.ownerUserId, requestId));
+    }
+    expect(() => current.read()).toThrow("ambiguous");
+  });
+
   it("reads a saved partial batch as approved for the plan and pending for its unanswered call", async () => {
     const reader = capture();
     reader.observe(requested({ requestId: "request-one", callId: "call-one" }));

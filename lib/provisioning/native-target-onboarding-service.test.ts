@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import type { MessageStreamEvent } from "eve/client";
+import { readPrivateNativeTargetApproval } from "../eve/private-native-target-approval";
 import { createInMemoryNativeTargetOnboardingStore } from "./native-target-onboarding-store";
 import {
   nativeTargetOnboardingPlanDigest,
@@ -222,6 +224,7 @@ const fixture = (workloadAuthorized = true) => {
   };
   return {
     authorize,
+    dependencies,
     store,
     readCapturedRelease,
     resolvePlan,
@@ -510,4 +513,106 @@ describe("native plan diagnostic boundaries", () => {
       warn.mockRestore();
     }
   });
+});
+
+describe("exact native preparation invocation approval", () => {
+  it.each([true, false])(
+    "uses only the current invocation approval (settled=%s) across all consumption reads",
+    async (settledCurrent) => {
+      const f = fixture();
+      const planned = await f.planOnce();
+      const prepared = { ...f.prepared, operationRef: planned.operationRef };
+      const history: MessageStreamEvent[] = [];
+      for (const [requestId, callId, settled] of [
+        ["old-request", "old-call", true],
+        ["current-request", "current-call", settledCurrent],
+      ] as const) {
+        history.push({
+          type: "input.requested",
+          meta: { at: "2026-10-30T20:00:00.000Z", id: `requested-${requestId}` },
+          data: {
+            sequence: 1,
+            stepIndex: 0,
+            turnId: "turn",
+            requests: [
+              {
+                kind: "tool-approval",
+                requestId,
+                prompt: "Approve exact saved target",
+                action: {
+                  kind: "tool-call",
+                  toolName: "prepare-app-native-target",
+                  callId,
+                  input: prepared,
+                },
+              },
+            ],
+          },
+        });
+        if (settled) {
+          history.push({
+            type: "approval.settled",
+            meta: { at: "2026-10-30T20:00:01.000Z", id: `settled-${requestId}` },
+            data: {
+              sequence: 2,
+              stepIndex: 0,
+              turnId: "turn",
+              requestId,
+              responderPrincipalId: authority.ownerUserId,
+              outcome: "approved",
+            },
+          });
+        }
+      }
+      const approvalCalls: (string | undefined)[] = [];
+      f.dependencies.readApproval = async (owner, record, callId) => {
+        approvalCalls.push(callId);
+        const result = await readPrivateNativeTargetApproval({
+          owner,
+          record,
+          ...(callId === undefined ? {} : { callId }),
+          historyOwner: owner.historyOwner,
+          assertOwner: async () => {
+            await f.authorize();
+          },
+          readHistory: (startIndex, onEvent) => {
+            for (const event of history.slice(startIndex)) {
+              onEvent(event);
+            }
+            return Promise.resolve({
+              complete: true,
+              nativeTailIndex: history.length,
+              nextNativeIndex: history.length,
+            });
+          },
+        });
+        return result.status === "pending" ? null : result.proof;
+      };
+      const invocation = {
+        ...f.common,
+        callId: "current-call",
+        action: "native-target-prepare" as const,
+        input: prepared,
+      };
+      const response = await f.send(invocation);
+      const result = nativeTargetTransportResponseSchemas["native-target-prepare"].parse(
+        await response.json(),
+      );
+      expect(approvalCalls.length).toBeGreaterThan(0);
+      expect(approvalCalls.every((callId) => callId === "current-call")).toBe(true);
+      if (settledCurrent) {
+        expect(result.status).toBe("ready");
+        expect(f.createProject).toHaveBeenCalledTimes(1);
+        const retried = await f.send(invocation);
+        expect(
+          nativeTargetTransportResponseSchemas["native-target-prepare"].parse(await retried.json())
+            .status,
+        ).toBe("ready");
+        expect(f.createProject).toHaveBeenCalledTimes(1);
+      } else {
+        expect(result.status).toBe("approval-pending");
+        expect(f.createProject).not.toHaveBeenCalled();
+      }
+    },
+  );
 });

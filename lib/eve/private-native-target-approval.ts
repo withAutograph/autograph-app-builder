@@ -166,16 +166,19 @@ export const createPrivateNativeTargetApprovalCapture = (input: {
       }
     },
     read(): NativeTargetOnboardingApproval | null {
-      const entries = capture
-        .snapshot()
-        .entries.filter((entry) => input.callId === undefined || entry.callId === input.callId);
-      const cancelled = entries.filter((entry) => entry.cancelled);
+      const allEntries = capture.snapshot().entries;
+      // Cancellation denies this exact plan across invocations; only positive
+      // authority is restricted to the current tool call.
+      const cancelled = allEntries.filter((entry) => entry.cancelled);
       if (cancelled.length > 1) {
         throw new Error("Native target cancellation is ambiguous.");
       }
       if (cancelled[0] !== undefined) {
         return proofFor(cancelled[0]);
       }
+      const entries = allEntries.filter(
+        (entry) => input.callId === undefined || entry.callId === input.callId,
+      );
       const receipt = capture.read();
       if (receipt === null) {
         return null;
