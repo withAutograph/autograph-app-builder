@@ -3146,7 +3146,7 @@ diff --git a/dist/src/execution/session/terminal-recovery-boot.js b/dist/src/exe
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery-boot.js
-@@ -0,0 +1,137 @@
+@@ -0,0 +1,141 @@
 +import { decodeSessionInboxPayload } from "#execution/session-inbox/protocol.js";
 +import { activeTurnId } from "#harness/active-turn-id.js";
 +import { createHook, getWorkflowMetadata, getWritable } from "#compiled/@workflow/core/index.js";
@@ -3192,6 +3192,10 @@ new file mode 100644
 +    throw new Error("Terminal recovery checkpoint identity changed.");
 +  }
 +  const carriedInbox = input.carriedInbox ?? [];
++  if (input.provenance.resumePhase === "await-input") {
++    const { deriveTerminalRecoveryResumePhase } = await import("#execution/session/terminal-recovery.js");
++    if (await deriveTerminalRecoveryResumePhase({ checkpointCore: checkpoint, replayInput: input.replayInput, carriedInbox }) !== "await-input") throw new Error("Idle recovery checkpoint contains pending work.");
++  }
 +  const ids = new Set();
 +  for (const [index, item] of carriedInbox.entries()) {
 +    if (
@@ -3266,7 +3270,7 @@ new file mode 100644
 +        deploymentId: input.ownerDeploymentId,
 +        initialInput: undefined,
 +        initialTurnInput: input.replayInput,
-+        awaitFirstMessage: false,
++        awaitFirstMessage: input.provenance.resumePhase === "await-input",
 +        retention: checkpoint.retention,
 +        serializedContext: checkpoint.serializedContext,
 +        sessionId: descriptor.logicalSessionId,
@@ -3289,7 +3293,7 @@ new file mode 100644
 index 0000000..a3f1892
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.d.ts
-@@ -0,0 +1,120 @@
+@@ -0,0 +1,123 @@
 +import type { SessionAuthContext } from "#channel/types.js";
 +import type { SessionCheckpoint } from "#execution/session/handoff.js";
 +import type { TerminalRecoveryWorkflowEntryInput } from "#execution/session/entry-input.js";
@@ -3315,6 +3319,8 @@ index 0000000..a3f1892
 +  readonly sourceEventId: string;
 +  readonly sourceSlot: number;
 +  readonly checkpointVersion: 1;
++  /** Server-derived idle boot phase; absent retains ordinary replay. */
++  readonly resumePhase?: "await-input";
 +}
 +export interface TerminalRecoveryBinding extends TerminalRecoveryDescriptor {
 +  readonly ownerRunId: string;
@@ -3383,7 +3389,8 @@ index 0000000..a3f1892
 +export declare function parseTerminalRecoveryDescriptor(value: unknown, operationId: unknown): TerminalRecoveryDescriptor | undefined;
 +export declare function terminalRecoveryActivationToken(auth: SessionAuthContext, descriptor: TerminalRecoveryDescriptor): string;
 +export declare function terminalRecoveryPolicy(entry: unknown): Pick<SessionCheckpoint, "capabilities" | "retention" | "sessionTimeoutMs"> | undefined;
-+export declare function quiesceLiveRecoverySource(input: TerminalRecoveryAuthorityInput & { readonly ports: TerminalRecoveryPorts }, dependencies: TerminalRecoveryDependencies, onStopMayHaveOccurred?: () => void, parkedRecoveryBinding?: TerminalRecoveryBinding): Promise<{ readonly kind: "ready"; readonly ownerRunIds: readonly string[]; readonly stopMayHaveOccurred: boolean } | { readonly kind: "unavailable" | "uncertain"; readonly reason: string }>;
++export declare function deriveTerminalRecoveryResumePhase(reconciled: { readonly checkpointCore: Pick<SessionCheckpoint, "serializedContext" | "sessionState">; readonly replayInput?: TerminalRecoveryWorkflowEntryInput["replayInput"]; readonly carriedInbox?: TerminalRecoveryWorkflowEntryInput["carriedInbox"] }): Promise<"await-input" | "replay" | undefined>;
++export declare function quiesceLiveRecoverySource(input: TerminalRecoveryAuthorityInput & { readonly ports: TerminalRecoveryPorts }, dependencies: TerminalRecoveryDependencies, onStopMayHaveOccurred?: () => void, parkedRecoveryBinding?: TerminalRecoveryBinding): Promise<{ readonly kind: "ready"; readonly ownerRunIds: readonly string[]; readonly stopMayHaveOccurred: boolean; readonly resumePhase: "await-input" | "replay" } | { readonly kind: "unavailable" | "uncertain"; readonly reason: string }>;
 +export declare function recoverTerminalSession(input: TerminalRecoveryAuthorityInput & { readonly ports: TerminalRecoveryPorts }, dependencies: TerminalRecoveryDependencies): Promise<{ readonly kind: "accepted"; readonly recoveryBinding: TerminalRecoveryBinding } | { readonly kind: "unavailable" | "uncertain"; readonly reason: string }>;
 +export declare function activateTerminalSession(input: TerminalRecoveryAuthorityInput & { readonly ports: TerminalRecoveryPorts }, dependencies: Pick<TerminalRecoveryDependencies, "getHook" | "resumeHook" | "isHookNotFound">): Promise<{ readonly kind: "accepted"; readonly recoveryBinding: TerminalRecoveryBinding }>;
 +export declare function handleTerminalRecoveryRequest(input: {
@@ -3414,13 +3421,13 @@ diff --git a/dist/src/execution/session/terminal-recovery.js b/dist/src/executio
 new file mode 100644
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.js
-@@ -0,0 +1,748 @@
+@@ -0,0 +1,765 @@
 +import { createHash } from "node:crypto";
 +import { DEFAULT_SESSION_TIMEOUT_MS } from "#execution/session/timeout.js";
 +import { SESSION_CHECKPOINT_VERSION } from "#execution/session/handoff.js";
 +
 +const descriptorKeys = ["version", "operationId", "sourcePublicSessionId", "sourceOwnerRunId", "sourceAdapterGeneration", "logicalSessionId", "originalAuthoritySessionId", "parentCancellationRevision", "sourceHandoffId", "executionTransfer"];
-+const provenanceKeys = ["kind", "sourceStepId", "sourceEventId", "sourceSlot", "checkpointVersion", "checkpointOwnerRunId"];
++const provenanceKeys = ["kind", "sourceStepId", "sourceEventId", "sourceSlot", "checkpointVersion", "checkpointOwnerRunId", "resumePhase"];
 +const sameTransfer = (left, right) => left === undefined && right === undefined || record(left) && record(right) && left.kind === right.kind && left.sourceCheckpointDigest === right.sourceCheckpointDigest;
 +const refusalReasons = new Set([
 +  "source-not-terminal", "native-data-expired", "handoff-discovery-unavailable", "handoff-owner-ambiguous", "handoff-parent-frontier-uncertain", "paired-native-checkpoint-unavailable", "native-checkpoint-identity-mismatch", "source-policy-unavailable", "checkpoint-origin-unavailable", "checkpoint-identity-mismatch", "live-transfer-unsupported", "source-approval-not-parked", "source-effect-steps-unsettled", "source-lineage-effects-unsettled", "source-not-parked", "source-physical-owner-changed", "source-stop-not-owned", "source-stop-unconfirmed", "approval-transcript-unavailable", "cancelled-call-history-unreconciled", "cancelled-turn-replay", "conflicting-retained-history", "coordination-results-incomplete", "delivery-consumption-unreconciled", "failed-turn-effects-unreconciled", "later-coordination-input-unreconciled", "native-stream-incomplete", "runtime-result-consumption-ambiguous", "runtime-result-owner-unreconciled", "unconsumed-native-inbox-input", "unreadable-native-effect-frontier", "uncommitted-action-result", "uncommitted-action-dispatch", "cancelled-call-result-unreconciled",
@@ -3512,6 +3519,7 @@ new file mode 100644
 +  return record(binding) && descriptorKeys.every((key) => key === "executionTransfer" ? sameTransfer(binding[key], descriptor[key]) : binding[key] === descriptor[key]) &&
 +    typeof binding.ownerRunId === "string" && binding.ownerRunId.length > 0 && record(binding.provenance) &&
 +    candidateKinds.includes(binding.provenance.kind) && binding.provenance.checkpointVersion === 1 &&
++    (binding.provenance.resumePhase === undefined || binding.provenance.resumePhase === "await-input") &&
 +    (binding.provenance.checkpointOwnerRunId === undefined || (typeof binding.provenance.checkpointOwnerRunId === "string" && binding.provenance.checkpointOwnerRunId.length > 0)) &&
 +    typeof binding.provenance.sourceStepId === "string" && typeof binding.provenance.sourceEventId === "string" &&
 +    Number.isSafeInteger(binding.provenance.sourceSlot) && binding.provenance.sourceSlot >= 0;
@@ -3556,6 +3564,7 @@ new file mode 100644
 +    return { kind: "accepted", recoveryBinding: existing };
 +  }
 +  let transferOwnerRunIds;
++  let transferResumePhase;
 +  let ready = await findReady("initial_ready");
 +  if (ready !== undefined && descriptor.executionTransfer !== undefined) markStopMayHaveOccurred();
 +  if (descriptor.executionTransfer !== undefined) {
@@ -3563,6 +3572,7 @@ new file mode 100644
 +    const stopped = await quiesceLiveRecoverySource(input, dependencies, markStopMayHaveOccurred, ready);
 +    if (stopped.kind !== "ready") return stopped;
 +    transferOwnerRunIds = stopped.ownerRunIds;
++    transferResumePhase = stopped.resumePhase;
 +  }
 +  if (ready === undefined && dependencies.closeHolder !== undefined) {
 +    const authorizeCurrent = async () => {
@@ -3625,6 +3635,7 @@ new file mode 100644
 +    preparing("candidate_reconcile");
 +    const reconciled = await dependencies.reconcile(collected.candidate, repeatableCallIds === undefined ? undefined : { repeatableCallIds });
 +    if (reconciled.kind !== "ready") return reconciled;
++    if (transferResumePhase !== undefined && await deriveTerminalRecoveryResumePhase(reconciled) !== transferResumePhase) return { kind: "uncertain", reason: "source-approval-not-parked" };
 +    let policy;
 +    preparing("source_policy");
 +    try { policy = terminalRecoveryPolicy(await dependencies.readEntry(payload)); }
@@ -3640,6 +3651,7 @@ new file mode 100644
 +      sourceEventId: selected.origin.eventId,
 +      sourceSlot: selected.origin.slot,
 +      checkpointVersion: 1,
++      ...(transferResumePhase === "await-input" ? { resumePhase: "await-input" } : {}),
 +    };
 +    const checkpoint = { ...reconciled.checkpointCore, ...policy, version: SESSION_CHECKPOINT_VERSION };
 +    if (checkpoint.sessionState.sessionId !== descriptor.logicalSessionId || checkpoint.serializedContext["eve.sessionId"] !== descriptor.logicalSessionId) return { kind: "uncertain", reason: "checkpoint-identity-mismatch" };
@@ -3653,7 +3665,7 @@ new file mode 100644
 +      return { kind: "accepted", recoveryBinding: current };
 +    }
 +    ready = await findReady("pre_start_ready");
-+    if (ready !== undefined && (ready.provenance.kind !== provenance.kind || ready.provenance.sourceStepId !== provenance.sourceStepId || ready.provenance.sourceEventId !== provenance.sourceEventId || ready.provenance.sourceSlot !== provenance.sourceSlot || (ready.provenance.checkpointOwnerRunId ?? descriptor.sourceOwnerRunId) !== provenance.checkpointOwnerRunId)) return { kind: "uncertain", reason: "checkpoint-origin-unavailable" };
++    if (ready !== undefined && (ready.provenance.resumePhase !== provenance.resumePhase || ready.provenance.kind !== provenance.kind || ready.provenance.sourceStepId !== provenance.sourceStepId || ready.provenance.sourceEventId !== provenance.sourceEventId || ready.provenance.sourceSlot !== provenance.sourceSlot || (ready.provenance.checkpointOwnerRunId ?? descriptor.sourceOwnerRunId) !== provenance.checkpointOwnerRunId)) return { kind: "uncertain", reason: "checkpoint-origin-unavailable" };
 +    if (ready === undefined) {
 +      preparing("owner_start");
 +      await dependencies.start({ activationToken: token, checkpoint, descriptor, provenance, replayInput: reconciled.replayInput, carriedInbox: reconciled.carriedInbox });
@@ -3907,6 +3919,22 @@ new file mode 100644
 +/** Transfer an owned parked execution only after complete retained-state preflight. */
 +const lineageOwnerIds = (payload) => [...new Set([...payload.handoffChain.map((entry) => entry.parentRunId), payload.checkpointOwnerRunId])];
 +const sameOwnerIds = (left, right) => left.length === right.length && left.every((id, index) => id === right[index]);
++/** Derive execution admission from the full retained state, never a client mode. */
++export async function deriveTerminalRecoveryResumePhase(reconciled) {
++  const [{ readDurableSession }, { getPendingInputBatches, getDeferredStepInput }, { getApprovalAuditState }, { getProxyInputRequests }, { getPendingCoordinationBatch }, { getPendingAuthorization }, { getBlockingWorkflowToolRuns, getBackgroundTasks }, { getAgentHandleStore }] = await Promise.all([
++    import("#execution/durable-session-store.js"), import("#harness/pending-input-batches.js"), import("#harness/approval-candidates.js"), import("#harness/proxy-input-requests.js"), import("#harness/coordination.js"), import("#harness/authorization.js"), import("#harness/workflow-tool-runs.js"), import("#subagents/handles/store.js"),
++  ]);
++  const session = readDurableSession(reconciled.checkpointCore.sessionState);
++  const state = session.state;
++  const pending = getPendingInputBatches(state);
++  if (getApprovalAuditState(state).activeCandidates.length > 0) return undefined;
++  if (pending.length > 0) return pending.some((batch) => batch.requests.some((request) => request.kind !== "tool-approval")) ? undefined : "replay";
++  if (getDeferredStepInput(session) !== undefined || (getPendingAuthorization(state)?.challenges.length ?? 0) > 0 || getProxyInputRequests(state).size > 0 || getPendingCoordinationBatch(state) !== undefined || reconciled.replayInput !== undefined || (reconciled.carriedInbox?.length ?? 0) > 0) return undefined;
++  if (getBlockingWorkflowToolRuns(state).length > 0 || getBackgroundTasks(state).query().some((task) => !["completed", "failed", "cancelled"].includes(task.status))) return undefined;
++  if (getAgentHandleStore(state)?.handles.some((handle) => ["starting", "running", "reserved", "claimed"].includes(handle.phase))) return undefined;
++  return "await-input";
++}
++
 +export async function quiesceLiveRecoverySource(input, dependencies, onStopMayHaveOccurred, parkedRecoveryBinding) {
 +  let stopMayHaveOccurred = false;
 +  const mark = () => { stopMayHaveOccurred = true; onStopMayHaveOccurred?.(); };
@@ -3928,12 +3956,8 @@ new file mode 100644
 +    const reconciled = await dependencies.reconcileLineagePreflight(result.preflight);
 +    if (reconciled.kind !== "ready") return reconciled;
 +    const payload = dependencies.readLineagePreflight(result.preflight);
-+    const { readDurableSession } = await import("#execution/durable-session-store.js");
-+    const { getPendingInputBatches } = await import("#harness/pending-input-batches.js");
-+    const { getApprovalAuditState } = await import("#harness/approval-candidates.js");
-+    const state = readDurableSession(reconciled.checkpointCore.sessionState).state;
-+    const pending = getPendingInputBatches(state);
-+    if (pending.length === 0 || pending.some((batch) => batch.requests.some((request) => request.kind !== "tool-approval")) || getApprovalAuditState(state).activeCandidates.length > 0) return { kind: "unavailable", reason: "source-approval-not-parked" };
++    const resumePhase = await deriveTerminalRecoveryResumePhase(reconciled);
++    if (resumePhase === undefined) return { kind: "unavailable", reason: "source-approval-not-parked" };
 +    const ownerRunIds = lineageOwnerIds(payload);
 +    const observations = [];
 +    for (const runId of ownerRunIds) {
@@ -3962,7 +3986,7 @@ new file mode 100644
 +    const final = observations.at(-1);
 +    if (inbox === undefined && ["pending", "running"].includes(final.status)) return { kind: "unavailable", reason: "source-approval-not-parked" };
 +    await authorize();
-+    return { kind: "preflight", ownerRunIds, observations };
++    return { kind: "preflight", ownerRunIds, observations, resumePhase };
 +  };
 +  const initial = await preflight();
 +  if (initial.kind !== "preflight") return initial;
@@ -3970,7 +3994,7 @@ new file mode 100644
 +  for (const runId of ownerRunIds) {
 +    const current = await preflight();
 +    if (current.kind !== "preflight") return current;
-+    if (!sameOwnerIds(current.ownerRunIds, ownerRunIds)) return { kind: "uncertain", reason: "source-physical-owner-changed" };
++    if (current.resumePhase !== initial.resumePhase || !sameOwnerIds(current.ownerRunIds, ownerRunIds)) return { kind: "uncertain", reason: "source-physical-owner-changed" };
 +    const observed = current.observations.find((run) => run.runId === runId);
 +    if (["completed", "failed", "cancelled"].includes(observed.status)) continue;
 +    await authorize();
@@ -3984,9 +4008,9 @@ new file mode 100644
 +  }
 +  const terminal = await preflight();
 +  if (terminal.kind !== "preflight") return terminal;
-+  if (!sameOwnerIds(terminal.ownerRunIds, ownerRunIds) || terminal.observations.some((run) => !["completed", "failed", "cancelled"].includes(run.status))) return { kind: "uncertain", reason: "source-physical-owner-changed" };
++  if (terminal.resumePhase !== initial.resumePhase || !sameOwnerIds(terminal.ownerRunIds, ownerRunIds) || terminal.observations.some((run) => !["completed", "failed", "cancelled"].includes(run.status))) return { kind: "uncertain", reason: "source-physical-owner-changed" };
 +  await authorize();
-+  return { kind: "ready", ownerRunIds };
++  return { kind: "ready", ownerRunIds, resumePhase: initial.resumePhase };
 +}
 +
 +export async function createNativeTerminalRecoveryDependencies() { return await nativeDependencies(); }

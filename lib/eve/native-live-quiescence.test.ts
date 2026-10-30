@@ -24,7 +24,11 @@ import type {
   PrivateOwnedLineagePreflight,
 } from "../../node_modules/eve/dist/src/execution/session/recovery-candidate";
 import type { createDurableSessionState as RuntimeDurable } from "../../node_modules/eve/dist/src/execution/durable-session-store";
-import type { appendPendingInputBatch as RuntimeAppend } from "../../node_modules/eve/dist/src/harness/pending-input-batches";
+import type {
+  appendPendingInputBatch as RuntimeAppend,
+  queueDeferredStepInput as RuntimeDefer,
+} from "../../node_modules/eve/dist/src/harness/pending-input-batches";
+import type { setPendingAuthorization as RuntimeSetAuthorization } from "../../node_modules/eve/dist/src/harness/authorization";
 import type { HarnessSession } from "../../node_modules/eve/dist/src/harness/types";
 
 const runtime = await vi.importActual<{
@@ -42,7 +46,10 @@ const durable = await vi.importActual<{ createDurableSessionState: typeof Runtim
   new URL("../../node_modules/eve/dist/src/execution/durable-session-store.js", import.meta.url)
     .href,
 );
-const batches = await vi.importActual<{ appendPendingInputBatch: typeof RuntimeAppend }>(
+const batches = await vi.importActual<{
+  appendPendingInputBatch: typeof RuntimeAppend;
+  queueDeferredStepInput: typeof RuntimeDefer;
+}>(
   new URL("../../node_modules/eve/dist/src/harness/pending-input-batches.js", import.meta.url).href,
 );
 const nativeDiagnosticLogSchema = z.looseObject({ event: z.string() });
@@ -114,8 +121,8 @@ const fixture = () => {
     responseAuthRequiredRequestIds: ["pending"],
     responseMessages: [],
   });
-  const before = durable.createDurableSessionState({ session });
-  const after = durable.createDurableSessionState({
+  let before = durable.createDurableSessionState({ session });
+  let after = durable.createDurableSessionState({
     session: { ...session, history: [{ role: "assistant", content: "retained late result" }] },
   });
   const provenance = {
@@ -288,6 +295,10 @@ const fixture = () => {
     after,
     run: () => runtime.recoverTerminalSession({ auth: actor, descriptor, ports }, dependencies),
     getNativeStatus: () => nativeStatus,
+    setCheckpointState: (state: typeof before) => {
+      before = state;
+      after = state;
+    },
     setLineage: (parents: string[]) => {
       lineageParents = parents;
     },
@@ -1451,4 +1462,101 @@ it("does not accept a caller-supplied parked owner without its exact native read
   ).toMatchObject({ kind: "uncertain", reason: "source-physical-owner-changed" });
   expect(f.stopSource).not.toHaveBeenCalled();
   expect(f.start).not.toHaveBeenCalled();
+});
+
+describe("idle source execution transfer", () => {
+  const idleSession = (): HarnessSession => ({
+    sessionId: "logical",
+    continuationToken: "continuation",
+    history: [{ role: "assistant", content: "The prior response belongs to an earlier prompt." }],
+    agent: { dynamicModel: true, system: "", tools: [] },
+    compaction: { recentWindowSize: 1, threshold: 1000 },
+  });
+  const idleState = () => durable.createDurableSessionState({ session: idleSession() });
+
+  it("transfers a proven idle lineage without replaying a response or starting a model turn", async () => {
+    const f = fixture();
+    f.setCheckpointState(idleState());
+    f.setLineage(["anchor", "middle"]);
+    f.setAncestorStatus("anchor", "running");
+    f.setAncestorStatus("middle", "running");
+    const result = await f.run();
+    expect(result.kind).toBe("accepted");
+    expect(f.stopSource.mock.calls.map(([id]) => id)).toEqual(["anchor", "middle", "old-native"]);
+    expect(f.start).toHaveBeenCalledTimes(1);
+    const started = f.start.mock.calls.at(0)?.[0];
+    if (started === undefined) {
+      throw new Error("Recovery did not start its owner.");
+    }
+    expect(started.provenance.resumePhase).toBe("await-input");
+    expect(started.replayInput).toBeUndefined();
+    expect(started.checkpoint.sessionState).toEqual(idleState());
+  });
+
+  it("does not stop an idle source with an unsettled native effect", async () => {
+    const f = fixture();
+    f.setCheckpointState(idleState());
+    f.setUnsettled(["running-provider-effect"]);
+    const result = await f.run();
+    expect(result.kind).toBe("unavailable");
+    expect(f.stopSource).not.toHaveBeenCalled();
+    expect(f.start).not.toHaveBeenCalled();
+  });
+
+  it("refuses a changed idle-to-approval phase after a source stop", async () => {
+    const f = fixture();
+    const approvalState = f.before;
+    f.setCheckpointState(idleState());
+    f.stopSource.mockImplementation(() => {
+      f.setNativeStatus("cancelled");
+      f.markStopReceipt("old-native");
+      f.setCheckpointState(approvalState);
+      return Promise.resolve();
+    });
+    const result = await f.run();
+    expect(result.kind).toBe("uncertain");
+    expect(f.start).not.toHaveBeenCalled();
+  });
+  it("does not stop a source whose accepted input is deferred outside pending approvals", async () => {
+    const f = fixture();
+    f.setCheckpointState(
+      durable.createDurableSessionState({
+        session: batches.queueDeferredStepInput(idleSession(), {
+          message: "Already accepted work",
+        }),
+      }),
+    );
+    const result = await f.run();
+    expect(result.kind).toBe("unavailable");
+    expect(f.stopSource).not.toHaveBeenCalled();
+    expect(f.start).not.toHaveBeenCalled();
+  });
+  it("does not stop a source waiting for an authorization callback", async () => {
+    const authorization = await vi.importActual<{
+      setPendingAuthorization: typeof RuntimeSetAuthorization;
+    }>(new URL("../../node_modules/eve/dist/src/harness/authorization.js", import.meta.url).href);
+    const session = idleSession();
+    const f = fixture();
+    f.setCheckpointState(
+      durable.createDurableSessionState({
+        session: {
+          ...session,
+          state: authorization.setPendingAuthorization(session.state, {
+            challenges: [
+              {
+                name: "provider",
+                attemptId: "retained-attempt",
+                challenge: { instructions: "Complete the existing authorization" },
+                hookUrl: "https://builder.example/retained-callback",
+              },
+            ],
+          }),
+        },
+      }),
+    );
+    const result = await f.run();
+    expect(result.kind).toBe("unavailable");
+    expect(f.stopSource).not.toHaveBeenCalled();
+    expect(f.start).not.toHaveBeenCalled();
+  });
 });

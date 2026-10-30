@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
-import { it } from "vitest";
+import { it, vi } from "vitest";
 
 const require = createRequire(import.meta.url);
 const sdk = pathToFileURL(
@@ -749,4 +749,77 @@ it("exact recovery retry preserves the immutable historical entry and starts onl
     /cancelled/u,
   );
   assert.equal(f.calls.includes("activate"), false);
+});
+
+it("an idle recovery owner enters the actual inbox wait without admitting a model turn", async () => {
+  const { runPreparedSession } = await import(`${sdk}execution/session/program.js`);
+  const { promise: activation, resolve: activate } = Promise.withResolvers();
+  const { promise: enteredWait, resolve: enterWait } = Promise.withResolvers();
+  const { promise: parkedWait } = Promise.withResolvers();
+  let claims = 0;
+  let writableReads = 0;
+  const inbox = {
+    claimSessionHooks: async () => {
+      claims += 1;
+    },
+    onInterrupt: () => vi.fn(),
+    drain: () => [],
+    restore: vi.fn(),
+    hasPending: () => false,
+    next: () => {
+      enterWait();
+      return parkedWait;
+    },
+    dispose: vi.fn(() => Promise.resolve()),
+  };
+  const ports = {
+    createSessionInbox: () => inbox,
+    getWorkflowMetadata: () => ({ workflowRunId: "idle-successor" }),
+    validateCheckpoint: vi.fn(() => Promise.resolve()),
+    getWritable: () => {
+      writableReads += 1;
+      return new WritableStream();
+    },
+    createHook: () =>
+      Object.assign(activation, { getConflict: () => Promise.resolve(), dispose: vi.fn() }),
+  };
+  const input = {
+    kind: "terminal-recovery",
+    descriptor,
+    checkpoint: checkpoint(),
+    provenance: { ...provenance, resumePhase: "await-input" },
+    activationToken: "idle-activation",
+    ownerDeploymentId: "deployment",
+  };
+  const pending = bootTerminalRecoveryOwnerWithPorts(input, ports);
+  await Promise.resolve();
+  assert.equal(writableReads, 0);
+  activate({
+    kind: "activate-terminal-recovery",
+    operationId: descriptor.operationId,
+    ownerRunId: "idle-successor",
+  });
+  const boot = await pending;
+  assert.equal(claims, 1);
+  assert.equal(boot.session.initialTurnInput, undefined);
+  const running = runPreparedSession(boot.session, boot.inbox);
+  await Promise.race([
+    enteredWait,
+    (async () => {
+      await running;
+      throw new Error("Idle owner ended before receiving input.");
+    })(),
+  ]);
+  assert.equal(boot.session.awaitFirstMessage, true);
+  await assert.rejects(
+    bootTerminalRecoveryOwnerWithPorts(
+      {
+        ...input,
+        replayInput: { delivery: { kind: "deliver", payloads: [{ message: "old response" }] } },
+      },
+      ports,
+    ),
+    /pending work/u,
+  );
+  assert.equal(claims, 1);
 });

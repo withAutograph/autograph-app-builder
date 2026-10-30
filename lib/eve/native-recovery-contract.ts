@@ -35,6 +35,7 @@ export const nativeRecoveryBindingSchema = nativeRecoveryDescriptorSchema
       sourceEventId: z.string().min(1),
       sourceSlot: z.number().int().nonnegative(),
       checkpointOwnerRunId: z.string().min(1).optional(),
+      resumePhase: z.literal("await-input").optional(),
       checkpointVersion: z.literal(1),
     }),
   })
