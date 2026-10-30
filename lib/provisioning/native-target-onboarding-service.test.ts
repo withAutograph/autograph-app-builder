@@ -458,3 +458,56 @@ describe("protected retained native resource selection", () => {
     expect(f.createProject).not.toHaveBeenCalled();
   });
 });
+
+describe("native plan diagnostic boundaries", () => {
+  it("reports workload and registry-read failures using fixed labels", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await expect(fixture(false).planOnce()).rejects.toThrow();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('"stage":"native_plan_workload"'));
+      warn.mockClear();
+      const f = fixture();
+      vi.spyOn(f.store, "read").mockRejectedValue(new Error("private registry error"));
+      await expect(f.planOnce()).rejects.toThrow("private registry error");
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('"stage":"native_plan_registry_read"'),
+      );
+      expect(warn.mock.calls.flat().join(" ")).not.toContain("private registry error");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+  it("reports the failing captured-release stage without private error text", async () => {
+    const f = fixture();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      f.readCapturedRelease.mockRejectedValue(new Error("private-token-unsafe"));
+      await expect(f.planOnce()).rejects.toThrow("private-token-unsafe");
+      const messages = warn.mock.calls.map(([value]) => String(value));
+      expect(
+        messages.some((value) => value.includes('"stage":"native_plan_captured_release"')),
+      ).toBe(true);
+      expect(messages.join(" ")).not.toContain("private-token-unsafe");
+      expect(f.createProject).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+  it("reports the profile boundary and preserves the original failure if logging fails", async () => {
+    const f = fixture();
+    const error = new Error("profile-private-detail");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {
+      throw new Error("logger failure");
+    });
+    try {
+      f.resolvePlan.mockRejectedValue(error);
+      await expect(f.planOnce()).rejects.toBe(error);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('"stage":"native_plan_profile_resolution"'),
+      );
+      expect(f.createProject).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});

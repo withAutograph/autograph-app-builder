@@ -7,6 +7,8 @@ import type {
 } from "../agent/native-target-onboarding-runtime";
 import type { OperatorOwnerContext } from "./hosted-operator-contract";
 import { HostedOperatorError } from "./hosted-operator-contract";
+import { reportHostedOperatorNativeFailure } from "./hosted-operator-native-diagnostic";
+import type { HostedOperatorNativeFailureStage } from "./hosted-operator-native-diagnostic";
 import {
   nativeTargetOnboardingApprovalSchema,
   nativeTargetOnboardingPlanDigest,
@@ -85,17 +87,41 @@ export class NativeTargetExistingConfiguredTargetError extends Error {
   }
 }
 
+const observeNativePlan = async <T>(
+  enabled: boolean,
+  stage: HostedOperatorNativeFailureStage,
+  operation: () => Promise<T>,
+): Promise<T> => {
+  try {
+    return await operation();
+  } catch (error) {
+    if (enabled && !(error instanceof NativeTargetExistingConfiguredTargetError)) {
+      try {
+        reportHostedOperatorNativeFailure(stage, error);
+      } catch {
+        // A diagnostic failure cannot alter the original operation.
+      }
+    }
+    throw error;
+  }
+};
+
 /** The native transport carries only hints. Every action resolves the same current owner again. */
 export const createNativeTargetOnboardingService =
   (deps: NativeTargetOnboardingServiceDependencies) =>
   async (request: Request, input: Invocation): Promise<Response> => {
     const workloadHeaders = new Headers(request.headers);
-    await deps.verifyWorkload(new Request(request.url, { headers: workloadHeaders }));
+    const isPlan = input.action === "native-target-plan";
+    await observeNativePlan(isPlan, "native_plan_workload", () =>
+      deps.verifyWorkload(new Request(request.url, { headers: workloadHeaders })),
+    );
     const workload = {
       authorization: workloadHeaders.get("authorization"),
       signal: request.signal,
     };
-    const owner = await deps.authorize(request, input);
+    const owner = await observeNativePlan(isPlan, "native_plan_owner", () =>
+      deps.authorize(request, input),
+    );
     const ownerMatches = [
       owner.adapterSessionId === input.adapterSessionId,
       owner.publicSessionId === input.ownerContext.sessionId,
@@ -110,7 +136,9 @@ export const createNativeTargetOnboardingService =
       if (invocation !== input || appId !== input.input.appId) {
         throw denied();
       }
-      const current = await deps.authorize(request, input);
+      const current = await observeNativePlan(isPlan, "native_plan_owner", () =>
+        deps.authorize(request, input),
+      );
       if (!isDeepStrictEqual(current, owner)) {
         throw denied();
       }
@@ -120,10 +148,8 @@ export const createNativeTargetOnboardingService =
       store: deps.store,
       authorize,
       assertPlanOrigin: async (current, plan) => {
-        const trusted = await deps.readCapturedRelease(
-          owner,
-          plan.appId,
-          plan.origin.appSpecDigest,
+        const trusted = await observeNativePlan(isPlan, "native_plan_captured_release", () =>
+          deps.readCapturedRelease(owner, plan.appId, plan.origin.appSpecDigest),
         );
         if (
           !isDeepStrictEqual(trusted.release, plan.origin.release) ||
@@ -150,7 +176,9 @@ export const createNativeTargetOnboardingService =
           throw mismatch();
         }
         if (retainedPlan !== undefined) {
-          const row = await registry.read(input, appId);
+          const row = await observeNativePlan(isPlan, "native_plan_registry_read", () =>
+            registry.read(input, appId),
+          );
           if (
             input.input.resourceProfileId === undefined ||
             row?.record.stage !== "planned" ||
@@ -159,19 +187,31 @@ export const createNativeTargetOnboardingService =
           ) {
             throw mismatch();
           }
-          return await deps.readCapturedRelease(owner, appId, row.record.plan.origin.appSpecDigest);
+          return await observeNativePlan(isPlan, "native_plan_captured_release", () =>
+            deps.readCapturedRelease(owner, appId, row.record.plan.origin.appSpecDigest),
+          );
         }
         if (input.selectedApp === undefined) {
           throw denied();
         }
-        return await deps.readCapturedRelease(owner, appId, input.selectedApp.appSpecDigest);
+        const selected = input.selectedApp;
+        return await observeNativePlan(isPlan, "native_plan_captured_release", () =>
+          deps.readCapturedRelease(owner, appId, selected.appSpecDigest),
+        );
       },
       resolvePlan: async (_ctx, proposal, source) =>
-        await deps.resolvePlan(owner, proposal, source),
+        await observeNativePlan(isPlan, "native_plan_profile_resolution", () =>
+          deps.resolvePlan(owner, proposal, source),
+        ),
       journal: {
         supersedePlannedScope: async (_ctx, plan, expectedPlanDigest) =>
-          await registry.supersedePlannedScope(input, plan, expectedPlanDigest),
-        read: async (_ctx, appId) => await registry.read(input, appId),
+          await observeNativePlan(isPlan, "native_plan_supersede", () =>
+            registry.supersedePlannedScope(input, plan, expectedPlanDigest),
+          ),
+        read: async (_ctx, appId) =>
+          await observeNativePlan(isPlan, "native_plan_registry_read", () =>
+            registry.read(input, appId),
+          ),
         reservePlan: async (_ctx, plan) => await registry.reservePlan(input, plan),
         recordApproval: async (_ctx, appId) => await registry.recordApproval(input, appId),
         claimAttempt: async (_ctx, appId, attempt) =>
@@ -229,17 +269,19 @@ export const createNativeTargetOnboardingService =
     switch (input.action) {
       case "native-target-plan": {
         try {
-          output = await runtime.plan(input.input, context, {
-            phase: "planned",
-            ...(input.selectedApp === undefined
-              ? {}
-              : {
-                  appSpec: {
-                    appId: input.selectedApp.appId,
-                    digest: input.selectedApp.appSpecDigest,
-                  },
-                }),
-          });
+          output = await observeNativePlan(isPlan, "native_plan_dispatch", () =>
+            runtime.plan(input.input, context, {
+              phase: "planned",
+              ...(input.selectedApp === undefined
+                ? {}
+                : {
+                    appSpec: {
+                      appId: input.selectedApp.appId,
+                      digest: input.selectedApp.appSpecDigest,
+                    },
+                  }),
+            }),
+          );
         } catch (error) {
           if (error instanceof NativeTargetExistingConfiguredTargetError) {
             return Response.json(

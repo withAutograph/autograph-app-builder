@@ -89,6 +89,14 @@ the shared operator error boundary, including its literal `unknown` app identity
 They preserve its closed error code as a failure, never as an approval or readiness
 result. Malformed responses and concrete foreign-app responses remain unavailable;
 this handling does not resend a request or relax owner verification.
+Native-target planning failures additionally identify the closed boundary that
+failed: workload, canonical owner, retained registry, captured release, resource
+configuration, or planned-scope transition. Only fixed error classifications
+are reported. Diagnostics never include the request, saved plan, artifact,
+provider response, identity, URL, or arbitrary exception text. A failed observer
+cannot replace the original failure or retry an operation. This evidence helps
+distinguish a rejected retained target from unavailable infrastructure; it does
+not authorize rescoping, approval, preparation, or provider effects.
 Browser acceptance receives `APP_TEST_BASE_URL` only for `test-e2e`, from the same
 owner-verified native Preview projection used to prepare runtime execution. This
 URL handoff supplies no actors, sessions, roles, or authenticated behavior proof.
