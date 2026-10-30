@@ -716,6 +716,15 @@ authorization so a later approval change cannot erase an already-created resourc
 Fresh receipts remain in authenticated native history; prior scopes, attempt
 history and the original journal approval are preserved.
 
+A typed incomplete-history timeout during the read-only
+`native-target-approval-read` lookup returns `pending`, allowing the normal
+current-invocation approval control to ask for consent. It never returns an
+approved receipt or permits an effect. Caller cancellation, explicit owner,
+plan or authorization denials, and non-timeout failures remain errors.
+Preparation still requires complete authenticated history, including any earlier cancellation that was
+outside an incomplete prefix; a fresh card cannot override that cancellation.
+The existing observation checkpoint remains available for the next read.
+
 Accepted app workflow facts survive internal notes and new design drafts. Recording
 a draft does not silently replace the selected specification or discard its build,
 validation, review or publication receipts. Explicitly accepting a different AppSpec
