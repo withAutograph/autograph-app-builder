@@ -4,6 +4,7 @@ import { createNativeTargetOnboardingRuntime } from "../agent/native-target-onbo
 import type {
   NativeTargetCapturedRelease,
   NativeTargetPlanRequest,
+  NativeTargetOnboardingResult,
 } from "../agent/native-target-onboarding-runtime";
 import type { OperatorOwnerContext } from "./hosted-operator-contract";
 import { HostedOperatorError } from "./hosted-operator-contract";
@@ -24,6 +25,7 @@ import { createNativeTargetOnboardingRegistry } from "./native-target-onboarding
 import type {
   NativeTargetCurrentOwner,
   NativeTargetOnboardingStore,
+  NativeTargetOnboardingRow,
 } from "./native-target-onboarding-store";
 import { nativeTargetTransportResponseSchemas } from "./native-target-onboarding-transport";
 import type {
@@ -34,6 +36,7 @@ import type {
   NativeTargetVercelProjectCreation,
   NativeTargetVercelProjectObservation,
 } from "./native-target-vercel-provider";
+import type { NativeTargetVercelAuthorizationObservation } from "./native-target-vercel-authorization";
 
 type Invocation = NativeTargetTransportRequest;
 type Current = NativeTargetCurrentOwner & { historyOwner: OperatorOwnerContext };
@@ -59,6 +62,12 @@ export interface NativeTargetOnboardingServiceDependencies {
     callId: string | undefined,
     workload: { authorization: string | null; signal: AbortSignal },
   ) => Promise<NativeTargetOnboardingApproval | null>;
+  /** GET-only advisory inspection with the retained plan's owner-scoped installation credential. */
+  inspectProviderAuthorization?: (input: {
+    owner: Current;
+    plan: NativeTargetOnboardingPlan;
+    signal: AbortSignal;
+  }) => Promise<NativeTargetVercelAuthorizationObservation>;
   createProject: (input: {
     owner: Current;
     plan: NativeTargetOnboardingPlan;
@@ -105,6 +114,47 @@ const observeNativePlan = async <T>(
     }
     throw error;
   }
+};
+
+const inspectRetainedProviderAuthorization = async (input: {
+  output: NativeTargetOnboardingResult;
+  read: () => Promise<NativeTargetOnboardingRow | undefined>;
+  inspect: NativeTargetOnboardingServiceDependencies["inspectProviderAuthorization"];
+  authorize: () => Promise<Current>;
+  signal: AbortSignal;
+}): Promise<NativeTargetOnboardingResult> => {
+  if (input.inspect === undefined) {
+    return input.output;
+  }
+  const retained = await input.read();
+  if (retained === undefined || retained.record.stage !== "approved") {
+    return input.output;
+  }
+  const matches = [
+    retained.requestId === input.output.operationRef,
+    retained.record.planDigest === input.output.planDigest,
+    nativeTargetOnboardingPlanDigest(retained.record.plan) === input.output.planDigest,
+    !("attempt" in retained.record),
+    !("acceptedCreation" in retained.record),
+    !("registration" in retained.record),
+    retained.record.previousAttempts.at(-1)?.reason === "provider_permission_denied",
+  ].every(Boolean);
+  if (!matches) {
+    return input.output;
+  }
+  input.signal.throwIfAborted();
+  const owner = await input.authorize();
+  input.signal.throwIfAborted();
+  const providerAuthorization = await input.inspect({
+    owner,
+    plan: retained.record.plan,
+    signal: input.signal,
+  });
+  input.signal.throwIfAborted();
+  // Do not publish private credential observations after an owner change or cancellation.
+  await input.authorize();
+  input.signal.throwIfAborted();
+  return { ...input.output, providerAuthorization };
 };
 
 /** A side-effect-free peek may report pending while its durable tail is incomplete. */
@@ -299,6 +349,13 @@ export const createNativeTargetOnboardingService =
                   }),
             }),
           );
+          output = await inspectRetainedProviderAuthorization({
+            output,
+            read: () => registry.read(input, input.input.appId),
+            inspect: deps.inspectProviderAuthorization,
+            authorize: () => authorize(input, input.input.appId),
+            signal: request.signal,
+          });
         } catch (error) {
           if (error instanceof NativeTargetExistingConfiguredTargetError) {
             return Response.json(

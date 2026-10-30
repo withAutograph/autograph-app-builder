@@ -264,6 +264,133 @@ const fixture = (workloadAuthorized = true, selectedPlan = plan) => {
 };
 
 describe("protected native target onboarding service", () => {
+  const permissionRejected = async () => {
+    const f = fixture();
+    const planned = await f.planOnce();
+    f.approve();
+    const create = vi.fn(
+      async (input: Parameters<NativeTargetOnboardingServiceDependencies["createProject"]>[0]) => {
+        await input.authorizeAttempt();
+        return { status: "rejected" as const, reason: "permission_denied" as const };
+      },
+    );
+    f.dependencies.createProject = create;
+    const denied = await f.send({
+      ...f.common,
+      action: "native-target-prepare",
+      input: { ...f.prepared, operationRef: planned.operationRef },
+    });
+    expect(await denied.json()).toMatchObject({ status: "blocked", reason: "permission_denied" });
+    const retained = await f.store.read({ authority, appId: plan.appId });
+    expect(retained?.record.stage).toBe("approved");
+    expect(retained?.record.previousAttempts.at(-1)?.reason).toBe("provider_permission_denied");
+    return { f, create, retained, planned };
+  };
+
+  it("reads same-credential authorization evidence after a retired permission failure without another attempt or journal write", async () => {
+    const { f, create, retained, planned } = await permissionRejected();
+    const observation = {
+      status: "observed" as const,
+      statusCode: 200,
+      installationMatches: true,
+      teamMatches: true,
+      ownerMatches: true,
+      projectWriteConfigured: true,
+      allProjectsConfigured: true,
+      disabled: false,
+    };
+    const inspect = vi.fn(
+      (
+        _input: Parameters<
+          NonNullable<NativeTargetOnboardingServiceDependencies["inspectProviderAuthorization"]>
+        >[0],
+      ) => Promise.resolve(observation),
+    );
+    f.dependencies.inspectProviderAuthorization = inspect;
+    expect(await f.planOnce()).toMatchObject({
+      operationRef: planned.operationRef,
+      planDigest: planned.planDigest,
+      providerAuthorization: observation,
+    });
+    expect(inspect).toHaveBeenCalledTimes(1);
+    expect(inspect.mock.calls[0]?.[0]).toMatchObject({ owner: current, plan });
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(await f.store.read({ authority, appId: plan.appId })).toEqual(retained);
+  });
+
+  it("does not inspect provider authorization during new planning or approval-history reads", async () => {
+    const f = fixture();
+    const inspect = vi.fn(() =>
+      Promise.resolve({
+        status: "unavailable" as const,
+        failure: "request_failed" as const,
+      }),
+    );
+    f.dependencies.inspectProviderAuthorization = inspect;
+    const planned = await f.planOnce();
+    await f.send({
+      ...f.common,
+      action: "native-target-approval-read",
+      input: { ...f.prepared, operationRef: planned.operationRef },
+    });
+    expect(inspect).not.toHaveBeenCalled();
+    expect(f.createProject).not.toHaveBeenCalled();
+  });
+
+  it("discards authorization observations if current owner changes during the GET", async () => {
+    const { f, create, retained } = await permissionRejected();
+    f.dependencies.inspectProviderAuthorization = () => {
+      f.changeOwner();
+      return Promise.resolve({ status: "observed", statusCode: 200 });
+    };
+    await expect(f.planOnce()).rejects.toThrow();
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(await f.store.read({ authority, appId: plan.appId })).toEqual(retained);
+  });
+
+  it("does not return advisory evidence after caller cancellation", async () => {
+    const { f, create, retained } = await permissionRejected();
+    const controller = new AbortController();
+    f.dependencies.inspectProviderAuthorization = () => {
+      controller.abort(new Error("cancelled"));
+      return Promise.resolve({ status: "unavailable", failure: "cancelled" });
+    };
+    await expect(
+      f.send(
+        { ...f.common, action: "native-target-plan", input: f.proposal },
+        new Request("https://operator.example/v1/runtime", {
+          method: "POST",
+          signal: controller.signal,
+        }),
+      ),
+    ).rejects.toThrow("cancelled");
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(await f.store.read({ authority, appId: plan.appId })).toEqual(retained);
+  });
+
+  it("discards observations when cancellation arrives during the final owner recheck", async () => {
+    const { f, create, retained } = await permissionRejected();
+    const controller = new AbortController();
+    f.dependencies.inspectProviderAuthorization = () => {
+      f.authorize.mockImplementation(() => {
+        controller.abort(new Error("cancelled during owner recheck"));
+        return Promise.resolve(structuredClone(current));
+      });
+      return Promise.resolve({ status: "observed", statusCode: 200 });
+    };
+    await expect(
+      f.send(
+        { ...f.common, action: "native-target-plan", input: f.proposal },
+        new Request("https://operator.example/v1/runtime", {
+          method: "POST",
+          signal: controller.signal,
+        }),
+      ),
+    ).rejects.toThrow("cancelled during owner recheck");
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(await f.store.read({ authority, appId: plan.appId })).toEqual(retained);
+  });
+
   it("never reads approval history when workload verification fails", async () => {
     const f = fixture(false);
     await expect(f.planOnce()).rejects.toThrow("unauthorized");
