@@ -61,14 +61,14 @@ trial files previously stored under `/private/tmp` were absent when checked afte
 the interruption; the figures below cannot currently be independently replayed
 from those files. Amounts are known receipts, not reconciled provider invoices.
 
-| Trial | Observed elapsed | Known Gateway charges | Outcome |
-| --- | --- | --- | --- |
-| Earlier low | 31m 52.8s to waiting | At least $0.05494587, excluding three reviews | Technical checks passed; no working preview |
-| Verified high | About 34m 06.8s to failure | At least $0.134447905; failed turn cost unknown | Missing tool output after approval; no successful app |
-| Route-fix low | 19m 20.9s to waiting | $0.133475655 from observed model and review receipts | Checks passed; preview returned 404; no verified app |
-| Guided low | 42m 57.351s through two ordinary follow-ups | At least $0.095190385 in agent-step charges | Failed tests and preview; no verified app |
-| Latest low | Still working at cursor 53 at last public observation | At least $0.045236965 in main-agent charges at 16m 25s | Public outcome unknown; sandbox later stopped |
-| Persistent low, newer Arrusted source | 25m 40.048s to ready preview; 28m 01.079s to browser checks | At least $0.045792155; source review unpriced | Browser add and complete actions passed; state was explicitly temporary and did not survive reload |
+| Trial                                 | Observed elapsed                                            | Known Gateway charges                                  | Outcome                                                                                            |
+| ------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| Earlier low                           | 31m 52.8s to waiting                                        | At least $0.05494587, excluding three reviews          | Technical checks passed; no working preview                                                        |
+| Verified high                         | About 34m 06.8s to failure                                  | At least $0.134447905; failed turn cost unknown        | Missing tool output after approval; no successful app                                              |
+| Route-fix low                         | 19m 20.9s to waiting                                        | $0.133475655 from observed model and review receipts   | Checks passed; preview returned 404; no verified app                                               |
+| Guided low                            | 42m 57.351s through two ordinary follow-ups                 | At least $0.095190385 in agent-step charges            | Failed tests and preview; no verified app                                                          |
+| Latest low                            | Still working at cursor 53 at last public observation       | At least $0.045236965 in main-agent charges at 16m 25s | Public outcome unknown; sandbox later stopped                                                      |
+| Persistent low, newer Arrusted source | 25m 40.048s to ready preview; 28m 01.079s to browser checks | At least $0.045792155; source review unpriced          | Browser add and complete actions passed; state was explicitly temporary and did not survive reload |
 
 The latest sandbox's read-only command inventory showed its most recent app
 check and app test exited successfully after earlier test failures. That is
@@ -151,10 +151,10 @@ Both arms used the same Builder file snapshot and Arrusted `6faffc85`; only
 the local reasoning setting differed. These are single samples and the
 available receipts are not reconciled invoices.
 
-| Arm | Start to ready preview | Known charges at initial ready | Observed behavior |
-| --- | --- | --- | --- |
-| Low | 16m 31.578s | $0.110973695 | Add, complete and reload passed. A later delayed-response test contradicted the accepted specification's immediate completion feedback. |
-| High | 36m 45.695s from successful start | $0.152030885 | Add, complete and reload passed; immediate completion feedback and a simulated storage failure warning were observed. |
+| Arm  | Start to ready preview            | Known charges at initial ready | Observed behavior                                                                                                                       |
+| ---- | --------------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Low  | 16m 31.578s                       | $0.110973695                   | Add, complete and reload passed. A later delayed-response test contradicted the accepted specification's immediate completion feedback. |
+| High | 36m 45.695s from successful start | $0.152030885                   | Add, complete and reload passed; immediate completion feedback and a simulated storage failure warning were observed.                   |
 
 Low's source review initially appeared unassessed because an exact excerpt was
 part of a long source line. After a later local citation-validation repair,
