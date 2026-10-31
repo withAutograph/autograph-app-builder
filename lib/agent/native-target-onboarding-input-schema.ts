@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { nativeTargetOnboardingPlanSchema } from "../provisioning/native-target-onboarding-plan-schema";
+import { nativeTargetProviderAuthorizationSchema } from "../provisioning/native-target-vercel-authorization";
 
 const appId = nativeTargetOnboardingPlanSchema.shape.appId;
 export const nativeTargetPlanRequestSchema = z.strictObject({
@@ -22,6 +23,8 @@ export const nativeTargetOnboardingResultSchema = nativeTargetPreparationRequest
   .extend({
     status: z.enum(["planned", "pending", "ready", "cancelled", "approval-pending", "blocked"]),
     projectId: z.string().min(1).optional(),
+    // Advisory same-credential GET evidence, never a project-creation grant.
+    providerAuthorization: nativeTargetProviderAuthorizationSchema.optional(),
     reason: z
       .enum([
         "authorization_denied",

@@ -38,6 +38,16 @@ may use the proposal's approved suffix policy. Technical retries preserve the
 same operation and candidate. Cancellation before any dispatch can be replanned
 with a new approval while retaining its prior cancellation provenance.
 
+After a definite provider permission rejection, reading that exact retained plan
+also returns an advisory `providerAuthorization` observation. The operator uses
+the same owner-scoped installation credential for one GET of the exact Vercel
+integration configuration. It returns only a bounded status/code and identity,
+scope and disabled-state comparisons; no credential, provider body, message or
+identity leaves the operator. The read does not claim an attempt, change the
+journal, retry creation or settle an approval. Configured Project Write access
+and successful configuration readback do not prove permission to create a
+project. Current owner authority is checked before and after the observation.
+
 A ready registration supplies one immutable per-operation configuration view to
 the operator and Auth consumers. It retains static siblings and shared Neon/Auth
 credentials, and adds only the selected app's project, database names, roles and

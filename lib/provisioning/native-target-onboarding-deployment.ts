@@ -19,6 +19,7 @@ import type { PrivateNativeTargetApprovalObservation } from "../eve/private-nati
 import { createSameOriginEveTransport } from "../eve/same-origin-http";
 import { createBuilderApprovalStreamFetch } from "./hosted-operator-approval-observer";
 import { readActiveVercelInstallationToken } from "../integrations/postgres-vercel-installation";
+import { inspectNativeTargetVercelAuthorization } from "./native-target-vercel-authorization";
 import { readVercelTokenKeyringEnvironment } from "../integrations/vercel-installation";
 import { createOperatorArtifactPublication } from "./hosted-operator-artifacts";
 import { createPostgresOperatorArtifactSelections } from "./hosted-operator-artifact-selection";
@@ -584,6 +585,21 @@ export const createNativeTargetOnboardingDeployment = (input: {
     readCapturedRelease,
     resolvePlan,
     readApproval,
+    inspectProviderAuthorization: async ({ owner, plan, signal }) =>
+      await inspectNativeTargetVercelAuthorization({
+        expectedInstallationId: plan.project.installationId,
+        expectedTeamId: plan.project.teamId,
+        readInstallationToken: async () => {
+          const credential = await readInstallation(
+            owner,
+            plan.project.installationId,
+            plan.project.teamId,
+          );
+          return credential.token;
+        },
+        fetch: input.fetch ?? fetch,
+        signal,
+      }),
     createProject: async ({ owner, plan, name, authorizeAttempt, acceptProjectId }) => {
       let credential: Awaited<ReturnType<typeof readInstallation>>;
       try {
