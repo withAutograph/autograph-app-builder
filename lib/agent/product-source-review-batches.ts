@@ -37,6 +37,7 @@ export interface SourceReviewInvocation {
 /** Allowlisted, bounded response metadata; never provider content or raw usage. */
 export interface SourceReviewRequest {
   modelId: string;
+  reasoningEffort?: "low" | "medium" | null;
   sdkCallId?: string;
   responseId?: string;
   gatewayGenerationId?: string;

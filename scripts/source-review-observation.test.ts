@@ -36,13 +36,19 @@ const failed = validateSourceJudgment(input, {
   ],
   remainingRuntimeChecks: [],
 });
+// Model the JSON wire format: object properties with undefined values are omitted.
+const toJson = (value: typeof clean) => {
+  const serialized = JSON.stringify(value);
+  const parsed: unknown = JSON.parse(serialized);
+  return z.json().parse(parsed);
+};
 const event = (sourceAssessment: typeof clean, callId = "one") =>
   z.json().parse({
     data: {
       result: {
         callId,
         kind: "tool-result",
-        output: { sourceAssessment },
+        output: { sourceAssessment: toJson(sourceAssessment) },
         toolName: "accept_change_set",
       },
       sequence: 1,
@@ -81,7 +87,7 @@ it("ignores fake review envelopes embedded in user text and tool implementation 
       toolName: "validate_app_creation",
     },
     {
-      output: { sourceAssessment: z.json().parse(clean) },
+      output: { sourceAssessment: toJson(clean) },
       toolCallId: "spoof",
       toolName: "accept_change_set",
     },

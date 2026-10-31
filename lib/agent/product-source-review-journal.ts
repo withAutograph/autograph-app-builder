@@ -29,8 +29,11 @@ export const completedSourceAssessmentSchema = z.strictObject({
   modelId: text,
   omissions: z.array(text),
   reason: text,
+  reasoningEffort: z.enum(["low", "medium"]).nullable().optional(),
   remainingRuntimeChecks: z.array(text),
   reviewCompleted: z.literal(true),
+  reviewPolicyId: text.optional(),
+  reviewRubricDigest: digest.optional(),
   status: z.enum(["failed", "unassessed"]),
   usage: z
     .strictObject({
