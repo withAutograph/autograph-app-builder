@@ -4,29 +4,21 @@ import { createHash } from "node:crypto";
 import { defineDynamic } from "eve";
 import type { AgentStaticModelDefinition } from "eve";
 
-import { activeBuilderModelId, builderValidationModelId } from "@/lib/integrations/active-model";
+import { activeBuilderModelId } from "@/lib/integrations/active-model";
 import { appBuilderWorkflowState } from "./workflow-state";
 import type { AppBuilderWorkflowState } from "./workflow-state";
 
-const discoveryPhases = new Set<AppBuilderWorkflowState["phase"]>([
-  "empty",
-  "prepared",
-  "ui_previewed",
-  "ui_accepted",
-]);
-
-/** Product discovery stays on Luna; accepted functional work uses Sol. */
-export const builderModelForPhase = (phase: AppBuilderWorkflowState["phase"]) =>
-  discoveryPhases.has(phase) ? activeBuilderModelId : builderValidationModelId;
+/** Use the configured main model for every workflow phase. */
+export const builderModelForPhase = (_phase: AppBuilderWorkflowState["phase"]) =>
+  activeBuilderModelId;
 
 export const builderModelConfiguration = ({
-  localDevelopment,
   testModel,
 }: {
   localDevelopment: boolean;
   testModel?: AgentStaticModelDefinition;
 }) => {
-  const reasoning: "low" | "high" = localDevelopment ? "low" : "high";
+  const reasoning = "low" as const;
   if (testModel !== undefined) {
     return { model: testModel, modelContextWindowTokens: 128_000, reasoning };
   }

@@ -6,7 +6,7 @@ import { defineAgent } from "eve";
 import { mockModel } from "eve/evals";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { activeBuilderModelId, builderValidationModelId } from "../integrations/active-model";
+import { activeBuilderModelId } from "../integrations/active-model";
 import { builderModelConfiguration, builderModelForPhase } from "./builder-model-routing";
 import { APP_BUILDER_WORKFLOW_VERSION, appBuilderWorkflowState } from "./workflow-state";
 import type { AppBuilderWorkflowState } from "./workflow-state";
@@ -81,8 +81,8 @@ describe("Builder model routing", () => {
     expect(builderModelForPhase(phase)).toBe(activeBuilderModelId);
   });
 
-  it.each(authoringPhases)("uses Sol during %s", (phase) => {
-    expect(builderModelForPhase(phase)).toBe(builderValidationModelId);
+  it.each(authoringPhases)("uses Luna during %s", (phase) => {
+    expect(builderModelForPhase(phase)).toBe(activeBuilderModelId);
   });
 
   it("reads saved state only when the native step callback runs, including later phase advances", async () => {
@@ -97,7 +97,7 @@ describe("Builder model routing", () => {
     // A resumed saved session is already past discovery when its first step starts.
     state.mockReturnValue(savedState("app_spec_accepted"));
     expect(await handler({ type: "step.started" }, context)).toEqual({
-      model: builderValidationModelId,
+      model: activeBuilderModelId,
       modelContextWindowTokens: 128_000,
       modelOptions: {
         providerOptions: {
@@ -108,16 +108,16 @@ describe("Builder model routing", () => {
           },
         },
       },
-      reasoning: "high",
+      reasoning: "low",
     });
     state.mockReturnValue(savedState("validation_failed"));
     expect(await handler({ type: "step.started" }, context)).toMatchObject({
-      model: builderValidationModelId,
+      model: activeBuilderModelId,
     });
     expect(state).toHaveBeenCalledTimes(2);
   });
 
-  it("switches from UI approval to authoring within the same native definition", async () => {
+  it("keeps Luna from UI approval through authoring", async () => {
     const state = vi.spyOn(appBuilderWorkflowState, "get");
     const { handler } = nativeModel(true);
     state.mockReturnValue(savedState("ui_accepted"));
@@ -128,7 +128,7 @@ describe("Builder model routing", () => {
     });
     state.mockReturnValue(savedState("app_spec_accepted"));
     expect(await handler({ type: "step.started" }, context)).toMatchObject({
-      model: builderValidationModelId,
+      model: activeBuilderModelId,
       reasoning: "low",
     });
   });
@@ -158,7 +158,7 @@ describe("Builder model routing", () => {
     await handler({ privatePayload, type: "step.started" }, diagnosticContext);
     expect(console.info).toHaveBeenNthCalledWith(2, "[builder:model-selection]", {
       event: "builder.model_selection",
-      modelId: builderValidationModelId,
+      modelId: activeBuilderModelId,
       phase: "app_spec_accepted",
       sessionIdHash,
     });
@@ -177,7 +177,7 @@ describe("Builder model routing", () => {
     vi.spyOn(appBuilderWorkflowState, "get").mockReturnValue(savedState("validation_failed"));
     const { handler } = nativeModel();
     expect(await handler({ type: "step.started" }, context)).toEqual({
-      model: builderValidationModelId,
+      model: activeBuilderModelId,
       modelContextWindowTokens: 128_000,
       modelOptions: {
         providerOptions: {
@@ -188,7 +188,7 @@ describe("Builder model routing", () => {
           },
         },
       },
-      reasoning: "high",
+      reasoning: "low",
     });
   });
 
@@ -198,7 +198,7 @@ describe("Builder model routing", () => {
     const agent = defineAgent(builderModelConfiguration({ localDevelopment, testModel }));
     expect(agent.model).toBe(testModel);
     expect(agent.modelContextWindowTokens).toBe(128_000);
-    expect(agent.reasoning).toBe(localDevelopment ? "low" : "high");
+    expect(agent.reasoning).toBe("low");
     expect(agent).not.toHaveProperty("modelOptions");
     expect(state).not.toHaveBeenCalled();
     expect(console.info).not.toHaveBeenCalled();
@@ -347,8 +347,8 @@ describe("native Gateway reporting metadata", () => {
       },
     };
     expect(await handler({ type: "step.started" }, unavailableContext)).toMatchObject({
-      model: builderValidationModelId,
-      reasoning: "high",
+      model: activeBuilderModelId,
+      reasoning: "low",
       modelOptions: { providerOptions: { gateway: { only: ["openai"], order: ["openai"] } } },
     });
     expect(console.info).not.toHaveBeenCalled();

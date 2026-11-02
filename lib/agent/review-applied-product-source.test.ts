@@ -2,18 +2,22 @@
 import { expect, it, vi } from "vitest";
 import {
   currentChangedSourcePaths,
+  completedReviewForInput,
   reviewObservedProductSource,
   reviewApplicationWithJournal,
   sourceReviewScopeBindingDigest,
 } from "./review-applied-product-source";
-import { unavailableSourceAssessment } from "./product-source-review";
+import { sourceReviewPolicy, unavailableSourceAssessment } from "./product-source-review";
 import {
   applicationReviewVisibility,
   createApplicationReviewEvidence,
 } from "./application-review-evidence";
 import { createHash } from "node:crypto";
 import type { SourceReviewJournalRecord } from "./product-source-review-journal";
-import { ApplicationReviewSelectionError } from "./application-source-review";
+import {
+  applicationSourceReviewRubricDigest,
+  ApplicationReviewSelectionError,
+} from "./application-source-review";
 import type {
   ApplicationReviewEvidence,
   ApplicationSourceReviewOptions,
@@ -238,7 +242,11 @@ const completedApplication = () => ({
   ...unavailableSourceAssessment(
     reviewInput,
     "Independent source review cannot prove runtime behavior",
+    "unassessed",
+    sourceReviewPolicy().primary,
   ),
+  reviewPolicyId: sourceReviewPolicy().id,
+  reviewRubricDigest: applicationSourceReviewRubricDigest(),
   reviewCompleted: true,
   status: "unassessed" as const,
 });
@@ -267,7 +275,7 @@ it("authorizes application journal reuse before returning completed evidence wit
   await expect(reviewApplicationWithJournal(input, assess)).rejects.toThrow("owner revoked");
   expect(assess).not.toHaveBeenCalled();
 });
-it("does not treat legacy fragment records as completed app review and strips fresh invocation from durable completion", async () => {
+it("strips fresh invocation from durable completion", async () => {
   const assessment = {
     ...completedApplication(),
     invocation: {
@@ -279,10 +287,7 @@ it("does not treat legacy fragment records as completed app review and strips fr
       freshUsage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 },
     },
   };
-  const read = vi.fn(async () => ({
-    kind: "completed" as const,
-    assessment: completedApplication(),
-  }));
+  const read = vi.fn(async (): Promise<undefined> => {});
   const put = vi.fn(async (_key: string, record: SourceReviewJournalRecord) => record);
   const assess = vi.fn(async () => assessment);
   const result = await reviewApplicationWithJournal(
@@ -473,4 +478,129 @@ it("rechecks fresh ownership without rereading completed evidence and blocks com
   expect(read).toHaveBeenCalledOnce();
   expect(assertCurrentOwner).toHaveBeenCalledTimes(2);
   expect(put).not.toHaveBeenCalled();
+});
+
+it("rejects completed journal assessments with wrong policy, reviewer, effort, rubric, or binding", () => {
+  const valid = completedApplication();
+  expect(
+    completedReviewForInput({ kind: "application-completed", assessment: valid }, reviewInput),
+  ).toBe(true);
+  for (const assessment of [
+    { ...valid, reviewPolicyId: "wrong-policy" },
+    { ...valid, modelId: "other-model" },
+    { ...valid, reasoningEffort: "medium" as const },
+    { ...valid, reviewRubricDigest: "a".repeat(64) },
+    { ...valid, bindingDigest: "b".repeat(64) },
+    { ...valid, reviewCompleted: false },
+  ]) {
+    expect(
+      completedReviewForInput({ kind: "application-completed", assessment }, reviewInput),
+    ).toBe(false);
+  }
+});
+
+it("does not reuse an incompatible first-writer record or perform a fresh review against its occupied key", async () => {
+  const valid = completedApplication();
+  for (const assessment of [
+    { ...valid, reviewPolicyId: "wrong-policy" },
+    { ...valid, modelId: "other-model" },
+    { ...valid, reasoningEffort: "medium" as const },
+    { ...valid, reviewRubricDigest: "a".repeat(64) },
+  ]) {
+    const assess = vi.fn(async () => valid);
+    const put = vi.fn();
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Check each first-writer mismatch independently.
+    const result = await reviewApplicationWithJournal(
+      {
+        reviewInput,
+        normalizedChanges: [],
+        evidence: sourceEvidence({}),
+        journal: {
+          assertCurrentOwner: async () => {},
+          read: async () => ({ kind: "application-completed" as const, assessment }),
+          put,
+        },
+        currentDigest: async () => reviewInput.sourceDigest,
+      },
+      assess,
+    );
+    expect(result).toMatchObject({ reviewCompleted: false, status: "blocked" });
+    expect(assess).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled();
+  }
+});
+
+it("rejects an incompatible canonical first writer returned by journal put", async () => {
+  const valid = completedApplication();
+  for (const assessment of [
+    { ...valid, reviewPolicyId: "wrong-policy" },
+    { ...valid, modelId: "other-model" },
+    { ...valid, reasoningEffort: "medium" as const },
+    { ...valid, reviewRubricDigest: "a".repeat(64) },
+  ]) {
+    const read = vi.fn(async (): Promise<undefined> => {});
+    const put = vi.fn(async () => ({ kind: "application-completed" as const, assessment }));
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Exercise each canonical mismatch independently.
+    await expect(
+      reviewApplicationWithJournal(
+        {
+          reviewInput,
+          normalizedChanges: [],
+          evidence: sourceEvidence({}),
+          journal: { assertCurrentOwner: async () => {}, read, put },
+          currentDigest: async () => reviewInput.sourceDigest,
+        },
+        async () => valid,
+      ),
+    ).rejects.toThrow("current policy");
+    expect(put).toHaveBeenCalledOnce();
+  }
+});
+
+it("does not publish an incompatible newly completed assessment", async () => {
+  const invalid = { ...completedApplication(), reviewPolicyId: "wrong-policy" };
+  const put = vi.fn();
+  const result = await reviewApplicationWithJournal(
+    {
+      reviewInput,
+      normalizedChanges: [],
+      evidence: sourceEvidence({}),
+      journal: {
+        assertCurrentOwner: async () => {},
+        read: async (): Promise<undefined> => {},
+        put,
+      },
+      currentDigest: async () => reviewInput.sourceDigest,
+    },
+    async () => invalid,
+  );
+  expect(result).toMatchObject({ reviewCompleted: false, status: "blocked" });
+  expect(put).not.toHaveBeenCalled();
+});
+
+it("fails closed on occupied non-application records without attempting a review or write", async () => {
+  const assessment = completedApplication();
+  const occupied: SourceReviewJournalRecord[] = [
+    { kind: "completed", assessment },
+    { kind: "split-source" },
+    { kind: "split-context" },
+  ];
+  for (const record of occupied) {
+    const assess = vi.fn(async () => assessment);
+    const put = vi.fn();
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Check each distinct occupied record independently.
+    const result = await reviewApplicationWithJournal(
+      {
+        reviewInput,
+        normalizedChanges: [],
+        evidence: sourceEvidence({}),
+        journal: { assertCurrentOwner: async () => {}, read: async () => record, put },
+        currentDigest: async () => reviewInput.sourceDigest,
+      },
+      assess,
+    );
+    expect(result).toMatchObject({ reviewCompleted: false, status: "blocked" });
+    expect(assess).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled();
+  }
 });

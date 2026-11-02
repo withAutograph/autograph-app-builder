@@ -27,7 +27,12 @@ import {
   productRequestState,
   reviewCurrentProductSource,
 } from "./product-source-review-state";
-import { assessProductSource, unavailableSourceAssessment } from "./product-source-review";
+import {
+  assessProductSource,
+  sourceReviewPolicy,
+  unavailableSourceAssessment,
+} from "./product-source-review";
+import { applicationSourceReviewRubricDigest } from "./application-source-review";
 import {
   prepareAppliedProductSourceReview,
   finalizeAppliedProductSourceReview,
@@ -455,7 +460,13 @@ it("retains canonical acceptance evidence while requiring matching private revie
     };
     const changes = [{ kind: "added" as const, path: "apps/example/page.tsx" }];
     const expanded = [...changes, { kind: "added" as const, path: "apps/example/error.tsx" }];
-    const assessment = { ...unavailableSourceAssessment(input, "fixture"), reviewCompleted: true };
+    const policy = sourceReviewPolicy();
+    const assessment = {
+      ...unavailableSourceAssessment(input, "fixture", "unassessed", policy.primary),
+      reviewCompleted: true,
+      reviewPolicyId: policy.id,
+      reviewRubricDigest: applicationSourceReviewRubricDigest(),
+    };
     const scope = sourceReviewScopeBindingDigest(input, changes);
     retainScopedProductSourceAssessment(assessment, scope);
     expect(currentProductSourceAssessment(input)).toBe(assessment);
@@ -606,7 +617,16 @@ it("captures parent evidence and finalizes a private durable outcome without rer
         reference: { ...prepared.reference, outcomeRef },
       });
       expect(result).toMatchObject({ reviewCompleted: false, status: "blocked" });
-      const completed = { ...unassessed, reviewCompleted: true, status: "unassessed" as const };
+      const policy = sourceReviewPolicy();
+      const completed = {
+        ...unassessed,
+        modelId: policy.primary.modelId,
+        reasoningEffort: policy.primary.reasoningEffort,
+        reviewPolicyId: policy.id,
+        reviewRubricDigest: applicationSourceReviewRubricDigest(),
+        reviewCompleted: true,
+        status: "unassessed" as const,
+      };
       const completedRef = await store.publishOutcome(prepared.reference.contextRef, completed);
       expect(
         await finalizeAppliedProductSourceReview({
