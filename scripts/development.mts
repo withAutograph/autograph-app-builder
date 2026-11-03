@@ -29,7 +29,7 @@ import {
 } from "../lib/development/process-supervisor";
 import {
   fingerprintDevelopmentRuntime,
-  waitForDevelopmentRuntimeChange,
+  observeDevelopmentRuntimeChanges,
 } from "../lib/development/runtime-watch";
 import {
   HOSTED_BUN_VERSION,
@@ -284,12 +284,26 @@ async function runEveCycle(input: {
     }
     // Eve reads the canonical Arrusted checkout directly. Its ordinary edits
     // are live planning input and must not replace the child or local queue.
-    const runtimeChanged = waitForDevelopmentRuntimeChange({
-      expectedFingerprint: runtimeFingerprint,
-      repositoryRoot,
-      signal: watchers.signal,
-      // oxlint-disable-next-line promise/prefer-await-to-then
-    }).then(() => ({ code: 0, kind: "restart" as const }));
+    // Source edits must not end the process that owns active or waiting sessions.
+    // A new runtime generation is an explicit separate instance, not a restart race.
+    void (async () => {
+      try {
+        await observeDevelopmentRuntimeChanges({
+          expectedFingerprint: runtimeFingerprint,
+          repositoryRoot,
+          signal: watchers.signal,
+          onChanged: () => {
+            console.info(
+              "Builder runtime source changed; existing Eve sessions retain their pinned worker. Use a separate local instance to exercise the changed runtime.",
+            );
+          },
+        });
+      } catch {
+        console.warn(
+          "Builder runtime source observation is unavailable; the pinned Eve worker remains running.",
+        );
+      }
+    })();
     // This derived promise is an input to the shared race below.
     // oxlint-disable-next-line promise/prefer-await-to-then
     const eveExited = developmentChildExit(eve).then((code) => ({
@@ -304,7 +318,6 @@ async function runEveCycle(input: {
           fetcher: input.web?.fetcher,
           signal: watchers.signal,
         }).then(() => ({ code: 0, kind: "ready" as const })),
-        runtimeChanged,
         eveExited,
         input.nextExited,
         stopping,
@@ -340,7 +353,7 @@ async function runEveCycle(input: {
         "Connect a client to the loopback endpoint below. If plugin installation is enabled, select Autograph App Builder (Development) in a fresh Codex task.",
       );
       console.log(`Loopback endpoint: ${packageResult.receipt.endpoint}`);
-      return await Promise.race([runtimeChanged, eveExited, input.nextExited, stopping]);
+      return await Promise.race([eveExited, input.nextExited, stopping]);
     } finally {
       watchers.abort();
       await stopDevelopmentChild(eve, { processGroup: true });
@@ -448,9 +461,6 @@ try {
       process.exitCode = outcome.code;
       break;
     }
-    console.log(
-      "Development runtime changed; Eve and the local package are restarting while Next stays live.",
-    );
   }
 } catch (error) {
   if (!shutdown.signal.aborted) {

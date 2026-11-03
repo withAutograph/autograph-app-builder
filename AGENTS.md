@@ -12,8 +12,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - Follow [`docs/local-development-lifecycle.md`](docs/local-development-lifecycle.md).
   `mise run dev` is the sole supported local entrypoint. Develop against live
-  checkout bytes, keep Next.js HMR running, and restart only the Eve, MCP, agent,
-  or package cycle affected by a change.
+  checkout bytes and keep Next.js HMR running. Existing Eve workers stay pinned
+  across agent/runtime source edits to preserve active and waiting sessions;
+  use a separate isolated instance to exercise changed runtime code, or an
+  explicit stop/restart after choosing to end the original instance's runs.
 - Develop and verify changes to Builder itself locally first. Pull requests,
   shared Preview/Production deployments and plugin publication are release or
   acceptance steps, not prerequisites for each edit or debugging iteration.

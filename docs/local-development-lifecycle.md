@@ -1,6 +1,6 @@
 # Local development lifecycle
 
-`mise run dev` is the fast, live-code loop: edit the checkout, let Next HMR or the affected Eve/package process reload, and retry the behavior. Do not rebuild artifacts, reinstall the plugin, run broad suites, publish, or deploy after each edit.
+`mise run dev` is the fast, live-code loop: edit the checkout and use Next HMR and live Arrusted inputs. Eve retains the worker that owns existing sessions. Do not rebuild artifacts, reinstall the plugin, run broad suites, publish, or deploy after each edit.
 
 This is the default development loop for Builder itself, not only generated app
 work. Implement and verify shared workflow repairs locally before requesting a
@@ -75,9 +75,21 @@ it does not install packages or change the execution backend.
 
 Eve reads the canonical `--arrusted-root` checkout directly. Ordinary Arrusted
 source edits become the next planning input without cycling Eve or replacing
-its local queue. App Builder runtime edits and child lifecycle events retain
-their existing restart behavior. Snapshot identities remain diagnostics and do
-not gate live source reads or dependency setup.
+its local queue. Builder agent/runtime/skill edits produce a notification only:
+the existing Eve instance stays pinned to its original runtime so active and
+waiting sessions retain their worker. To exercise changed agent/runtime code,
+launch a separate isolated branch instance and explicit client endpoint, or
+explicitly stop and restart after choosing to end that instance's runs. Next HMR
+continues independently. The watcher updates its observed baseline after each
+edit; a notification or observation error is never a worker shutdown condition.
+Snapshot identities remain diagnostics and do not gate live source reads or
+dependency setup.
+
+This retention prevents new source edits from killing local sessions; it does
+not restore an already lost worker. Preserve such sessions and report recovery
+unavailable unless a supported recovery is independently verified. Do not enable
+an undocumented recovery flag, transplant hosted state, replay approvals, or
+silently start a replacement session.
 
 Vercel Sandbox is the execution backend. Use project-scoped OIDC, supported Sandbox source/file APIs, and structured commands. Do not add static keys, fallback runtimes, shell wrappers, or provider-internals checks. The checkout and generated files are writable.
 
