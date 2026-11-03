@@ -1,5 +1,9 @@
 import { isDeepStrictEqual } from "node:util";
 import type { ToolContext } from "eve/tools";
+import {
+  hostedOperatorCallbackExecution,
+  readHostedOperatorCallbackSessions,
+} from "../provisioning/hosted-operator-callback-owner";
 import type {
   BuilderProvisionJournalStore,
   BuilderProvisionAuthority,
@@ -78,7 +82,6 @@ export const readBuilderPublicationDestinationForTool = async (
     { readPreviewOAuthRuntimeConfig },
     { openHostedPostgresDatabase },
     { createPostgresHostedEveStore },
-    { toDurableHostedSessionRecord },
     { createPostgresBuilderProvisionJournalStore },
   ] = await Promise.all([
     import("../hosted/session-authority"),
@@ -86,10 +89,12 @@ export const readBuilderPublicationDestinationForTool = async (
     import("../auth/preview-oauth-runtime"),
     import("../mcp/hosted-route"),
     import("../eve/postgres-hosted-store"),
-    import("../eve/hosted-store"),
     import("../provisioning/postgres-journal"),
   ]);
-  const { authority, principal } = exactForwardedSessionAuthority(ctx.session.auth);
+  const execution = hostedOperatorCallbackExecution(ctx.session);
+  const { authority, principal } = exactForwardedSessionAuthority(ctx.session.auth, {
+    realmContinuation: { adapterSessionId: execution.ownerAnchorRunId ?? ctx.session.id },
+  });
   const config = readPreviewOAuthRuntimeConfig(process.env);
   if (authority.issuer !== config.issuer || authority.audience !== config.resource) {
     throw new Error("The saved Builder app destination is unavailable for publication.");
@@ -105,13 +110,13 @@ export const readBuilderPublicationDestinationForTool = async (
         principal,
         sessionAuth: ctx.session.auth,
         environment: process.env,
+        execution,
       });
-      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Owner verification must precede reading canonical private app metadata.
-      const stored = await sessions.getSessionByAdapterSessionId?.(principal, ctx.session.id);
-      if (stored === null || stored === undefined) {
-        throw new Error("The saved Builder app is unavailable.");
-      }
-      const session = toDurableHostedSessionRecord(stored);
+      const { currentSession: session } = await readHostedOperatorCallbackSessions({
+        store: sessions,
+        owner,
+        execution,
+      });
       if (session.appId !== appId) {
         throw new Error("The saved Builder app identity changed.");
       }
