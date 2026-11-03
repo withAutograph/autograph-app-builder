@@ -87,6 +87,12 @@ clients alone do not prevent registration replacement. If profile isolation is
 unavailable, do not launch a second default instance against the shared active
 profile. Preserve the existing task's registration and report the limitation.
 
+Install the repository-pinned dependencies once inside each Builder and Arrusted
+checkout. Package-manager download caches may be reused, but do not link a
+checkout's `node_modules` to a different checkout: development snapshots reject
+source links that escape their own checkout, and another branch's install must
+not rewrite this instance's dependencies. Restarts reuse that instance's install.
+
 Then, in two different worktrees with their selected Arrusted checkout:
 
 ```sh
