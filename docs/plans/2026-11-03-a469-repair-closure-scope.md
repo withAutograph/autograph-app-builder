@@ -69,6 +69,16 @@ Never resend `a469-preview-target-approved-batch` or invent its settlement.
    planning checkout. Verify direct execution on the actual Linux Sandbox base,
    including Bun availability and protected SQL transport. Running `bun file.js`
    on a developer Mac does not prove the SDK's direct-executable command works.
+   The three-worker bundle is additive. Preserve and verify the full existing
+   installer catalog from a fresh trusted worker base, then overlay the new
+   source. Standard app resource profiles select their own Sandbox filesystem;
+   updating only the base operator configuration leaves them unchanged. Verify
+   each intended base/profile selection before the bundled release.
+
+   Compiled native ingress inspection also found two missing Vercel Services
+   rewrites despite mounted central handlers, and a pinned Bun compiler parsing
+   failure missed by source tests/types. Exercise actual provider route-table
+   resolution into the compiled operator, as well as service-level composition.
 
 4. **Provide reachable authenticated native delivery receipts.** A provider
    webhook cannot reach a loopback Mac endpoint. Identify the supported public
