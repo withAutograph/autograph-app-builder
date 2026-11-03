@@ -1724,10 +1724,18 @@ export const operatorPreparationProgressSchema = z.strictObject({
   accountProgramMatchesPlan: z.boolean().optional(),
 });
 export type OperatorPreparationProgress = z.infer<typeof operatorPreparationProgressSchema>;
+export const operatorRecoveryStageSchema = z.enum([
+  "canonical_read",
+  "setup",
+  "native_history",
+  "journal",
+]);
 export const operatorPublicResultSchema = z.strictObject({
   appId: id,
   authenticatedBehavior: z.literal("unassessed"),
   code: operatorPublicCodeSchema.optional(),
+  recoveryStage: operatorRecoveryStageSchema.optional(),
+  recoveryProgressAdvanced: z.boolean().optional(),
   operationRef: z.uuid().optional(),
   plan: hostedOperatorPlanSchema.optional(),
   planDigest: digest.optional(),
@@ -1740,10 +1748,20 @@ export const operatorPublicResultSchema = z.strictObject({
 export type OperatorPublicResult = z.infer<typeof operatorPublicResultSchema>;
 export class HostedOperatorError extends Error {
   readonly code: NonNullable<OperatorPublicResult["code"]>;
-  constructor(code: NonNullable<OperatorPublicResult["code"]>) {
-    super(code);
+  readonly recoveryStage?: z.infer<typeof operatorRecoveryStageSchema>;
+  readonly recoveryProgressAdvanced?: boolean;
+  constructor(
+    code: NonNullable<OperatorPublicResult["code"]>,
+    options?: ErrorOptions & {
+      recoveryStage?: z.infer<typeof operatorRecoveryStageSchema>;
+      recoveryProgressAdvanced?: boolean;
+    },
+  ) {
+    super(code, options);
     this.name = "HostedOperatorError";
     this.code = code;
+    this.recoveryStage = options?.recoveryStage;
+    this.recoveryProgressAdvanced = options?.recoveryProgressAdvanced;
   }
 }
 

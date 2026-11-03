@@ -388,7 +388,10 @@ export const createHostedOperatorClient = (input: {
       stage = "client_response_validation";
       const blocked = operatorPublicResultSchema.safeParse(value);
       if (blocked.success) {
-        throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable");
+        throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable", {
+          recoveryStage: blocked.data.recoveryStage,
+          recoveryProgressAdvanced: blocked.data.recoveryProgressAdvanced,
+        });
       }
       try {
         return resultSchema.parse(value);
@@ -497,7 +500,7 @@ export const createHostedOperatorClient = (input: {
           action: "continuity-approval",
           ownerContext: exportOwner(),
         },
-        z.strictObject({ approved: z.boolean() }),
+        z.strictObject({ approved: z.boolean(), pending: z.boolean().optional() }),
         signal,
       );
     },

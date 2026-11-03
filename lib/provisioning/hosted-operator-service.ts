@@ -3349,6 +3349,9 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           appId,
           authenticatedBehavior: "unassessed",
           code: error instanceof HostedOperatorError ? error.code : "operator_unavailable",
+          recoveryStage: error instanceof HostedOperatorError ? error.recoveryStage : undefined,
+          recoveryProgressAdvanced:
+            error instanceof HostedOperatorError ? error.recoveryProgressAdvanced : undefined,
           status: "blocked",
         }),
       );

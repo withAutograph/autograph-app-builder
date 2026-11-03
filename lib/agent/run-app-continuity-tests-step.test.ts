@@ -2,6 +2,9 @@
 /* oxlint-disable eslint/require-await -- Controlled provider ports keep asynchronous contracts. */
 import { expect, it, vi } from "vitest";
 import { z } from "zod";
+import type { ApprovalContext, ApprovalStatus } from "eve/tools/approval";
+import type { ContinuityApprovalToolInput } from "../eve/private-continuity-approval";
+import "../../agent/tools/run-app-continuity-tests";
 import { HostedOperatorError } from "../provisioning/hosted-operator-contract";
 import {
   runHostedContinuityStep,
@@ -16,9 +19,31 @@ import {
   setup,
 } from "../provisioning/hosted-acceptance-recovery.test-fixture";
 
-const hooks = vi.hoisted(() => ({ client: vi.fn() }));
+const hooks = vi.hoisted(() => ({
+  client: vi.fn(),
+  approval: vi.fn<(ctx: ApprovalContext<ContinuityApprovalToolInput>) => Promise<ApprovalStatus>>(),
+}));
+vi.mock("eve/tools", () => ({
+  defineWorkflowTool: <
+    T extends {
+      approval: (ctx: ApprovalContext<ContinuityApprovalToolInput>) => Promise<ApprovalStatus>;
+    },
+  >(
+    tool: T,
+  ) => {
+    hooks.approval.mockImplementation(tool.approval);
+    return tool;
+  },
+}));
 vi.mock("../provisioning/hosted-operator-client", () => ({
   hostedOperatorClientForSession: hooks.client,
+}));
+
+vi.mock("workflow", () => ({
+  sleep: vi.fn(),
+  RetryableError: class extends Error {
+    override name = "RetryableError";
+  },
 }));
 
 const fixture = async () => {
@@ -162,12 +187,73 @@ it("defers a transient canonical read without granting consent or losing the ori
       throw new HostedOperatorError("operator_unavailable");
     },
   });
-  expect(await readHostedContinuityApprovalStep(saved.request, ctx)).toMatchObject({
-    approved: false,
+  await expect(readHostedContinuityApprovalStep(saved.request, ctx)).rejects.toMatchObject({
+    name: "RetryableError",
   });
+  await expect(readHostedContinuityApprovalPreflightStep(saved.request, ctx)).rejects.toMatchObject(
+    {
+      name: "RetryableError",
+    },
+  );
+  await expect(
+    hooks.approval(
+      z
+        .custom<ApprovalContext<ContinuityApprovalToolInput>>()
+        .parse({ ...ctx, toolInput: saved.request }),
+    ),
+  ).rejects.toMatchObject({ name: "RetryableError" });
   expect(f.events).toEqual([]);
   hooks.client.mockResolvedValue(client);
   expect(await readHostedContinuityApprovalPreflightStep(saved.request, ctx)).toEqual({
     approved: false,
   });
+});
+
+it("recovers the original native approval for a still-planned intent before requesting duplicate consent", async () => {
+  const { f, saved, ctx, approve } = await fixture();
+  approve();
+  const planned = await f.operations.readPlan(context, saved.plan.intentId);
+  expect(planned.status.state).toBe("planned");
+  await expect(readHostedContinuityApprovalPreflightStep(saved.request, ctx)).resolves.toEqual({
+    approved: true,
+  });
+  expect(f.rows.get(saved.plan.intentId)?.approval).toMatchObject({
+    approvalId: "native-approval",
+    approvedByCallId: "continuity-call",
+  });
+  expect(f.events).toEqual([]);
+  await expect(
+    hooks.approval(
+      z
+        .custom<ApprovalContext<ContinuityApprovalToolInput>>()
+        .parse({ ...ctx, toolInput: saved.request }),
+    ),
+  ).resolves.toBe("not-applicable");
+  await expect(readHostedContinuityApprovalPreflightStep(saved.request, ctx)).resolves.toEqual({
+    approved: true,
+  });
+  expect(f.rows.get(saved.plan.intentId)?.requestId).toBe(saved.plan.intentId);
+});
+
+it("defers an original unsettled native request during preflight while execution continues its legitimate wait", async () => {
+  const { f, saved, ctx, client } = await fixture();
+  hooks.client.mockResolvedValue({
+    ...client,
+    continuityApproval: async () => ({ approved: false, pending: true }),
+  });
+  await expect(readHostedContinuityApprovalPreflightStep(saved.request, ctx)).rejects.toThrow(
+    "approval_settlement_pending",
+  );
+  await expect(
+    hooks.approval(
+      z
+        .custom<ApprovalContext<ContinuityApprovalToolInput>>()
+        .parse({ ...ctx, toolInput: saved.request }),
+    ),
+  ).rejects.toMatchObject({ name: "RetryableError" });
+  await expect(readHostedContinuityApprovalStep(saved.request, ctx)).resolves.toMatchObject({
+    approved: false,
+    pending: true,
+  });
+  expect(f.events).toEqual([]);
 });

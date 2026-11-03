@@ -1,4 +1,5 @@
 import type { PrivateOperatorApprovalObservationPort } from "../eve/private-operator-approval-observation";
+import { HostedSessionReadTimeoutError } from "../eve/hosted-session-read-timeout-error";
 /* oxlint-disable sonarjs/no-nested-functions -- One resource lease retains a single approved attempt through its private checkpoints. */
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
@@ -137,6 +138,35 @@ const intentIdFor = (context: HostedOperatorContext, key: string) => {
 };
 export const createHostedContinuityOperations = (deps: HostedContinuityDependencies) => {
   const now = deps.now ?? (() => new Date());
+  const approvalStage = async <T>(
+    recoveryStage: NonNullable<HostedOperatorError["recoveryStage"]>,
+    run: () => Promise<T>,
+  ): Promise<T> => {
+    try {
+      return await run();
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw error;
+      }
+      let code: HostedOperatorError["code"] = "operator_unavailable";
+      let progress: boolean | undefined;
+      let stage = recoveryStage;
+      if (error instanceof HostedOperatorError) {
+        code = error.code;
+        stage = error.recoveryStage ?? stage;
+        progress = error.recoveryProgressAdvanced;
+      } else if (error instanceof HostedSessionReadTimeoutError) {
+        progress = error.progressPersisted;
+      } else if (recoveryStage === "native_history") {
+        code = "reconciliation_required";
+      }
+      throw new HostedOperatorError(code, {
+        cause: error,
+        recoveryStage: stage,
+        recoveryProgressAdvanced: progress,
+      });
+    }
+  };
   const read = async (context: HostedOperatorContext, intentId: string) => {
     await deps.assertOwner(context);
     const record = await deps.store.read({ authority: context.authority, intentId });
@@ -167,7 +197,9 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
   ): PrivateOperatorApprovalObservationPort => ({
     ...(record.approvalObservation === undefined ? {} : { state: record.approvalObservation }),
     save: async (state) => {
-      await update(record, (value) => ({ ...value, approvalObservation: state }));
+      await approvalStage("journal", () =>
+        update(record, (value) => ({ ...value, approvalObservation: state })),
+      );
     },
   });
   const assertRecoverablePredecessor = (record: ContinuityRecord, successorId: string) => {
@@ -319,7 +351,8 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
       return continuityStatus(await read(context, z.uuid().parse(intentId)));
     },
     async approval(context: HostedOperatorContext, request: HostedContinuityRequest) {
-      let record = await read(context, z.uuid().parse(request.planRef.split("/").at(-1)));
+      const intentId = z.uuid().parse(request.planRef.split("/").at(-1));
+      let record = await approvalStage("canonical_read", () => read(context, intentId));
       parseContinuityRequestForPlan(request, record.plan);
       if (request.idempotencyKey !== record.idempotencyKey) {
         throw new HostedOperatorError("resource_mismatch");
@@ -328,19 +361,51 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
       if (record.approval !== undefined) {
         return { approved: true };
       }
-      await deps.assertSetup(context, record.plan);
-      const receipt = await deps.readApproval(
-        context,
-        request,
-        undefined,
-        approvalObservation(record),
+      await approvalStage("setup", () => deps.assertSetup(context, record.plan));
+      const receipt = await approvalStage("native_history", () =>
+        deps.readApproval(context, request, undefined, approvalObservation(record)),
       );
-      if (receipt !== null) {
-        record = await update(record, (value) => ({
-          ...value,
-          approval: receipt,
-          state: "approved",
-        }));
+      if (receipt === null) {
+        record = await approvalStage("journal", () => read(context, intentId));
+        await assertRecovery(context, record);
+        const cancelled = record.approvalObservation?.capture.entries.some(
+          (entry) => entry.cancelled || entry.completedCancelled,
+        );
+        if (cancelled === true) {
+          throw new HostedOperatorError("authorization_required", {
+            recoveryStage: "native_history",
+          });
+        }
+        if (
+          record.approval === undefined &&
+          record.approvalObservation?.capture.entries.some((entry) => !entry.approved) === true
+        ) {
+          return { approved: false, pending: true };
+        }
+      } else {
+        await approvalStage("journal", async () => {
+          try {
+            record = await update(record, (value) => ({
+              ...value,
+              approval: receipt,
+              state: "approved",
+            }));
+          } catch (error) {
+            if (!(error instanceof HostedOperatorError) || error.code !== "operation_in_progress") {
+              throw error;
+            }
+            // A concurrent observation may win the revision without changing consent.
+            // Re-read the owner-scoped winner; never overwrite a newer attempt or denial.
+            record = await read(context, intentId);
+            await assertRecovery(context, record);
+            if (record.approval === undefined) {
+              throw error;
+            }
+            if (!isDeepStrictEqual(record.approval, receipt)) {
+              throw new HostedOperatorError("reconciliation_required");
+            }
+          }
+        });
       }
       return { approved: record.approval !== undefined };
     },

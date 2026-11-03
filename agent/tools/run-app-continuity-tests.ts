@@ -1,4 +1,5 @@
 import { sleep } from "workflow";
+import { isContinuityApprovalReadRetryable } from "../../lib/agent/continuity-approval-recovery";
 import { defineWorkflowTool } from "eve/tools";
 import type { ApprovalContext, ApprovalStatus } from "eve/tools/approval";
 import type { ContinuityApprovalToolInput } from "../../lib/eve/private-continuity-approval";
@@ -20,7 +21,10 @@ async function continuityApproval(
   try {
     const retained = await readHostedContinuityApprovalPreflightStep(ctx.toolInput, ctx);
     return retained.approved ? "not-applicable" : "user-approval";
-  } catch {
+  } catch (error) {
+    if (isContinuityApprovalReadRetryable(error)) {
+      throw error;
+    }
     return {
       type: "denied",
       reason:
@@ -39,10 +43,11 @@ export default defineWorkflowTool({
     let delayMs = 1000;
     let approval = await readHostedContinuityApprovalStep(input, ctx, delayMs);
     while (!approval.approved) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- Durable sleep releases compute while the human settlement commits.
+      // A complete negative observation is legitimate while native human consent is pending.
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Durable sleep releases compute while consent or retained history advances.
       await sleep(new Date(approval.checkAfter));
       delayMs = Math.min(delayMs * 2, 30_000);
-      // oxlint-disable-next-line eslint/no-await-in-loop -- Re-read the same exact receipt after durable backoff.
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Reconcile the exact same native request without issuing duplicate consent.
       approval = await readHostedContinuityApprovalStep(input, ctx, delayMs);
     }
     return await runHostedContinuityStep(input, ctx);

@@ -205,7 +205,7 @@ export const readPrivateOperatorApproval = async <Approval>(input: {
     /* Diagnostic delivery never changes approval authority. */
   }
   if (!observed.complete) {
-    throw new HostedSessionReadTimeoutError();
+    throw new HostedSessionReadTimeoutError(persisted && observed.nextNativeIndex > startIndex);
   }
   return approval;
 };
