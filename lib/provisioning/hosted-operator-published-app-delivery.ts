@@ -19,7 +19,9 @@ export const resolvePublishedAppDelivery = (
       throw new HostedOperatorError("app_source_publication_required");
     }
     const projectSettings =
-      sourceDescription === undefined
+      sourceDescription === undefined ||
+      (application.projectSettings?.framework === "services" &&
+        application.projectSettings.rootDirectory === ".")
         ? application.projectSettings
         : {
             ...(sourceDescription.deployment ?? application.projectSettings),
