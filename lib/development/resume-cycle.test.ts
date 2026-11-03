@@ -41,7 +41,7 @@ const fixture = async () => {
   );
   return { root, repositoryRoot, runsRoot, cycle, server, port: address.port };
 };
-it("resumes one stopped local cycle with current code and unchanged saved state, under an exclusive lease", async () => {
+it("resumes one stopped local cycle with current code and unchanged saved state, under the caller’s state-root lock", async () => {
   const f = await fixture();
   try {
     const closed = once(f.server, "close");
@@ -55,28 +55,16 @@ it("resumes one stopped local cycle with current code and unchanged saved state,
       cycleRoot: f.cycle.root,
       evePort: f.port,
     });
-    try {
-      expect(resumed.application.root).toBe(f.cycle.application.root);
-      expect(await readFile(path.join(resumed.application.root, "agent.ts"), "utf-8")).toContain(
-        "revision=2",
-      );
-      expect(
-        await readFile(
-          path.join(resumed.application.root, ".eve/.workflow-data/session.json"),
-          "utf-8",
-        ),
-      ).toBe(' {"session":"original","state":"waiting"}\n');
-      await expect(
-        resumeDevelopmentCycle({
-          repositoryRoot: f.repositoryRoot,
-          runsRoot: f.runsRoot,
-          cycleRoot: f.cycle.root,
-          evePort: f.port,
-        }),
-      ).rejects.toMatchObject({ code: "EEXIST" });
-    } finally {
-      await resumed.release();
-    }
+    expect(resumed.application.root).toBe(f.cycle.application.root);
+    expect(await readFile(path.join(resumed.application.root, "agent.ts"), "utf-8")).toContain(
+      "revision=2",
+    );
+    expect(
+      await readFile(
+        path.join(resumed.application.root, ".eve/.workflow-data/session.json"),
+        "utf-8",
+      ),
+    ).toBe(' {"session":"original","state":"waiting"}\n');
   } finally {
     await rm(f.root, { recursive: true, force: true });
   }

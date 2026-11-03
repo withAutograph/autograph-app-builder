@@ -353,7 +353,8 @@ mise run dev -- --arrusted-root /absolute/path/to/arrusted --next-port 3100 --ev
 ```
 
 Use the actual printed path. Recovery refuses a running listener, another state
-root, non-owned or linked runtime directories, and a concurrent recovery lease.
+root, and non-owned or linked runtime directories. The existing kernel advisory
+lock on the state root prevents concurrent instances, including recovery.
 It refreshes Builder application code while retaining the original `.eve`
 workflow history, local home and saved Sandbox association. It never copies a
 hosted checkpoint, changes an approval, starts a replacement app or replays a
@@ -361,3 +362,5 @@ public request. Read the original session through `autograph_get` first, then
 continue it through ordinary public controls. If the installed Eve runtime
 cannot recover that history, preserve the original IDs and report the concrete
 failure; source tests alone do not establish successful recovery.
+
+The explicit recovery option also selects Eve’s documented `dev --resume` recovery. Reading retained history alone does not establish that a stopped run can accept another message; verify the same session through public `autograph_get` and an ordinary continuation. Do not resend any message with an uncertain dispatch outcome.

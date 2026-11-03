@@ -133,6 +133,17 @@ describe("closed local Eve launch", () => {
     expect(invocation.cwd).toBe(realpathSync(input.applicationRoot));
     expect(invocation.args).toContain("--no-default-extensions");
     expect(invocation.args).not.toContain("--resume");
+    const recovering = createLocalEveInvocation({
+      environment: input.environment,
+      eveCli: "/repository/node_modules/.pnpm/eve/bin/eve.js",
+      oidcToken: sentinel,
+      pinnedNode: "/mise/node/24.18.0/bin/node",
+      repositoryRoot: input.repositoryRoot,
+      vercelProject: { orgId: "team_example", projectId: "prj_example" },
+      resume: true,
+    });
+    expect(recovering.args).toContain("--resume");
+    expect(recovering.environment.WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS).toBe("0");
     expect(invocation.environment.VERCEL_OIDC_TOKEN).toBe(sentinel);
     expect(invocation.environment.APP_BUILDER_SANDBOX_PROVIDER).toBe("vercel");
     expect(invocation.environment.APP_BUILDER_EXECUTION_BUNDLE).toBe("local-development");

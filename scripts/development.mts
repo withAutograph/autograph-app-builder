@@ -268,6 +268,7 @@ async function runEveCycle(input: {
           repositoryRoot,
           ".config/mise/scripts/repository/run-local-development-eve.mts",
         ),
+        ...(input.resumeCycle === undefined ? [] : ["--resume"]),
       ],
       {
         cwd: repositoryRoot,
@@ -368,9 +369,6 @@ async function runEveCycle(input: {
       await waitForDevelopmentPortRelease(input.evePort);
     }
   } finally {
-    if ("release" in cycle) {
-      await cycle.release();
-    }
     await removeDevelopmentSnapshot(activeRun);
   }
 }

@@ -200,6 +200,7 @@ export function createLocalEveInvocation(input: {
   repositoryRoot: string;
   pinnedNode: string;
   eveCli: string;
+  resume?: boolean;
   oidcToken: string;
   vercelProject: Readonly<{ projectId: string; orgId: string }>;
   environment: Environment;
@@ -216,6 +217,7 @@ export function createLocalEveInvocation(input: {
       binding.port,
       "--no-ui",
       "--no-default-extensions",
+      ...(input.resume === true ? ["--resume"] : []),
     ],
     command: input.pinnedNode,
     cwd: roots.applicationRoot,
@@ -306,6 +308,7 @@ export async function runLocalEve(input: {
   repositoryRoot: string;
   environment?: Environment;
   nowEpochSeconds?: number;
+  resume?: boolean;
 }) {
   const environment = input.environment ?? process.env;
   const repositoryRoot = ownerDirectory(input.repositoryRoot, "App Builder repository root");
@@ -326,6 +329,7 @@ export async function runLocalEve(input: {
   });
   const invocation = createLocalEveInvocation({
     environment,
+    resume: input.resume,
     eveCli: resolveInstalledEveCli(repositoryRoot),
     oidcToken,
     pinnedNode: process.execPath,

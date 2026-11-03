@@ -1,4 +1,4 @@
-import { lstat, readFile, realpath, open, unlink } from "node:fs/promises";
+import { lstat, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { createConnection } from "node:net";
 import { once } from "node:events";
@@ -115,22 +115,14 @@ export const resumeDevelopmentCycle = async (input: {
   await ownedDirectory(workflowData, true);
   await ownedDirectory(path.join(applicationRoot, ".eve"));
   await ownedDirectory(path.join(applicationRoot, ".eve/.workflow-data"));
-  const lockPath = path.join(root, ".explicit-resume.lock");
-  const lock = await open(lockPath, "wx", 0o600);
-  const release = async () => {
-    await lock.close();
-    await unlink(lockPath);
-  };
-  try {
-    await stopped(applicationRoot, input.evePort);
-    await refreshDevelopmentApplication({
-      repositoryRoot: input.repositoryRoot,
-      applicationRoot,
-      runRoot: root,
-    });
-    return { root, application: { root: applicationRoot }, runtimeHome, workflowData, release };
-  } catch (error) {
-    await release();
-    throw error;
-  }
+  // The entrypoint holds the existing kernel advisory lock for the entire state
+  // root, including recovery. A second sentinel file would survive interruption
+  // and cannot establish whether a local process still owns the cycle.
+  await stopped(applicationRoot, input.evePort);
+  await refreshDevelopmentApplication({
+    repositoryRoot: input.repositoryRoot,
+    applicationRoot,
+    runRoot: root,
+  });
+  return { root, application: { root: applicationRoot }, runtimeHome, workflowData };
 };
