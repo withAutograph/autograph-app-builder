@@ -421,10 +421,12 @@ export const createHostedOperatorClient = (input: {
       runtime: ContinuityRuntimeSelection,
       idempotencyKey: string,
       signal?: AbortSignal,
+      recovery?: { predecessorIntentId: string },
     ) {
       const result = await sendContinuity(
         {
           action: "continuity-plan",
+          ...recovery,
           selection,
           runtime,
           idempotencyKey,
@@ -439,6 +441,9 @@ export const createHostedOperatorClient = (input: {
         sameOperatorSelection(selection, result.plan.preparedPlan.selection),
         result.plan.runtime.sandboxId === runtime.sandboxId,
         result.plan.runtime.root === runtime.root,
+        JSON.stringify(result.plan.runtime.browserSelection) ===
+          JSON.stringify(runtime.browserSelection),
+        result.plan.predecessorIntentId === recovery?.predecessorIntentId,
         result.status.intentId === result.plan.intentId,
         result.status.planRef === result.plan.planRef,
       ].every(Boolean);

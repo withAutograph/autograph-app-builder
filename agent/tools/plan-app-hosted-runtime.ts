@@ -1,3 +1,5 @@
+import { browserTestSelectionSchema } from "@/lib/agent/browser-test-selection";
+import { resolveAcceptanceRuntimeRoot } from "@/lib/agent/acceptance-runtime-root";
 import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
@@ -118,9 +120,30 @@ export default defineTool({
           state: appBuilderWorkflowState.get(),
         });
         continuityStage = "tool_sandbox_identity";
-        const runtime = { sandboxId: getBuilderSandboxId(sandbox), root: selected.root };
+        const root = await resolveAcceptanceRuntimeRoot({
+          appId: selected.appId,
+          fallbackRoot: selected.root,
+          sandbox,
+          state: appBuilderWorkflowState.get(),
+          ctx,
+        });
+        const runtime = {
+          sandboxId: getBuilderSandboxId(sandbox),
+          root,
+          ...(input.browserSelection === undefined
+            ? {}
+            : { browserSelection: input.browserSelection }),
+        };
         continuityStage = "tool_plan_request";
-        return await operator.planContinuity(selection, runtime, ctx.callId, ctx.abortSignal);
+        return await operator.planContinuity(
+          selection,
+          runtime,
+          ctx.callId,
+          ctx.abortSignal,
+          input.recoverContinuityIntentId === undefined
+            ? undefined
+            : { predecessorIntentId: input.recoverContinuityIntentId },
+        );
       }
       if (operation === "export") {
         if (input.customerId === undefined && input.customerScope === undefined) {
@@ -181,12 +204,20 @@ export default defineTool({
       branch: z.string().min(1).optional(),
       environment: z.literal("preview"),
       operation: z.enum(["prepare", "cleanup", "export", "continuity"]),
+      recoverContinuityIntentId: z.uuid().optional(),
+      browserSelection: browserTestSelectionSchema.optional(),
       releaseIntent: z.literal("prepared-preview").optional(),
       customerId: z.string().min(1).optional(),
       customerScope: z.literal("owner-organization").optional(),
       normalActorProgram: normalActorProgramSchema.optional(),
       projectId: z.string().min(1).optional(),
     })
+    .refine(
+      (input) =>
+        input.operation === "continuity" ||
+        (input.recoverContinuityIntentId === undefined && input.browserSelection === undefined),
+      "Continuity recovery and browser selection require continuity planning.",
+    )
     .refine(
       (input) => input.customerId === undefined || input.customerScope === undefined,
       "Select one export customer scope.",

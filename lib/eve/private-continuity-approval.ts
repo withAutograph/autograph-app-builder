@@ -92,3 +92,15 @@ export const createPrivateContinuityApprovalCapture = (input: {
     proveComplete: capture.proveComplete,
   };
 };
+
+/** A fresh exact consent may be requested after owner-authorized intent readback. */
+export const verifySavedContinuityIntent = (
+  input: ContinuityApprovalInput,
+  saved: { plan: HostedContinuityPlan; request: HostedContinuityRequest },
+) => {
+  const { plan, ...request } = continuityApprovalInputSchema.parse(input);
+  if (!isDeepStrictEqual(saved.plan, plan) || !isDeepStrictEqual(saved.request, request)) {
+    throw new Error("Continuity intent differs.");
+  }
+  return request;
+};

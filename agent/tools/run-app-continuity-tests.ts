@@ -6,6 +6,7 @@ import { continuityApprovalInputSchema } from "../../lib/eve/private-continuity-
 import {
   runHostedContinuityStep,
   readHostedContinuityApprovalStep,
+  readHostedContinuityApprovalPreflightStep,
 } from "../../lib/agent/run-app-continuity-tests-step";
 
 // eslint-disable-next-line eslint/func-style -- Workflow approval is a top-level Node step.
@@ -17,7 +18,7 @@ async function continuityApproval(
     return "user-approval";
   }
   try {
-    const retained = await readHostedContinuityApprovalStep(ctx.toolInput, ctx);
+    const retained = await readHostedContinuityApprovalPreflightStep(ctx.toolInput, ctx);
     return retained.approved ? "not-applicable" : "user-approval";
   } catch {
     return {

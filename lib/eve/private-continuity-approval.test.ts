@@ -6,7 +6,10 @@ import {
   hostedContinuityPlanSchema,
   continuityPlanDigest,
 } from "../provisioning/hosted-operator-continuity-contract";
-import { createPrivateContinuityApprovalCapture } from "./private-continuity-approval";
+import {
+  verifySavedContinuityIntent,
+  createPrivateContinuityApprovalCapture,
+} from "./private-continuity-approval";
 
 const authority = {
   issuer: "https://builder.example/api/auth",
@@ -222,5 +225,22 @@ describe("native private managed continuity approval", () => {
     reader.observe(settled(authority.ownerUserId, "cancelled"));
     reader.observe(settled());
     expect(reader.read()).toBeNull();
+  });
+});
+
+describe("continuity approval preflight", () => {
+  it("verifies the saved exact intent without claiming consent", () => {
+    expect(verifySavedContinuityIntent(toolInput, { plan, request })).toEqual(request);
+  });
+  it("rejects another owner, source, runtime, or selection before asking for consent", () => {
+    for (const changed of [
+      { ...plan, authority: { ...plan.authority, ownerUserId: "foreign" } },
+      { ...plan, runtime: { ...plan.runtime, root: "/different" } },
+      { ...plan, runtime: { ...plan.runtime, browserSelection: { testName: "other" } } },
+    ]) {
+      expect(() => verifySavedContinuityIntent(toolInput, { plan: changed, request })).toThrow(
+        "Continuity intent differs",
+      );
+    }
   });
 });
