@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { prepareWithVerifiedGitHubFetchRecovery } from "./verified-github-fetch-recovery";
 import {
   recoverAcceptanceCheckout,
   resolveCompatibleAcceptanceRoot,
@@ -64,6 +65,103 @@ describe("acceptance workspace recovery", () => {
         recover: async () => "/recovered",
       }),
     ).rejects.toThrow("installed release");
+  });
+  it("reports an actual dependency failure from the recovered command instead of a release mismatch", async () => {
+    await expect(
+      resolveCompatibleAcceptanceRoot({
+        roots: ["/expired"],
+        releaseId: "v3",
+        describe: async (root) => {
+          throw new Error(
+            root === "/expired"
+              ? "workspace absent"
+              : "app:describe: Cannot find package @platform/schema",
+          );
+        },
+        recover: async () => "/recovered",
+      }),
+    ).rejects.toThrow("app:describe: Cannot find package @platform/schema");
+  });
+  it("does not recover a workspace after cancellation while probing a retained root", async () => {
+    const controller = new AbortController();
+    const recover = vi.fn();
+    await expect(
+      resolveCompatibleAcceptanceRoot({
+        roots: ["/retained"],
+        releaseId: "v3",
+        signal: controller.signal,
+        describe: async () => {
+          controller.abort(new Error("cancelled"));
+          throw new Error("aborted command");
+        },
+        recover,
+      }),
+    ).rejects.toThrow("cancelled");
+    expect(recover).not.toHaveBeenCalled();
+  });
+  it("refreshes verified repository credentials once after a rejected fetch and preserves the partial checkout", async () => {
+    const roots: string[] = [];
+    const commands: string[] = [];
+    const acquireCredential = vi.fn(async () => ({ token: "private-installation-token" }));
+    const setNetworkPolicy = vi.fn(async () => {});
+    const result = await prepareWithVerifiedGitHubFetchRecovery({
+      acquireCredential,
+      sandbox: { setNetworkPolicy },
+      prepare: async () => {
+        const root = `/workspace/recovered-${roots.length}`;
+        roots.push(root);
+        return await recoverAcceptanceCheckout({
+          sandbox: {
+            run: async ({ command }) => {
+              commands.push(command);
+              return roots.length === 1 && command.includes(" fetch ")
+                ? {
+                    exitCode: 128,
+                    stdout: "",
+                    stderr: "remote: Repository not found.\nprivate provider detail",
+                  }
+                : { exitCode: 0, stdout: "", stderr: "" };
+            },
+          },
+          repositoryUrl: "https://github.com/owner/existing.git",
+          revision: "published",
+          root,
+          workingDirectory: "/workspace",
+          signal: new AbortController().signal,
+        });
+      },
+    });
+    expect(result).toEqual({ prepared: "/workspace/recovered-1", retriedGitFetch: true });
+    expect(acquireCredential).toHaveBeenCalledTimes(2);
+    expect(roots).toEqual(["/workspace/recovered-0", "/workspace/recovered-1"]);
+    expect(commands).toHaveLength(5);
+    expect(commands.some((command) => command.includes("rm "))).toBe(false);
+    expect(setNetworkPolicy).toHaveBeenLastCalledWith("allow-all");
+  });
+  it("does not refresh credentials for an unrelated Git failure or disclose transport output", async () => {
+    const acquireCredential = vi.fn(async () => ({ token: "private-token" }));
+    await expect(
+      prepareWithVerifiedGitHubFetchRecovery({
+        acquireCredential,
+        sandbox: { setNetworkPolicy: async () => {} },
+        prepare: async () =>
+          await recoverAcceptanceCheckout({
+            sandbox: {
+              run: async () => ({
+                exitCode: 128,
+                stdout: "",
+                stderr: "fatal: unknown revision; private transport detail",
+              }),
+            },
+            repositoryUrl: "https://github.com/owner/existing.git",
+            revision: "missing",
+            root: "/workspace/new",
+            workingDirectory: "/workspace",
+            signal: new AbortController().signal,
+          }),
+      }),
+    ).rejects.toThrow("could not recover the published acceptance source (exit 128)");
+    expect(acquireCredential).toHaveBeenCalledOnce();
   });
   it("reconstructs a missing published checkout with real Git while preserving private edits", async () => {
     const run = promisify(execFile);

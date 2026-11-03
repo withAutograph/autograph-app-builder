@@ -7,6 +7,7 @@ import type { ToolContext } from "eve/tools";
 import { hostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 import { setBuilderSandboxNetworkPolicy } from "../sandbox/builder-sandbox";
 import { ensureSandboxDirectories } from "../repository/sandbox-filesystem";
+import { sanitizeValidationDiagnosticText } from "../repository/validation-output-sanitize";
 import { attachCheckoutDependencyView } from "../repository/dependency-cache";
 import { prepareWithVerifiedGitHubFetchRecovery } from "./verified-github-fetch-recovery";
 import { repositoryAccessRuntimeForSession } from "./deployment-repository-access-runtime";
@@ -52,6 +53,15 @@ export const recoverAcceptanceCheckout = async (input: {
       workingDirectory: input.workingDirectory,
       abortSignal: input.signal,
     });
+    if (
+      result.exitCode === 128 &&
+      /remote: Repository not found\./u.test(`${result.stderr}\n${result.stdout}`)
+    ) {
+      // Preserve the verified-fetch recovery signal without exposing transport output or credentials.
+      throw new Error(
+        "Builder could not fetch the current draft head (exit 128): remote: Repository not found.",
+      );
+    }
     if (result.exitCode !== 0) {
       throw new Error(
         `Builder could not recover the published acceptance source (exit ${result.exitCode}). Check its repository access and retry; existing work is preserved.`,
@@ -67,11 +77,18 @@ export const resolveCompatibleAcceptanceRoot = async (input: {
   releaseId: string;
   describe: (root: string) => Promise<string | undefined>;
   recover: () => Promise<string>;
+  signal?: AbortSignal;
 }): Promise<string> => {
   for (const root of new Set(input.roots)) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- Probe retained roots in preference order without changing them.
-    if ((await input.describe(root)) === input.releaseId) {
-      return root;
+    try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Probe retained roots in preference order without changing them.
+      if ((await input.describe(root)) === input.releaseId) {
+        return root;
+      }
+    } catch {
+      input.signal?.throwIfAborted();
+      // An expired or incomplete retained workspace can fail to run. Recover once, then
+      // preserve the recovered command's actual failure rather than calling it a release mismatch.
     }
   }
   const root = await input.recover();
@@ -121,6 +138,7 @@ export const resolveAcceptanceRuntimeRoot = async (input: {
       input.fallbackRoot,
     ].filter((entry): entry is string => entry !== undefined),
     releaseId: projection.plan.release.id,
+    signal: ctx.abortSignal,
     describe: async (root) => {
       ctx.abortSignal.throwIfAborted();
       try {
@@ -130,7 +148,12 @@ export const resolveAcceptanceRuntimeRoot = async (input: {
           abortSignal: ctx.abortSignal,
         });
         if (result.exitCode !== 0) {
-          return undefined;
+          const diagnostic = sanitizeValidationDiagnosticText(
+            `${result.stderr}\n${result.stdout}`,
+          ).slice(-4000);
+          throw new Error(
+            `The acceptance workspace could not run mise run app:describe (exit ${result.exitCode}). ${diagnostic}`,
+          );
         }
         const value = z
           .object({
@@ -139,9 +162,12 @@ export const resolveAcceptanceRuntimeRoot = async (input: {
           })
           .parse(JSON.parse(result.stdout));
         return value.app.id === appId ? value.backend.release.id : undefined;
-      } catch {
+      } catch (error) {
         ctx.abortSignal.throwIfAborted();
-        return undefined;
+        // oxlint-disable-next-line eslint/preserve-caught-error -- Raw sandbox errors may contain credentials; retain only sanitized diagnostics.
+        throw new Error(
+          `Acceptance workspace description failed: ${sanitizeValidationDiagnosticText(error instanceof Error ? error.message : String(error)).slice(-4000)}`,
+        );
       }
     },
     recover: async () => {
@@ -158,7 +184,6 @@ export const resolveAcceptanceRuntimeRoot = async (input: {
       }
       const revision = delivery.gitSha;
       const runtime = await repositoryAccessRuntimeForSession(ctx.session.auth);
-      const destination = `/workspace/.app-builder/acceptance/${randomUUID()}`;
       const { prepared } = await prepareWithVerifiedGitHubFetchRecovery({
         acquireCredential: async () =>
           await runtime.acquireExistingSourceCredential({
@@ -172,6 +197,8 @@ export const resolveAcceptanceRuntimeRoot = async (input: {
           },
         },
         prepare: async () => {
+          // A rejected fetch may leave a partial clone. Keep it intact and retry into a new checkout.
+          const destination = `/workspace/.app-builder/acceptance/${randomUUID()}`;
           await ensureSandboxDirectories(sandbox, ["/workspace/.app-builder/acceptance"]);
           await recoverAcceptanceCheckout({
             sandbox,
