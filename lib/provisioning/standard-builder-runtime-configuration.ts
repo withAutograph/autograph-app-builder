@@ -3,7 +3,10 @@ import { z } from "zod";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import type { AppDescription } from "../repository/app-description";
 import type { CompiledOperatorReleaseSelection } from "./hosted-operator-artifact-selection";
-import { validateHostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration-schema";
+import {
+  hostedOperatorSourceConfigurationSchema,
+  validateHostedOperatorSourceConfiguration,
+} from "./hosted-operator-source-configuration-schema";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
 import { resolveNativeTargetResourceProfile } from "./native-target-resource-profile";
 import {
@@ -25,6 +28,10 @@ export const standardBuilderRuntimeProfileSchema = z.strictObject({
   authority: hostedTenantAuthoritySchema,
   appId: id,
   resourceProfileId: id,
+  authOwnership: z.strictObject({
+    kind: z.literal("dedicated-app-development"),
+    resource: hostedOperatorSourceConfigurationSchema.shape.authDatabase,
+  }),
   publicOrigin: origin,
   productionDatabaseIdentity: z.string().regex(/^[a-z0-9.-]+\.neon\.tech\/[a-z][a-z0-9_]*$/u),
   gatewayWorkload: z.strictObject({ audience: z.url(), issuer: z.url(), subject: id }),
@@ -77,6 +84,9 @@ export const assembleStandardBuilderRuntimeConfiguration = (input: {
     resourceProfileId: profile.resourceProfileId,
     environment: input.environment,
   });
+  if (!isDeepStrictEqual(profile.authOwnership.resource, resources.authDatabase)) {
+    throw fail();
+  }
   const resource = resources.applications[input.appId]?.appDatabase ?? {
     ...nativeTargetDatabaseNames(input.appId),
     resourceId: resources.nativeNeon.configuration.nativeStore.resourceId,
@@ -86,6 +96,7 @@ export const assembleStandardBuilderRuntimeConfiguration = (input: {
     composition: "single-project-services",
     standardRuntime: {
       profileId: profile.resourceProfileId,
+      authOwnership: profile.authOwnership,
       productionDatabaseIdentity: profile.productionDatabaseIdentity,
       provisioningRequestId: destination.provisioningRequestId,
       provisioningDigest: destination.provisioningDigest,

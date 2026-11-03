@@ -579,6 +579,7 @@ describe("fresh normal same-project runtime assembly", () => {
           authority,
           appId: "new-app",
           resourceProfileId: "isolated",
+          authOwnership: { kind: "dedicated-app-development", resource: base.authDatabase },
           publicOrigin: "https://apps-new-app.vercel.app",
           productionDatabaseIdentity: "ep-production.neon.tech/auth",
           gatewayWorkload: {

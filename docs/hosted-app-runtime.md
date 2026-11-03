@@ -717,3 +717,32 @@ require an already deployed Preview alias to construct its bootstrap plan.
 Production exposure and public BetterAuth settings require their separate
 ordinary public release approval. Configuration and local tests are not hosted
 or authenticated acceptance evidence.
+
+#### Owned application Auth in a Services project
+
+[Vercel Services share project environment variables](https://vercel.com/docs/services).
+The [service configuration reference](https://vercel.com/docs/services/config-reference)
+does not provide a per-service credential visibility boundary. This composition
+therefore owns one application's BetterAuth backend and app services as one
+project security boundary. It must not host a customer/shared privileged Auth
+realm or claim that another service cannot see project credentials.
+
+A standard runtime profile must explicitly declare
+`authOwnership: {kind: "dedicated-app-development", resource: ...}` with the
+exact approved Auth database/resource/runtime/installer-role tuple. The assembler
+compares that declaration with the selected isolated profile. The public release
+consumer must additionally compare the current owner-scoped approved runtime and
+private binding URLs: Auth and app databases and all four roles are distinct,
+only restricted runtime URLs are delivered, TLS verifies the endpoint, and the
+normalized development endpoint differs from the explicit Production guard.
+Prior adoption of that exact owned development resource does not authorize a
+shared customer realm or reuse another app's secret.
+
+`owned-app-auth-environment.ts` defines the closed own-app public runtime key
+set and hash manifest. Public binding, reconciliation and readiness consumers
+reject privileged provider/operator/migrator keys and unrelated database/Auth
+keys in Production rather than treating them as legitimate shared Services
+configuration. The historical separate-project Preview inventory remains
+unchanged; it filters Preview and inherited rows and does not include
+Production-only bindings. A source declaration, unit test or hash alone is not
+independent hosted database, Auth or application acceptance evidence.

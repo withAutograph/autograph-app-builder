@@ -83,6 +83,7 @@ export const hostedOperatorSourceConfigurationSchema = z.strictObject({
   standardRuntime: z
     .strictObject({
       profileId: id,
+      authOwnership: z.strictObject({ kind: z.literal("dedicated-app-development"), resource }),
       productionDatabaseIdentity: z.string().regex(/^[a-z0-9.-]+\.neon\.tech\/[a-z][a-z0-9_]*$/u),
       provisioningRequestId: z.uuid(),
       provisioningDigest: digest,
