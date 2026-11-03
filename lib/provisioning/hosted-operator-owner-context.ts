@@ -42,6 +42,9 @@ interface OwnerContextResolverDependencies {
   isActiveMember: (authority: HostedSessionTenantAuthority) => Promise<boolean>;
   issuer: string;
   audience: string;
+  reconcileOwnerDelivery?: (
+    session: ReturnType<typeof toDurableHostedSessionRecord>,
+  ) => Promise<void>;
 }
 
 const sameAuthority = (left: HostedSessionTenantAuthority, right: HostedSessionTenantAuthority) =>
@@ -176,6 +179,7 @@ const resolveCallbackOwner = async (
   owner: OperatorOwnerContext,
   execution: HostedOperatorCallbackExecution | undefined,
   sessions: OwnerContextResolverDependencies["sessions"],
+  reconcileOwnerDelivery?: OwnerContextResolverDependencies["reconcileOwnerDelivery"],
 ): Promise<OperatorOwnerContext> => {
   if (execution === undefined) {
     return owner;
@@ -184,6 +188,7 @@ const resolveCallbackOwner = async (
     store: sessions,
     owner,
     execution,
+    reconcileOwnerDelivery,
   });
   return {
     ...owner,
@@ -259,7 +264,12 @@ export const createHostedOperatorOwnerContextResolver =
           principal: input.principal,
           sessions: dependencies.sessions,
         });
-        const current = await resolveCallbackOwner(result, input.execution, dependencies.sessions);
+        const current = await resolveCallbackOwner(
+          result,
+          input.execution,
+          dependencies.sessions,
+          dependencies.reconcileOwnerDelivery,
+        );
         const restricted = restrictRealmContinuationOwner(current, delegation, input.sessionAuth);
         emit("verified");
         return restricted;
@@ -338,6 +348,7 @@ export const createHostedOperatorOwnerContextResolver =
         },
         input.execution,
         dependencies.sessions,
+        dependencies.reconcileOwnerDelivery,
       );
       return restrictRealmContinuationOwner(current, delegation, input.sessionAuth);
     } catch (error) {
@@ -399,7 +410,7 @@ let deploymentResolver: Promise<
 type OwnerReaderConfiguration = ReturnType<typeof readHostedOperatorOwnerReaderConfiguration>;
 type OwnerReaderStores = Pick<
   OwnerContextResolverDependencies,
-  "handoffs" | "isActiveMember" | "sessions"
+  "handoffs" | "isActiveMember" | "sessions" | "reconcileOwnerDelivery"
 >;
 type OpenOwnerReaderStores = (
   configuration: OwnerReaderConfiguration,
@@ -522,13 +533,39 @@ const openOwnerReaderStores: OpenOwnerReaderStores = async (config) => {
       audience: config.resource,
       issuer: config.issuer,
     });
+    const sessions = createPostgresHostedEveStore(database);
     return {
+      reconcileOwnerDelivery: async (session) => {
+        const [
+          { createHostedEveSessionService },
+          { createSameOriginEveTransport },
+          { createVercelWorkloadIdentity },
+        ] = await Promise.all([
+          import("../eve/hosted-service"),
+          import("../eve/same-origin-http"),
+          import("../eve/vercel-workload-identity"),
+        ]);
+        const service = createHostedEveSessionService({
+          principal: session.principal,
+          store: sessions,
+          transport: createSameOriginEveTransport({
+            config: { baseUrl: new URL(config.resource).origin },
+            workloadIdentity: createVercelWorkloadIdentity(),
+          }),
+        });
+        await service.reconcileOwnerDelivery({
+          sessionId: session.sessionId,
+          adapterSessionId: session.adapterSessionId,
+          adapterGeneration: session.adapterGeneration,
+          cancellationRevision: session.cancellationRevision ?? 0,
+        });
+      },
       handoffs: createPostgresBuilderHandoffStore(database),
       isActiveMember: async (authority) => {
         const active = await membership.isActiveMember(authority);
         return active;
       },
-      sessions: createPostgresHostedEveStore(database),
+      sessions,
     };
   } catch {
     throw new OwnerInitializationError("owner_store_construction");

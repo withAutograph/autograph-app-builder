@@ -41,10 +41,18 @@ export async function readHostedContinuityApprovalPreflightStep(
   ctx: ContinuityContext,
 ) {
   "use step";
-  const { readSavedContinuityApproval } = await import("./continuity-approval-resolution");
-  const { operator, saved, request } = await readSavedContinuityApproval(input, ctx);
-  // Planned intents still ask for fresh native consent. Execution independently verifies its settlement.
-  return saved.status.state === "planned"
-    ? { approved: false }
-    : await operator.continuityApproval(request, ctx.abortSignal);
+  const [{ readSavedContinuityApproval }, { readContinuityApprovalWithRecovery }] =
+    await Promise.all([
+      import("./continuity-approval-resolution"),
+      import("./continuity-approval-recovery"),
+    ]);
+  // Reconcile retained native consent even while the operator journal still says planned.
+  return await readContinuityApprovalWithRecovery(
+    async () => {
+      const { operator, request } = await readSavedContinuityApproval(input, ctx);
+      return await operator.continuityApproval(request, ctx.abortSignal);
+    },
+    ctx.abortSignal,
+    { deferPendingSettlement: true },
+  );
 }

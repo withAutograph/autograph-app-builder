@@ -53,11 +53,26 @@ requires fresh exact effect approval. The old intent exposes `supersededBy`
 and cannot execute again. An uncertain active attempt must instead reconcile
 its original intent; recovery never reinterprets old approval for a new root.
 
-Before requesting consent, Builder owner-verifies the saved exact plan without
-scanning historical approvals. After consent, partial or temporarily unavailable
-native approval reads retry with durable backoff and respect cancellation;
-execution waits for a completed exact approval receipt. An owner denial is not
-retryable and never becomes permission to execute.
+Before requesting consent, Builder owner-verifies the saved exact plan and
+reconciles any previously recorded native approval, including when the intent
+still says `planned`. A verified receipt advances that same intent to `approved`
+without asking for duplicate consent. A fresh complete read with no matching
+approval request may ask for ordinary approval. An existing request awaiting
+settlement, an incomplete read or an unavailable read cannot issue another prompt.
+
+Partial native history reads continue only after their cursor and capture have
+been durably saved. Non-advancing temporary failures use the existing workflow
+step retry policy, retaining a closed recovery stage and operator error code
+instead of appearing as missing consent. A concurrent journal writer is reread;
+only the identical saved receipt can settle a competing approval write. Native
+cancellation, foreign ownership and conflicting evidence remain refused.
+
+An explicit continuation after Stop must prove its native message delivery
+before protected callbacks pass the existing cancellation-revision guard. The
+callback may reconcile that already submitted message through the same owner
+and session; it cannot submit another message or optimistically undo Stop.
+Execution and cleanup remain bound to the original intent and attempt. Neither
+a displayable approval nor a local regression result proves hosted acceptance.
 
 ## Deployment-owned worker setup
 
