@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { VercelInstallationBinding } from "../integrations/vercel-installation";
 import type { PublicReleasePlan, PublicReleaseObservation } from "./public-release-contract";
+import { publicReleaseRequiresNativeGitEvent } from "./public-release-contract";
 import type { PublicReleaseInvocation, PublicReleaseEffectContext } from "./public-release-handler";
 
 import { vercelProvisionDiagnosticSchema } from "./contracts";
@@ -26,6 +27,7 @@ const projectSchema = z.object({
   framework: id,
   rootDirectory: id,
   link: z.object({
+    type: z.literal("github"),
     repoId: z.union([id, z.number()]).transform(String),
     productionBranch: id,
   }),
@@ -38,6 +40,11 @@ const projectSchema = z.object({
     .optional(),
 });
 const valueHash = (value: string) => createHash("sha256").update(value).digest("hex");
+const assertSnapshotCurrent = async (signal: AbortSignal, assertCurrent: () => Promise<void>) => {
+  signal.throwIfAborted();
+  await assertCurrent();
+  signal.throwIfAborted();
+};
 const marker = (operationRef: string) => `autograph:public-app-release:${operationRef}`;
 const fail = () => new Error("public_release_provider_mismatch");
 
@@ -430,6 +437,14 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
       if (deploymentId === undefined || deploymentId.length === 0) {
         return { status: "pending" };
       }
+      if (publicReleaseRequiresNativeGitEvent(plan)) {
+        if (plan.project.priorActiveDeploymentId === undefined) {
+          throw fail();
+        }
+        if (deploymentId === plan.project.priorActiveDeploymentId) {
+          return { status: "pending" };
+        }
+      }
       const host = new URL(plan.publicOrigin).hostname;
       const domain = z
         .object({
@@ -539,11 +554,7 @@ export const createPublicReleaseVercelBindingSnapshot =
     fetch?: typeof fetch;
   }) =>
   async (scope: PublicReleaseVercelBindingSnapshotScope) => {
-    const check = async () => {
-      scope.signal.throwIfAborted();
-      await deps.assertCurrent();
-      scope.signal.throwIfAborted();
-    };
+    const check = () => assertSnapshotCurrent(scope.signal, deps.assertCurrent);
     const read = async (route: string) => {
       await check();
       const credential = await deps.readCredential();
@@ -604,7 +615,9 @@ export const createPublicReleaseVercelBindingSnapshot =
         throw fail();
       }
       const row = rows[0];
-      const markerMatch = /^autograph:public-app-release:(?<operationRef>[0-9a-f-]{36})$/u.exec(row.comment ?? "");
+      const markerMatch = /^autograph:public-app-release:(?<operationRef>[0-9a-f-]{36})$/u.exec(
+        row.comment ?? "",
+      );
       const operationRef = z.uuid().safeParse(markerMatch?.groups?.operationRef);
       if (
         !operationRef.success ||
@@ -632,4 +645,68 @@ export const createPublicReleaseVercelBindingSnapshot =
     }
     await check();
     return snapshots;
+  };
+
+/** Trusted planning snapshot; the ID only excludes the prior active deployment, never selects a replacement. */
+export const createPublicReleaseVercelActiveDeploymentSnapshot =
+  (deps: {
+    assertCurrent: () => Promise<void>;
+    readCredential: () => Promise<
+      { token: string; binding: VercelInstallationBinding } | undefined
+    >;
+    fetch?: typeof fetch;
+  }) =>
+  async (
+    scope: Omit<PublicReleaseVercelBindingSnapshotScope, "keys"> & {
+      repositoryId: string;
+      productionBranch: string;
+    },
+  ): Promise<{ priorActiveDeploymentId: string | null }> => {
+    const check = () => assertSnapshotCurrent(scope.signal, deps.assertCurrent);
+    await check();
+    const credential = await deps.readCredential();
+    await check();
+    if (
+      !credential ||
+      !credential.token ||
+      !credential.binding.active ||
+      credential.binding.installationId !== scope.installationId ||
+      credential.binding.scopeType !== "team" ||
+      credential.binding.scopeId !== scope.teamId
+    ) {
+      throw fail();
+    }
+    const url = new URL(
+      `/v9/projects/${encodeURIComponent(scope.projectId)}`,
+      "https://api.vercel.com",
+    );
+    url.searchParams.set("teamId", scope.teamId);
+    const response = await (deps.fetch ?? fetch)(url, {
+      method: "GET",
+      headers: { authorization: `Bearer ${credential.token}` },
+      redirect: "error",
+      signal: scope.signal,
+    });
+    await check();
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw fail();
+    }
+    const current = projectSchema.parse(await boundedJson(response, scope.signal));
+    await check();
+    if (
+      current.id !== scope.projectId ||
+      current.accountId !== scope.teamId ||
+      current.framework !== "services" ||
+      current.rootDirectory !== "." ||
+      current.link.repoId !== scope.repositoryId ||
+      current.link.productionBranch !== scope.productionBranch ||
+      current.ssoProtection.deploymentType !== "prod_deployment_urls_and_all_previews" ||
+      !current.oidcTokenConfig.enabled ||
+      current.oidcTokenConfig.issuerMode !== "team" ||
+      (current.microfrontends?.groupIds?.length ?? 0) > 0
+    ) {
+      throw fail();
+    }
+    return { priorActiveDeploymentId: current.targets?.production?.id ?? null };
   };

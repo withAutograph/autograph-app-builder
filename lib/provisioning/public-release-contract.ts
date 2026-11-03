@@ -48,6 +48,7 @@ export const publicReleasePlanSchema = z
       rootDirectory: z.literal("."),
       deploymentAccess: z.literal("public-app"),
       environment: z.literal("production"),
+      priorActiveDeploymentId: id.nullable().optional(),
     }),
     source: z.strictObject({
       deliveryScope: publicReleaseSourceDeliveryScopeSchema,
@@ -97,6 +98,11 @@ export const publicReleasePlanSchema = z
   });
 
 export type PublicReleasePlan = z.infer<typeof publicReleasePlanSchema>;
+/** Runtime values determine whether the native Git publication must cause a fresh deployment. */
+export const publicReleaseRequiresNativeGitEvent = (plan: Pick<PublicReleasePlan, "environment">) =>
+  plan.environment.some(
+    (entry) => entry.priorBinding === undefined || entry.priorBinding.valueSha256 !== entry.sha256,
+  );
 export const publicReleasePlanDigest = (plan: PublicReleasePlan) =>
   createHash("sha256")
     .update(JSON.stringify(publicReleasePlanSchema.parse(plan)))

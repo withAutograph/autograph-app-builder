@@ -21,6 +21,7 @@ export const plan = publicReleasePlanSchema.parse({
     rootDirectory: ".",
     deploymentAccess: "public-app",
     environment: "production",
+    priorActiveDeploymentId: null,
   },
   source: {
     deliveryScope: {

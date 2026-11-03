@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   createPublicReleaseVercelProvider,
   createPublicReleaseVercelBindingSnapshot,
+  createPublicReleaseVercelActiveDeploymentSnapshot,
 } from "./public-release-vercel-provider";
 import type { PublicReleaseVercelDependencies } from "./public-release-vercel-provider";
 import { createPublicReleaseHandler } from "./public-release-handler";
@@ -50,7 +51,11 @@ const fixture = () => {
     accountId: plan.project.teamId,
     framework: "services",
     rootDirectory: ".",
-    link: { repoId: plan.source.repositoryId, productionBranch: plan.source.productionBranch },
+    link: {
+      type: "github",
+      repoId: plan.source.repositoryId,
+      productionBranch: plan.source.productionBranch,
+    },
     ssoProtection: { deploymentType: "prod_deployment_urls_and_all_previews" },
     oidcTokenConfig: { enabled: true, issuerMode: "team" },
     targets: { production: { id: "active-deployment" } },
@@ -550,4 +555,67 @@ it("refuses foreign production binding scope while planning before decrypting or
     read({ ...f.plan.project, keys: ["APP_DATABASE_URL"], signal: f.invocation.signal }),
   ).rejects.toThrow("public_release_provider_mismatch");
   expect(f.writes).toHaveLength(0);
+});
+
+it("does not accept the prior active deployment when changed runtime values require a new native Git event", async () => {
+  const f = fixture();
+  f.plan.project.priorActiveDeploymentId = f.project.targets.production.id;
+  expect(await f.provider.observe(f.invocation, f.plan)).toEqual({ status: "pending" });
+  expect(f.deps.readDeliveredRelease).not.toHaveBeenCalled();
+});
+it("takes a current owner-bound active deployment snapshot without selecting or mutating a deployment", async () => {
+  const f = fixture();
+  const read = createPublicReleaseVercelActiveDeploymentSnapshot({
+    assertCurrent: () => f.deps.assertCurrent(f.invocation, f.plan, false),
+    readCredential: () => f.deps.readCredential(f.invocation, f.plan),
+    fetch: f.fetcher,
+  });
+  const scope = {
+    ...f.plan.project,
+    repositoryId: f.plan.source.repositoryId,
+    productionBranch: f.plan.source.productionBranch,
+    signal: f.invocation.signal,
+  };
+  expect(await read(scope)).toEqual({ priorActiveDeploymentId: "active-deployment" });
+  expect(f.writes).toEqual([]);
+  await expect(read({ ...scope, repositoryId: "foreign" })).rejects.toThrow("provider_mismatch");
+  expect(f.writes).toEqual([]);
+});
+it("records absent Production activation explicitly rather than inventing a deployment", async () => {
+  const f = fixture();
+  f.fetcher.mockResolvedValueOnce(Response.json({ ...f.project, targets: { production: null } }));
+  const read = createPublicReleaseVercelActiveDeploymentSnapshot({
+    assertCurrent: () => f.deps.assertCurrent(f.invocation, f.plan, false),
+    readCredential: () => f.deps.readCredential(f.invocation, f.plan),
+    fetch: f.fetcher,
+  });
+  expect(
+    await read({
+      ...f.plan.project,
+      repositoryId: f.plan.source.repositoryId,
+      productionBranch: f.plan.source.productionBranch,
+      signal: f.invocation.signal,
+    }),
+  ).toEqual({ priorActiveDeploymentId: null });
+});
+it("can reuse the provider active deployment when every approved runtime value is unchanged", async () => {
+  const f = fixture();
+  f.plan.project.priorActiveDeploymentId = f.project.targets.production.id;
+  f.plan.environment = f.plan.environment.map((entry) => ({
+    ...entry,
+    priorBinding: {
+      id: "existing",
+      operationRef: f.context.operationRef,
+      valueSha256: entry.sha256,
+    },
+  }));
+  expect(await f.provider.observe(f.invocation, f.plan)).toMatchObject({
+    status: "ready",
+    deploymentId: "active-deployment",
+  });
+});
+it("requires a newly reviewed snapshot for changed-runtime plans with no retained activation fence", async () => {
+  const f = fixture();
+  delete f.plan.project.priorActiveDeploymentId;
+  await expect(f.provider.observe(f.invocation, f.plan)).rejects.toThrow("provider_mismatch");
 });

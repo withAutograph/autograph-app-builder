@@ -237,3 +237,11 @@ When public-release planning finds no normal destination, its blocked result
 links to that same saved build's destination controls. Recovered workers use
 the verified public owner session for this link. Opening the control does not
 approve resource creation or release; the ordinary effect reviews still apply.
+
+New public release plans snapshot the provider's prior active Production
+deployment ID, or explicit absence, alongside the actual runtime key hashes.
+If any runtime value is new or changed, publication must trigger native Git
+delivery and observation cannot accept that prior deployment as the result.
+Unchanged runtime values may reuse the provider's actual active deployment.
+The snapshot excludes stale evidence; it never selects, promotes or aliases a
+deployment. Provider activation and the public domain remain independently read.
