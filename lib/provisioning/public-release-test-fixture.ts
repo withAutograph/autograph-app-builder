@@ -27,6 +27,7 @@ export const plan = publicReleasePlanSchema.parse({
     sourceBranch: "builder/app",
     sourceSha: "a".repeat(40),
     productionBranch: "main",
+    expectedProductionSha: "e".repeat(40),
     reviewDigest: "b".repeat(64),
   },
   runtime: {

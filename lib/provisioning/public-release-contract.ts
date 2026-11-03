@@ -45,6 +45,7 @@ export const publicReleasePlanSchema = z.strictObject({
     sourceBranch: id,
     sourceSha: z.string().regex(/^[a-f0-9]{40}$/u),
     productionBranch: id,
+    expectedProductionSha: z.string().regex(/^[a-f0-9]{40}$/u),
     reviewDigest: digest,
   }),
   runtime: z.strictObject({

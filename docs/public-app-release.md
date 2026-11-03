@@ -42,3 +42,22 @@ The consumed operator composition must provide real authoritative receipt,
 synthetic-runtime, private configuration, approval-history, environment,
 publication and active-domain adapters. Missing capabilities fail closed; local
 port tests are recovery evidence, not hosted product acceptance.
+
+## Source publication and provider binding
+
+The source publication plan freezes the reviewed source commit and the expected
+current Production branch commit. The GitHub adapter uses an atomic expected-OID
+reference update with `force: false`, followed by an independent reference read.
+A moved branch requires a new plan; Builder never forces it or silently merges
+unreviewed content. A lost publication response is reconciled read-only. Once
+dispatch may have occurred, observing the old branch does not authorize retry.
+These Git facts govern the approved source write only, never Vercel deployment
+selection or Gateway activation.
+
+The private Vercel adapter preflights all runtime values and prior binding
+ownership before writing any key. It accepts only encrypted, Production-only
+rows, excluding branch, custom-environment and Marketplace bindings. It records
+each accepted row ID and verifies the decrypted value privately. Public results
+contain no environment values. Delivery observation reads the provider's active
+Production target and public-domain alias, verifies the actual installed release,
+and then rechecks activation before reporting delivery ready.
