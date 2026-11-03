@@ -753,3 +753,56 @@ describe("managed runtime planning port observation", () => {
     expect(runCommand).toHaveBeenCalledTimes(1);
   });
 });
+
+it("runs only the frozen focused continuity selection and resumes without another dispatch", async () => {
+  const f = setup();
+  await f.start();
+  const selected = f.read();
+  selected.plan.runtime.browserSelection = {
+    testName: "@acceptance",
+    workers: 1,
+    retries: 0,
+    maxFailures: 1,
+  };
+  selected.planDigest = continuityPlanDigest(selected.plan);
+  f.replace(selected);
+  const checkpoint = async (id: string) => {
+    const record = f.read();
+    record.suiteCommandId = id;
+    f.replace(record);
+  };
+  const first = await f.runtime.runSuite(
+    context,
+    f.read(),
+    f.capabilities,
+    f.guard,
+    checkpoint,
+    true,
+  );
+  expect(first.exitCode).toBe(0);
+  const calls = vi
+    .mocked(f.provider.runCommand)
+    .mock.calls.filter(([call]) => call.args.includes("test-e2e"));
+  expect(calls).toHaveLength(1);
+  expect(calls[0][0].args).toEqual(
+    expect.arrayContaining([
+      "--grep",
+      "@acceptance",
+      "--workers=1",
+      "--retries=0",
+      "--max-failures=1",
+    ]),
+  );
+  const resumed = await f.runtime.runSuite(
+    context,
+    f.read(),
+    f.capabilities,
+    f.guard,
+    checkpoint,
+    false,
+  );
+  expect(resumed.exitCode).toBe(0);
+  expect(
+    vi.mocked(f.provider.runCommand).mock.calls.filter(([call]) => call.args.includes("test-e2e")),
+  ).toHaveLength(1);
+});

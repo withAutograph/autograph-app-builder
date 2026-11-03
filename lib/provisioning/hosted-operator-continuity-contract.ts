@@ -1,4 +1,5 @@
 import { privateOperatorApprovalObservationSchema } from "../eve/private-operator-approval-observation";
+import { browserTestSelectionSchema } from "../agent/browser-test-selection";
 import { createHash } from "node:crypto";
 import { managedRuntimePublicProfileSchema } from "../sandbox/managed-runtime-capabilities";
 import { isDeepStrictEqual } from "node:util";
@@ -25,13 +26,18 @@ export const managedRuntimeWorkerDescriptorSchema = z.strictObject({
   operationScope: z.literal("managed-app-runtime-v1"),
   subcommand: z.literal("protected-managed-app-runtime"),
 });
-export const continuityRuntimeSelectionSchema = z.strictObject({ sandboxId: id, root: id });
+export const continuityRuntimeSelectionSchema = z.strictObject({
+  sandboxId: id,
+  root: id,
+  browserSelection: browserTestSelectionSchema.optional(),
+});
 export type ContinuityRuntimeSelection = z.infer<typeof continuityRuntimeSelectionSchema>;
 export const hostedContinuityPlanSchema = z
   .strictObject({
     version: z.literal(1),
     kind: z.literal("app-continuity-plan"),
     intentId: z.uuid(),
+    predecessorIntentId: z.uuid().optional(),
     planRef: id,
     authority: hostedTenantAuthoritySchema,
     target: hostedRuntimeTargetSchema,
@@ -190,6 +196,7 @@ export const continuityRecordSchema = z
   .strictObject({
     kind: z.literal("app-continuity"),
     requestId: z.uuid(),
+    supersededBy: z.uuid().optional(),
     revision: z.number().int().nonnegative(),
     idempotencyKey: id,
     plan: hostedContinuityPlanSchema,
@@ -246,6 +253,7 @@ export const continuityStatus = (record: ContinuityRecord) => ({
   intentId: record.requestId,
   planRef: record.plan.planRef,
   state: record.state,
+  ...(record.supersededBy === undefined ? {} : { supersededBy: record.supersededBy }),
   ...(record.outcome === undefined ? {} : { outcome: record.outcome }),
   ...(record.failure === undefined ? {} : { failure: record.failure }),
   ...(record.current === undefined
@@ -263,6 +271,7 @@ export const continuityStatusSchema = z.strictObject({
   intentId: z.uuid(),
   planRef: id,
   state: continuityRecordSchema.shape.state,
+  supersededBy: z.uuid().optional(),
   outcome: continuityRecordSchema.shape.outcome,
   failure: continuityRecordSchema.shape.failure,
   runtime: z

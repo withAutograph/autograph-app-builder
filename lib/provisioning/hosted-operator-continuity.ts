@@ -170,11 +170,44 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
       await update(record, (value) => ({ ...value, approvalObservation: state }));
     },
   });
+  const assertRecoverablePredecessor = (record: ContinuityRecord, successorId: string) => {
+    if (
+      ![
+        ["planned", "approved"].includes(record.state),
+        record.fence === 0,
+        record.attemptId === undefined,
+        record.locator === undefined,
+        record.supersededBy === undefined || record.supersededBy === successorId,
+      ].every(Boolean)
+    ) {
+      throw unavailable();
+    }
+  };
+  const supersede = (record: ContinuityRecord, successorId: string) => {
+    assertRecoverablePredecessor(record, successorId);
+    return { ...record, supersededBy: successorId };
+  };
+  const assertRecovery = async (context: HostedOperatorContext, record: ContinuityRecord) => {
+    if (record.supersededBy !== undefined) {
+      throw unavailable();
+    }
+    if (record.plan.predecessorIntentId !== undefined) {
+      const prior = await read(context, record.plan.predecessorIntentId);
+      if (
+        prior.supersededBy !== record.requestId ||
+        prior.fence !== 0 ||
+        prior.attemptId !== undefined
+      ) {
+        throw unavailable();
+      }
+    }
+  };
   const approval = async (
     context: HostedOperatorContext,
     record: ContinuityRecord,
     callId?: string,
   ) => {
+    await assertRecovery(context, record);
     await deps.assertSetup(context, record.plan);
     const request = {
       action: "continuity" as const,
@@ -197,12 +230,28 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
     return approved;
   };
   return {
-    async plan(context: HostedOperatorContext, runtime: ContinuityRuntimeSelection, key: string) {
+    async plan(
+      context: HostedOperatorContext,
+      runtime: ContinuityRuntimeSelection,
+      key: string,
+      recovery?: { predecessorIntentId: string },
+    ) {
       await deps.assertOwner(context);
       const intentId = intentIdFor(context, z.string().min(1).parse(key));
       const previous = await deps.store.read({ authority: context.authority, intentId });
       if (previous !== undefined) {
         parseContinuityPlanForOwner(previous.plan, context);
+        if (previous.plan.predecessorIntentId !== recovery?.predecessorIntentId) {
+          throw unavailable();
+        }
+        if (recovery !== undefined) {
+          const prior = await read(context, recovery.predecessorIntentId);
+          assertRecoverablePredecessor(prior, intentId);
+          if (prior.supersededBy === undefined) {
+            await update(prior, (value) => supersede(value, intentId));
+          }
+          await assertRecovery(context, previous);
+        }
         return {
           plan: previous.plan,
           request: {
@@ -214,10 +263,16 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
           status: continuityStatus(previous),
         };
       }
+      const predecessor =
+        recovery === undefined ? undefined : await read(context, recovery.predecessorIntentId);
+      if (predecessor !== undefined) {
+        assertRecoverablePredecessor(predecessor, intentId);
+      }
       const selected = await deps.resolvePlan(context, runtime);
       const plan = hostedContinuityPlanSchema.parse({
         ...selected,
         intentId,
+        ...(predecessor === undefined ? {} : { predecessorIntentId: predecessor.requestId }),
         planRef: `_protected-operator/continuity-plans/${intentId}`,
       });
       await deps.assertSetup(context, plan);
@@ -237,6 +292,9 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
         }),
         now: now(),
       });
+      if (predecessor !== undefined && predecessor.supersededBy !== intentId) {
+        await update(predecessor, (value) => supersede(value, intentId));
+      }
       return {
         plan: record.plan,
         request: {
@@ -266,6 +324,7 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
       if (request.idempotencyKey !== record.idempotencyKey) {
         throw new HostedOperatorError("resource_mismatch");
       }
+      await assertRecovery(context, record);
       if (record.approval !== undefined) {
         return { approved: true };
       }
@@ -330,6 +389,17 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
                 lifecycle: randomBytes(32).toString("base64url"),
               };
               current = await update(current, (value) => {
+                if (
+                  ![
+                    value.supersededBy === undefined,
+                    value.attemptId === undefined,
+                    value.locator === undefined,
+                    value.fence === 0,
+                    value.state === "approved",
+                  ].every(Boolean)
+                ) {
+                  throw unavailable();
+                }
                 value.fence += 1;
                 value.attemptId = randomUUID();
                 value.privateState = deps.seal(value, capabilities);

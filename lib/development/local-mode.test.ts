@@ -324,3 +324,49 @@ it("opts into emulated web without changing default development", () => {
     parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--emulated-web", "yes"]),
   ).toThrow("true or false");
 });
+
+it("selects an existing hosted MCP resource through the native connector", () => {
+  expect(
+    parseDevelopmentArguments([
+      "--arrusted-root",
+      "/tmp/arrusted",
+      "--hosted-session-resource",
+      "https://builder.example.test/mcp",
+    ]).hostedSessionResource,
+  ).toBe("https://builder.example.test/mcp");
+  for (const value of [
+    "http://builder.example.test/mcp",
+    "https://private@builder.example.test/mcp",
+    "https://builder.example.test/mcp?token=private",
+  ]) {
+    expect(() =>
+      parseDevelopmentArguments([
+        "--arrusted-root",
+        "/tmp/arrusted",
+        "--hosted-session-resource",
+        value,
+      ]),
+    ).toThrow();
+  }
+});
+
+it("selects an existing native client by an explicit absolute path", () => {
+  expect(
+    parseDevelopmentArguments([
+      "--arrusted-root",
+      "/tmp/arrusted",
+      "--hosted-session-resource",
+      "https://builder.example.test/mcp",
+      "--hosted-session-codex-bin",
+      "/tools/codex",
+    ]).hostedSessionCodexBin,
+  ).toBe("/tools/codex");
+  expect(() =>
+    parseDevelopmentArguments([
+      "--arrusted-root",
+      "/tmp/arrusted",
+      "--hosted-session-codex-bin",
+      "relative-codex",
+    ]),
+  ).toThrow();
+});

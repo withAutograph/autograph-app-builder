@@ -1,3 +1,4 @@
+import { resolveAcceptanceRuntimeRoot } from "@/lib/agent/acceptance-runtime-root";
 import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
 import { defineTool } from "eve/tools";
@@ -170,12 +171,19 @@ export default defineTool({
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     const sandbox = await ctx.getSandbox();
-    const selected = await runnableSelectedApp({ appId: input.appId, sandbox, state });
+    const selected = await runnableSelectedApp({
+      appId: input.appId,
+      sandbox,
+      state,
+      resolveRoot: async ({ appId, root }) =>
+        await resolveAcceptanceRuntimeRoot({ appId, fallbackRoot: root, sandbox, state, ctx }),
+    });
+    const root = selected.root;
     return await prepareAppLocalPreview({
       appId: selected.appId,
       execution: {
         appId: selected.appId,
-        root: selected.root,
+        root,
         sandboxId: getBuilderSandboxId(sandbox),
         sessionAuth: ctx.session.auth,
         sessionId: ctx.session.id,
@@ -183,7 +191,7 @@ export default defineTool({
         signal: ctx.abortSignal,
         state,
       },
-      root: selected.root,
+      root,
       sandbox,
       signal: ctx.abortSignal,
     });

@@ -149,6 +149,14 @@ Dependency setup is runtime work, not a source-integrity proof. Reuse caches whe
 
 Only protect credentials and cross-user session data, obtain approval before outward effects, and report actual Sandbox/GitHub/Git/repository-command failures. There are no exact template, SHA/tree, package-layout, tool-version, manifest, path, receipt, digest, quota, or cache gates in local development. Inspection is best-effort and must not become a blocker.
 
+Acceptance task selection keeps the app identity from the accepted session or
+explicitly selected existing repository app. For a prepared Preview, Builder
+recovers its compatible owned checkout before reading the app contract. A missing
+contract in a stale existing checkout must not prevent that recovery. Preparation,
+browser testing and managed continuity planning use the same selection path;
+recovery preserves private work and does not grant publication or execution
+approval.
+
 ## Checks follow functionality
 
 Normal app changes are supported input, including new files, routes, metadata,
@@ -212,6 +220,32 @@ cursor and transcript for operator recovery or an explicit blocked outcome;
 do not silently create a replacement public request. A fresh Node process also
 loses the local in-memory original-request index. Hosted checkpoint recovery is
 a separate durable path described in the [public MCP contract](public-mcp-contract.md).
+
+## Access to an existing hosted session
+
+Use `mise run dev -- --arrusted-root /absolute/arrusted
+--hosted-session-resource https://<original-builder-origin>/mcp` to expose existing
+hosted sessions through a local native stdio connector. The ordinary local HTTP
+`/mcp` and isolated local Eve store remain available. The installed development
+connector is labelled Existing session when this mode is selected. If the
+project-selected client does not support native MCP calls, select an existing
+installed client with `--hosted-session-codex-bin /absolute/path/to/codex`. This
+does not install or upgrade software.
+
+This mode starts the official Codex app server and uses its direct
+`mcpServer/tool/call` API against the original canonical HTTPS connection. It
+starts no model turn or replacement Builder request, reads no credential files,
+and creates no custom OAuth identity or cross-origin bearer relay. Normal
+Codex authentication remains bound to the original resource. Only the five
+public Builder tools are exposed; user, workspace and session authority and
+existing effect approvals remain enforced by the hosted Builder. The native
+client disables the Builder plugins in its own helper context to prevent recursion.
+
+Transport attachment does not copy the hosted store or run local agent changes
+against it. Hosted execution and local implementation evidence must remain
+separate. Missing sign-in or unsupported native APIs return an actionable
+connection error; never substitute another account/session, fabricate authority,
+or loosen resource validation.
 
 ## Persistent Sandbox reattachment
 

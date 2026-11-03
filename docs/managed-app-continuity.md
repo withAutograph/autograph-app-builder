@@ -29,6 +29,29 @@ cleanup. Review the app suite's actual business-write scope before approving.
 No extra account, role grant, membership change, fixture seed, or data mutation
 is implied by this shared capability.
 
+## Recovering an unexecuted intent
+
+A continuity plan freezes its runtime root and optional `browserSelection`
+(`testName`, `workers`, `retries`, `maxFailures`) in the exact effect approval.
+The literal test-name filter is forwarded as structured Playwright arguments to
+the app-authored task; omitting it retains that task's normal selection. A
+focused selection does not remove the managed lifecycle capability needed by
+restart assertions.
+
+If the saved intent points to an old workspace, Builder can plan continuity
+with `recoverContinuityIntentId` naming that intent. Recovery is allowed only
+before an attempt or provider effect starts. The operator preserves the old
+plan and approval, links a successor using the current owned runtime, and
+requires fresh exact effect approval. The old intent exposes `supersededBy`
+and cannot execute again. An uncertain active attempt must instead reconcile
+its original intent; recovery never reinterprets old approval for a new root.
+
+Before requesting consent, Builder owner-verifies the saved exact plan without
+scanning historical approvals. After consent, partial or temporarily unavailable
+native approval reads retry with durable backoff and respect cancellation;
+execution waits for a completed exact approval receipt. An owner denial is not
+retryable and never becomes permission to execute.
+
 ## Deployment-owned worker setup
 
 The deployment owner explicitly assembles Builder's worker entry with Arrusted's
@@ -160,3 +183,13 @@ session.
   `lib/sandbox/managed-runtime-supervisor.ts`,
   `lib/provisioning/hosted-operator-managed-runtime-projection.ts`,
   `lib/provisioning/hosted-operator-continuity.ts`.
+
+## Saved-plan continuation
+
+The normal continuity run accepts the exact four-field saved request (`action`,
+`planRef`, `planDigest`, `idempotencyKey`). Builder loads the full canonical plan
+through the existing owner-scoped read before approval and execution. The model
+does not recreate resource, release or actor payloads. The existing native
+approval must still settle for that exact request, owner and call. Strict legacy
+full-plan inputs remain supported; a partial or altered legacy plan is rejected.
+Saved intent supersession and effect reconciliation remain enforced.
