@@ -521,3 +521,115 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
     },
   };
 };
+
+export interface PublicReleaseVercelBindingSnapshotScope {
+  projectId: string;
+  teamId: string;
+  installationId: string;
+  keys: readonly string[];
+  signal: AbortSignal;
+}
+/** Read-only planning facts. The caller must additionally prove each prior row in its owner-scoped release journal. */
+export const createPublicReleaseVercelBindingSnapshot =
+  (deps: {
+    assertCurrent: () => Promise<void>;
+    readCredential: () => Promise<
+      { token: string; binding: VercelInstallationBinding } | undefined
+    >;
+    fetch?: typeof fetch;
+  }) =>
+  async (scope: PublicReleaseVercelBindingSnapshotScope) => {
+    const check = async () => {
+      scope.signal.throwIfAborted();
+      await deps.assertCurrent();
+      scope.signal.throwIfAborted();
+    };
+    const read = async (route: string) => {
+      await check();
+      const credential = await deps.readCredential();
+      await check();
+      if (
+        credential === undefined ||
+        credential.token.length === 0 ||
+        !credential.binding.active ||
+        credential.binding.installationId !== scope.installationId ||
+        credential.binding.scopeType !== "team" ||
+        credential.binding.scopeId !== scope.teamId
+      ) {
+        throw fail();
+      }
+      const url = new URL(route, "https://api.vercel.com");
+      url.searchParams.set("teamId", scope.teamId);
+      const response = await (deps.fetch ?? fetch)(url, {
+        method: "GET",
+        headers: { authorization: `Bearer ${credential.token}` },
+        redirect: "error",
+        signal: scope.signal,
+      });
+      await check();
+      if (!response.ok) {
+        await response.body?.cancel();
+        throw fail();
+      }
+      const result = await boundedJson(response, scope.signal);
+      await check();
+      return result;
+    };
+    await check();
+    if (new Set(scope.keys).size !== scope.keys.length) {
+      throw fail();
+    }
+    const current = projectSchema.parse(
+      await read(`/v9/projects/${encodeURIComponent(scope.projectId)}`),
+    );
+    if (
+      current.id !== scope.projectId ||
+      current.accountId !== scope.teamId ||
+      current.framework !== "services" ||
+      current.rootDirectory !== "." ||
+      current.ssoProtection.deploymentType !== "prod_deployment_urls_and_all_previews"
+    ) {
+      throw fail();
+    }
+    const all = z
+      .object({ envs: z.array(rowSchema) })
+      .parse(await read(`/v10/projects/${encodeURIComponent(scope.projectId)}/env`)).envs;
+    const snapshots: { key: string; id: string; operationRef: string; sha256: string }[] = [];
+    for (const key of scope.keys) {
+      const rows = all.filter((row) => row.key === key && row.target.includes("production"));
+      if (rows.length === 0) {
+        continue;
+      }
+      if (rows.length !== 1) {
+        throw fail();
+      }
+      const row = rows[0];
+      const markerMatch = /^autograph:public-app-release:(?<operationRef>[0-9a-f-]{36})$/u.exec(row.comment ?? "");
+      const operationRef = z.uuid().safeParse(markerMatch?.groups?.operationRef);
+      if (
+        !operationRef.success ||
+        row.type !== "encrypted" ||
+        row.target.length !== 1 ||
+        (row.gitBranch !== null && row.gitBranch !== undefined) ||
+        (row.configurationId !== null && row.configurationId !== undefined) ||
+        (row.customEnvironmentIds?.length ?? 0) > 0
+      ) {
+        throw fail();
+      }
+      const value = z
+        .object({ value: z.string() })
+        .parse(
+          await read(
+            `/v1/projects/${encodeURIComponent(scope.projectId)}/env/${encodeURIComponent(row.id)}`,
+          ),
+        ).value;
+      snapshots.push({
+        key,
+        id: row.id,
+        operationRef: operationRef.data,
+        sha256: valueHash(value),
+      });
+    }
+    await check();
+    return snapshots;
+  };

@@ -2,7 +2,10 @@
 import { createHash } from "node:crypto";
 import { expect, it, vi } from "vitest";
 import { z } from "zod";
-import { createPublicReleaseVercelProvider } from "./public-release-vercel-provider";
+import {
+  createPublicReleaseVercelProvider,
+  createPublicReleaseVercelBindingSnapshot,
+} from "./public-release-vercel-provider";
 import type { PublicReleaseVercelDependencies } from "./public-release-vercel-provider";
 import { createPublicReleaseHandler } from "./public-release-handler";
 import type { PublicReleaseRow, PublicReleaseEffectContext } from "./public-release-handler";
@@ -498,5 +501,53 @@ it("does not report a stale provider-active source as the requested app release 
   });
   expect(await f.provider.observe(f.invocation, f.plan)).toEqual({ status: "pending" });
   expect(f.deps.readDeliveredRelease).not.toHaveBeenCalled();
+  expect(f.writes).toHaveLength(0);
+});
+
+it("reads only bounded prior binding facts for new plan construction, without returning values or writing", async () => {
+  const f = fixture();
+  await f.provider.bindRuntime(f.context);
+  const read = createPublicReleaseVercelBindingSnapshot({
+    assertCurrent: async () => {
+      await f.deps.assertCurrent(f.invocation, f.plan, false);
+    },
+    readCredential: async () => await f.deps.readCredential(f.invocation, f.plan),
+    fetch: f.fetcher,
+  });
+  const snapshot = await read({
+    ...f.plan.project,
+    keys: ["APP_DATABASE_URL"],
+    signal: f.invocation.signal,
+  });
+  expect(snapshot).toEqual([
+    {
+      key: "APP_DATABASE_URL",
+      id: "new-env",
+      operationRef: f.context.operationRef,
+      sha256: f.plan.environment[0].sha256,
+    },
+  ]);
+  expect(JSON.stringify(snapshot)).not.toContain("synthetic-private-runtime-value");
+  expect(f.writes).toHaveLength(1);
+});
+it("refuses foreign production binding scope while planning before decrypting or writing", async () => {
+  const f = fixture();
+  f.rows.push({
+    id: "foreign",
+    key: "APP_DATABASE_URL",
+    type: "encrypted",
+    target: ["production"],
+    comment: "foreign",
+  });
+  const read = createPublicReleaseVercelBindingSnapshot({
+    assertCurrent: async () => {
+      await f.deps.assertCurrent(f.invocation, f.plan, false);
+    },
+    readCredential: async () => await f.deps.readCredential(f.invocation, f.plan),
+    fetch: f.fetcher,
+  });
+  await expect(
+    read({ ...f.plan.project, keys: ["APP_DATABASE_URL"], signal: f.invocation.signal }),
+  ).rejects.toThrow("public_release_provider_mismatch");
   expect(f.writes).toHaveLength(0);
 });
