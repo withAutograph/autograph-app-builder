@@ -47,7 +47,10 @@ export const createHostedOperatorNativeHandler = (
     }
   };
   return async (request: Request) => {
-    if (request.method !== "POST" || new URL(request.url).pathname !== "/v1/runtime") {
+    if (
+      request.method !== "POST" ||
+      !["/v1/runtime", "/v1/public-release"].includes(new URL(request.url).pathname)
+    ) {
       return Response.json(
         { code: "not_found" },
         { headers: { "cache-control": "no-store" }, status: 404 },

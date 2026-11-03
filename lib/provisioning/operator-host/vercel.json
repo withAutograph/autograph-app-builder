@@ -16,11 +16,21 @@
   "rewrites": [
     {
       "source": "/v1/key-custody/possession",
-      "destination": { "service": "operator" }
+      "destination": {
+        "service": "operator"
+      }
     },
     {
       "source": "/v1/runtime",
-      "destination": { "service": "operator" }
+      "destination": {
+        "service": "operator"
+      }
+    },
+    {
+      "source": "/v1/public-release",
+      "destination": {
+        "service": "operator"
+      }
     }
   ]
 }

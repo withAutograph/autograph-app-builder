@@ -64,6 +64,7 @@ describe("separate native operator host", () => {
     expect(config.rewrites).toEqual([
       { destination: { service: "operator" }, source: "/v1/key-custody/possession" },
       { destination: { service: "operator" }, source: "/v1/runtime" },
+      { destination: { service: "operator" }, source: "/v1/public-release" },
     ]);
     expect(readFileSync(path.join(root, "vercel.json"), "utf-8")).toContain("next build");
   });
@@ -132,6 +133,22 @@ describe("separate native operator host", () => {
     const retry = await handler(request());
     expect(retry.status).not.toBe(503);
     expect(loader).toHaveBeenCalledTimes(2);
+  });
+  it("dispatches public release through its separate canonical authority boundary", async () => {
+    const dependencies = deniedDependencies();
+    dependencies.publicReleaseRequest = vi.fn(() => Promise.resolve(Response.json({ status: "pending" })));
+    const handler = createHostedOperatorNativeHandler({
+      createDependencies: () => Promise.resolve(dependencies),
+    });
+    const response = await handler(
+      new Request("https://operator.example.test/v1/public-release", {
+        method: "POST",
+        body: "{}",
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(dependencies.publicReleaseRequest).toHaveBeenCalledTimes(1);
+    expect(dependencies.authorize).not.toHaveBeenCalled();
   });
   it("rejects an incomplete concrete factory through existing dependency validation", async () => {
     const dependencies = deniedDependencies();

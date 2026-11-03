@@ -266,6 +266,8 @@ export type HostedOperatorWorkerEffectContext = HostedOperatorEffectContext & {
   bindWorkerContext: (binding: WorkerContextBinding) => Promise<RecordWorkerCheckpoint>;
 };
 export interface ProtectedHostedOperatorDependencies {
+  /** Additive public delivery contract, independently authenticated and approved. */
+  publicReleaseRequest?: (request: Request) => Promise<Response>;
   /** Dedicated pre-project native target dispatcher with current app-owner authority. */
   nativeTargetRequest?: (
     request: Request,
@@ -1839,6 +1841,12 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
       request.headers.get(OPERATOR_PREPARATION_PROGRESS_HEADER) ===
       OPERATOR_PREPARATION_PROGRESS_PREFERENCE;
     try {
+      if (request.method === "POST" && new URL(request.url).pathname === "/v1/public-release") {
+        if (deps.publicReleaseRequest === undefined) {
+          return response({ code: "protected_operator_required" }, 503);
+        }
+        return await deps.publicReleaseRequest(request);
+      }
       if (request.method !== "POST" || new URL(request.url).pathname !== "/v1/runtime") {
         return response({ code: "not_found" }, 404);
       }

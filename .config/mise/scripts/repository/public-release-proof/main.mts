@@ -15,6 +15,13 @@ import * as schema from "../../../../../lib/db/schema";
 import { createPostgresPublicReleaseStore } from "../../../../../lib/provisioning/public-release-store";
 import { plan, authority } from "../../../../../lib/provisioning/public-release-test-fixture";
 
+import { createPublicReleaseApprovalCheckpoint } from "../../../../../lib/provisioning/public-release-approval-authority";
+import { operatorOwnerContextSchema } from "../../../../../lib/provisioning/hosted-operator-contract";
+import {
+  publicReleasePlanDigest,
+  publicReleaseOperationRef,
+} from "../../../../../lib/provisioning/public-release-contract";
+
 const postgresFlag = process.argv.indexOf("--postgres-bin");
 const postgresBin = postgresFlag === -1 ? undefined : process.argv[postgresFlag + 1];
 if (postgresBin === undefined || !path.isAbsolute(postgresBin)) {
@@ -139,6 +146,62 @@ try {
       bindings: { APP_DATABASE_URL: { state: "pending", acceptedEnvId: "env-observed" } },
     }),
   );
+  const owner = operatorOwnerContextSchema.parse({
+    kind: "direct",
+    authority,
+    principal: { ...authority, scopes: ["autograph:send"] },
+    sessionId: plan.selection.sessionId,
+    adapterSessionId: "native",
+    adapterGeneration: 1,
+  });
+  const checkpointInput = {
+    database: drizzle(writer, { schema }),
+    plan,
+    owner,
+    assertCurrentOwner: async () => {
+      await Promise.resolve();
+    },
+  };
+  const checkpoint = createPublicReleaseApprovalCheckpoint(checkpointInput);
+  assert.equal(await checkpoint.read(), undefined);
+  const observation = {
+    adapterSessionId: "native",
+    adapterGeneration: 1,
+    nextNativeIndex: 5,
+    capture: {
+      request: {
+        action: "public-release" as const,
+        planRef: publicReleaseOperationRef(plan),
+        planDigest: publicReleasePlanDigest(plan),
+        idempotencyKey: plan.selection.appId,
+      },
+      ownerUserId: authority.ownerUserId,
+      entries: [
+        {
+          requestId: "approval",
+          callId: "call",
+          approved: false,
+          cancelled: true,
+          completedApproved: false,
+          completedCancelled: true,
+        },
+      ],
+    },
+  };
+  await checkpoint.save(observation);
+  const resumedCheckpoint = createPublicReleaseApprovalCheckpoint(checkpointInput);
+  assert.deepEqual(await resumedCheckpoint.read(), observation);
+  await assert.rejects(resumedCheckpoint.save({ ...observation, nextNativeIndex: 4 }));
+  await assert.rejects(
+    resumedCheckpoint.save({
+      ...observation,
+      nextNativeIndex: 6,
+      capture: { ...observation.capture, entries: [] },
+    }),
+  );
+  await assert.rejects(resumedCheckpoint.save({ ...observation, adapterSessionId: "foreign" }));
+  await checkpoint.save({ ...observation, nextNativeIndex: 7 });
+  await assert.rejects(resumedCheckpoint.save({ ...observation, nextNativeIndex: 8 }));
   const otherRef = randomUUID();
   await admin`INSERT INTO public.builder_provisioning_journal (issuer,audience,workspace_id,owner_user_id,request_id,request_digest,revision,state,record,created_at,updated_at) VALUES (${authority.issuer},${authority.audience},${authority.workspaceId},${authority.ownerUserId},${otherRef},${"f".repeat(64)},1,'pending',${JSON.stringify({ kind: "native-target-onboarding" })}::jsonb,now(),now())`;
   assert.equal(await store.read(authority, otherRef), undefined);

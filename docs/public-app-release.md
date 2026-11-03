@@ -61,3 +61,5 @@ each accepted row ID and verifies the decrypted value privately. Public results
 contain no environment values. Delivery observation reads the provider's active
 Production target and public-domain alias, verifies the actual installed release,
 and then rechecks activation before reporting delivery ready.
+
+The native operator exposes `/v1/public-release` as a separate authority boundary. Its dispatcher verifies the workload, canonical app/session owner, stored frozen plan, and complete current-call approval history. Partial approval reads use an owner-scoped CAS cursor in the existing provision journal; that cursor never grants consent. The public route remains unavailable until trusted deployment composition supplies the real runtime, publication, and provider ports. Local route and journal proof does not establish hosted delivery.
