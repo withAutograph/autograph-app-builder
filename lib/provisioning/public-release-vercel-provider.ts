@@ -461,12 +461,21 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
         throw fail();
       }
       const deployment = z
-        .object({ id, projectId: id, target: id, readyState: id })
+        .object({
+          id,
+          projectId: id,
+          target: id,
+          readyState: id,
+          gitSource: z
+            .object({ sha: z.string().regex(/^[a-f0-9]{40}$/u) })
+            .nullable()
+            .optional(),
+        })
         .parse(
           await request(
             invocation,
             plan,
-            `/v13/deployments/${encodeURIComponent(deploymentId)}`,
+            `/v13/deployments/${encodeURIComponent(deploymentId)}?withGitRepoInfo=true`,
             false,
           ),
         );
@@ -478,6 +487,10 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
         throw fail();
       }
       if (deployment.readyState !== "READY") {
+        return { status: "pending" };
+      }
+      // Source provenance validates the already provider-selected active delivery. It never elects a deployment.
+      if (deployment.gitSource?.sha !== plan.source.sourceSha) {
         return { status: "pending" };
       }
       const release = await deps.readDeliveredRelease(invocation, plan, deploymentId);

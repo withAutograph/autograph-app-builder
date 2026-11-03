@@ -113,6 +113,7 @@ const fixture = () => {
         projectId: plan.project.projectId,
         target: "production",
         readyState: "READY",
+        gitSource: { sha: plan.source.sourceSha },
       });
     }
     if (/\/v10\/projects\/[^/]+\/env$/u.test(parsed.pathname)) {
@@ -473,4 +474,29 @@ it("persists the actual adapter rejection with the pending key and never retries
     await handler.release(f.invocation, selected.operationRef, selected.planDigest),
   ).toMatchObject({ status: "reconciliation-required" });
   expect(posts).toBe(1);
+});
+
+it("does not report a stale provider-active source as the requested app release or elect another deployment", async () => {
+  const f = fixture();
+  const original = f.fetcher.getMockImplementation();
+  f.fetcher.mockImplementation(async (url, init) => {
+    const parsed = requestUrl(url);
+    if (parsed.pathname === "/v13/deployments/active-deployment") {
+      expect(parsed.searchParams.get("withGitRepoInfo")).toBe("true");
+      return Response.json({
+        id: "active-deployment",
+        projectId: f.plan.project.projectId,
+        target: "production",
+        readyState: "READY",
+        gitSource: { sha: "f".repeat(40) },
+      });
+    }
+    if (!original) {
+      throw new Error("fixture missing");
+    }
+    return await original(url, init);
+  });
+  expect(await f.provider.observe(f.invocation, f.plan)).toEqual({ status: "pending" });
+  expect(f.deps.readDeliveredRelease).not.toHaveBeenCalled();
+  expect(f.writes).toHaveLength(0);
 });
