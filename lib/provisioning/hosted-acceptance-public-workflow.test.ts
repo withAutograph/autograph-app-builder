@@ -8,6 +8,12 @@ import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ApprovalContext, ApprovalStatus } from "eve/tools/approval";
+import type { MessageStreamEvent } from "eve/client";
+import {
+  deriveInstalledEveStatus,
+  outstandingInstalledEveRequests,
+  projectInstalledEveEvent,
+} from "../eve/public-events";
 import type { ContinuityApprovalToolInput } from "../eve/private-continuity-approval";
 import type { OperatorSelection } from "./hosted-operator-contract";
 import type { SandboxNetworkPolicy, SandboxSession } from "eve/sandbox";
@@ -255,7 +261,7 @@ it("uses actual planning and approval workflow tools to recover retained source 
   });
   f.deps.readApproval = async () => capture.read();
   expect(await f.operations.approval(context, successor.request)).toEqual({ approved: false });
-  capture.observe({
+  const approvalEvent: MessageStreamEvent = {
     type: "input.requested",
     meta: { at: "2026-11-03T00:00:00Z", id: "request-event" },
     data: {
@@ -276,7 +282,16 @@ it("uses actual planning and approval workflow tools to recover retained source 
         },
       ],
     },
-  });
+  };
+  // Exercise the actual public approval surface before consenting to the managed run.
+  const publicRequests = outstandingInstalledEveRequests([approvalEvent]);
+  expect(deriveInstalledEveStatus([approvalEvent])).toBe("input_required");
+  expect(publicRequests).toMatchObject([{ kind: "approval", requestId: "fresh-approval" }]);
+  expect(publicRequests[0]?.description).toBeTruthy();
+  expect(
+    projectInstalledEveEvent(approvalEvent, 0).some((event) => event.type === "error.public"),
+  ).toBe(false);
+  capture.observe(approvalEvent);
   expect(capture.read()).toBeNull();
   capture.observe({
     type: "approval.settled",
@@ -285,7 +300,7 @@ it("uses actual planning and approval workflow tools to recover retained source 
       sequence: 2,
       stepIndex: 0,
       turnId: "retained-turn",
-      requestId: "fresh-approval",
+      requestId: z.string().parse(publicRequests[0]?.requestId),
       responderPrincipalId: authority.ownerUserId,
       outcome: "approved",
     },

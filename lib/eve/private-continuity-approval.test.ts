@@ -1,3 +1,5 @@
+import { publicApprovalDescription } from "../agent/approval-receipt";
+import { projectInstalledEveEvent } from "./public-events";
 import { describe, expect, it } from "vitest";
 import type { ContinuityApprovalToolInput } from "./private-continuity-approval";
 import type { MessageStreamEvent } from "eve/client";
@@ -292,5 +294,35 @@ describe("compact saved continuity request", () => {
     expect(() =>
       continuityApprovalIntentId({ ...request, planRef: `untrusted/${plan.intentId}` }),
     ).toThrow();
+  });
+});
+
+describe("public continuity consent and exact private authority", () => {
+  it("exposes the real compact approval request while withholding execution authority until settlement", () => {
+    const event = requested({ toolInput: request });
+    const projected = projectInstalledEveEvent(event, 3);
+    expect(projected).toHaveLength(1);
+    expect(projected[0]).toMatchObject({
+      type: "input.requested",
+      request: { kind: "approval", requestId: "human-request" },
+    });
+    expect(projected[0]).not.toHaveProperty("code", "confirmation_unavailable");
+    const reader = capture();
+    reader.observe(event);
+    expect(reader.read()).toBeNull();
+    reader.observe(settled());
+    expect(reader.read()).toMatchObject({ ...request, approvedByCallId: "continuity-call" });
+  });
+  it("retains concrete actor details for full legacy plans and rejects a forged full plan", () => {
+    const description = publicApprovalDescription(toolInput, "run-app-continuity-tests");
+    for (const actor of plan.actors) {
+      expect(description).toContain(`${actor.actorId} in ${actor.organizationId}`);
+    }
+    expect(
+      publicApprovalDescription(
+        { ...toolInput, plan: { ...plan, runtime: { ...plan.runtime, root: "/forged" } } },
+        "run-app-continuity-tests",
+      ),
+    ).toBeUndefined();
   });
 });

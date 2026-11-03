@@ -1,4 +1,7 @@
-import { continuityApprovalInputSchema } from "../eve/private-continuity-approval";
+import {
+  continuityApprovalToolInputSchema,
+  continuityApprovalIntentId,
+} from "../eve/private-continuity-approval";
 import { tenantExportApprovalInputSchema } from "../eve/private-export-approval";
 import { z } from "zod";
 import {
@@ -513,15 +516,23 @@ const operatorApprovalDescription = (
 };
 
 const continuityApprovalDescription = (input: unknown): string | undefined => {
-  const parsed = continuityApprovalInputSchema.safeParse(input);
+  const parsed = continuityApprovalToolInputSchema.safeParse(input);
   if (!parsed.success) return undefined;
-  const actorOrganizationReferences = parsed.data.plan.actors.map(
-    (actor) => `${actor.actorId} in ${actor.organizationId}`,
-  );
+  let intentId: string;
+  try {
+    intentId = continuityApprovalIntentId(parsed.data);
+  } catch {
+    return undefined;
+  }
+  const actorScope =
+    "plan" in parsed.data
+      ? `Test actor and organization references (provider identity references):\n${parsed.data.plan.actors.map((actor) => `- ${actor.actorId} in ${actor.organizationId}`).join("\n")}`
+      : "Use only the actors, organizations and browser-test selection recorded in this saved plan. Builder verifies its full owner-scoped plan before execution; this approval does not add accounts or grant roles.";
   return [
     `Run the app's existing browser checks against its Preview environment. The checks may perform the actions written into the app and restart only this app's process.`,
     "What will happen:\n- Start the app's Preview environment and temporarily publish its test connection to the shared service.\n- Close the app environment and remove the temporary connection when the checks finish. The shared service may retain the target until its normal refresh or expiry.",
-    `Test actor and organization references (provider identity references):\n${actorOrganizationReferences.map((reference) => `- ${reference}`).join("\n")}`,
+    `Saved plan: ${intentId}\nPlan fingerprint: ${parsed.data.planDigest}\nThis confirmation applies only to this exact saved plan.`,
+    actorScope,
     "This does not change the app's main project or prove behavior after a later deployment.",
   ].join("\n\n");
 };
