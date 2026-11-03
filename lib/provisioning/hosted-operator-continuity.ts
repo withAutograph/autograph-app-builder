@@ -170,6 +170,23 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
       await update(record, (value) => ({ ...value, approvalObservation: state }));
     },
   });
+  const assertRecoverablePredecessor = (record: ContinuityRecord, successorId: string) => {
+    if (
+      ![
+        ["planned", "approved"].includes(record.state),
+        record.fence === 0,
+        record.attemptId === undefined,
+        record.locator === undefined,
+        record.supersededBy === undefined || record.supersededBy === successorId,
+      ].every(Boolean)
+    ) {
+      throw unavailable();
+    }
+  };
+  const supersede = (record: ContinuityRecord, successorId: string) => {
+    assertRecoverablePredecessor(record, successorId);
+    return { ...record, supersededBy: successorId };
+  };
   const assertRecovery = async (context: HostedOperatorContext, record: ContinuityRecord) => {
     if (record.supersededBy !== undefined) {
       throw unavailable();
@@ -229,13 +246,9 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
         }
         if (recovery !== undefined) {
           const prior = await read(context, recovery.predecessorIntentId);
-          if (
-            prior.supersededBy === undefined &&
-            ["planned", "approved"].includes(prior.state) &&
-            prior.fence === 0 &&
-            prior.attemptId === undefined
-          ) {
-            await update(prior, (value) => ({ ...value, supersededBy: intentId }));
+          assertRecoverablePredecessor(prior, intentId);
+          if (prior.supersededBy === undefined) {
+            await update(prior, (value) => supersede(value, intentId));
           }
           await assertRecovery(context, previous);
         }
@@ -253,16 +266,7 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
       const predecessor =
         recovery === undefined ? undefined : await read(context, recovery.predecessorIntentId);
       if (predecessor !== undefined) {
-        const idle = [
-          ["planned", "approved"].includes(predecessor.state),
-          predecessor.fence === 0,
-          predecessor.attemptId === undefined,
-          predecessor.locator === undefined,
-          predecessor.supersededBy === undefined || predecessor.supersededBy === intentId,
-        ].every(Boolean);
-        if (!idle) {
-          throw unavailable();
-        }
+        assertRecoverablePredecessor(predecessor, intentId);
       }
       const selected = await deps.resolvePlan(context, runtime);
       const plan = hostedContinuityPlanSchema.parse({
@@ -289,7 +293,7 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
         now: now(),
       });
       if (predecessor !== undefined && predecessor.supersededBy !== intentId) {
-        await update(predecessor, (value) => ({ ...value, supersededBy: intentId }));
+        await update(predecessor, (value) => supersede(value, intentId));
       }
       return {
         plan: record.plan,
@@ -385,6 +389,17 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
                 lifecycle: randomBytes(32).toString("base64url"),
               };
               current = await update(current, (value) => {
+                if (
+                  ![
+                    value.supersededBy === undefined,
+                    value.attemptId === undefined,
+                    value.locator === undefined,
+                    value.fence === 0,
+                    value.state === "approved",
+                  ].every(Boolean)
+                ) {
+                  throw unavailable();
+                }
                 value.fence += 1;
                 value.attemptId = randomUUID();
                 value.privateState = deps.seal(value, capabilities);

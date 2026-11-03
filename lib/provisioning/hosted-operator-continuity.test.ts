@@ -790,6 +790,75 @@ describe("continuity recovery preserves frozen plans", () => {
     ).rejects.toThrow("reconciliation_required");
     expect(f.rows.size).toBe(1);
   });
+  it.each([false, true])(
+    "rejects successor supersession when the original execution wins CAS (existing=%s)",
+    async (existing) => {
+      const f = recovered();
+      const old = await f.operations.plan(context, selection.runtime, "old-race");
+      const recovery = { predecessorIntentId: old.plan.intentId };
+      const runtime = { ...selection.runtime, root: "/recovered" };
+      const cas = f.deps.store.compareAndSet;
+      if (existing) {
+        f.deps.store.compareAndSet = async (input) =>
+          input.record.supersededBy === undefined ? await cas(input) : undefined;
+        await expect(
+          f.operations.plan(context, runtime, "successor-race", recovery),
+        ).rejects.toThrow("operation_in_progress");
+      }
+      const entered = Promise.withResolvers<boolean>();
+      const release = Promise.withResolvers<boolean>();
+      f.deps.store.compareAndSet = async (input) => {
+        if (input.record.supersededBy !== undefined) {
+          entered.resolve(true);
+          await release.promise;
+        }
+        return await cas(input);
+      };
+      const successor = f.operations.plan(context, runtime, "successor-race", recovery);
+      const rejected = expect(successor).rejects.toThrow("operation_in_progress");
+      await entered.promise;
+      f.approve();
+      await f.operations.execute(context, old.request, "original-call");
+      release.resolve(true);
+      await rejected;
+      expect(f.rows.get(old.plan.intentId)?.supersededBy).toBeUndefined();
+      expect(f.rows.get(old.plan.intentId)?.fence).toBe(1);
+      await expect(f.operations.plan(context, runtime, "successor-race", recovery)).rejects.toThrow(
+        "reconciliation_required",
+      );
+      expect(f.events.filter((event) => event === "dispatch-suite")).toHaveLength(1);
+    },
+  );
+  it("does not start the original runtime when successor supersession wins claim CAS", async () => {
+    const f = recovered();
+    const old = await f.operations.plan(context, selection.runtime, "old-claim-race");
+    f.approve();
+    await f.operations.approval(context, old.request);
+    const entered = Promise.withResolvers<boolean>();
+    const release = Promise.withResolvers<boolean>();
+    const cas = f.deps.store.compareAndSet;
+    f.deps.store.compareAndSet = async (input) => {
+      if (input.record.requestId === old.plan.intentId && input.record.state === "starting") {
+        entered.resolve(true);
+        await release.promise;
+      }
+      return await cas(input);
+    };
+    const execution = f.operations.execute(context, old.request, "original-call");
+    const rejected = expect(execution).rejects.toThrow("operation_in_progress");
+    await entered.promise;
+    const successor = await f.operations.plan(
+      context,
+      { ...selection.runtime, root: "/recovered" },
+      "successor-claim-race",
+      { predecessorIntentId: old.plan.intentId },
+    );
+    release.resolve(true);
+    await rejected;
+    expect(f.rows.get(old.plan.intentId)?.supersededBy).toBe(successor.plan.intentId);
+    expect(f.rows.get(old.plan.intentId)?.attemptId).toBeUndefined();
+    expect(f.events).toEqual([]);
+  });
   it("binds focused selection into the exact continuity approval", async () => {
     const f = recovered();
     const planned = await f.operations.plan(
