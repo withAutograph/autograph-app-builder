@@ -52,6 +52,31 @@ export const builderProvisionRequestSchema = z
 
 export type BuilderProvisionRequest = z.infer<typeof builderProvisionRequestSchema>;
 
+/** Bounded Vercel support facts, never a provider message or response body. */
+export const vercelProvisionDiagnosticSchema = z.strictObject({
+  statusCode: z.number().int().min(400).max(599),
+  code: z
+    .enum([
+      "forbidden",
+      "integration_configuration_disabled",
+      "not_authorized",
+      "insufficient_permissions",
+      "project_limit_reached",
+      "too_many_projects",
+      "invalid_request",
+      "bad_request",
+      "repo_not_found",
+      "rate_limited",
+    ])
+    .optional(),
+  requestRef: z
+    .string()
+    .max(160)
+    .regex(/^[a-z0-9]{3,8}::[A-Za-z0-9_-]{1,120}$/u)
+    .optional(),
+});
+export type VercelProvisionDiagnostic = z.infer<typeof vercelProvisionDiagnosticSchema>;
+
 const failureSchema = z
   .object({
     code: z.enum([
@@ -72,6 +97,7 @@ const failureSchema = z
       "postcondition_failed",
     ]),
     retryable: z.boolean(),
+    providerDiagnostic: vercelProvisionDiagnosticSchema.optional(),
     status: z.literal("failed"),
   })
   .strict();
@@ -184,6 +210,7 @@ export const builderProvisionResponseSchema = z
             operation: z.enum(["github", "vercel"]),
             outcomeKnown: z.boolean(),
             provider: z.enum(["github", "vercel"]),
+            lastProviderDiagnostic: vercelProvisionDiagnosticSchema.optional(),
             recoveryAction: z.string().min(1),
           })
           .strict(),

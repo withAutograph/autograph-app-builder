@@ -95,6 +95,45 @@ describe("Vercel project provisioning", () => {
     },
   );
 
+  it.each([
+    [
+      JSON.stringify({ error: { code: "forbidden", message: "secret" } }),
+      "iad1::failure_123",
+      { statusCode: 403, code: "forbidden", requestRef: "iad1::failure_123" },
+    ],
+    [
+      JSON.stringify({ error: { code: "secret", message: "secret" }, token: "secret" }),
+      "https://secret.example",
+      { statusCode: 403 },
+    ],
+    ["not-json", "iad1::failure_123", { statusCode: 403, requestRef: "iad1::failure_123" }],
+  ])("retains only allowlisted provider failure facts", async (body, requestRef, diagnostic) => {
+    // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
+    const request = vi.fn<typeof fetch>(async (_url, init) => {
+      if (init?.method !== "POST") return Response.json({}, { status: 404 });
+      return new Response(body, { status: 403, headers: { "x-vercel-id": requestRef } });
+    });
+    const result = await provisionVercelProject({
+      appId: "vendor-portal",
+      fetch: request,
+      github: { code: "not_selected", retryable: false, status: "skipped" },
+      githubSelected: false,
+      installation: installation("team"),
+      persistAbsent: vi.fn(),
+      persistCandidate: vi.fn(),
+      persistedAbsentCandidates: [],
+      persistedCandidates: [],
+      token: "secret",
+    });
+    expect(result).toMatchObject({
+      status: "failed",
+      code: "provider_permission_denied",
+      providerDiagnostic: diagnostic,
+    });
+    expect(JSON.stringify(result)).not.toContain("secret");
+    expect(request.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+  });
+
   it("pauses when an expired write may already have created a project", async () => {
     // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
     const request = vi.fn<typeof fetch>(async () =>
@@ -189,7 +228,11 @@ describe("Vercel project provisioning", () => {
       },
       token: "vercel-token",
     });
-    expect(result).toEqual({ code: "provider_rate_limited", retryable: true, status: "failed" });
+    expect(result).toMatchObject({
+      code: "provider_rate_limited",
+      retryable: true,
+      status: "failed",
+    });
     expect(observed).toEqual([37_000]);
     expect(request.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
   });

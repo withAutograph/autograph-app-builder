@@ -310,6 +310,10 @@ export async function executeBuilderProvisioning(input: {
           (current.operations[request.operation].attemptCount ?? 0) + 1;
         current.operations[request.operation].outcomeKnown = result.status === "succeeded";
         if (result.status === "failed") {
+          if (result.providerDiagnostic !== undefined) {
+            current.operations[request.operation].lastProviderDiagnostic =
+              result.providerDiagnostic;
+          }
           current.operations[request.operation].failureDetail = result.code;
           if (
             result.code === "provider_unavailable" ||
@@ -376,6 +380,9 @@ export function projectBuilderProvisioning(row: BuilderProvisionJournalRow) {
       outcomeKnown: state.outcomeKnown ?? false,
       provider: operation,
       recoveryAction,
+      ...(state.lastProviderDiagnostic === undefined
+        ? {}
+        : { lastProviderDiagnostic: state.lastProviderDiagnostic }),
     };
     if (state.nextRetryAt) {
       diagnostic.nextRetryAt = state.nextRetryAt;

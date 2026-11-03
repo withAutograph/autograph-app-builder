@@ -7,7 +7,8 @@ import type {
   BuilderProvisionJournalStore,
 } from "./journal";
 import { builderProvisionRequestDigest, builderProvisionRequestSchema } from "./contracts";
-import { readBuilderProvisioning } from "./service";
+import type { BuilderProvisioningDependencies } from "./service";
+import { executeBuilderProvisioning, readBuilderProvisioning } from "./service";
 
 const request = builderProvisionRequestSchema.parse({
   appName: "Vendor Portal",
@@ -87,6 +88,98 @@ function memoryStore(): BuilderProvisionJournalStore {
 }
 
 describe("builder provisioning journal", () => {
+  it("persists sanitized provider denial evidence across reads and reconciliation retry", async () => {
+    const store = memoryStore();
+    const selected = builderProvisionRequestSchema.parse({
+      ...request,
+      operation: "vercel",
+      providers: { vercelInstallationId: "icfg_202" },
+    });
+    const secret = "private-credential-and-message";
+    let postCount = 0;
+    // SAFETY: This exercises only the selected Vercel branch; no GitHub dependency is read.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Unused GitHub adapters are intentionally absent in this branch fixture.
+    const dependencies = {
+      journal: store,
+      // oxlint-disable-next-line eslint/require-await -- Promise-returning credential test double.
+      readVercelCredential: async () => ({
+        binding: {
+          active: true,
+          installationId: "icfg_202",
+          scopeType: "team",
+          scopeId: "team_1",
+          slug: "owner",
+          displayName: "Owner",
+          plan: "pro",
+          updatedAt: new Date(),
+        },
+        token: secret,
+      }),
+      // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
+      fetch: async (_url: string, init?: RequestInit) => {
+        if (init?.method === "POST") {
+          postCount += 1;
+          return Response.json(
+            {
+              error: { code: "integration_configuration_disabled", message: secret },
+              token: secret,
+            },
+            {
+              status: 403,
+              headers: { "x-vercel-id": "iad1::denied_123" },
+            },
+          );
+        }
+        return postCount === 0
+          ? Response.json({}, { status: 404 })
+          : Response.json({ id: "unproven" });
+      },
+    } as BuilderProvisioningDependencies;
+    const result = await executeBuilderProvisioning({
+      authority,
+      request: selected,
+      dependencies,
+    });
+    expect(result.vercel).toMatchObject({
+      status: "failed",
+      code: "provider_permission_denied",
+      providerDiagnostic: {
+        statusCode: 403,
+        code: "integration_configuration_disabled",
+        requestRef: "iad1::denied_123",
+      },
+    });
+    const retry = await executeBuilderProvisioning({
+      authority,
+      request: selected,
+      dependencies,
+    });
+    expect(retry.vercel).toMatchObject({ status: "failed", code: "reconciliation_uncertain" });
+    const projection = await readBuilderProvisioning({
+      authority,
+      journal: store,
+      requestId: selected.requestId,
+    });
+    expect(
+      projection?.diagnostics?.find((value) => value.provider === "vercel")?.lastProviderDiagnostic,
+    ).toEqual({
+      statusCode: 403,
+      code: "integration_configuration_disabled",
+      requestRef: "iad1::denied_123",
+    });
+    expect(postCount).toBe(1);
+    const saved = await store.read({ authority, requestId: selected.requestId });
+    expect(JSON.stringify(saved)).not.toContain(secret);
+    expect(JSON.stringify(projection)).not.toContain(secret);
+    expect(
+      await readBuilderProvisioning({
+        authority: { ...authority, ownerUserId: "other" },
+        journal: store,
+        requestId: selected.requestId,
+      }),
+    ).toBeUndefined();
+  });
+
   it("projects a due retry with a safe recovery action", async () => {
     const store = memoryStore();
     await store.reserve({ authority, now: new Date(), request });

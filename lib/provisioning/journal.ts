@@ -7,6 +7,7 @@ import {
   builderProvisionRequestSchema,
   builderProvisionResponseSchema,
   initialBuilderProvisionResponse,
+  vercelProvisionDiagnosticSchema,
 } from "./contracts";
 import type { BuilderProvisionRequest } from "./contracts";
 
@@ -46,6 +47,7 @@ const operationStateSchema = z
     attempted: z.boolean(),
     candidates: z.array(z.string().min(1).max(100)),
     failureDetail: z.string().max(2048).optional(),
+    lastProviderDiagnostic: vercelProvisionDiagnosticSchema.optional(),
     leaseExpiresAt: z.string().datetime({ offset: true }).optional(),
     leaseId: z.string().uuid().optional(),
     nextRetryAt: z.string().datetime({ offset: true }).optional(),

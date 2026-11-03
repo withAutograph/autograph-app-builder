@@ -3,7 +3,12 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 
 import type { VercelInstallationBinding } from "../integrations/vercel-installation";
-import type { GitHubProvisionResult, VercelProvisionResult } from "./contracts";
+import { vercelProvisionDiagnosticSchema } from "./contracts";
+import type {
+  VercelProvisionDiagnostic,
+  GitHubProvisionResult,
+  VercelProvisionResult,
+} from "./contracts";
 import { suffixedProviderName } from "./names";
 import { runSequentiallyUntilAsync } from "../async-sequential.ts";
 
@@ -59,6 +64,7 @@ export async function provisionVercelProject(input: {
     return { code: "github_required", retryable: false, status: "skipped" };
   }
   const request = input.fetch ?? fetch;
+  let providerDiagnostic: VercelProvisionDiagnostic | undefined;
   const query =
     input.installation.scopeType === "team"
       ? `?teamId=${encodeURIComponent(input.installation.scopeId)}`
@@ -91,11 +97,35 @@ export async function provisionVercelProject(input: {
     } catch {
       throw new Error("provider-unavailable");
     }
+    const failed =
+      response.status >= 400 &&
+      response.status <= 599 &&
+      !(args.method !== "POST" && response.status === 404) &&
+      response.status !== 409;
+    if (failed) {
+      const requestRef = vercelProvisionDiagnosticSchema.shape.requestRef.safeParse(
+        response.headers.get("x-vercel-id"),
+      );
+      providerDiagnostic = {
+        statusCode: response.status,
+        ...(requestRef.success ? { requestRef: requestRef.data } : {}),
+      };
+    }
     let body: unknown;
     try {
       body = response.body === null ? undefined : await response.json();
     } catch {
-      throw new Error("invalid-response");
+      if (!failed) {
+        throw new Error("invalid-response");
+      }
+    }
+    if (failed && providerDiagnostic !== undefined) {
+      const error = z
+        .object({ error: z.object({ code: vercelProvisionDiagnosticSchema.shape.code }) })
+        .safeParse(body);
+      if (error.success && error.data.error.code !== undefined) {
+        providerDiagnostic.code = error.data.error.code;
+      }
     }
     const retryAfter = response.headers.get("retry-after");
     if (retryAfter !== null) {
@@ -233,6 +263,7 @@ export async function provisionVercelProject(input: {
             }
             return {
               code,
+              ...(providerDiagnostic === undefined ? {} : { providerDiagnostic }),
               retryable: created.status === 429,
               status: "failed",
             };
@@ -301,16 +332,27 @@ export async function provisionVercelProject(input: {
     return result ?? { code: "provider_unavailable", retryable: true, status: "failed" };
   } catch (error) {
     if (error instanceof Error && error.message === "provider-rate-limited") {
-      return { code: "provider_rate_limited", retryable: true, status: "failed" };
+      return {
+        code: "provider_rate_limited",
+        retryable: true,
+        status: "failed",
+        ...(providerDiagnostic === undefined ? {} : { providerDiagnostic }),
+      };
     }
     if (error instanceof Error && error.message === "provider-permission-denied") {
-      return { code: "provider_permission_denied", retryable: false, status: "failed" };
+      return {
+        code: "provider_permission_denied",
+        retryable: false,
+        status: "failed",
+        ...(providerDiagnostic === undefined ? {} : { providerDiagnostic }),
+      };
     }
     return {
       code:
         error instanceof Error && error.message === "credential-rejected"
           ? "credential_unavailable"
           : "provider_unavailable",
+      ...(providerDiagnostic === undefined ? {} : { providerDiagnostic }),
       retryable: true,
       status: "failed",
     };

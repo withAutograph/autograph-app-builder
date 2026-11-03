@@ -42,3 +42,16 @@ project, or disable protection to repair it. Existing frozen requests without
 the optional access field preserve their digest and inherited provider policy;
 handoff continuations retain that absence. Dedicated native Preview plans keep
 their separately approved All Deployments policy unchanged.
+
+## Safe provider rejection evidence
+
+Standard Vercel provisioning retains only an HTTP failure status, an optional
+closed allowlisted provider error code, and an optional bounded `x-vercel-id`
+request reference in Vercel's region-prefixed format. Unknown codes, response
+messages, bodies, URLs and credentials are not retained. An unreadable error
+body does not discard the observed rejection status or its safe request reference.
+The durable operation preserves the latest such observation through a later
+reconciliation failure; tenant-scoped provisioning diagnostics expose those
+same bounded facts. They describe the prior rejection, not permission for a
+retry, proof of creation, or resolution of an uncertain write. Successful
+provisioning does not present the prior rejection as a current failure.
