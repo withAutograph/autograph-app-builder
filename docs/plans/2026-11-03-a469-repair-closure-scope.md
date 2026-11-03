@@ -41,11 +41,13 @@ Never resend `a469-preview-target-approved-batch` or invent its settlement.
    authenticated owner and protected HTTPS operator. The local adapter creates
    native sessions without forwarded user/workspace authority or canonical SQL
    session registration; project OIDC proves the machine, not the user. No
-   effect-capable local profile was found. Either implement the genuine
-   authenticated/durable local path, or use a qualified shared release for final
-   hosted acceptance. The execution route must be selected before effect-capable implementation. Neither
-   route may flip flags, invent claims, copy approvals or silently transplant the
-   private local app. Editing a local factory does not update the remote operator.
+   effect-capable local profile was found. The selected route is to keep local
+   runs for development and qualification, then use one bundled shared release
+   for the final hosted flow. Adding an authenticated local delivery mode is not
+   part of this repair batch. Re-read the genuine hosted owner/session and
+   pending actions before continuation; do not flip flags, invent claims, copy
+   approvals or silently transplant the private local app. Editing a local
+   factory does not update the remote operator.
 
 3. **Finish central integration composition.** Approved service/provider/tool
    implementations and private custody exist on isolated branches, but their
