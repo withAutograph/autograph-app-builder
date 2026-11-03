@@ -60,7 +60,8 @@ export const readPublicReleasePreparedRuntime = async (input: {
         record.proof?.manifestSha256 !== operator.plan.release.sha256 ||
         record.proof?.releaseId !== operator.plan.release.id)) ||
     (resourceOnly &&
-      (operator.receipts.length !== operator.plan.effects.length ||
+      (record.environmentBound !== false ||
+        operator.receipts.length !== operator.plan.effects.length ||
         operator.plan.effects.some(
           (effect) =>
             [
