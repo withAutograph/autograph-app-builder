@@ -324,28 +324,3 @@ it("opts into emulated web without changing default development", () => {
     parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--emulated-web", "yes"]),
   ).toThrow("true or false");
 });
-
-it("accepts a canonical hosted session resource without credentials", () => {
-  expect(
-    parseDevelopmentArguments([
-      "--arrusted-root",
-      "/tmp/arrusted",
-      "--hosted-session-resource",
-      "https://builder.example.test/mcp",
-    ]).hostedSessionResource,
-  ).toBe("https://builder.example.test/mcp");
-  for (const resource of [
-    "http://builder.example.test/mcp",
-    "https://secret@builder.example.test/mcp",
-    "https://builder.example.test/mcp?token=private",
-  ]) {
-    expect(() =>
-      parseDevelopmentArguments([
-        "--arrusted-root",
-        "/tmp/arrusted",
-        "--hosted-session-resource",
-        resource,
-      ]),
-    ).toThrow();
-  }
-});

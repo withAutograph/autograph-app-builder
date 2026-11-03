@@ -92,24 +92,6 @@ do not silently create a replacement public request. A fresh Node process also
 loses the local in-memory original-request index. Hosted checkpoint recovery is
 a separate durable path described in the [public MCP contract](public-mcp-contract.md).
 
-## Access to an existing hosted session
-
-An explicit `--hosted-session-resource https://<original-builder-origin>/mcp`
-option adds `/mcp/hosted` on the loopback development server and selects it in
-the generated development connector. Its OAuth resource remains the original
-HTTPS endpoint. The ordinary local `/mcp` and local Eve store remain available.
-This is a transport relay to the original public Builder workflow: it does not
-import session state, execute local agent changes against hosted state, or grant
-the development worker hosted workload authority. Cross-origin OAuth discovery
-must be verified with the actual connector before claiming hosted access.
-
-Only the caller's normal OAuth bearer and MCP transport headers reach the pinned
-HTTPS resource. Cookies and workload identity headers are not forwarded. Tokens
-and session payloads are not persisted by the relay, redirects are refused, and
-requests from other browser origins are rejected. The original hosted service
-continues to enforce user, workspace, session and approval authorization. No
-replacement session, resource migration or deployment is part of attachment.
-
 ## Persistent Sandbox reattachment
 
 The Eve 0.68 provider records the persistent Sandbox name as immutable session
