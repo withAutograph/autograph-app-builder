@@ -499,6 +499,12 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
         runTask: async (input: Parameters<typeof runTask>[0]) =>
           await runTask({
             ...input,
+            ...(record.plan.runtime.browserSelection === undefined
+              ? {}
+              : {
+                  browserSelection: record.plan.runtime.browserSelection,
+                  frozenBrowserSelection: true,
+                }),
             environment: { ...input.environment, ...privateEnvironment },
             commandId: record.suiteCommandId,
             commandCheckpoint: checkpoint,

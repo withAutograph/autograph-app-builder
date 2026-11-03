@@ -38,6 +38,42 @@ export const continuityApprovalInputSchema = z
   });
 export type ContinuityApprovalInput = z.infer<typeof continuityApprovalInputSchema>;
 
+/** Compact model input is a locator; canonical owner-scoped readback remains authority. */
+export const continuityApprovalToolInputSchema = z.union([
+  hostedContinuityRequestSchema,
+  continuityApprovalInputSchema,
+]);
+export type ContinuityApprovalToolInput = z.infer<typeof continuityApprovalToolInputSchema>;
+export const continuityApprovalIntentId = (input: ContinuityApprovalToolInput): string => {
+  const parsed = continuityApprovalToolInputSchema.parse(input);
+  const intentId = z.uuid().parse(parsed.planRef.split("/").at(-1));
+  if (parsed.planRef !== `_protected-operator/continuity-plans/${intentId}`) {
+    throw new Error("Continuity intent reference differs.");
+  }
+  return intentId;
+};
+
+/** A fresh exact consent may be requested after owner-authorized intent readback. */
+export const verifySavedContinuityIntent = (
+  input: ContinuityApprovalToolInput,
+  saved: { plan: HostedContinuityPlan; request: HostedContinuityRequest },
+) => {
+  const savedInput = continuityApprovalInputSchema.safeParse({
+    ...saved.request,
+    plan: saved.plan,
+  });
+  if (!savedInput.success) {
+    throw new Error("Continuity intent differs.");
+  }
+  const canonical = savedInput.data;
+  const parsed = continuityApprovalToolInputSchema.parse(input);
+  const { plan, ...request } = "plan" in parsed ? parsed : { ...parsed, plan: canonical.plan };
+  if (!isDeepStrictEqual(canonical.plan, plan) || !isDeepStrictEqual(saved.request, request)) {
+    throw new Error("Continuity intent differs.");
+  }
+  return request;
+};
+
 /** Reads only the authored exact human approval pair from the owner-authenticated Eve stream. */
 export const createPrivateContinuityApprovalCapture = (input: {
   plan: HostedContinuityPlan;
@@ -67,12 +103,13 @@ export const createPrivateContinuityApprovalCapture = (input: {
           ) {
             continue;
           }
-          const parsed = continuityApprovalInputSchema.safeParse(requested.action.input);
+          const parsed = continuityApprovalToolInputSchema.safeParse(requested.action.input);
           if (!parsed.success) {
             continue;
           }
-          const { plan, ...request } = parsed.data;
-          if (!isDeepStrictEqual(plan, input.plan) || !isDeepStrictEqual(request, input.request)) {
+          try {
+            verifySavedContinuityIntent(parsed.data, { plan: input.plan, request: input.request });
+          } catch {
             continue;
           }
           capture.acceptRequest(requested.requestId, requested.action.callId);

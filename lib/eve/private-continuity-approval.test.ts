@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ContinuityApprovalToolInput } from "./private-continuity-approval";
 import type { MessageStreamEvent } from "eve/client";
 import { hostedOperatorPlanSchema } from "../provisioning/hosted-operator-contract";
 import type { HostedOperatorContext } from "../provisioning/hosted-operator-service";
@@ -6,7 +7,12 @@ import {
   hostedContinuityPlanSchema,
   continuityPlanDigest,
 } from "../provisioning/hosted-operator-continuity-contract";
-import { createPrivateContinuityApprovalCapture } from "./private-continuity-approval";
+import {
+  verifySavedContinuityIntent,
+  continuityApprovalToolInputSchema,
+  continuityApprovalIntentId,
+  createPrivateContinuityApprovalCapture,
+} from "./private-continuity-approval";
 
 const authority = {
   issuer: "https://builder.example/api/auth",
@@ -113,7 +119,7 @@ const request = {
 };
 const toolInput = { ...request, plan };
 const requested = (
-  options: { toolName?: string; callId?: string; toolInput?: typeof toolInput } = {},
+  options: { toolName?: string; callId?: string; toolInput?: ContinuityApprovalToolInput } = {},
 ): MessageStreamEvent => ({
   type: "input.requested",
   meta: { at: "2026-10-20T00:00:00Z", id: "request-event" },
@@ -222,5 +228,69 @@ describe("native private managed continuity approval", () => {
     reader.observe(settled(authority.ownerUserId, "cancelled"));
     reader.observe(settled());
     expect(reader.read()).toBeNull();
+  });
+});
+
+describe("continuity approval preflight", () => {
+  it("verifies the saved exact intent without claiming consent", () => {
+    expect(verifySavedContinuityIntent(toolInput, { plan, request })).toEqual(request);
+  });
+  it("rejects another owner, source, runtime, or selection before asking for consent", () => {
+    for (const changed of [
+      { ...plan, authority: { ...plan.authority, ownerUserId: "foreign" } },
+      { ...plan, runtime: { ...plan.runtime, root: "/different" } },
+      { ...plan, runtime: { ...plan.runtime, browserSelection: { testName: "other" } } },
+    ]) {
+      expect(() => verifySavedContinuityIntent(toolInput, { plan: changed, request })).toThrow(
+        "Continuity intent differs",
+      );
+    }
+  });
+});
+
+describe("compact saved continuity request", () => {
+  it("accepts the exact request while retaining canonical full-plan validation", () => {
+    expect(continuityApprovalToolInputSchema.parse(request)).toEqual(request);
+    expect(continuityApprovalIntentId(request)).toBe(plan.intentId);
+    expect(verifySavedContinuityIntent(request, { plan, request })).toEqual(request);
+    const reader = capture();
+    reader.observe(requested({ toolInput: request }));
+    expect(reader.read()).toBeNull();
+    reader.observe(settled());
+    expect(reader.read()).toMatchObject({ ...request, approvalId: "human-request" });
+  });
+  it.each(["planRef", "planDigest", "idempotencyKey"] as const)(
+    "rejects a changed compact %s",
+    (key) => {
+      const changed = { ...request, [key]: key === "planDigest" ? "e".repeat(64) : "other" };
+      expect(() => verifySavedContinuityIntent(changed, { plan, request })).toThrow();
+      const reader = capture();
+      reader.observe(requested({ toolInput: changed }));
+      reader.observe(settled());
+      expect(reader.read()).toBeNull();
+    },
+  );
+  it("does not accept a compact request for a foreign owner or cancelled settlement", () => {
+    for (const event of [settled("foreign"), settled(authority.ownerUserId, "cancelled")]) {
+      const reader = capture();
+      reader.observe(requested({ toolInput: request }));
+      reader.observe(event);
+      expect(reader.read()).toBeNull();
+    }
+  });
+  it("rejects missing reference fields, extra partial plans, and malformed intent paths", () => {
+    const incomplete = {
+      action: request.action,
+      planRef: request.planRef,
+      idempotencyKey: request.idempotencyKey,
+    };
+    expect(continuityApprovalToolInputSchema.safeParse(incomplete).success).toBe(false);
+    expect(
+      continuityApprovalToolInputSchema.safeParse({ ...request, plan: { intentId: plan.intentId } })
+        .success,
+    ).toBe(false);
+    expect(() =>
+      continuityApprovalIntentId({ ...request, planRef: `untrusted/${plan.intentId}` }),
+    ).toThrow();
   });
 });

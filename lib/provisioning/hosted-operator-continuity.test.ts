@@ -720,3 +720,185 @@ describe("approved managed app continuity service", () => {
     }
   });
 });
+
+describe("continuity recovery preserves frozen plans", () => {
+  const recovered = () => {
+    const f = setup();
+    const rows = new Map<string, ContinuityRecord>();
+    f.deps.store = {
+      read: async ({ intentId }) => structuredClone(rows.get(intentId)),
+      reserve: async ({ record }) => {
+        if (!rows.has(record.requestId)) {
+          rows.set(record.requestId, structuredClone(record));
+        }
+        const saved = rows.get(record.requestId);
+        if (saved === undefined) {
+          throw new Error("Controlled record missing");
+        }
+        return structuredClone(saved);
+      },
+      compareAndSet: async ({ record, expectedRevision }) => {
+        if (rows.get(record.requestId)?.revision !== expectedRevision) {
+          // oxlint-disable-next-line unicorn/no-useless-undefined -- CAS conflicts explicitly return no row.
+          return undefined;
+        }
+        rows.set(record.requestId, structuredClone(record));
+        return structuredClone(record);
+      },
+    };
+    return { ...f, rows, operations: createHostedContinuityOperations(f.deps) };
+  };
+  it("creates a new exact approval for a corrected runtime and keeps the old plan", async () => {
+    const f = recovered();
+    const old = await f.operations.plan(context, selection.runtime, "old");
+    const runtime = {
+      ...selection.runtime,
+      root: "/workspace/recovered",
+      browserSelection: { testName: "@acceptance", workers: 1, retries: 0, maxFailures: 1 },
+    };
+    const next = await f.operations.plan(context, runtime, "recovery", {
+      predecessorIntentId: old.plan.intentId,
+    });
+    expect(next.plan.intentId).not.toBe(old.plan.intentId);
+    expect(next.plan.predecessorIntentId).toBe(old.plan.intentId);
+    expect(next.plan.runtime.browserSelection).toEqual(runtime.browserSelection);
+    expect(f.rows.get(old.plan.intentId)?.plan).toEqual(old.plan);
+    expect(f.rows.get(old.plan.intentId)?.supersededBy).toBe(next.plan.intentId);
+    expect(f.rows.get(next.plan.intentId)?.approval).toBeUndefined();
+    expect(await f.operations.approval(context, next.request)).toEqual({ approved: false });
+    await expect(f.operations.execute(context, old.request, "old-call")).rejects.toThrow(
+      "reconciliation_required",
+    );
+    expect(f.events).toEqual([]);
+    const repeated = await f.operations.plan(context, runtime, "recovery", {
+      predecessorIntentId: old.plan.intentId,
+    });
+    expect(repeated.request).toEqual(next.request);
+  });
+  it("refuses to replace an attempt with uncertain effects", async () => {
+    const f = recovered();
+    const old = await f.operations.plan(context, selection.runtime, "old");
+    const prior = f.rows.get(old.plan.intentId);
+    if (prior === undefined) {
+      throw new Error("Controlled record missing");
+    }
+    prior.state = "reconciliation-required";
+    await expect(
+      f.operations.plan(context, { ...selection.runtime, root: "/new" }, "recovery", {
+        predecessorIntentId: old.plan.intentId,
+      }),
+    ).rejects.toThrow("reconciliation_required");
+    expect(f.rows.size).toBe(1);
+  });
+  it.each([false, true])(
+    "rejects successor supersession when the original execution wins CAS (existing=%s)",
+    async (existing) => {
+      const f = recovered();
+      const old = await f.operations.plan(context, selection.runtime, "old-race");
+      const recovery = { predecessorIntentId: old.plan.intentId };
+      const runtime = { ...selection.runtime, root: "/recovered" };
+      const cas = f.deps.store.compareAndSet;
+      if (existing) {
+        f.deps.store.compareAndSet = async (input) =>
+          input.record.supersededBy === undefined ? await cas(input) : undefined;
+        await expect(
+          f.operations.plan(context, runtime, "successor-race", recovery),
+        ).rejects.toThrow("operation_in_progress");
+      }
+      const entered = Promise.withResolvers<boolean>();
+      const release = Promise.withResolvers<boolean>();
+      f.deps.store.compareAndSet = async (input) => {
+        if (input.record.supersededBy !== undefined) {
+          entered.resolve(true);
+          await release.promise;
+        }
+        return await cas(input);
+      };
+      const successor = f.operations.plan(context, runtime, "successor-race", recovery);
+      const rejected = expect(successor).rejects.toThrow("operation_in_progress");
+      await entered.promise;
+      f.approve();
+      await f.operations.execute(context, old.request, "original-call");
+      release.resolve(true);
+      await rejected;
+      expect(f.rows.get(old.plan.intentId)?.supersededBy).toBeUndefined();
+      expect(f.rows.get(old.plan.intentId)?.fence).toBe(1);
+      await expect(f.operations.plan(context, runtime, "successor-race", recovery)).rejects.toThrow(
+        "reconciliation_required",
+      );
+      expect(f.events.filter((event) => event === "dispatch-suite")).toHaveLength(1);
+    },
+  );
+  it("does not start the original runtime when successor supersession wins claim CAS", async () => {
+    const f = recovered();
+    const old = await f.operations.plan(context, selection.runtime, "old-claim-race");
+    f.approve();
+    await f.operations.approval(context, old.request);
+    const entered = Promise.withResolvers<boolean>();
+    const release = Promise.withResolvers<boolean>();
+    const cas = f.deps.store.compareAndSet;
+    f.deps.store.compareAndSet = async (input) => {
+      if (input.record.requestId === old.plan.intentId && input.record.state === "starting") {
+        entered.resolve(true);
+        await release.promise;
+      }
+      return await cas(input);
+    };
+    const execution = f.operations.execute(context, old.request, "original-call");
+    const rejected = expect(execution).rejects.toThrow("operation_in_progress");
+    await entered.promise;
+    const successor = await f.operations.plan(
+      context,
+      { ...selection.runtime, root: "/recovered" },
+      "successor-claim-race",
+      { predecessorIntentId: old.plan.intentId },
+    );
+    release.resolve(true);
+    await rejected;
+    expect(f.rows.get(old.plan.intentId)?.supersededBy).toBe(successor.plan.intentId);
+    expect(f.rows.get(old.plan.intentId)?.attemptId).toBeUndefined();
+    expect(f.events).toEqual([]);
+  });
+  it("retains original approval evidence but refuses it as successor authority", async () => {
+    const f = recovered();
+    const original = await f.operations.plan(context, selection.runtime, "approved-original");
+    f.approve();
+    await f.operations.approval(context, original.request);
+    const retained = structuredClone(f.rows.get(original.plan.intentId));
+    expect(retained?.approval).toBeDefined();
+    const successor = await f.operations.plan(
+      context,
+      { ...selection.runtime, root: "/recovered" },
+      "fresh-successor",
+      { predecessorIntentId: original.plan.intentId },
+    );
+    const originalAfter = f.rows.get(original.plan.intentId);
+    expect(originalAfter).toEqual({
+      ...retained,
+      revision: (retained?.revision ?? 0) + 1,
+      supersededBy: successor.plan.intentId,
+    });
+    vi.mocked(f.deps.readApproval).mockResolvedValue(retained?.approval ?? null);
+    await expect(
+      f.operations.execute(context, successor.request, "successor-call"),
+    ).rejects.toThrow("authorization_required");
+    expect(f.rows.get(successor.plan.intentId)?.approval).toBeUndefined();
+    expect(f.rows.get(successor.plan.intentId)?.attemptId).toBeUndefined();
+    expect(f.events).toEqual([]);
+  });
+  it("binds focused selection into the exact continuity approval", async () => {
+    const f = recovered();
+    const planned = await f.operations.plan(
+      context,
+      { ...selection.runtime, browserSelection: { testName: "@acceptance" } },
+      "focused",
+    );
+    const { continuityPlanDigest } = await import("./hosted-operator-continuity-contract");
+    expect(
+      continuityPlanDigest({
+        ...planned.plan,
+        runtime: { ...planned.plan.runtime, browserSelection: { testName: "another" } },
+      }),
+    ).not.toBe(planned.request.planDigest);
+  });
+});

@@ -34,6 +34,7 @@ export const continuityTransportRequestSchema = z.discriminatedUnion("action", [
   }),
   z.strictObject({
     action: z.literal("continuity-plan"),
+    predecessorIntentId: z.uuid().optional(),
     selection: operatorSelectionSchema,
     runtime: continuityRuntimeSelectionSchema,
     idempotencyKey: z.string().min(1),
@@ -123,7 +124,14 @@ export const createContinuityDispatcher =
       let result;
       switch (parsed.action) {
         case "continuity-plan": {
-          result = await operations.plan(context, parsed.runtime, parsed.idempotencyKey);
+          result = await operations.plan(
+            context,
+            parsed.runtime,
+            parsed.idempotencyKey,
+            parsed.predecessorIntentId === undefined
+              ? undefined
+              : { predecessorIntentId: parsed.predecessorIntentId },
+          );
           break;
         }
         case "continuity-read": {

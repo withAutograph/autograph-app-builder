@@ -1,5 +1,6 @@
 import { prepareDevelopmentEmulatedWeb } from "../lib/development/emulated-web";
 import { spawn } from "node:child_process";
+import type { HostedSessionConnection } from "../lib/development/dev-package";
 import type { ChildProcess } from "node:child_process";
 import { lstat, mkdir, mkdtemp, realpath } from "node:fs/promises";
 import nodePath from "node:path";
@@ -169,6 +170,7 @@ async function runEveCycle(input: {
   destinationRoot: string;
   installPlugin?: boolean;
   nextPort: number;
+  hostedSession?: HostedSessionConnection;
   evePort: number;
   signal: AbortSignal;
   shutdownExitCode: () => number;
@@ -230,6 +232,7 @@ async function runEveCycle(input: {
     const runtimeFingerprint = await fingerprintDevelopmentRuntime(repositoryRoot);
     const packageFingerprint = await developmentPackageFingerprint({
       origin: input.web?.origin,
+      hostedSession: input.hostedSession,
       port: input.nextPort,
       repositoryRoot,
     });
@@ -239,6 +242,7 @@ async function runEveCycle(input: {
     if (!packageReused) {
       input.packageState.result = await createDevelopmentPackage({
         origin: input.web?.origin,
+        hostedSession: input.hostedSession,
         outputRoot: input.codexRoot,
         port: input.nextPort,
         repositoryRoot,
@@ -362,6 +366,11 @@ async function runEveCycle(input: {
         "Connect a client to the loopback endpoint below. If plugin installation is enabled, select Autograph App Builder (Development) in a fresh Codex task.",
       );
       console.log(`Loopback endpoint: ${packageResult.receipt.endpoint}`);
+      if (input.hostedSession !== undefined) {
+        console.log(
+          `Existing-session connector: ${input.hostedSession.resourceUrl} (local native transport; hosted execution)`,
+        );
+      }
       return await Promise.race([eveExited, input.nextExited, stopping]);
     } finally {
       watchers.abort();
@@ -395,6 +404,15 @@ try {
     await realpath(await mkdtemp(nodePath.join(runsRoot, "supervisor-"))),
   );
   const packageState: DevelopmentSupervisorState = {};
+  const hostedSession: HostedSessionConnection | undefined =
+    args.hostedSessionResource === undefined
+      ? undefined
+      : {
+          resourceUrl: args.hostedSessionResource,
+          codexBin: args.hostedSessionCodexBin ?? requiredEnvironment("APP_BUILDER_DEV_CODEX_BIN"),
+          nodeBin: requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"),
+          cwd: await privateRoot(nodePath.join(stateRoot, "native-session-client")),
+        };
   const nextHome = await privateRoot(nodePath.join(stateRoot, "next-home"));
   const destinationRoot = await privateRoot(
     args.destinationRoot ?? nodePath.join(artifactRoot, "destination"),
@@ -453,6 +471,7 @@ try {
       installPlugin: args.installPlugin,
       nextExited,
       nextPort: args.nextPort,
+      hostedSession,
       packageState,
       runsRoot,
       resumeCycle: args.resumeCycle,

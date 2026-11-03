@@ -101,6 +101,36 @@ describe("development Codex package", () => {
     }
   });
 
+  it("uses native stdio for existing hosted sessions without a loopback OAuth resource", async () => {
+    const root = await realpath(await mkdtemp(path.join(tmpdir(), "autograph-native-package-")));
+    try {
+      const result = await createDevelopmentPackage({
+        repositoryRoot: path.resolve("."),
+        outputRoot: root,
+        port: 3210,
+        hostedSession: {
+          resourceUrl: "https://builder.example.test/mcp",
+          codexBin: "/tools/codex",
+          nodeBin: "/tools/node",
+          cwd: "/private/native-client",
+        },
+      });
+      const mcp = JSON.parse(await readFile(path.join(result.pluginRoot, ".mcp.json"), "utf-8"));
+      const server = mcp.mcpServers["app-builder-dev-3210-hosted"];
+      expect(server.type).toBe("stdio");
+      expect(server.command).toBe("/tools/node");
+      expect(server.args).toContain("https://builder.example.test/mcp");
+      expect(server.args).toContain("/tools/codex");
+      expect(server).not.toHaveProperty("oauth_resource");
+      expect(result.receipt).toMatchObject({
+        hostedSessionResource: "https://builder.example.test/mcp",
+        execution: "hosted",
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("installs development guidance without enabling it globally", async () => {
     const codexHome = await mkdtemp(path.join(tmpdir(), "codex-scope-"));
     const commands: {

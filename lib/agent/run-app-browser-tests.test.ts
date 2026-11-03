@@ -14,6 +14,53 @@ import { runAppBrowserTests as runResolvedAppBrowserTests } from "./app-browser-
 type SandboxRunOptions = Parameters<SandboxSession["run"]>[0];
 
 describe("private app browser tests", () => {
+  it("forwards the focused selection through the prepared hosted runtime", async () => {
+    const runTask = vi
+      .fn<PreparedRuntimeExecution["runTask"]>()
+      .mockResolvedValue({ exitCode: 0, stdout: "selected passed", stderr: "" });
+    const runtime: PreparedRuntimeExecution = {
+      environmentPath: "/private/environment.json",
+      stateDirectory: "/private",
+      installationProof: {
+        actors: 1,
+        appId: "spend-review",
+        artifactHash: "a".repeat(64),
+        authenticatedBehavior: "unassessed",
+        branch: "draft",
+        environment: "preview",
+        observation: "database-verification",
+        observedAt: "2026-10-20T00:00:00Z",
+        releaseId: "release",
+        tenants: 1,
+      },
+      prepareAuthenticatedOrigin: vi.fn(),
+      runTask,
+    };
+    const selection = { testName: "@acceptance", workers: 1, retries: 0, maxFailures: 1 };
+    const result = await runAppBrowserTests({
+      appId: "spend-review",
+      root: "/workspace/published",
+      sandbox: { run: vi.fn() },
+      runtime,
+      selection,
+    });
+    expect(result).toMatchObject({ status: "passed" });
+    expect(runTask).toHaveBeenCalledWith(
+      expect.objectContaining({ task: "test-e2e", browserSelection: selection }),
+    );
+  });
+  it("does not silently run the full local task for a requested focused selection", async () => {
+    const run = vi.fn();
+    const result = await runAppBrowserTests({
+      appId: "spend-review",
+      root: "/workspace/repository",
+      sandbox: { run },
+      selection: { testName: "@acceptance" },
+    });
+    expect(result).toMatchObject({ status: "failed", exitCode: null });
+    expect(result.problem).toContain("structured argument transport");
+    expect(run).not.toHaveBeenCalled();
+  });
   it.each([false, true])(
     "reuses prepared local state with explicit signal %s and preserves it across dependency recovery",
     async (withSignal) => {

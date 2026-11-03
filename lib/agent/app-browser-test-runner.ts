@@ -3,6 +3,8 @@ import path from "node:path";
 import { z } from "zod";
 import { localRuntimeEnvironmentPath } from "../repository/runtime-environment";
 import type { PreparedRuntimeExecution } from "./prepared-runtime-execution-core";
+import { browserTestSelectionSchema } from "./browser-test-selection";
+import type { BrowserTestSelection } from "./browser-test-selection";
 
 const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 
@@ -34,13 +36,17 @@ export const runAppBrowserTests = async (input: {
   signal?: AbortSignal;
   resolveRuntime?: () => Promise<PreparedRuntimeExecution | null>;
   runtime?: PreparedRuntimeExecution | null;
+  selection?: BrowserTestSelection;
   continuation?: {
     commandId?: string;
     commandCheckpoint: (commandId: string) => Promise<void>;
     allowDispatch: boolean;
   };
 }) => {
-  const command = appBrowserTestCommand(input.appId);
+  const selection =
+    input.selection === undefined ? undefined : browserTestSelectionSchema.parse(input.selection);
+  const command =
+    appBrowserTestCommand(input.appId) + (selection === undefined ? "" : " (focused selection)");
   try {
     const runtime = input.runtime ?? (input.resolveRuntime ? await input.resolveRuntime() : null);
     const runTask = async () => {
@@ -48,11 +54,17 @@ export const runAppBrowserTests = async (input: {
         return await runtime.runTask({
           signal: input.signal,
           task: "test-e2e",
+          ...(selection === undefined ? {} : { browserSelection: selection }),
           ...input.continuation,
           ...(runtime.browserTestBaseUrl === undefined
             ? {}
             : { environment: { APP_TEST_BASE_URL: runtime.browserTestBaseUrl } }),
         });
+      }
+      if (selection !== undefined) {
+        throw new Error(
+          "Focused browser selection requires a prepared runtime with structured argument transport.",
+        );
       }
       const env = {
         APP_RUNTIME_STATE_DIR: path.posix.dirname(

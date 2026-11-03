@@ -51,6 +51,8 @@ export type DevelopmentArguments = Readonly<{
   webKey?: string;
   webCa?: string;
   nextPort: number;
+  hostedSessionResource?: string;
+  hostedSessionCodexBin?: string;
   nextBundler?: "turbopack" | "webpack";
   evePort: number;
 }>;
@@ -111,7 +113,21 @@ const defaultStateRoot = (stateRoot: string | undefined, emulatedWeb = false) =>
     ? nodePath.join(tmpdir(), `autograph-development-${sha256(process.cwd()).slice(0, 12)}`)
     : undefined);
 
-// oxlint-disable-next-line eslint/complexity -- Each documented independent CLI option is parsed into a closed development-only configuration.
+const hostedSessionResource = (value: string): string => {
+  const resource = new URL(value);
+  if (
+    resource.protocol !== "https:" ||
+    resource.pathname !== "/mcp" ||
+    [resource.username, resource.password, resource.search, resource.hash].some(
+      (part) => part !== "",
+    )
+  ) {
+    throw new Error("Hosted session access requires a credential-free HTTPS /mcp resource.");
+  }
+  return resource.href;
+};
+
+// oxlint-disable-next-line eslint/complexity -- Each named development option validates only its own argument.
 export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentArguments => {
   const parsed: {
     arrustedRoot?: string;
@@ -124,6 +140,8 @@ export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentA
     webKey?: string;
     webCa?: string;
     nextPort: number;
+    hostedSessionResource?: string;
+    hostedSessionCodexBin?: string;
     nextBundler?: "turbopack" | "webpack";
     evePort: number;
   } = { evePort: 2000, nextPort: 3000 };
@@ -164,6 +182,17 @@ export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentA
       }
       case "--next-bundler": {
         parsed.nextBundler = parseNextBundler(value);
+        break;
+      }
+      case "--hosted-session-codex-bin": {
+        if (!isAbsolute(value)) {
+          throw new Error("--hosted-session-codex-bin must be absolute.");
+        }
+        parsed.hostedSessionCodexBin = value;
+        break;
+      }
+      case "--hosted-session-resource": {
+        parsed.hostedSessionResource = hostedSessionResource(value);
         break;
       }
       case "--next-port": {

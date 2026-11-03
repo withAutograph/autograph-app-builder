@@ -1,3 +1,4 @@
+/* oxlint-disable sonarjs/cognitive-complexity -- The private dispatcher handles recovery, cancellation, redaction and selected browser arguments together. */
 import type { HostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 /** Shared execution over approved private bindings; this module does not resolve agent state or define tools. */
 import type { Sandbox } from "@vercel/sandbox";
@@ -13,6 +14,8 @@ import { appDescriptionSchema } from "../repository/app-description";
 import { sanitizeValidationDiagnosticText } from "../repository/validation-output-sanitize";
 import { normalActorBrowserFiles } from "./normal-actor-browser-state";
 import type { NormalActorRuntimeProjection } from "../provisioning/hosted-operator-normal-actor-program";
+import { browserTestSelectionArguments } from "./browser-test-selection";
+import type { BrowserTestSelection } from "./browser-test-selection";
 
 type PreparedRuntimeMismatchStage =
   | "app-description-command"
@@ -97,6 +100,9 @@ export interface PreparedRuntimeExecution {
     commandCheckpoint?: (commandId: string) => Promise<void>;
     allowDispatch?: boolean;
     shard?: string;
+    browserSelection?: BrowserTestSelection;
+    /** Internal: a saved command uses the immutable approved continuity plan selection. */
+    frozenBrowserSelection?: true;
     /** Only after the selected compile task succeeded in this validation pass. */
     alreadyCompiled?: true;
     environment?: Readonly<Record<string, string | undefined>>;
@@ -377,9 +383,12 @@ export const restorePreparedRuntimeExecution = async (input: {
       await restore();
     },
     runTask: withPrivateTaskErrors(
+      // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- One private task dispatch preserves execution, redaction, cancellation and optional browser selection.
       async ({
         task,
         shard,
+        browserSelection,
+        frozenBrowserSelection,
         alreadyCompiled,
         environment,
         onChunk,
@@ -388,6 +397,16 @@ export const restorePreparedRuntimeExecution = async (input: {
         commandCheckpoint,
         allowDispatch,
       }) => {
+        if (browserSelection !== undefined && task !== "test-e2e") {
+          throw new Error("A browser selection is only supported for the browser test task.");
+        }
+        if (
+          browserSelection !== undefined &&
+          commandId !== undefined &&
+          frozenBrowserSelection !== true
+        ) {
+          throw new Error("A saved browser command cannot be resumed with a new test selection.");
+        }
         const command = await resolveTaskCommand(
           { commandId, commandCheckpoint, allowDispatch },
           {
@@ -399,6 +418,9 @@ export const restorePreparedRuntimeExecution = async (input: {
               input.appId,
               task,
               ...(shard !== undefined && shard !== "" ? [shard] : []),
+              ...(browserSelection === undefined
+                ? []
+                : browserTestSelectionArguments(browserSelection)),
             ],
             cmd: "/usr/bin/env",
             cwd: input.root,
