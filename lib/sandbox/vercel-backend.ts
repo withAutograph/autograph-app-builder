@@ -159,6 +159,55 @@ const shouldInitializeSeed = async (
   }
 };
 
+// Limit decoded bytes held for an upload, not the total seed tree or a file's size.
+const SEED_UPLOAD_BATCH_BYTES = 8 * 1024 * 1024;
+
+/* oxlint-disable eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Preserve retained-file probes and bounded upload backpressure in source order. */
+const initializeSeeds = async (input: {
+  native: Sandbox;
+  files: BuilderArtifact["files"];
+  homePath: string;
+  recovered: boolean;
+}) => {
+  const directories = new Set<string>();
+  const initialized = new Set<string>();
+  let batch: { path: string; content: Buffer }[] = [];
+  let bytes = 0;
+  let transferredFiles = 0;
+  const flush = async () => {
+    if (batch.length === 0) return;
+    await input.native.writeFiles(batch, {});
+    transferredFiles += batch.length;
+    console.info(JSON.stringify({ event: "autograph.sandbox.seed-transfer", transferredFiles }));
+    batch = [];
+    bytes = 0;
+  };
+  for (const file of input.files) {
+    const destination = path.posix.resolve(
+      "/workspace",
+      file.path.replace(/^\$HOME(?=\/|$)/u, input.homePath),
+    );
+    const preserveExisting =
+      input.recovered || destination === "/workspace" || destination.startsWith("/workspace/");
+    // Preserve the original sequential first-seed-wins behavior for retained paths.
+    if (preserveExisting && initialized.has(destination)) continue;
+    if (!(await shouldInitializeSeed(input.native, destination, preserveExisting))) continue;
+    const content = Buffer.from(file.content, "base64");
+    if (bytes + content.byteLength > SEED_UPLOAD_BATCH_BYTES) await flush();
+    const directory = path.posix.dirname(destination);
+    if (!directories.has(directory)) {
+      await input.native.fs.mkdir(directory, { recursive: true });
+      directories.add(directory);
+    }
+    batch.push({ content, path: destination });
+    initialized.add(destination);
+    bytes += content.byteLength;
+    if (bytes >= SEED_UPLOAD_BATCH_BYTES) await flush();
+  }
+  await flush();
+};
+/* oxlint-enable eslint/no-await-in-loop, react-doctor/async-await-in-loop */
+
 export const createBuilderVercelProvider = (
   options?: BuilderVercelEnvironmentOptions,
 ): SandboxProviderImplementation<
@@ -374,21 +423,7 @@ export const createBuilderVercelProvider = (
           throw new Error("Vercel Sandbox did not expose its managed home directory.");
         const homeOutput = await home.stdout();
         const homePath = homeOutput.trim();
-        const sandbox = createVercelSdkSession(native);
-        for (const file of artifact.files) {
-          const destination = sandbox.resolvePath(file.path.replace(/^\$HOME(?=\/|$)/u, homePath));
-          const workspaceSeed =
-            destination === "/workspace" || destination.startsWith("/workspace/");
-          // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Preserve existing files before this seed's sequential upload.
-          if (!(await shouldInitializeSeed(native, destination, recovered || workspaceSeed))) {
-            continue;
-          }
-          // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Sequential resource uploads keep provider backpressure for the complete tree.
-          await sandbox.writeBinaryFile({
-            content: Buffer.from(file.content, "base64"),
-            path: destination,
-          });
-        }
+        await initializeSeeds({ native, files: artifact.files, homePath, recovered });
         // Last initialization step: source stays on the mounted filesystem and
         // a retry can recognize its completed checkout without rewriting edits.
         if (source !== undefined) {

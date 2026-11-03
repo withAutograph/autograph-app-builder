@@ -111,6 +111,90 @@ describe("Builder Vercel provider", () => {
       );
     drives.list.mockReset().mockResolvedValue(listedDrives(driveFixture()));
   });
+  it("uploads multiple skill seeds together with their exact binary bytes and resolved paths", async () => {
+    const native = nativeFixture();
+    const files = seedStorage(native, []);
+    sdk.create.mockResolvedValue(native);
+    const binary = Buffer.from([0, 255, 3]);
+    const started = await createBuilderVercelProvider().start(context, undefined, {
+      files: [
+        { path: "$HOME/.agents/skills/a.md", content: binary.toString("base64") },
+        { path: "$HOME/.agents/skills/b.md", content: Buffer.from("second").toString("base64") },
+      ],
+    });
+    expect(files.get("/home/vercel/.agents/skills/a.md")).toEqual(binary);
+    expect(files.get("/home/vercel/.agents/skills/b.md")).toEqual(Buffer.from("second"));
+    expect(native.writeFiles).toHaveBeenCalledOnce();
+    expect(
+      native.fs.mkdir.mock.calls.filter(
+        ([directory]) => directory === "/home/vercel/.agents/skills",
+      ),
+    ).toHaveLength(1);
+    await started.handle.onSessionStop();
+  });
+
+  it("continues bounded uploads without limiting large files or the total tree", async () => {
+    const native = nativeFixture();
+    const files = seedStorage(native, []);
+    sdk.create.mockResolvedValue(native);
+    const large = Buffer.alloc(9 * 1024 * 1024, 7);
+    const started = await createBuilderVercelProvider().start(context, undefined, {
+      files: [
+        { path: "/workspace/first", content: Buffer.from("first").toString("base64") },
+        { path: "/workspace/large", content: large.toString("base64") },
+        { path: "/workspace/last", content: Buffer.from("last").toString("base64") },
+      ],
+    });
+    expect(files.get("/workspace/first")).toEqual(Buffer.from("first"));
+    const observedLarge = files.get("/workspace/large") ?? Buffer.alloc(0);
+    expect(observedLarge.byteLength).toBe(large.byteLength);
+    expect(createHash("sha256").update(observedLarge).digest("hex")).toBe(
+      createHash("sha256").update(large).digest("hex"),
+    );
+    expect(files.get("/workspace/last")).toEqual(Buffer.from("last"));
+    expect(native.writeFiles).toHaveBeenCalledTimes(3);
+    expect(native.writeFiles).toHaveBeenNthCalledWith(
+      3,
+      [{ path: "/workspace/last", content: Buffer.from("last") }],
+      {},
+    );
+    await started.handle.onSessionStop();
+  });
+
+  it("preserves the first workspace seed when the artifact repeats a retained destination", async () => {
+    const native = nativeFixture();
+    const files = seedStorage(native, []);
+    sdk.create.mockResolvedValue(native);
+    const started = await createBuilderVercelProvider().start(context, undefined, {
+      files: [
+        { path: "same", content: Buffer.from("first").toString("base64") },
+        { path: "/workspace/same", content: Buffer.from("second").toString("base64") },
+      ],
+    });
+    expect(files.get("/workspace/same")).toEqual(Buffer.from("first"));
+    await started.handle.onSessionStop();
+  });
+
+  it("does not return a ready handle before the seed batch upload finishes", async () => {
+    const native = nativeFixture();
+    const upload = Promise.withResolvers<null>();
+    native.writeFiles.mockReturnValue(upload.promise);
+    sdk.create.mockResolvedValue(native);
+    let ready = false;
+    const pending = (async () => {
+      const result = await createBuilderVercelProvider().start(context, undefined, {
+        files: [{ path: "/workspace/seed", content: Buffer.from("seed").toString("base64") }],
+      });
+      ready = true;
+      return result;
+    })();
+    await vi.waitFor(() => expect(native.writeFiles).toHaveBeenCalled());
+    expect(ready).toBe(false);
+    upload.resolve(null);
+    const started = await pending;
+    expect(ready).toBe(true);
+    await started.handle.onSessionStop();
+  });
   it("prepares public resource targets without contacting Vercel or capturing source bytes", async () => {
     const provider = createBuilderVercelProvider();
     const artifact = await provider.prepare({
