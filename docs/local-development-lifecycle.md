@@ -340,3 +340,24 @@ reads those same owner/session-bound pages after compute cleanup. Interrupted
 capture remains distinguishable from completed output. Hosted validation retains
 its authenticated PostgreSQL store. Diagnostic simulated-target fixtures do not
 publish app releases or stand in for hosted product qualification.
+
+## Explicit recovery of a stopped local cycle
+
+A Builder runtime edit does not automatically restart an active or waiting Eve
+session. To load a runtime repair while retaining that instance's actual saved
+sessions, stop only that instance and pass its printed `cycleRoot` to the same
+local entrypoint with its original explicit state root and separate ports:
+
+```sh
+mise run dev -- --arrusted-root /absolute/path/to/arrusted --next-port 3100 --eve-port 2100 --state-root /private/tmp/builder-a-state --destination-root /private/tmp/builder-a-apps --install-plugin false --resume-cycle /private/tmp/builder-a-state/state/runs/supervisor-EXAMPLE/cycle-EXAMPLE
+```
+
+Use the actual printed path. Recovery refuses a running listener, another state
+root, non-owned or linked runtime directories, and a concurrent recovery lease.
+It refreshes Builder application code while retaining the original `.eve`
+workflow history, local home and saved Sandbox association. It never copies a
+hosted checkpoint, changes an approval, starts a replacement app or replays a
+public request. Read the original session through `autograph_get` first, then
+continue it through ordinary public controls. If the installed Eve runtime
+cannot recover that history, preserve the original IDs and report the concrete
+failure; source tests alone do not establish successful recovery.

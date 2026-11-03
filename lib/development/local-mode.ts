@@ -44,6 +44,7 @@ export type DevelopmentArguments = Readonly<{
   arrustedRoot: string;
   stateRoot?: string;
   destinationRoot?: string;
+  resumeCycle?: string;
   emulatedWeb?: boolean;
   installPlugin?: boolean;
   webCertificate?: string;
@@ -110,11 +111,13 @@ const defaultStateRoot = (stateRoot: string | undefined, emulatedWeb = false) =>
     ? nodePath.join(tmpdir(), `autograph-development-${sha256(process.cwd()).slice(0, 12)}`)
     : undefined);
 
+// oxlint-disable-next-line eslint/complexity -- Each documented independent CLI option is parsed into a closed development-only configuration.
 export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentArguments => {
   const parsed: {
     arrustedRoot?: string;
     stateRoot?: string;
     destinationRoot?: string;
+    resumeCycle?: string;
     emulatedWeb?: boolean;
     installPlugin?: boolean;
     webCertificate?: string;
@@ -137,6 +140,10 @@ export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentA
       }
       case "--state-root": {
         parsed.stateRoot = value;
+        break;
+      }
+      case "--resume-cycle": {
+        parsed.resumeCycle = value;
         break;
       }
       case "--destination-root": {
@@ -186,6 +193,12 @@ export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentA
   }
   if (parsed.destinationRoot !== undefined && !isAbsolute(parsed.destinationRoot)) {
     throw new Error("--destination-root must be absolute.");
+  }
+  if (
+    parsed.resumeCycle !== undefined &&
+    (!isAbsolute(parsed.resumeCycle) || parsed.stateRoot === undefined)
+  ) {
+    throw new Error("--resume-cycle requires an absolute cycle path and explicit --state-root.");
   }
   parsed.stateRoot = defaultStateRoot(parsed.stateRoot, parsed.emulatedWeb);
   return { ...parsed, arrustedRoot: parsed.arrustedRoot };

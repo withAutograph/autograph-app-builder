@@ -24,6 +24,8 @@ Required:
 Options:
   --state-root PATH        Owner-only state and cache root. Defaults to
                            .artifacts/development.
+  --resume-cycle PATH      Explicitly reuse a stopped owner-bound cycle in this state root,
+                           retaining its saved Eve sessions while loading current Builder code.
   --destination-root PATH  Builder-owned generated-work root. Defaults to
                            .artifacts/development/destination.
   --install-plugin BOOL    Install in the active Codex profile (default true).

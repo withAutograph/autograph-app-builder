@@ -41,6 +41,8 @@ import { loopbackDevelopmentOrigin } from "../lib/mcp/browser-preview";
 import { rotateLocalEveCycleBinding } from "../lib/eve/local-cycle-binding";
 import { ensureLocalDevelopmentOidc } from "../lib/development/local-oidc-startup";
 
+import { resumeDevelopmentCycle } from "../lib/development/resume-cycle";
+
 const repositoryRoot = nodePath.resolve(".");
 const developmentTools = {
   bun: HOSTED_BUN_VERSION,
@@ -155,11 +157,12 @@ function eveWrapperEnvironment(input: {
   } satisfies NodeJS.ProcessEnv;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line eslint/func-style, eslint/complexity -- Explicit retained-cycle recovery shares the same owned process shutdown path.
 async function runEveCycle(input: {
   cycleFile: string;
   sourceRoot: string;
   runsRoot: string;
+  resumeCycle?: string;
   codexRoot: string;
   supervisorRoot: string;
   packageState: DevelopmentSupervisorState;
@@ -187,11 +190,16 @@ async function runEveCycle(input: {
   // any response stream owned by the child we are replacing.
   await rotateLocalEveCycleBinding(input.cycleFile);
   const cycleStartedAt = performance.now();
-  const cycle = await createDevelopmentCycle({
-    repositoryRoot,
-    supervisorRoot: input.supervisorRoot,
-  });
   const activeRun = await realpath(await mkdtemp(nodePath.join(input.runsRoot, "run-")));
+  const cycle =
+    input.resumeCycle === undefined
+      ? await createDevelopmentCycle({ repositoryRoot, supervisorRoot: input.supervisorRoot })
+      : await resumeDevelopmentCycle({
+          repositoryRoot,
+          runsRoot: input.runsRoot,
+          cycleRoot: input.resumeCycle,
+          evePort: input.evePort,
+        });
   try {
     const snapshot = await createDevelopmentSnapshot({
       runRoot: activeRun,
@@ -272,7 +280,7 @@ async function runEveCycle(input: {
           closed,
           runsRoot: input.runsRoot,
           runtimeHome: cycle.runtimeHome,
-          supervisorRoot: input.supervisorRoot,
+          supervisorRoot: nodePath.dirname(cycle.root),
           workflowData: cycle.workflowData,
         }),
         stdio: "inherit",
@@ -341,7 +349,7 @@ async function runEveCycle(input: {
           eveRestartMs: Math.round(performance.now() - cycleStartedAt),
           event: "autograph.local.eve-cycle",
           packageReused,
-          persistentEveStateReused: false,
+          persistentEveStateReused: input.resumeCycle !== undefined,
           snapshotDeltaBytes,
           snapshotDeltaFiles,
         }),
@@ -360,6 +368,9 @@ async function runEveCycle(input: {
       await waitForDevelopmentPortRelease(input.evePort);
     }
   } finally {
+    if ("release" in cycle) {
+      await cycle.release();
+    }
     await removeDevelopmentSnapshot(activeRun);
   }
 }
@@ -446,6 +457,7 @@ try {
       nextPort: args.nextPort,
       packageState,
       runsRoot,
+      resumeCycle: args.resumeCycle,
       shutdownExitCode: shutdown.exitCode,
       signal: shutdown.signal,
       sourceRoot,
