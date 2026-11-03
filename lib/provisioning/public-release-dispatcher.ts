@@ -1,3 +1,7 @@
+import {
+  PublicReleasePrerequisiteError,
+  publicReleasePrerequisiteResponse,
+} from "./public-release-prerequisite";
 import { isDeepStrictEqual } from "node:util";
 import { createPublicReleaseHandler } from "./public-release-handler";
 import type { PublicReleasePorts } from "./public-release-handler";
@@ -27,7 +31,7 @@ export const createPublicReleaseDispatcher =
   }) =>
   async (request: Request): Promise<Response> => {
     // oxlint-disable-next-line anti-slop/no-object-parameters -- The HTTP JSON boundary serializes only closed parsed plan/results or bounded codes.
-  const response = (value: object, status = 200) =>
+    const response = (value: object, status = 200) =>
       Response.json(value, {
         status,
         headers: { "cache-control": "no-store" },
@@ -81,7 +85,10 @@ export const createPublicReleaseDispatcher =
       );
       await assertCurrentOwner();
       return response(result);
-    } catch {
+    } catch (error) {
+      if (error instanceof PublicReleasePrerequisiteError) {
+        return response(publicReleasePrerequisiteResponse(error), 409);
+      }
       // Private transport, credentials, histories and provider messages never cross this boundary.
       return response({ code: "public_release_unavailable" }, 403);
     }

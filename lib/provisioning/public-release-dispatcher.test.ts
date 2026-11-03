@@ -1,3 +1,4 @@
+import { PublicReleasePrerequisiteError } from "./public-release-prerequisite";
 /* oxlint-disable unicorn/no-useless-undefined, unicorn/no-await-expression-member, eslint/require-await -- Promise mocks and direct HTTP assertions use the real asynchronous port contracts. */
 import { describe, expect, it, vi } from "vitest";
 import { createPublicReleaseDispatcher } from "./public-release-dispatcher";
@@ -75,6 +76,22 @@ describe("public release HTTP authority boundary", () => {
     expect(f.owner.assertCanonicalAppOwner.mock.invocationCallOrder[0]).toBeLessThan(
       f.createPorts.mock.invocationCallOrder[0],
     );
+    expect(f.ports.applyEffect).not.toHaveBeenCalled();
+  });
+  it("returns a bounded actionable prerequisite while keeping arbitrary internal errors private", async () => {
+    const f = fixture();
+    f.createPorts.mockRejectedValue(
+      new PublicReleasePrerequisiteError("same_project_auth_required"),
+    );
+    const result = await f.handler(
+      request({ ...common, action: "public-release-plan", appId: plan.selection.appId }),
+    );
+    expect(result.status).toBe(409);
+    expect(await result.json()).toMatchObject({
+      status: "blocked",
+      code: "same_project_auth_required",
+      authenticatedBehavior: "unassessed",
+    });
     expect(f.ports.applyEffect).not.toHaveBeenCalled();
   });
   it("rejects unverified workload before private composition", async () => {

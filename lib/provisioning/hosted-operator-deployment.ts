@@ -1,3 +1,5 @@
+import { createPublicReleaseDeployment } from "./public-release-deployment";
+import { createPostgresBuilderProvisionJournalStore } from "./postgres-journal";
 import {
   canReserveIdentityLink,
   isIdlePendingAccountCapture,
@@ -756,6 +758,7 @@ export const createHostedOperatorControlPlane = async (input: {
         installationId,
       });
     const owner = createHostedOperatorOwnerAuthority({
+      readProvisioning: createPostgresBuilderProvisionJournalStore(database).read,
       eve,
       journal: store,
       realmContinuation: {
@@ -3592,10 +3595,14 @@ export const createHostedOperatorControlPlane = async (input: {
     const nativeTargetPort: Pick<ProtectedHostedOperatorDependencies, "nativeTargetRequest"> = {
       nativeTargetRequest,
     };
+    const publicReleasePort: Pick<ProtectedHostedOperatorDependencies, "publicReleaseRequest"> = {
+      publicReleaseRequest: createPublicReleaseDeployment({ database, owner }),
+    };
     return {
       ...controlPlane,
       ...normalActors,
       ...nativeTargetPort,
+      ...publicReleasePort,
       exportRequest,
       continuityRequest,
       readNormalActorRuntimeBindings: createNormalActorRuntimeBindings(

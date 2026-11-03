@@ -1,3 +1,7 @@
+import {
+  publicReleasePrerequisiteResponseSchema,
+  PublicReleasePrerequisiteError,
+} from "../provisioning/public-release-prerequisite";
 import type { z } from "zod";
 import type { WorkflowStepToolContext } from "eve/tools";
 import { exactForwardedSessionAuthority } from "../hosted/session-authority";
@@ -61,6 +65,10 @@ export const publicReleaseClientForContext = async (ctx: WorkflowStepToolContext
       body: JSON.stringify(publicReleaseTransportRequestSchema.parse(input)),
     });
     ctx.abortSignal.throwIfAborted();
+    if (response.status === 409) {
+      const prerequisite = publicReleasePrerequisiteResponseSchema.parse(await response.json());
+      throw new PublicReleasePrerequisiteError(prerequisite.code);
+    }
     if (!response.ok) {
       throw new Error("public_release_unavailable");
     }

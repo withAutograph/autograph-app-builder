@@ -22,6 +22,11 @@ import {
   publicReleaseOperationRef,
 } from "../../../../../lib/provisioning/public-release-contract";
 
+import {
+  createPublicReleaseRuntimeConfigurationStore,
+  createFreshPublicAuthValues,
+} from "../../../../../lib/provisioning/public-release-runtime-configuration";
+
 const postgresFlag = process.argv.indexOf("--postgres-bin");
 const postgresBin = postgresFlag === -1 ? undefined : process.argv[postgresFlag + 1];
 if (postgresBin === undefined || !path.isAbsolute(postgresBin)) {
@@ -202,6 +207,70 @@ try {
   await assert.rejects(resumedCheckpoint.save({ ...observation, adapterSessionId: "foreign" }));
   await checkpoint.save({ ...observation, nextNativeIndex: 7 });
   await assert.rejects(resumedCheckpoint.save({ ...observation, nextNativeIndex: 8 }));
+  const privateTarget = {
+    authority,
+    appId: plan.selection.appId,
+    sessionId: plan.selection.sessionId,
+    projectId: plan.project.projectId,
+  };
+  const privateStore = createPublicReleaseRuntimeConfigurationStore({
+    target: privateTarget,
+    database: drizzle(writer, { schema }),
+    keyring: { tokenKey: Buffer.alloc(32, 9), tokenKeyVersion: "fixture-v1" },
+    assertCurrentOwner: checkpointInput.assertCurrentOwner,
+  });
+  const privateScope = {
+    authority,
+    appId: plan.selection.appId,
+    sessionId: plan.selection.sessionId,
+    projectId: plan.project.projectId,
+    runtimeOperationRef: plan.runtime.operationRef,
+    runtimePlanDigest: plan.runtime.planDigest,
+    releaseId: plan.runtime.releaseId,
+    publicOrigin: plan.publicOrigin,
+  };
+  const prepared = await privateStore.reserve(privateScope, () =>
+    createFreshPublicAuthValues({
+      appId: plan.selection.appId,
+      publicOrigin: plan.publicOrigin,
+      authResource: {
+        hostname: "ep-synthetic.aws.neon.tech",
+        port: 5432,
+        database: "isolated_auth",
+        schema: "public",
+        runtimeRole: "app_auth_runtime",
+        migratorRole: "auth_migrator",
+        neon: { projectId: "synthetic", branchId: "non-default" },
+      },
+      authRuntimeUrl:
+        "postgresql://app_auth_runtime:private-fixture-password@ep-synthetic.aws.neon.tech/isolated_auth?sslmode=verify-full",
+      productionDatabaseIdentity: "ep-production.aws.neon.tech/neondb",
+    }),
+  );
+  const privateValues = await privateStore.read(privateScope);
+  assert.ok(privateValues);
+  assert.equal(privateValues.BETTER_AUTH_URL, plan.publicOrigin);
+  assert.equal(privateValues.PLATFORM_AUTH_DEPLOYMENT_PROFILE, "isolated-development");
+  const repeated = await privateStore.reserve(privateScope, () => {
+    throw new Error("A retry must not rotate the private Auth seed");
+  });
+  assert.deepEqual(repeated, prepared);
+  const [privateRow] =
+    await admin`select record from public.builder_provisioning_journal where request_id=${prepared.configurationRef}`;
+  assert.equal(JSON.stringify(privateRow.record).includes(privateValues.BETTER_AUTH_SECRET), false);
+  assert.equal(
+    JSON.stringify(privateRow.record).includes(privateValues.PLATFORM_AUTH_DATABASE_URL),
+    false,
+  );
+  await assert.rejects(privateStore.read({ ...privateScope, projectId: "foreign" }));
+  await assert.rejects(
+    createPublicReleaseRuntimeConfigurationStore({
+      database: drizzle(writer, { schema }),
+      keyring: { tokenKey: Buffer.alloc(32, 8), tokenKeyVersion: "fixture-v1" },
+      target: privateTarget,
+      assertCurrentOwner: checkpointInput.assertCurrentOwner,
+    }).read(privateScope),
+  );
   const otherRef = randomUUID();
   await admin`INSERT INTO public.builder_provisioning_journal (issuer,audience,workspace_id,owner_user_id,request_id,request_digest,revision,state,record,created_at,updated_at) VALUES (${authority.issuer},${authority.audience},${authority.workspaceId},${authority.ownerUserId},${otherRef},${"f".repeat(64)},1,'pending',${JSON.stringify({ kind: "native-target-onboarding" })}::jsonb,now(),now())`;
   assert.equal(await store.read(authority, otherRef), undefined);
