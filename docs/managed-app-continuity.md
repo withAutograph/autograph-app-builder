@@ -22,6 +22,13 @@ plan and request through the separate `run-app-continuity-tests` approval.
 The human-visible plan is an echo; the operator's saved plan and exact
 owner-authenticated approval receipt provide authority.
 
+The model may submit only the compact saved-plan request (`action`, `planRef`,
+`planDigest`, `idempotencyKey`). The public confirmation must present that same
+request without requiring the model to reconstruct its full resource payload.
+Execution still reloads the owner-scoped canonical plan and verifies its exact
+request, digest and approval. A displayable confirmation does not grant authority
+or prove that the suite ran.
+
 Approval covers the named app/session, existing resources and actors, owned
 Sandbox process, temporary worker-asset transfer/disposal, one app-authored
 suite, and an isolated managed Gateway target with its normal refresh and
