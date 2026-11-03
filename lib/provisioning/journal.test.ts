@@ -98,7 +98,7 @@ describe("builder provisioning journal", () => {
     const secret = "private-credential-and-message";
     let postCount = 0;
     // SAFETY: This exercises only the selected Vercel branch; no GitHub dependency is read.
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Unused GitHub adapters are intentionally absent in this branch fixture.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- Only selected Vercel adapters are exercised; unused GitHub dependencies are intentionally absent in this branch fixture.
     const dependencies = {
       journal: store,
       // oxlint-disable-next-line eslint/require-await -- Promise-returning credential test double.
@@ -134,7 +134,7 @@ describe("builder provisioning journal", () => {
           ? Response.json({}, { status: 404 })
           : Response.json({ id: "unproven" });
       },
-    } as BuilderProvisioningDependencies;
+    } as unknown as BuilderProvisioningDependencies;
     const result = await executeBuilderProvisioning({
       authority,
       request: selected,
