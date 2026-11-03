@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from "node:util";
+import type { BuilderProvisionJournalStore } from "./journal";
 import { readParticipantSuccessorPredecessor } from "./hosted-operator-participant-successor";
 import { readUnapprovedCapturePredecessor } from "./hosted-operator-unapproved-capture-history";
 import { readAppGatewaySourcePredecessor } from "./hosted-operator-app-gateway-source-successor";
@@ -210,6 +212,7 @@ const readCurrentOwnedSession = async (
       adapterSessionId: current.adapterSessionId,
       nativeRecoveryBinding: currentBinding,
       privateBuildDecision: current.privateBuildDecision,
+      builderDestination: current.builderDestination,
       resumability: current.resumability,
       stage: current.stage,
       status: current.status,
@@ -660,17 +663,95 @@ const readCanonicalAppOwnerSession = async (
   return session;
 };
 
+type StandardDestinationDependencies = HostedOperatorAppOwnerDependencies &
+  Pick<HostedOperatorOwnerDependencies, "readVercelCredential" | "fetch" | "apiOrigin"> & {
+    readProvisioning?: BuilderProvisionJournalStore["read"];
+  };
+
+const readDirectStandardBuilderDestination = async (
+  deps: StandardDestinationDependencies,
+  input: HostedOperatorAppOwnerContext,
+) => {
+  const session = await readCanonicalAppOwnerSession(deps, input);
+  const reference = session.builderDestination;
+  if (reference === undefined || deps.readProvisioning === undefined) {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Explicit absent destination is part of this async result.
+    return undefined;
+  }
+  if (reference.appId !== input.target.appId) {
+    throw resourceMismatch();
+  }
+  const row = await deps.readProvisioning({
+    authority: input.authority,
+    requestId: reference.requestId,
+  });
+  if (
+    row === undefined ||
+    row.requestDigest !== reference.requestDigest ||
+    row.record.response.appId !== input.target.appId
+  ) {
+    throw resourceMismatch();
+  }
+  const project = row.record.response.vercel;
+  if (row.state !== "settled" || project.status !== "succeeded") {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- An unfinished journal is never a ready destination.
+    return undefined;
+  }
+  if (project.scope.type !== "team") {
+    throw resourceMismatch();
+  }
+  const access = await readOwnerVercelProjectAccess({
+    authority: input.authority,
+    projectId: project.projectId,
+    installationId: project.installationId,
+    expectedScope: { ...project.scope, installationId: project.installationId },
+    requireServicesRoot: true,
+    readCredential: deps.readVercelCredential,
+    ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
+    ...(deps.apiOrigin === undefined ? {} : { apiOrigin: deps.apiOrigin }),
+  });
+  if (access.status !== "ready" || access.project?.id !== project.projectId) {
+    throw resourceMismatch();
+  }
+  const current = await readCanonicalAppOwnerSession(deps, input);
+  const latest = await deps.readProvisioning({
+    authority: input.authority,
+    requestId: reference.requestId,
+  });
+  if (latest === undefined || latest.record.response.vercel.status !== "succeeded") {
+    throw unavailable();
+  }
+  const latestProject = latest.record.response.vercel;
+  const unchanged = [
+    isDeepStrictEqual(current.builderDestination, reference),
+    latest.requestDigest === reference.requestDigest,
+    latest.state === "settled",
+    latestProject.projectId === project.projectId,
+    latestProject.installationId === project.installationId,
+    latestProject.scope.id === project.scope.id,
+    latestProject.scope.type === project.scope.type,
+  ].every(Boolean);
+  if (!unchanged) {
+    throw unavailable();
+  }
+  return {
+    projectId: project.projectId,
+    teamId: project.scope.id,
+    installationId: project.installationId,
+    name: access.project.name,
+    repository: project.linkedGitHubRepository,
+  };
+};
+
 /** Only an existing normal Builder handoff receipt can identify this destination. */
 export const readStandardBuilderDestination = async (
-  deps: HostedOperatorAppOwnerDependencies &
-    Pick<HostedOperatorOwnerDependencies, "readVercelCredential" | "fetch" | "apiOrigin">,
+  deps: StandardDestinationDependencies,
   input: HostedOperatorAppOwnerContext,
 ) => {
   await readCanonicalAppOwnerSession(deps, input);
   const { owner } = ownerContextFromHint(input.ownerContext);
   if (owner.kind !== "handoff") {
-    // oxlint-disable-next-line unicorn/no-useless-undefined -- Explicit absence preserves the async destination result union.
-    return undefined;
+    return await readDirectStandardBuilderDestination(deps, input);
   }
   const readHandoff = async () => {
     const handoff = builderHandoffRecordSchema.parse(
@@ -691,7 +772,7 @@ export const readStandardBuilderDestination = async (
   const handoff = await readHandoff();
   const receipt = handoff.intent.provisioning;
   const project = receipt?.vercel;
-  if (project?.status !== "succeeded") {
+  if (receipt === undefined || project?.status !== "succeeded") {
     // oxlint-disable-next-line unicorn/no-useless-undefined -- Explicit absence preserves the async destination result union.
     return undefined;
   }

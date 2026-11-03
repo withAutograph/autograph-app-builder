@@ -28,6 +28,7 @@ different destination. An unknown public response must never be replayed or
 fabricated as settled. A provider 403 remains unexplained until independent
 evidence identifies its cause; selecting the correct product path is not proof
 that a protection setting caused or resolved that denial.
+
 ## Standard Builder destinations
 
 Deployment-owned configuration may explicitly select
@@ -48,10 +49,31 @@ a fabricated receipt. `builder_destination_configuration_required` means that
 the selected receipt does not yet have coherent deployment-owned same-project
 configuration. Neither case falls back to dedicated native target creation.
 
-This reader does not assemble Gateway deployment/domain metadata, generate a
-handoff for an existing direct session, or add Production runtime preparation.
-Those supported workflow capabilities are required before claiming public
-create/release acceptance; a hand-written configuration is not that proof.
+Saved direct sessions select a normal destination at
+`/builds/<session-id>/destination` using the existing GitHub/Vercel panels and an
+authenticated same-origin Server Action. The user selects the concrete accounts
+and repository and approves creating the app destination. The normal provisioner
+reserves its request first; an atomic owner-scoped session update then attaches
+only that request ID/digest/app reference before any provider POST. The private
+`builderDestination` field is not a successful receipt and never replaces the
+session or changes its auth principal, `sourceHandoffId`, or approval history. Reloads
+reuse the exact attached request. A different request conflicts rather than
+creating a second destination. Pending and unknown provisioning stays pending.
+
+Attachment requires the waiting session's exact adapter, generation,
+cancellation revision and checkpoint, with no current input or reserved/unknown
+native operation (including resume requests). Provider writes recheck the same
+owner and epoch through the normal provisioner's write-lease renewal, after
+credential and source work. A cancelled or changed build stops further dispatch.
+Recovery carries this reference through its existing verified lineage; it does
+not start a replacement product session. The operator reads the attached normal
+journal under current canonical ownership, accepts only settled success, and
+independently rechecks the actual project under the owner's installation.
+
+This reader does not assemble Gateway deployment/domain metadata or add
+Production runtime preparation. Those supported workflow capabilities are still
+required before claiming public create/release acceptance; a hand-written
+configuration is not that proof.
 
 ## Dedicated native Preview targets
 

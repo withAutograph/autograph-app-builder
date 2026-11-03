@@ -314,6 +314,8 @@ const readVercelProjectAccess = async (input: {
 export async function readOwnerVercelProjectAccess(input: {
   authority: Authority;
   projectId: string;
+  requireServicesRoot?: boolean;
+  expectedScope?: VercelScope;
   installationId: string;
   readCredential: (input: {
     authority: Authority;

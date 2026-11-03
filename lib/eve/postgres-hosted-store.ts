@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import {
+  attachBuilderDestinationRecord,
   isProvedSessionLimitResponse,
   isProvedResourceApprovalResponse,
   isProvedSendDelivery,
@@ -566,6 +567,52 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         { isolationLevel: "repeatable read", accessMode: "read only" },
       );
     },
+    async attachBuilderDestination(input) {
+      const principal = hostedPrincipalSchema.parse(input.principal);
+      return await database.transaction(async (transaction) => {
+        const current = await sessionById(transaction, principal, input.sessionId, true);
+        if (current === null) {
+          throw new Error(SESSION_NOT_FOUND);
+        }
+        const pending = await transaction
+          .select({ operationId: agentOperations.operationId })
+          .from(agentOperations)
+          .where(
+            and(
+              eq(agentOperations.issuer, principal.issuer),
+              eq(agentOperations.audience, principal.audience),
+              eq(agentOperations.workspaceId, principal.workspaceId),
+              eq(agentOperations.ownerUserId, principal.ownerUserId),
+              or(
+                eq(agentOperations.sessionId, input.sessionId),
+                sql`${agentOperations.record}->>'resumeSessionId' = ${input.sessionId}`,
+              ),
+              inArray(agentOperations.state, ["reserved", "submission_unknown"]),
+            ),
+          )
+          .limit(1);
+        if (pending.length !== 0) {
+          throw new Error("Builder destination selection requires settled session operations.");
+        }
+        const updated = attachBuilderDestinationRecord(current, input);
+        const rows = await transaction
+          .update(agentSessions)
+          .set(sessionValues(updated))
+          .where(
+            and(
+              sessionTenantPredicate(principal),
+              eq(agentSessions.sessionId, input.sessionId),
+              eq(agentSessions.updatedAt, new Date(current.updatedAtEpochMs)),
+            ),
+          )
+          .returning();
+        if (rows.length !== 1) {
+          throw new Error("Builder destination selection was not durable.");
+        }
+        return parseHostedSessionRow(rows[0]);
+      });
+    },
+
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async getSession(principalInput, sessionId) {
       const principal = hostedPrincipalSchema.parse(principalInput);

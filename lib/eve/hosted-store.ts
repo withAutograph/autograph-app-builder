@@ -1,3 +1,8 @@
+import { builderSessionDestinationSchema } from "../provisioning/builder-session-destination-contract";
+import type {
+  BuilderSessionDestination,
+  BuilderDestinationEpoch,
+} from "../provisioning/builder-session-destination-contract";
 import type { NativeSendReadObservation } from "./hosted-submission-diagnostic";
 import {
   nativeRecoveryDescriptorSchema,
@@ -283,6 +288,7 @@ export const durableHostedSessionRecordSchema = z
     resumability: publicSessionResumabilitySchema,
     sessionId: z.string().min(1).max(200),
     sourceHandoffId: z.string().uuid().optional(),
+    builderDestination: builderSessionDestinationSchema.optional(),
     stage: publicSessionStageSchema,
     status: sessionStatusSchema,
     title: z.string().min(1).max(200),
@@ -757,12 +763,17 @@ export const inheritRecoveryBuildDecision = (
     (sourceSequence === authoritySequence && sourceIsCurrentChild)
       ? sourceDecision
       : authorityDecision;
-  return latestDecision === undefined
-    ? child
-    : durableHostedSessionRecordSchema.parse({
-        ...toDurableHostedSessionRecord(child),
-        privateBuildDecision: recoveredBuildDecision(latestDecision, child),
-      });
+  const destination =
+    toDurableHostedSessionRecord(source).builderDestination ??
+    toDurableHostedSessionRecord(authority).builderDestination;
+  if (latestDecision === undefined && destination === undefined) return child;
+  return durableHostedSessionRecordSchema.parse({
+    ...toDurableHostedSessionRecord(child),
+    ...(latestDecision === undefined
+      ? {}
+      : { privateBuildDecision: recoveredBuildDecision(latestDecision, child) }),
+    ...(destination === undefined ? {} : { builderDestination: destination }),
+  });
 };
 export const unsettledSendAcknowledgementSchema = z.strictObject({
   operation: hostedOperationRecordSchema,
@@ -1108,7 +1119,56 @@ export type ReserveOperationResult = z.infer<typeof reserveOperationResultSchema
  * owner in the storage predicate. `settleSucceeded` must atomically persist an
  * optional new session and the terminal operation result.
  */
+/** Metadata-only selection; epoch fences do not settle or replay native operations. */
+export const attachBuilderDestinationRecord = (
+  value: HostedSessionRecord,
+  input: {
+    expected: BuilderDestinationEpoch;
+    destination: BuilderSessionDestination;
+    nowEpochMs: number;
+  },
+): DurableHostedSessionRecord => {
+  const current = toDurableHostedSessionRecord(value);
+  const destination = builderSessionDestinationSchema.parse(input.destination);
+  const matches = [
+    current.status === "waiting",
+    current.appId === destination.appId,
+    current.sourceHandoffId === undefined,
+    current.adapterSessionId === input.expected.adapterSessionId,
+    current.adapterGeneration === input.expected.adapterGeneration,
+    (current.cancellationRevision ?? 0) === input.expected.cancellationRevision,
+    (current.cancellationRevision ?? 0) === (current.resumedCancellationRevision ?? 0),
+    current.checkpointDigest === input.expected.checkpointDigest,
+    (current.checkpoint?.inputRequests?.length ?? 0) === 0,
+  ].every(Boolean);
+  if (!matches) throw new Error("Builder destination selection is stale or unavailable.");
+  const existing = current.builderDestination;
+  if (
+    existing !== undefined &&
+    [
+      existing.appId !== destination.appId,
+      existing.requestId !== destination.requestId,
+      existing.requestDigest !== destination.requestDigest,
+    ].some(Boolean)
+  ) {
+    throw new Error("Builder destination is already selected.");
+  }
+  return durableHostedSessionRecordSchema.parse({
+    ...current,
+    builderDestination: destination,
+    updatedAtEpochMs: Math.max(current.updatedAtEpochMs, input.nowEpochMs),
+  });
+};
+
 export interface HostedEveStore {
+  attachBuilderDestination?: (input: {
+    principal: HostedPrincipal;
+    sessionId: string;
+    expected: BuilderDestinationEpoch;
+    destination: BuilderSessionDestination;
+    nowEpochMs: number;
+  }) => Promise<HostedSessionRecord>;
+
   getPrivateOperation?: (
     principal: HostedPrincipal,
     operationId: string,
@@ -1885,6 +1945,26 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       settledCount += 1;
     }
     return settledCount;
+  }
+
+  async attachBuilderDestination(
+    input: Parameters<NonNullable<HostedEveStore["attachBuilderDestination"]>>[0],
+  ) {
+    const key = InMemoryHostedEveStore.sessionKey(input.principal, input.sessionId);
+    const current = this.sessions.get(key);
+    if (current === undefined) throw new Error(SESSION_NOT_FOUND);
+    const pending = [...this.operations.values()].some(
+      (operation) =>
+        tenantKeyFor(operation.principal) === tenantKeyFor(input.principal) &&
+        (operation.sessionId === input.sessionId ||
+          operation.resumeSessionId === input.sessionId) &&
+        ["reserved", "submission_unknown"].includes(operation.state),
+    );
+    if (pending)
+      throw new Error("Builder destination selection requires settled session operations.");
+    const updated = attachBuilderDestinationRecord(current, input);
+    this.sessions.set(key, structuredClone(updated));
+    return await Promise.resolve(structuredClone(updated));
   }
 
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract

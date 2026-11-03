@@ -1,3 +1,4 @@
+import { createPostgresBuilderProvisionJournalStore } from "./postgres-journal";
 import { z } from "zod";
 import { resolveNativeTargetResourceProfile } from "./native-target-resource-profile";
 import postgres from "postgres";
@@ -275,6 +276,7 @@ export const openNativeTargetConfigurationResources = async (
         readStandardBuilderDestination(
           {
             ...ownerDependencies,
+            readProvisioning: createPostgresBuilderProvisionJournalStore(database).read,
             readVercelCredential: (credential) =>
               readActiveVercelInstallationToken({
                 ...credential,

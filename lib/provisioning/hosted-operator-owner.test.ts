@@ -1,3 +1,5 @@
+import { initialBuilderProvisionJournalRecord } from "./journal";
+import type { BuilderProvisionJournalRow } from "./journal";
 import { nativeDeliveryForEvents } from "../eve/native-delivery-state";
 import type { ApprovedBuildDecision } from "../agent/approved-build-continuation";
 import { createAppGatewaySourceSuccessorPlan } from "./hosted-operator-app-gateway-source-successor";
@@ -3457,5 +3459,94 @@ describe("normal Builder destination authority", () => {
       );
     });
     await expect(read(f)).rejects.toMatchObject({ code: "authorization_required" });
+  });
+});
+
+describe("attached direct-session standard destination", () => {
+  const fixture = async () => {
+    const f = makeFixture();
+    const handoff = await f.handoffs.read({ authority: ownerContext.authority, handoffId });
+    if (handoff?.intent.provisioning === undefined) {
+      throw new Error("Expected normal fixture receipt");
+    }
+    const receipt = handoff.intent.provisioning;
+    delete f.currentSession.sourceHandoffId;
+    f.currentSession.builderDestination = {
+      appId: selection.appId,
+      requestId: receipt.requestId,
+      requestDigest: receipt.requestDigest,
+    };
+    const row: BuilderProvisionJournalRow = {
+      authority: ownerContext.authority,
+      requestId: receipt.requestId,
+      requestDigest: receipt.requestDigest,
+      state: "settled",
+      revision: 3,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      record: {
+        ...initialBuilderProvisionJournalRecord(
+          {
+            version: 1,
+            appName: "Vendor Onboarding",
+            operation: "vercel",
+            requestId: receipt.requestId,
+            repository: { name: "vendor-onboarding", private: true },
+            providers: { vercelInstallationId: "icfg_1" },
+          },
+          new Date(),
+        ),
+        response: receipt,
+      },
+    };
+    const readProvisioning = vi.fn(async () => await Promise.resolve(row));
+    const read = () =>
+      readStandardBuilderDestination(
+        { ...f, workloadPolicy, readProvisioning, apiOrigin: "https://vercel.example" },
+        {
+          authority: ownerContext.authority,
+          ownerContext: directOwnerContext,
+          target: { appId: selection.appId, sessionId: ownerContext.sessionId },
+        },
+      );
+    f.fetch.mockImplementation(
+      async () =>
+        await Promise.resolve(
+          Response.json({
+            id: selection.projectId,
+            accountId: "team_1",
+            name: "apps-vendor-onboarding",
+            framework: "services",
+            rootDirectory: ".",
+          }),
+        ),
+    );
+    return { f, row, read, readProvisioning };
+  };
+
+  it("uses the actual attached normal receipt without rewriting source handoff or history", async () => {
+    const x = await fixture();
+    await expect(x.read()).resolves.toMatchObject({
+      projectId: selection.projectId,
+      teamId: "team_1",
+      installationId: "icfg_1",
+    });
+    expect(x.f.currentSession.sourceHandoffId).toBeUndefined();
+    expect(x.f.handoffs.read).toHaveBeenCalledOnce();
+    expect(x.f.fetch).toHaveBeenCalledOnce();
+  });
+
+  it("does not treat a pending reserved reference as provider success", async () => {
+    const x = await fixture();
+    x.row.state = "pending";
+    await expect(x.read()).resolves.toBeUndefined();
+    expect(x.f.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a different journal digest before any provider inspection", async () => {
+    const x = await fixture();
+    x.row.requestDigest = "f".repeat(64);
+    await expect(x.read()).rejects.toMatchObject({ code: "resource_mismatch" });
+    expect(x.f.fetch).not.toHaveBeenCalled();
   });
 });

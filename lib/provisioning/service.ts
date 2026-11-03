@@ -38,6 +38,8 @@ interface VercelCredential {
 }
 
 export interface BuilderProvisioningDependencies {
+  /** Current saved-session owner/epoch, checked again by each provider write lease. */
+  assertCurrent?: () => Promise<void>;
   journal: BuilderProvisionJournalStore;
   githubInstallations: HostedGitHubInstallationStore;
   githubCredentials: GitHubUserCredentialStore;
@@ -119,6 +121,7 @@ export async function executeBuilderProvisioning(input: {
 
   let leaseFailure: Error | undefined;
   const renewLease = async () => {
+    await input.dependencies.assertCurrent?.();
     if (leaseFailure) {
       throw leaseFailure;
     }
@@ -136,6 +139,7 @@ export async function executeBuilderProvisioning(input: {
         return current;
       },
     });
+    await input.dependencies.assertCurrent?.();
   };
   const tick = async () => {
     try {
