@@ -1,3 +1,4 @@
+import { gatewayDeliverySourceForPlan } from "./hosted-operator-gateway-delivery-source";
 import { createParticipantSuccessorPlan } from "./hosted-operator-participant-successor";
 import { inspectUnapprovedAppSuccessor } from "./hosted-operator-unapproved-app-successor";
 import { createUnapprovedParticipantPlan } from "./hosted-operator-unapproved-participant-plan";
@@ -157,26 +158,7 @@ const AUTH_MEMBERSHIP = "auth-membership";
 const AUTH_SIGNUP_POLICY = "auth-signup-policy";
 const OPERATION_IN_PROGRESS = "operation_in_progress";
 const RECONCILIATION_REQUIRED = "reconciliation_required";
-const gatewayDeliverySourceForPlan = (
-  configuration: HostedOperatorSourceConfiguration,
-  currentPlan?: HostedOperatorPlan,
-): AppGatewayDeliverySource & { gitSha: string } => {
-  const publishedSha =
-    currentPlan?.stage === "app" && currentPlan.delivery?.repoId === configuration.gateway.repoId
-      ? currentPlan.delivery.gitSha
-      : undefined;
-  const frozenBootstrapSource =
-    currentPlan?.stage !== "app" && currentPlan?.gatewayDelivery?.gitRef !== undefined
-      ? currentPlan.gatewayDelivery
-      : undefined;
-  return {
-    branch: configuration.gateway.branch,
-    ...(frozenBootstrapSource === undefined ? {} : { gitRef: frozenBootstrapSource.gitRef }),
-    gitSha: publishedSha ?? frozenBootstrapSource?.gitSha ?? configuration.gateway.gitSha,
-    projectId: configuration.gateway.projectId,
-    repoId: configuration.gateway.repoId,
-  };
-};
+
 const publishedGatewayDeliverySource = (
   configuration: HostedOperatorSourceConfiguration,
   selection: CompiledOperatorReleaseSelection | undefined,

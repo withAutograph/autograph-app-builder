@@ -1,3 +1,4 @@
+import { gatewayDeliverySourceForPlan } from "./hosted-operator-gateway-delivery-source";
 import {
   canReserveIdentityLink,
   isIdlePendingAccountCapture,
@@ -2521,12 +2522,7 @@ export const createHostedOperatorControlPlane = async (input: {
       const bootstrap = inspectPlanningParticipantBootstrap(
         {
           ...operator.plan,
-          gatewayDelivery: {
-            branch: configuration.gateway.branch,
-            gitSha: configuration.gateway.gitSha,
-            projectId: configuration.gateway.projectId,
-            repoId: configuration.gateway.repoId,
-          },
+          gatewayDelivery: gatewayDeliverySourceForPlan(configuration, operator.plan),
         },
         current.record,
       );
@@ -2586,12 +2582,7 @@ export const createHostedOperatorControlPlane = async (input: {
         const bindings = preparation.accountPlan.gatewayBindings;
         const desired = {
           ...known.operator.plan,
-          gatewayDelivery: {
-            branch: configuration.gateway.branch,
-            gitSha: configuration.gateway.gitSha,
-            projectId: configuration.gateway.projectId,
-            repoId: configuration.gateway.repoId,
-          },
+          gatewayDelivery: gatewayDeliverySourceForPlan(configuration, known.operator.plan),
         };
         const bootstrap = inspectPlanningParticipantBootstrap(desired, known.record);
         if (
