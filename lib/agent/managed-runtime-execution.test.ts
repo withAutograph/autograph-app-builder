@@ -15,6 +15,7 @@ import type {
 } from "./managed-runtime-execution";
 import type { RuntimeCommand } from "./prepared-runtime-execution";
 import { managedRuntimeEntryInputSchema } from "./managed-runtime-entry";
+import { createManagedRuntimeWorkerAsset } from "./managed-runtime-worker-asset";
 import {
   createPrivateManagedRuntimeCapabilities,
   managedRuntimePublicProfileSchema,
@@ -301,15 +302,7 @@ const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
     domain: () => "https://controlled-sandbox.vercel.run",
     runCommand: vi.fn<ManagedRuntimeSandboxPort["runCommand"]>(async (input) => {
       if (input.cmd === "sha256sum") {
-        const selected = input.args[1];
-        const bytes = selected === undefined ? undefined : files.get(selected);
-        return makeCommand(
-          "hash-command",
-          bytes === undefined
-            ? ""
-            : `${createHash("sha256").update(bytes).digest("hex")}  ${selected}`,
-          bytes === undefined ? 1 : 0,
-        );
+        return makeCommand("hash-command", "");
       }
       if (input.cmd === worker.executablePath) {
         const inputPath = input.args[2];
@@ -378,15 +371,45 @@ const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
       }),
     },
   };
+  let sourceName = "";
+  let sourceBytes: Buffer = workerBytes;
+  let sourceCreates = 0;
+  const source = {
+    get name() {
+      return sourceName;
+    },
+    readFileToBuffer: vi.fn(async () => sourceBytes),
+    stop: vi.fn(async () => {}),
+    delete: vi.fn(async () => {}),
+  };
+  const installer = {
+    ...worker,
+    operationScope: "generated-app-release-install-v1",
+    subcommand: "protected-generated-app-install",
+  } as const;
+  const asset = createManagedRuntimeWorkerAsset({
+    configuration: {
+      projectId: "operator-project",
+      teamId: "operator-team",
+      source: { type: "snapshot", snapshotId: "controlled-worker-source" },
+      accessWorker: installer,
+      authWorker: installer,
+      resourcesWorker: installer,
+      workers: {},
+      authProposal: installer,
+    },
+    token: async () => "controlled-operator-host-oidc",
+    create: async (options) => {
+      sourceCreates += 1;
+      sourceName = options?.name ?? "";
+      return source;
+    },
+  });
   const deps: ManagedRuntimeExecutionDependencies = {
     worker,
     installWorkerAsset: vi.fn<ManagedRuntimeExecutionDependencies["installWorkerAsset"]>(
       async (input) => {
-        await input.assertCurrent();
-        await input.target.writeFiles([
-          { path: input.descriptor.executablePath, content: workerBytes, mode: 0o700 },
-        ]);
-        await input.checkpoint({ installed: true, disposed: true });
+        await asset.install(input);
       },
     ),
     disposeWorkerAsset: vi.fn<ManagedRuntimeExecutionDependencies["disposeWorkerAsset"]>(
@@ -438,6 +461,11 @@ const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
     start,
     workerCommand,
     suiteCommand,
+    source,
+    readSourceCreates: () => sourceCreates,
+    setSourceBytes: (bytes: Buffer) => {
+      sourceBytes = bytes;
+    },
     read: () => structuredClone(record),
     replace: (next: ContinuityRecord) => {
       record = continuityRecordSchema.parse(next);
@@ -455,6 +483,79 @@ const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
 };
 
 describe("managed runtime execution through supported SDK ports", () => {
+  it("launches the verified worker without depending on checksum command stdout", async () => {
+    const f = setup();
+    await f.start();
+    expect(f.files.get(worker.executablePath)).toEqual(workerBytes);
+    expect(f.read().current?.state).toBe("ready");
+    expect(f.source.delete).toHaveBeenCalledWith({ deleteOrphanSnapshots: false });
+    expect(f.provider.runCommand).not.toHaveBeenCalledWith(
+      expect.objectContaining({ cmd: "sha256sum" }),
+    );
+  });
+  it("refuses wrong worker bytes before dispatch and retries the same intent after owned cleanup", async () => {
+    const f = setup();
+    f.setSourceBytes(Buffer.from("wrong worker"));
+    await expect(f.start()).rejects.toMatchObject({ code: "resource_mismatch" });
+    const failed = f.read();
+    expect(failed.locator?.dispatchAttempted).not.toBe(true);
+    expect(failed.locator?.commandId).toBeUndefined();
+    expect(failed.workerAsset).toMatchObject({ installed: false, disposed: true });
+    expect(f.source.delete).toHaveBeenCalledWith({ deleteOrphanSnapshots: false });
+    expect(f.provider.runCommand).not.toHaveBeenCalled();
+    await f.runtime.close(context, failed, async () => {});
+    f.setSourceBytes(workerBytes);
+    await f.start();
+    expect(f.read()).toMatchObject({
+      requestId: failed.requestId,
+      attemptId: failed.attemptId,
+      fence: failed.fence,
+      current: { state: "ready" },
+      locator: { commandId: "runtime-command" },
+    });
+    await f.start();
+    expect(f.provider.runCommand).toHaveBeenCalledTimes(1);
+    await f.runtime.close(context, f.read(), async () => {});
+    expect(f.workerCommand.kill).toHaveBeenCalledWith("SIGTERM");
+    expect(f.suiteCommand.kill).not.toHaveBeenCalled();
+  });
+  it("resumes the same verified setup after a pre-dispatch interruption without another source VM or worker dispatch", async () => {
+    const f = setup();
+    vi.mocked(f.deps.readExecution).mockRejectedValueOnce(new Error("Interrupted after setup"));
+    await expect(f.start()).rejects.toThrow("Interrupted after setup");
+    const interrupted = f.read();
+    expect(interrupted.workerAsset).toMatchObject({ installed: true, disposed: true });
+    expect(interrupted.locator?.dispatchAttempted).not.toBe(true);
+    expect(interrupted.locator?.commandId).toBeUndefined();
+    expect(f.provider.runCommand).not.toHaveBeenCalled();
+    expect(f.readSourceCreates()).toBe(1);
+    await f.runtime.close(context, interrupted, async () => {});
+    await f.start();
+    expect(f.read()).toMatchObject({
+      requestId: interrupted.requestId,
+      attemptId: interrupted.attemptId,
+      fence: interrupted.fence,
+      locator: { ...interrupted.locator, commandId: "runtime-command" },
+      current: { state: "ready" },
+    });
+    expect(f.readSourceCreates()).toBe(1);
+    expect(f.source.delete).toHaveBeenCalledTimes(1);
+    await f.start();
+    expect(f.provider.runCommand).toHaveBeenCalledTimes(1);
+  });
+  it("refuses altered target readback before worker launch and cleans its owned source", async () => {
+    const f = setup();
+    vi.mocked(f.provider.writeFiles).mockImplementation(async (writes) => {
+      for (const file of writes) {
+        f.files.set(file.path, Buffer.from("corrupted target"));
+      }
+    });
+    await expect(f.start()).rejects.toMatchObject({ code: "reconciliation_required" });
+    expect(f.provider.runCommand).not.toHaveBeenCalled();
+    expect(f.read().workerAsset?.installed).not.toBe(true);
+    expect(f.read().workerAsset?.disposed).toBe(true);
+    expect(f.source.delete).toHaveBeenCalledWith({ deleteOrphanSnapshots: false });
+  });
   it("rejects stale ready metadata from a terminal retained runtime before any new suite dispatch", async () => {
     const f = setup();
     await f.start();
