@@ -4,7 +4,10 @@ import { expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createPublicReleaseVercelProvider } from "./public-release-vercel-provider";
 import type { PublicReleaseVercelDependencies } from "./public-release-vercel-provider";
-import type { PublicReleaseEffectContext } from "./public-release-handler";
+import { createPublicReleaseHandler } from "./public-release-handler";
+import type { PublicReleaseRow, PublicReleaseEffectContext } from "./public-release-handler";
+import { initialPublicReleaseRecord } from "./public-release-store";
+import { publicReleaseOperationRef } from "./public-release-contract";
 import { plan as basePlan } from "./public-release-test-fixture";
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -122,7 +125,8 @@ const fixture = () => {
     throw new Error("Unexpected provider route");
   });
   const deps: PublicReleaseVercelDependencies = {
-    assertCurrent: vi.fn().mockResolvedValue(),
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Vitest requires an explicit void fulfillment value.
+    assertCurrent: vi.fn().mockResolvedValue(undefined),
     readCredential: vi.fn().mockResolvedValue({
       token: "synthetic-private-provider-token",
       binding: {
@@ -287,7 +291,8 @@ it("does not claim delivery when the public alias points at another project", as
 
 it("keeps deployment readiness pending when the installed app release is unproved", async () => {
   const f = fixture();
-  vi.mocked(f.deps.readDeliveredRelease).mockResolvedValue();
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing installed release proof is distinct from a provider-ready result.
+  vi.mocked(f.deps.readDeliveredRelease).mockResolvedValue(undefined);
   expect(await f.provider.observe(f.invocation, f.plan)).toEqual({ status: "pending" });
 });
 
@@ -360,4 +365,112 @@ it("refuses a production binding shared with a custom environment before any wri
     "public_release_provider_mismatch",
   );
   expect(f.writes).toHaveLength(0);
+});
+
+it.each([
+  [
+    JSON.stringify({ error: { code: "forbidden", message: "private-token-should-never-persist" } }),
+    "iad1::request_123",
+    { statusCode: 403, code: "forbidden", requestRef: "iad1::request_123" },
+  ],
+  [
+    JSON.stringify({
+      error: { code: "private-arbitrary-code", message: "private-token-should-never-persist" },
+    }),
+    "https://private.example/secret",
+    { statusCode: 403 },
+  ],
+  [
+    "not-json-private-token-should-never-persist",
+    "iad1::request_123",
+    { statusCode: 403, requestRef: "iad1::request_123" },
+  ],
+  ["x".repeat(20_000), "iad1::request_123", { statusCode: 403, requestRef: "iad1::request_123" }],
+])(
+  "projects only bounded allowlisted facts from a provider rejection",
+  async (body, requestRef, diagnostic) => {
+    const f = fixture();
+    f.fetcher.mockResolvedValue(
+      new Response(body, {
+        status: 403,
+        headers: { "x-vercel-id": requestRef },
+      }),
+    );
+    await expect(f.provider.observe(f.invocation, f.plan)).rejects.toMatchObject({
+      name: "PublicReleaseProviderError",
+      diagnostic,
+    });
+  },
+);
+
+it("persists the actual adapter rejection with the pending key and never retries an uncertain dispatch", async () => {
+  const f = fixture();
+  let row: PublicReleaseRow | undefined;
+  const originalFetch = f.fetcher.getMockImplementation();
+  if (originalFetch === undefined) {
+    throw new Error("Missing test provider");
+  }
+  let posts = 0;
+  f.fetcher.mockImplementation(async (url, init) => {
+    if (init?.method === "POST") {
+      posts += 1;
+      return Response.json(
+        { error: { code: "forbidden", message: "private-provider-payload" } },
+        {
+          status: 403,
+          headers: { "x-vercel-id": "iad1::denial_123" },
+        },
+      );
+    }
+    return await originalFetch(url, init);
+  });
+  const handler = createPublicReleaseHandler({
+    store: {
+      async reserve(plan) {
+        row ??= {
+          operationRef: publicReleaseOperationRef(plan),
+          revision: 1,
+          record: initialPublicReleaseRecord(plan),
+        };
+        return structuredClone(row);
+      },
+      async read() {
+        return row === undefined ? undefined : structuredClone(row);
+      },
+      async compareAndSet(prior, record) {
+        if (row?.revision !== prior.revision) {
+          // oxlint-disable-next-line unicorn/no-useless-undefined -- A stale durable compare-and-set returns no record.
+          return undefined;
+        }
+        row = { ...row, record, revision: row.revision + 1 };
+        return structuredClone(row);
+      },
+    },
+    resolve: async () => f.plan,
+    assertAuthorized: async () => {},
+    assertApproved: async () => {},
+    withTargetLease: async (_invocation, _plan, run) => await run(),
+    reconcileEffect: async (context) => await f.provider.reconcileBindings(context),
+    applyEffect: async (context) => {
+      await f.provider.bindRuntime(context);
+    },
+    observe: async () => ({ status: "pending" }),
+  });
+  const selected = await handler.plan(f.invocation, f.plan.selection.appId);
+  await expect(
+    handler.release(f.invocation, selected.operationRef, selected.planDigest),
+  ).rejects.toThrow("public_release_provider_rejected");
+  expect(row?.record).toMatchObject({
+    bindings: { APP_DATABASE_URL: { state: "pending" } },
+    effects: { "bind-production-runtime": "pending", "publish-release-source": "idle" },
+    lastProviderFailure: {
+      phase: "bind-production-runtime",
+      diagnostic: { statusCode: 403, code: "forbidden", requestRef: "iad1::denial_123" },
+    },
+  });
+  expect(JSON.stringify(row)).not.toContain("private-provider-payload");
+  expect(
+    await handler.release(f.invocation, selected.operationRef, selected.planDigest),
+  ).toMatchObject({ status: "reconciliation-required" });
+  expect(posts).toBe(1);
 });

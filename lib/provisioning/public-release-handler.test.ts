@@ -7,6 +7,7 @@ import {
   publicReleaseOperationRef,
 } from "./public-release-contract";
 import type { PublicReleaseRecord } from "./public-release-contract";
+import { PublicReleaseProviderError } from "./public-release-provider-error";
 import { createPublicReleaseHandler } from "./public-release-handler";
 import type {
   PublicReleaseRow,
@@ -236,4 +237,23 @@ describe("public app release lifecycle", () => {
       }).success,
     ).toBe(false);
   });
+});
+
+it("records observation failures without changing completed effects or claiming readiness", async () => {
+  const f = fixture();
+  vi.mocked(f.ports.observe).mockRejectedValue(
+    new PublicReleaseProviderError({ statusCode: 403, code: "forbidden" }),
+  );
+  const ctx = invocation();
+  const selected = await f.handler.plan(ctx, plan.selection.appId);
+  await expect(f.handler.release(ctx, selected.operationRef, selected.planDigest)).rejects.toThrow(
+    "public_release_provider_rejected",
+  );
+  const row = await f.store.read(authority, selected.operationRef);
+  expect(row?.record.lastProviderFailure).toEqual({
+    phase: "observe-production",
+    diagnostic: { statusCode: 403, code: "forbidden" },
+  });
+  expect(Object.values(row?.record.effects ?? {})).toEqual(["applied", "applied"]);
+  expect(row?.record.observation).toBeUndefined();
 });

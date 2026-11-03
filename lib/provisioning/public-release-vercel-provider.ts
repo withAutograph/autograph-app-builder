@@ -5,6 +5,9 @@ import type { VercelInstallationBinding } from "../integrations/vercel-installat
 import type { PublicReleasePlan, PublicReleaseObservation } from "./public-release-contract";
 import type { PublicReleaseInvocation, PublicReleaseEffectContext } from "./public-release-handler";
 
+import { vercelProvisionDiagnosticSchema } from "./contracts";
+import { PublicReleaseProviderError } from "./public-release-provider-error";
+
 const id = z.string().min(1);
 const rowSchema = z.object({
   id,
@@ -62,8 +65,12 @@ export interface PublicReleaseVercelDependencies {
   fetch?: typeof fetch;
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-returns -- Private bounded JSON input is immediately parsed by each provider-owned response schema.
-const boundedJson = async (response: Response, signal: AbortSignal): Promise<unknown> => {
+const boundedJson = async (
+  response: Response,
+  signal: AbortSignal,
+  maxBytes = 1_048_576,
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Private bounded JSON input is immediately parsed by each provider-owned response schema.
+): Promise<unknown> => {
   if (!response.body) {
     throw fail();
   }
@@ -89,7 +96,7 @@ const boundedJson = async (response: Response, signal: AbortSignal): Promise<unk
         break;
       }
       length += chunk.value.byteLength;
-      if (length > 1_048_576) {
+      if (length > maxBytes) {
         throw fail();
       }
       chunks.push(chunk.value);
@@ -160,12 +167,30 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
     });
     await check(invocation, plan, approval);
     if (!response.ok) {
+      const requestRef = vercelProvisionDiagnosticSchema.shape.requestRef.safeParse(
+        response.headers.get("x-vercel-id"),
+      );
+      let code: string | undefined;
       try {
-        await response.body?.cancel();
+        // Error bodies are untrusted diagnostic input; read only a bounded projection.
+        const errorBody = await boundedJson(response, invocation.signal, 16_384);
+        const parsed = z
+          .object({ error: z.object({ code: vercelProvisionDiagnosticSchema.shape.code }) })
+          .safeParse(errorBody);
+        if (parsed.success) {
+          code = parsed.data.error.code;
+        }
       } catch {
-        /* Preserve the classified provider rejection. */
+        invocation.signal.throwIfAborted();
+        // Non-JSON, oversized and malformed errors still preserve safe HTTP facts.
       }
-      throw new Error("public_release_provider_rejected");
+      await check(invocation, plan, approval);
+      const diagnostic = vercelProvisionDiagnosticSchema.parse({
+        statusCode: response.status,
+        ...(code === undefined ? {} : { code }),
+        ...(requestRef.success ? { requestRef: requestRef.data } : {}),
+      });
+      throw new PublicReleaseProviderError(diagnostic);
     }
     const result = await boundedJson(response, invocation.signal);
     await check(invocation, plan, approval);
