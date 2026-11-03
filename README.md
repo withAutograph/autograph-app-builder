@@ -18,6 +18,9 @@ Complete OAuth, open a new task, and mention `@Autograph App Builder`. See
 
 ## Develop locally
 
+Local development is the default when changing Builder itself. Start with the
+[run-and-use quickstart](docs/local-development-lifecycle.md#run-and-use-the-local-builder)
+for the launch command, client connection, and normal product interaction.
 Use `mise run dev`. Edit live code, let HMR or the affected process reload, and
 retry the behavior. Vercel Sandbox is the execution backend and project-scoped
 OIDC is the provider credential boundary. The checkout is writable and new or
