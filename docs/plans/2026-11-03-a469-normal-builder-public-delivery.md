@@ -173,3 +173,11 @@ The optional integration service's missing isolated infrastructure and app-scope
 credential boundary are specified separately in
 [isolated central integration setup](2026-11-03-a469-isolated-central-integrations-setup.md).
 This does not add a generated-app destination or change the public release goal.
+
+## Consolidated repair closure
+
+The [cross-layer repair scope](2026-11-03-a469-repair-closure-scope.md) records
+the complete audited handoff chain, concrete remaining code/configuration gaps
+and required integration probes before another saved-app attempt. It preserves
+this accepted outcome and the original operation/approval meanings. Local source
+qualification and full functional acceptance remain separate.
