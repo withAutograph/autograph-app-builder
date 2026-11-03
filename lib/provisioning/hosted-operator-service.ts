@@ -462,7 +462,7 @@ type OperatorHttpResponse =
   | NeonAuthorizationResult
   | z.infer<typeof operatorAuthIdentityInputSchema>
   | OperatorPublicResult
-  | { code: "not_found" }
+  | { code: "not_found" | "protected_operator_required" }
   | {
       environment: Record<string, string>;
       nativePreview?: z.infer<typeof operatorNativePreviewSchema>;

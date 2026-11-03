@@ -3358,7 +3358,7 @@ describe("hosted operator Sandbox ownership", () => {
 });
 
 describe("normal Builder destination authority", () => {
-  const read = (f: ReturnType<typeof makeFixture>, owner = ownerContext) =>
+  const read = (f: ReturnType<typeof makeFixture>, owner: OperatorOwnerContext = ownerContext) =>
     readStandardBuilderDestination(
       { ...f, workloadPolicy, apiOrigin: "https://vercel.example" },
       {
