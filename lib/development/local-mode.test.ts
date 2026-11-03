@@ -90,6 +90,23 @@ async function fixture() {
 }
 
 describe("development source snapshots", () => {
+  it("accepts an explicit endpoint-only launch without changing the plugin-install default", () => {
+    expect(
+      parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted"]).installPlugin,
+    ).toBeUndefined();
+    expect(
+      parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--install-plugin", "false"])
+        .installPlugin,
+    ).toBe(false);
+    expect(
+      parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--install-plugin", "true"])
+        .installPlugin,
+    ).toBe(true);
+    expect(() =>
+      parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--install-plugin", "yes"]),
+    ).toThrow(/--install-plugin/u);
+  });
+
   it("skips uninitialized gitlinks and snapshots live initialized submodule files", async () => {
     const source = await fixture();
     const { execFileSync } = await import("node:child_process");

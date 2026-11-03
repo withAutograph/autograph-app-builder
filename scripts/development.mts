@@ -164,6 +164,7 @@ async function runEveCycle(input: {
   supervisorRoot: string;
   packageState: DevelopmentSupervisorState;
   destinationRoot: string;
+  installPlugin?: boolean;
   nextPort: number;
   evePort: number;
   signal: AbortSignal;
@@ -313,8 +314,9 @@ async function runEveCycle(input: {
       }
       if (!packageReused) {
         await registerDevelopmentPackage({
-          codexBin: requiredEnvironment("APP_BUILDER_DEV_CODEX_BIN"),
-          codexHome: requiredEnvironment("APP_BUILDER_DEV_CODEX_HOME", "profile root"),
+          codexBin: process.env.APP_BUILDER_DEV_CODEX_BIN,
+          codexHome: process.env.APP_BUILDER_DEV_CODEX_HOME,
+          installPlugin: input.installPlugin,
           marketplaceRoot: packageResult.marketplaceRoot,
           version: packageResult.receipt.version,
         });
@@ -334,7 +336,9 @@ async function runEveCycle(input: {
       input.packageState.dependencyKey = dependencyKey;
       input.packageState.snapshot = snapshot;
       console.log("Autograph App Builder development is ready.");
-      console.log("Open a fresh Codex task and select Autograph App Builder (Development).");
+      console.log(
+        "Connect a client to the loopback endpoint below. If plugin installation is enabled, select Autograph App Builder (Development) in a fresh Codex task.",
+      );
       console.log(`Loopback endpoint: ${packageResult.receipt.endpoint}`);
       return await Promise.race([runtimeChanged, eveExited, input.nextExited, stopping]);
     } finally {
@@ -424,6 +428,7 @@ try {
       cycleFile,
       destinationRoot,
       evePort: args.evePort,
+      installPlugin: args.installPlugin,
       nextExited,
       nextPort: args.nextPort,
       packageState,

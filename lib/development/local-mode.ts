@@ -45,6 +45,7 @@ export type DevelopmentArguments = Readonly<{
   stateRoot?: string;
   destinationRoot?: string;
   emulatedWeb?: boolean;
+  installPlugin?: boolean;
   webCertificate?: string;
   webKey?: string;
   webCa?: string;
@@ -81,11 +82,19 @@ const port = (value: string, name: string) => {
   return parsed;
 };
 
-const parseEmulatedWeb = (value: string) => {
-  if (value !== "true" && value !== "false") {
-    throw new Error("--emulated-web must be true or false.");
+const applyBooleanArgument = (
+  parsed: { emulatedWeb?: boolean; installPlugin?: boolean },
+  name: string,
+  value: string,
+) => {
+  if (name !== "--emulated-web" && name !== "--install-plugin") {
+    return false;
   }
-  return value === "true";
+  if (value !== "true" && value !== "false") {
+    throw new Error(`${name} must be true or false.`);
+  }
+  parsed[name === "--emulated-web" ? "emulatedWeb" : "installPlugin"] = value === "true";
+  return true;
 };
 
 const parseNextBundler = (value: string): NonNullable<DevelopmentArguments["nextBundler"]> => {
@@ -107,6 +116,7 @@ export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentA
     stateRoot?: string;
     destinationRoot?: string;
     emulatedWeb?: boolean;
+    installPlugin?: boolean;
     webCertificate?: string;
     webKey?: string;
     webCa?: string;
@@ -131,10 +141,6 @@ export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentA
       }
       case "--destination-root": {
         parsed.destinationRoot = value;
-        break;
-      }
-      case "--emulated-web": {
-        parsed.emulatedWeb = parseEmulatedWeb(value);
         break;
       }
       case "--web-certificate": {
@@ -162,6 +168,9 @@ export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentA
         break;
       }
       default: {
+        if (applyBooleanArgument(parsed, name, value)) {
+          break;
+        }
         throw new Error(`Development option ${name} is unsupported.`);
       }
     }

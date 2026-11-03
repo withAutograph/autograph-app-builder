@@ -236,12 +236,23 @@ const disableGlobalDevelopmentPackage = async (codexHome: string) => {
 };
 
 export const registerDevelopmentPackage = async (input: {
-  codexBin: string;
-  codexHome: string;
+  codexBin?: string;
+  codexHome?: string;
+  installPlugin?: boolean;
   marketplaceRoot: string;
   version: string;
   runner?: DevelopmentCodexCommandRunner;
 }) => {
+  if (input.installPlugin === false) {
+    return {
+      marketplaceRoot: input.marketplaceRoot,
+      selector: DEVELOPMENT_PLUGIN_SELECTOR,
+      installed: false,
+    };
+  }
+  if (input.codexBin === undefined || input.codexHome === undefined) {
+    throw new Error("Plugin installation requires the Codex executable and profile root.");
+  }
   const codexBin = path.resolve(input.codexBin);
   const codexHome = path.resolve(input.codexHome);
   const marketplaceRoot = path.resolve(input.marketplaceRoot);

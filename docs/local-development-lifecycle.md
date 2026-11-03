@@ -46,6 +46,12 @@ registration to point at another instance. If the client cannot isolate profiles
 or connect explicitly, retain the other task's connection and report that client
 limitation rather than claiming simultaneous independent plugin connections.
 
+For an explicit-endpoint client, add `--install-plugin false` to `mise run dev`.
+The launcher still prepares the local package and checks MCP readiness, but it
+does not execute Codex registration commands or read/write the client profile.
+It prints the endpoint for the client to connect to explicitly. Omit the option
+or use `--install-plugin true` for the existing profile installation behavior.
+
 When qualifying parallel-instance support, run instances A and B from different
 branches with clients bound to their explicit endpoints. Demonstrate that each
 consumes its own branch's source and retains its own session state. Start,
