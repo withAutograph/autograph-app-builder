@@ -239,6 +239,23 @@ const gatewayBindingsForNewAppPlan = (
     },
   };
 };
+const resourcePreparationPlan = (plan: HostedOperatorPlan): HostedOperatorPlan => {
+  if (plan.runtimePreparation === undefined) {
+    return plan;
+  }
+  const { delivery, gatewayBindings, gatewayDelivery, appTrustedSources, ...resources } = plan;
+  void delivery;
+  void gatewayBindings;
+  void gatewayDelivery;
+  void appTrustedSources;
+  return {
+    ...resources,
+    effects: resources.effects.filter(
+      (effect) =>
+        !["bindings", "delivery", GATEWAY_BINDINGS, GATEWAY_DELIVERY].includes(effect.kind),
+    ),
+  };
+};
 const appStageEffects = (
   effects: HostedOperatorPlan["effects"],
   gatewayBindings: HostedOperatorPlan["gatewayBindings"],
@@ -1010,43 +1027,45 @@ const resolveParticipantPlan = async (
     ...base.effects.filter((effect) => [GATEWAY_BINDINGS, GATEWAY_DELIVERY].includes(effect.kind)),
   ];
   await controlPlane.assertPlanningAuthorized(context);
-  const appPlan = hostedOperatorPlanSchema.parse({
-    ...base,
-    ...(appTrustedSources === undefined ? {} : { appTrustedSources }),
-    ...(signupPolicy === undefined
-      ? {}
-      : {
-          authSignupPolicy: bindSignupPolicy(
-            signupPolicy,
-            base,
-            signupPolicy.organizationId,
-            allowedAppRoles,
-          ),
-        }),
-    stage: "app",
-    access: proposedAccess,
-    authMembership:
-      organizations.length === 0
-        ? undefined
-        : { kind: "create-owned-organizations", organizations },
-    normalActorPreparation: {
-      accountOperationRef: preparation.accountOperationRef,
-      programDigest: preparation.programDigest,
-      accountPlanDigest: preparation.accountPlanDigest,
-      accountApprovalId: preparation.accountApprovalId,
-      accountApprovedByCallId: preparation.accountApprovedByCallId,
-    },
-    delivery,
-    deploymentBoundary:
-      base.deploymentBoundary === undefined
-        ? undefined
+  const appPlan = hostedOperatorPlanSchema.parse(
+    resourcePreparationPlan({
+      ...base,
+      ...(appTrustedSources === undefined ? {} : { appTrustedSources }),
+      ...(signupPolicy === undefined
+        ? {}
         : {
-            ...base.deploymentBoundary,
-            app: { ...base.deploymentBoundary.app, branch: delivery.branch },
-          },
-    ...(gatewayBindings === undefined ? {} : { gatewayBindings }),
-    effects: appStageEffects(effects, gatewayBindings),
-  });
+            authSignupPolicy: bindSignupPolicy(
+              signupPolicy,
+              base,
+              signupPolicy.organizationId,
+              allowedAppRoles,
+            ),
+          }),
+      stage: "app",
+      access: proposedAccess,
+      authMembership:
+        organizations.length === 0
+          ? undefined
+          : { kind: "create-owned-organizations", organizations },
+      normalActorPreparation: {
+        accountOperationRef: preparation.accountOperationRef,
+        programDigest: preparation.programDigest,
+        accountPlanDigest: preparation.accountPlanDigest,
+        accountApprovalId: preparation.accountApprovalId,
+        accountApprovedByCallId: preparation.accountApprovedByCallId,
+      },
+      delivery,
+      deploymentBoundary:
+        base.deploymentBoundary === undefined
+          ? undefined
+          : {
+              ...base.deploymentBoundary,
+              app: { ...base.deploymentBoundary.app, branch: delivery.branch },
+            },
+      ...(gatewayBindings === undefined ? {} : { gatewayBindings }),
+      effects: appStageEffects(effects, gatewayBindings),
+    }),
+  );
   return await withRetainedAppInstallationTargets(appPlan, context, controlPlane);
 };
 
@@ -1265,36 +1284,38 @@ export const resolveFullPlan = async (
       kind: "delivery",
     },
   );
-  return hostedOperatorPlanSchema.parse({
-    ...base,
-    ...(appTrustedSources === undefined ? {} : { appTrustedSources }),
-    ...(signupPolicy === undefined
-      ? {}
-      : {
-          authSignupPolicy: bindSignupPolicy(signupPolicy, base, organizationId, allowedAppRoles),
-        }),
-    access: verifiedActorAccess(verified.identity.actorId, organizationId, allowedAppRoles),
-    authMembership,
-    delivery,
-    deploymentBoundary:
-      base.deploymentBoundary === undefined
-        ? undefined
+  return hostedOperatorPlanSchema.parse(
+    resourcePreparationPlan({
+      ...base,
+      ...(appTrustedSources === undefined ? {} : { appTrustedSources }),
+      ...(signupPolicy === undefined
+        ? {}
         : {
-            ...base.deploymentBoundary,
-            app: { ...base.deploymentBoundary.app, branch: delivery.branch },
-          },
-    ...(gatewayBindings === undefined ? {} : { gatewayBindings }),
-    effects: appStageEffects(
-      [
-        ...effects,
-        ...base.effects.filter((effect) =>
-          [GATEWAY_BINDINGS, GATEWAY_DELIVERY].includes(effect.kind),
-        ),
-      ],
-      gatewayBindings,
-    ),
-    stage: "app",
-  });
+            authSignupPolicy: bindSignupPolicy(signupPolicy, base, organizationId, allowedAppRoles),
+          }),
+      access: verifiedActorAccess(verified.identity.actorId, organizationId, allowedAppRoles),
+      authMembership,
+      delivery,
+      deploymentBoundary:
+        base.deploymentBoundary === undefined
+          ? undefined
+          : {
+              ...base.deploymentBoundary,
+              app: { ...base.deploymentBoundary.app, branch: delivery.branch },
+            },
+      ...(gatewayBindings === undefined ? {} : { gatewayBindings }),
+      effects: appStageEffects(
+        [
+          ...effects,
+          ...base.effects.filter((effect) =>
+            [GATEWAY_BINDINGS, GATEWAY_DELIVERY].includes(effect.kind),
+          ),
+        ],
+        gatewayBindings,
+      ),
+      stage: "app",
+    }),
+  );
 };
 /** Native source composition uses deployment-owned config and actual private control-plane readers. */
 export const composeHostedOperatorDependencies = (
@@ -1629,15 +1650,18 @@ export const composeHostedOperatorDependencies = (
         : undefined;
     const prerequisiteGatewaySource = publishedGatewaySource ?? frozenPrerequisiteGatewaySource;
     await selectedForGateway?.assertCurrent?.();
-    const existingBootstrap = await readExistingAuthBootstrapPrerequisite(
-      current,
-      context,
-      configuration,
-      application.appDatabase,
-      controlPlane,
-      Date.now(),
-      prerequisiteGatewaySource,
-    );
+    const existingBootstrap =
+      configuration.composition === "single-project-services"
+        ? undefined
+        : await readExistingAuthBootstrapPrerequisite(
+            current,
+            context,
+            configuration,
+            application.appDatabase,
+            controlPlane,
+            Date.now(),
+            prerequisiteGatewaySource,
+          );
     if (existingBootstrap !== undefined) {
       return existingBootstrap;
     }
@@ -1831,6 +1855,9 @@ export const composeHostedOperatorDependencies = (
           maintenanceDatabase: native.maintenanceDatabase,
           role: native.maintenanceRole,
         },
+        ...(configuration.composition === "single-project-services"
+          ? { runtimePreparation: "single-project-resources-v1" }
+          : {}),
         contextId: selected.contextId ?? selected.currentSpec.appSpecDigest,
         cost: {
           class: "shared-recovery-group",
@@ -1932,29 +1959,32 @@ export const composeHostedOperatorDependencies = (
         version: 1,
       }),
     );
-    const gatewayPlan = hostedOperatorPlanSchema.parse({
-      ...base,
-      effects: [
-        ...base.effects,
-        {
-          description:
-            "Bind shared Auth only in the isolated Gateway/Auth project; retain existing signing and Auth secrets.",
-          id: GATEWAY_BINDINGS,
-          kind: GATEWAY_BINDINGS,
-        },
-        {
-          description:
-            "Deliver and pin an independently READY native Gateway Preview. Explicit approved retries may create duplicate deployments and usage charges.",
-          id: GATEWAY_DELIVERY,
-          kind: GATEWAY_DELIVERY,
-        },
-      ],
-      gatewayBindings: configuredBootstrapGatewayBindings(configuration),
-      gatewayDelivery:
-        prerequisiteGatewaySource ??
-        publishedGatewayDeliverySource(configuration, selection) ??
-        gatewayDeliverySourceForPlan(configuration),
-    });
+    const gatewayPlan =
+      base.runtimePreparation === undefined
+        ? hostedOperatorPlanSchema.parse({
+            ...base,
+            effects: [
+              ...base.effects,
+              {
+                description:
+                  "Bind shared Auth only in the isolated Gateway/Auth project; retain existing signing and Auth secrets.",
+                id: GATEWAY_BINDINGS,
+                kind: GATEWAY_BINDINGS,
+              },
+              {
+                description:
+                  "Deliver and pin an independently READY native Gateway Preview. Explicit approved retries may create duplicate deployments and usage charges.",
+                id: GATEWAY_DELIVERY,
+                kind: GATEWAY_DELIVERY,
+              },
+            ],
+            gatewayBindings: configuredBootstrapGatewayBindings(configuration),
+            gatewayDelivery:
+              prerequisiteGatewaySource ??
+              publishedGatewayDeliverySource(configuration, selection) ??
+              gatewayDeliverySourceForPlan(configuration),
+          })
+        : base;
     let participantsBootstrapPrepared = false;
     const bootstrapPreparation =
       gatewayPlan.normalActorProgram === undefined
@@ -2010,7 +2040,7 @@ export const composeHostedOperatorDependencies = (
         ),
     );
     const sourced =
-      resolved.stage === "app"
+      resolved.stage === "app" && resolved.runtimePreparation === undefined
         ? hostedOperatorPlanSchema.parse({
             ...resolved,
             gatewayDelivery: gatewayDeliverySourceForPlan(configuration, resolved),
@@ -2940,43 +2970,53 @@ export const composeHostedOperatorDependencies = (
           candidate.readyState === "READY",
       );
       const deploymentBoundary = input.plan.deploymentBoundary;
-      if (app === undefined || gateway === undefined || deploymentBoundary === undefined) {
+      if (
+        input.plan.runtimePreparation === undefined &&
+        (app === undefined || gateway === undefined || deploymentBoundary === undefined)
+      ) {
         throw new HostedOperatorError(RECONCILIATION_REQUIRED);
       }
-      await observeOperatorExecutionStage(
-        input.target.sessionId,
-        "final_inventory_readback",
-        async () =>
-          await readHostedOperatorProviderInventory({
-            assertCurrentOwner: async () => {
-              await controlPlane.assertAuthorized(input);
-              await privateBindings(input);
-            },
-            configuration: {
-              app: {
-                branch: app.branch,
-                deploymentId: app.deploymentId,
-                environment: "preview",
-                projectId: app.projectId,
+      if (
+        input.plan.runtimePreparation === undefined &&
+        app !== undefined &&
+        gateway !== undefined &&
+        deploymentBoundary !== undefined
+      ) {
+        await observeOperatorExecutionStage(
+          input.target.sessionId,
+          "final_inventory_readback",
+          async () =>
+            await readHostedOperatorProviderInventory({
+              assertCurrentOwner: async () => {
+                await controlPlane.assertAuthorized(input);
+                await privateBindings(input);
               },
-              gateway: {
-                branch: gateway.branch,
-                deploymentId: gateway.deploymentId,
-                environment: "preview",
-                projectId: gateway.projectId,
+              configuration: {
+                app: {
+                  branch: app.branch,
+                  deploymentId: app.deploymentId,
+                  environment: "preview",
+                  projectId: app.projectId,
+                },
+                gateway: {
+                  branch: gateway.branch,
+                  deploymentId: gateway.deploymentId,
+                  environment: "preview",
+                  projectId: gateway.projectId,
+                },
+                operator: deploymentBoundary.operator,
+                verification: {
+                  gatewayOrigin: gateway.origin,
+                  publicOrigin: deploymentBoundary.verification.publicOrigin,
+                },
               },
-              operator: deploymentBoundary.operator,
-              verification: {
-                gatewayOrigin: gateway.origin,
-                publicOrigin: deploymentBoundary.verification.publicOrigin,
-              },
-            },
-            context: input,
-            approvedAppBranch: deploymentBoundary.app.branch,
-            readVercelCredential: async ({ authority, installationId }) =>
-              await controlPlane.readCredential(authority, installationId),
-          }),
-      );
+              context: input,
+              approvedAppBranch: deploymentBoundary.app.branch,
+              readVercelCredential: async ({ authority, installationId }) =>
+                await controlPlane.readCredential(authority, installationId),
+            }),
+        );
+      }
       const readiness = await observeOperatorExecutionStage(
         input.target.sessionId,
         "final_runtime_readiness",

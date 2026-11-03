@@ -312,6 +312,7 @@ const hostedOperatorPlanDataSchema = z.strictObject({
   ),
   action: z.enum(["prepare", "cleanup"]),
   releaseIntent: z.literal("prepared-preview").optional(),
+  runtimePreparation: z.literal("single-project-resources-v1").optional(),
   appDatabase: databaseResource,
   /** Schema installation scope is independent of actor and role grants. */
   appInstallation: z.strictObject({ customerIds: z.array(id).min(1) }).optional(),
@@ -700,6 +701,30 @@ const validateAuthSignupPolicy = (
     });
   }
 };
+const validateResourcePreparation = (
+  plan: z.infer<typeof hostedOperatorPlanDataSchema>,
+  ctx: z.RefinementCtx,
+) => {
+  if (
+    plan.runtimePreparation !== undefined &&
+    (plan.deploymentBoundary?.composition !== "single-project-services" ||
+      plan.action !== "prepare" ||
+      plan.releaseIntent !== undefined ||
+      plan.delivery !== undefined ||
+      plan.gatewayDelivery !== undefined ||
+      plan.gatewayBindings !== undefined ||
+      plan.appTrustedSources !== undefined ||
+      plan.effects.some((effect) =>
+        ["bindings", "delivery", "gateway-bindings", "gateway-delivery"].includes(effect.kind),
+      ))
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["runtimePreparation"],
+      message: "Resource preparation cannot authorize deployment or environment binding effects.",
+    });
+  }
+};
 const authorizationPhases = (plan: z.infer<typeof hostedOperatorPlanDataSchema>) => {
   if (plan.stage === AUTH_PARTICIPANTS_STAGE) {
     return ["normal-accounts"];
@@ -713,7 +738,10 @@ const authorizationPhases = (plan: z.infer<typeof hostedOperatorPlanDataSchema>)
     if (plan.authSignupPolicy !== undefined) {
       phases.push("auth-signup-policy");
     }
-    phases.push("access", "bindings");
+    phases.push("access");
+    if (plan.runtimePreparation === undefined) {
+      phases.push("bindings");
+    }
     if (plan.delivery !== undefined) {
       phases.push("delivery");
     }
@@ -984,6 +1012,7 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
   validateAuthSignupPolicy(plan, ctx);
   // Each phase has an observed receipt, including a no-op verification for already-existing resources.
   // Authority is opened only after install/grant verification, and closed before retirement.
+  validateResourcePreparation(plan, ctx);
   const phases = authorizationPhases(plan);
   const kinds = plan.effects.map((effect) => effect.kind);
   const groups = kinds.filter((kind, index) => index === 0 || kind !== kinds[index - 1]);

@@ -5076,3 +5076,49 @@ it("keeps legacy project separation frozen and accepts an explicitly planned sin
   expect(plan.selection.projectId).toBe(plan.publicGateway?.projectId);
   expect(original.deploymentBoundary).toEqual(boundary);
 });
+
+it("plans same-project resource preparation without Preview effects or an environment claim", async () => {
+  const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+  f.configuration.composition = "single-project-services";
+  f.configuration.gateway.projectId = context.target.projectId;
+  f.configuration.gateway.workload.projectId = context.target.projectId;
+  f.controlPlane.assertPlanningAuthorized.mockResolvedValue(undefined);
+  const original = bootstrapWithGatewayOrigin("https://apps.example");
+  if (original.deploymentBoundary === undefined || original.publicGateway === undefined) {
+    throw new Error("missing fixture boundary");
+  }
+  const { gatewayBindings, gatewayDelivery, ...bootstrap } = original;
+  void gatewayBindings;
+  void gatewayDelivery;
+  const fresh = hostedOperatorPlanSchema.parse({
+    ...bootstrap,
+    runtimePreparation: "single-project-resources-v1",
+    deploymentBoundary: {
+      ...original.deploymentBoundary,
+      composition: "single-project-services",
+      gateway: { ...original.deploymentBoundary.gateway, projectId: context.target.projectId },
+    },
+    publicGateway: { ...original.publicGateway, projectId: context.target.projectId },
+    effects: original.effects.filter(
+      (effect) => !["gateway-bindings", "gateway-delivery"].includes(effect.kind),
+    ),
+  });
+  const result = await resolveFullPlan(fresh, context, f.configuration, f.controlPlane);
+  expect(result.stage).toBe("app");
+  expect(result.runtimePreparation).toBe("single-project-resources-v1");
+  expect(result.effects.map((effect) => effect.kind)).not.toEqual(
+    expect.arrayContaining(["bindings", "delivery", "gateway-bindings", "gateway-delivery"]),
+  );
+  expect(result.delivery).toBeUndefined();
+  expect(result.gatewayBindings).toBeUndefined();
+  expect(result.gatewayDelivery).toBeUndefined();
+  expect(() =>
+    hostedOperatorPlanSchema.parse({
+      ...result,
+      effects: [
+        ...result.effects,
+        { id: "bindings", kind: "bindings", description: "Not approved by a resource plan" },
+      ],
+    }),
+  ).toThrow();
+});

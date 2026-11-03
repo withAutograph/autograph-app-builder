@@ -2078,7 +2078,10 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           requireOperator(record).receipts.some(
             (receipt) => receipt.effectId === "auth-signup-policy",
           );
-        const signupReady = record.status === "prepared" && policyInstalled;
+        const signupReady =
+          record.status === "prepared" &&
+          policyInstalled &&
+          currentOperator.plan.runtimePreparation === undefined;
         const appUrl =
           signupReady && signupPolicy !== undefined
             ? new URL(signupPolicy.appPath, signupPolicy.origin).toString()
@@ -2087,7 +2090,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           appUrl === undefined || signupPolicy === undefined
             ? undefined
             : `${signupPolicy.origin}/auth/sign-up?redirectTo=${encodeURIComponent(appUrl)}`;
-        if (status === "prepared" && policyInstalled) {
+        if (status === "prepared" && signupReady) {
           status = "waiting_for_signup";
         }
         return {
@@ -3320,6 +3323,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                     return parsed;
                   })
                 : undefined;
+            const preparedStep = plan.runtimePreparation === undefined ? "bound" : "resource-ready";
             await observePrepare("final_authority", assertCurrent);
             return await observePrepare("final_proof_publication", async () => {
               const complete = await ownedUpdate((value) => {
@@ -3329,10 +3333,11 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 }
                 return retainCompletedAuth({
                   ...value,
-                  environmentBound: plan.action === "prepare",
+                  environmentBound:
+                    plan.action === "prepare" && plan.runtimePreparation === undefined,
                   proof,
                   status: plan.action === "prepare" ? "prepared" : "cleaned",
-                  step: plan.action === "prepare" ? "bound" : "cleaned",
+                  step: plan.action === "prepare" ? preparedStep : "cleaned",
                 });
               });
               return response(operatorPublicResultSchema.parse(publicStatus(complete.record)));

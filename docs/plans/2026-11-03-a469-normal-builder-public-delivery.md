@@ -168,3 +168,18 @@ its own concrete scope and approval.
 - [Hosted runtime and protected Preview contract](../hosted-app-runtime.md)
 - [Public MCP contract](../public-mcp-contract.md)
 - [Production handoff](../production-readiness-handoff.md)
+
+## Resource preparation and public release are separate approvals
+
+Fresh standard single-project setup plans carry
+`runtimePreparation: single-project-resources-v1`. Auth bootstrap prepares the
+isolated resources and verifies the installed Auth schema. Application setup
+installs and independently reads the selected schema and grants the approved
+application access. Neither setup plan binds a Vercel environment nor deploys a
+Preview. Completed application setup records its actual restricted-role SQL
+proof as `prepared/resource-ready`, with `environmentBound: false`.
+
+A separately approved public release binds the app-owned Production runtime
+configuration and publishes through native Git deployment. Resource readiness
+alone does not establish public delivery or authenticated browser acceptance.
+Previously frozen plans keep their original effects and semantics.

@@ -4427,3 +4427,36 @@ describe("completed owned Gateway binding convergence", () => {
     expect(f.deps.executeEffect).toHaveBeenCalledTimes(calls);
   });
 });
+
+it("completes resource preparation without claiming a bound or deployed app", async () => {
+  const f = fixture();
+  if (plan.deploymentBoundary === undefined || plan.publicGateway === undefined) {
+    throw new Error("missing fixture boundary");
+  }
+  const resources = hostedOperatorPlanSchema.parse({
+    ...plan,
+    runtimePreparation: "single-project-resources-v1",
+    deploymentBoundary: {
+      ...plan.deploymentBoundary,
+      composition: "single-project-services",
+      gateway: { ...plan.deploymentBoundary.gateway, projectId: selection.projectId },
+    },
+    publicGateway: { ...plan.publicGateway, projectId: selection.projectId },
+    effects: plan.effects.filter((effect) => effect.kind !== "bindings"),
+  });
+  f.deps.plan = async () => resources;
+  f.deps.bindings = vi.fn(f.deps.bindings);
+  const input = await prepared(f);
+  f.approve();
+  expect((await f.client.request(input)).status).toBe("prepared");
+  expect(f.row?.record).toMatchObject({
+    status: "prepared",
+    step: "resource-ready",
+    environmentBound: false,
+    proof,
+  });
+  expect(f.deps.bindings).not.toHaveBeenCalled();
+  expect(f.row?.record.operator?.receipts.map((receipt) => receipt.effectId)).toEqual(
+    resources.effects.map((effect) => effect.id),
+  );
+});

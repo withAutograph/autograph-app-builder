@@ -155,6 +155,7 @@ const hostedRuntimeJournalRecordBaseSchema = z.strictObject({
     "prepared",
     "verified",
     "bound",
+    "resource-ready",
     "environment-removed",
     "cleaned",
   ]),
@@ -210,8 +211,9 @@ export const retainedOperatorAuthFromJournal = (
       ? record.status === "pending" && record.step === "reserved"
       : [
           record.status === "prepared",
-          record.step === "bound",
-          record.environmentBound === true,
+          operator.plan.runtimePreparation === "single-project-resources-v1"
+            ? record.step === "resource-ready" && record.environmentBound === false
+            : record.step === "bound" && record.environmentBound === true,
           record.proof?.manifestSha256 === operator.plan.release.sha256,
           record.proof?.releaseId === operator.plan.release.id,
         ].every(Boolean);
