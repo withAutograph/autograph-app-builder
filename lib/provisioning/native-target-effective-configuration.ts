@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { nativeTargetResourceProfileAuthorityDigest } from "./native-target-resource-profile";
+import { hasSingleProjectServicesTopology } from "./hosted-operator-source-configuration-schema";
 import { HostedOperatorError } from "./hosted-operator-contract";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
 import type { NativeTargetReadyRegistration } from "./native-target-onboarding-contract";
@@ -35,6 +36,17 @@ export const resolveNativeTargetEffectiveConfiguration = async <Invocation>(inpu
   ) => HostedOperatorSourceConfiguration;
 }): Promise<HostedOperatorSourceConfiguration> => {
   const ready = await input.readReady(input.invocation, input.appId);
+  if (input.configuration.composition === "single-project-services") {
+    // readReady above still reauthorizes the current canonical owner. A historical
+    // dedicated-project registration must not redirect this explicit destination.
+    if (
+      input.configuration.applications[input.appId] === undefined ||
+      !hasSingleProjectServicesTopology(input.configuration)
+    ) {
+      throw new HostedOperatorError("resource_mismatch");
+    }
+    return freezeConfiguration(structuredClone(input.configuration));
+  }
   if (ready === undefined) {
     return freezeConfiguration(structuredClone(input.configuration));
   }

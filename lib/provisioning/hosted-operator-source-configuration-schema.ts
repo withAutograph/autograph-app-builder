@@ -78,6 +78,8 @@ export const hostedOperatorSandboxConfigurationSchema = z.union([
 ]);
 
 export const hostedOperatorSourceConfigurationSchema = z.strictObject({
+  /** Explicit deployment-owned topology; omitted configurations retain legacy behavior. */
+  composition: z.literal("single-project-services").optional(),
   applications: z.record(
     id,
     z.strictObject({
@@ -135,6 +137,23 @@ export type HostedOperatorSourceConfiguration = z.infer<
   typeof hostedOperatorSourceConfigurationSchema
 >;
 
+/** A standard destination is supplied coherently, never assembled from an old Gateway. */
+export const hasSingleProjectServicesTopology = (config: HostedOperatorSourceConfiguration) =>
+  config.gateway.projectId !== config.operator.projectId &&
+  config.gateway.gatewayOrigin === config.gateway.publicOrigin &&
+  config.gateway.authBrowserOrigin === config.gateway.publicOrigin &&
+  Object.values(config.applications).every((app) =>
+    [
+      app.projectId === config.gateway.projectId,
+      app.branch === config.gateway.branch,
+      app.projectSettings?.framework === "services",
+      app.projectSettings?.rootDirectory === ".",
+      app.nativeTargetRegistration === undefined,
+      app.hostProtection === undefined,
+      app.repoId === undefined || app.repoId === config.gateway.repoId,
+    ].every(Boolean),
+  );
+
 /** Validate the same deployment ownership invariants for every configuration snapshot. */
 export const validateHostedOperatorSourceConfiguration = (
   value: HostedOperatorSourceConfiguration,
@@ -150,7 +169,9 @@ export const validateHostedOperatorSourceConfiguration = (
     config.gateway.workload.environment === config.gateway.environment,
     Object.values(config.applications).every(
       (app) =>
-        app.projectId !== config.operator.projectId && app.projectId !== config.gateway.projectId,
+        app.projectId !== config.operator.projectId &&
+        (config.composition === "single-project-services" ||
+          app.projectId !== config.gateway.projectId),
     ),
     config.sandbox.projectId === config.operator.projectId,
     config.sandbox.teamId === config.teamId,
@@ -165,6 +186,7 @@ export const validateHostedOperatorSourceConfiguration = (
         ),
     ),
     new Set([config.operator.projectId, config.gateway.projectId]).size === 2,
+    config.composition !== "single-project-services" || hasSingleProjectServicesTopology(config),
   ].every(Boolean);
   if (!ownedConfiguration) {
     throw new Error("Protected operator deployment configuration is unavailable.");
