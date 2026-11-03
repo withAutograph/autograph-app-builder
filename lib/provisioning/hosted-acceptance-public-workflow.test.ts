@@ -184,7 +184,8 @@ it("uses actual planning and approval workflow tools to recover retained source 
       }
       const localCommand = command
         .replaceAll("/workspace", workspace)
-        .replaceAll("https://github.com/controlled/fixture.git", source);
+        .replaceAll("https://github.com/controlled/fixture.git", source)
+        .replace(/^node /u, `'${process.execPath.replaceAll("'", "'\"'\"'")}' `);
       const result = await exec("/bin/sh", ["-c", localCommand], { cwd });
       return { ...result, exitCode: 0 };
     },
