@@ -407,7 +407,7 @@ describe("unchanged paged observation reuse", () => {
       await input.onEvent({ index: 3, type: "input.requested", request });
       return structuredClone(f.observation);
     });
-    f.adapter.start.mockClear();
+    vi.mocked(f.adapter.start).mockClear();
     const result = await f.service.get({ cursor: 3, limit: 10, sessionId: f.sessionId });
     expect(result).toMatchObject({ status: "input_required", cursor: 4, inputRequests: [request] });
     expect(result.events.map((event) => event.index)).toEqual([3]);

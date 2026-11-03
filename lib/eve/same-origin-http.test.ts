@@ -2749,6 +2749,7 @@ describe("activation transport diagnostics", () => {
 });
 
 describe("retained confirmation presentation recovery", () => {
+  const observerConfig = { ...config, timeoutMs: 10_000 };
   const requestEvent = (requestId: string, digest = "a".repeat(64)) => ({
     type: "input.requested",
     data: {
@@ -2776,7 +2777,7 @@ describe("retained confirmation presentation recovery", () => {
   });
   const seedFailure = async (events: unknown[]) => {
     const observed = await observeSameOriginEveStream({
-      config,
+      config: observerConfig,
       sessionId: "wrun_1",
       workloadIdentity: identity(),
       fetchImplementation: vi.fn(async () => await Promise.resolve(stream(events))),
@@ -2799,7 +2800,7 @@ describe("retained confirmation presentation recovery", () => {
       const projected: InternalEveEvent[] = [];
       const privateEvents: string[] = [];
       const input = {
-        config,
+        config: observerConfig,
         sessionId: "wrun_1",
         workloadIdentity: identity(),
         fetchImplementation: http.fetchImplementation,
@@ -2862,7 +2863,7 @@ describe("retained confirmation presentation recovery", () => {
     const state = await seedFailure(events);
     const projected: InternalEveEvent[] = [];
     const observed = await observeSameOriginEveStream({
-      config,
+      config: observerConfig,
       sessionId: "wrun_1",
       workloadIdentity: identity(),
       nativeObservationState: state,
@@ -2894,7 +2895,7 @@ describe("retained confirmation presentation recovery", () => {
         ),
     );
     const observed = await observeSameOriginEveStream({
-      config,
+      config: observerConfig,
       sessionId: "wrun_1",
       workloadIdentity: identity(),
       nativeObservationState: state,
