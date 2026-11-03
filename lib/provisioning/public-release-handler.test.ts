@@ -312,6 +312,7 @@ it.each([
         if (url.pathname.startsWith("/repositories/")) {
           return Response.json({
             id: plan.source.repositoryId,
+            description: `Created by Autograph App Builder request ${plan.source.deliveryScope.provisioningRequestId}`,
             node_id: "repository-node",
             name: "app",
             owner: { login: "owner" },
