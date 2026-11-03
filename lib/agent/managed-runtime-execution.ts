@@ -356,15 +356,7 @@ export const createManagedRuntimeExecution = (deps: ManagedRuntimeExecutionDepen
             await checkpoint({ workerAsset });
           },
         });
-        const executable = await provider.runCommand({
-          cmd: "sha256sum",
-          args: ["--", descriptor.executablePath],
-        });
-        const executableOutput = await executable.stdout();
-        const executableSha256 = executableOutput.split(/\s+/u)[0];
-        if (executable.exitCode !== 0 || executableSha256 !== descriptor.sha256) {
-          throw new HostedOperatorError("resource_mismatch");
-        }
+        // Installation verifies the configured binary and target readback through the file API.
         const material = await deps.readExecution(context, record.plan);
         const profile =
           record.publicProfile ??

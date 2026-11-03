@@ -103,6 +103,12 @@ writes mode `0755`, verifies target readback, and disposes only its owned source
 VM without deleting the shared snapshot. Unknown creation outcomes reconnect by
 the same owned name; they do not create another VM blindly.
 
+The same helper rechecks the current target bytes on a pre-dispatch recovery;
+an earlier installation receipt alone is not verification. Its successful target
+readback establishes the approved executable digest before startup. Startup does
+not add a second checksum subprocess or depend on its textual output. Missing or
+incorrect source bytes and failed target readback still prevent execution.
+
 Access to the existing target Sandbox instead uses the exact verified incoming
 **Builder workload carrier**, retained in a request-bound private closure. The
 Builder token is never sent to the source VM. Provider credentials, Auth SQL

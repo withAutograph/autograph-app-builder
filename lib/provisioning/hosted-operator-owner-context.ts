@@ -99,6 +99,58 @@ const recoveryAuthoritySessionId = async (
   return binding.originalAuthoritySessionId;
 };
 
+/** Verify the physical native history against its canonical public grant authority, including recovery lineage. */
+export const createHostedOperatorApprovalReadAuthority =
+  (input: {
+    sessions: Pick<HostedEveStore, "getSessionByAdapterSessionId">;
+    resolveOwnerContext: ReturnType<typeof createHostedOperatorOwnerContextResolver>;
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- The existing canonical resolver parses Eve's private forwarded auth shape below.
+    forwardSessionAuth: (principal: HostedPrincipal, sourceHandoffId?: string) => unknown;
+  }) =>
+  async (request: {
+    adapterSessionId: string;
+    principal: HostedPrincipal;
+    sessionId: string;
+  }): Promise<boolean> => {
+    try {
+      const { adapterSessionId, principal, sessionId } = request;
+      const rawSession = await input.sessions.getSessionByAdapterSessionId?.(
+        principal,
+        adapterSessionId,
+      );
+      const parsed = hostedSessionRecordSchema.safeParse(rawSession);
+      if (!parsed.success) {
+        return false;
+      }
+      const physical = toDurableHostedSessionRecord(parsed.data);
+      if (
+        physical.adapterSessionId !== adapterSessionId ||
+        !samePrincipal(physical.principal, principal)
+      ) {
+        return false;
+      }
+      const resolved = await input.resolveOwnerContext({
+        adapterSessionId,
+        authority: {
+          audience: principal.audience,
+          issuer: principal.issuer,
+          ownerUserId: principal.ownerUserId,
+          workspaceId: principal.workspaceId,
+        },
+        principal,
+        sessionAuth: input.forwardSessionAuth(
+          principal,
+          parsed.data.version === 2 ? parsed.data.sourceHandoffId : undefined,
+        ),
+      });
+      // The resolver validates recovered source/parent ownership before returning its original grant authority.
+      // A recovered worker's physical public session ID intentionally differs from that authority.
+      return resolved.sessionId === sessionId && resolved.adapterSessionId === adapterSessionId;
+    } catch {
+      return false;
+    }
+  };
+
 const resolveDirectOwnerContext = async (input: {
   adapterSessionId: string;
   authority: HostedSessionTenantAuthority;
