@@ -107,6 +107,8 @@ const previewDeploymentSchema = z.strictObject({
   projectId: id,
 });
 const deploymentBoundarySchema = z.strictObject({
+  /** Omitted plans retain their original three-project Preview semantics. */
+  composition: z.literal("single-project-services").optional(),
   app: previewDeploymentSchema,
   authority: hostedTenantAuthoritySchema,
   gateway: previewDeploymentSchema,
@@ -949,8 +951,11 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
     const boundary = plan.deploymentBoundary;
     const jwks = new URL(boundary.verification.jwksUrl);
     const invalidBoundary = [
-      new Set([boundary.app.projectId, boundary.gateway.projectId, boundary.operator.projectId])
-        .size !== 3,
+      boundary.composition === "single-project-services"
+        ? boundary.app.projectId !== boundary.gateway.projectId ||
+          boundary.app.projectId === boundary.operator.projectId
+        : new Set([boundary.app.projectId, boundary.gateway.projectId, boundary.operator.projectId])
+            .size !== 3,
       boundary.app.projectId !== plan.selection.projectId,
       boundary.app.branch !== boundaryAppBranch(plan),
       boundary.gateway.branch !== plan.publicGateway?.branch,

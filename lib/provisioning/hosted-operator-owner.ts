@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import type { BuilderProvisionResponse } from "./contracts";
 import type { BuilderProvisionJournalStore } from "./journal";
 import { readParticipantSuccessorPredecessor } from "./hosted-operator-participant-successor";
 import { readUnapprovedCapturePredecessor } from "./hosted-operator-unapproved-capture-history";
@@ -640,7 +641,7 @@ export type HostedOperatorAppOwnerDependencies = Pick<
 >;
 
 /** The same canonical app linkage protects pre-project registry and existing artifact reads. */
-const readCanonicalAppOwnerSession = async (
+export const readCanonicalAppOwnerSession = async (
   deps: HostedOperatorAppOwnerDependencies,
   input: HostedOperatorAppOwnerContext,
 ) => {
@@ -662,6 +663,16 @@ const readCanonicalAppOwnerSession = async (
     await readHandoffOwnerIdentity(deps, owner, principal, input.target, session, sessionVersion);
   }
   return session;
+};
+
+const standardRepository = (receipt: BuilderProvisionResponse) => {
+  const github = receipt.github;
+  const vercel = receipt.vercel;
+  return github.status === "succeeded" &&
+    vercel.status === "succeeded" &&
+    github.fullName === vercel.linkedGitHubRepository
+    ? { repositoryId: github.repositoryId, githubInstallationId: github.installationId }
+    : { repositoryId: undefined, githubInstallationId: undefined };
 };
 
 type StandardDestinationDependencies = HostedOperatorAppOwnerDependencies &
@@ -740,7 +751,9 @@ const readDirectStandardBuilderDestination = async (
     teamId: project.scope.id,
     installationId: project.installationId,
     name: access.project.name,
+    productionBranch: access.project.productionBranch,
     repository: project.linkedGitHubRepository,
+    ...standardRepository(row.record.response),
     provisioningRequestId: row.requestId,
     provisioningDigest: row.requestDigest,
     deploymentAccess: row.record.request.deploymentAccess,
@@ -818,7 +831,9 @@ export const readStandardBuilderDestination = async (
     teamId: project.scope.id,
     installationId: project.installationId,
     name: access.project.name,
+    productionBranch: access.project.productionBranch,
     repository: project.linkedGitHubRepository,
+    ...standardRepository(receipt),
     provisioningRequestId: receipt.requestId,
     provisioningDigest: receipt.requestDigest,
     deploymentAccess: receipt.deploymentAccess,

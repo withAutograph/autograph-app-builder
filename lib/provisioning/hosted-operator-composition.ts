@@ -204,7 +204,9 @@ const appTrustedSourcesForNewPlan = (
   base: HostedOperatorPlan,
   configuration: HostedOperatorSourceConfiguration,
 ): HostedOperatorPlan["appTrustedSources"] =>
-  base.gatewayBindings === undefined || base.deploymentBoundary === undefined
+  configuration.composition === "single-project-services" ||
+  base.gatewayBindings === undefined ||
+  base.deploymentBoundary === undefined
     ? undefined
     : {
         gatewayPreview: {
@@ -1686,7 +1688,9 @@ export const composeHostedOperatorDependencies = (
           },
           context,
           phase: "bootstrap-planning",
-          resolveGatewayByPublicOrigin: true,
+          ...(configuration.composition === "single-project-services"
+            ? {}
+            : { resolveGatewayByPublicOrigin: true as const }),
           resolveOperatorByConfiguredOrigin: true,
           readVercelCredential: async ({ authority, installationId }) =>
             await controlPlane.readCredential(authority, installationId),
@@ -1837,6 +1841,9 @@ export const composeHostedOperatorDependencies = (
           owner: context.authority.ownerUserId,
         },
         deploymentBoundary: {
+          ...(configuration.composition === "single-project-services"
+            ? { composition: "single-project-services" }
+            : {}),
           app: {
             branch: inventory.app.branch,
             deploymentId: inventory.app.deploymentId,

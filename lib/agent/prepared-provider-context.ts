@@ -90,7 +90,7 @@ export type PreparedVercelAccess =
   | {
       status: "ready";
       scope: VercelScope;
-      project?: { id: string; name: string };
+      project?: { id: string; name: string; productionBranch?: string };
     };
 
 const unavailable = (): PreparedVercelAccess => ({
@@ -265,6 +265,7 @@ const readVercelProjectAccess = async (input: {
             { expected: ".", pointer: "/rootDirectory" },
           ]
         : []),
+      { capture: true, optional: true, pointer: "/link/productionBranch" },
     ]);
     const [idMatches, hasName, accountMatches] = observed.matches;
     if (observed.matches.some((matches) => !matches)) {
@@ -282,6 +283,9 @@ const readVercelProjectAccess = async (input: {
       project: {
         id: input.projectId,
         name: observed.values[1] ?? input.projectName ?? input.projectId,
+        ...(observed.values.at(-1) === undefined
+          ? {}
+          : { productionBranch: observed.values.at(-1) }),
       },
       scope: {
         id: binding.scopeId,

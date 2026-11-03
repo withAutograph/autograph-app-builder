@@ -688,3 +688,32 @@ row and refuses those states without modifying it. A selected normal destination
 blocks new legacy native target plans and preparation, including the final provider
 dispatch recheck; retained plan and approval inspection remain readable. Neither
 path settles or replays a native response batch whose submission is uncertain.
+
+### Normal Builder destination runtime composition
+
+A normal destination can use the existing restricted Preview resource/schema
+installer without creating or visiting another Vercel project. Configure
+`PROTECTED_HOSTED_OPERATOR_STANDARD_RUNTIME_PROFILES` with owner/app entries:
+`authority`, `appId`, `resourceProfileId`, `publicOrigin`,
+`productionDatabaseIdentity`, and `gatewayWorkload` (`audience`, `issuer`,
+`subject`). The resource profile is the existing deployment-owned isolated
+Neon/Auth/installer custody; the production database identity is the reviewed
+`hostname/database` guard, never inferred from the development endpoint.
+
+The request resolver reads the canonical saved app's current captured descriptor
+and reviewed published source, and the recorded normal provisioning receipt with
+independent Services/root provider readback. It constructs a fresh same-project
+Gateway/app configuration from that receipt and source. It copies resource
+custody from the selected isolated profile, without carrying over an old Gateway
+project, deployment, repository or origin. Missing destination/source/profile
+configuration remains actionable setup work; it cannot fall back to a dedicated
+native onboarding target.
+
+New setup plans explicitly freeze `deploymentBoundary.composition` as
+`single-project-services`; old omitted boundaries continue requiring three
+separate projects. The new mode uses Preview only as the isolated installer
+resource context, omits cross-project trusted-source configuration, and does not
+require an already deployed Preview alias to construct its bootstrap plan.
+Production exposure and public BetterAuth settings require their separate
+ordinary public release approval. Configuration and local tests are not hosted
+or authenticated acceptance evidence.

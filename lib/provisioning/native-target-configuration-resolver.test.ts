@@ -216,6 +216,8 @@ const context = (appId = "new-app"): HostedOperatorContext => ({
 });
 
 interface ConfigurationFixtureBody {
+  adapterSessionId?: string;
+  execution?: { logicalSessionId: string };
   action: string;
   ownerContext?: OperatorOwnerContext;
   selection?: OperatorSelection;
@@ -514,6 +516,192 @@ describe("normal single-project destination resolution", () => {
     await expect(resolve(request(body))).rejects.toMatchObject({
       code: "builder_destination_configuration_required",
     });
+    expect(f.resources.registry.read).not.toHaveBeenCalled();
+  });
+});
+
+describe("fresh normal same-project runtime assembly", () => {
+  const fixture = () => {
+    const f = setup();
+    const base = configuration();
+    const { audience, issuer, environment: operatorEnvironment, ownerId } = workload;
+    base.nativeNeon.configuration.operator = {
+      audience,
+      issuer,
+      environment: operatorEnvironment,
+      ownerId,
+      projectId: base.operator.projectId,
+    };
+    const selected = {
+      appId: "new-app",
+      appSpecDigest: "a".repeat(64),
+      artifactRef: "generated-release:fixture",
+      manifestSha256: "b".repeat(64),
+      schemaSha256: "c".repeat(64),
+      releaseId: "release-current",
+      version: 1 as const,
+      publishedSource: {
+        repositoryId: "123",
+        branch: "builder/current-app",
+        gitSha: "d".repeat(40),
+        gitTree: "e".repeat(40),
+        reviewDigest: "f".repeat(64),
+        changeSetDigest: "1".repeat(64),
+      },
+    };
+    const description = {
+      version: 1 as const,
+      app: { id: "new-app", routes: ["/"], workspacePath: "apps/new-app" },
+      backend: {
+        kind: "generated-postgres" as const,
+        authorization: "app-owned" as const,
+        release: { id: "release-current", artifactHash: "c".repeat(64), directory: "release" },
+        roles: ["member"],
+        runtime: { databaseEnvironment: "APP_DATABASE_URL" },
+        schemaReceipt: null,
+      },
+      validation: { check: { task: "check" }, browser: null, test: null },
+    };
+    const destination = {
+      projectId: "standard-project",
+      teamId: "team",
+      installationId: "installation",
+      name: "apps-new-app",
+      repository: "owner/apps-new-app",
+      repositoryId: "123",
+      provisioningRequestId: "bb863e20-5238-4e28-b156-31b9ca26d304",
+      provisioningDigest: "2".repeat(64),
+      deploymentAccess: "public-app" as const,
+    };
+    const environment = {
+      PROTECTED_HOSTED_OPERATOR_STANDARD_RUNTIME_PROFILES: JSON.stringify([
+        {
+          authority,
+          appId: "new-app",
+          resourceProfileId: "isolated",
+          publicOrigin: "https://apps-new-app.vercel.app",
+          productionDatabaseIdentity: "ep-production.neon.tech/auth",
+          gatewayWorkload: {
+            audience: workload.audience,
+            issuer: workload.issuer,
+            subject: "same-project-gateway",
+          },
+        },
+      ]),
+      PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES: JSON.stringify([
+        { id: "isolated", authority, appId: "new-app", configuration: base },
+      ]),
+    };
+    const readStandardDestination = vi.fn().mockResolvedValue(destination);
+    const readStandardCapture = vi.fn().mockResolvedValue({ selection: selected, description });
+    const resolve = createNativeTargetConfigurationResolver({
+      configuration: base,
+      environment,
+      openResources: () =>
+        Promise.resolve({ ...f.resources, readStandardDestination, readStandardCapture }),
+    });
+    const body = {
+      action: "resolve-preview-target",
+      appId: "new-app",
+      sessionId: ownerContext.sessionId,
+      ownerContext,
+    };
+    return {
+      ...f,
+      base,
+      selected,
+      description,
+      destination,
+      environment,
+      readStandardDestination,
+      readStandardCapture,
+      resolve,
+      body,
+    };
+  };
+  it("uses the real normal receipt and captured source without reading legacy native registration", async () => {
+    const f = fixture();
+    const result = await f.resolve(request(f.body));
+    expect(result.gateway).toMatchObject({
+      projectId: f.destination.projectId,
+      repoId: "123",
+      branch: f.selected.publishedSource.branch,
+      gitSha: f.selected.publishedSource.gitSha,
+      publicOrigin: "https://apps-new-app.vercel.app",
+      environment: "preview",
+    });
+    expect(result.gateway.deploymentId).toBeUndefined();
+    expect(result.applications["new-app"]).toMatchObject({
+      projectId: result.gateway.projectId,
+      accessRoles: ["member"],
+      projectSettings: { framework: "services", rootDirectory: "." },
+    });
+    expect(result.applications.sibling).toBeUndefined();
+    expect(result.gateway.projectId).not.toBe(f.base.gateway.projectId);
+    expect(result.nativeNeon).toEqual(f.base.nativeNeon);
+    expect(f.resources.registry.read).not.toHaveBeenCalled();
+    expect(f.base.gateway.projectId).toBe("gateway");
+  });
+  it.each(["missing-destination", "foreign-source", "foreign-profile", "private-delivery"])(
+    "refuses %s without falling back to a legacy target",
+    async (failure) => {
+      const f = fixture();
+      if (failure === "missing-destination") {
+        f.readStandardDestination.mockResolvedValue(undefined);
+      }
+      if (failure === "foreign-source") {
+        f.selected.publishedSource.repositoryId = "foreign-repository";
+      }
+      if (failure === "foreign-profile") {
+        f.environment.PROTECTED_HOSTED_OPERATOR_RESOURCE_PROFILES = JSON.stringify([
+          {
+            id: "isolated",
+            authority: { ...authority, ownerUserId: "other" },
+            appId: "new-app",
+            configuration: f.base,
+          },
+        ]);
+      }
+      if (failure === "private-delivery") {
+        f.readStandardDestination.mockResolvedValue({
+          ...f.destination,
+          deploymentAccess: undefined,
+        });
+      }
+      await expect(f.resolve(request(f.body))).rejects.toThrow();
+      expect(f.resources.registry.read).not.toHaveBeenCalled();
+    },
+  );
+  it("routes public release through the same normal destination and never reads the obsolete registry", async () => {
+    const f = fixture();
+    const result = await f.resolve(
+      request({
+        action: "public-release-plan",
+        appId: "new-app",
+        ownerContext,
+        adapterSessionId: ownerContext.adapterSessionId,
+        callId: "release-call",
+        execution: { logicalSessionId: ownerContext.adapterSessionId },
+      }),
+    );
+    expect(result.gateway.projectId).toBe(f.destination.projectId);
+    expect(result.standardRuntime?.productionDatabaseIdentity).toBe("ep-production.neon.tech/auth");
+    expect(f.resources.registry.read).not.toHaveBeenCalled();
+  });
+  it("does not borrow a legacy native target for an unconfigured public release", async () => {
+    const f = setup();
+    await expect(
+      f.resolve(
+        request({
+          action: "public-release-plan",
+          appId: "new-app",
+          ownerContext,
+          adapterSessionId: ownerContext.adapterSessionId,
+          callId: "release-call",
+          execution: { logicalSessionId: ownerContext.adapterSessionId },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "builder_destination_configuration_required" });
     expect(f.resources.registry.read).not.toHaveBeenCalled();
   });
 });

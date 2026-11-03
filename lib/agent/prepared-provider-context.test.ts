@@ -222,6 +222,7 @@ describe("prepared provider continuity", () => {
         env: [credential.token],
         id: "prj_1",
         name: "renamed-stock",
+        link: { productionBranch: "release/published-app" },
         token: credential.token,
       }),
     );
@@ -245,7 +246,7 @@ describe("prepared provider continuity", () => {
       redirect: "error",
     });
     expect(result).toEqual({
-      project: { id: "prj_1", name: "renamed-stock" },
+      project: { id: "prj_1", name: "renamed-stock", productionBranch: "release/published-app" },
       scope: {
         id: "team_1",
         installationId: "icfg_1",

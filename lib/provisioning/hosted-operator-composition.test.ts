@@ -5030,3 +5030,49 @@ it("uses only the same approved completed additive capture successor for app pla
   record.operator.pendingEffectId = "normal-accounts";
   expect(readCompletedCaptureBootstrap(successor, record)).toBeUndefined();
 });
+
+it("keeps legacy project separation frozen and accepts an explicitly planned single Services destination", async () => {
+  const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+  const original = bootstrapWithGatewayOrigin("https://apps.example");
+  const boundary = original.deploymentBoundary;
+  if (
+    boundary === undefined ||
+    original.publicGateway === undefined ||
+    original.gatewayDelivery === undefined ||
+    original.gatewayBindings === undefined
+  ) {
+    throw new Error("Missing fixture boundary");
+  }
+  const sameProject = {
+    ...original,
+    deploymentBoundary: {
+      ...boundary,
+      gateway: { ...boundary.gateway, projectId: context.target.projectId },
+    },
+    publicGateway: { ...original.publicGateway, projectId: context.target.projectId },
+    gatewayDelivery: { ...original.gatewayDelivery, projectId: context.target.projectId },
+    gatewayBindings: {
+      ...original.gatewayBindings,
+      sourceWorkload: {
+        ...original.gatewayBindings.sourceWorkload,
+        projectId: context.target.projectId,
+      },
+    },
+  };
+  expect(() => hostedOperatorPlanSchema.parse(sameProject)).toThrow();
+  const fresh = hostedOperatorPlanSchema.parse({
+    ...sameProject,
+    deploymentBoundary: {
+      ...sameProject.deploymentBoundary,
+      composition: "single-project-services",
+    },
+  });
+  f.configuration.composition = "single-project-services";
+  f.configuration.gateway.projectId = context.target.projectId;
+  f.configuration.gateway.workload.projectId = context.target.projectId;
+  const plan = await resolveFullPlan(fresh, context, f.configuration, f.controlPlane);
+  expect(plan.deploymentBoundary?.composition).toBe("single-project-services");
+  expect(plan.appTrustedSources).toBeUndefined();
+  expect(plan.selection.projectId).toBe(plan.publicGateway?.projectId);
+  expect(original.deploymentBoundary).toEqual(boundary);
+});

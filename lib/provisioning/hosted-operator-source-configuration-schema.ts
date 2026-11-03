@@ -80,6 +80,16 @@ export const hostedOperatorSandboxConfigurationSchema = z.union([
 export const hostedOperatorSourceConfigurationSchema = z.strictObject({
   /** Explicit deployment-owned topology; omitted configurations retain legacy behavior. */
   composition: z.literal("single-project-services").optional(),
+  standardRuntime: z
+    .strictObject({
+      profileId: id,
+      productionDatabaseIdentity: z.string().regex(/^[a-z0-9.-]+\.neon\.tech\/[a-z][a-z0-9_]*$/u),
+      provisioningRequestId: z.uuid(),
+      provisioningDigest: digest,
+      appSpecDigest: digest,
+      capturedReleaseId: id,
+    })
+    .optional(),
   applications: z.record(
     id,
     z.strictObject({
@@ -186,6 +196,7 @@ export const validateHostedOperatorSourceConfiguration = (
         ),
     ),
     new Set([config.operator.projectId, config.gateway.projectId]).size === 2,
+    config.standardRuntime === undefined || config.composition === "single-project-services",
     config.composition !== "single-project-services" || hasSingleProjectServicesTopology(config),
   ].every(Boolean);
   if (!ownedConfiguration) {
