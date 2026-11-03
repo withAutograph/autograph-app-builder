@@ -168,3 +168,8 @@ its own concrete scope and approval.
 - [Hosted runtime and protected Preview contract](../hosted-app-runtime.md)
 - [Public MCP contract](../public-mcp-contract.md)
 - [Production handoff](../production-readiness-handoff.md)
+
+The optional integration service's missing isolated infrastructure and app-scoped
+credential boundary are specified separately in
+[isolated central integration setup](2026-11-03-a469-isolated-central-integrations-setup.md).
+This does not add a generated-app destination or change the public release goal.
