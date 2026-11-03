@@ -43,6 +43,37 @@ expand private build approval. Report unavailable delivery capabilities and
 remaining handoff work precisely. Preserve the original public session and all
 approval decisions throughout these phases.
 
+### One app destination and public delivery
+
+The [A-469 execution decision](plans/2026-11-03-a469-normal-builder-public-delivery.md)
+records the local-first implementation milestones and remaining acceptance gaps.
+
+Resolve delivery from the accepted app and its owner-scoped provisioning result.
+Normal Builder provisioning derives `apps-<app-id>`, links the selected repository,
+and creates one native Vercel Services project rooted at `.`. Reuse that exact
+verified project for runtime setup, publication, delivery and existing-app
+revisions. An existing project requires recorded ownership and current provider
+readback; a matching name alone is not ownership. Do not create another app,
+Preview or Auth project merely to complete acceptance. Gateway, Auth and app
+Services follow the selected repository's single-project composition; the
+privileged installer/operator remains separate infrastructure.
+
+For a requested public release, the app's public domain must open without a
+Vercel account. Better Auth still owns sign-in, organization membership, app
+assignment and action authorization. Standard Protection can retain protection
+on deployment URLs while leaving the production domain public. A public domain
+does not authorize public product data, provider activation or customer
+Production changes. Public delivery must be an explicit supported Builder effect,
+not a manually completed deployment or a renamed protected Preview receipt.
+
+The protected native Preview onboarding contract is a distinct capability, not
+the required destination for every normal app. Its frozen plans, approvals and
+uncertain outcomes keep their original meaning. A changed destination or exposure
+requires a supported new intent and its own effect approval, preserving history;
+never rewrite a journal or replay an uncertain response to obtain consent.
+Missing standard-destination or public-delivery automation is a Builder defect
+to repair in the shared workflow, not work for the evaluator to do privately.
+
 ## Backend ownership
 
 - Use Arrusted's CUE/PostgreSQL generated data boundary for app-owned durable
