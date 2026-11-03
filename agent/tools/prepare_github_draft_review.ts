@@ -16,7 +16,7 @@ import { resolvePublicationTargetForTool } from "@/lib/agent/github-publication-
 
 export default defineTool({
   description:
-    "Prepare a fresh initial draft-PR review against the selected GitHub repository's current default branch. For a fresh-template app, supply the intended existing repository in destination; its normal GitHub access connection is checked without replacing the starter checkout. A retained destination review can be refreshed without repeating that selector. Read only the intended app change paths, preserve the validated private app and original source provenance, and invalidate the old review and draft proposal. Use change_set_status with contentSide before or after to inspect destination content as needed. Then accept_change_set, seal the new proposal, and request separate publication approval. This never writes GitHub or updates an existing PR.",
+    "Prepare a fresh initial draft-PR review against the selected GitHub repository's current default branch. For a normal provisioned app, automatically use its recorded repository. For another fresh-template app, supply the intended existing repository in destination; its normal GitHub access connection is checked without replacing the starter checkout. A retained destination review can be refreshed without repeating that selector. Read only the intended app change paths, preserve the validated private app and original source provenance, and invalidate the old review and draft proposal. Use change_set_status with contentSide before or after to inspect destination content as needed. Then accept_change_set, seal the new proposal, and request separate publication approval. This never writes GitHub or updates an existing PR.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "validated" && state.phase !== "reviewed") {
@@ -32,6 +32,7 @@ export default defineTool({
     }
     const resolved = await resolvePublicationTargetForTool({
       ctx,
+      appId: state.appSpec.appId,
       destination: input.destination,
       destinationReview: state.githubDestinationReview,
       githubSource: state.githubSource,

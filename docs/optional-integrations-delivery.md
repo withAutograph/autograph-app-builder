@@ -224,3 +224,10 @@ resource digest; no generic membership fallback substitutes for that policy.
 Frozen protected Preview link configurations and proofs retain their original
 meaning. They cannot satisfy a new pending public release binding, and no
 uncertain request or approval is replayed or transferred.
+
+For a normal provisioned app, the initial GitHub destination review automatically
+selects its owner/session-bound settled Builder repository receipt. Independent
+GitHub access must return the same repository and installation; a supplied
+selector cannot retarget the app. The fresh-template source receipt retains its
+original provenance. Later revisions retain that same destination and review
+current content through the existing branch/ref comparison and approval flow.

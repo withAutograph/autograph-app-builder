@@ -1,3 +1,4 @@
+import { readBuilderPublicationDestinationForTool } from "./builder-publication-destination";
 import type { GitHubPublicationDestinationIdentity } from "./github-publication-runtime";
 import { repositoryAccessReceiptSchema } from "./repository-access-state";
 import type { RepositoryAccessReceipt } from "./repository-access-state";
@@ -52,18 +53,37 @@ export const publicationDestinationFromReview = (
 };
 
 /** Use the ordinary owned connection flow without replacing an acquired checkout. */
+// oxlint-disable-next-line eslint/complexity -- Canonical app destination checks preserve the existing fresh, revision, retained-review and access-selection branches.
 export const resolvePublicationTargetForTool = async (input: {
   ctx: ToolContext;
   destination?: PublicationDestinationSelector;
   githubSource?: ImmutableGitHubSourceReceipt;
   sourceKind: SourceKind;
   destinationReview?: GitHubDestinationReviewBinding;
+  appId: string;
 }): Promise<
   | { kind: "ready"; target: PublicationTarget }
   | { kind: "missing" }
   | { kind: "selection"; access: RepositoryAccessResult }
 > => {
+  const ownedDestination = await readBuilderPublicationDestinationForTool(input.ctx, input.appId);
+  if (ownedDestination !== undefined && input.destination !== undefined) {
+    const selectedInstallation =
+      input.destination.selectedInstallationId ?? ownedDestination.selectedInstallationId;
+    if (
+      input.destination.repository.toLowerCase() !== ownedDestination.repository.toLowerCase() ||
+      selectedInstallation !== ownedDestination.selectedInstallationId
+    ) {
+      throw new Error("Publication must retain this Builder app's recorded repository.");
+    }
+  }
   if (input.githubSource !== undefined) {
+    if (
+      ownedDestination !== undefined &&
+      input.githubSource.repository.repositoryId !== ownedDestination.repositoryId
+    ) {
+      throw new Error("The revision source differs from this Builder app's repository.");
+    }
     if (
       input.destination !== undefined &&
       input.destination.repository.toLowerCase() !==
@@ -81,6 +101,7 @@ export const resolvePublicationTargetForTool = async (input: {
       ? undefined
       : publicationDestinationFromReview(input.destinationReview);
   const destination =
+    ownedDestination ??
     input.destination ??
     (retained === undefined
       ? undefined
@@ -102,8 +123,16 @@ export const resolvePublicationTargetForTool = async (input: {
   if (access.kind === "selection") {
     return { kind: "selection", access: access.access };
   }
-  return {
-    kind: "ready",
-    target: { destination: publicationDestinationFromAccess(access.receipt, input.ctx.session.id) },
-  };
+  const selected = publicationDestinationFromAccess(access.receipt, input.ctx.session.id);
+  if (ownedDestination !== undefined) {
+    const current = await readBuilderPublicationDestinationForTool(input.ctx, input.appId);
+    if (
+      selected.repositoryId !== ownedDestination.repositoryId ||
+      selected.installationId !== ownedDestination.selectedInstallationId ||
+      JSON.stringify(current) !== JSON.stringify(ownedDestination)
+    ) {
+      throw new Error("The saved Builder app destination changed during publication review.");
+    }
+  }
+  return { kind: "ready", target: { destination: selected } };
 };
