@@ -49,3 +49,18 @@ describe("public release additive staging metadata", () => {
     ).toBe(false);
   });
 });
+
+it("rejects a public source receipt from a different normal provisioning operation", () => {
+  expect(
+    publicReleasePlanSchema.safeParse({
+      ...plan,
+      source: {
+        ...plan.source,
+        deliveryScope: {
+          ...plan.source.deliveryScope,
+          provisioningRequestId: "99999999-9999-4999-a999-999999999999",
+        },
+      },
+    }).success,
+  ).toBe(false);
+});

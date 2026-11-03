@@ -27,7 +27,12 @@ const fixture = () => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     expect(url.origin).toBe("https://api.github.com");
     if (url.pathname === "/repositories/123") {
-      return Response.json({ id: 123, name: "app", owner: { login: "owner" } });
+      return Response.json({
+        id: 123,
+        name: "app",
+        description: `Created by Autograph App Builder request ${plan.project.provisioningRequestId}`,
+        owner: { login: "owner" },
+      });
     }
     const ref = decodeURIComponent(url.pathname);
     if (ref.endsWith("/git/ref/heads/builder/app")) {
@@ -144,6 +149,7 @@ it("withholds the token when installation is disconnected during token mint", as
 it("reads explicit source and provider-linked production refs without choosing a default branch", async () => {
   const f = fixture();
   expect(await f.destination(f.invocation, f.plan.source)).toEqual({
+    deliveryScope: f.plan.source.deliveryScope,
     installationId: "456",
     repositoryId: "123",
     productionBranch: "main",

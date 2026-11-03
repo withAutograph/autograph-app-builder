@@ -10,6 +10,7 @@ import type { PublicReleaseEffectContext, PublicReleaseInvocation } from "./publ
 const oid = z.string().regex(/^[a-f0-9]{40}$/u);
 const repositorySchema = z.object({
   id: z.union([z.string(), z.number()]).transform(String),
+  description: z.string(),
   node_id: z.string().min(1),
   name: z.string().min(1),
   owner: z.object({ login: z.string().min(1) }),
@@ -67,7 +68,11 @@ export const createPublicReleaseGitHubProvider = (deps: PublicReleaseGitHubDepen
     });
     await check(context);
     const repo = repositorySchema.parse(result.data);
-    if (repo.id !== context.plan.source.repositoryId) {
+    if (
+      repo.id !== context.plan.source.repositoryId ||
+      repo.description !==
+        `Created by Autograph App Builder request ${context.plan.source.deliveryScope.provisioningRequestId}`
+    ) {
       throw unavailable();
     }
     return repo;

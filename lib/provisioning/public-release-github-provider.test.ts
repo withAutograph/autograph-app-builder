@@ -8,6 +8,7 @@ import type { PublicReleaseEffectContext } from "./public-release-handler";
 const fixture = () => {
   const plan = structuredClone(basePlan);
   plan.source.repositoryId = "123";
+  let description = `Created by Autograph App Builder request ${plan.project.provisioningRequestId}`;
   let production = plan.source.expectedProductionSha;
   let source = plan.source.sourceSha;
   let authorized = true;
@@ -53,6 +54,7 @@ const fixture = () => {
       if (url.pathname === "/repositories/123") {
         return Response.json({
           id: 123,
+          description,
           node_id: "repository-node",
           name: "app",
           owner: { login: "owner" },
@@ -104,6 +106,9 @@ const fixture = () => {
     context,
     provider,
     writes,
+    foreignRepository: () => {
+      description = "Shared platform repository";
+    },
     setProduction: (v: string) => {
       production = v;
     },
@@ -183,4 +188,14 @@ it("denies publication after owner or consent revocation", async () => {
   f.revoke();
   await expect(f.provider.publish(f.context)).rejects.toThrow("public_release_source_unavailable");
   expect(f.writes).toHaveLength(0);
+});
+
+it("refuses a shared or foreign repository before any publication, even with matching IDs and refs", async () => {
+  const f = fixture();
+  f.foreignRepository();
+  await expect(f.provider.publish(f.context)).rejects.toThrow("public_release_source_unavailable");
+  await expect(f.provider.reconcile(f.context)).rejects.toThrow(
+    "public_release_source_unavailable",
+  );
+  expect(f.writes).toEqual([]);
 });

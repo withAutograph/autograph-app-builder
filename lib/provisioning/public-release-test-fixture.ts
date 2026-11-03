@@ -23,6 +23,11 @@ export const plan = publicReleasePlanSchema.parse({
     environment: "production",
   },
   source: {
+    deliveryScope: {
+      kind: "builder-created-app-repository",
+      provisioningRequestId: "11111111-1111-4111-a111-111111111111",
+      provisioningDigest: "a".repeat(64),
+    },
     installationId: "github-installation",
     repositoryId: "owned-repository",
     sourceBranch: "builder/app",

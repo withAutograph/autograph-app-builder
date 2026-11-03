@@ -5,6 +5,7 @@ import { parseGitHubAppHttpProviderCredentials } from "../repository/github-app-
 import { mergeHostedGitHubInstallationBindings } from "../repository/postgres-github-installation-store";
 import type { HostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
 import type { PublicReleaseGitHubDependencies } from "./public-release-github-provider";
+import type { PublicReleasePlan } from "./public-release-contract";
 import type { PublicReleaseInvocation } from "./public-release-handler";
 
 const decimal = z.string().regex(/^[1-9][0-9]*$/u);
@@ -118,7 +119,8 @@ export const createPublicReleaseGitHubDestinationReader = (
   const read = scopedCredential(input);
   return async (
     invocation: PublicReleaseInvocation,
-    scope: PublicReleaseGitHubSourceScope & { productionBranch: string; sourceBranch: string },
+    scope: PublicReleaseGitHubSourceScope &
+      Pick<PublicReleasePlan["source"], "productionBranch" | "sourceBranch" | "deliveryScope">,
   ) => {
     const check = async () => {
       invocation.signal.throwIfAborted();
@@ -138,11 +140,16 @@ export const createPublicReleaseGitHubDestinationReader = (
       const repo = z
         .object({
           id: z.union([z.string(), z.number()]).transform(String),
+          description: z.string(),
           name: z.string().min(1),
           owner: z.object({ login: z.string().min(1) }),
         })
         .parse(repository.data);
-      if (repo.id !== scope.repositoryId) {
+      if (
+        repo.id !== scope.repositoryId ||
+        repo.description !==
+          `Created by Autograph App Builder request ${scope.deliveryScope.provisioningRequestId}`
+      ) {
         throw unavailable();
       }
       const readRef = async (branch: string) => {
@@ -162,6 +169,7 @@ export const createPublicReleaseGitHubDestinationReader = (
       const expectedProductionSha = await readRef(scope.productionBranch);
       await check();
       return {
+        deliveryScope: scope.deliveryScope,
         installationId: scope.installationId,
         repositoryId: scope.repositoryId,
         productionBranch: scope.productionBranch,

@@ -192,3 +192,13 @@ deployments or production/provider writes.
 This handoff intentionally leaves the executable skill and its generated bundle
 unchanged. Future authoring-guidance edits must use the repository's normal
 bundle-generation/parity workflow before claiming the product consumes them.
+
+New public release plans freeze a `source.deliveryScope` identifying the normal
+Builder create receipt. Its request and digest must equal the destination's
+provisioning receipt. Before planning and publication, the private factory
+requires the settled owner-bound journal to prove this app repository was
+created by Builder, with the recorded absent-candidate and accepted repository
+identity. Independent GitHub reads must match that identity and its existing
+Builder request marker. A shared source/template repository cannot become an
+app release destination merely because its installation and branch are writable.
+No legacy frozen onboarding approval authorizes this new release scope.

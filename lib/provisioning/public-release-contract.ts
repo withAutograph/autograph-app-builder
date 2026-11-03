@@ -25,58 +25,77 @@ export const publicReleaseSelectionSchema = z.strictObject({
   appId: builderAppIdSchema,
   sessionId: id,
 });
-export const publicReleasePlanSchema = z.strictObject({
-  version: z.literal(1),
-  kind: z.literal("public-app-release-v1"),
-  /** Absence preserves the first additive release contract as application delivery. */
-  purpose: z.enum(["auth-bootstrap", "application"]).optional(),
-  authority: hostedTenantAuthoritySchema,
-  selection: publicReleaseSelectionSchema,
-  project: z.strictObject({
-    projectId: id,
-    teamId: id,
-    installationId: id,
-    provisioningRequestId: z.uuid(),
-    provisioningDigest: digest,
-    framework: z.literal("services"),
-    rootDirectory: z.literal("."),
-    deploymentAccess: z.literal("public-app"),
-    environment: z.literal("production"),
-  }),
-  source: z.strictObject({
-    installationId: id,
-    repositoryId: id,
-    sourceBranch: id,
-    sourceSha: z.string().regex(/^[a-f0-9]{40}$/u),
-    productionBranch: id,
-    expectedProductionSha: z.string().regex(/^[a-f0-9]{40}$/u),
-    reviewDigest: digest,
-  }),
-  runtime: z.strictObject({
-    operationRef: z.uuid(),
-    planDigest: digest,
-    configurationRef: id,
-    realmEnrollmentRef: z.uuid().optional(),
-    releaseId: id,
-    providerEnvironment: z.literal("development"),
-    syntheticOnly: z.literal(true),
-  }),
-  publicOrigin: origin,
-  environment: z
-    .array(
-      z.strictObject({
-        key: z.string().regex(/^[A-Z_][A-Z0-9_]*$/u),
-        sha256: digest,
-        priorBinding: z
-          .strictObject({ id, operationRef: z.uuid(), valueSha256: digest })
-          .optional(),
-      }),
-    )
-    .min(1)
-    .refine((rows) => new Set(rows.map((row) => row.key)).size === rows.length)
-    .transform((rows) => rows.toSorted((left, right) => left.key.localeCompare(right.key))),
-  effects: z.tuple([z.literal("bind-production-runtime"), z.literal("publish-release-source")]),
+export const publicReleaseSourceDeliveryScopeSchema = z.strictObject({
+  kind: z.literal("builder-created-app-repository"),
+  provisioningRequestId: z.uuid(),
+  provisioningDigest: digest,
 });
+export const publicReleasePlanSchema = z
+  .strictObject({
+    version: z.literal(1),
+    kind: z.literal("public-app-release-v1"),
+    /** Absence preserves the first additive release contract as application delivery. */
+    purpose: z.enum(["auth-bootstrap", "application"]).optional(),
+    authority: hostedTenantAuthoritySchema,
+    selection: publicReleaseSelectionSchema,
+    project: z.strictObject({
+      projectId: id,
+      teamId: id,
+      installationId: id,
+      provisioningRequestId: z.uuid(),
+      provisioningDigest: digest,
+      framework: z.literal("services"),
+      rootDirectory: z.literal("."),
+      deploymentAccess: z.literal("public-app"),
+      environment: z.literal("production"),
+    }),
+    source: z.strictObject({
+      deliveryScope: publicReleaseSourceDeliveryScopeSchema,
+      installationId: id,
+      repositoryId: id,
+      sourceBranch: id,
+      sourceSha: z.string().regex(/^[a-f0-9]{40}$/u),
+      productionBranch: id,
+      expectedProductionSha: z.string().regex(/^[a-f0-9]{40}$/u),
+      reviewDigest: digest,
+    }),
+    runtime: z.strictObject({
+      operationRef: z.uuid(),
+      planDigest: digest,
+      configurationRef: id,
+      realmEnrollmentRef: z.uuid().optional(),
+      releaseId: id,
+      providerEnvironment: z.literal("development"),
+      syntheticOnly: z.literal(true),
+    }),
+    publicOrigin: origin,
+    environment: z
+      .array(
+        z.strictObject({
+          key: z.string().regex(/^[A-Z_][A-Z0-9_]*$/u),
+          sha256: digest,
+          priorBinding: z
+            .strictObject({ id, operationRef: z.uuid(), valueSha256: digest })
+            .optional(),
+        }),
+      )
+      .min(1)
+      .refine((rows) => new Set(rows.map((row) => row.key)).size === rows.length)
+      .transform((rows) => rows.toSorted((left, right) => left.key.localeCompare(right.key))),
+    effects: z.tuple([z.literal("bind-production-runtime"), z.literal("publish-release-source")]),
+  })
+  .superRefine((plan, context) => {
+    if (
+      plan.source.deliveryScope.provisioningRequestId !== plan.project.provisioningRequestId ||
+      plan.source.deliveryScope.provisioningDigest !== plan.project.provisioningDigest
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Public source must use the normal app provisioning receipt",
+      });
+    }
+  });
+
 export type PublicReleasePlan = z.infer<typeof publicReleasePlanSchema>;
 export const publicReleasePlanDigest = (plan: PublicReleasePlan) =>
   createHash("sha256")
