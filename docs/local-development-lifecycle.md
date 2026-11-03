@@ -92,6 +92,29 @@ do not silently create a replacement public request. A fresh Node process also
 loses the local in-memory original-request index. Hosted checkpoint recovery is
 a separate durable path described in the [public MCP contract](public-mcp-contract.md).
 
+## Access to an existing hosted session
+
+Use `mise run dev -- --arrusted-root /absolute/arrusted
+--hosted-session-resource https://<original-builder-origin>/mcp` to expose existing
+hosted sessions through a local native stdio connector. The ordinary local HTTP
+`/mcp` and isolated local Eve store remain available. The installed development
+connector is labelled Existing session when this mode is selected.
+
+This mode starts the official Codex app server and uses its direct
+`mcpServer/tool/call` API against the original canonical HTTPS connection. It
+starts no model turn or replacement Builder request, reads no credential files,
+and creates no custom OAuth identity or cross-origin bearer relay. Normal
+Codex authentication remains bound to the original resource. Only the five
+public Builder tools are exposed; user, workspace and session authority and
+existing effect approvals remain enforced by the hosted Builder. The native
+client disables the Builder plugins in its own helper context to prevent recursion.
+
+Transport attachment does not copy the hosted store or run local agent changes
+against it. Hosted execution and local implementation evidence must remain
+separate. Missing sign-in or unsupported native APIs return an actionable
+connection error; never substitute another account/session, fabricate authority,
+or loosen resource validation.
+
 ## Persistent Sandbox reattachment
 
 The Eve 0.68 provider records the persistent Sandbox name as immutable session

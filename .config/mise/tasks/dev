@@ -27,6 +27,10 @@ Options:
   --destination-root PATH  Builder-owned generated-work root. Defaults to
                            .artifacts/development/destination.
   --next-port PORT         Loopback App Builder and /mcp port. Default: 3000.
+  --hosted-session-resource URL
+                           Access an existing hosted Builder through the local
+                           native Codex client, using its normal stored OAuth.
+                           Agent execution remains hosted; local changes are not applied.
   --eve-port PORT          Loopback Eve port. Default: 2000.
   --emulated-web true      Prepare synthetic local auth/providers/PostgreSQL and
                            serve HTTPS localhost. Requires Docker and existing
@@ -39,7 +43,8 @@ Options:
 The command snapshots Arrusted, starts loopback /mcp, checks MCP transport
 readiness, and installs app-builder@autograph-dev in the active
 CODEX_HOME, disabled globally and enabled by this repository's .codex/config.toml.
-Development mode cannot publish, deploy, or mutate providers.
+The local development worker cannot publish, deploy, or mutate providers.
+The optional existing-session connector preserves hosted authority and approvals.
 EOF
     exit 0
     ;;

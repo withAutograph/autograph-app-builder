@@ -183,3 +183,13 @@ session.
   `lib/sandbox/managed-runtime-supervisor.ts`,
   `lib/provisioning/hosted-operator-managed-runtime-projection.ts`,
   `lib/provisioning/hosted-operator-continuity.ts`.
+
+## Saved-plan continuation
+
+The normal continuity run accepts the exact four-field saved request (`action`,
+`planRef`, `planDigest`, `idempotencyKey`). Builder loads the full canonical plan
+through the existing owner-scoped read before approval and execution. The model
+does not recreate resource, release or actor payloads. The existing native
+approval must still settle for that exact request, owner and call. Strict legacy
+full-plan inputs remain supported; a partial or altered legacy plan is rejected.
+Saved intent supersession and effect reconciliation remain enforced.

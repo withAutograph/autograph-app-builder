@@ -1,5 +1,6 @@
 import { prepareDevelopmentEmulatedWeb } from "../lib/development/emulated-web";
 import { spawn } from "node:child_process";
+import type { HostedSessionConnection } from "../lib/development/dev-package";
 import type { ChildProcess } from "node:child_process";
 import { lstat, mkdir, mkdtemp, realpath } from "node:fs/promises";
 import nodePath from "node:path";
@@ -155,7 +156,7 @@ function eveWrapperEnvironment(input: {
   } satisfies NodeJS.ProcessEnv;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line eslint/complexity, eslint/func-style -- Existing restart branches share one owned lifecycle and optional transport mode.
 async function runEveCycle(input: {
   cycleFile: string;
   sourceRoot: string;
@@ -165,6 +166,7 @@ async function runEveCycle(input: {
   packageState: DevelopmentSupervisorState;
   destinationRoot: string;
   nextPort: number;
+  hostedSession?: HostedSessionConnection;
   evePort: number;
   signal: AbortSignal;
   shutdownExitCode: () => number;
@@ -221,6 +223,7 @@ async function runEveCycle(input: {
     const runtimeFingerprint = await fingerprintDevelopmentRuntime(repositoryRoot);
     const packageFingerprint = await developmentPackageFingerprint({
       origin: input.web?.origin,
+      hostedSession: input.hostedSession,
       port: input.nextPort,
       repositoryRoot,
     });
@@ -230,6 +233,7 @@ async function runEveCycle(input: {
     if (!packageReused) {
       input.packageState.result = await createDevelopmentPackage({
         origin: input.web?.origin,
+        hostedSession: input.hostedSession,
         outputRoot: input.codexRoot,
         port: input.nextPort,
         repositoryRoot,
@@ -336,6 +340,11 @@ async function runEveCycle(input: {
       console.log("Autograph App Builder development is ready.");
       console.log("Open a fresh Codex task and select Autograph App Builder (Development).");
       console.log(`Loopback endpoint: ${packageResult.receipt.endpoint}`);
+      if (input.hostedSession !== undefined) {
+        console.log(
+          `Existing-session connector: ${input.hostedSession.resourceUrl} (local native transport; hosted execution)`,
+        );
+      }
       return await Promise.race([runtimeChanged, eveExited, input.nextExited, stopping]);
     } finally {
       watchers.abort();
@@ -369,6 +378,15 @@ try {
     await realpath(await mkdtemp(nodePath.join(runsRoot, "supervisor-"))),
   );
   const packageState: DevelopmentSupervisorState = {};
+  const hostedSession: HostedSessionConnection | undefined =
+    args.hostedSessionResource === undefined
+      ? undefined
+      : {
+          resourceUrl: args.hostedSessionResource,
+          codexBin: requiredEnvironment("APP_BUILDER_DEV_CODEX_BIN"),
+          nodeBin: requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"),
+          cwd: await privateRoot(nodePath.join(stateRoot, "native-session-client")),
+        };
   const nextHome = await privateRoot(nodePath.join(stateRoot, "next-home"));
   const destinationRoot = await privateRoot(
     args.destinationRoot ?? nodePath.join(artifactRoot, "destination"),
@@ -426,6 +444,7 @@ try {
       evePort: args.evePort,
       nextExited,
       nextPort: args.nextPort,
+      hostedSession,
       packageState,
       runsRoot,
       shutdownExitCode: shutdown.exitCode,
