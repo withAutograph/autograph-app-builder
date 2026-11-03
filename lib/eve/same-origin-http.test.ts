@@ -2747,3 +2747,162 @@ describe("activation transport diagnostics", () => {
     },
   );
 });
+
+describe("retained confirmation presentation recovery", () => {
+  const requestEvent = (requestId: string, digest = "a".repeat(64)) => ({
+    type: "input.requested",
+    data: {
+      sequence: 0,
+      stepIndex: 0,
+      turnId: "confirmation-turn",
+      requests: [
+        {
+          requestId,
+          kind: "tool-approval",
+          action: {
+            kind: "tool-call",
+            callId: `call-${requestId}`,
+            toolName: "run-app-continuity-tests",
+            input: {
+              action: "continuity",
+              planRef: "_protected-operator/continuity-plans/00000000-0000-4000-8000-000000000001",
+              planDigest: digest,
+              idempotencyKey: "retained-exercise",
+            },
+          },
+        },
+      ],
+    },
+  });
+  const seedFailure = async (events: unknown[]) => {
+    const observed = await observeSameOriginEveStream({
+      config,
+      sessionId: "wrun_1",
+      workloadIdentity: identity(),
+      fetchImplementation: vi.fn(async () => await Promise.resolve(stream(events))),
+      onEvent: () => {},
+    });
+    // This is the persisted observer shape from the previous unsupported renderer:
+    // its public error/history remain at cursor 5, while native input remains parked.
+    return nativeObservationStateSchema.parse({
+      ...observed.nativeObservationState,
+      invalidInput: true,
+      pendingRequests: [],
+      publicEventCount: 5,
+    });
+  };
+  it("restores the same parked approval with an appended public row and no private replay or repeated scan", async () => {
+    const events = [requestEvent("retained-approval"), { type: "session.waiting", data: {} }];
+    const state = await seedFailure(events);
+    const http = await liveHttpSnapshot(events);
+    try {
+      const projected: InternalEveEvent[] = [];
+      const privateEvents: string[] = [];
+      const input = {
+        config,
+        sessionId: "wrun_1",
+        workloadIdentity: identity(),
+        fetchImplementation: http.fetchImplementation,
+        onEvent: (event: InternalEveEvent) => {
+          projected.push(event);
+        },
+        onPrivateEvent: (event: { type: string }) => {
+          privateEvents.push(event.type);
+        },
+      };
+      const restored = await observeSameOriginEveStream({
+        ...input,
+        nativeObservationState: state,
+      });
+      expect(restored.status).toBe("input_required");
+      expect(restored.pendingRequests.map((request) => request.requestId)).toEqual([
+        "retained-approval",
+      ]);
+      expect(projected.map((event) => ({ index: event.index, type: event.type }))).toEqual([
+        { index: 5, type: "input.requested" },
+      ]);
+      expect(privateEvents).toEqual([]);
+      expect(restored.nextNativeIndex).toBe(state.nextNativeIndex);
+      expect(restored.publicEventCount).toBe(6);
+      expect(restored.nativeObservationState.invalidInput).toBe(false);
+      expect(restored.nativeObservationState.privateInputState).toEqual(state.privateInputState);
+      const next = await observeSameOriginEveStream({
+        ...input,
+        nativeObservationState: restored.nativeObservationState,
+      });
+      expect(next.nativeObservationState).toEqual(restored.nativeObservationState);
+      expect(http.paths).toEqual([
+        "/eve/v1/session/wrun_1/stream?startIndex=0&includeTailIndex=1",
+        "/eve/v1/session/wrun_1/stream?startIndex=2&includeTailIndex=1",
+        "/eve/v1/session/wrun_1/stream?startIndex=2&includeTailIndex=1",
+      ]);
+      expect(state.invalidInput).toBe(true);
+      expect(state.pendingRequests).toEqual([]);
+    } finally {
+      await http.close();
+    }
+  });
+  it("does not resurrect settled approval and preserves an unsupported pending confirmation", async () => {
+    const events = [
+      requestEvent("settled"),
+      {
+        type: "approval.settled",
+        data: {
+          requestId: "settled",
+          outcome: "cancelled",
+          responderPrincipalId: "user_1",
+          sequence: 0,
+          stepIndex: 0,
+          turnId: "confirmation-turn",
+        },
+      },
+      requestEvent("unsupported", "invalid-digest"),
+      { type: "session.waiting", data: {} },
+    ];
+    const state = await seedFailure(events);
+    const projected: InternalEveEvent[] = [];
+    const observed = await observeSameOriginEveStream({
+      config,
+      sessionId: "wrun_1",
+      workloadIdentity: identity(),
+      nativeObservationState: state,
+      fetchImplementation: vi.fn(
+        async (url) =>
+          await Promise.resolve(
+            streamFromIndex(events, Number(new URL(String(url)).searchParams.get("startIndex"))),
+          ),
+      ),
+      onEvent: (event) => {
+        projected.push(event);
+      },
+    });
+    expect(observed.status).toBe("failed");
+    expect(observed.pendingRequests).toEqual([]);
+    expect(observed.nativeObservationState.invalidInput).toBe(true);
+    expect(projected).toEqual([]);
+  });
+  it("retains genuine native terminal state instead of restoring an approval", async () => {
+    const events = [
+      requestEvent("retained-approval"),
+      { type: "session.failed", data: { message: "native failure" } },
+    ];
+    const state = await seedFailure(events);
+    const fetchImplementation = vi.fn(
+      async (url) =>
+        await Promise.resolve(
+          streamFromIndex(events, Number(new URL(String(url)).searchParams.get("startIndex"))),
+        ),
+    );
+    const observed = await observeSameOriginEveStream({
+      config,
+      sessionId: "wrun_1",
+      workloadIdentity: identity(),
+      nativeObservationState: state,
+      fetchImplementation,
+      onEvent: () => {},
+    });
+    expect(observed.status).toBe("failed");
+    expect(observed.pendingRequests).toEqual([]);
+    expect(fetchImplementation).toHaveBeenCalledTimes(1);
+  });
+});
