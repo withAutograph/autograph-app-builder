@@ -1,3 +1,4 @@
+import { gatewayDeliverySourceForPlan } from "./hosted-operator-gateway-delivery-source";
 import { describe, expect, it, vi } from "vitest";
 import { normalActorOrganizationProofSchema } from "./hosted-operator-normal-actor-journal";
 import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
@@ -587,6 +588,38 @@ const incompleteAppRecord = () => {
 };
 
 describe("completed enrollment and Gateway bootstrap handoff", () => {
+  it("continues completed participant proof planning with the frozen approved draft source and rejects a different project", () => {
+    const record = completedEnrollmentBootstrap();
+    const operator = requiredFixture(record.operator);
+    const source = requiredFixture(operator.plan.gatewayDelivery);
+    operator.plan.gatewayDelivery = { ...source, gitRef: "feature/approved-draft" };
+    operator.planDigest = operatorPlanDigest(operator.plan);
+    const configuration = { gateway: { ...source, gitSha: "9".repeat(40) } };
+    const previousDesired = { ...operator.plan, gatewayDelivery: configuration.gateway };
+    // Reconstructing from current configuration loses the draft ref and its approved source.
+    expect(inspectPlanningParticipantBootstrap(previousDesired, record)).toBeUndefined();
+    const desired = {
+      ...operator.plan,
+      gatewayDelivery: gatewayDeliverySourceForPlan(configuration, operator.plan),
+    };
+    const selected = requiredFixture(inspectPlanningParticipantBootstrap(desired, record));
+    expect(selected.candidate.origin).toBe("https://gateway.example");
+    expect(selected.auth.plan.gatewayDelivery?.gitRef).toBe("feature/approved-draft");
+    expect(selected.auth.plan.gatewayDelivery?.gitSha).toBe(source.gitSha);
+    const mismatched = {
+      ...desired,
+      gatewayDelivery: gatewayDeliverySourceForPlan(
+        { gateway: { ...configuration.gateway, projectId: "different-project" } },
+        operator.plan,
+      ),
+    };
+    expect(inspectPlanningParticipantBootstrap(mismatched, record)).toBeUndefined();
+    const wrongSource = {
+      ...desired,
+      gatewayDelivery: { ...desired.gatewayDelivery, gitRef: "feature/unapproved-draft" },
+    };
+    expect(inspectPlanningParticipantBootstrap(wrongSource, record)).toBeUndefined();
+  });
   it("selects only the independently completed current bootstrap while preserving the original enrollment", () => {
     const record = completedEnrollmentBootstrap();
     const before = structuredClone(record.accountPreparation);
