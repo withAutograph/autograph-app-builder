@@ -1,6 +1,7 @@
 import { defineTool } from "eve/tools";
 import { publicReleasePlanSchema } from "../../lib/provisioning/public-release-contract";
 import { z } from "zod";
+import { planPublicAppWithGuidance } from "../../lib/agent/public-release-planning";
 
 export default defineTool({
   availableInSubagents: false,
@@ -10,6 +11,6 @@ export default defineTool({
   async execute(input, ctx) {
     const { publicReleaseClientForContext } = await import("../../lib/agent/public-release-client");
     const client = await publicReleaseClientForContext(ctx);
-    return await client.plan(input.appId);
+    return await planPublicAppWithGuidance(client, input.appId);
   },
 });

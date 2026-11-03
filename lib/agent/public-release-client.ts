@@ -75,6 +75,7 @@ export const publicReleaseClientForContext = async (ctx: WorkflowStepToolContext
     return schema.parse(await response.json());
   };
   return {
+    sessionId: ownerContext.sessionId,
     plan: async (appId: string) =>
       await send(
         { ...common, action: "public-release-plan", appId },

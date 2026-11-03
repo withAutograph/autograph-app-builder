@@ -202,6 +202,7 @@ identity. Independent GitHub reads must match that identity and its existing
 Builder request marker. A shared source/template repository cannot become an
 app release destination merely because its installation and branch are writable.
 No legacy frozen onboarding approval authorizes this new release scope.
+
 ### Public realm enrollment
 
 A public Auth bootstrap freezes a fresh `realmEnrollmentRef` with its environment
@@ -231,3 +232,8 @@ GitHub access must return the same repository and installation; a supplied
 selector cannot retarget the app. The fresh-template source receipt retains its
 original provenance. Later revisions retain that same destination and review
 current content through the existing branch/ref comparison and approval flow.
+
+When public-release planning finds no normal destination, its blocked result
+links to that same saved build's destination controls. Recovered workers use
+the verified public owner session for this link. Opening the control does not
+approve resource creation or release; the ordinary effect reviews still apply.
