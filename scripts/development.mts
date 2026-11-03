@@ -383,7 +383,7 @@ try {
       ? undefined
       : {
           resourceUrl: args.hostedSessionResource,
-          codexBin: requiredEnvironment("APP_BUILDER_DEV_CODEX_BIN"),
+          codexBin: args.hostedSessionCodexBin ?? requiredEnvironment("APP_BUILDER_DEV_CODEX_BIN"),
           nodeBin: requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"),
           cwd: await privateRoot(nodePath.join(stateRoot, "native-session-client")),
         };

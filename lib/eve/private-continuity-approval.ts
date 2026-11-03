@@ -40,8 +40,8 @@ export type ContinuityApprovalInput = z.infer<typeof continuityApprovalInputSche
 
 /** Compact model input is a locator; canonical owner-scoped readback remains authority. */
 export const continuityApprovalToolInputSchema = z.union([
-  continuityApprovalInputSchema,
   hostedContinuityRequestSchema,
+  continuityApprovalInputSchema,
 ]);
 export type ContinuityApprovalToolInput = z.infer<typeof continuityApprovalToolInputSchema>;
 export const continuityApprovalIntentId = (input: ContinuityApprovalToolInput): string => {

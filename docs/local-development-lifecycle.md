@@ -98,7 +98,10 @@ Use `mise run dev -- --arrusted-root /absolute/arrusted
 --hosted-session-resource https://<original-builder-origin>/mcp` to expose existing
 hosted sessions through a local native stdio connector. The ordinary local HTTP
 `/mcp` and isolated local Eve store remain available. The installed development
-connector is labelled Existing session when this mode is selected.
+connector is labelled Existing session when this mode is selected. If the
+project-selected client does not support native MCP calls, select an existing
+installed client with `--hosted-session-codex-bin /absolute/path/to/codex`. This
+does not install or upgrade software.
 
 This mode starts the official Codex app server and uses its direct
 `mcpServer/tool/call` API against the original canonical HTTPS connection. It

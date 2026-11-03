@@ -31,6 +31,9 @@ Options:
                            Access an existing hosted Builder through the local
                            native Codex client, using its normal stored OAuth.
                            Agent execution remains hosted; local changes are not applied.
+  --hosted-session-codex-bin PATH
+                           Use an existing native Codex client for session access.
+                           Defaults to the project-selected Codex executable.
   --eve-port PORT          Loopback Eve port. Default: 2000.
   --emulated-web true      Prepare synthetic local auth/providers/PostgreSQL and
                            serve HTTPS localhost. Requires Docker and existing

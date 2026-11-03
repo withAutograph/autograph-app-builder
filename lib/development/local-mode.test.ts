@@ -349,3 +349,24 @@ it("selects an existing hosted MCP resource through the native connector", () =>
     ).toThrow();
   }
 });
+
+it("selects an existing native client by an explicit absolute path", () => {
+  expect(
+    parseDevelopmentArguments([
+      "--arrusted-root",
+      "/tmp/arrusted",
+      "--hosted-session-resource",
+      "https://builder.example.test/mcp",
+      "--hosted-session-codex-bin",
+      "/tools/codex",
+    ]).hostedSessionCodexBin,
+  ).toBe("/tools/codex");
+  expect(() =>
+    parseDevelopmentArguments([
+      "--arrusted-root",
+      "/tmp/arrusted",
+      "--hosted-session-codex-bin",
+      "relative-codex",
+    ]),
+  ).toThrow();
+});

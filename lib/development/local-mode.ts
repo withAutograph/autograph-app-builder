@@ -50,6 +50,7 @@ export type DevelopmentArguments = Readonly<{
   webCa?: string;
   nextPort: number;
   hostedSessionResource?: string;
+  hostedSessionCodexBin?: string;
   nextBundler?: "turbopack" | "webpack";
   evePort: number;
 }>;
@@ -128,6 +129,7 @@ export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentA
     webCa?: string;
     nextPort: number;
     hostedSessionResource?: string;
+    hostedSessionCodexBin?: string;
     nextBundler?: "turbopack" | "webpack";
     evePort: number;
   } = { evePort: 2000, nextPort: 3000 };
@@ -168,6 +170,13 @@ export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentA
       }
       case "--next-bundler": {
         parsed.nextBundler = parseNextBundler(value);
+        break;
+      }
+      case "--hosted-session-codex-bin": {
+        if (!isAbsolute(value)) {
+          throw new Error("--hosted-session-codex-bin must be absolute.");
+        }
+        parsed.hostedSessionCodexBin = value;
         break;
       }
       case "--hosted-session-resource": {
