@@ -16,7 +16,11 @@ import {
   operatorOwnerContextSchema,
 } from "./hosted-operator-contract";
 import type { OperatorOwnerContext } from "./hosted-operator-contract";
-import { createHostedOperatorAppOwnerAuthority } from "./hosted-operator-owner";
+import {
+  createHostedOperatorAppOwnerAuthority,
+  readStandardBuilderDestination,
+} from "./hosted-operator-owner";
+import { readActiveVercelInstallationToken } from "../integrations/postgres-vercel-installation";
 import { readHostedOperatorOwnerReaderConfiguration } from "./hosted-operator-owner-context";
 import { createPostgresContinuityJournalStore } from "./postgres-hosted-operator-continuity-journal";
 import { createPostgresTenantExportJournalStore } from "./postgres-hosted-operator-export-journal";
@@ -68,6 +72,9 @@ export interface NativeTargetConfigurationResources {
   registry: Pick<NativeTargetOnboardingStore, "read">;
   continuity: Pick<ContinuityJournalStore, "read">;
   exports: Pick<TenantExportJournalStore, "read">;
+  readStandardDestination?: (
+    input: Parameters<typeof readStandardBuilderDestination>[1],
+  ) => ReturnType<typeof readStandardBuilderDestination>;
   close: () => Promise<void>;
 }
 
@@ -135,6 +142,31 @@ export const createNativeTargetConfigurationResolver =
         const ownerContext = parsed.data.ownerContext;
         if (ownerContext === undefined || ownerContext.sessionId !== selected.sessionId) {
           throw new HostedOperatorError("authorization_required");
+        }
+        if (input.configuration.composition === "single-project-services") {
+          await resources.owner.verifyWorkload(request);
+          await resources.owner.assertCanonicalAppOwner({
+            authority: ownerContext.authority,
+            ownerContext,
+            target: { appId: selected.appId, sessionId: selected.sessionId },
+          });
+          const destination = await resources.readStandardDestination?.({
+            authority: ownerContext.authority,
+            ownerContext,
+            target: { appId: selected.appId, sessionId: selected.sessionId },
+          });
+          if (destination === undefined) {
+            throw new HostedOperatorError("builder_destination_required");
+          }
+          const app = input.configuration.applications[selected.appId];
+          if (
+            app === undefined ||
+            destination.projectId !== app.projectId ||
+            destination.projectId !== input.configuration.gateway.projectId ||
+            destination.teamId !== input.configuration.teamId
+          ) {
+            throw new HostedOperatorError("builder_destination_configuration_required");
+          }
         }
         const reader = createNativeTargetOnboardingReader<RegistryInvocation>({
           store: resources.registry,
@@ -218,7 +250,7 @@ export const openNativeTargetConfigurationResources = async (
       audience: settings.resource,
       issuer: settings.issuer,
     });
-    const owner = createHostedOperatorAppOwnerAuthority({
+    const ownerDependencies = {
       eve: createPostgresHostedEveStore(database),
       handoffs: createPostgresBuilderHandoffStore(database),
       membership: {
@@ -235,9 +267,23 @@ export const openNativeTargetConfigurationResources = async (
         config: tokenKeyring,
         service: realmContinuationServiceIdentityForWorkload(configuration.workloadPolicy),
       },
-    });
+    } satisfies Parameters<typeof createHostedOperatorAppOwnerAuthority>[0];
+    const owner = createHostedOperatorAppOwnerAuthority(ownerDependencies);
     return {
       owner,
+      readStandardDestination: (context) =>
+        readStandardBuilderDestination(
+          {
+            ...ownerDependencies,
+            readVercelCredential: (credential) =>
+              readActiveVercelInstallationToken({
+                ...credential,
+                database,
+                config: tokenKeyring,
+              }),
+          },
+          context,
+        ),
       registry: createPostgresNativeTargetOnboardingStore(database),
       continuity: createPostgresContinuityJournalStore(database),
       exports: createPostgresTenantExportJournalStore(database),

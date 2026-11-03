@@ -28,6 +28,30 @@ different destination. An unknown public response must never be replayed or
 fabricated as settled. A provider 403 remains unexplained until independent
 evidence identifies its cause; selecting the correct product path is not proof
 that a protection setting caused or resolved that denial.
+## Standard Builder destinations
+
+Deployment-owned configuration may explicitly select
+`composition: "single-project-services"`. This mode requires the app and Gateway
+in the same Services project and branch, rooted at `.`, with one public
+Gateway/Auth origin. The privileged operator remains a separate project.
+A historical dedicated-target registration cannot redirect this destination.
+Configurations without this selection retain their frozen legacy semantics.
+
+The actual configuration resolver reads the current owner's normal Builder
+handoff provisioning receipt and independently checks the project ID, team,
+Services framework and root through that owner's active Vercel installation.
+It rechecks canonical ownership and membership after the provider read. It
+never creates a project, changes a registration or replays an approval.
+`builder_destination_required` means that normal Builder destination selection
+has not been established. Direct MCP sessions without a handoff do not acquire
+a fabricated receipt. `builder_destination_configuration_required` means that
+the selected receipt does not yet have coherent deployment-owned same-project
+configuration. Neither case falls back to dedicated native target creation.
+
+This reader does not assemble Gateway deployment/domain metadata, generate a
+handoff for an existing direct session, or add Production runtime preparation.
+Those supported workflow capabilities are required before claiming public
+create/release acceptance; a hand-written configuration is not that proof.
 
 ## Dedicated native Preview targets
 

@@ -1675,6 +1675,8 @@ export const operatorAuthIdentityInputSchema = z.strictObject({
 });
 const operatorPublicCodeSchema = z.enum([
   "protected_operator_required",
+  "builder_destination_required",
+  "builder_destination_configuration_required",
   "auth_identity_required",
   "auth_membership_required",
   "auth_schema_not_ready",

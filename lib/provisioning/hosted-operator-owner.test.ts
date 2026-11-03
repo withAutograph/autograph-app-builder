@@ -33,6 +33,7 @@ import type { OperatorOwnerContext, OperatorSelection } from "./hosted-operator-
 import type { PrivateHostedApprovalReceipt } from "../eve/private-hosted-approval";
 import {
   createHostedOperatorOwnerAuthority,
+  readStandardBuilderDestination,
   createHostedOperatorAppOwnerAuthority,
   createHostedOperatorReadApproval,
   createHostedOperatorReadApprovedPlan,
@@ -3352,4 +3353,109 @@ describe("hosted operator Sandbox ownership", () => {
       expectNoProviderReads(fixture);
     },
   );
+});
+
+describe("normal Builder destination authority", () => {
+  const read = (f: ReturnType<typeof makeFixture>, owner = ownerContext) =>
+    readStandardBuilderDestination(
+      { ...f, workloadPolicy, apiOrigin: "https://vercel.example" },
+      {
+        authority: owner.authority,
+        ownerContext: owner,
+        target: { appId: selection.appId, sessionId: owner.sessionId },
+      },
+    );
+
+  it("reads the recorded standard destination with independent project topology readback", async () => {
+    const f = makeFixture();
+    f.fetch.mockImplementation(
+      async () =>
+        await Promise.resolve(
+          Response.json({
+            id: selection.projectId,
+            accountId: "team_1",
+            name: "apps-vendor-onboarding",
+            framework: "services",
+            rootDirectory: ".",
+          }),
+        ),
+    );
+    await expect(read(f)).resolves.toMatchObject({
+      projectId: selection.projectId,
+      teamId: "team_1",
+      installationId: "icfg_1",
+    });
+    expect(f.fetch).toHaveBeenCalledOnce();
+    expect(f.currentSession.appId).toBe(selection.appId);
+  });
+
+  it("returns no destination for a direct session instead of inventing a handoff", async () => {
+    const f = makeFixture();
+    delete f.currentSession.sourceHandoffId;
+    await expect(read(f, directOwnerContext)).resolves.toBeUndefined();
+    expect(f.fetch).not.toHaveBeenCalled();
+    expect(f.handoffs.read).not.toHaveBeenCalled();
+  });
+
+  it("rejects provider topology drift and leaves the standard receipt unchanged", async () => {
+    const f = makeFixture();
+    await expect(read(f)).rejects.toMatchObject({ code: "resource_mismatch" });
+  });
+
+  it("checks membership before reading a credential or provider", async () => {
+    const f = makeFixture(undefined, false, false);
+    await expect(read(f)).rejects.toMatchObject({ code: "authorization_required" });
+    expect(f.readVercelCredential).not.toHaveBeenCalled();
+    expect(f.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a destination changed while provider readback was in flight", async () => {
+    const f = makeFixture();
+    const originalRead = f.handoffs.read;
+    f.fetch.mockImplementation(async () => {
+      f.handoffs.read = async (lookup) => {
+        const handoff = await originalRead(lookup);
+        if (handoff?.intent.provisioning?.vercel.status !== "succeeded") {
+          throw new Error("Expected the normal provisioned fixture");
+        }
+        return {
+          ...handoff,
+          intent: {
+            ...handoff.intent,
+            provisioning: {
+              ...handoff.intent.provisioning,
+              vercel: { ...handoff.intent.provisioning.vercel, projectId: "changed-destination" },
+            },
+          },
+        };
+      };
+      return await Promise.resolve(
+        Response.json({
+          id: selection.projectId,
+          accountId: "team_1",
+          name: "apps-vendor-onboarding",
+          framework: "services",
+          rootDirectory: ".",
+        }),
+      );
+    });
+    await expect(read(f)).rejects.toMatchObject({ code: "authorization_required" });
+  });
+
+  it("rechecks current membership after provider I/O", async () => {
+    const f = makeFixture();
+    f.fetch.mockImplementation(async () => {
+      f.membership.isMember = vi.fn().mockResolvedValue(false);
+      return await Promise.resolve(
+        Response.json({
+          id: selection.projectId,
+          accountId: "team_1",
+          name: "apps-vendor-onboarding",
+          framework: "services",
+          rootDirectory: ".",
+        }),
+      );
+    });
+    await expect(read(f)).rejects.toMatchObject({ code: "authorization_required" });
+  });
 });

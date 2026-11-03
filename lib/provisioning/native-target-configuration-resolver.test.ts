@@ -440,3 +440,83 @@ describe("production native target configuration resolver", () => {
     },
   );
 });
+
+describe("normal single-project destination resolution", () => {
+  const standard = () => {
+    const config = configuration();
+    config.composition = "single-project-services";
+    config.gateway.gatewayOrigin = config.gateway.publicOrigin;
+    config.gateway.authBrowserOrigin = config.gateway.publicOrigin;
+    config.applications.sibling = {
+      ...config.applications.sibling,
+      projectId: config.gateway.projectId,
+      projectSettings: { framework: "services", rootDirectory: "." },
+    };
+    return config;
+  };
+  const body = {
+    action: "resolve-preview-target",
+    appId: "sibling",
+    sessionId: ownerContext.sessionId,
+    ownerContext,
+  };
+
+  it("requires normal destination selection without looking up a dedicated target", async () => {
+    const f = setup();
+    const resolve = createNativeTargetConfigurationResolver({
+      configuration: standard(),
+      openResources: f.openResources,
+    });
+    await expect(resolve(request(body))).rejects.toMatchObject({
+      code: "builder_destination_required",
+    });
+    expect(f.resources.registry.read).not.toHaveBeenCalled();
+  });
+
+  it("uses the trusted normal receipt for the configured single-project destination", async () => {
+    const f = setup();
+    const config = standard();
+    const readStandardDestination = vi
+      .fn()
+      .mockResolvedValue({
+        projectId: config.gateway.projectId,
+        teamId: config.teamId,
+        installationId: "installation",
+        name: "apps-sibling",
+      });
+    const resolve = createNativeTargetConfigurationResolver({
+      configuration: config,
+      openResources: async () => await Promise.resolve({ ...f.resources, readStandardDestination }),
+    });
+    const result = await resolve(request(body));
+    expect(result.applications.sibling.projectId).toBe(result.gateway.projectId);
+    expect(readStandardDestination).toHaveBeenCalledWith(
+      expect.objectContaining({
+        target: { appId: "sibling", sessionId: ownerContext.sessionId },
+      }),
+    );
+  });
+
+  it("reports missing coherent setup instead of mixing an old Gateway into a new receipt", async () => {
+    const f = setup();
+    const resolve = createNativeTargetConfigurationResolver({
+      configuration: standard(),
+      openResources: async () =>
+        await Promise.resolve({
+          ...f.resources,
+          readStandardDestination: vi
+            .fn()
+            .mockResolvedValue({
+              projectId: "new-standard-project",
+              teamId: "team",
+              installationId: "installation",
+              name: "apps-sibling",
+            }),
+        }),
+    });
+    await expect(resolve(request(body))).rejects.toMatchObject({
+      code: "builder_destination_configuration_required",
+    });
+    expect(f.resources.registry.read).not.toHaveBeenCalled();
+  });
+});

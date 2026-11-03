@@ -660,6 +660,83 @@ const readCanonicalAppOwnerSession = async (
   return session;
 };
 
+/** Only an existing normal Builder handoff receipt can identify this destination. */
+export const readStandardBuilderDestination = async (
+  deps: HostedOperatorAppOwnerDependencies &
+    Pick<HostedOperatorOwnerDependencies, "readVercelCredential" | "fetch" | "apiOrigin">,
+  input: HostedOperatorAppOwnerContext,
+) => {
+  await readCanonicalAppOwnerSession(deps, input);
+  const { owner } = ownerContextFromHint(input.ownerContext);
+  if (owner.kind !== "handoff") {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Explicit absence preserves the async destination result union.
+    return undefined;
+  }
+  const readHandoff = async () => {
+    const handoff = builderHandoffRecordSchema.parse(
+      await deps.handoffs.read({
+        authority: owner.authority,
+        handoffId: owner.sourceHandoffId,
+      }),
+    );
+    if (
+      handoff.sessionId !== owner.sessionId ||
+      handoff.intent.appId !== input.target.appId ||
+      !sameAuthority(handoff.authority, owner.authority)
+    ) {
+      throw unavailable();
+    }
+    return handoff;
+  };
+  const handoff = await readHandoff();
+  const receipt = handoff.intent.provisioning;
+  const project = receipt?.vercel;
+  if (project?.status !== "succeeded") {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Explicit absence preserves the async destination result union.
+    return undefined;
+  }
+  if (receipt.appId !== input.target.appId || project.scope.type !== "team") {
+    throw resourceMismatch();
+  }
+  const access = await readPreparedVercelAccess({
+    authority: owner.authority,
+    intent: handoff.intent,
+    requireServicesRoot: true,
+    readCredential: deps.readVercelCredential,
+    ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
+    ...(deps.apiOrigin === undefined ? {} : { apiOrigin: deps.apiOrigin }),
+  });
+  if (access.status !== "ready" || access.project?.id !== project.projectId) {
+    throw resourceMismatch();
+  }
+  await readCanonicalAppOwnerSession(deps, input);
+  const current = await readHandoff();
+  const latest = current.intent.provisioning;
+  if (latest === undefined || latest.vercel.status !== "succeeded") {
+    throw unavailable();
+  }
+  const unchanged = [
+    latest.requestDigest === receipt.requestDigest,
+    latest.requestId === receipt.requestId,
+    latest.vercel.projectId === project.projectId,
+    latest.vercel.installationId === project.installationId,
+    latest.vercel.scope.id === project.scope.id,
+    latest.vercel.scope.type === project.scope.type,
+    current.intent.providers?.vercelInstallationId ===
+      handoff.intent.providers?.vercelInstallationId,
+  ].every(Boolean);
+  if (!unchanged) {
+    throw unavailable();
+  }
+  return {
+    projectId: project.projectId,
+    teamId: project.scope.id,
+    installationId: project.installationId,
+    name: access.project.name,
+    repository: project.linkedGitHubRepository,
+  };
+};
+
 /** No project grant or provider credential is needed to read this owner's app registration. */
 export const createHostedOperatorAppOwnerAuthority = (
   deps: HostedOperatorAppOwnerDependencies,

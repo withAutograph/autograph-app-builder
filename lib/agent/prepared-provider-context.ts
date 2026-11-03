@@ -142,6 +142,7 @@ const recordVercelProjectAccessFailure = (read: () => VercelProjectAccessFailure
 const readVercelProjectAccess = async (input: {
   authority: Authority;
   projectId: string;
+  requireServicesRoot?: boolean;
   projectName?: string;
   installationId: string;
   expectedScope?: { id: string; type: "team" | "user" };
@@ -253,10 +254,20 @@ const readVercelProjectAccess = async (input: {
     const observed = await readJsonStringChecks(response.body, [
       { expected: input.projectId, pointer: "/id" },
       { capture: true, pointer: "/name" },
-      { expected: binding.scopeId, optional: true, pointer: "/accountId" },
+      {
+        expected: binding.scopeId,
+        optional: input.requireServicesRoot !== true,
+        pointer: "/accountId",
+      },
+      ...(input.requireServicesRoot === true
+        ? [
+            { expected: "services", pointer: "/framework" },
+            { expected: ".", pointer: "/rootDirectory" },
+          ]
+        : []),
     ]);
     const [idMatches, hasName, accountMatches] = observed.matches;
-    if (!idMatches || !hasName || !accountMatches) {
+    if (observed.matches.some((matches) => !matches)) {
       recordVercelProjectAccessFailure(() => ({
         stage: diagnosticStage,
         reason: vercelProjectAccessReasons.projectResponseMismatch,
@@ -318,6 +329,7 @@ export async function readOwnerVercelProjectAccess(input: {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function readPreparedVercelAccess(input: {
   intent: PreparedIntent;
+  requireServicesRoot?: boolean;
   authority: Authority;
   readCredential: (input: {
     authority: Authority;
@@ -341,6 +353,7 @@ export async function readPreparedVercelAccess(input: {
     return await readVercelProjectAccess({
       authority: input.authority,
       expectedScope: project.scope,
+      requireServicesRoot: input.requireServicesRoot,
       installationId,
       projectId: project.projectId,
       projectName: project.name,
