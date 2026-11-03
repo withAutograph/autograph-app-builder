@@ -147,6 +147,17 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    the CUE model and policies from the accepted product decisions, compile the
    checked release, and implement the authenticated server reads and actions.
    The user supplies product meaning, not schema source or backend code.
+   When accepted access requirements name application roles, declare the CUE
+   `authorization.roles` and matching model/operation/field/row `grants` in the
+   app schema. Follow the selected repository's generated-data-operations
+   contract. Use the compiler's canonical role IDs throughout app policy and
+   runtime consumers; product labels are not PostgreSQL identifiers. Inspect
+   `app:describe` after compiling: its checked release must expose the intended
+   roles. AppSpec prose, a role literal in application code, or a fixture actor
+   does not declare a schema grant. If authenticated local setup reports no
+   schema roles, repair that app's schema/policy through ordinary implementation
+   repairs and retry validation. Never invent a default role or manually inject
+   `APP_RUNTIME_ROLES` to bypass missing app authorization.
    Preserve `catalog:` and `workspace:*` references. The generator profile owns
    the standard scaffold toolset, not every app-specific dependency. Additional
    dependencies need the appropriate reviewed app manifest/lockfile changes,

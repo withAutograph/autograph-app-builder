@@ -121,7 +121,12 @@ export const prepareAppLocalPreview = async (input: {
       return {
         command,
         exitCode: result.exitCode,
-        problem: `The selected app's repository-owned local setup exited with status ${result.exitCode}. Inspect the output for a repository-pinned tool installation failure, local database startup failure, or schema error. Repair that cause in the private sandbox and retry setup before opening the app preview.`,
+        problem:
+          description.backend.kind === "generated-postgres" &&
+          roles.length === 0 &&
+          `${stderr}\n${stdout}`.includes("Authenticated runtime requires schema-declared roles")
+            ? "The selected app's authenticated runtime rejected its checked schema release because it declares no application roles. Repair this app's CUE authorization roles and model/operation grants from the accepted access requirements through the ordinary implementation repair flow, then regenerate its checked release and retry validation. Use the compiler's canonical role IDs. AppSpec prose or role strings in application code do not declare database authorization; do not inject APP_RUNTIME_ROLES or grant a default role to bypass the missing policy."
+            : `The selected app's repository-owned local setup exited with status ${result.exitCode}. Inspect the output for a repository-pinned tool installation failure, local database startup failure, or schema error. Repair that cause in the private sandbox and retry setup before opening the app preview.`,
         status: "failed" as const,
         stderr,
         stdout,

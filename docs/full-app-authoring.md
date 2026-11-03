@@ -211,3 +211,11 @@ For hosted delivery, follow [Production handoff](production-readiness-handoff.md
 for reviewed Auth identity, runtime binding and QA access requirements. Missing
 operator/provider capabilities remain explicit handoff work, not a reason to
 bypass authentication or block ordinary private app authoring.
+
+Application roles in accepted product prose must be implemented in the app's
+CUE `authorization.roles` and matching model/operation/field/row grants. The
+compiler's checked `extras.authorization_policy` supplies canonical role IDs
+to `app:describe` and authenticated runtime preparation. Builder does not infer
+those grants from Markdown or inject default runtime roles. A missing compiled
+policy is an app authoring repair: update the same app through ordinary Builder
+implementation controls, regenerate its checked release and retry validation.
