@@ -42,6 +42,7 @@ export { publicReleaseApprovalInputSchema as publicReleasePlanResultSchema } fro
 export const publicReleaseResultSchema = z.union([
   z.strictObject({
     status: z.enum(["pending", "ready"]),
+    purpose: z.enum(["auth-bootstrap", "application"]).optional(),
     operationRef: z.uuid(),
     observation: z.discriminatedUnion("status", [
       z.strictObject({ status: z.literal("pending") }),

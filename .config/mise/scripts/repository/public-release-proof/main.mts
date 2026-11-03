@@ -16,7 +16,7 @@ import { createPostgresPublicReleaseStore } from "../../../../../lib/provisionin
 import { plan, authority } from "../../../../../lib/provisioning/public-release-test-fixture";
 
 import { createPublicReleaseApprovalCheckpoint } from "../../../../../lib/provisioning/public-release-approval-authority";
-import { operatorOwnerContextSchema } from "../../../../../lib/provisioning/hosted-operator-contract";
+
 import {
   publicReleasePlanDigest,
   publicReleaseOperationRef,
@@ -26,6 +26,25 @@ import {
   createPublicReleaseRuntimeConfigurationStore,
   createFreshPublicAuthValues,
 } from "../../../../../lib/provisioning/public-release-runtime-configuration";
+
+import { reservePublicReleaseAuthSeed } from "../../../../../lib/provisioning/public-release-auth-seed";
+import { createPublicReleaseTargetLease } from "../../../../../lib/provisioning/public-release-target-lease";
+
+import {
+  resolvePublicRealmEnrollment,
+  readPublicRealmLinkConfiguration,
+} from "../../../../../lib/provisioning/public-realm-link-configuration";
+import type { PublicRealmLinkSourceConfiguration } from "../../../../../lib/provisioning/public-realm-link-configuration";
+import {
+  captureFixture,
+  requiredFixture,
+} from "../../../../../lib/provisioning/hosted-operator-unapproved-app-successor.test-support";
+import {
+  operatorOwnerContextSchema,
+  hostedOperatorPlanSchema,
+  retainedOperatorAuthSchema,
+  operatorPlanDigest,
+} from "../../../../../lib/provisioning/hosted-operator-contract";
 
 const postgresFlag = process.argv.indexOf("--postgres-bin");
 const postgresBin = postgresFlag === -1 ? undefined : process.argv[postgresFlag + 1];
@@ -119,19 +138,19 @@ try {
   const pending = await store.compareAndSet(initial, {
     ...initial.record,
     effects: { ...initial.record.effects, "bind-production-runtime": "pending" },
-    bindings: { APP_DATABASE_URL: { state: "pending" } },
+    bindings: { INVOICE_APP_DATABASE_URL: { state: "pending" } },
   });
   assert.ok(pending);
   assert.equal(await store.compareAndSet(initial, initial.record), undefined);
   const accepted = await store.compareAndSet(pending, {
     ...pending.record,
-    bindings: { APP_DATABASE_URL: { state: "pending", acceptedEnvId: "env-observed" } },
+    bindings: { INVOICE_APP_DATABASE_URL: { state: "pending", acceptedEnvId: "env-observed" } },
   });
   assert.ok(accepted);
   await assert.rejects(
     store.compareAndSet(accepted, {
       ...accepted.record,
-      bindings: { APP_DATABASE_URL: { state: "pending", acceptedEnvId: "foreign-env" } },
+      bindings: { INVOICE_APP_DATABASE_URL: { state: "pending", acceptedEnvId: "foreign-env" } },
     }),
   );
   await assert.rejects(
@@ -142,13 +161,13 @@ try {
   );
   const verified = await store.compareAndSet(accepted, {
     ...accepted.record,
-    bindings: { APP_DATABASE_URL: { state: "applied", acceptedEnvId: "env-observed" } },
+    bindings: { INVOICE_APP_DATABASE_URL: { state: "applied", acceptedEnvId: "env-observed" } },
   });
   assert.ok(verified);
   await assert.rejects(
     store.compareAndSet(verified, {
       ...verified.record,
-      bindings: { APP_DATABASE_URL: { state: "pending", acceptedEnvId: "env-observed" } },
+      bindings: { INVOICE_APP_DATABASE_URL: { state: "pending", acceptedEnvId: "env-observed" } },
     }),
   );
   const owner = operatorOwnerContextSchema.parse({
@@ -234,6 +253,7 @@ try {
       appId: plan.selection.appId,
       publicOrigin: plan.publicOrigin,
       authResource: {
+        environment: "preview",
         hostname: "ep-synthetic.aws.neon.tech",
         port: 5432,
         database: "isolated_auth",
@@ -271,12 +291,183 @@ try {
       assertCurrentOwner: checkpointInput.assertCurrentOwner,
     }).read(privateScope),
   );
+  const seedInput = {
+    database: drizzle(writer, { schema }),
+    keyring: { tokenKey: Buffer.alloc(32, 9), tokenKeyVersion: "fixture-v1" },
+    assertCurrentOwner: checkpointInput.assertCurrentOwner,
+    scope: {
+      ...privateTarget,
+      publicOrigin: plan.publicOrigin,
+      authResourceIdentity: "e".repeat(64),
+    },
+  };
+  const seed = await reservePublicReleaseAuthSeed(seedInput);
+  assert.deepEqual(await reservePublicReleaseAuthSeed(seedInput), seed);
+  assert.deepEqual(
+    await reservePublicReleaseAuthSeed({
+      ...seedInput,
+      scope: { ...seedInput.scope, sessionId: "normal-existing-app-revision" },
+    }),
+    seed,
+  );
+  const otherSeed = await reservePublicReleaseAuthSeed({
+    ...seedInput,
+    scope: { ...seedInput.scope, publicOrigin: "https://other.example" },
+  });
+  assert.notEqual(otherSeed.BETTER_AUTH_SECRET, seed.BETTER_AUTH_SECRET);
+  let fence: (() => Promise<void>) | undefined;
+  const targetLease = createPublicReleaseTargetLease({
+    databaseUrl: dsn.toString(),
+    store,
+    assertCurrent: async () => {
+      await Promise.resolve();
+    },
+    lockKeys: () => ["owned-project-fixture"],
+    bindFence: (current) => {
+      fence = current;
+    },
+  });
+  await targetLease(
+    {
+      authority,
+      sessionId: plan.selection.sessionId,
+      callId: "call",
+      signal: new AbortController().signal,
+    },
+    plan,
+    async () => {
+      assert.ok(fence);
+      await fence();
+      const claimed = await store.read(authority, initial.operationRef);
+      assert.ok(claimed);
+      assert.equal(claimed.record.executionLease?.fenceGeneration, 1);
+      const approvalRecorded = await store.compareAndSet(claimed, {
+        ...claimed.record,
+        approvalReceipts: [{ approvalId: "actual-approval", approvedByCallId: "actual-call" }],
+      });
+      assert.ok(approvalRecorded);
+      await assert.rejects(
+        store.compareAndSet(approvalRecorded, { ...approvalRecorded.record, approvalReceipts: [] }),
+      );
+      const advanced = await store.compareAndSet(approvalRecorded, {
+        ...approvalRecorded.record,
+        executionLease: { leaseId: randomUUID(), fenceGeneration: 2 },
+      });
+      assert.ok(advanced);
+      await assert.rejects(fence());
+    },
+  );
+  assert.equal(fence, undefined);
+  // A fresh test-only normal resource plan is parsed independently; no live or frozen plan is rewritten.
+  const retainedFixture = requiredFixture(captureFixture().record.retainedAuth);
+  const fixtureBoundary = requiredFixture(retainedFixture.plan.deploymentBoundary);
+  const fixtureTarget = retainedFixture.plan.selection;
+  const freshNormalPlan = hostedOperatorPlanSchema.parse({
+    ...retainedFixture.plan,
+    gatewayBindings: undefined,
+    gatewayDelivery: undefined,
+    effects: retainedFixture.plan.effects.filter(
+      (effect) => !["gateway-bindings", "gateway-delivery"].includes(effect.kind),
+    ),
+    publicGateway: { ...retainedFixture.plan.publicGateway, projectId: fixtureTarget.projectId },
+    deploymentBoundary: {
+      ...fixtureBoundary,
+      composition: "single-project-services",
+      gateway: { ...fixtureBoundary.gateway, projectId: fixtureTarget.projectId },
+    },
+  });
+  const freshNormalSetup = retainedOperatorAuthSchema.parse({
+    ...retainedFixture,
+    operationRef: randomUUID(),
+    plan: freshNormalPlan,
+    planDigest: operatorPlanDigest(freshNormalPlan),
+    gatewayEnvironment: undefined,
+    receipts: retainedFixture.receipts.filter((receipt) =>
+      freshNormalPlan.effects.some((effect) => effect.id === receipt.effectId),
+    ),
+  });
+  const issuer = "https://oidc.vercel.com/team";
+  const audience = "https://vercel.com/team";
+  const realmConfiguration: PublicRealmLinkSourceConfiguration = {
+    teamId: fixtureBoundary.teamId,
+    gateway: { projectId: fixtureTarget.projectId },
+    builderCallbackOrigin: "https://builder.example",
+    operator: { origin: "https://operator.example" },
+    workloadPolicy: {
+      issuer,
+      audience,
+      projectId: "builder",
+      ownerId: fixtureBoundary.teamId,
+      environment: "production",
+      subject: "explicit-reviewed-builder-production",
+    },
+    nativeNeon: {
+      configuration: {
+        operator: {
+          issuer,
+          audience,
+          projectId: "operator",
+          ownerId: fixtureBoundary.teamId,
+          environment: "preview",
+        },
+      },
+    },
+    standardRuntime: {
+      publicRealmWorkload: {
+        issuer,
+        audience,
+        projectId: fixtureTarget.projectId,
+        ownerId: fixtureBoundary.teamId,
+        environment: "production",
+        subject: "explicit-reviewed-app-production",
+      },
+    },
+  };
+  const enrollmentInput = {
+    database: drizzle(writer, { schema }),
+    keyring: seedInput.keyring,
+    configuration: realmConfiguration,
+    owner: { authority, appId: fixtureTarget.appId, sessionId: fixtureTarget.sessionId },
+    originalSetup: freshNormalSetup,
+    publicOrigin: requiredFixture(freshNormalPlan.publicGateway).origin,
+    authResource: {
+      version: 1 as const,
+      environment: "preview" as const,
+      hostname: freshNormalPlan.neon.endpoint,
+      port: 5432 as const,
+      database: freshNormalPlan.authDatabase.database,
+      schema: "public" as const,
+      runtimeRole: freshNormalPlan.authDatabase.runtimeRole,
+      migratorRole: freshNormalPlan.authDatabase.migratorRole,
+      neon: { projectId: freshNormalPlan.neon.projectId, branchId: freshNormalPlan.neon.branchId },
+    },
+    assertCurrentOwner: checkpointInput.assertCurrentOwner,
+  };
+  const enrollment = await resolvePublicRealmEnrollment(enrollmentInput);
+  assert.deepEqual(await resolvePublicRealmEnrollment(enrollmentInput), enrollment);
+  assert.equal(enrollment.linkConfiguration.publicEnrollment.resource.environment, "preview");
+  assert.equal(enrollment.linkConfiguration.identityHandoff.sender.environment, "production");
+  await assert.rejects(
+    readPublicRealmLinkConfiguration({
+      database: enrollmentInput.database,
+      keyring: enrollmentInput.keyring,
+      authority: { ...authority, ownerUserId: "foreign" },
+      enrollmentRef: enrollment.enrollmentRef,
+      assertCurrentOwner: checkpointInput.assertCurrentOwner,
+    }),
+  );
+  const [sealedEnrollment] =
+    await admin`select record from public.builder_provisioning_journal where record->'enrollment'->>'enrollmentRef'=${enrollment.enrollmentRef}`;
+  assert.equal(
+    JSON.stringify(sealedEnrollment.record).includes("explicit-reviewed-app-production"),
+    false,
+  );
   const otherRef = randomUUID();
   await admin`INSERT INTO public.builder_provisioning_journal (issuer,audience,workspace_id,owner_user_id,request_id,request_digest,revision,state,record,created_at,updated_at) VALUES (${authority.issuer},${authority.audience},${authority.workspaceId},${authority.ownerUserId},${otherRef},${"f".repeat(64)},1,'pending',${JSON.stringify({ kind: "native-target-onboarding" })}::jsonb,now(),now())`;
   assert.equal(await store.read(authority, otherRef), undefined);
   const restarted = createPostgresPublicReleaseStore(drizzle(writer, { schema }));
   const observed = await restarted.read(authority, initial.operationRef);
-  assert.equal(observed?.record.bindings.APP_DATABASE_URL.acceptedEnvId, "env-observed");
+  assert.equal(observed?.record.bindings.INVOICE_APP_DATABASE_URL.acceptedEnvId, "env-observed");
   console.log(
     "Public release PostgreSQL proof passed: restricted writer, restart readback, stale CAS, immutable target/row receipt, foreign owner and record-kind isolation.",
   );

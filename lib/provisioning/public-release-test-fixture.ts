@@ -46,6 +46,6 @@ export const plan = publicReleasePlanSchema.parse({
     syntheticOnly: true,
   },
   publicOrigin: "https://app.example",
-  environment: [{ key: "APP_DATABASE_URL", sha256: "d".repeat(64) }],
+  environment: [{ key: "INVOICE_APP_DATABASE_URL", sha256: "d".repeat(64) }],
   effects: ["bind-production-runtime", "publish-release-source"],
 });

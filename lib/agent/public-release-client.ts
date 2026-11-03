@@ -67,7 +67,10 @@ export const publicReleaseClientForContext = async (ctx: WorkflowStepToolContext
     ctx.abortSignal.throwIfAborted();
     if (response.status === 409) {
       const prerequisite = publicReleasePrerequisiteResponseSchema.parse(await response.json());
-      throw new PublicReleasePrerequisiteError(prerequisite.code);
+      throw new PublicReleasePrerequisiteError(
+        prerequisite.code,
+        prerequisite.recordedBuilderDestination,
+      );
     }
     if (!response.ok) {
       throw new Error("public_release_unavailable");

@@ -3816,7 +3816,21 @@ export const createHostedOperatorControlPlane = async (input: {
       nativeTargetRequest,
     };
     const publicReleasePort: Pick<ProtectedHostedOperatorDependencies, "publicReleaseRequest"> = {
-      publicReleaseRequest: createPublicReleaseDeployment({ database, owner }),
+      publicReleaseRequest: createPublicReleaseDeployment({
+        database,
+        owner,
+        configuration: input.sourceConfiguration,
+        environment,
+        keyring: tokenKeyring,
+        databaseUrl: config.databaseUrl,
+        readResourceBindings,
+        assertRuntimeAuthorized: owner.assertAuthorized,
+        readInstallationScopes: controlPlane.readAppInstallationMetadataScopes,
+        bindRuntimeWorkload: (context, token, signal) => {
+          approvalObserver.bindWorkload(context, token, signal);
+        },
+        ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
+      }),
     };
     return {
       ...controlPlane,

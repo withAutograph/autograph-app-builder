@@ -24,7 +24,7 @@ const fixture = () => {
   const marker = `autograph:public-app-release:${operationRef}`;
   const value = "synthetic-private-runtime-value";
   const plan = structuredClone(basePlan);
-  plan.environment = [{ key: "APP_DATABASE_URL", sha256: hash(value) }];
+  plan.environment = [{ key: "INVOICE_APP_DATABASE_URL", sha256: hash(value) }];
   const invocation = {
     authority: plan.authority,
     sessionId: plan.selection.sessionId,
@@ -32,7 +32,7 @@ const fixture = () => {
     signal: new AbortController().signal,
   };
   const states: Awaited<ReturnType<PublicReleaseEffectContext["bindings"]["read"]>> = {
-    APP_DATABASE_URL: { state: "idle" },
+    INVOICE_APP_DATABASE_URL: { state: "idle" },
   };
   const rows: {
     id: string;
@@ -72,7 +72,7 @@ const fixture = () => {
     if (init?.method === "POST" || init?.method === "PATCH") {
       expect(parsed.pathname).toMatch(/\/projects\/[^/]+\/env(?:\/[^/]+)?$/u);
       expect(parsed.searchParams.has("upsert")).toBe(false);
-      expect(states.APP_DATABASE_URL.state).toBe("pending");
+      expect(states.INVOICE_APP_DATABASE_URL.state).toBe("pending");
       const body = z
         .object({
           key: z.string(),
@@ -149,7 +149,7 @@ const fixture = () => {
         updatedAt: new Date(0),
       },
     }),
-    readRuntimeBindings: vi.fn().mockResolvedValue([{ key: "APP_DATABASE_URL", value }]),
+    readRuntimeBindings: vi.fn().mockResolvedValue([{ key: "INVOICE_APP_DATABASE_URL", value }]),
     readDeliveredRelease: vi.fn().mockResolvedValue({ releaseId: plan.runtime.releaseId }),
     fetch: fetcher,
   };
@@ -203,7 +203,7 @@ const fixture = () => {
 it("persists a per-key dispatch before creating and independently reading an encrypted Production binding", async () => {
   const f = fixture();
   await f.provider.bindRuntime(f.context);
-  expect(f.states.APP_DATABASE_URL).toEqual({ state: "applied", acceptedEnvId: "new-env" });
+  expect(f.states.INVOICE_APP_DATABASE_URL).toEqual({ state: "applied", acceptedEnvId: "new-env" });
   expect(await f.provider.reconcileBindings({ ...f.context, priorPhase: "applied" })).toBe(
     "applied",
   );
@@ -236,7 +236,7 @@ it("refuses foreign bindings before any mutation", async () => {
   const f = fixture();
   f.rows.push({
     id: "foreign",
-    key: "APP_DATABASE_URL",
+    key: "INVOICE_APP_DATABASE_URL",
     type: "encrypted",
     target: ["production"],
     comment: "unrelated-owner",
@@ -249,7 +249,7 @@ it("checks the complete private value projection before writing any variable", a
   const f = fixture();
   f.plan.environment.push({ key: "BETTER_AUTH_SECRET", sha256: hash("expected-private-value") });
   vi.mocked(f.deps.readRuntimeBindings).mockResolvedValue([
-    { key: "APP_DATABASE_URL", value: f.value },
+    { key: "INVOICE_APP_DATABASE_URL", value: f.value },
     { key: "BETTER_AUTH_SECRET", value: "wrong-value" },
   ]);
   await expect(f.provider.bindRuntime(f.context)).rejects.toThrow("provider_mismatch");
@@ -261,7 +261,7 @@ it("requires the current owner credential and permission again after private con
   let revoked = false;
   vi.mocked(f.deps.readRuntimeBindings).mockImplementation(async () => {
     revoked = true;
-    return [{ key: "APP_DATABASE_URL", value: f.value }];
+    return [{ key: "INVOICE_APP_DATABASE_URL", value: f.value }];
   });
   vi.mocked(f.deps.assertCurrent).mockImplementation(async () => {
     if (revoked) {
@@ -315,7 +315,7 @@ it("updates only the exact prior owned binding named by the approved plan", asyn
   };
   f.rows.push({
     id: "old-env",
-    key: "APP_DATABASE_URL",
+    key: "INVOICE_APP_DATABASE_URL",
     type: "encrypted",
     target: ["production"],
     comment: `autograph:public-app-release:${previousOperation}`,
@@ -324,14 +324,14 @@ it("updates only the exact prior owned binding named by the approved plan", asyn
   await f.provider.bindRuntime(f.context);
   expect(f.writes).toEqual([`/v9/projects/${f.plan.project.projectId}/env/old-env`]);
   expect(f.rows).toHaveLength(1);
-  expect(f.states.APP_DATABASE_URL.acceptedEnvId).toBe("old-env");
+  expect(f.states.INVOICE_APP_DATABASE_URL.acceptedEnvId).toBe("old-env");
 });
 
 it("detects a later conflicting binding before writing earlier absent keys", async () => {
   const f = fixture();
   f.plan.environment.push({ key: "BETTER_AUTH_SECRET", sha256: hash("private-auth") });
   vi.mocked(f.deps.readRuntimeBindings).mockResolvedValue([
-    { key: "APP_DATABASE_URL", value: f.value },
+    { key: "INVOICE_APP_DATABASE_URL", value: f.value },
     { key: "BETTER_AUTH_SECRET", value: "private-auth" },
   ]);
   f.rows.push({
@@ -363,7 +363,7 @@ it("refuses a production binding shared with a custom environment before any wri
   };
   f.rows.push({
     id: "existing-env",
-    key: "APP_DATABASE_URL",
+    key: "INVOICE_APP_DATABASE_URL",
     type: "encrypted",
     target: ["production"],
     comment: "autograph:public-app-release:44444444-4444-4444-a444-444444444444",
@@ -470,7 +470,7 @@ it("persists the actual adapter rejection with the pending key and never retries
     handler.release(f.invocation, selected.operationRef, selected.planDigest),
   ).rejects.toThrow("public_release_provider_rejected");
   expect(row?.record).toMatchObject({
-    bindings: { APP_DATABASE_URL: { state: "pending" } },
+    bindings: { INVOICE_APP_DATABASE_URL: { state: "pending" } },
     effects: { "bind-production-runtime": "pending", "publish-release-source": "idle" },
     lastProviderFailure: {
       phase: "bind-production-runtime",
@@ -521,12 +521,12 @@ it("reads only bounded prior binding facts for new plan construction, without re
   });
   const snapshot = await read({
     ...f.plan.project,
-    keys: ["APP_DATABASE_URL"],
+    keys: ["INVOICE_APP_DATABASE_URL"],
     signal: f.invocation.signal,
   });
   expect(snapshot).toEqual([
     {
-      key: "APP_DATABASE_URL",
+      key: "INVOICE_APP_DATABASE_URL",
       id: "new-env",
       operationRef: f.context.operationRef,
       sha256: f.plan.environment[0].sha256,
@@ -539,7 +539,7 @@ it("refuses foreign production binding scope while planning before decrypting or
   const f = fixture();
   f.rows.push({
     id: "foreign",
-    key: "APP_DATABASE_URL",
+    key: "INVOICE_APP_DATABASE_URL",
     type: "encrypted",
     target: ["production"],
     comment: "foreign",
@@ -552,7 +552,7 @@ it("refuses foreign production binding scope while planning before decrypting or
     fetch: f.fetcher,
   });
   await expect(
-    read({ ...f.plan.project, keys: ["APP_DATABASE_URL"], signal: f.invocation.signal }),
+    read({ ...f.plan.project, keys: ["INVOICE_APP_DATABASE_URL"], signal: f.invocation.signal }),
   ).rejects.toThrow("public_release_provider_mismatch");
   expect(f.writes).toHaveLength(0);
 });

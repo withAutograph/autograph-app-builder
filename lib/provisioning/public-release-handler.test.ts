@@ -90,6 +90,26 @@ const fixture = () => {
   return { ports, store, writes, applied, handler: createPublicReleaseHandler(ports) };
 };
 describe("public app release lifecycle", () => {
+  it("reports Auth bootstrap as its separate approved purpose without authenticated app acceptance", async () => {
+    const f = fixture();
+    const bootstrap = publicReleasePlanSchema.parse({
+      ...plan,
+      purpose: "auth-bootstrap",
+      runtime: { ...plan.runtime, realmEnrollmentRef: "55555555-5555-4555-a555-555555555555" },
+    });
+    f.ports.resolve = vi.fn().mockResolvedValue(bootstrap);
+    const selected = await f.handler.plan(invocation(), plan.selection.appId);
+    const result = await f.handler.release(
+      invocation(),
+      selected.operationRef,
+      selected.planDigest,
+    );
+    expect(result).toMatchObject({
+      purpose: "auth-bootstrap",
+      authenticatedBehavior: "unassessed",
+    });
+  });
+
   it("uses one owned target and resumes without duplicate effects", async () => {
     const f = fixture();
     const ctx = invocation();
@@ -126,10 +146,10 @@ describe("public app release lifecycle", () => {
     const normalApply = f.ports.applyEffect;
     f.ports.applyEffect = async (context) => {
       if (context.effect === "bind-production-runtime") {
-        const claimed = await context.bindings.claim("APP_DATABASE_URL");
+        const claimed = await context.bindings.claim("INVOICE_APP_DATABASE_URL");
         expect(claimed.state).toBe("pending");
         bindingWrites += 1;
-        await context.bindings.recordAccepted("APP_DATABASE_URL", "env-accepted");
+        await context.bindings.recordAccepted("INVOICE_APP_DATABASE_URL", "env-accepted");
         throw new Error("interrupted after receipt");
       }
       await normalApply(context);
@@ -138,7 +158,7 @@ describe("public app release lifecycle", () => {
       f.handler.release(ctx, selected.operationRef, selected.planDigest),
     ).rejects.toThrow("interrupted after receipt");
     const saved = await f.store.read(authority, selected.operationRef);
-    expect(saved?.record.bindings.APP_DATABASE_URL).toEqual({
+    expect(saved?.record.bindings.INVOICE_APP_DATABASE_URL).toEqual({
       state: "pending",
       acceptedEnvId: "env-accepted",
     });
@@ -147,8 +167,8 @@ describe("public app release lifecycle", () => {
       if (context.effect === "bind-production-runtime") {
         expect(context.priorPhase).toBe("pending");
         const bindings = await context.bindings.read();
-        expect(bindings.APP_DATABASE_URL.acceptedEnvId).toBe("env-accepted");
-        await context.bindings.recordVerified("APP_DATABASE_URL");
+        expect(bindings.INVOICE_APP_DATABASE_URL.acceptedEnvId).toBe("env-accepted");
+        await context.bindings.recordVerified("INVOICE_APP_DATABASE_URL");
         return "applied";
       }
       return await normalReconcile(context);
@@ -223,7 +243,7 @@ describe("public app release lifecycle", () => {
     expect(
       publicReleasePlanDigest({
         ...plan,
-        environment: [{ key: "APP_DATABASE_URL", sha256: "f".repeat(64) }],
+        environment: [{ key: "INVOICE_APP_DATABASE_URL", sha256: "f".repeat(64) }],
       }),
     ).not.toBe(publicReleasePlanDigest(plan));
     expect(

@@ -1,3 +1,4 @@
+import { assertOwnedAppProductionEnvironment } from "./owned-app-auth-environment";
 /* oxlint-disable eslint/no-await-in-loop, react-doctor/async-await-in-loop, react-doctor/server-sequential-independent-await, sonarjs/expression-complexity, eslint/complexity, sonarjs/cognitive-complexity -- Provider reads, durable per-key dispatch receipts and authority rechecks must remain ordered. */
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -310,6 +311,10 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
     ): Promise<"applied" | "not-applied" | "unknown"> {
       await project(context.invocation, context.plan, true);
       const all = await rows(context);
+      assertOwnedAppProductionEnvironment(
+        context.plan,
+        all.flatMap((row) => (row.target.includes("production") ? [row.key] : [])),
+      );
       const states = await context.bindings.read();
       let applied = 0;
       for (const entry of context.plan.environment) {
@@ -359,6 +364,10 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
       }
       const valuesByKey = new Map(values.map((item) => [item.key, item.value]));
       const all = await rows(context);
+      assertOwnedAppProductionEnvironment(
+        context.plan,
+        all.flatMap((row) => (row.target.includes("production") ? [row.key] : [])),
+      );
       const existing = new Map(
         context.plan.environment.map((entry) => [entry.key, findRow(context, all, entry.key)]),
       );
@@ -433,6 +442,20 @@ export const createPublicReleaseVercelProvider = (deps: PublicReleaseVercelDepen
       plan: PublicReleasePlan,
     ): Promise<PublicReleaseObservation> {
       const current = await project(invocation, plan, false);
+      const environment = z
+        .object({ envs: z.array(rowSchema) })
+        .parse(
+          await request(
+            invocation,
+            plan,
+            `/v10/projects/${encodeURIComponent(plan.project.projectId)}/env`,
+            false,
+          ),
+        );
+      assertOwnedAppProductionEnvironment(
+        plan,
+        environment.envs.flatMap((row) => (row.target.includes("production") ? [row.key] : [])),
+      );
       const deploymentId = current.targets?.production?.id;
       if (deploymentId === undefined || deploymentId.length === 0) {
         return { status: "pending" };
@@ -548,6 +571,7 @@ export interface PublicReleaseVercelBindingSnapshotScope {
 export const createPublicReleaseVercelBindingSnapshot =
   (deps: {
     assertCurrent: () => Promise<void>;
+    assertProjectKeys?: (keys: readonly string[]) => void;
     readCredential: () => Promise<
       { token: string; binding: VercelInstallationBinding } | undefined
     >;
@@ -605,6 +629,9 @@ export const createPublicReleaseVercelBindingSnapshot =
     const all = z
       .object({ envs: z.array(rowSchema) })
       .parse(await read(`/v10/projects/${encodeURIComponent(scope.projectId)}/env`)).envs;
+    deps.assertProjectKeys?.(
+      all.flatMap((row) => (row.target.includes("production") ? [row.key] : [])),
+    );
     const snapshots: { key: string; id: string; operationRef: string; sha256: string }[] = [];
     for (const key of scope.keys) {
       const rows = all.filter((row) => row.key === key && row.target.includes("production"));

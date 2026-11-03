@@ -50,11 +50,11 @@ describe("mounted public release native preparation inspection", () => {
     expect(await response.json()).toMatchObject({ code: "builder_destination_required" });
     expect(f.select).not.toHaveBeenCalled();
   });
-  it("returns the actual isolated setup prerequisite when this exact app project has no prepared journal", async () => {
+  it("requires actual dedicated normal repository creation provenance before reading or publishing source", async () => {
     const f = fixture();
     const response = await f.handler(request());
     expect(response.status).toBe(409);
-    expect(await response.json()).toMatchObject({ code: "prepared_runtime_required" });
+    expect(await response.json()).toMatchObject({ code: "public_release_source_required" });
     expect(f.select).toHaveBeenCalledTimes(1);
     expect(f.owner.readStandardDestination).toHaveBeenCalledWith({
       authority,

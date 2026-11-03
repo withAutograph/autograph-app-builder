@@ -199,3 +199,40 @@ it("refuses a shared or foreign repository before any publication, even with mat
   );
   expect(f.writes).toEqual([]);
 });
+
+it("requires a confirmed native Git event after changed runtime bindings", async () => {
+  const f = fixture();
+  f.plan.purpose = "auth-bootstrap";
+  f.setProduction(f.plan.source.sourceSha);
+  expect(await f.provider.reconcile(f.context)).toBe("unknown");
+  await expect(f.provider.publish(f.context)).rejects.toThrow("public_release_source_unavailable");
+  expect(f.writes).toHaveLength(0);
+});
+it("does not adopt a lost acknowledgment as evidence of a build after changed bindings", async () => {
+  const f = fixture();
+  f.plan.purpose = "application";
+  f.lose();
+  await expect(f.provider.publish(f.context)).rejects.toThrow("public_release_source_unavailable");
+  expect(await f.provider.reconcile({ ...f.context, priorPhase: "pending" })).toBe("unknown");
+  expect(f.writes).toHaveLength(1);
+});
+it("confirms its own native Git event, and permits unchanged runtime reuse", async () => {
+  const f = fixture();
+  f.plan.purpose = "auth-bootstrap";
+  await f.provider.publish(f.context);
+  expect(await f.provider.reconcile(f.context)).toBe("applied");
+  const unchanged = fixture();
+  unchanged.plan.purpose = "application";
+  unchanged.plan.environment = unchanged.plan.environment.map((entry) => ({
+    ...entry,
+    priorBinding: {
+      id: "env-owned",
+      operationRef: unchanged.context.operationRef,
+      valueSha256: entry.sha256,
+    },
+  }));
+  unchanged.setProduction(unchanged.plan.source.sourceSha);
+  expect(await unchanged.provider.reconcile(unchanged.context)).toBe("applied");
+  await unchanged.provider.publish(unchanged.context);
+  expect(unchanged.writes).toHaveLength(0);
+});

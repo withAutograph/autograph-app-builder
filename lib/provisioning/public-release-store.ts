@@ -1,4 +1,4 @@
-/* oxlint-disable sonarjs/expression-complexity -- Journal reads and CAS validate the complete immutable authority and effect history. */
+/* oxlint-disable eslint/complexity, sonarjs/expression-complexity -- Journal reads and CAS validate the complete immutable authority and effect history. */
 import { isDeepStrictEqual } from "node:util";
 import { and, eq, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -107,6 +107,23 @@ export const createPostgresPublicReleaseStore = (database: Database): PublicRele
           );
         }) ||
         !isDeepStrictEqual(record.plan, row.record.plan) ||
+        (row.record.approvalReceipts !== undefined &&
+          !isDeepStrictEqual(
+            record.approvalReceipts?.slice(0, row.record.approvalReceipts.length),
+            row.record.approvalReceipts,
+          )) ||
+        (record.approvalReceipts !== undefined &&
+          new Set(record.approvalReceipts.map((receipt) => receipt.approvedByCallId)).size !==
+            record.approvalReceipts.length) ||
+        (row.record.executionLease === undefined &&
+          record.executionLease !== undefined &&
+          record.executionLease.fenceGeneration !== 1) ||
+        (row.record.executionLease !== undefined &&
+          (record.executionLease === undefined ||
+            (record.executionLease.fenceGeneration === row.record.executionLease.fenceGeneration
+              ? record.executionLease.leaseId !== row.record.executionLease.leaseId
+              : record.executionLease.fenceGeneration !==
+                row.record.executionLease.fenceGeneration + 1))) ||
         record.planDigest !== row.record.planDigest ||
         publicReleasePlanDigest(record.plan) !== record.planDigest ||
         publicReleaseEffects.some(

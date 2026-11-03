@@ -1,4 +1,4 @@
-/* oxlint-disable eslint/no-await-in-loop, eslint/no-loop-func, sonarjs/no-nested-functions, sonarjs/cognitive-complexity -- Runtime binding, readback, consent checks and source publication must execute sequentially under one target lease. */
+/* oxlint-disable eslint/complexity, eslint/no-await-in-loop, eslint/no-loop-func, sonarjs/no-nested-functions, sonarjs/cognitive-complexity -- Runtime binding, readback, consent checks and source publication must execute sequentially under one target lease. */
 import { isDeepStrictEqual } from "node:util";
 import { PublicReleaseProviderError } from "./public-release-provider-error";
 import {
@@ -289,6 +289,7 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
           await checkpoint(row, { ...row.record, observation });
           return {
             status: observation.status,
+            ...(plan.purpose === undefined ? {} : { purpose: plan.purpose }),
             operationRef,
             observation,
             authenticatedBehavior: "unassessed" as const,

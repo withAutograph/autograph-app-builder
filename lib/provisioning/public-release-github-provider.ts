@@ -1,3 +1,4 @@
+import { publicReleaseRequiresNativeGitEvent } from "./public-release-plan-reuse";
 import { z } from "zod";
 import {
   githubReleaseFailure,
@@ -38,6 +39,9 @@ export interface PublicReleaseGitHubDependencies {
 
 /** Publish approved source only. Native Vercel activation remains provider-owned. */
 export const createPublicReleaseGitHubProvider = (deps: PublicReleaseGitHubDependencies) => {
+  // A matching ref cannot prove that a build happened after new runtime values were bound.
+  // Preserve ambiguous acknowledgments rather than retrying or adopting a pre-existing event.
+  const confirmedPublications = new Set<string>();
   const check = async (context: PublicReleaseEffectContext) => {
     context.invocation.signal.throwIfAborted();
     if (context.effect !== "publish-release-source") {
@@ -100,7 +104,10 @@ export const createPublicReleaseGitHubProvider = (deps: PublicReleaseGitHubDepen
         const repo = await repository(context);
         const current = await readRef(context, repo, context.plan.source.productionBranch);
         if (current === context.plan.source.sourceSha) {
-          return "applied";
+          return !publicReleaseRequiresNativeGitEvent(context.plan) ||
+            confirmedPublications.has(context.operationRef)
+            ? "applied"
+            : "unknown";
         }
         // Once dispatch may have occurred, a branch that moved back does not establish non-application.
         return context.priorPhase === "idle" &&
@@ -124,6 +131,9 @@ export const createPublicReleaseGitHubProvider = (deps: PublicReleaseGitHubDepen
           throw unavailable();
         }
         if (current === source) {
+          if (publicReleaseRequiresNativeGitEvent(context.plan)) {
+            throw unavailable();
+          }
           return;
         }
         if (current !== context.plan.source.expectedProductionSha) {
@@ -155,6 +165,7 @@ export const createPublicReleaseGitHubProvider = (deps: PublicReleaseGitHubDepen
         if ((await readRef(context, repo, context.plan.source.productionBranch)) !== source) {
           throw unavailable();
         }
+        confirmedPublications.add(context.operationRef);
       } catch (error) {
         context.invocation.signal.throwIfAborted();
         // Do not expose provider bodies, credentials or request URLs to the workflow journal.
