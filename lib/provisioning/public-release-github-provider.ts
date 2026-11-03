@@ -48,7 +48,7 @@ export const createPublicReleaseGitHubProvider = (deps: PublicReleaseGitHubDepen
     if (
       credential === undefined ||
       credential.token.length === 0 ||
-      credential.installationId.length === 0 ||
+      credential.installationId !== context.plan.source.installationId ||
       credential.repositoryId !== context.plan.source.repositoryId
     ) {
       throw unavailable();

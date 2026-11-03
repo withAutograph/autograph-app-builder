@@ -23,6 +23,7 @@ export const plan = publicReleasePlanSchema.parse({
     environment: "production",
   },
   source: {
+    installationId: "github-installation",
     repositoryId: "owned-repository",
     sourceBranch: "builder/app",
     sourceSha: "a".repeat(40),

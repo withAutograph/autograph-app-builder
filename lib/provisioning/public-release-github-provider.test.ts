@@ -43,7 +43,7 @@ const fixture = () => {
     },
     readCredential: async () => ({
       token: "test-token",
-      installationId: "installation",
+      installationId: plan.source.installationId,
       repositoryId: "123",
     }),
     fetch: vi.fn<typeof fetch>(async (resource, init) => {

@@ -42,6 +42,7 @@ export const publicReleasePlanSchema = z.strictObject({
     environment: z.literal("production"),
   }),
   source: z.strictObject({
+    installationId: id,
     repositoryId: id,
     sourceBranch: id,
     sourceSha: z.string().regex(/^[a-f0-9]{40}$/u),
