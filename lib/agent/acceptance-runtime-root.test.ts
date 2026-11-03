@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { prepareWithVerifiedGitHubFetchRecovery } from "./verified-github-fetch-recovery";
 import {
+  attachAvailableAcceptanceDependencies,
   recoverAcceptanceCheckout,
   resolveCompatibleAcceptanceRoot,
 } from "./acceptance-runtime-root";
@@ -162,6 +163,67 @@ describe("acceptance workspace recovery", () => {
       }),
     ).rejects.toThrow("could not recover the published acceptance source (exit 128)");
     expect(acquireCredential).toHaveBeenCalledOnce();
+  });
+  it("uses real filesystem attachment when history is missing, then reuses an available retained dependency source", async () => {
+    const run = promisify(execFile);
+    const workspace = await mkdtemp(path.join(tmpdir(), "builder-acceptance-dependencies-"));
+    const recoveredRoot = path.join(workspace, "recovered");
+    const retainedRoot = path.join(workspace, "retained");
+    const missingRoot = path.join(workspace, "missing-history");
+    const sandbox = {
+      run: async ({
+        command,
+        workingDirectory,
+      }: {
+        command: string;
+        workingDirectory?: string;
+      }) => {
+        try {
+          return {
+            ...(await run("/bin/sh", ["-c", command], { cwd: workingDirectory })),
+            exitCode: 0,
+          };
+        } catch {
+          return { stdout: "", stderr: "command failed", exitCode: 1 };
+        }
+      },
+    };
+    const signal = new AbortController().signal;
+    try {
+      await mkdir(recoveredRoot);
+      await writeFile(path.join(recoveredRoot, "release"), "v3");
+      await expect(
+        attachAvailableAcceptanceDependencies({
+          sandbox,
+          roots: [missingRoot],
+          recoveredRoot,
+          workspaceRoot: workspace,
+          signal,
+        }),
+      ).resolves.toBeUndefined();
+      expect(await readFile(path.join(recoveredRoot, "release"), "utf-8")).toBe("v3");
+      // No installation is invented when all retained sources are gone. Actual repository execution
+      // can still run without dependencies or report its precise missing-package failure.
+      const packageRoot = path.join(retainedRoot, "node_modules", "fixture-package");
+      await mkdir(packageRoot, { recursive: true });
+      await writeFile(path.join(packageRoot, "index.js"), "export const retained = true;");
+      await attachAvailableAcceptanceDependencies({
+        sandbox,
+        roots: [missingRoot, retainedRoot],
+        recoveredRoot,
+        workspaceRoot: workspace,
+        signal,
+      });
+      expect(
+        await readFile(path.join(recoveredRoot, "node_modules/fixture-package/index.js"), "utf-8"),
+      ).toBe("export const retained = true;");
+      expect(await readFile(path.join(packageRoot, "index.js"), "utf-8")).toBe(
+        "export const retained = true;",
+      );
+      expect(await readFile(path.join(recoveredRoot, "release"), "utf-8")).toBe("v3");
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
   });
   it("reconstructs a missing published checkout with real Git while preserving private edits", async () => {
     const run = promisify(execFile);

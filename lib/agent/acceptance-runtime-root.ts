@@ -71,6 +71,46 @@ export const recoverAcceptanceCheckout = async (input: {
   return input.root;
 };
 
+/** Borrow only from a retained directory that still exists; missing history is not a recovery prerequisite. */
+export const attachAvailableAcceptanceDependencies = async (input: {
+  sandbox: Pick<SandboxSession, "run">;
+  roots: string[];
+  recoveredRoot: string;
+  workspaceRoot: string;
+  signal: AbortSignal;
+}): Promise<void> => {
+  for (const root of new Set(input.roots)) {
+    input.signal.throwIfAborted();
+    if (root === input.recoveredRoot) {
+      continue;
+    }
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Inspect retained sources in preference order.
+    const existing = await input.sandbox.run({
+      command: `test -d ${quote(root)}`,
+      workingDirectory: input.workspaceRoot,
+      abortSignal: input.signal,
+    });
+    if (existing.exitCode === 1) {
+      continue;
+    }
+    if (existing.exitCode !== 0) {
+      throw new Error(
+        "Builder could not inspect the retained dependency source. The recovered checkout is preserved; inspect sandbox file access before retrying.",
+      );
+    }
+    // The maintained attachment implementation enforces owned paths and rebases workspace links.
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Attach the first existing source only.
+    await attachCheckoutDependencyView({
+      sandbox: input.sandbox,
+      checkoutRoot: root,
+      candidateRoot: input.recoveredRoot,
+      workspaceRoot: input.workspaceRoot,
+    });
+    return;
+  }
+  // Let the repository-owned describe command reveal any actual missing dependency.
+};
+
 /** Source edits are allowed. Only the installed release must be compatible before credentials are restored. */
 export const resolveCompatibleAcceptanceRoot = async (input: {
   roots: string[];
@@ -130,13 +170,14 @@ export const resolveAcceptanceRuntimeRoot = async (input: {
     currentDraftCandidateSource(state, candidate) !== undefined
       ? candidate.root
       : undefined;
+  const retainedRoots = [
+    current,
+    recoveredRoots.get()[appId],
+    ...completions.toReversed().map((entry) => entry.root),
+    input.fallbackRoot,
+  ].filter((entry): entry is string => entry !== undefined);
   const selectedRoot = await resolveCompatibleAcceptanceRoot({
-    roots: [
-      current,
-      recoveredRoots.get()[appId],
-      ...completions.toReversed().map((entry) => entry.root),
-      input.fallbackRoot,
-    ].filter((entry): entry is string => entry !== undefined),
+    roots: retainedRoots,
     releaseId: projection.plan.release.id,
     signal: ctx.abortSignal,
     describe: async (root) => {
@@ -208,11 +249,14 @@ export const resolveAcceptanceRuntimeRoot = async (input: {
             workingDirectory: "/workspace",
             signal: ctx.abortSignal,
           });
-          await attachCheckoutDependencyView({
+          // Retain the fetched source even if dependency attachment or description subsequently fails.
+          recoveredRoots.update((value) => ({ ...value, [appId]: destination }));
+          await attachAvailableAcceptanceDependencies({
             sandbox,
-            checkoutRoot: input.fallbackRoot,
-            candidateRoot: destination,
+            roots: retainedRoots,
+            recoveredRoot: destination,
             workspaceRoot: "/workspace",
+            signal: ctx.abortSignal,
           });
           return destination;
         },
