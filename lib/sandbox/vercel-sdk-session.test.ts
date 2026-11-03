@@ -619,3 +619,51 @@ it("kills a running command when renewal fails and leaves no idle renewal", asyn
     vi.useRealTimers();
   }
 });
+
+it("reapplies configured toolchain environment to commands on a replacement native handle, preserving command overrides", async () => {
+  const native = fixture();
+  native.runCommand.mockResolvedValue({
+    stdout: async () => "",
+    stderr: async () => "",
+    wait: async () => ({ exitCode: 0 }),
+    kill: async () => {},
+  });
+  const replacement = fixture();
+  replacement.runCommand.mockResolvedValue({
+    stdout: async () => "",
+    stderr: async () => "",
+    wait: async () => ({ exitCode: 0 }),
+    kill: async () => {},
+  });
+  let active = native;
+  const session = createVercelSdkSession(native, () => active, undefined, {
+    CARGO_HOME: "/private/cargo",
+    MISE_DATA_DIR: "/private/mise",
+    PATH: "/private/bin:/usr/bin",
+  });
+  await session.run({ command: "cargo --version", env: { EXPLICIT: "retained" } });
+  expect(native.runCommand).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      env: {
+        CARGO_HOME: "/private/cargo",
+        MISE_DATA_DIR: "/private/mise",
+        PATH: "/private/bin:/usr/bin",
+        EXPLICIT: "retained",
+      },
+    }),
+  );
+  active = replacement;
+  await session.run({
+    command: "mise exec -- rustc --version",
+    env: { PATH: "/command/bin:/usr/bin" },
+  });
+  expect(replacement.runCommand).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      env: {
+        CARGO_HOME: "/private/cargo",
+        MISE_DATA_DIR: "/private/mise",
+        PATH: "/command/bin:/usr/bin",
+      },
+    }),
+  );
+});

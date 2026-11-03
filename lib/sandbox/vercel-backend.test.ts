@@ -297,6 +297,10 @@ describe("Builder Vercel provider", () => {
     expect(sdk.get).toHaveBeenCalledWith(
       expect.objectContaining({ name: native.name, resume: true }),
     );
+    await resumed.sandbox.run({ command: "cargo --version" });
+    expect(native.runCommand).toHaveBeenLastCalledWith(
+      expect.objectContaining({ env: { MISE_DATA_DIR: "/runtime" } }),
+    );
     expect(sdk.create).toHaveBeenCalledOnce();
     expect(drives.getOrCreate).toHaveBeenCalledOnce();
     expect(drives.list).not.toHaveBeenCalled();

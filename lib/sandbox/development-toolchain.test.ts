@@ -111,7 +111,7 @@ describe("Development Vercel Sandbox dependency template", () => {
     expect(command).toContain("/workspace/.app-builder/dependency-cache/cargo/config.toml");
     expect(command).toContain("bun install --frozen-lockfile --ignore-scripts --linker=hoisted");
     expect(command).toContain("stage='mise-tools'");
-    expect(command).toContain("mise install --locked cue");
+    expect(command).toContain("mise install --locked cue rust");
     expect(command).toContain('node - "$work/source"');
     expect(command).not.toContain('readlink -f -- "$link"');
     expect(command).toContain(
@@ -149,7 +149,7 @@ describe("Development Vercel Sandbox dependency template", () => {
     );
     expect(command).toContain('"$cache_root/cargo/config.toml"');
     expect(command).toContain('unlink "$source_archive"');
-    expect(command).toContain("mise install --locked cue");
+    expect(command).toContain("mise install --locked cue rust");
   });
 
   it("accepts validated Bun symlinks while rejecting writable cache entries", () => {
@@ -158,7 +158,7 @@ describe("Development Vercel Sandbox dependency template", () => {
     expect(command).not.toContain('find "$cache_root" -perm /022');
     expect(command).toContain(developmentDependencySymlinkScript);
     expect(command).toContain("stage='mise-tools'");
-    expect(command).toContain("mise install --locked cue");
+    expect(command).toContain("mise install --locked cue rust");
   });
 
   it("keeps Bun links inside the closure and rebinds only workspace links", async () => {

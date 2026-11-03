@@ -397,3 +397,11 @@ cannot recover that history, preserve the original IDs and report the concrete
 failure; source tests alone do not establish successful recovery.
 
 The explicit recovery option also selects Eve’s documented `dev --resume` recovery. Reading retained history alone does not establish that a stopped run can accept another message; verify the same session through public `autograph_get` and an ordinary continuation. Do not resend any message with an uncertain dispatch outcome.
+
+The development toolchain registers the repository's locked Rust toolchain and
+components through mise before repository commands run; standalone compiler
+binaries alone do not initialize mise's rustup backend. Rust manager state stays
+in the instance's private toolchain directories. Every command reapplies the
+configured toolchain environment, including commands after reconnecting to the
+same compute instance. This setup does not change the selected source's tool
+versions or authorize app/provider effects.

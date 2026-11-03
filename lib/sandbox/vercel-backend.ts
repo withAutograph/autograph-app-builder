@@ -347,6 +347,7 @@ export const createBuilderVercelProvider = (
           async () => {
             await assertHostedSandboxCommandAuthority({ sessionId });
           },
+          options?.sandboxEnvironment,
         ),
       }),
     };

@@ -1,3 +1,4 @@
+import { sourceDeclaredToolchainActivationCommand } from "../repository/source-toolchain";
 import { describe, expect, it, vi } from "vitest";
 import type { z } from "zod";
 import type { appDescriptionSchema } from "../repository/app-description";
@@ -53,17 +54,21 @@ describe("private local preview setup", () => {
       .fn()
       .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: descriptor(generated) })
       .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: descriptor(generated) })
-      .mockResolvedValueOnce({ exitCode: 1, stderr: "pg_ctl failed", stdout: "" });
+      .mockResolvedValueOnce({
+        exitCode: 1,
+        stderr: "rustup: toolchain download failed",
+        stdout: "",
+      });
     await expect(
       prepareValidationLocalData({
         appId: "spend-review",
         root: "/workspace/repository",
         sandbox: { run },
       }),
-    ).rejects.toThrow(/Validation could not prepare.*pg_ctl failed/su);
+    ).rejects.toThrow(/Validation could not prepare.*rustup: toolchain download failed/su);
     expect(run).toHaveBeenCalledTimes(3);
     expect(run).toHaveBeenLastCalledWith({
-      command: localPreviewExecutionCommand("spend-review"),
+      command: `${sourceDeclaredToolchainActivationCommand()}\n${localPreviewExecutionCommand("spend-review")}`,
       env: {
         APP_RUNTIME_ROLES: "member",
         APP_RUNTIME_STATE_DIR: runtimeStateDirectory,
@@ -95,7 +100,7 @@ describe("private local preview setup", () => {
     expect(result.problem).toContain("CUE authorization roles and model/operation grants");
     expect(result.problem).toContain("ordinary implementation repair");
     expect(run).toHaveBeenLastCalledWith({
-      command: localPreviewExecutionCommand("spend-review"),
+      command: `${sourceDeclaredToolchainActivationCommand()}\n${localPreviewExecutionCommand("spend-review")}`,
       workingDirectory: "/workspace/repository",
       env: { APP_RUNTIME_STATE_DIR: runtimeStateDirectory },
     });
@@ -116,7 +121,7 @@ describe("private local preview setup", () => {
     });
     expect(result).toMatchObject({ status: "prepared", exitCode: 0 });
     expect(run).toHaveBeenLastCalledWith({
-      command: localPreviewExecutionCommand("spend-review"),
+      command: `${sourceDeclaredToolchainActivationCommand()}\n${localPreviewExecutionCommand("spend-review")}`,
       workingDirectory: "/workspace/repository",
       env: { APP_RUNTIME_STATE_DIR: runtimeStateDirectory },
     });
@@ -133,7 +138,7 @@ describe("private local preview setup", () => {
       sandbox: { run },
     });
     expect(run).toHaveBeenCalledWith({
-      command: localPreviewExecutionCommand("spend-review"),
+      command: `${sourceDeclaredToolchainActivationCommand()}\n${localPreviewExecutionCommand("spend-review")}`,
       env: {
         APP_RUNTIME_ROLES: "member",
         APP_RUNTIME_STATE_DIR: runtimeStateDirectory,
@@ -159,7 +164,7 @@ describe("private local preview setup", () => {
       sandbox: { run },
     });
     expect(run).toHaveBeenLastCalledWith({
-      command: localPreviewExecutionCommand("spend-review"),
+      command: `${sourceDeclaredToolchainActivationCommand()}\n${localPreviewExecutionCommand("spend-review")}`,
       env: {
         APP_RUNTIME_AUTH_ORIGIN: "https://spend-review.vercel.run",
         APP_RUNTIME_ROLES: "member,reviewer",
@@ -188,6 +193,23 @@ describe("private local preview setup", () => {
     expect(result.problem).toContain("local database startup");
     expect(result.stderr).toContain("pg_ctl");
     expect(JSON.stringify(result)).not.toContain("secret");
+  });
+
+  it("leaves static app setup free of Rust activation", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: descriptor({ kind: "static" }) })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "Runtime ready", stderr: "" });
+    await prepareAppLocalPreview({
+      appId: "spend-review",
+      root: "/workspace/repository",
+      sandbox: { run },
+    });
+    expect(run).toHaveBeenLastCalledWith({
+      command: localPreviewExecutionCommand("spend-review"),
+      env: { APP_RUNTIME_STATE_DIR: runtimeStateDirectory },
+      workingDirectory: "/workspace/repository",
+    });
   });
 
   it("reports command-provider errors with a recovery action", async () => {

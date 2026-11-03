@@ -1,3 +1,4 @@
+import { sourceDeclaredToolchainActivationCommand } from "./source-toolchain";
 import type { FrameworkVersions } from "./framework-upgrade";
 import { frameworkUpgradeCommand, frameworkSharedPaths } from "./framework-upgrade";
 import { setBuilderSandboxNetworkPolicy } from "../sandbox/builder-sandbox";
@@ -633,22 +634,6 @@ async function stageCreatedAppSpec(input: {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function sourceDeclaredCueActivationCommand() {
-  return String.raw`set -euo pipefail
-config_file="$PWD/.config/mise/config.toml"
-runtime_bin="$(dirname "$(command -v bun)")"
-test -f "$config_file"
-test -x "$runtime_bin/bun"
-export MISE_CONFIG_FILE="$config_file"
-mise trust --yes "$config_file"
-mise install --locked cue
-cue_bin="$(mise which cue)"
-test -x "$cue_bin"
-ln -sfn "$cue_bin" "$runtime_bin/cue"
-"$runtime_bin/cue" version >/dev/null`;
-}
-
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
   return async ({ sandbox, appId, applyRoot, proposal }) => {
     if ("operation" in proposal) {
@@ -726,11 +711,11 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
       return { ...install, failedCommand: installCommand };
     }
     const cue = await sandbox.run({
-      command: sourceDeclaredCueActivationCommand(),
+      command: sourceDeclaredToolchainActivationCommand(),
       workingDirectory: applyRoot,
     });
     if (cue.exitCode !== 0) {
-      return { ...cue, failedCommand: sourceDeclaredCueActivationCommand() };
+      return { ...cue, failedCommand: sourceDeclaredToolchainActivationCommand() };
     }
     if ("operation" in proposal) {
       const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);

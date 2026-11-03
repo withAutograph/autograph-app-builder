@@ -1,3 +1,4 @@
+import { sourceDeclaredToolchainActivationCommand } from "../../lib/repository/source-toolchain";
 import { resolveAcceptanceRuntimeRoot } from "@/lib/agent/acceptance-runtime-root";
 import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
@@ -85,7 +86,7 @@ export const prepareAppLocalPreview = async (input: {
           .string()
           .regex(/^https:\/\/[a-z0-9-]+\.vercel\.run$/u)
           .parse(input.authOrigin);
-  const command = localPreviewExecutionCommand(input.appId);
+  let command = localPreviewExecutionCommand(input.appId);
   try {
     const description = await describeSelectedApp({
       appId: input.appId,
@@ -95,6 +96,9 @@ export const prepareAppLocalPreview = async (input: {
     });
     const roles =
       description.backend.kind === "generated-postgres" ? description.backend.roles : [];
+    if (description.backend.kind === "generated-postgres") {
+      command = `${sourceDeclaredToolchainActivationCommand()}\n${command}`;
+    }
     const env: LocalPreviewEnvironment = {
       APP_RUNTIME_STATE_DIR: path.posix.dirname(
         localRuntimeEnvironmentPath(input.root, input.appId),

@@ -32,13 +32,14 @@ export const createVercelSdkSession = (
   native: VercelSdkSessionNative,
   current: () => VercelSdkSessionNative = () => native,
   authorize?: () => Promise<void>,
+  environment?: Readonly<Record<string, string>>,
 ): BuilderSandboxSession => {
   const runCommand = (options: SandboxRunOptions) => ({
     // A login profile may change directories after the SDK applies cwd.
     args: ["-c", options.command],
     cmd: "bash",
     cwd: resolvePath(options.workingDirectory ?? "."),
-    env: options.env,
+    env: environment === undefined ? options.env : { ...environment, ...options.env },
     signal: options.abortSignal,
   });
   const readBinaryFile: BuilderSandboxSession["readBinaryFile"] = async (options) =>
