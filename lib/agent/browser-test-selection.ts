@@ -6,7 +6,7 @@ export const browserTestSelectionSchema = z.strictObject({
     .string()
     .min(1)
     .max(160)
-    .regex(/^[^\p{Cc}]+$/u),
+    .refine((value) => !/\p{Cc}/u.test(value), "Test title must not contain control characters."),
   workers: z.number().int().positive().optional(),
   retries: z.number().int().nonnegative().optional(),
   maxFailures: z.number().int().nonnegative().optional(),
