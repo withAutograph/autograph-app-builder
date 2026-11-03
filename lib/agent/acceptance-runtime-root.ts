@@ -1,0 +1,198 @@
+/* oxlint-disable unicorn/no-useless-undefined -- Undefined means the described source cannot run against this installed release. */
+import { z } from "zod";
+import { randomUUID } from "node:crypto";
+import { defineState } from "eve/context";
+import type { SandboxSession } from "eve/sandbox";
+import type { ToolContext } from "eve/tools";
+import { hostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
+import { setBuilderSandboxNetworkPolicy } from "../sandbox/builder-sandbox";
+import { ensureSandboxDirectories } from "../repository/sandbox-filesystem";
+import { attachCheckoutDependencyView } from "../repository/dependency-cache";
+import { prepareWithVerifiedGitHubFetchRecovery } from "./verified-github-fetch-recovery";
+import { repositoryAccessRuntimeForSession } from "./deployment-repository-access-runtime";
+import {
+  repositoryAccessReceiptSchema,
+  repositoryAccessReceiptState,
+} from "./repository-access-state";
+import {
+  draftReconciliationCompletions,
+  draftReconciliationState,
+  publishedDraftRepairCompletions,
+} from "./draft-reconciliation-state";
+import { currentDraftCandidateSource } from "./published-draft-repair";
+import { resolveProtectedRuntimeBindings } from "./prepared-runtime-execution";
+import type { AppBuilderWorkflowState } from "./workflow-state";
+
+const recoveredRoots = defineState<Record<string, string>>(
+  "autograph-app-builder.acceptance-runtime-roots.v1",
+  () => ({}),
+);
+const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
+
+/** Fetch the recorded source into a separate checkout without rewriting retained private work. */
+export const recoverAcceptanceCheckout = async (input: {
+  sandbox: Pick<SandboxSession, "run">;
+  repositoryUrl: string;
+  revision: string;
+  root: string;
+  workingDirectory: string;
+  signal: AbortSignal;
+}): Promise<string> => {
+  const commands = [
+    `git clone --filter=blob:none --no-checkout ${quote(input.repositoryUrl)} ${quote(input.root)}`,
+    `git -C ${quote(input.root)} fetch --no-tags origin ${quote(input.revision)}`,
+    `git -C ${quote(input.root)} checkout --detach ${quote(input.revision)}`,
+  ];
+  // oxlint-disable-next-line react-doctor/async-await-in-loop -- Git checkout commands depend on their predecessor.
+  for (const command of commands) {
+    input.signal.throwIfAborted();
+    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Recover source in order, retaining every existing checkout.
+    const result = await input.sandbox.run({
+      command,
+      workingDirectory: input.workingDirectory,
+      abortSignal: input.signal,
+    });
+    if (result.exitCode !== 0) {
+      throw new Error(
+        `Builder could not recover the published acceptance source (exit ${result.exitCode}). Check its repository access and retry; existing work is preserved.`,
+      );
+    }
+  }
+  return input.root;
+};
+
+/** Source edits are allowed. Only the installed release must be compatible before credentials are restored. */
+export const resolveCompatibleAcceptanceRoot = async (input: {
+  roots: string[];
+  releaseId: string;
+  describe: (root: string) => Promise<string | undefined>;
+  recover: () => Promise<string>;
+}): Promise<string> => {
+  for (const root of new Set(input.roots)) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Probe retained roots in preference order without changing them.
+    if ((await input.describe(root)) === input.releaseId) {
+      return root;
+    }
+  }
+  const root = await input.recover();
+  if ((await input.describe(root)) !== input.releaseId) {
+    throw new Error(
+      "The recovered published app could not describe the installed release. Preserve its checkout and inspect the repository command before retrying acceptance.",
+    );
+  }
+  return root;
+};
+
+/** Recover a private execution checkout; never overwrite the app's original or evolving candidate work. */
+export const resolveAcceptanceRuntimeRoot = async (input: {
+  appId: string;
+  fallbackRoot: string;
+  sandbox: SandboxSession;
+  state: AppBuilderWorkflowState;
+  ctx: ToolContext;
+}): Promise<string> => {
+  const { state, sandbox, ctx, appId } = input;
+  const projection = await resolveProtectedRuntimeBindings({
+    appId,
+    sessionAuth: ctx.session.auth,
+    sessionId: ctx.session.id,
+    signal: ctx.abortSignal,
+    callbackExecution: hostedOperatorCallbackExecution(ctx.session),
+  });
+  if (projection === null) {
+    return input.fallbackRoot;
+  }
+  const candidate = draftReconciliationState.get();
+  const completions = [
+    ...publishedDraftRepairCompletions.get(),
+    ...draftReconciliationCompletions.get(),
+  ].filter((entry) => entry.appId === appId);
+  const current =
+    state.phase === "reviewed" &&
+    candidate?.appId === appId &&
+    currentDraftCandidateSource(state, candidate) !== undefined
+      ? candidate.root
+      : undefined;
+  const selectedRoot = await resolveCompatibleAcceptanceRoot({
+    roots: [
+      current,
+      recoveredRoots.get()[appId],
+      ...completions.toReversed().map((entry) => entry.root),
+      input.fallbackRoot,
+    ].filter((entry): entry is string => entry !== undefined),
+    releaseId: projection.plan.release.id,
+    describe: async (root) => {
+      ctx.abortSignal.throwIfAborted();
+      try {
+        const result = await sandbox.run({
+          command: `mise run app:describe ${quote(appId)}`,
+          workingDirectory: root,
+          abortSignal: ctx.abortSignal,
+        });
+        if (result.exitCode !== 0) {
+          return undefined;
+        }
+        const value = z
+          .object({
+            app: z.object({ id: z.string() }),
+            backend: z.object({ release: z.object({ id: z.string() }) }),
+          })
+          .parse(JSON.parse(result.stdout));
+        return value.app.id === appId ? value.backend.release.id : undefined;
+      } catch {
+        ctx.abortSignal.throwIfAborted();
+        return undefined;
+      }
+    },
+    recover: async () => {
+      const access = repositoryAccessReceiptSchema.parse(repositoryAccessReceiptState.get());
+      const delivery = projection.plan.delivery;
+      if (
+        access.sessionId !== ctx.session.id ||
+        delivery?.gitSha === undefined ||
+        access.repository.repositoryId !== delivery.repoId
+      ) {
+        throw new Error(
+          "The prepared app's repository access must be reconnected in this same Builder session before its runtime can recover.",
+        );
+      }
+      const revision = delivery.gitSha;
+      const runtime = await repositoryAccessRuntimeForSession(ctx.session.auth);
+      const destination = `/workspace/.app-builder/acceptance/${randomUUID()}`;
+      const { prepared } = await prepareWithVerifiedGitHubFetchRecovery({
+        acquireCredential: async () =>
+          await runtime.acquireExistingSourceCredential({
+            installationId: access.scope.installationId,
+            repository: access.repository,
+            sessionId: ctx.session.id,
+          }),
+        sandbox: {
+          setNetworkPolicy: async (policy) => {
+            await setBuilderSandboxNetworkPolicy(sandbox, policy);
+          },
+        },
+        prepare: async () => {
+          await ensureSandboxDirectories(sandbox, ["/workspace/.app-builder/acceptance"]);
+          await recoverAcceptanceCheckout({
+            sandbox,
+            repositoryUrl: `https://github.com/${access.repository.owner}/${access.repository.name}.git`,
+            revision,
+            root: destination,
+            workingDirectory: "/workspace",
+            signal: ctx.abortSignal,
+          });
+          await attachCheckoutDependencyView({
+            sandbox,
+            checkoutRoot: input.fallbackRoot,
+            candidateRoot: destination,
+            workspaceRoot: "/workspace",
+          });
+          return destination;
+        },
+      });
+      recoveredRoots.update((value) => ({ ...value, [appId]: prepared }));
+      return prepared;
+    },
+  });
+  return selectedRoot;
+};

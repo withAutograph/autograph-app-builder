@@ -280,6 +280,54 @@ beforeEach(() => {
 });
 
 describe("approved hosted runtime consumers", () => {
+  it("passes a literal focused browser selection as structured task arguments", async () => {
+    const fixture = transport();
+    const runtime = await restorePreparedRuntimeExecution({
+      appId: context.appId,
+      binding: binding(),
+      observeInstallation: async (actualFiles) =>
+        await mocks.observeInstallation({
+          ...context,
+          files: actualFiles,
+          stateDirectory: "/private-state",
+        }),
+      provider: fixture.provider,
+      root: context.root,
+    });
+    await runtime.runTask({
+      task: "test-e2e",
+      browserSelection: { testName: "@acceptance", workers: 1, retries: 0, maxFailures: 1 },
+    });
+    expect(fixture.provider.runCommand).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        args: [
+          "mise",
+          "run",
+          "app:runtime",
+          "run",
+          context.appId,
+          "test-e2e",
+          "--grep",
+          "@acceptance",
+          "--workers=1",
+          "--retries=0",
+          "--max-failures=1",
+        ],
+        cmd: "/usr/bin/env",
+        cwd: context.root,
+      }),
+    );
+    await expect(
+      runtime.runTask({ task: "repository-check", browserSelection: { testName: "x" } }),
+    ).rejects.toThrow();
+    await expect(
+      runtime.runTask({
+        task: "test-e2e",
+        commandId: "saved",
+        browserSelection: { testName: "x" },
+      }),
+    ).rejects.toThrow("cannot be resumed with a new test selection");
+  });
   it.each([
     ["repository-check", undefined, undefined],
     ["repository-test", "1/1", undefined],
