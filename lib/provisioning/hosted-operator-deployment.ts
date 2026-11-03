@@ -195,7 +195,10 @@ import {
   createHostedOperatorReadApproval,
   createHostedOperatorReadApprovedPlan,
 } from "./hosted-operator-owner";
-import { createHostedOperatorOwnerContextResolver } from "./hosted-operator-owner-context";
+import {
+  createHostedOperatorOwnerContextResolver,
+  createHostedOperatorApprovalReadAuthority,
+} from "./hosted-operator-owner-context";
 import type {
   HostedOperatorContext,
   HostedOperatorEffectContext,
@@ -818,39 +821,11 @@ export const createHostedOperatorControlPlane = async (input: {
     const operatorIdentity = createVercelWorkloadIdentity();
     const approvalObserver = createHostedOperatorApprovalObserver({
       builderOrigin: new URL(config.resource).origin,
-      verifyReadAuthority: async ({ adapterSessionId, principal, sessionId }) => {
-        try {
-          const rawSession = await eve.getSessionByAdapterSessionId?.(principal, adapterSessionId);
-          const parsed = hostedSessionRecordSchema.safeParse(rawSession);
-          if (!parsed.success) {
-            return false;
-          }
-          const durableSession = toDurableHostedSessionRecord(parsed.data);
-          if (
-            durableSession.sessionId !== sessionId ||
-            durableSession.adapterSessionId !== adapterSessionId ||
-            !samePrincipal(durableSession.principal, principal)
-          ) {
-            return false;
-          }
-          const sourceHandoffId =
-            parsed.data.version === 2 ? parsed.data.sourceHandoffId : undefined;
-          const resolved = await ownerContextResolver({
-            adapterSessionId,
-            authority: {
-              audience: principal.audience,
-              issuer: principal.issuer,
-              ownerUserId: principal.ownerUserId,
-              workspaceId: principal.workspaceId,
-            },
-            principal,
-            sessionAuth: forwardedSessionAuth(principal, sourceHandoffId),
-          });
-          return resolved.sessionId === sessionId && resolved.adapterSessionId === adapterSessionId;
-        } catch {
-          return false;
-        }
-      },
+      verifyReadAuthority: createHostedOperatorApprovalReadAuthority({
+        sessions: eve,
+        resolveOwnerContext: ownerContextResolver,
+        forwardSessionAuth: forwardedSessionAuth,
+      }),
       workloadIdentity: operatorIdentity,
     });
     const readApproval = (
