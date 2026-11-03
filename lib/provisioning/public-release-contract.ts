@@ -28,6 +28,8 @@ export const publicReleaseSelectionSchema = z.strictObject({
 export const publicReleasePlanSchema = z.strictObject({
   version: z.literal(1),
   kind: z.literal("public-app-release-v1"),
+  /** Absence preserves the first additive release contract as application delivery. */
+  purpose: z.enum(["auth-bootstrap", "application"]).optional(),
   authority: hostedTenantAuthoritySchema,
   selection: publicReleaseSelectionSchema,
   project: z.strictObject({
@@ -54,6 +56,7 @@ export const publicReleasePlanSchema = z.strictObject({
     operationRef: z.uuid(),
     planDigest: digest,
     configurationRef: id,
+    realmEnrollmentRef: z.uuid().optional(),
     releaseId: id,
     providerEnvironment: z.literal("development"),
     syntheticOnly: z.literal(true),
@@ -100,6 +103,10 @@ export const publicReleaseRecordSchema = z.strictObject({
   kind: z.literal("public-app-release-v1"),
   plan: publicReleasePlanSchema,
   planDigest: digest,
+  approvalReceipts: z.array(z.strictObject({ approvalId: id, approvedByCallId: id })).optional(),
+  executionLease: z
+    .strictObject({ leaseId: z.uuid(), fenceGeneration: z.number().int().positive() })
+    .optional(),
   bindings: z.record(z.string(), publicReleaseBindingStateSchema),
   effects: z.strictObject({
     "bind-production-runtime": z.enum(["idle", "pending", "applied"]),
