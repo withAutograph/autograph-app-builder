@@ -762,6 +762,8 @@ export const createHostedOperatorControlPlane = async (input: {
       });
     const owner = createHostedOperatorOwnerAuthority({
       readProvisioning: createPostgresBuilderProvisionJournalStore(database).read,
+      findProvisioningForAppRepository:
+        createPostgresBuilderProvisionJournalStore(database).findSettledAppRepository,
       eve,
       journal: store,
       realmContinuation: {

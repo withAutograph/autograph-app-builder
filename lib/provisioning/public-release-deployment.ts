@@ -46,6 +46,7 @@ import { createPublicReleaseGitHubProvider } from "./public-release-github-provi
 import {
   createPublicReleaseVercelProvider,
   createPublicReleaseVercelBindingSnapshot,
+  createPublicReleaseVercelActiveDeploymentSnapshot,
 } from "./public-release-vercel-provider";
 import { createPublicReleaseAuthObservation } from "./public-release-auth-observation";
 import { createPublicReleaseApprovalAuthority } from "./public-release-approval-authority";
@@ -587,6 +588,24 @@ export const createPublicReleaseDeployment = (input: {
               original.recordedBuilderDestination,
             );
           }
+          const activation = await createPublicReleaseVercelActiveDeploymentSnapshot({
+            assertCurrent: () => base(current),
+            readCredential: () =>
+              readActiveVercelInstallationToken({
+                database: input.database,
+                config: keyring,
+                authority: owner.authority,
+                installationId: project.installationId,
+              }),
+            fetch: input.fetch,
+          })({
+            projectId: project.projectId,
+            teamId: project.teamId,
+            installationId: project.installationId,
+            repositoryId: refs.repositoryId,
+            productionBranch: refs.productionBranch,
+            signal: current.signal,
+          });
           const bindings = await readResourceBindings(runtimeContext);
           await base(current);
           assertOwnedAppAuthRuntimeScope({
@@ -688,6 +707,7 @@ export const createPublicReleaseDeployment = (input: {
               rootDirectory: ".",
               deploymentAccess: "public-app",
               environment: "production",
+              priorActiveDeploymentId: activation.priorActiveDeploymentId,
             },
             source: { ...refs, reviewDigest: source.reviewDigest },
             runtime: {

@@ -89,3 +89,20 @@ it("requires an ordinary reviewed source revision when runtime changes need a na
     }),
   ).toThrow("Runtime configuration changed");
 });
+it("retains the original approved activation fence when the same intent is resumed after provider activation", () => {
+  const original = publicReleasePlanSchema.parse({
+    ...plan,
+    purpose: "application",
+    project: { ...plan.project, priorActiveDeploymentId: "prior-production" },
+  });
+  const record = initialPublicReleaseRecord(original);
+  record.effects["publish-release-source"] = "pending";
+  const candidate = publicReleasePlanSchema.parse({
+    ...original,
+    project: { ...original.project, priorActiveDeploymentId: "now-production" },
+    source: { ...original.source, expectedProductionSha: original.source.sourceSha },
+  });
+  expect(
+    reconcilePublicReleasePlanHistory({ candidate, records: [record], snapshots: [] }),
+  ).toEqual(original);
+});

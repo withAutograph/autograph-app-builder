@@ -7,6 +7,7 @@ import {
   publicReleaseOperationRef,
   publicReleasePlanDigest,
   publicReleasePlanSchema,
+  publicReleaseRequiresNativeGitEvent,
 } from "./public-release-contract";
 import type { PublicReleasePlan, PublicReleaseRecord } from "./public-release-contract";
 import { PublicReleasePrerequisiteError } from "./public-release-prerequisite";
@@ -17,12 +18,11 @@ export interface PublicReleaseBindingSnapshot {
   operationRef: string;
   sha256: string;
 }
-export const publicReleaseRequiresNativeGitEvent = (plan: PublicReleasePlan) =>
-  plan.purpose !== undefined &&
-  plan.environment.some((entry) => entry.priorBinding?.valueSha256 !== entry.sha256);
+export { publicReleaseRequiresNativeGitEvent } from "./public-release-contract";
 const semantic = (plan: PublicReleasePlan) => ({
   ...plan,
   purpose: plan.purpose ?? "application",
+  project: { ...plan.project, priorActiveDeploymentId: undefined },
   source: { ...plan.source, expectedProductionSha: undefined },
   environment: plan.environment.map(({ key, sha256 }) => ({ key, sha256 })),
 });

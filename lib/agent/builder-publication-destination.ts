@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import { resolveExistingBuilderDestinationReference } from "../provisioning/builder-existing-destination";
 import type { ToolContext } from "eve/tools";
 import {
   hostedOperatorCallbackExecution,
@@ -101,8 +102,9 @@ export const readBuilderPublicationDestinationForTool = async (
   }
   const database = openHostedPostgresDatabase(config.databaseUrl);
   const sessions = createPostgresHostedEveStore(database);
+  const provisioning = createPostgresBuilderProvisionJournalStore(database);
   return await createBuilderPublicationDestinationReader({
-    readProvisioning: createPostgresBuilderProvisionJournalStore(database).read,
+    readProvisioning: provisioning.read,
     readSelection: async () => {
       const owner = await resolveHostedOperatorOwnerContext({
         adapterSessionId: ctx.session.id,
@@ -120,7 +122,13 @@ export const readBuilderPublicationDestinationForTool = async (
       if (session.appId !== appId) {
         throw new Error("The saved Builder app identity changed.");
       }
-      return { authority, appId, owner, destination: session.builderDestination };
+      const destination = await resolveExistingBuilderDestinationReference({
+        session,
+        authority,
+        appId,
+        findProvisioningForAppRepository: provisioning.findSettledAppRepository,
+      });
+      return { authority, appId, owner, destination };
     },
   })();
 };

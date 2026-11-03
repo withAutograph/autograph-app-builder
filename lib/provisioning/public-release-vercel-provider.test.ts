@@ -24,6 +24,7 @@ const fixture = () => {
   const marker = `autograph:public-app-release:${operationRef}`;
   const value = "synthetic-private-runtime-value";
   const plan = structuredClone(basePlan);
+  plan.purpose = "application";
   plan.environment = [{ key: "INVOICE_APP_DATABASE_URL", sha256: hash(value) }];
   const invocation = {
     authority: plan.authority,
