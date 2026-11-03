@@ -56,6 +56,7 @@ type Database = PostgresJsDatabase<typeof databaseSchema>;
 type Current = NativeTargetCurrentOwner & { historyOwner: OperatorOwnerContext };
 interface AppOwner {
   verifyWorkload: (request: Request) => Promise<void>;
+  assertNoStandardBuilderDestination?: AppOwner["assertCanonicalAppOwner"];
   assertCanonicalAppOwner: (input: {
     authority: OperatorOwnerContext["authority"];
     ownerContext: OperatorOwnerContext;
@@ -352,6 +353,15 @@ export const createNativeTargetOnboardingDeployment = (input: {
       target: { appId: request.input.appId, sessionId: historyOwner.sessionId },
     };
     await input.owner.assertCanonicalAppOwner(context);
+    if (
+      request.action === "native-target-prepare" ||
+      (request.action === "native-target-plan" && request.selectedApp !== undefined)
+    ) {
+      if (input.owner.assertNoStandardBuilderDestination === undefined) {
+        throw unavailable();
+      }
+      await input.owner.assertNoStandardBuilderDestination(context);
+    }
     if (historyOwner.adapterSessionId !== request.adapterSessionId) {
       throw denied();
     }

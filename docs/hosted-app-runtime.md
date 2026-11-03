@@ -680,3 +680,11 @@ Provider contracts:
 [read one decrypted variable](https://vercel.com/docs/rest-api/projects/retrieve-the-decrypted-value-of-an-environment-variable-of-a-project-by-id),
 [remove an owned environment variable](https://vercel.com/docs/rest-api/projects/remove-an-environment-variable),
 and [bind branch environment variables](https://vercel.com/docs/rest-api/projects/create-one-or-more-environment-variables).
+
+Normal destination selection also reads the existing owner/app native onboarding journal.
+An active, uncertain, or accepted legacy creation must be reconciled before selecting
+another destination. The session attachment transaction locks that existing journal
+row and refuses those states without modifying it. A selected normal destination
+blocks new legacy native target plans and preparation, including the final provider
+dispatch recheck; retained plan and approval inspection remain readable. Neither
+path settles or replays a native response batch whose submission is uncertain.

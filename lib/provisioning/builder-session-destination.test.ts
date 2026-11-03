@@ -142,13 +142,20 @@ const fixture = async () => {
   const assertMember = vi.fn(async () => {
     await Promise.resolve();
   });
+  const readNativeTarget = vi.fn<
+    Parameters<typeof createBuilderSessionDestinationService>[0]["readNativeTarget"]
+  >(
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- This lookup intentionally has no native onboarding journal.
+    () => Promise.resolve(undefined),
+  );
   const service = createBuilderSessionDestinationService({
     sessions,
     provisioning,
     execute,
     assertMember,
+    readNativeTarget,
   });
-  return { sessions, service, execute, assertMember, reserve, start, journal };
+  return { sessions, service, execute, assertMember, reserve, start, journal, readNativeTarget };
 };
 
 describe("saved-session destination selection", () => {
@@ -303,6 +310,8 @@ it("rechecks the saved epoch after real credential I/O before the Vercel POST", 
     provisioning: dependencies,
     execute: executeBuilderProvisioning,
     assertMember: f.assertMember,
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- No legacy onboarding is present in this cancellation fixture.
+    readNativeTarget: () => Promise.resolve(undefined),
   });
   const result = await service.select({ principal, sessionId, expected, request });
   expect(credential).toHaveBeenCalledOnce();
@@ -311,4 +320,33 @@ it("rechecks the saved epoch after real credential I/O before the Vercel POST", 
   const saved = await readSession(f.sessions);
   expect(saved.builderDestination).toEqual(destination);
   expect(saved.cancellationRevision).toBe(1);
+});
+
+it.each(["creating", "unknown", "ready"] as const)(
+  "preserves a legacy %s operation without reserving or dispatching a second destination",
+  async (stage) => {
+    const f = await fixture();
+    f.readNativeTarget.mockResolvedValue({ record: { stage } });
+    await expect(f.service.select({ principal, sessionId, expected, request })).rejects.toThrow(
+      "Reconcile",
+    );
+    expect(f.reserve).not.toHaveBeenCalled();
+    expect(f.execute).not.toHaveBeenCalled();
+    const saved = await readSession(f.sessions);
+    expect(saved.builderDestination).toBeUndefined();
+  },
+);
+
+it("blocks provider dispatch if a legacy attempt starts after the initial read", async () => {
+  const f = await fixture();
+  f.readNativeTarget
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- The first lookup deliberately observes an absent native journal.
+    .mockResolvedValueOnce(undefined)
+    .mockResolvedValue({ record: { stage: "creating" } });
+  await expect(f.service.select({ principal, sessionId, expected, request })).rejects.toThrow(
+    "Reconcile",
+  );
+  expect(f.execute).not.toHaveBeenCalled();
+  const saved = await readSession(f.sessions);
+  expect(saved.builderDestination).toEqual(destination);
 });

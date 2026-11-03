@@ -17,6 +17,15 @@ import {
   toDurableHostedSessionRecord,
   hostedOperationRecordSchema,
 } from "../../../../lib/eve/hosted-store";
+import {
+  createPostgresNativeTargetOnboardingStore,
+  createNativeTargetOnboardingRegistry,
+} from "../../../../lib/provisioning/native-target-onboarding-store";
+import {
+  nativeTargetOnboardingPlanSchema,
+  nativeTargetOnboardingPlanDigest,
+  nativeTargetRequiredProjectProtection,
+} from "../../../../lib/provisioning/native-target-onboarding-contract";
 import type { BuilderDestinationEpoch } from "../../../../lib/provisioning/builder-session-destination-contract";
 
 // An owned loopback cluster only. Never consumes DATABASE_URL or provider credentials.
@@ -232,6 +241,137 @@ try {
     assert.deepEqual(await store.getPrivateOperation?.(principal, resume.operationId), before);
     cases.push(`pending resume ${state} with null session_id denied and preserved`);
   }
+  const legacySource = await seed("native-legacy");
+  const legacyAuthority = {
+    issuer: principal.issuer,
+    audience: principal.audience,
+    workspaceId: principal.workspaceId,
+    ownerUserId: principal.ownerUserId,
+  };
+  const legacyOwner = {
+    authority: legacyAuthority,
+    publicSessionId: legacySource.sessionId,
+    adapterSessionId: legacySource.expected.adapterSessionId,
+    adapterGeneration: 1,
+  };
+  const legacyPlan = nativeTargetOnboardingPlanSchema.parse({
+    version: 1,
+    appId: destination.appId,
+    origin: {
+      publicSessionId: legacySource.sessionId,
+      adapterSessionId: legacySource.expected.adapterSessionId,
+      adapterGeneration: 1,
+      appSpecDigest: "a".repeat(64),
+      release: {
+        id: "release-original",
+        artifactRef: "artifact-original",
+        manifestSha256: "b".repeat(64),
+        schemaSha256: "c".repeat(64),
+      },
+    },
+    project: {
+      name: destination.appId,
+      teamId: "team_fixture",
+      installationId: "install_fixture",
+      projectSettings: {
+        framework: "nextjs",
+        rootDirectory: "apps/requests",
+        sourceFilesOutsideRootDirectory: true,
+      },
+      protection: nativeTargetRequiredProjectProtection,
+    },
+    branch: "main",
+    appDatabase: {
+      resourceId: "requests-resource",
+      database: "requests_data",
+      migratorRole: "requests_migrator",
+      runtimeRole: "requests_runtime",
+    },
+    productRoles: [],
+    nativeNeon: {
+      approvalReference: "native-scope-approval",
+      nativeStore: {
+        configurationId: "store-config",
+        resourceId: "store-resource",
+        sourceProjectId: "source-project",
+      },
+      scope: {
+        projectId: "neon-project",
+        branchId: "neon-branch",
+        endpointId: "neon-endpoint",
+        hostname: "ep-fixture.neon.tech",
+        maintenanceDatabase: "maintenance",
+        maintenanceRole: "installer",
+      },
+    },
+    worker: {
+      id: "generic-installer",
+      executablePath: "/trusted/generic-worker",
+      sha256: "d".repeat(64),
+      operationScope: "generated-app-release-install-v1",
+      subcommand: "protected-generated-app-install",
+    },
+    cost: { ownership: "current-owner", description: "Separate app target" },
+    retention: { policy: "Until approved cleanup" },
+    conflictPolicy: "stop-on-conflict",
+  });
+  const nativeStore = createPostgresNativeTargetOnboardingStore(drizzle(client, { schema }));
+  const legacyNow = new Date("2026-10-21T15:00:00.000Z");
+  const nativeRegistry = createNativeTargetOnboardingRegistry({
+    store: nativeStore,
+    authorize: () => Promise.resolve(legacyOwner),
+    now: () => legacyNow,
+    assertPlanOrigin: (owner, plan) => {
+      assert.deepEqual(owner, legacyOwner);
+      assert.deepEqual(plan, legacyPlan);
+      return Promise.resolve();
+    },
+    readApproval: () =>
+      Promise.resolve({
+        requestId: "legacy-approval",
+        callId: "legacy-call",
+        planDigest: nativeTargetOnboardingPlanDigest(legacyPlan),
+        responderPrincipalId: principal.ownerUserId,
+        publicSessionId: legacySource.sessionId,
+        outcome: "approved",
+        observedAt: legacyNow.toISOString(),
+      }),
+  });
+  await nativeRegistry.reservePlan({}, legacyPlan);
+  await nativeRegistry.recordApproval({}, destination.appId);
+  const legacyAttempt = {
+    attemptId: randomUUID(),
+    candidateName: destination.appId,
+    leaseId: randomUUID(),
+    startedAt: legacyNow.toISOString(),
+    leaseExpiresAt: "2026-10-21T15:10:00.000Z",
+  };
+  await nativeRegistry.claimAttempt({}, destination.appId, legacyAttempt);
+  const key = { authority: legacyAuthority, appId: destination.appId };
+  const creating = await nativeStore.read(key);
+  await assert.rejects(attach(legacySource), /Reconcile/u);
+  assert.deepEqual(await nativeStore.read(key), creating);
+  cases.push("active native project creation prevents attachment without journal mutation");
+  await nativeRegistry.authorizeAttempt(
+    {},
+    destination.appId,
+    legacyAttempt.attemptId,
+    legacyAttempt.leaseId,
+  );
+  await nativeRegistry.recordUnknown({}, destination.appId, legacyAttempt.attemptId);
+  const uncertain = await nativeStore.read(key);
+  await assert.rejects(attach(legacySource), /Reconcile/u);
+  assert.deepEqual(await nativeStore.read(key), uncertain);
+  cases.push("unknown native project creation prevents attachment and stays unknown");
+  await nativeRegistry.acceptProjectId({}, destination.appId, legacyAttempt.leaseId, {
+    attemptId: legacyAttempt.attemptId,
+    projectId: "project-accepted",
+    acceptedAt: legacyNow.toISOString(),
+  });
+  const accepted = await nativeStore.read(key);
+  await assert.rejects(attach(legacySource), /Reconcile/u);
+  assert.deepEqual(await nativeStore.read(key), accepted);
+  cases.push("accepted native project identity prevents attachment and remains preserved");
   console.log(
     JSON.stringify({
       result: "passed",

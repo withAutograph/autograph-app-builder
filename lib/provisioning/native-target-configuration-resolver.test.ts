@@ -259,6 +259,7 @@ const setup = () => {
         order.push("workload");
         await Promise.resolve();
       }),
+      assertNoStandardBuilderDestination: vi.fn(() => Promise.resolve()),
       assertCanonicalAppOwner: vi.fn(async () => {
         order.push("owner");
         await Promise.resolve();
@@ -476,14 +477,12 @@ describe("normal single-project destination resolution", () => {
   it("uses the trusted normal receipt for the configured single-project destination", async () => {
     const f = setup();
     const config = standard();
-    const readStandardDestination = vi
-      .fn()
-      .mockResolvedValue({
-        projectId: config.gateway.projectId,
-        teamId: config.teamId,
-        installationId: "installation",
-        name: "apps-sibling",
-      });
+    const readStandardDestination = vi.fn().mockResolvedValue({
+      projectId: config.gateway.projectId,
+      teamId: config.teamId,
+      installationId: "installation",
+      name: "apps-sibling",
+    });
     const resolve = createNativeTargetConfigurationResolver({
       configuration: config,
       openResources: async () => await Promise.resolve({ ...f.resources, readStandardDestination }),
@@ -504,14 +503,12 @@ describe("normal single-project destination resolution", () => {
       openResources: async () =>
         await Promise.resolve({
           ...f.resources,
-          readStandardDestination: vi
-            .fn()
-            .mockResolvedValue({
-              projectId: "new-standard-project",
-              teamId: "team",
-              installationId: "installation",
-              name: "apps-sibling",
-            }),
+          readStandardDestination: vi.fn().mockResolvedValue({
+            projectId: "new-standard-project",
+            teamId: "team",
+            installationId: "installation",
+            name: "apps-sibling",
+          }),
         }),
     });
     await expect(resolve(request(body))).rejects.toMatchObject({

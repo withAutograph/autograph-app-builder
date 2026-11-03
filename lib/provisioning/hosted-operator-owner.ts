@@ -74,6 +74,7 @@ type AccessReader = Parameters<typeof readPreparedVercelAccess>[0]["readCredenti
 type VerifierKeyResolver = Parameters<typeof createOperatorWorkloadVerifier>[1];
 
 export interface HostedOperatorOwnerDependencies {
+  readProvisioning?: BuilderProvisionJournalStore["read"];
   journal?: Pick<HostedRuntimeJournalStore, "read">;
   realmContinuation?: RealmContinuationVerificationOptions;
   workloadPolicy: OperatorWorkloadPolicy;
@@ -740,6 +741,9 @@ const readDirectStandardBuilderDestination = async (
     installationId: project.installationId,
     name: access.project.name,
     repository: project.linkedGitHubRepository,
+    provisioningRequestId: row.requestId,
+    provisioningDigest: row.requestDigest,
+    deploymentAccess: row.record.request.deploymentAccess,
   };
 };
 
@@ -815,6 +819,9 @@ export const readStandardBuilderDestination = async (
     installationId: project.installationId,
     name: access.project.name,
     repository: project.linkedGitHubRepository,
+    provisioningRequestId: receipt.requestId,
+    provisioningDigest: receipt.requestDigest,
+    deploymentAccess: receipt.deploymentAccess,
   };
 };
 
@@ -823,6 +830,14 @@ export const createHostedOperatorAppOwnerAuthority = (
   deps: HostedOperatorAppOwnerDependencies,
 ) => ({
   verifyWorkload: createOperatorWorkloadVerifier(deps.workloadPolicy, deps.keyResolver),
+  assertNoStandardBuilderDestination: async (
+    input: HostedOperatorAppOwnerContext,
+  ): Promise<void> => {
+    const session = await readCanonicalAppOwnerSession(deps, input);
+    if (session.builderDestination !== undefined || session.sourceHandoffId !== undefined) {
+      throw new HostedOperatorError("builder_destination_configuration_required");
+    }
+  },
   assertCanonicalAppOwner: async (input: HostedOperatorAppOwnerContext): Promise<void> => {
     await readCanonicalAppOwnerSession(deps, input);
   },
@@ -935,7 +950,11 @@ export const createHostedOperatorOwnerAuthority = (deps: HostedOperatorOwnerDepe
   return {
     verifyWorkload,
     assertArtifactAuthorized,
+    readStandardDestination: (context: HostedOperatorAppOwnerContext) =>
+      readStandardBuilderDestination(deps, context),
     assertCanonicalAppOwner,
+    assertNoStandardBuilderDestination:
+      createHostedOperatorAppOwnerAuthority(deps).assertNoStandardBuilderDestination,
     assertSandboxAuthorized,
     authorizeArtifactRead,
     assertAuthorized,

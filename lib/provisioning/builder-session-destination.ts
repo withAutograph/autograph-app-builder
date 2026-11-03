@@ -6,6 +6,8 @@ import { builderProvisionRequestSchema, builderProvisionRequestDigest } from "./
 import type { BuilderProvisionRequest, BuilderProvisionResponse } from "./contracts";
 import type { BuilderProvisionAuthority } from "./journal";
 import type { BuilderProvisioningDependencies } from "./service";
+import type { NativeTargetOnboardingStore } from "./native-target-onboarding-store";
+import type { NativeTargetOnboardingRecord } from "./native-target-onboarding-contract";
 
 /** Same normal provisioner, with its durable request selected before the first POST. */
 export const createBuilderSessionDestinationService = <
@@ -19,6 +21,9 @@ export const createBuilderSessionDestinationService = <
     dependencies: Dependencies;
   }) => Promise<BuilderProvisionResponse>;
   assertMember: (principal: HostedPrincipal) => Promise<void>;
+  readNativeTarget: (
+    key: Parameters<NativeTargetOnboardingStore["read"]>[0],
+  ) => Promise<{ record: Pick<NativeTargetOnboardingRecord, "stage"> } | undefined>;
   now?: () => Date;
 }) => ({
   async select(input: {
@@ -41,12 +46,22 @@ export const createBuilderSessionDestinationService = <
     if (session.builderDestination === undefined && request.deploymentAccess !== "public-app") {
       throw new Error("Review public app delivery before creating its destination.");
     }
+    const appId = session.appId;
     const authority = {
       issuer: input.principal.issuer,
       audience: input.principal.audience,
       workspaceId: input.principal.workspaceId,
       ownerUserId: input.principal.ownerUserId,
     };
+    const assertNoLegacyEffects = async () => {
+      const legacy = await deps.readNativeTarget({ authority, appId });
+      if (legacy !== undefined && ["creating", "unknown", "ready"].includes(legacy.record.stage)) {
+        throw new Error(
+          "Reconcile this app’s existing destination operation before selecting another destination.",
+        );
+      }
+    };
+    await assertNoLegacyEffects();
     const destination = {
       appId: session.appId,
       requestId: request.requestId,
@@ -79,6 +94,7 @@ export const createBuilderSessionDestinationService = <
     });
     const assertCurrent = async () => {
       await deps.assertMember(input.principal);
+      await assertNoLegacyEffects();
       await attach({
         principal: input.principal,
         sessionId: input.sessionId,

@@ -39,7 +39,11 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
 import type * as databaseSchema from "../db/schema";
-import { agentOperations, agentSessions } from "../db/schema";
+import { agentOperations, agentSessions, builderProvisioningJournals } from "../db/schema";
+import {
+  nativeTargetOnboardingRegistryId,
+  nativeTargetOnboardingRecordSchema,
+} from "../provisioning/native-target-onboarding-contract";
 import { eveSessionResultSchema, sessionStatusSchema } from "../mcp/contracts";
 import { hostedPrincipalSchema, tenantKeyFor } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
@@ -593,6 +597,44 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           .limit(1);
         if (pending.length !== 0) {
           throw new Error("Builder destination selection requires settled session operations.");
+        }
+        // Lock the existing legacy owner/app journal after the session fence. A concurrent
+        // legacy claim either precedes this read (and blocks attachment), or sees the
+        // selected destination in its mandatory owner recheck before provider dispatch.
+        const legacy = await transaction
+          .select({ record: builderProvisioningJournals.record })
+          .from(builderProvisioningJournals)
+          .where(
+            and(
+              eq(builderProvisioningJournals.issuer, principal.issuer),
+              eq(builderProvisioningJournals.audience, principal.audience),
+              eq(builderProvisioningJournals.workspaceId, principal.workspaceId),
+              eq(builderProvisioningJournals.ownerUserId, principal.ownerUserId),
+              eq(
+                builderProvisioningJournals.requestId,
+                nativeTargetOnboardingRegistryId(
+                  {
+                    issuer: principal.issuer,
+                    audience: principal.audience,
+                    workspaceId: principal.workspaceId,
+                    ownerUserId: principal.ownerUserId,
+                  },
+                  input.destination.appId,
+                ),
+              ),
+            ),
+          )
+          .limit(1)
+          .for("update");
+        if (
+          legacy[0] !== undefined &&
+          ["creating", "unknown", "ready"].includes(
+            nativeTargetOnboardingRecordSchema.parse(legacy[0].record).stage,
+          )
+        ) {
+          throw new Error(
+            "Reconcile this app’s existing destination operation before selecting another destination.",
+          );
         }
         const updated = attachBuilderDestinationRecord(current, input);
         const rows = await transaction

@@ -8,6 +8,7 @@ import { loadBuilderIntegrationState } from "../integrations/builder-integration
 import { createBuilderProvisioningDependencies } from "./deployment";
 import { executeBuilderProvisioning } from "./service";
 import { createBuilderSessionDestinationService } from "./builder-session-destination";
+import { createPostgresNativeTargetOnboardingStore } from "./native-target-onboarding-store";
 import type { HostedPrincipal } from "../eve/hosted-auth";
 
 export const openBuilderSessionDestination = async (
@@ -27,7 +28,8 @@ export const openBuilderSessionDestination = async (
     workspaceId: owner.organization.workspaceId,
   };
   const principal: HostedPrincipal = { ...authority, scopes: ["autograph:session"] };
-  const sessions = createPostgresHostedEveStore(openHostedPostgresDatabase(config.databaseUrl));
+  const database = openHostedPostgresDatabase(config.databaseUrl);
+  const sessions = createPostgresHostedEveStore(database);
   const { dependencies } = createBuilderProvisioningDependencies(environment);
   const assertMember = async (selected: HostedPrincipal) => {
     const current = await readOwner();
@@ -50,6 +52,7 @@ export const openBuilderSessionDestination = async (
       provisioning: dependencies,
       execute: executeBuilderProvisioning,
       assertMember,
+      readNativeTarget: createPostgresNativeTargetOnboardingStore(database).read,
     }),
     readPage: async (sessionId: string) => {
       const stored = await sessions.getSession(principal, sessionId);

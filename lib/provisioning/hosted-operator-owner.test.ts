@@ -1608,6 +1608,33 @@ describe("canonical app ownership before provider target creation", () => {
   );
 });
 
+it("blocks new legacy target effects after selecting a standard destination while keeping owner reads", async () => {
+  const current = directSessionRecord();
+  current.builderDestination = {
+    appId: selection.appId,
+    requestId: "d16f6dd2-157a-42dc-8dfc-253ce9005502",
+    requestDigest: "a".repeat(64),
+  };
+  const f = makeFixture(current);
+  const reader = createHostedOperatorAppOwnerAuthority({
+    eve: f.eve,
+    handoffs: f.handoffs,
+    membership: f.membership,
+    workloadPolicy,
+    keyResolver,
+  });
+  const context = {
+    authority: directOwnerContext.authority,
+    ownerContext: directOwnerContext,
+    target: { appId: selection.appId, sessionId: directOwnerContext.sessionId },
+  };
+  await expect(reader.assertCanonicalAppOwner(context)).resolves.toBeUndefined();
+  await expect(reader.assertNoStandardBuilderDestination(context)).rejects.toThrow(
+    "builder_destination_configuration_required",
+  );
+  expectNoProviderReads(f);
+});
+
 describe("hosted operator artifact ownership", () => {
   const contextFor = (owner: OperatorOwnerContext = ownerContext) => ({
     authority: owner.authority,
