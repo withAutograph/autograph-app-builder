@@ -1,3 +1,4 @@
+import { publicRealmReleaseBindingSchema } from "./public-realm-enrollment";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { generatedAppRoleSchema } from "../repository/generated-app-role";
@@ -1074,6 +1075,7 @@ export const workerEffectCheckpointFrameSchema = z.strictObject({
 export type WorkerEffectCheckpointFrame = z.infer<typeof workerEffectCheckpointFrameSchema>;
 export const operatorRealmIdentityLinkSchema = z
   .strictObject({
+    publicRelease: publicRealmReleaseBindingSchema.optional(),
     audience: httpsPublicOrigin,
     browserSession: z
       .strictObject({

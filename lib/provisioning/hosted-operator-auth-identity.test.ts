@@ -375,3 +375,46 @@ it("verifies an expired historical owner capture without requiring a live old se
     }),
   ).rejects.toMatchObject({ code: "auth_identity_required" });
 });
+
+it("requires the fresh public release binding in addition to the original normal realm proof", async () => {
+  const f = await fixture();
+  const publicRelease = {
+    enrollmentRef: "11111111-1111-4111-a111-111111111111",
+    operationRef: "22222222-2222-4222-a222-222222222222",
+    planDigest: "c".repeat(64),
+  };
+  const proof = await new SignJWT({ ...f.claims, publicRelease })
+    .setProtectedHeader({
+      alg: "EdDSA",
+      kid: "actual-native-key",
+      typ: "platform-realm-operator-link+jwt",
+    })
+    .sign(keys.privateKey);
+  const pending = { ...f.pending, publicRelease };
+  await expect(verifyRealmIdentityLinkProof({ ...f, pending, proof })).resolves.toMatchObject({
+    publicRelease,
+    resource: f.resource,
+  });
+  await expect(verifyRealmIdentityLinkProof({ ...f, pending })).rejects.toThrow(
+    "auth_identity_required",
+  );
+  await expect(verifyRealmIdentityLinkProof({ ...f, proof })).rejects.toThrow(
+    "auth_identity_required",
+  );
+  for (const field of ["enrollmentRef", "operationRef", "planDigest"] as const) {
+    const changed =
+      field === "planDigest" ? "d".repeat(64) : "33333333-3333-4333-a333-333333333333";
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Each independent wrong canonical public binding must be rejected.
+    await expect(
+      verifyRealmIdentityLinkProof({
+        ...f,
+        proof,
+        pending: { ...pending, publicRelease: { ...publicRelease, [field]: changed } },
+      }),
+    ).rejects.toThrow("auth_identity_required");
+  }
+  const url = new URL(createRealmIdentityBrowserUrl({ link: pending, nonce: f.nonce }));
+  expect(url.searchParams.get("publicEnrollmentRef")).toBe(publicRelease.enrollmentRef);
+  expect(url.searchParams.get("publicOperationRef")).toBe(publicRelease.operationRef);
+  expect(url.searchParams.get("publicPlanDigest")).toBe(publicRelease.planDigest);
+});

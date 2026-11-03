@@ -1,4 +1,5 @@
 /* oxlint-disable eslint/no-await-in-loop -- Bounded callback body is read sequentially; the reader cancels immediately at the byte limit. */
+import { publicRealmEnrollmentSchema } from "./public-realm-enrollment";
 import { verifyVercelOidcToken } from "@vercel/oidc";
 import { createHash, randomBytes } from "node:crypto";
 import { createRemoteJWKSet, customFetch } from "jose";
@@ -198,8 +199,16 @@ export const createRealmIdentityHandoffSenderVerifier =
     const bearer = request.headers
       .get("authorization")
       ?.match(/^Bearer (?<token>[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/u)?.groups?.token;
-    if (bearer === undefined || bearer.length > 16_384 || sender.environment !== "preview") {
+    if (bearer === undefined || bearer.length > 16_384) {
       throw new Error("realm_handoff_sender");
+    }
+    if (sender.environment === "production") {
+      const enrollment = publicRealmEnrollmentSchema.parse(sender.publicEnrollment);
+      if (
+        sender.projectId !== enrollment.project.projectId ||
+        sender.ownerId !== enrollment.project.ownerId
+      )
+        {throw new Error("realm_handoff_sender");}
     }
     const verified = await verify(bearer, {
       audience: sender.audience,
