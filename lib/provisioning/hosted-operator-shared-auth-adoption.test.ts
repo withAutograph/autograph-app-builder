@@ -1088,6 +1088,8 @@ describe("native composition adoption boundary", () => {
       reserveRealmIdentityLink: unavailable,
       resolveRealmIdentityCallbackOwnerContext: unavailable,
       readApprovedPublicAuthBootstrap: unavailable,
+      readOwnedAppResourceSource: unavailable,
+      checkpointOwnedAppResourceSource: unavailable,
       resolveRealmIdentityCallbackContext: unavailable,
       store: {
         compareAndSet: unavailable,

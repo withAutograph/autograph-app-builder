@@ -204,3 +204,13 @@ installation IDs. This read-only recovery does not copy the creation session,
 reuse an effect approval, adopt a project by name, or create another project.
 Ambiguous or mismatched receipts remain unavailable. New resource verification
 and public release approvals still belong to the revision session.
+
+Separate-session revisions retain the original restricted Auth and application
+database password pairs. Normal setup records app-owned private credential
+provenance after actual Auth schema readiness. A later resource plan identifies
+that exact checkpoint and receives a fresh approval to verify and reuse it.
+The operator rechecks original consent and current ownership, then encrypts the
+same pairs for the new session. Existing-resource steps run the fixed worker's
+read-only ownership, role, and login inspection; an absent or mismatched
+resource is a blocker, never permission to recreate it or rotate passwords.
+New session enrollment and approved schema/access changes remain separate.

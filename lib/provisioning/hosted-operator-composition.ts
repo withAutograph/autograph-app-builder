@@ -239,6 +239,21 @@ const gatewayBindingsForNewAppPlan = (
     },
   };
 };
+const signupEffectDescription = (plan: HostedOperatorPlan) =>
+  plan.runtimePreparation === undefined
+    ? "Persist the approved public signup eligibility and app-scoped member roles before the Preview is offered."
+    : "Persist the approved public signup eligibility and app-scoped member roles before separately approved public delivery.";
+const bootstrapCostDescription = (
+  composition: HostedOperatorSourceConfiguration["composition"],
+  adopting: boolean,
+) => {
+  if (composition === "single-project-services") {
+    return "Prepare or verify only isolated app-owned databases, restricted roles and Auth schema. Public delivery requires a separate approved release.";
+  }
+  return adopting
+    ? "Adopt the reviewed shared Auth credentials after independent Auth readiness and canonical Gateway checks, then prepare this app’s separate database and bindings. Retain shared Auth users, sessions, credentials, and sibling Gateway settings."
+    : "Preview-only resources and Auth bootstrap. Explicit normal Git delivery retries may create duplicate owned Preview deployments and provider usage charges. No human login or app preparation is established by schema readiness.";
+};
 const resourcePreparationPlan = (plan: HostedOperatorPlan): HostedOperatorPlan => {
   if (plan.runtimePreparation === undefined) {
     return plan;
@@ -1000,8 +1015,7 @@ const resolveParticipantPlan = async (
           {
             id: AUTH_SIGNUP_POLICY,
             kind: "auth-signup-policy" as const,
-            description:
-              "Persist the approved public signup eligibility and app-scoped member roles before the Preview is offered.",
+            description: signupEffectDescription(base),
           },
         ]),
     {
@@ -1259,8 +1273,7 @@ export const resolveFullPlan = async (
     effects.push({
       id: AUTH_SIGNUP_POLICY,
       kind: AUTH_SIGNUP_POLICY,
-      description:
-        "Persist the approved public signup eligibility and app-scoped member roles before the Preview is offered.",
+      description: signupEffectDescription(base),
     });
   }
   effects.push(
@@ -1550,6 +1563,7 @@ export const composeHostedOperatorDependencies = (
         appTrustedSources: oldAppTrustedSources,
         appDeliveryReplacement: oldAppDeliveryReplacement,
         runtimePreparation: oldRuntimePreparation,
+        existingResources: oldExistingResources,
         ...cleanupBase
       } = retained;
       void oldMembership;
@@ -1559,6 +1573,7 @@ export const composeHostedOperatorDependencies = (
       void oldAppTrustedSources;
       void oldAppDeliveryReplacement;
       void oldRuntimePreparation;
+      void oldExistingResources;
       return hostedOperatorPlanSchema.parse({
         ...cleanupBase,
         action: "cleanup",
@@ -1843,7 +1858,7 @@ export const composeHostedOperatorDependencies = (
       }
       return selectedWorker;
     });
-    const base = await observe("plan_construction", () =>
+    const freshBase = await observe("plan_construction", () =>
       hostedOperatorPlanSchema.parse({
         access: [],
         action: "prepare",
@@ -1863,10 +1878,10 @@ export const composeHostedOperatorDependencies = (
         contextId: selected.contextId ?? selected.currentSpec.appSpecDigest,
         cost: {
           class: "shared-recovery-group",
-          description:
-            adopted === undefined && activeAuth === undefined
-              ? "Preview-only resources and Auth bootstrap. Explicit normal Git delivery retries may create duplicate owned Preview deployments and provider usage charges. No human login or app preparation is established by schema readiness."
-              : "Adopt the reviewed shared Auth credentials after independent Auth readiness and canonical Gateway checks, then prepare this app’s separate database and bindings. Retain shared Auth users, sessions, credentials, and sibling Gateway settings.",
+          description: bootstrapCostDescription(
+            configuration.composition,
+            adopted !== undefined || activeAuth !== undefined,
+          ),
           owner: context.authority.ownerUserId,
         },
         deploymentBoundary: {
@@ -1961,6 +1976,26 @@ export const composeHostedOperatorDependencies = (
         version: 1,
       }),
     );
+    const existingResources =
+      freshBase.runtimePreparation === undefined
+        ? undefined
+        : await controlPlane.readOwnedAppResourceSource(context, freshBase);
+    const base =
+      existingResources === undefined
+        ? freshBase
+        : hostedOperatorPlanSchema.parse({
+            ...freshBase,
+            existingResources,
+            effects: freshBase.effects.map((effect) =>
+              effect.kind === "resources"
+                ? {
+                    ...effect,
+                    description:
+                      "Verify the existing owned database and restricted roles using retained passwords; do not create resources or rotate credentials.",
+                  }
+                : effect,
+            ),
+          });
     const gatewayPlan =
       base.runtimePreparation === undefined
         ? hostedOperatorPlanSchema.parse({
@@ -2146,6 +2181,17 @@ export const composeHostedOperatorDependencies = (
       configuration.nativeNeon.scope,
       async ({ maintenanceUrl }) => {
         const privateInput = { database, directDatabaseUrl: maintenanceUrl, resourceCredentials };
+        if (input.plan.existingResources !== undefined) {
+          const observed = await launcher.inspect({
+            ...input,
+            ...privateInput,
+            readbackOnly: true,
+          });
+          if (observed?.status !== "applied") {
+            throw new HostedOperatorError(RESOURCE_MISMATCH);
+          }
+          return observed;
+        }
         if (execute !== undefined) {
           await launcher.execute({ ...execute, ...privateInput });
         }
@@ -3074,7 +3120,13 @@ export const composeHostedOperatorDependencies = (
         tenants: readiness.tenants,
       };
     },
-    verifyAuthReadiness: async (input) => await authReadiness.verify(input),
+    verifyAuthReadiness: async (input) => {
+      const observed = await authReadiness.verify(input);
+      if (input.plan.runtimePreparation !== undefined) {
+        await controlPlane.checkpointOwnedAppResourceSource(input, input.plan, observed);
+      }
+      return observed;
+    },
     verifyNormalActorAccounts: async (input) => await controlPlane.verifyNormalActorAccounts(input),
     ensureNormalActorCapture: async (input) => await controlPlane.ensureNormalActorCapture(input),
     withResourceLease: controlPlane.withResourceLease,

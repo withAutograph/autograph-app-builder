@@ -1234,6 +1234,8 @@ const unusedCompositionControlPlane = (): Parameters<
     resolveRealmIdentityCallbackContext: unexpectedPort,
     resolveRealmIdentityCallbackOwnerContext: unexpectedPort,
     readApprovedPublicAuthBootstrap: unexpectedPort,
+    readOwnedAppResourceSource: unexpectedPort,
+    checkpointOwnedAppResourceSource: unexpectedPort,
     store,
     verifySharedAuthAdoption: unexpectedPort,
     withResourceLease: unexpectedPort,

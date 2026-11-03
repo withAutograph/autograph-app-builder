@@ -480,6 +480,8 @@ const composed = (active = true) => {
     reserveRealmIdentityLink: unavailable,
     resolveRealmIdentityCallbackOwnerContext: unavailable,
     readApprovedPublicAuthBootstrap: unavailable,
+    readOwnedAppResourceSource: unavailable,
+    checkpointOwnedAppResourceSource: unavailable,
     resolveRealmIdentityCallbackContext: unavailable,
     store: {
       compareAndSet: unavailable,

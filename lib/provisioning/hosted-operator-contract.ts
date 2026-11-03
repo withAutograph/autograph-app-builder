@@ -1,3 +1,4 @@
+import { ownedAppResourceSourceSchema } from "./owned-app-resource-source-contract";
 import { publicRealmReleaseBindingSchema } from "./public-realm-enrollment";
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -313,6 +314,7 @@ const hostedOperatorPlanDataSchema = z.strictObject({
   action: z.enum(["prepare", "cleanup"]),
   releaseIntent: z.literal("prepared-preview").optional(),
   runtimePreparation: z.literal("single-project-resources-v1").optional(),
+  existingResources: ownedAppResourceSourceSchema.optional(),
   appDatabase: databaseResource,
   /** Schema installation scope is independent of actor and role grants. */
   appInstallation: z.strictObject({ customerIds: z.array(id).min(1) }).optional(),
@@ -705,6 +707,26 @@ const validateResourcePreparation = (
   plan: z.infer<typeof hostedOperatorPlanDataSchema>,
   ctx: z.RefinementCtx,
 ) => {
+  if (plan.existingResources !== undefined) {
+    const target = plan.existingResources.source.target;
+    if (
+      ![
+        plan.runtimePreparation === "single-project-resources-v1",
+        plan.authAdoption === undefined,
+        target.appId === plan.selection.appId,
+        target.projectId === plan.selection.projectId,
+        target.scopeId === plan.deploymentBoundary?.teamId,
+        target.installationId.length > 0,
+      ].every(Boolean)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["existingResources"],
+        message: "Existing credential reuse must remain in the same owned normal app and project.",
+      });
+    }
+  }
+
   if (
     plan.runtimePreparation !== undefined &&
     (plan.deploymentBoundary?.composition !== "single-project-services" ||

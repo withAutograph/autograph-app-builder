@@ -1,5 +1,6 @@
 import { createPublicReleaseDeployment } from "./public-release-deployment";
 import { createPostgresBuilderProvisionJournalStore } from "./postgres-journal";
+import { createOwnedAppResourceCustody } from "./owned-app-resource-custody";
 import { createPostgresPublicRealmCallbackResolver } from "./public-realm-callback-resolution";
 import type { PublicRealmReleaseBinding } from "./public-realm-enrollment";
 import { createPublicReleaseApprovalAuthority } from "./public-release-approval-authority";
@@ -1383,6 +1384,50 @@ export const createHostedOperatorControlPlane = async (input: {
           : await resolvePublicRealm(context, link.publicRelease);
       return { context, known, link, publicRealm };
     };
+    const ownedAppResources = createOwnedAppResourceCustody({
+      database,
+      configuration: input.sourceConfiguration,
+      keyring: tokenKeyring,
+      store,
+      assertCurrentOwner: owner.assertPlanningAuthorized,
+      readApproval,
+      isExistingRevision: async (context) => {
+        const current = await owner.readCurrentPlanningOwner(context);
+        return current.session.privateBuildDecision?.existingRepositorySource !== undefined;
+      },
+      sourceContext: async (context, target) => {
+        await owner.assertPlanningAuthorized(context);
+        if (isDeepStrictEqual(context.target, target)) {
+          return context;
+        }
+        const currentOwner = operatorOwnerContextSchema.parse(context.ownerContext);
+        const stored = await eve.getSession(currentOwner.principal, target.sessionId);
+        if (stored === null) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        const { current } = await readCurrentRealmSession(stored);
+        if (
+          current.appId !== target.appId ||
+          !isDeepStrictEqual(
+            hostedTenantAuthoritySchema.parse(current.principal),
+            context.authority,
+          )
+        ) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        const ownerContext = await ownerContextResolver({
+          adapterSessionId: current.adapterSessionId,
+          authority: context.authority,
+          principal: current.principal,
+          sessionAuth: forwardedSessionAuth(current.principal, current.sourceHandoffId),
+        });
+        const source = { authority: context.authority, ownerContext, target };
+        await owner.assertArtifactAuthorized(source);
+        await owner.assertPlanningAuthorized(context);
+        return source;
+      },
+    });
+
     const sharedAuth = createHostedOperatorSharedAuthAdoption({
       assertAuthorized: owner.assertAuthorized,
       assertPlanningAuthorized: owner.assertPlanningAuthorized,
@@ -2046,6 +2091,8 @@ export const createHostedOperatorControlPlane = async (input: {
         return operatorRealmIdentityLinkSchema.parse(saved.record.operator?.identityLink);
       },
       readApprovedPublicAuthBootstrap: resolvePublicRealm,
+      readOwnedAppResourceSource: ownedAppResources.readReference,
+      checkpointOwnedAppResourceSource: ownedAppResources.checkpoint,
       prepareRealmIdentityLink,
       async prepareNormalActorCapture(
         captureInput: HostedOperatorContext & {
@@ -2216,14 +2263,34 @@ export const createHostedOperatorControlPlane = async (input: {
         ) {
           throw new HostedOperatorError("operation_in_progress");
         }
-        const prepared = prepareHostedOperatorResourceCredentials({
-          ...effectInput,
-          config: tokenKeyring,
-          record: await readCurrentResourceCredentialRecord({
+        let record = await readCurrentResourceCredentialRecord({
+          assertAuthorized: owner.assertAuthorized,
+          effect: effectInput,
+          store,
+        });
+        if (effectInput.plan.existingResources !== undefined) {
+          const privateState = await ownedAppResources.rewrap(
+            effectInput,
+            effectInput.plan,
+            record,
+          );
+          await effectInput.checkpoint(privateState);
+          record = await readCurrentResourceCredentialRecord({
             assertAuthorized: owner.assertAuthorized,
             effect: effectInput,
             store,
-          }),
+          });
+          assertResourceCredentialCheckpoint(record.privateState, privateState);
+        } else if (input.sourceConfiguration.standardRuntime !== undefined) {
+          const current = await owner.readCurrentPlanningOwner(effectInput);
+          if (current.session.privateBuildDecision?.existingRepositorySource !== undefined) {
+            throw new HostedOperatorError("reconciliation_required");
+          }
+        }
+        const prepared = prepareHostedOperatorResourceCredentials({
+          ...effectInput,
+          config: tokenKeyring,
+          record,
         });
         // The journal callback commits under the active lease before plaintext can escape.
         await effectInput.checkpoint(prepared.privateState);
