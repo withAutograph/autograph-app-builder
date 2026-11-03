@@ -75,6 +75,25 @@ describe("development Codex package", () => {
     }
   });
 
+  it("keeps the original hosted OAuth resource while routing through the local connector", async () => {
+    const root = await realpath(await mkdtemp(path.join(tmpdir(), "autograph-dev-hosted-")));
+    try {
+      const result = await createDevelopmentPackage({
+        repositoryRoot: path.resolve("."),
+        outputRoot: root,
+        port: 3210,
+        hostedSessionResource: "https://builder.example.test/mcp",
+      });
+      const mcp = JSON.parse(await readFile(path.join(result.pluginRoot, ".mcp.json"), "utf-8"));
+      expect(mcp.mcpServers["app-builder-dev-3210-hosted"]).toMatchObject({
+        oauth_resource: "https://builder.example.test/mcp",
+        url: "http://127.0.0.1:3210/mcp/hosted",
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("installs development guidance without enabling it globally", async () => {
     const codexHome = await mkdtemp(path.join(tmpdir(), "codex-scope-"));
     const commands: {

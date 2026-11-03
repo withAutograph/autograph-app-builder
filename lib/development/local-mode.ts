@@ -1,3 +1,4 @@
+import { hostedSessionResourceSchema } from "./hosted-session-relay";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { execFile, execFileSync } from "node:child_process";
@@ -49,6 +50,7 @@ export type DevelopmentArguments = Readonly<{
   webKey?: string;
   webCa?: string;
   nextPort: number;
+  hostedSessionResource?: string;
   nextBundler?: "turbopack" | "webpack";
   evePort: number;
 }>;
@@ -101,6 +103,7 @@ const defaultStateRoot = (stateRoot: string | undefined, emulatedWeb = false) =>
     ? nodePath.join(tmpdir(), `autograph-development-${sha256(process.cwd()).slice(0, 12)}`)
     : undefined);
 
+// oxlint-disable-next-line eslint/complexity -- Named development options share one parser; each branch validates only its own value.
 export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentArguments => {
   const parsed: {
     arrustedRoot?: string;
@@ -111,6 +114,7 @@ export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentA
     webKey?: string;
     webCa?: string;
     nextPort: number;
+    hostedSessionResource?: string;
     nextBundler?: "turbopack" | "webpack";
     evePort: number;
   } = { evePort: 2000, nextPort: 3000 };
@@ -151,6 +155,10 @@ export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentA
       }
       case "--next-bundler": {
         parsed.nextBundler = parseNextBundler(value);
+        break;
+      }
+      case "--hosted-session-resource": {
+        parsed.hostedSessionResource = hostedSessionResourceSchema.parse(value);
         break;
       }
       case "--next-port": {

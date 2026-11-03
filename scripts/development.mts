@@ -88,6 +88,7 @@ function nextEnvironment(input: {
   cycleFile: string;
   evePort: number;
   nextPort: number;
+  hostedSessionResource?: string;
   runtimeHome: string;
   web?: Awaited<ReturnType<typeof prepareDevelopmentEmulatedWeb>>;
 }) {
@@ -101,6 +102,7 @@ function nextEnvironment(input: {
     APP_BUILDER_LOCAL_AUTH_EMULATION: input.web === undefined ? "0" : "1",
     APP_BUILDER_LOCAL_EVE_CYCLE_FILE: input.cycleFile,
     APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+    APP_BUILDER_DEVELOPMENT_HOSTED_RESOURCE: input.hostedSessionResource ?? "",
     EVE_AGENT_HOST: `http://127.0.0.1:${input.evePort}`,
     EVE_HOSTED_ADAPTER: "0",
     HOME: input.runtimeHome,
@@ -165,6 +167,7 @@ async function runEveCycle(input: {
   packageState: DevelopmentSupervisorState;
   destinationRoot: string;
   nextPort: number;
+  hostedSessionResource?: string;
   evePort: number;
   signal: AbortSignal;
   shutdownExitCode: () => number;
@@ -221,6 +224,7 @@ async function runEveCycle(input: {
     const runtimeFingerprint = await fingerprintDevelopmentRuntime(repositoryRoot);
     const packageFingerprint = await developmentPackageFingerprint({
       origin: input.web?.origin,
+      hostedSessionResource: input.hostedSessionResource,
       port: input.nextPort,
       repositoryRoot,
     });
@@ -230,6 +234,7 @@ async function runEveCycle(input: {
     if (!packageReused) {
       input.packageState.result = await createDevelopmentPackage({
         origin: input.web?.origin,
+        hostedSessionResource: input.hostedSessionResource,
         outputRoot: input.codexRoot,
         port: input.nextPort,
         repositoryRoot,
@@ -299,7 +304,7 @@ async function runEveCycle(input: {
     try {
       const startup = await Promise.race([
         waitForDevelopmentMcp({
-          endpoint: packageResult.receipt.endpoint,
+          endpoint: packageResult.receipt.endpoint.replace(/\/hosted$/u, ""),
           fetcher: input.web?.fetcher,
           signal: watchers.signal,
         }).then(() => ({ code: 0, kind: "ready" as const })),
@@ -399,6 +404,7 @@ try {
         cycleFile,
         evePort: args.evePort,
         nextPort: args.nextPort,
+        hostedSessionResource: args.hostedSessionResource,
         runtimeHome: nextHome,
         web,
       }),
@@ -426,6 +432,7 @@ try {
       evePort: args.evePort,
       nextExited,
       nextPort: args.nextPort,
+      hostedSessionResource: args.hostedSessionResource,
       packageState,
       runsRoot,
       shutdownExitCode: shutdown.exitCode,
