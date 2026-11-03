@@ -1,4 +1,6 @@
-import { createHash, randomBytes, generateKeyPairSync } from "node:crypto";
+import { createHash } from "node:crypto";
+import { createFreshPublicAuthSeed } from "./public-release-auth-seed";
+import type { PublicReleaseAuthSeed } from "./public-release-auth-seed";
 import { isDeepStrictEqual } from "node:util";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -25,6 +27,7 @@ export const publicReleaseRuntimeConfigurationScopeSchema = z.strictObject({
   runtimePlanDigest: digest,
   releaseId: id,
   publicOrigin: origin,
+  realmEnrollmentRef: z.uuid().optional(),
 });
 export type PublicReleaseRuntimeConfigurationScope = z.infer<
   typeof publicReleaseRuntimeConfigurationScopeSchema
@@ -42,6 +45,7 @@ const recordSchema = z.strictObject({
   sealed: sealedSchema,
 });
 const authResourceSchema = z.strictObject({
+  environment: z.enum(["preview", "isolated-development"]),
   hostname: z.string().regex(/^[a-z0-9.-]+\.neon\.tech$/u),
   port: z.literal(5432),
   database: z.string().regex(/^[a-z_][a-z0-9_]*$/u),
@@ -75,6 +79,7 @@ export const createFreshPublicAuthValues = (input: {
   authRuntimeUrl: string;
   productionDatabaseIdentity: string;
   authResource: z.infer<typeof authResourceSchema>;
+  seed?: PublicReleaseAuthSeed;
 }) => {
   const publicOrigin = origin.parse(input.publicOrigin);
   const resource = authResourceSchema.parse(input.authResource);
@@ -107,12 +112,10 @@ export const createFreshPublicAuthValues = (input: {
   ) {
     throw unavailable();
   }
-  const gatewayKey = generateKeyPairSync("ed25519", {
-    privateKeyEncoding: { type: "pkcs8", format: "pem" },
-    publicKeyEncoding: { type: "spki", format: "pem" },
-  });
+  const seed = input.seed ?? createFreshPublicAuthSeed();
   return {
-    PLATFORM_GATEWAY_IDENTITY_PRIVATE_KEY: gatewayKey.privateKey,
+    PLATFORM_GATEWAY_IDENTITY_PRIVATE_KEY: seed.PLATFORM_GATEWAY_IDENTITY_PRIVATE_KEY,
+    PLATFORM_GATEWAY_IDENTITY_KEY_ID: seed.PLATFORM_GATEWAY_IDENTITY_KEY_ID,
     PLATFORM_GATEWAY_PROTECTED_APPLICATIONS: JSON.stringify([
       z
         .string()
@@ -122,11 +125,10 @@ export const createFreshPublicAuthValues = (input: {
     PLATFORM_ORIGIN: publicOrigin,
     PLATFORM_JWKS_URL: `${publicOrigin}/_platform/jwks.json`,
     BETTER_AUTH_URL: publicOrigin,
-    BETTER_AUTH_SECRET: randomBytes(32).toString("base64url"),
+    BETTER_AUTH_SECRET: seed.BETTER_AUTH_SECRET,
     PLATFORM_AUTH_DATABASE_URL: input.authRuntimeUrl,
     AUTH_DATABASE_RESOURCE: JSON.stringify({
       version: 1,
-      environment: "isolated-development",
       ...resource,
     }),
     AUTH_PRODUCTION_DATABASE_IDENTITY: input.productionDatabaseIdentity,
@@ -196,6 +198,7 @@ export const createPublicReleaseRuntimeConfigurationStore = (input: {
     }
   };
   return {
+    reference: (scope: PublicReleaseRuntimeConfigurationScope) => identity(scope).ref,
     read,
     async reserve(
       scopeInput: PublicReleaseRuntimeConfigurationScope,
