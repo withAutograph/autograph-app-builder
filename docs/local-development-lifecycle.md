@@ -2,6 +2,65 @@
 
 `mise run dev` is the fast, live-code loop: edit the checkout, let Next HMR or the affected Eve/package process reload, and retry the behavior. Do not rebuild artifacts, reinstall the plugin, run broad suites, publish, or deploy after each edit.
 
+This is the default development loop for Builder itself, not only generated app
+work. Implement and verify shared workflow repairs locally before requesting a
+reviewed release. A pull request, shared Preview/Production deployment, plugin
+publication, or hosted acceptance run is not a prerequisite for an ordinary edit
+or debugging iteration. Local operation does not authorize outward provider
+mutations; provider resources and release effects retain their concrete approvals.
+
+## Parallel branch instances
+
+Use a separate checkout/worktree for each branch instance. Give each instance its
+own Next and Eve ports, owner-only state root and generated destination root.
+Its checkout also owns its build outputs (including `.next`); do not share build
+output directories or writable runtime state between instances. Read-only package
+caches may be reused under the ordinary dependency lifecycle.
+
+For example, in two different worktrees with their selected Arrusted checkout:
+
+```sh
+mise run dev -- --arrusted-root /absolute/path/to/arrusted-a --next-port 3100 --eve-port 2100 --state-root /private/tmp/builder-a-state --destination-root /private/tmp/builder-a-apps
+```
+
+```sh
+mise run dev -- --arrusted-root /absolute/path/to/arrusted-b --next-port 3200 --eve-port 2200 --state-root /private/tmp/builder-b-state --destination-root /private/tmp/builder-b-apps
+```
+
+The paths and ports are examples. Check availability first; choose other unused
+ports instead of killing another task's process. Keep each selected Arrusted
+checkout isolated when its source is also being edited. For emulated web stacks,
+also configure distinct `APP_BUILDER_DATABASE_PORT` and `EMULATE_BASE_PORT` values
+and non-overlapping emulator port ranges through that instance's mise environment.
+Separate Next/Eve ports alone do not isolate its database or emulators.
+
+Connect the browser and public-tool client explicitly to the intended instance's
+loopback origin and `/mcp` endpoint (HTTPS in emulated web mode). Confirm the
+endpoint before starting or continuing a session. Development MCP identity and
+version already distinguish ports; the launcher nevertheless installs the same
+`app-builder@autograph-dev` plugin selector into the active client profile.
+Concurrent launchers must not silently replace that shared registration. Use
+supported isolated client profiles for plugin installation, or explicit endpoint
+connections for parallel clients. Do not globally swap a running task's plugin
+registration to point at another instance. If the client cannot isolate profiles
+or connect explicitly, retain the other task's connection and report that client
+limitation rather than claiming simultaneous independent plugin connections.
+
+When qualifying parallel-instance support, run instances A and B from different
+branches with clients bound to their explicit endpoints. Demonstrate that each
+consumes its own branch's source and retains its own session state. Start,
+cancel and restart A while B continues working, then verify B's endpoint,
+source and saved session are unchanged. Record the actual outcomes; distinct
+flags or this documentation alone do not establish that isolation was tested.
+
+Local sessions and controlled product exercises are local evidence. Retain saved
+hosted sessions and their operation journals unchanged; do not copy checkpoints,
+approvals or request records into a local instance, replay uncertain requests,
+or claim a local run continued a hosted session. A transfer requires a supported,
+independently verified recovery/handoff flow. A local repair can later be released
+and exercised against the original hosted session through its normal public
+interface, with original request IDs and uncertain states preserved.
+
 Next uses Turbopack by default. If its module resolver fails on the actual linked
 dependency layout, use `mise run dev -- --arrusted-root /absolute/path/to/arrusted
 --next-bundler webpack` to select Next's supported Webpack development bundler.

@@ -60,6 +60,16 @@ Keep the evaluator at the normal web/public-tool boundary; do not implement the
 generated app on its behalf. Preserve the public tool registry and ordinary
 product questions/effect approvals.
 
+Builder development is universally local-first: keep the local live-code loop
+running and retry the affected behavior without a PR, shared deployment or
+plugin publication for each iteration. Parallel branch work uses isolated
+worktrees, Next/Eve ports, state/destination roots, build outputs and client
+endpoint/profile connections. Follow the
+[parallel-instance lifecycle](../local-development-lifecycle.md#parallel-branch-instances);
+port-specific MCP identity does not prevent the shared active-profile plugin
+selector from being overwritten. Do not switch another task's registration.
+Local startup grants no provider-mutation authority.
+
 Local iteration tests the shared Builder implementation; it does not transplant
 the saved hosted session into a local database or runtime. The last verified
 hosted observation is waiting at cursor 1414, with no verified handoff rows.
