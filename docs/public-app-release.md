@@ -69,3 +69,12 @@ Public Auth preparation generates new per-app signing keys into owner/project/ru
 Public delivery has two explicit purposes when first sign-in must precede app installation. An `auth-bootstrap` plan uses the actual completed Auth/resource checkpoint and publishes the same Services project with fresh app-owned Auth configuration. It can establish anonymous Auth/Gateway transport readiness, while app installation and authenticated acceptance remain unassessed. After normal signup and canonical identity capture, Builder completes the approved app/schema/access setup and offers a separate `application` release plan. Both plans retain the same app destination and the same app-owned signing keys. The normal installer resource classification remains unchanged; public Production delivery is independently described by the new plan and the explicit isolated Auth profile.
 
 A native resource lease serializes project, database and source writes and records a fresh fence in the existing release row. Accepted environment IDs, approval receipts and prior frozen plans remain monotone. A changed release cannot bypass an older uncertain effect. Planning reuses an identical frozen intent on resume and proves every prior provider row against its accepted owner-scoped journal receipt before offering revision approval.
+
+For new explicit public-release purposes, anonymous Gateway health must include
+`runtimeBindingDigest` matching the exact approved environment manifest: sort
+`{key, sha256(value)}` entries by key and hash their JSON encoding. The enrolled
+isolated runtime computes this from its fifteen loaded app/Auth values. It
+returns only the aggregate, without individual hashes, values, or enrollment
+identities. Matching source and signing keys alone cannot establish loaded
+configuration. Missing or stale fingerprints keep delivery pending; existing
+plans without an explicit purpose retain their original health semantics.

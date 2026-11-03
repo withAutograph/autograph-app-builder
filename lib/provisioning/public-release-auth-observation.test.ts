@@ -1,8 +1,9 @@
 /* oxlint-disable eslint/require-await -- Test ports preserve production async authority checks. */
-import { generateKeyPairSync } from "node:crypto";
+import { createHash, generateKeyPairSync } from "node:crypto";
 import { expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createPublicReleaseAuthObservation } from "./public-release-auth-observation";
+import { publicReleaseRuntimeBindingDigest } from "./public-release-contract";
 import { plan } from "./public-release-test-fixture";
 
 const pair = generateKeyPairSync("ed25519");
@@ -94,4 +95,64 @@ it("rechecks owner authority after network awaits", async () => {
   });
   await expect(f.observe(f.invocation, plan)).rejects.toThrow("owner revoked");
   expect(f.fetcher).toHaveBeenCalledOnce();
+});
+
+it("requires the exact loaded runtime for new purpose plans, even when signing keys are unchanged", async () => {
+  const selected = {
+    ...plan,
+    purpose: "application" as const,
+    environment: [
+      ...plan.environment,
+      {
+        key: "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
+        sha256: createHash("sha256").update("current-enrollment").digest("hex"),
+      },
+    ],
+  };
+  const stale = {
+    ...selected,
+    environment: selected.environment.map((entry) =>
+      entry.key === "PLATFORM_REALM_OPERATOR_LINK_CONFIG"
+        ? { ...entry, sha256: createHash("sha256").update("previous-enrollment").digest("hex") }
+        : entry,
+    ),
+  };
+  const old = fixture();
+  old.fetcher.mockResolvedValueOnce(
+    Response.json({ status: "ok", runtimeBindingDigest: publicReleaseRuntimeBindingDigest(stale) }),
+  );
+  expect(await old.observe(old.invocation, selected)).toBe(false);
+  expect(old.fetcher).toHaveBeenCalledOnce();
+  const current = fixture();
+  current.fetcher.mockResolvedValueOnce(
+    Response.json({
+      status: "ok",
+      runtimeBindingDigest: publicReleaseRuntimeBindingDigest(selected),
+    }),
+  );
+  expect(await current.observe(current.invocation, selected)).toBe(true);
+  expect(current.fetcher).toHaveBeenCalledTimes(3);
+});
+it("keeps new releases pending when the runtime has no loaded configuration fingerprint", async () => {
+  const f = fixture();
+  expect(await f.observe(f.invocation, { ...plan, purpose: "auth-bootstrap" })).toBe(false);
+  expect(f.fetcher).toHaveBeenCalledOnce();
+});
+it("canonicalizes only the approved key/value hashes, independent of order and prior provider rows", () => {
+  const withPrior = {
+    ...plan,
+    environment: plan.environment
+      .map((entry) => ({
+        ...entry,
+        priorBinding: {
+          id: "row",
+          operationRef: "00000000-0000-4000-a000-000000000000",
+          valueSha256: "f".repeat(64),
+        },
+      }))
+      .toReversed(),
+  };
+  expect(publicReleaseRuntimeBindingDigest(withPrior)).toBe(
+    publicReleaseRuntimeBindingDigest(plan),
+  );
 });

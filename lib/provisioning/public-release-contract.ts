@@ -104,6 +104,18 @@ export const publicReleaseRequiresNativeGitEvent = (
 ) =>
   plan.purpose !== undefined &&
   plan.environment.some((entry) => entry.priorBinding?.valueSha256 !== entry.sha256);
+/** Aggregate only: the loaded public runtime returns no individual key hash or value. */
+export const publicReleaseRuntimeBindingDigest = (plan: Pick<PublicReleasePlan, "environment">) => {
+  const manifest = plan.environment
+    .map(({ key, sha256 }) => ({ key, sha256 }))
+    .toSorted((a, b) => {
+      if (a.key === b.key) {
+        return 0;
+      }
+      return a.key < b.key ? -1 : 1;
+    });
+  return createHash("sha256").update(JSON.stringify(manifest)).digest("hex");
+};
 export const publicReleasePlanDigest = (plan: PublicReleasePlan) =>
   createHash("sha256")
     .update(JSON.stringify(publicReleasePlanSchema.parse(plan)))

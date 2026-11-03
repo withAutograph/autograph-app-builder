@@ -1,6 +1,7 @@
 import { createPublicKey } from "node:crypto";
 import { z } from "zod";
 import type { PublicReleaseInvocation } from "./public-release-handler";
+import { publicReleaseRuntimeBindingDigest } from "./public-release-contract";
 import type { PublicReleasePlan } from "./public-release-contract";
 
 const publicKeySchema = z.object({
@@ -99,6 +100,17 @@ export const createPublicReleaseAuthObservation =
       !z.object({ status: z.literal("ok") }).safeParse(health.data).success
     ) {
       return false;
+    }
+    if (plan.purpose !== undefined) {
+      const proof = z
+        .object({ runtimeBindingDigest: z.string().regex(/^[a-f0-9]{64}$/u) })
+        .safeParse(health.data);
+      if (
+        !proof.success ||
+        proof.data.runtimeBindingDigest !== publicReleaseRuntimeBindingDigest(plan)
+      ) {
+        return false;
+      }
     }
     const keys = await read("/_platform/jwks.json");
     if (keys.status !== "observed") {
