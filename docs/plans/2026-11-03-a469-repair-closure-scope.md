@@ -19,7 +19,7 @@ Never resend `a469-preview-target-approved-batch` or invent its settlement.
 | --- | --- | --- |
 | Local tool exposure and saved-cycle recovery | Normal internal planning tool is exposed through the same five public controls; saved local cycle is retained. | Complete actual saved planning/apply/preview sequence. |
 | Original source import | Exact original archive baseline, compact host-tree import, merge-parent handling and repeated replans are implemented. | Actual saved app must complete reconciliation. |
-| Earlier source overlay | Engine authenticates the retained transport manifest and preserves app/checkpoint/genuine shared changes. | Native receipt-to-workflow adapter is still missing; engine tests alone missed this boundary. |
+| Earlier source overlay | Engine and native receipt-to-workflow adapter authenticate the completed retained transport and preserve app/checkpoint/genuine shared changes. | Actual saved app must exercise this recovered baseline; adapter checks alone are not a successful app run. |
 | Build capacity and checks | Fresh 8-vCPU/16-GiB, one-worker plan, normal Build approval and durable SDK-operation journal; lint plugins/types remain enabled. | New actual approval, same-workspace update/readback, validation. No resize has run. |
 | Dependencies and runtime tools | Ordinary dependency reconciliation and repository tool environment fixes are implemented. | Actual saved app dependency install, checks and preview startup. |
 | Local Auth origin | Owned local cluster and complete private-checkpoint checks precede initial localhost-to-preview HTTPS handoff. Real disposable PostgreSQL/BetterAuth checks pass. | Actual app's loaded origin, login/session/logout and persistent action. |
@@ -56,12 +56,29 @@ Never resend `a469-preview-target-approved-batch` or invent its settlement.
    owner/history readers, webhook receiver, ready/private/control-bootstrap ports
    and app-capability consumers must be assembled and tested together. Missing
    private profile/configuration remains explicit, never a fixture success.
+   The audit found the outer operator composition dropped public-release and
+   app-capability ports even when their factories constructed them. Verify
+   positive requests through the actual default factory and mounted routes,
+   including the new central port. Independently read the installation,
+   repository and reviewed source before proposing setup effects. A separate
+   revision session must read and verify the original ready caller/setup and
+   their original consent, not create a replacement or transfer approval.
+
+   Package the exact three directly executable worker files, receipt and
+   Git-inventoried source into an offline code-only artifact outside the live
+   planning checkout. Verify direct execution on the actual Linux Sandbox base,
+   including Bun availability and protected SQL transport. Running `bun file.js`
+   on a developer Mac does not prove the SDK's direct-executable command works.
 
 4. **Provide reachable authenticated native delivery receipts.** A provider
    webhook cannot reach a loopback Mac endpoint. Identify the supported public
    callback and its actual runtime/configuration release. Preserve immutable
    accepted deployment IDs; no listing/SHA/time selection or manual promotion.
    Any shared operator release must be a concrete separately reviewable action.
+   Builder's public callback relays through the closed authenticated operator
+   transport. Only the separate operator verifies the provider signature and
+   persists the receipt; Builder must not load the operator's privileged private
+   configuration merely to receive a webhook.
 
 5. **Complete optional-capability removal handoff.** Shared source uninstall and
    backend disable/drain already exist. The Builder release/revision contract
@@ -73,6 +90,12 @@ Never resend `a469-preview-target-approved-batch` or invent its settlement.
    with independently verified authority fencing. Exact environment deletion or
    credential/principal cleanup needs a separate concrete cleanup scope. Reuse
    the existing lifecycle; source omission alone is not a completed removal.
+   The fixed approved worker must use the existing strict protected-connection
+   checks, preserve principal/authority then connection/binding lock ordering,
+   and persist an app-specific fence receipt for reconciliation after its old
+   app credential is denied. Current consent and the held physical lease remain
+   checked at each effect boundary without recursively acquiring the same SQL
+   locks. A rejected app credential alone is not stopped-work proof.
 
 6. **Correct the consumed integration authoring guidance.** The Builder reference
    still names a generic host plus platform adapters instead of the existing
@@ -93,6 +116,14 @@ Never resend `a469-preview-target-approved-batch` or invent its settlement.
    source/manifest; never infer it from absent keys. Do not inherit customer Auth
    keys or add default Production fallbacks. Probe the actual compiled entrypoint
    with only declared central bindings and provider-owned native metadata.
+
+   Independent provider readback found the configured central target is the
+   shared `apps` project with inherited unscoped Preview credentials. It is not
+   an isolated central target. Stop before setup effects when inherited secrets
+   violate the central profile. Resolve the actual infrastructure destination
+   explicitly; do not blank inherited values, modify customer environments or
+   create an arbitrary replacement acceptance project. The generated app still
+   uses its one ordinary Builder-owned destination.
 
 ## Evidence gaps, distinct from established code defects
 
