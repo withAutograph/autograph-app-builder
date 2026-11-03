@@ -172,7 +172,9 @@ it.each(["source", "production"] as const)(
 it("keeps a provider race visible and never forces a changed branch", async () => {
   const f = fixture();
   f.race();
-  await expect(f.provider.publish(f.context)).rejects.toThrow("public_release_source_unavailable");
+  await expect(f.provider.publish(f.context)).rejects.toMatchObject({
+    diagnostic: { provider: "github", statusCode: 200 },
+  });
   expect(await f.provider.reconcile({ ...f.context, priorPhase: "pending" })).toBe("unknown");
   expect(f.writes).toHaveLength(1);
 });

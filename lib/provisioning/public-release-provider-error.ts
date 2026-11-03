@@ -1,13 +1,13 @@
-import { vercelProvisionDiagnosticSchema } from "./contracts";
-import type { VercelProvisionDiagnostic } from "./contracts";
+import { publicReleaseProviderDiagnosticSchema } from "./public-release-provider-diagnostic";
+import type { PublicReleaseProviderDiagnostic } from "./public-release-provider-diagnostic";
 
 /** Only allowlisted support facts cross this boundary; no raw provider error is retained. */
 export class PublicReleaseProviderError extends Error {
-  readonly diagnostic: VercelProvisionDiagnostic;
+  readonly diagnostic: PublicReleaseProviderDiagnostic;
 
-  constructor(diagnostic: VercelProvisionDiagnostic) {
+  constructor(diagnostic: PublicReleaseProviderDiagnostic) {
     super("public_release_provider_rejected");
     this.name = "PublicReleaseProviderError";
-    this.diagnostic = vercelProvisionDiagnosticSchema.parse(diagnostic);
+    this.diagnostic = publicReleaseProviderDiagnosticSchema.parse(diagnostic);
   }
 }

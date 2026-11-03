@@ -125,6 +125,14 @@ by A481. A public release must open without a Vercel login and enforce access
 through real Better Auth sessions, including a same-organization member with no
 app assignment. A READY deployment or successful sign-in alone is insufficient.
 
+Public release failures retain only bounded provider support facts with their
+saved effect phase. GitHub diagnostics include the provider name, actual HTTP
+status (or HTTP 200 for explicit GraphQL errors), closed error classifications
+and a bounded hexadecimal request reference. Vercel diagnostics keep their
+existing shape. Provider messages, response bodies, credentials and URLs are
+never retained. Transport exceptions without an HTTP response remain unknown;
+a diagnostic never clears a pending effect or grants another dispatch.
+
 Record these exercised outcomes independently:
 
 | Area                         | Required evidence                                                                                                                                                                       |

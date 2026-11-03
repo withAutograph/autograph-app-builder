@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  githubReleaseFailure,
+  githubReleaseGraphqlFailure,
+} from "./public-release-github-diagnostic";
 import { createGitHubTokenOctokit } from "../github/octokit";
 import type { PublicReleasePlan } from "./public-release-contract";
 import type { PublicReleaseEffectContext, PublicReleaseInvocation } from "./public-release-handler";
@@ -98,9 +102,9 @@ export const createPublicReleaseGitHubProvider = (deps: PublicReleaseGitHubDepen
           current === context.plan.source.expectedProductionSha
           ? "not-applied"
           : "unknown";
-      } catch {
+      } catch (error) {
         context.invocation.signal.throwIfAborted();
-        throw unavailable();
+        throw githubReleaseFailure(error) ?? unavailable();
       }
     },
     async publish(context: PublicReleaseEffectContext) {
@@ -135,6 +139,10 @@ export const createPublicReleaseGitHubProvider = (deps: PublicReleaseGitHubDepen
           request: { signal: context.invocation.signal },
         });
         await check(context);
+        const diagnostic = githubReleaseGraphqlFailure(result.data, result.headers);
+        if (diagnostic !== undefined) {
+          throw diagnostic;
+        }
         z.object({
           data: z.object({ updateRefs: z.object({ clientMutationId: z.string().nullable() }) }),
           errors: z.array(z.unknown()).max(0).optional(),
@@ -142,10 +150,10 @@ export const createPublicReleaseGitHubProvider = (deps: PublicReleaseGitHubDepen
         if ((await readRef(context, repo, context.plan.source.productionBranch)) !== source) {
           throw unavailable();
         }
-      } catch {
+      } catch (error) {
         context.invocation.signal.throwIfAborted();
         // Do not expose provider bodies, credentials or request URLs to the workflow journal.
-        throw unavailable();
+        throw githubReleaseFailure(error) ?? unavailable();
       }
     },
   };

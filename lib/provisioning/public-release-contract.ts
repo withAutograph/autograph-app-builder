@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
-import { vercelProvisionDiagnosticSchema } from "./contracts";
+import { publicReleaseProviderDiagnosticSchema } from "./public-release-provider-diagnostic";
 import { builderAppIdSchema } from "./names";
 
 const id = z.string().min(1);
@@ -109,7 +109,7 @@ export const publicReleaseRecordSchema = z.strictObject({
   lastProviderFailure: z
     .strictObject({
       phase: z.enum([...publicReleaseEffects, "observe-production"]),
-      diagnostic: vercelProvisionDiagnosticSchema,
+      diagnostic: publicReleaseProviderDiagnosticSchema,
     })
     .optional(),
 });

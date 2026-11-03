@@ -1,6 +1,8 @@
 /* oxlint-disable eslint/no-await-in-loop -- Test runtime binding receipt order matches the durable provider contract. */
 /* oxlint-disable eslint/require-await -- Test provider and store adapters return the same Promise contracts as production. */
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
+import { createPublicReleaseGitHubProvider } from "./public-release-github-provider";
 import {
   publicReleasePlanSchema,
   publicReleasePlanDigest,
@@ -257,3 +259,104 @@ it("records observation failures without changing completed effects or claiming 
   expect(Object.values(row?.record.effects ?? {})).toEqual(["applied", "applied"]);
   expect(row?.record.observation).toBeUndefined();
 });
+
+it.each([
+  [
+    403,
+    { message: "private-provider-body" },
+    { provider: "github", statusCode: 403, code: "forbidden", requestRef: "ABCD:1234:AA00:1234" },
+  ],
+  [
+    200,
+    {
+      errors: [{ type: "FORBIDDEN", message: "private-provider-body", path: ["private"] }],
+      data: null,
+    },
+    { provider: "github", statusCode: 200, code: "FORBIDDEN", requestRef: "ABCD:1234:AA00:1234" },
+  ],
+  [
+    200,
+    {
+      errors: [{ type: "private-unrecognized-type", message: "private-provider-body" }],
+      data: null,
+    },
+    { provider: "github", statusCode: 200, requestRef: "ABCD:1234:AA00:1234" },
+  ],
+])(
+  "persists bounded actual GitHub denial metadata at HTTP%s without another branch dispatch",
+  async (status, body, diagnostic) => {
+    const f = fixture();
+    let posts = 0;
+    const github = createPublicReleaseGitHubProvider({
+      assertCurrent: async () => {},
+      readCredential: async () => ({
+        token: "private-test-token",
+        repositoryId: plan.source.repositoryId,
+        installationId: plan.source.installationId,
+      }),
+      fetch: async (resource) => {
+        const parsed = z
+          .union([z.string(), z.instanceof(URL), z.instanceof(Request)])
+          .parse(resource);
+        const url = new URL(parsed instanceof Request ? parsed.url : String(parsed));
+        if (url.pathname.endsWith("/graphql")) {
+          posts += 1;
+          return Response.json(body, {
+            status,
+            headers: {
+              "x-github-request-id": "ABCD:1234:AA00:1234",
+              "set-cookie": "private-cookie",
+            },
+          });
+        }
+        if (url.pathname.startsWith("/repositories/")) {
+          return Response.json({
+            id: plan.source.repositoryId,
+            node_id: "repository-node",
+            name: "app",
+            owner: { login: "owner" },
+          });
+        }
+        if (decodeURIComponent(url.pathname).endsWith("/git/ref/heads/main")) {
+          return Response.json({
+            object: { sha: plan.source.expectedProductionSha, type: "commit" },
+          });
+        }
+        if (decodeURIComponent(url.pathname).endsWith("/git/ref/heads/builder/app")) {
+          return Response.json({ object: { sha: plan.source.sourceSha, type: "commit" } });
+        }
+        throw new Error("Unexpected request");
+      },
+    });
+    const apply = f.ports.applyEffect;
+    const reconcile = f.ports.reconcileEffect;
+    f.ports.applyEffect = async (context) => {
+      await (context.effect === "publish-release-source"
+        ? github.publish(context)
+        : apply(context));
+    };
+    f.ports.reconcileEffect = async (context) =>
+      context.effect === "publish-release-source"
+        ? await github.reconcile(context)
+        : await reconcile(context);
+    const ctx = invocation();
+    const selected = await f.handler.plan(ctx, plan.selection.appId);
+    await expect(
+      f.handler.release(ctx, selected.operationRef, selected.planDigest),
+    ).rejects.toThrow("public_release_provider_rejected");
+    const row = await f.store.read(authority, selected.operationRef);
+    expect(row?.record.lastProviderFailure).toEqual({
+      phase: "publish-release-source",
+      diagnostic,
+    });
+    expect(row?.record.effects).toEqual({
+      "bind-production-runtime": "applied",
+      "publish-release-source": "pending",
+    });
+    expect(JSON.stringify(row)).not.toContain("private-");
+    expect(await f.handler.release(ctx, selected.operationRef, selected.planDigest)).toMatchObject({
+      status: "reconciliation-required",
+    });
+    expect(posts).toBe(1);
+  },
+);

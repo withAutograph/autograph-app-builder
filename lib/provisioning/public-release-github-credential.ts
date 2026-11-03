@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { githubReleaseFailure } from "./public-release-github-diagnostic";
 import { createGitHubApp, createGitHubTokenOctokit } from "../github/octokit";
 import { parseGitHubAppHttpProviderCredentials } from "../repository/github-app-http-provider";
 import { mergeHostedGitHubInstallationBindings } from "../repository/postgres-github-installation-store";
@@ -88,9 +89,9 @@ const scopedCredential = (input: CredentialDependencies) => {
         repositoryId: scope.repositoryId,
         installationId: scope.installationId,
       };
-    } catch {
+    } catch (error) {
       invocation.signal.throwIfAborted();
-      throw unavailable();
+      throw githubReleaseFailure(error) ?? unavailable();
     }
   };
 };
@@ -168,9 +169,9 @@ export const createPublicReleaseGitHubDestinationReader = (
         sourceSha,
         expectedProductionSha,
       };
-    } catch {
+    } catch (error) {
       invocation.signal.throwIfAborted();
-      throw unavailable();
+      throw githubReleaseFailure(error) ?? unavailable();
     }
   };
 };
