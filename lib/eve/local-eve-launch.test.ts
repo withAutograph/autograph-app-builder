@@ -13,6 +13,10 @@ import path from "node:path";
 import type { ChildProcess } from "node:child_process";
 
 import { describe, expect, it } from "vitest";
+import {
+  readLocalOperatorArtifactAuthority,
+  createLocalOperatorArtifactStorage,
+} from "../provisioning/local-operator-artifact-store";
 
 import {
   createLocalEveInvocation,
@@ -220,4 +224,39 @@ describe("closed local Eve launch", () => {
       }),
     ).toThrow();
   });
+});
+
+it("the real child launch can retain private planning artifacts without a hosted operator", async () => {
+  const f = fixture();
+  const invocation = createLocalEveInvocation({
+    repositoryRoot: f.repositoryRoot,
+    environment: f.environment,
+    pinnedNode: process.execPath,
+    eveCli: "/owned/eve-cli.mjs",
+    oidcToken: "synthetic-project-oidc",
+    vercelProject: { projectId: "project", orgId: "team" },
+  });
+  const authority = await readLocalOperatorArtifactAuthority(invocation.environment);
+  expect(authority).toBeDefined();
+  if (authority === undefined) {
+    throw new Error("missing local planning authority");
+  }
+  const context = {
+    authority,
+    target: { appId: "supplier-spend", sessionId: "saved-local-session" },
+  };
+  const artifacts = await createLocalOperatorArtifactStorage({
+    authority,
+    assertCurrentOwner: (current) => {
+      expect(current).toEqual(context);
+      return Promise.resolve();
+    },
+  });
+  const artifactRef = `_protected-operator/artifacts/source-review-context/supplier-spend/${"a".repeat(64)}`;
+  await artifacts.store.put(context, {
+    artifactRef,
+    chunkIndex: 0,
+    content: "private reviewed app plan",
+  });
+  expect(await artifacts.store.read(context, artifactRef, 0)).toBe("private reviewed app plan");
 });
