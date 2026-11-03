@@ -21,6 +21,11 @@ const projectSchema = z
       .optional(),
     name: z.string().min(1),
     rootDirectory: z.string().min(1),
+    ssoProtection: z.object({ deploymentType: z.string() }).nullable().optional(),
+    oidcTokenConfig: z
+      .object({ enabled: z.boolean(), issuerMode: z.string() })
+      .nullable()
+      .optional(),
   })
   .passthrough();
 
@@ -35,6 +40,8 @@ export async function provisionVercelProject(input: {
   installation: VercelInstallationBinding;
   token: string;
   appId: string;
+  /** Absent on frozen legacy requests; those retain their inherited provider policy. */
+  deploymentAccess?: "public-app";
   github: GitHubProvisionResult;
   githubSelected: boolean;
   persistedCandidates: readonly string[];
@@ -195,6 +202,12 @@ export async function provisionVercelProject(input: {
               framework: "services",
               name: candidate,
               rootDirectory: ".",
+              ...(input.deploymentAccess === "public-app"
+                ? {
+                    ssoProtection: { deploymentType: "prod_deployment_urls_and_all_previews" },
+                    oidcTokenConfig: { enabled: true, issuerMode: "team" },
+                  }
+                : {}),
               ...(linkedRepository
                 ? {
                     gitRepository: {
@@ -254,6 +267,10 @@ export async function provisionVercelProject(input: {
         if (
           project.name !== candidate ||
           project.rootDirectory !== "." ||
+          (input.deploymentAccess === "public-app" &&
+            (project.ssoProtection?.deploymentType !== "prod_deployment_urls_and_all_previews" ||
+              project.oidcTokenConfig?.enabled !== true ||
+              project.oidcTokenConfig?.issuerMode !== "team")) ||
           (linkedRepository !== undefined &&
             `${project.link?.org}/${project.link?.repo}` !== linkedRepository) ||
           (linkedRepository === undefined && project.link !== undefined)

@@ -23,3 +23,22 @@ of an existing resource based only on an availability response.
 
 This change intentionally does not add form-time provider requests or inline
 conflict UI.
+
+## Public app deployment policy
+
+New normal web Builder provisioning records `deploymentAccess: "public-app"`
+in its durable request, digest, response and handoff. Creation requests Standard
+Protection (`prod_deployment_urls_and_all_previews`) and enabled team-issued
+OIDC, then independently reads both settings back before reporting success.
+The production app domain is publicly reachable; the app's Better Auth and
+application authorization still control access to its data and actions. Preview
+and immutable deployment URLs remain protected. This setting does not deploy
+or activate the app or establish authenticated behavior.
+
+The standard project remains `apps-<app-id>`, uses the Services framework at the
+repository root, and retains its selected GitHub link. A policy mismatch is a
+failed postcondition; provisioning does not patch the project, create another
+project, or disable protection to repair it. Existing frozen requests without
+the optional access field preserve their digest and inherited provider policy;
+handoff continuations retain that absence. Dedicated native Preview plans keep
+their separately approved All Deployments policy unchanged.

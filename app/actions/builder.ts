@@ -195,6 +195,7 @@ function provisioningInput(
 ) {
   return builderProvisionRequestSchema.parse({
     appName: input.form.appName,
+    deploymentAccess: "public-app",
     operation,
     providers: {
       ...(input.form.githubInstallationId
@@ -373,6 +374,9 @@ export async function continueHandoffProvisioning(
       }
       await provisionBuilderProvider({
         appName: data.intent.appName,
+        ...(data.intent.provisioning?.deploymentAccess === undefined
+          ? {}
+          : { deploymentAccess: data.intent.provisioning.deploymentAccess }),
         operation,
         providers,
         repository: {

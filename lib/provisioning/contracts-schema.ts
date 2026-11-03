@@ -10,6 +10,7 @@ const instant = z.string().datetime({ offset: true });
 export const builderProvisionRequestSchema = z
   .object({
     appName: z.string().trim().min(1).max(120),
+    deploymentAccess: z.literal("public-app").optional(),
     operation: z.enum(["github", "vercel"]),
     providers: z
       .object({
@@ -173,6 +174,7 @@ export const vercelProvisionResultSchema = z.union([
 export const builderProvisionResponseSchema = z
   .object({
     appId: builderAppIdSchema,
+    deploymentAccess: z.literal("public-app").optional(),
     diagnostics: z
       .array(
         z

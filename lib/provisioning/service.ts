@@ -249,6 +249,7 @@ export async function executeBuilderProvisioning(input: {
       if (credential?.binding.active) {
         result = await provisionVercelProject({
           appId: current.record.response.appId,
+          deploymentAccess: current.record.request.deploymentAccess,
           fetch: input.dependencies.fetch,
           github: current.record.response.github,
           githubSelected: request.providers.githubInstallationId !== undefined,
