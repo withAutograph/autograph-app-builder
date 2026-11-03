@@ -114,19 +114,16 @@ export default defineTool({
         continuityStage = "tool_local_sandbox";
         const sandbox = await ctx.getSandbox();
         continuityStage = "tool_selected_app";
+        const state = appBuilderWorkflowState.get();
         const selected = await runnableSelectedApp({
           appId: input.appId,
           sandbox,
-          state: appBuilderWorkflowState.get(),
+          state,
+          resolveRoot: async ({ appId, root }) =>
+            await resolveAcceptanceRuntimeRoot({ appId, fallbackRoot: root, sandbox, state, ctx }),
         });
+        const root = selected.root;
         continuityStage = "tool_sandbox_identity";
-        const root = await resolveAcceptanceRuntimeRoot({
-          appId: selected.appId,
-          fallbackRoot: selected.root,
-          sandbox,
-          state: appBuilderWorkflowState.get(),
-          ctx,
-        });
         const runtime = {
           sandboxId: getBuilderSandboxId(sandbox),
           root,

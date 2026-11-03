@@ -20,6 +20,14 @@ Dependency setup is runtime work, not a source-integrity proof. Reuse caches whe
 
 Only protect credentials and cross-user session data, obtain approval before outward effects, and report actual Sandbox/GitHub/Git/repository-command failures. There are no exact template, SHA/tree, package-layout, tool-version, manifest, path, receipt, digest, quota, or cache gates in local development. Inspection is best-effort and must not become a blocker.
 
+Acceptance task selection keeps the app identity from the accepted session or
+explicitly selected existing repository app. For a prepared Preview, Builder
+recovers its compatible owned checkout before reading the app contract. A missing
+contract in a stale existing checkout must not prevent that recovery. Preparation,
+browser testing and managed continuity planning use the same selection path;
+recovery preserves private work and does not grant publication or execution
+approval.
+
 ## Checks follow functionality
 
 Normal app changes are supported input, including new files, routes, metadata,

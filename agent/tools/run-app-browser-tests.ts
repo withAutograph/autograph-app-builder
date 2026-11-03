@@ -48,14 +48,14 @@ export default defineTool({
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     const sandbox = await ctx.getSandbox();
-    const selected = await runnableSelectedApp({ appId: input.appId, sandbox, state });
-    const root = await resolveAcceptanceRuntimeRoot({
-      appId: selected.appId,
-      fallbackRoot: selected.root,
+    const selected = await runnableSelectedApp({
+      appId: input.appId,
       sandbox,
       state,
-      ctx,
+      resolveRoot: async ({ appId, root }) =>
+        await resolveAcceptanceRuntimeRoot({ appId, fallbackRoot: root, sandbox, state, ctx }),
     });
+    const root = selected.root;
     return await runAppBrowserTests({
       appId: selected.appId,
       execution: {
