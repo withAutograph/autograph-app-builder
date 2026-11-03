@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { repositoryAccessReceiptSchema } from "./repository-access-state";
+import type { RepositoryAccessReceipt } from "./repository-access-state";
 import type { AppBuilderWorkflowState } from "./workflow-state";
 import type { PrivateApplyScope } from "./private-apply-authority";
 
@@ -22,6 +24,7 @@ export const approvedBuildDecisionSchema = z.strictObject({
       workspaceId: z.string(),
     })
     .optional(),
+  existingRepositorySource: repositoryAccessReceiptSchema.optional(),
   decision: z.enum(["working", "runnable", "waiting-input", "blocked", "settled"]),
   scope: approvedBuildScopeSchema.optional(),
   turnId: z.string().min(1),
@@ -52,6 +55,36 @@ export const internalBuildMessage = (operationId: string, nonce: string) =>
   "Continue the existing approved private app build. Resolve its remaining app-owned repair and validation through supported workflow capabilities. Keep the current session and scope. Wait for actual provider, human-input, or outward-effect approval boundaries. This runtime continuation is not a new user requirement or approval." +
   `\n[autograph-private-build:${operationId}:${nonce}]`;
 
+const projectExistingRepositorySource = (
+  workflow: AppBuilderWorkflowState,
+  access: RepositoryAccessReceipt | undefined,
+  adapterSessionId: string,
+) => {
+  if (
+    workflow.phase === "empty" ||
+    workflow.sourceReceipt?.sourceKind !== "existing-repository" ||
+    workflow.githubSource === undefined ||
+    access === undefined
+  ) {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing acquired source is an explicit optional private projection.
+    return undefined;
+  }
+  if (
+    ![
+      access.sessionId === adapterSessionId,
+      access.repository.repositoryId === workflow.githubSource.repository.repositoryId,
+      access.repository.owner === workflow.githubSource.repository.owner,
+      access.repository.name === workflow.githubSource.repository.name,
+      workflow.githubSource.installationIdentityDigest ===
+        workflow.githubSource.repository.installationIdentityDigest,
+    ].every(Boolean)
+  ) {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing acquired source is an explicit optional private projection.
+    return undefined;
+  }
+  return repositoryAccessReceiptSchema.parse(access);
+};
+
 /** Source-owned state, actual retained approval and validator facts determine runnable work; model prose is never an input. */
 export const decideApprovedBuildContinuation = (input: {
   state: AppBuilderWorkflowState;
@@ -59,6 +92,7 @@ export const decideApprovedBuildContinuation = (input: {
   turnId: string;
   turnSequence: number;
   approvalMatches: (scope: PrivateApplyScope) => boolean;
+  repositoryAccess?: RepositoryAccessReceipt;
   pendingInput: boolean;
   blocked: boolean;
 }): ApprovedBuildDecision => {
@@ -69,6 +103,14 @@ export const decideApprovedBuildContinuation = (input: {
     version: 1 as const,
     workflowPhase: input.state.phase,
   };
+  const existingRepositorySource = projectExistingRepositorySource(
+    input.state,
+    input.repositoryAccess,
+    input.adapterSessionId,
+  );
+  if (existingRepositorySource !== undefined) {
+    Object.assign(base, { existingRepositorySource });
+  }
   if ("appSpec" in input.state) {
     const { state } = input;
     const currentSpec: NonNullable<ApprovedBuildDecision["currentSpec"]> = {

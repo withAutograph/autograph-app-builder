@@ -1,3 +1,4 @@
+import { repositoryAccessReceiptState } from "./repository-access-state";
 import { defineState } from "eve/context";
 import { hostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 import { hasTestCapability } from "../testing/test-capability";
@@ -149,6 +150,7 @@ export const emitCurrentBuildWorkflowProjection = async (
   ]);
   const decision = decideApprovedBuildContinuation({
     adapterSessionId: ctx.session.id,
+    repositoryAccess: repositoryAccessReceiptState.get(),
     approvalMatches: (scope) => {
       try {
         assertApprovedPrivateApplySession(scope);

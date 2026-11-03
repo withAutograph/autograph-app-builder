@@ -143,6 +143,7 @@ const readVercelProjectAccess = async (input: {
   authority: Authority;
   projectId: string;
   requireServicesRoot?: boolean;
+  requireExpectedRepositoryId?: string;
   projectName?: string;
   installationId: string;
   expectedScope?: { id: string; type: "team" | "user" };
@@ -265,6 +266,12 @@ const readVercelProjectAccess = async (input: {
             { expected: ".", pointer: "/rootDirectory" },
           ]
         : []),
+      ...(input.requireExpectedRepositoryId === undefined
+        ? []
+        : [
+            { expected: "github", pointer: "/link/type" },
+            { expectedDecimal: input.requireExpectedRepositoryId, pointer: "/link/repoId" },
+          ]),
       { capture: true, optional: true, pointer: "/link/productionBranch" },
     ]);
     const [idMatches, hasName, accountMatches] = observed.matches;
@@ -319,6 +326,7 @@ export async function readOwnerVercelProjectAccess(input: {
   authority: Authority;
   projectId: string;
   requireServicesRoot?: boolean;
+  requireExpectedRepositoryId?: string;
   expectedScope?: VercelScope;
   installationId: string;
   readCredential: (input: {
@@ -336,6 +344,7 @@ export async function readOwnerVercelProjectAccess(input: {
 export async function readPreparedVercelAccess(input: {
   intent: PreparedIntent;
   requireServicesRoot?: boolean;
+  requireExpectedRepositoryId?: string;
   authority: Authority;
   readCredential: (input: {
     authority: Authority;
@@ -360,6 +369,7 @@ export async function readPreparedVercelAccess(input: {
       authority: input.authority,
       expectedScope: project.scope,
       requireServicesRoot: input.requireServicesRoot,
+      requireExpectedRepositoryId: input.requireExpectedRepositoryId,
       installationId,
       projectId: project.projectId,
       projectName: project.name,

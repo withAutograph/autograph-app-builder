@@ -196,3 +196,11 @@ public release binding alongside the original account setup digest.
 These local contracts and tests establish implementation behavior, not hosted
 acceptance evidence. Public delivery, normal sign-in, persistent app actions and
 provider lifecycle observations still require the progressive product run.
+
+A separate existing-app revision session recovers its original normal Builder
+destination from the authenticated owner's settled provisioning receipt, keyed
+by the accepted app ID and the independently acquired GitHub repository and
+installation IDs. This read-only recovery does not copy the creation session,
+reuse an effect approval, adopt a project by name, or create another project.
+Ambiguous or mismatched receipts remain unavailable. New resource verification
+and public release approvals still belong to the revision session.

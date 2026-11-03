@@ -1,3 +1,4 @@
+import { resolveExistingBuilderDestinationReference } from "./builder-existing-destination";
 import { ensurePreviewOAuthDeploymentSessionOrganization } from "../auth/preview-oauth-deployment";
 import { readPreviewOAuthRuntimeConfig } from "../auth/preview-oauth-runtime";
 import { builderResourceProvisioningFlag } from "../feature-flags";
@@ -73,7 +74,13 @@ export const openBuilderSessionDestination = async (
       if (session.appId === undefined) {
         throw new Error("Choose an app before selecting its destination.");
       }
-      const reference = session.builderDestination;
+      const reference = await resolveExistingBuilderDestinationReference({
+        session,
+        authority,
+        appId: session.appId,
+        findProvisioningForAppRepository: dependencies.journal.findSettledAppRepository,
+      });
+      await assertMember(principal);
       const row =
         reference === undefined
           ? undefined
@@ -107,7 +114,10 @@ export const openBuilderSessionDestination = async (
         },
         request: row?.record.request,
         ready: row?.state === "settled" && row.record.response.vercel.status === "succeeded",
-        selectable: session.status === "waiting" && session.sourceHandoffId === undefined,
+        selectable:
+          session.status === "waiting" &&
+          session.sourceHandoffId === undefined &&
+          session.privateBuildDecision?.existingRepositorySource === undefined,
         enabled: await builderResourceProvisioningFlag(),
         github: integrations.github.scopes,
         vercel: integrations.vercel.scopes,

@@ -345,6 +345,8 @@ export const openNativeTargetConfigurationResources = async (
           {
             ...ownerDependencies,
             readProvisioning: createPostgresBuilderProvisionJournalStore(database).read,
+            findProvisioningForAppRepository:
+              createPostgresBuilderProvisionJournalStore(database).findSettledAppRepository,
             readVercelCredential: (credential) =>
               readActiveVercelInstallationToken({
                 ...credential,

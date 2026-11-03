@@ -39,6 +39,11 @@ export const createBuilderSessionDestinationService = <
     }
     const attach = deps.sessions.attachBuilderDestination.bind(deps.sessions);
     const session = toDurableHostedSessionRecord(stored);
+    if (session.privateBuildDecision?.existingRepositorySource !== undefined) {
+      throw new Error(
+        "This existing app retains its original Builder destination; continue its saved revision instead of creating another project.",
+      );
+    }
     const request = builderProvisionRequestSchema.parse(input.request);
     if (request.operation !== "vercel" || session.appId === undefined) {
       throw new Error("Select a Vercel destination for this app.");

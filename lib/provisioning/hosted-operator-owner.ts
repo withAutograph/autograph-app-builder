@@ -1,3 +1,4 @@
+import { resolveExistingBuilderDestinationReference } from "./builder-existing-destination";
 import { isDeepStrictEqual } from "node:util";
 import type { BuilderProvisionResponse } from "./contracts";
 import type { BuilderProvisionJournalStore } from "./journal";
@@ -76,6 +77,7 @@ type VerifierKeyResolver = Parameters<typeof createOperatorWorkloadVerifier>[1];
 
 export interface HostedOperatorOwnerDependencies {
   readProvisioning?: BuilderProvisionJournalStore["read"];
+  findProvisioningForAppRepository?: BuilderProvisionJournalStore["findSettledAppRepository"];
   journal?: Pick<HostedRuntimeJournalStore, "read">;
   realmContinuation?: RealmContinuationVerificationOptions;
   workloadPolicy: OperatorWorkloadPolicy;
@@ -678,14 +680,50 @@ const standardRepository = (receipt: BuilderProvisionResponse) => {
 type StandardDestinationDependencies = HostedOperatorAppOwnerDependencies &
   Pick<HostedOperatorOwnerDependencies, "readVercelCredential" | "fetch" | "apiOrigin"> & {
     readProvisioning?: BuilderProvisionJournalStore["read"];
+    findProvisioningForAppRepository?: BuilderProvisionJournalStore["findSettledAppRepository"];
   };
+
+/** Recover an existing app destination only from its privately acquired repository and owned normal receipt. */
+export const readOwnedStandardBuilderDestinationReference = async (
+  deps: Pick<
+    StandardDestinationDependencies,
+    | "eve"
+    | "handoffs"
+    | "membership"
+    | "realmContinuation"
+    | "workloadPolicy"
+    | "keyResolver"
+    | "findProvisioningForAppRepository"
+  >,
+  input: HostedOperatorAppOwnerContext,
+) => {
+  const session = await readCanonicalAppOwnerSession(deps, input);
+  const reference = await resolveExistingBuilderDestinationReference({
+    session,
+    authority: input.authority,
+    appId: input.target.appId,
+    findProvisioningForAppRepository: deps.findProvisioningForAppRepository,
+  });
+  if (session.builderDestination !== undefined || reference === undefined) {
+    return reference;
+  }
+  const source = session.privateBuildDecision?.existingRepositorySource;
+  const current = await readCanonicalAppOwnerSession(deps, input);
+  if (
+    !isDeepStrictEqual(current.privateBuildDecision?.existingRepositorySource, source) ||
+    current.builderDestination !== undefined
+  ) {
+    throw unavailable();
+  }
+  return reference;
+};
 
 const readDirectStandardBuilderDestination = async (
   deps: StandardDestinationDependencies,
   input: HostedOperatorAppOwnerContext,
 ) => {
-  const session = await readCanonicalAppOwnerSession(deps, input);
-  const reference = session.builderDestination;
+  await readCanonicalAppOwnerSession(deps, input);
+  const reference = await readOwnedStandardBuilderDestinationReference(deps, input);
   if (reference === undefined || deps.readProvisioning === undefined) {
     // oxlint-disable-next-line unicorn/no-useless-undefined -- Explicit absent destination is part of this async result.
     return undefined;
@@ -718,6 +756,7 @@ const readDirectStandardBuilderDestination = async (
     installationId: project.installationId,
     expectedScope: { ...project.scope, installationId: project.installationId },
     requireServicesRoot: true,
+    requireExpectedRepositoryId: standardRepository(row.record.response).repositoryId,
     readCredential: deps.readVercelCredential,
     ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
     ...(deps.apiOrigin === undefined ? {} : { apiOrigin: deps.apiOrigin }),
@@ -725,7 +764,7 @@ const readDirectStandardBuilderDestination = async (
   if (access.status !== "ready" || access.project?.id !== project.projectId) {
     throw resourceMismatch();
   }
-  const current = await readCanonicalAppOwnerSession(deps, input);
+  await readCanonicalAppOwnerSession(deps, input);
   const latest = await deps.readProvisioning({
     authority: input.authority,
     requestId: reference.requestId,
@@ -735,7 +774,7 @@ const readDirectStandardBuilderDestination = async (
   }
   const latestProject = latest.record.response.vercel;
   const unchanged = [
-    isDeepStrictEqual(current.builderDestination, reference),
+    isDeepStrictEqual(await readOwnedStandardBuilderDestinationReference(deps, input), reference),
     latest.requestDigest === reference.requestDigest,
     latest.state === "settled",
     latestProject.projectId === project.projectId,
@@ -790,8 +829,7 @@ export const readStandardBuilderDestination = async (
   const receipt = handoff.intent.provisioning;
   const project = receipt?.vercel;
   if (receipt === undefined || project?.status !== "succeeded") {
-    // oxlint-disable-next-line unicorn/no-useless-undefined -- Explicit absence preserves the async destination result union.
-    return undefined;
+    return await readDirectStandardBuilderDestination(deps, input);
   }
   if (receipt.appId !== input.target.appId || project.scope.type !== "team") {
     throw resourceMismatch();
@@ -800,6 +838,7 @@ export const readStandardBuilderDestination = async (
     authority: owner.authority,
     intent: handoff.intent,
     requireServicesRoot: true,
+    requireExpectedRepositoryId: standardRepository(receipt).repositoryId,
     readCredential: deps.readVercelCredential,
     ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
     ...(deps.apiOrigin === undefined ? {} : { apiOrigin: deps.apiOrigin }),
@@ -849,7 +888,11 @@ export const createHostedOperatorAppOwnerAuthority = (
     input: HostedOperatorAppOwnerContext,
   ): Promise<void> => {
     const session = await readCanonicalAppOwnerSession(deps, input);
-    if (session.builderDestination !== undefined || session.sourceHandoffId !== undefined) {
+    if (
+      session.builderDestination !== undefined ||
+      session.sourceHandoffId !== undefined ||
+      session.privateBuildDecision?.existingRepositorySource !== undefined
+    ) {
       throw new HostedOperatorError("builder_destination_configuration_required");
     }
   },

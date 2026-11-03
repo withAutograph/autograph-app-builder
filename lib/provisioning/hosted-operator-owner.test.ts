@@ -1,3 +1,4 @@
+import { recordRepositoryAccessReceipt } from "../agent/repository-access-state";
 import { initialBuilderProvisionJournalRecord } from "./journal";
 import type { BuilderProvisionJournalRow } from "./journal";
 import { nativeDeliveryForEvents } from "../eve/native-delivery-state";
@@ -3490,7 +3491,7 @@ describe("normal Builder destination authority", () => {
 });
 
 describe("attached direct-session standard destination", () => {
-  const fixture = async () => {
+  const fixture = async (revision = false) => {
     const f = makeFixture();
     const handoff = await f.handoffs.read({ authority: ownerContext.authority, handoffId });
     if (handoff?.intent.provisioning === undefined) {
@@ -3526,10 +3527,69 @@ describe("attached direct-session standard destination", () => {
         response: receipt,
       },
     };
+    if (revision) {
+      delete f.currentSession.builderDestination;
+      row.record.response.github = {
+        status: "succeeded",
+        defaultBranch: "main",
+        fullName: "owned/vendor-onboarding",
+        name: "vendor-onboarding",
+        owner: "owned",
+        repositoryId: "200",
+        installationId: "10",
+        headSha: "1".repeat(40),
+        headTree: "2".repeat(40),
+        scope: { id: "20", login: "owned", type: "organization" },
+        starter: { sourceSha: "1".repeat(40), sourceTree: "2".repeat(40) },
+        url: "https://github.com/owned/vendor-onboarding",
+        visibility: "private",
+      };
+      if (row.record.response.vercel.status !== "succeeded") {
+        throw new Error("missing project");
+      }
+      row.record.response.vercel.linkedGitHubRepository = "owned/vendor-onboarding";
+      const existingRepositorySource = recordRepositoryAccessReceipt({
+        current: undefined,
+        sessionId: f.currentSession.adapterSessionId,
+        confirmedByCallId: "actual-acquisition",
+        access: {
+          status: "ready",
+          accessDigest: "3".repeat(64),
+          scope: { accountLogin: "owned", accountType: "Organization", installationId: "10" },
+          repository: {
+            archived: false,
+            defaultBranch: "main",
+            headSha: "1".repeat(40),
+            headTree: "2".repeat(40),
+            name: "vendor-onboarding",
+            owner: "owned",
+            repositoryId: "200",
+            repositoryVariableNames: [],
+            visibility: "private",
+          },
+        },
+      });
+      f.currentSession.privateBuildDecision = {
+        adapterSessionId: f.currentSession.adapterSessionId,
+        decision: "working",
+        turnId: "revision-turn",
+        turnSequence: 1,
+        workflowPhase: "app_spec_accepted",
+        version: 1,
+        existingRepositorySource,
+      };
+    }
+    const findProvisioningForAppRepository = vi.fn(async () => await Promise.resolve([row]));
     const readProvisioning = vi.fn(async () => await Promise.resolve(row));
     const read = () =>
       readStandardBuilderDestination(
-        { ...f, workloadPolicy, readProvisioning, apiOrigin: "https://vercel.example" },
+        {
+          ...f,
+          workloadPolicy,
+          readProvisioning,
+          findProvisioningForAppRepository,
+          apiOrigin: "https://vercel.example",
+        },
         {
           authority: ownerContext.authority,
           ownerContext: directOwnerContext,
@@ -3545,10 +3605,11 @@ describe("attached direct-session standard destination", () => {
             name: "apps-vendor-onboarding",
             framework: "services",
             rootDirectory: ".",
+            ...(revision ? { link: { type: "github", repoId: 200 } } : {}),
           }),
         ),
     );
-    return { f, row, read, readProvisioning };
+    return { f, row, read, readProvisioning, findProvisioningForAppRepository };
   };
 
   it("uses the actual attached normal receipt without rewriting source handoff or history", async () => {
@@ -3576,4 +3637,84 @@ describe("attached direct-session standard destination", () => {
     await expect(x.read()).rejects.toMatchObject({ code: "resource_mismatch" });
     expect(x.f.fetch).not.toHaveBeenCalled();
   });
+  it("recovers the same standard destination in a separately acquired revision session without rewriting its history", async () => {
+    const x = await fixture(true);
+    const before = structuredClone(x.f.currentSession);
+    await expect(x.read()).resolves.toMatchObject({
+      projectId: selection.projectId,
+      repositoryId: "200",
+      githubInstallationId: "10",
+      provisioningRequestId: x.row.requestId,
+    });
+    expect(x.findProvisioningForAppRepository).toHaveBeenCalledWith({
+      authority: ownerContext.authority,
+      appId: selection.appId,
+      repositoryId: "200",
+      githubInstallationId: "10",
+    });
+    expect(x.f.currentSession).toEqual(before);
+    expect(x.f.currentSession.builderDestination).toBeUndefined();
+    expect(x.f.fetch).toHaveBeenCalledOnce();
+  });
+  it("refuses ambiguous historical receipts without a provider call or new target", async () => {
+    const x = await fixture(true);
+    x.findProvisioningForAppRepository.mockResolvedValue([
+      x.row,
+      { ...x.row, requestId: "be05a1b9-92d0-4a16-832b-3309a5594244" },
+    ]);
+    await expect(x.read()).rejects.toMatchObject({
+      code: "builder_destination_configuration_required",
+    });
+    expect(x.f.fetch).not.toHaveBeenCalled();
+  });
+  it.each(["app", "repository", "installation", "owner", "pending"])(
+    "refuses a mismatched recovered %s receipt",
+    async (field) => {
+      const x = await fixture(true);
+      const github = x.row.record.response.github;
+      if (github.status !== "succeeded") {
+        throw new Error("missing github");
+      }
+      if (field === "app") {
+        x.row.record.response.appId = "another-app";
+      }
+      if (field === "repository") {
+        github.repositoryId = "201";
+      }
+      if (field === "installation") {
+        github.installationId = "11";
+      }
+      if (field === "owner") {
+        x.row.authority = { ...x.row.authority, ownerUserId: "another-owner" };
+      }
+      if (field === "pending") {
+        x.row.state = "pending";
+      }
+      await expect(x.read()).rejects.toMatchObject({
+        code: "builder_destination_configuration_required",
+      });
+      expect(x.f.fetch).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    { type: "github", repoId: 201 },
+    { type: "gitlab", repoId: 200 },
+  ])(
+    "refuses live provider linkage drift before returning the recovered destination",
+    async (link) => {
+      const x = await fixture(true);
+      x.f.fetch.mockResolvedValue(
+        Response.json({
+          id: selection.projectId,
+          accountId: "team_1",
+          name: "apps-vendor-onboarding",
+          framework: "services",
+          rootDirectory: ".",
+          link,
+        }),
+      );
+      await expect(x.read()).rejects.toMatchObject({ code: "resource_mismatch" });
+      expect(x.f.currentSession.builderDestination).toBeUndefined();
+    },
+  );
 });

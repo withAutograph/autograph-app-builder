@@ -84,6 +84,14 @@ export interface BuilderProvisionJournalRow {
 }
 
 export interface BuilderProvisionJournalStore {
+  /** Exact owner/app/acquired repository identity; at most two rows establish uniqueness. */
+  findSettledAppRepository?: (input: {
+    authority: BuilderProvisionAuthority;
+    appId: string;
+    repositoryId: string;
+    githubInstallationId: string;
+  }) => Promise<readonly BuilderProvisionJournalRow[]>;
+
   listDue?: (input: {
     now: Date;
     after?: {
