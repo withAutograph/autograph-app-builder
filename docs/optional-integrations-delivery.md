@@ -202,3 +202,25 @@ identity. Independent GitHub reads must match that identity and its existing
 Builder request marker. A shared source/template repository cannot become an
 app release destination merely because its installation and branch are writable.
 No legacy frozen onboarding approval authorizes this new release scope.
+### Public realm enrollment
+
+A public Auth bootstrap freezes a fresh `realmEnrollmentRef` with its environment
+value hashes before its release operation digest is computed. The sealed link
+configuration binds that reference to the current owner, app, creation session,
+normal Services project, future public origin and exact prior installer Auth
+resource tuple. It retains the installer's resource classification, including
+`preview`, independently of native public delivery in Vercel Production.
+
+Enrollment metadata alone grants no callback or membership authority. The
+callback must resolve one owner-scoped READY `auth-bootstrap` public release,
+verify its genuine approval receipts and original installer provenance, and
+bind its operation reference and digest into the pending nonce and signed
+`publicRelease` correlation. Ordinary browser identity and normal cookie capture
+still require current Auth session readback. Production native senders come
+from explicitly reviewed workload configuration, never an edited Preview
+subject. Signup uses the actual installed policy for that origin and exact
+resource digest; no generic membership fallback substitutes for that policy.
+
+Frozen protected Preview link configurations and proofs retain their original
+meaning. They cannot satisfy a new pending public release binding, and no
+uncertain request or approval is replayed or transferred.
