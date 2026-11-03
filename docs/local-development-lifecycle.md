@@ -28,7 +28,7 @@ mutations; provider resources and release effects retain their concrete approval
    Leave this terminal running. Wait for the ready message and the printed
    loopback endpoint. By default this is the HTTP MCP development loop, for
    example `http://127.0.0.1:3100/mcp`; it is not the synthetic authenticated web
-   product. The current launcher installs `app-builder@autograph-dev` in the
+   product. Unless `--install-plugin false` is passed, the launcher installs `app-builder@autograph-dev` in the
    active client profile, disabled globally and enabled by the repository's
    `.codex/config.toml`.
    If Turbopack reports a resolver failure on linked dependencies, rerun the
@@ -39,9 +39,8 @@ mutations; provider resources and release effects retain their concrete approval
    Builder (Development)**. A supported explicit MCP client may instead connect
    to the printed `/mcp` endpoint. Before submitting a brief, verify the selected
    server uses this instance's loopback host/port, not the hosted Builder URL or
-   another worktree's endpoint. Explicit client connection does not itself stop
-   the launcher's profile installation; parallel launches still require the
-   profile isolation below.
+   another worktree's endpoint. For an explicit endpoint client, pass `--install-plugin false` so the launcher
+   leaves existing profile registrations alone. Otherwise use profile isolation below.
 4. Submit an ordinary product brief. Use the same public Builder interaction as
    a user: answer product questions and concrete approval requests, inspect the
    preview, and retain the returned session ID and cursor. With an explicit MCP
@@ -49,8 +48,10 @@ mutations; provider resources and release effects retain their concrete approval
    complete current input batch with `autograph_respond`, and send ordinary
    follow-ups with `autograph_send` only when waiting without unresolved input.
    Do not force internal stages or finish the generated app manually.
-5. Edit local Builder or Arrusted source, let HMR or the affected process reload,
-   then retry the affected behavior. Restart only the process that needs it;
+5. Edit local Builder or Arrusted source and keep Next.js HMR running. Active
+   and waiting Eve sessions retain their pinned worker across runtime edits.
+   To exercise changed agent/runtime code, launch a separate isolated instance,
+   or explicitly end the original instance's runs before stopping/restarting it;
    do not open a PR, deploy Preview/Production, or reinstall the plugin for each
    iteration. Run focused checks for concrete repairs and one final local
    walkthrough when ready. A reviewed shared release and hosted acceptance come
@@ -80,21 +81,20 @@ Its checkout also owns its build outputs (including `.next`); do not share build
 output directories or writable runtime state between instances. Read-only package
 caches may be reused under the ordinary dependency lifecycle.
 
-Before running either parallel command, select a different supported isolated
-client profile for each launcher. Current main installs the same development
-plugin selector in the active profile, so different ports and explicit endpoint
-clients alone do not prevent registration replacement. If profile isolation is
-unavailable, do not launch a second default instance against the shared active
-profile. Preserve the existing task's registration and report the limitation.
+For explicit MCP clients, pass `--install-plugin false` in both instances and
+connect each client to its own printed endpoint. This avoids modifying the
+shared active plugin profile. If using plugin installation instead, select a
+different supported isolated client profile for each launcher. Never replace
+another task's active registration.
 
 Then, in two different worktrees with their selected Arrusted checkout:
 
 ```sh
-mise run dev -- --arrusted-root /absolute/path/to/arrusted-a --next-port 3100 --eve-port 2100 --state-root /private/tmp/builder-a-state --destination-root /private/tmp/builder-a-apps
+mise run dev -- --arrusted-root /absolute/path/to/arrusted-a --next-port 3100 --eve-port 2100 --state-root /private/tmp/builder-a-state --destination-root /private/tmp/builder-a-apps --install-plugin false
 ```
 
 ```sh
-mise run dev -- --arrusted-root /absolute/path/to/arrusted-b --next-port 3200 --eve-port 2200 --state-root /private/tmp/builder-b-state --destination-root /private/tmp/builder-b-apps
+mise run dev -- --arrusted-root /absolute/path/to/arrusted-b --next-port 3200 --eve-port 2200 --state-root /private/tmp/builder-b-state --destination-root /private/tmp/builder-b-apps --install-plugin false
 ```
 
 The paths and ports are examples. Check availability first; choose other unused
