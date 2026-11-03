@@ -2,6 +2,135 @@
 
 `mise run dev` is the fast, live-code loop: edit the checkout, let Next HMR or the affected Eve/package process reload, and retry the behavior. Do not rebuild artifacts, reinstall the plugin, run broad suites, publish, or deploy after each edit.
 
+This is the default development loop for Builder itself, not only generated app
+work. Implement and verify shared workflow repairs locally before requesting a
+reviewed release. A pull request, shared Preview/Production deployment, plugin
+publication, or hosted acceptance run is not a prerequisite for an ordinary edit
+or debugging iteration. Local operation does not authorize outward provider
+mutations; provider resources and release effects retain their concrete approvals.
+
+## Run and use the local Builder
+
+1. Open the Builder checkout/worktree you are developing. Use its installed
+   dependencies and repository tools, an absolute path to the selected Arrusted
+   checkout, and the existing project-scoped Vercel OIDC setup. The launcher
+   checks/refreshes that OIDC setup; do not supply static provider keys. Missing
+   dependencies or credentials are concrete setup work, not a reason to deploy
+   Builder to debug it. If another local Builder is running, select an isolated
+   supported client profile **before launch** as described below.
+2. From the Builder checkout, run this command, substituting the Arrusted path
+   and unused ports and private directories for your instance:
+
+   ```sh
+   mise run dev -- --arrusted-root /absolute/path/to/arrusted --next-port 3100 --eve-port 2100 --state-root /private/tmp/builder-local-state --destination-root /private/tmp/builder-local-apps
+   ```
+
+   Leave this terminal running. Wait for the ready message and the printed
+   loopback endpoint. By default this is the HTTP MCP development loop, for
+   example `http://127.0.0.1:3100/mcp`; it is not the synthetic authenticated web
+   product. The current launcher installs `app-builder@autograph-dev` in the
+   active client profile, disabled globally and enabled by the repository's
+   `.codex/config.toml`.
+   If Turbopack reports a resolver failure on linked dependencies, rerun the
+   same command with `--next-bundler webpack`; this is the supported development
+   fallback and does not require a package rebuild or hosted deployment.
+
+3. Open a fresh Codex task in this Builder checkout and select **Autograph App
+   Builder (Development)**. A supported explicit MCP client may instead connect
+   to the printed `/mcp` endpoint. Before submitting a brief, verify the selected
+   server uses this instance's loopback host/port, not the hosted Builder URL or
+   another worktree's endpoint. Explicit client connection does not itself stop
+   the launcher's profile installation; parallel launches still require the
+   profile isolation below.
+4. Submit an ordinary product brief. Use the same public Builder interaction as
+   a user: answer product questions and concrete approval requests, inspect the
+   preview, and retain the returned session ID and cursor. With an explicit MCP
+   client, start with `autograph_start`, read with `autograph_get`, answer the
+   complete current input batch with `autograph_respond`, and send ordinary
+   follow-ups with `autograph_send` only when waiting without unresolved input.
+   Do not force internal stages or finish the generated app manually.
+5. Edit local Builder or Arrusted source, let HMR or the affected process reload,
+   then retry the affected behavior. Restart only the process that needs it;
+   do not open a PR, deploy Preview/Production, or reinstall the plugin for each
+   iteration. Run focused checks for concrete repairs and one final local
+   walkthrough when ready. A reviewed shared release and hosted acceptance come
+   afterward. Stop the launcher with Ctrl+C when finished; retain saved session
+   identities and state for supported recovery rather than silently replacing
+   an interrupted session.
+
+For the full local web UI with synthetic sign-in and provider emulators, append
+`--emulated-web true`. That mode uses `https://localhost:<next-port>` for the UI
+and `/mcp`, requires Docker and existing trusted localhost certificates/CA, and
+has separate database/emulator ports. Follow
+[synthetic web setup](#synthetic-web-authentication-and-provider-connections).
+Do not treat the default HTTP MCP endpoint as an authenticated web acceptance
+run or disable TLS verification to make the HTTPS mode work.
+
+Local startup cannot publish, deploy, or mutate live providers. Keep hosted
+sessions and their journals separate: never transplant their checkpoints or
+approvals into local state, replay an uncertain request, or claim a local test
+continued the saved hosted creation journey. See
+[interrupted public sessions](#interrupted-public-sessions) for recovery limits.
+
+## Parallel branch instances
+
+Use a separate checkout/worktree for each branch instance. Give each instance its
+own Next and Eve ports, owner-only state root and generated destination root.
+Its checkout also owns its build outputs (including `.next`); do not share build
+output directories or writable runtime state between instances. Read-only package
+caches may be reused under the ordinary dependency lifecycle.
+
+Before running either parallel command, select a different supported isolated
+client profile for each launcher. Current main installs the same development
+plugin selector in the active profile, so different ports and explicit endpoint
+clients alone do not prevent registration replacement. If profile isolation is
+unavailable, do not launch a second default instance against the shared active
+profile. Preserve the existing task's registration and report the limitation.
+
+Then, in two different worktrees with their selected Arrusted checkout:
+
+```sh
+mise run dev -- --arrusted-root /absolute/path/to/arrusted-a --next-port 3100 --eve-port 2100 --state-root /private/tmp/builder-a-state --destination-root /private/tmp/builder-a-apps
+```
+
+```sh
+mise run dev -- --arrusted-root /absolute/path/to/arrusted-b --next-port 3200 --eve-port 2200 --state-root /private/tmp/builder-b-state --destination-root /private/tmp/builder-b-apps
+```
+
+The paths and ports are examples. Check availability first; choose other unused
+ports instead of killing another task's process. Keep each selected Arrusted
+checkout isolated when its source is also being edited. For emulated web stacks,
+also configure distinct `APP_BUILDER_DATABASE_PORT` and `EMULATE_BASE_PORT` values
+and non-overlapping emulator port ranges through that instance's mise environment.
+Separate Next/Eve ports alone do not isolate its database or emulators.
+
+Connect the browser and public-tool client explicitly to the intended instance's
+loopback origin and `/mcp` endpoint (HTTPS in emulated web mode). Confirm the
+endpoint before starting or continuing a session. Development MCP identity and
+version already distinguish ports; the launcher nevertheless installs the same
+`app-builder@autograph-dev` plugin selector into the active client profile.
+Concurrent launchers must not silently replace that shared registration. Use
+supported isolated client profiles for installation, and bind each client to its
+intended endpoint. Do not globally swap a running task's plugin registration to
+point at another instance. A client connected directly to `/mcp` still requires
+the launcher's installation to have used an isolated profile; it is not a
+no-install launch option on current main.
+
+When qualifying parallel-instance support, run instances A and B from different
+branches with clients bound to their explicit endpoints. Demonstrate that each
+consumes its own branch's source and retains its own session state. Start,
+cancel and restart A while B continues working, then verify B's endpoint,
+source and saved session are unchanged. Record the actual outcomes; distinct
+flags or this documentation alone do not establish that isolation was tested.
+
+Local sessions and controlled product exercises are local evidence. Retain saved
+hosted sessions and their operation journals unchanged; do not copy checkpoints,
+approvals or request records into a local instance, replay uncertain requests,
+or claim a local run continued a hosted session. A transfer requires a supported,
+independently verified recovery/handoff flow. A local repair can later be released
+and exercised against the original hosted session through its normal public
+interface, with original request IDs and uncertain states preserved.
+
 Next uses Turbopack by default. If its module resolver fails on the actual linked
 dependency layout, use `mise run dev -- --arrusted-root /absolute/path/to/arrusted
 --next-bundler webpack` to select Next's supported Webpack development bundler.

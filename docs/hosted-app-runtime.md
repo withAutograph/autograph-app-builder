@@ -9,6 +9,26 @@ app and shared Auth databases and roles, release, exact effects and access grant
 cost ownership and retention. `get-app-hosted-runtime` reads operator journal
 status. Static apps require no database operation.
 
+## Normal app destination versus protected Preview onboarding
+
+The dedicated Preview capability below describes its existing frozen operation
+contract. It does not define the destination for a normal public app release.
+Normal Builder provisioning already creates `apps-<app-id>` as one repository-linked
+Services project rooted at `.`. Runtime setup and later delivery must consume the
+same owner-scoped project identity instead of allocating a second app target.
+See [complete app delivery](full-app-authoring.md#one-app-destination-and-public-delivery).
+
+Public delivery requires its own supported effect plan and observed public origin.
+The production domain should reach the app's Better Auth sign-in without Vercel
+authentication; this does not remove application authorization or make installer
+infrastructure public. Existing Preview schemas and receipts are not evidence
+that public delivery works. Preserve frozen plans unchanged, and reconcile an
+obsolete intent through supported cancellation/supersession before approving a
+different destination. An unknown public response must never be replayed or
+fabricated as settled. A provider 403 remains unexplained until independent
+evidence identifies its cause; selecting the correct product path is not proof
+that a protection setting caused or resolved that denial.
+
 ## Dedicated native Preview targets
 
 Target onboarding precedes hosted resource preparation when a new generated app has no

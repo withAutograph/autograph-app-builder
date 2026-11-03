@@ -102,6 +102,50 @@ blocked and hand recovery to the Arrusted runbook's platform/provider owner.
 Application rollback does not undo database migrations, canonical writes or
 shared provider effects; preserve the observed installed release and data.
 
+### A-469 normal Builder acceptance
+
+Follow the accepted [local-first execution decision](plans/2026-11-03-a469-normal-builder-public-delivery.md)
+before implementation and hosted continuation. Its milestones remain unproved
+until their named behavior is observed.
+
+Continue the saved generated app through the public product. Resolve its accepted
+repository and normal provisioning result first; reuse its independently verified
+project, or let normal Create App provision its standard `apps-<app-id>` Services
+project. Use that one project for Auth, app Services, delivery and revisions.
+Do not substitute a separately named protected acceptance project. Keep the
+privileged operator private and separate. Follow the
+[one-destination delivery contract](full-app-authoring.md#one-app-destination-and-public-delivery).
+
+Verify the actual isolated database, Auth bindings, service memberships and app
+assignments before app tests or provider effects. Public app distribution and
+provider environment are separate facts: the app may have a public production
+domain while the approved provider account and canonical test records remain
+development/Sandbox-only. Customer Production rollout remains separately owned
+by A481. A public release must open without a Vercel login and enforce access
+through real Better Auth sessions, including a same-organization member with no
+app assignment. A READY deployment or successful sign-in alone is insufficient.
+
+Record these exercised outcomes independently:
+
+| Area                         | Required evidence                                                                                                                                                                       |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public delivery              | Public app domain, real sign-in/sign-out, unauthorized route/action denial, persistent app action and independent readback.                                                             |
+| Builder create/revision      | Saved public creation journey and existing-app revision against the same app/repository/project; preserved content and data.                                                            |
+| QuickBooks development pilot | Exact authorized Sandbox connection, app activation, real ingestion and independently observed canonical records and provenance.                                                        |
+| Isolation                    | Two apps with distinct installations/bindings on one tenant-owned connection; two tenants; denied foreign-app/tenant and unassigned-user access.                                        |
+| Recovery/lifecycle           | Replay without duplicate writes, visible conflicts/uncertain state, and app-only disable with drained jobs while the other app and connection remain active.                            |
+| Optionality/retention        | Shared standard/embedded component, safe installer reconciliation, no integration capability in a non-opted-in app, and no secrets/raw provider payloads in retained logs or artifacts. |
+
+Ordinary Builder questions and concrete effect approvals drive these journeys.
+Repair missing automation in the shared workflow and resume the saved work;
+manual app changes, internal stage forcing and manually created resources do not
+satisfy public Builder acceptance. Preserve every prior resource and operation.
+In particular, never replay or fabricate settlement of the uncertain
+`a469-preview-target-approved-batch`. Changed destination/exposure approval cannot
+be borrowed from its obsolete protected Preview plan. Cleanup remains separately
+scoped. Mark each criterion passed, failed, blocked or unassessed from observed
+evidence; do not close A469 on source tests or deployed metadata alone.
+
 ## Decisions needed to start the pilot
 
 1. **Identify the rollout approver and provider-consent owner.** The delivery
