@@ -32,3 +32,22 @@ it("respects cancellation during a failed read", async () => {
     }, controller.signal),
   ).rejects.toThrow();
 });
+
+it("does not return authority from a successful read completed after cancellation", async () => {
+  const controller = new AbortController();
+  const result = Promise.withResolvers<{ approved: boolean }>();
+  const read = vi.fn(() => result.promise);
+  const pending = readContinuityApprovalWithRecovery(read, controller.signal);
+  const rejected = expect(pending).rejects.toThrow();
+  controller.abort();
+  result.resolve({ approved: true });
+  await rejected;
+  expect(read).toHaveBeenCalledOnce();
+});
+it("does not read after cancellation", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  const read = vi.fn().mockResolvedValue({ approved: true });
+  await expect(readContinuityApprovalWithRecovery(read, controller.signal)).rejects.toThrow();
+  expect(read).not.toHaveBeenCalled();
+});

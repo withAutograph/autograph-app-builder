@@ -7,7 +7,9 @@ export const readContinuityApprovalWithRecovery = async (
 ) => {
   signal.throwIfAborted();
   try {
-    return await read();
+    const result = await read();
+    signal.throwIfAborted();
+    return result;
   } catch (error) {
     signal.throwIfAborted();
     if (

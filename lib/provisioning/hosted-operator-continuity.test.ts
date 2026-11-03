@@ -859,6 +859,33 @@ describe("continuity recovery preserves frozen plans", () => {
     expect(f.rows.get(old.plan.intentId)?.attemptId).toBeUndefined();
     expect(f.events).toEqual([]);
   });
+  it("retains original approval evidence but refuses it as successor authority", async () => {
+    const f = recovered();
+    const original = await f.operations.plan(context, selection.runtime, "approved-original");
+    f.approve();
+    await f.operations.approval(context, original.request);
+    const retained = structuredClone(f.rows.get(original.plan.intentId));
+    expect(retained?.approval).toBeDefined();
+    const successor = await f.operations.plan(
+      context,
+      { ...selection.runtime, root: "/recovered" },
+      "fresh-successor",
+      { predecessorIntentId: original.plan.intentId },
+    );
+    const originalAfter = f.rows.get(original.plan.intentId);
+    expect(originalAfter).toEqual({
+      ...retained,
+      revision: (retained?.revision ?? 0) + 1,
+      supersededBy: successor.plan.intentId,
+    });
+    vi.mocked(f.deps.readApproval).mockResolvedValue(retained?.approval ?? null);
+    await expect(
+      f.operations.execute(context, successor.request, "successor-call"),
+    ).rejects.toThrow("authorization_required");
+    expect(f.rows.get(successor.plan.intentId)?.approval).toBeUndefined();
+    expect(f.rows.get(successor.plan.intentId)?.attemptId).toBeUndefined();
+    expect(f.events).toEqual([]);
+  });
   it("binds focused selection into the exact continuity approval", async () => {
     const f = recovered();
     const planned = await f.operations.plan(
