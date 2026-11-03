@@ -71,10 +71,11 @@ Public delivery has two explicit purposes when first sign-in must precede app in
 A native resource lease serializes project, database and source writes and records a fresh fence in the existing release row. Accepted environment IDs, approval receipts and prior frozen plans remain monotone. A changed release cannot bypass an older uncertain effect. Planning reuses an identical frozen intent on resume and proves every prior provider row against its accepted owner-scoped journal receipt before offering revision approval.
 
 For new explicit public-release purposes, anonymous Gateway health must include
-`runtimeBindingDigest` matching the exact approved environment manifest: sort
+`runtimeBindingDigest` matching the approved fifteen-key app/Auth environment projection: sort
 `{key, sha256(value)}` entries by key and hash their JSON encoding. The enrolled
 isolated runtime computes this from its fifteen loaded app/Auth values. It
 returns only the aggregate, without individual hashes, values, or enrollment
-identities. Matching source and signing keys alone cannot establish loaded
+identities. Other optional runtime configuration keeps its own explicit proof
+contract and is excluded from this Auth fingerprint. Matching source and signing keys alone cannot establish loaded
 configuration. Missing or stale fingerprints keep delivery pending; existing
 plans without an explicit purpose retain their original health semantics.
