@@ -1086,6 +1086,8 @@ describe("native composition adoption boundary", () => {
       readSharedAuthAdoption: unavailable,
       readSharedGatewayRows: unavailable,
       reserveRealmIdentityLink: unavailable,
+      resolveRealmIdentityCallbackOwnerContext: unavailable,
+      readApprovedPublicAuthBootstrap: unavailable,
       resolveRealmIdentityCallbackContext: unavailable,
       store: {
         compareAndSet: unavailable,

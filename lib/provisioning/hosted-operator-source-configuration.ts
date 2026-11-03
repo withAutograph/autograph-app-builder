@@ -1,4 +1,5 @@
 import { createHostedOperatorControlPlane } from "./hosted-operator-deployment";
+import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration-schema";
 import type { OperatorWorkloadPolicy } from "./hosted-operator-workload";
 import {
   hostedOperatorSourceConfigurationSchema,
@@ -34,6 +35,20 @@ export const openHostedOperatorCompositionResources = async (
     environment,
     sourceConfiguration: configuration,
     workloadPolicy: configuration.workloadPolicy satisfies OperatorWorkloadPolicy,
+  });
+  return { configuration, controlPlane };
+};
+
+/** Canonical callback composition supplies a verified private configuration, never browser policy. */
+export const openHostedOperatorConfigurationResources = async (
+  value: HostedOperatorSourceConfiguration,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+) => {
+  const configuration = validateHostedOperatorSourceConfiguration(value);
+  const controlPlane = await createHostedOperatorControlPlane({
+    environment,
+    sourceConfiguration: configuration,
+    workloadPolicy: configuration.workloadPolicy,
   });
   return { configuration, controlPlane };
 };

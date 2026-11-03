@@ -309,6 +309,9 @@ const fixture = () => {
         },
       },
       assertPlanningAuthorized: noOp,
+      resolveRealmIdentityCallbackOwnerContext: vi.fn(() =>
+        Promise.reject(new Error("unexpected public route")),
+      ),
       readPendingNormalActorCapture: readPending,
       readPendingRealmIdentityLinkForStaging: readStaging,
       close: noOp,
@@ -514,4 +517,74 @@ describe("native normal capture deployment assembly", () => {
     expect(f.resources.controlPlane.close).toHaveBeenCalledOnce();
     expect(f.readPending).not.toHaveBeenCalled();
   });
+});
+
+it("uses the canonical enrolled Production sender without relabeling the Preview workload", async () => {
+  const f = fixture();
+  const legacySender = structuredClone(f.resources.configuration.gateway.workload);
+  const sender = {
+    ...legacySender,
+    environment: "production" as const,
+    subject: "native-production-subject",
+  };
+  const signing = await generateKeyPair("EdDSA");
+  const key = await exportJWK(signing.publicKey);
+  if (key.x === undefined) {
+    throw new Error("missing public key");
+  }
+  f.resources.publicRealm = {
+    binding: {
+      enrollmentRef: "11111111-1111-4111-a111-111111111111",
+      operationRef: accountOperationRef,
+      planDigest: "b".repeat(64),
+    },
+    sender,
+    publicJwk: {
+      kty: "OKP",
+      crv: "Ed25519",
+      x: key.x,
+      kid: "public-own-app",
+      alg: "EdDSA",
+      use: "sig",
+    },
+    enrollment: {
+      version: 1,
+      kind: "public-isolated-realm-v1",
+      enrollmentRef: "11111111-1111-4111-a111-111111111111",
+      appId: target.appId,
+      ownerSessionId: target.sessionId,
+      authority,
+      publicOrigin: program.origin,
+      project: { projectId: sender.projectId, ownerId: sender.ownerId, environment: "production" },
+      sourceBootstrap: {
+        operationRef: accountOperationRef,
+        planDigest: "b".repeat(64),
+        authResourceId: "auth-resource",
+      },
+      resource,
+    },
+  };
+  const token = await new SignJWT({
+    owner_id: sender.ownerId,
+    project_id: sender.projectId,
+    environment: "production",
+  })
+    .setProtectedHeader({ alg: "EdDSA" })
+    .setIssuer(sender.issuer)
+    .setAudience(sender.audience)
+    .setSubject(sender.subject)
+    .setIssuedAt()
+    .setExpirationTime("2m")
+    .sign(signing.privateKey);
+  const verifyNativeToken = vi.fn<NonNullable<NormalActorCaptureDeploymentIo["verifyNativeToken"]>>(
+    async (incoming, options) => await jwtVerify(incoming, signing.publicKey, options),
+  );
+  const ports = createNormalActorCaptureDeploymentPorts(f.resources, { verifyNativeToken });
+  const verified = await ports.verifySender(token, ports.sender);
+  expect(verified.environment).toBe("production");
+  expect(verifyNativeToken).toHaveBeenCalledWith(
+    token,
+    expect.objectContaining({ environment: "production", subject: sender.subject }),
+  );
+  expect(f.resources.configuration.gateway.workload).toEqual(legacySender);
 });

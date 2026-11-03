@@ -1232,6 +1232,8 @@ const unusedCompositionControlPlane = (): Parameters<
     readSharedGatewayRows: unexpectedPort,
     reserveRealmIdentityLink: unexpectedPort,
     resolveRealmIdentityCallbackContext: unexpectedPort,
+    resolveRealmIdentityCallbackOwnerContext: unexpectedPort,
+    readApprovedPublicAuthBootstrap: unexpectedPort,
     store,
     verifySharedAuthAdoption: unexpectedPort,
     withResourceLease: unexpectedPort,
@@ -5082,7 +5084,10 @@ it("plans same-project resource preparation without Preview effects or an enviro
   f.configuration.composition = "single-project-services";
   f.configuration.gateway.projectId = context.target.projectId;
   f.configuration.gateway.workload.projectId = context.target.projectId;
-  f.controlPlane.assertPlanningAuthorized.mockResolvedValue(undefined);
+  const authorizedControlPlane = {
+    ...f.controlPlane,
+    assertPlanningAuthorized: () => Promise.resolve(),
+  };
   const original = bootstrapWithGatewayOrigin("https://apps.example");
   if (original.deploymentBoundary === undefined || original.publicGateway === undefined) {
     throw new Error("missing fixture boundary");
@@ -5103,7 +5108,7 @@ it("plans same-project resource preparation without Preview effects or an enviro
       (effect) => !["gateway-bindings", "gateway-delivery"].includes(effect.kind),
     ),
   });
-  const result = await resolveFullPlan(fresh, context, f.configuration, f.controlPlane);
+  const result = await resolveFullPlan(fresh, context, f.configuration, authorizedControlPlane);
   expect(result.stage).toBe("app");
   expect(result.runtimePreparation).toBe("single-project-resources-v1");
   expect(result.effects.map((effect) => effect.kind)).not.toEqual(

@@ -183,3 +183,16 @@ A separately approved public release binds the app-owned Production runtime
 configuration and publishes through native Git deployment. Resource readiness
 alone does not establish public delivery or authenticated browser acceptance.
 Previously frozen plans keep their original effects and semantics.
+
+The normal Auth handoff is selected from one owner-, app-, session-, and
+project-bound READY public Auth bootstrap release. The callback rechecks the
+original resource approval and actual public release approval history, the
+sealed enrollment and runtime configuration, the exact Auth resource and the
+app-owned public signing key. Public callbacks use the explicitly reviewed
+Production workload identity; earlier Preview identities remain unchanged.
+Normal account capture and organization proof challenges retain the separate
+public release binding alongside the original account setup digest.
+
+These local contracts and tests establish implementation behavior, not hosted
+acceptance evidence. Public delivery, normal sign-in, persistent app actions and
+provider lifecycle observations still require the progressive product run.

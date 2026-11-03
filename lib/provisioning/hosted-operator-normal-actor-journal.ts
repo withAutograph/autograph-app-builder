@@ -110,6 +110,7 @@ export type NormalActorOrganizationProofBinding = Pick<
   | "browserOrigin"
   | "endpointOrigin"
   | "issuer"
+  | "publicRelease"
 > & { transportSource: NormalActorOrganizationProof["transportSource"] };
 export const normalActorAccountPreparationSchema = normalActorPreparationSchema.extend({
   program: normalActorProgramSchema,
@@ -440,6 +441,7 @@ const sameOrganizationProofBinding = (
     existing.link.bootstrapPlanDigest === input.binding.bootstrapPlanDigest,
     existing.link.browserOrigin === input.binding.browserOrigin,
     existing.link.issuer === input.binding.issuer,
+    isDeepStrictEqual(existing.link.publicRelease, input.binding.publicRelease),
     existing.transportSource.audience === input.binding.transportSource.audience,
     existing.transportSource.issuer === input.binding.transportSource.issuer,
     existing.transportSource.ownerId === input.binding.transportSource.ownerId,

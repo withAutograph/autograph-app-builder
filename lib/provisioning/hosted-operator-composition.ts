@@ -1549,6 +1549,7 @@ export const composeHostedOperatorDependencies = (
         gatewayDelivery: oldGatewayDelivery,
         appTrustedSources: oldAppTrustedSources,
         appDeliveryReplacement: oldAppDeliveryReplacement,
+        runtimePreparation: oldRuntimePreparation,
         ...cleanupBase
       } = retained;
       void oldMembership;
@@ -1557,6 +1558,7 @@ export const composeHostedOperatorDependencies = (
       void oldGatewayDelivery;
       void oldAppTrustedSources;
       void oldAppDeliveryReplacement;
+      void oldRuntimePreparation;
       return hostedOperatorPlanSchema.parse({
         ...cleanupBase,
         action: "cleanup",
@@ -1990,6 +1992,19 @@ export const composeHostedOperatorDependencies = (
       gatewayPlan.normalActorProgram === undefined
         ? undefined
         : inspectPlanningParticipantBootstrapPreparation(gatewayPlan, current?.record);
+    // Resource setup alone never claims a live transport. New normal participant
+    // planning uses the independently approved READY public Auth release instead.
+    if (gatewayPlan.runtimePreparation !== undefined && bootstrapPreparation?.auth !== undefined) {
+      await controlPlane.readApprovedPublicAuthBootstrap(context);
+      await authReadiness.verify({
+        ...context,
+        plan: bootstrapPreparation.auth.plan,
+        assertCurrent: async () => {
+          await controlPlane.assertPlanningAuthorized(context);
+        },
+      });
+      participantsBootstrapPrepared = true;
+    }
     const captureBootstrap = readCompletedCaptureBootstrap(gatewayPlan, current?.record);
     let availableBootstrap = bootstrapPreparation;
     if (availableBootstrap?.gatewayPrepared !== true && captureBootstrap !== undefined) {
@@ -2822,6 +2837,26 @@ export const composeHostedOperatorDependencies = (
     if (capturedOwner) {
       // Consumption raced the preceding execute read. Preserve its canonical nonce and re-read preparation.
       throw new HostedOperatorError(OPERATION_IN_PROGRESS);
+    }
+    if (operator.plan.runtimePreparation !== undefined) {
+      const released = await controlPlane.readApprovedPublicAuthBootstrap(input);
+      const pending = await controlPlane.prepareRealmIdentityLink({
+        audience: configuration.operator.origin,
+        authResourceId: operator.plan.authDatabase.resourceId,
+        bootstrapPlanDigest: operator.planDigest,
+        browserOrigin: released.plan.publicOrigin,
+        context: input,
+        endpointOrigin: released.plan.publicOrigin,
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+        issuer: released.plan.publicOrigin,
+        organizationId: organizationId ?? null,
+      });
+      return {
+        browserUrl: createRealmIdentityBrowserUrl(pending),
+        expiresAt: pending.link.expiresAt,
+        operationRef: input.operationRef,
+        sessionId: input.target.sessionId,
+      };
     }
     const candidate = operator.gatewayDeliveryCandidates?.find(
       (value) =>

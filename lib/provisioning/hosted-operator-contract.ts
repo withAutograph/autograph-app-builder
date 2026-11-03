@@ -1356,6 +1356,18 @@ export const matchesHostedOperatorIdentityLinkScope = (
   operator: z.infer<typeof hostedOperatorRecordDataSchema>,
 ): boolean => {
   const link = operator.identityLink;
+  if (link !== undefined && operator.plan.runtimePreparation !== undefined) {
+    return [
+      link.publicRelease !== undefined,
+      operator.plan.deploymentBoundary?.composition === "single-project-services",
+      operator.plan.publicGateway?.projectId === operator.plan.selection.projectId,
+      link.authResourceId === operator.plan.authDatabase.resourceId,
+      link.ownerSessionId === operator.plan.selection.sessionId,
+      link.browserOrigin === operator.plan.publicGateway?.origin,
+      link.endpointOrigin === operator.plan.publicGateway?.origin,
+      link.issuer === operator.plan.publicGateway?.origin,
+    ].every(Boolean);
+  }
   return (
     link === undefined ||
     [

@@ -2,18 +2,28 @@ import { isDeepStrictEqual } from "node:util";
 import { verifyVercelOidcToken } from "@vercel/oidc";
 import { createRemoteJWKSet, customFetch } from "jose";
 import { z } from "zod";
-import { createNormalActorCaptureHandler } from "./hosted-operator-normal-actor-capture";
+import { realmIdentityNonceSha256 } from "./hosted-operator-auth-identity";
+import {
+  operatorOwnerContextSchema,
+  projectPendingRealmIdentityLink,
+} from "./hosted-operator-contract";
+import {
+  normalActorCaptureRequestSchema,
+  createNormalActorCaptureHandler,
+} from "./hosted-operator-normal-actor-capture";
 import type { NormalActorCapturePorts } from "./hosted-operator-normal-actor-capture";
 import { createNormalActorJournal } from "./hosted-operator-normal-actor-journal";
 import { createHostedOperatorNormalAuthClient } from "./hosted-operator-normal-auth-client";
 import { createHostedOperatorNormalAuthTransport } from "./hosted-operator-normal-auth-transport";
 import { createHostedOperatorRealmHttpTransport } from "./hosted-operator-realm-http-transport";
-import { projectPendingRealmIdentityLink } from "./hosted-operator-contract";
 import type { openHostedOperatorCompositionResources } from "./hosted-operator-source-configuration";
 
 type CompositionResources = Awaited<ReturnType<typeof openHostedOperatorCompositionResources>>;
 export interface NormalActorCaptureDeploymentResources {
   configuration: CompositionResources["configuration"];
+  publicRealm?: Awaited<
+    ReturnType<CompositionResources["controlPlane"]["readPendingRealmIdentityLinkForStaging"]>
+  >["publicRealm"];
   controlPlane: Pick<
     CompositionResources["controlPlane"],
     | "normalActorJournalPorts"
@@ -21,6 +31,7 @@ export interface NormalActorCaptureDeploymentResources {
     | "readPendingNormalActorCapture"
     | "readPendingRealmIdentityLinkForStaging"
     | "close"
+    | "resolveRealmIdentityCallbackOwnerContext"
   >;
 }
 export interface NormalActorCaptureDeploymentIo {
@@ -52,9 +63,9 @@ export const createNormalActorCaptureDeploymentPorts = (
   io: NormalActorCaptureDeploymentIo = {},
 ): NormalActorCapturePorts => {
   const { configuration, controlPlane } = resources;
-  const configuredSender = configuration.gateway.workload;
+  const configuredSender = resources.publicRealm?.sender ?? configuration.gateway.workload;
   if (
-    configuredSender.environment !== "preview" ||
+    (resources.publicRealm === undefined && configuredSender.environment !== "preview") ||
     configuredSender.projectId !== configuration.gateway.projectId ||
     configuredSender.ownerId !== configuration.teamId
   ) {
@@ -62,7 +73,10 @@ export const createNormalActorCaptureDeploymentPorts = (
   }
   return {
     builderOrigin: configuration.builderCallbackOrigin,
-    sender: { ...configuredSender, environment: "preview" },
+    sender:
+      resources.publicRealm === undefined
+        ? { ...configuration.gateway.workload, environment: "preview" }
+        : { ...resources.publicRealm.sender, publicEnrollment: resources.publicRealm.enrollment },
     now: Date.now,
     journal: createNormalActorJournal(controlPlane.normalActorJournalPorts),
     verifySender:
@@ -89,7 +103,7 @@ export const createNormalActorCaptureDeploymentPorts = (
         gateway?.projectId === configuration.gateway.projectId,
         gateway?.projectId === configuredSender.projectId,
         gateway?.branch === configuration.gateway.branch,
-        gateway?.branch === context.target.branch,
+        resources.publicRealm !== undefined || gateway?.branch === context.target.branch,
         preparation.program.origin === configuration.gateway.publicOrigin,
         link.browserOrigin === preparation.program.origin,
         link.organizationId === null,
@@ -98,6 +112,7 @@ export const createNormalActorCaptureDeploymentPorts = (
         link.browserSession?.participantProgramDigest === preparation.programDigest,
         staging.jwksUrl === `${link.endpointOrigin}/_platform/jwks.json`,
         isDeepStrictEqual(staging.link, projectPendingRealmIdentityLink(link)),
+        isDeepStrictEqual(staging.publicRealm, resources.publicRealm),
       ].every(Boolean);
       if (!matches) {
         throw unavailable();
@@ -115,12 +130,38 @@ export const createNormalActorCaptureDeploymentPorts = (
         link: projectPendingRealmIdentityLink(link),
         resource: staging.bootstrapResource,
         getKey: (io.keySet ?? createRemoteJWKSet)(new URL(staging.jwksUrl), {
-          [customFetch]: transport,
+          [customFetch]: async (...args) => {
+            const response = await transport(...args);
+            const pin = resources.publicRealm?.publicJwk;
+            if (pin === undefined || !response.ok) {
+              return response;
+            }
+            const payload = z
+              .object({ keys: z.array(z.record(z.string(), z.unknown())) })
+              .parse(await response.json());
+            if (
+              !payload.keys.some(
+                (key) =>
+                  key.kty === pin.kty &&
+                  key.crv === pin.crv &&
+                  key.x === pin.x &&
+                  key.kid === pin.kid,
+              )
+            ) {
+              throw unavailable();
+            }
+            return Response.json({ keys: [pin] });
+          },
         }),
         readback: async (request) => await transport(request),
         assertCurrent: async () => {
           await controlPlane.normalActorJournalPorts.assertAuthorized(context);
           const latest = await controlPlane.readPendingNormalActorCapture(selector);
+          // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Revalidate public release authority after the canonical current capture snapshot.
+          const latestStaging = await controlPlane.readPendingRealmIdentityLinkForStaging(selector);
+          if (!isDeepStrictEqual(latestStaging.publicRealm, resources.publicRealm)) {
+            throw unavailable();
+          }
           const current = [
             isDeepStrictEqual(latest.context, context),
             latest.preparation.accountOperationRef === preparation.accountOperationRef,
@@ -170,6 +211,7 @@ export const createNormalActorCaptureDeploymentHandler =
   ) =>
   async (request: Request): Promise<Response> => {
     let resources: NormalActorCaptureDeploymentResources | undefined;
+    let initialResources: typeof resources;
     try {
       const open =
         io.openResources ??
@@ -178,6 +220,81 @@ export const createNormalActorCaptureDeploymentHandler =
           return await deployment.openHostedOperatorCompositionResources(settings);
         });
       resources = await open(environment);
+      initialResources = resources;
+      if (environment.PROTECTED_HOSTED_OPERATOR_STANDARD_RUNTIME_PROFILES !== undefined) {
+        // Routing hint only; the ordinary handler still verifies native sender,
+        // nonce, public approval, signed proof and actual cookie before capture.
+        const clone = request.clone();
+        const reader = clone.body?.getReader();
+        if (reader === undefined) {
+          throw unavailable();
+        }
+        const chunks: Uint8Array[] = [];
+        let size = 0;
+        for (;;) {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- Consume the bounded routing copy in stream order.
+          const next = await reader.read();
+          if (next.done) {
+            break;
+          }
+          size += next.value.byteLength;
+          if (size > 32_768) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- Stop the bounded stream before rejecting an oversized routing copy.
+            await reader.cancel();
+            throw unavailable();
+          }
+          chunks.push(next.value);
+        }
+        const hint = normalActorCaptureRequestSchema.parse(
+          JSON.parse(Buffer.concat(chunks).toString("utf-8")),
+        );
+        const selector = {
+          ownerSessionId: hint.ownerSessionId,
+          nonceSha256: realmIdentityNonceSha256(hint.reviewedNonce),
+        };
+        const selected =
+          await resources.controlPlane.resolveRealmIdentityCallbackOwnerContext(selector);
+        if (selected.publicRelease !== undefined) {
+          const {
+            openNativeTargetConfigurationResources,
+            resolveOwnedStandardRuntimeConfiguration,
+          } = await import("./native-target-configuration-resolver");
+          const { openHostedOperatorConfigurationResources } =
+            await import("./hosted-operator-source-configuration");
+          const native = await openNativeTargetConfigurationResources(
+            resources.configuration,
+            environment,
+          );
+          try {
+            const configuration = await resolveOwnedStandardRuntimeConfiguration({
+              configuration: resources.configuration,
+              resources: native,
+              environment,
+              context: {
+                authority: selected.context.authority,
+                ownerContext: operatorOwnerContextSchema.parse(selected.context.ownerContext),
+                target: {
+                  appId: selected.context.target.appId,
+                  sessionId: selected.context.target.sessionId,
+                },
+              },
+            });
+            const canonical = await openHostedOperatorConfigurationResources(
+              configuration,
+              environment,
+            );
+            resources = canonical;
+            const staging =
+              await canonical.controlPlane.readPendingRealmIdentityLinkForStaging(selector);
+            if (staging.publicRealm === undefined) {
+              throw unavailable();
+            }
+            resources = { ...canonical, publicRealm: staging.publicRealm };
+          } finally {
+            await native.close();
+          }
+        }
+      }
       return await createNormalActorCaptureHandler(
         createNormalActorCaptureDeploymentPorts(resources, io),
       )(request);
@@ -191,5 +308,11 @@ export const createNormalActorCaptureDeploymentHandler =
       );
     } finally {
       await resources?.controlPlane.close();
+      if (
+        initialResources !== undefined &&
+        initialResources.controlPlane !== resources?.controlPlane
+      ) {
+        await initialResources.controlPlane.close();
+      }
     }
   };

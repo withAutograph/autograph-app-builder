@@ -138,6 +138,34 @@ const selectedApp = async (
   return { appId: saved.originalTarget.appId, sessionId: saved.originalTarget.sessionId };
 };
 
+/** Private owner lookup used by authenticated operator requests and canonical callback composition. */
+export const resolveOwnedStandardRuntimeConfiguration = async (input: {
+  configuration: HostedOperatorSourceConfiguration;
+  resources: NativeTargetConfigurationResources;
+  context: Parameters<typeof readStandardBuilderDestination>[1];
+  environment: Readonly<Record<string, string | undefined>>;
+}) => {
+  await input.resources.owner.assertCanonicalAppOwner(input.context);
+  const destination = await input.resources.readStandardDestination?.(input.context);
+  if (destination === undefined) {
+    throw new HostedOperatorError("builder_destination_required");
+  }
+  const captured = await input.resources.readStandardCapture?.(input.context);
+  if (captured === undefined) {
+    throw new HostedOperatorError("builder_destination_configuration_required");
+  }
+  const result = assembleStandardBuilderRuntimeConfiguration({
+    base: input.configuration,
+    authority: input.context.authority,
+    appId: input.context.target.appId,
+    destination,
+    captured,
+    environment: input.environment,
+  });
+  await input.resources.owner.assertCanonicalAppOwner(input.context);
+  return result;
+};
+
 /** The only source of dynamic app configuration is an authorized durable ready registration. */
 export const createNativeTargetConfigurationResolver =
   (input: {
@@ -170,25 +198,12 @@ export const createNativeTargetConfigurationResolver =
             ownerContext,
             target: { appId: selected.appId, sessionId: selected.sessionId },
           };
-          await resources.owner.assertCanonicalAppOwner(context);
-          const destination = await resources.readStandardDestination?.(context);
-          if (destination === undefined) {
-            throw new HostedOperatorError("builder_destination_required");
-          }
-          const captured = await resources.readStandardCapture?.(context);
-          if (captured === undefined) {
-            throw new HostedOperatorError("builder_destination_configuration_required");
-          }
-          const configuration = assembleStandardBuilderRuntimeConfiguration({
-            base: input.configuration,
-            authority: ownerContext.authority,
-            appId: selected.appId,
-            destination,
-            captured,
+          return await resolveOwnedStandardRuntimeConfiguration({
+            configuration: input.configuration,
+            resources,
+            context,
             environment: input.environment,
           });
-          await resources.owner.assertCanonicalAppOwner(context);
-          return configuration;
         }
         if (input.configuration.composition === "single-project-services") {
           await resources.owner.verifyWorkload(request);
