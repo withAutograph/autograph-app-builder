@@ -233,6 +233,15 @@ a separate durable path described in the [public MCP contract](public-mcp-contra
 
 ## Persistent Sandbox reattachment
 
+Streaming source archives use bounded chunk uploads through the supported
+Sandbox SDK. Builder assembles them with a structured Node command and
+atomically replaces the target only after all bytes arrive; cancellation or
+transfer failure leaves an existing target intact and attempts cleanup of the
+owned staging files. This avoids the SDK `fs.appendFile` helper, which rereads and uploads the
+entire growing file for each incoming stream chunk. The transfer holds the
+normal active-command lease and keeps backpressure without limiting total
+archive size. Source bytes and provider responses are not diagnostic logs.
+
 The Eve 0.68 provider records the persistent Sandbox name as immutable session
 state. Reopening that state uses `Sandbox.get({ name, resume: true })`; it does
 not resolve a new Git source, upload new seeds, or repeat initialization.

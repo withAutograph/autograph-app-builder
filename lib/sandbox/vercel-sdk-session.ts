@@ -4,6 +4,7 @@ import type { SandboxRunOptions, SandboxProcess } from "eve/sandbox";
 import path from "node:path";
 import { Readable } from "node:stream";
 import type { BuilderSandboxSession } from "./builder-sandbox";
+import { writeVercelStream } from "./vercel-stream-write";
 import { materializeVercelGitSource } from "./vercel-git-source";
 
 export type VercelSdkSessionNative = Pick<
@@ -16,7 +17,7 @@ export type VercelSdkSessionNative = Pick<
   | "update"
   | "expiresAt"
   | "extendTimeout"
-> & { readonly fs: Pick<Sandbox["fs"], "mkdir" | "writeFile" | "appendFile" | "rm"> };
+> & { readonly fs: Pick<Sandbox["fs"], "mkdir" | "rm"> };
 
 const resolvePath = (value: string) => path.posix.resolve("/workspace", value);
 const encoding = (value = "utf-8"): BufferEncoding => {
@@ -267,17 +268,13 @@ export const createVercelSdkSession = (
     },
     writeBinaryFile,
     async writeFile(options) {
-      const provider = current();
-      const target = resolvePath(options.path);
-      await provider.fs.mkdir(path.posix.dirname(target), {
-        recursive: true,
+      await writeVercelStream({
+        current,
+        authorize,
+        target: resolvePath(options.path),
+        content: options.content,
         signal: options.abortSignal,
       });
-      await provider.fs.writeFile(target, Buffer.alloc(0), { signal: options.abortSignal });
-      for await (const chunk of options.content) {
-        options.abortSignal?.throwIfAborted();
-        await provider.fs.appendFile(target, chunk, { signal: options.abortSignal });
-      }
     },
     writeTextFile: (options) =>
       writeBinaryFile({
