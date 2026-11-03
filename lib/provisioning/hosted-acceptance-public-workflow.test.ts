@@ -8,7 +8,7 @@ import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ApprovalContext, ApprovalStatus } from "eve/tools/approval";
-import type { ContinuityApprovalInput } from "../eve/private-continuity-approval";
+import type { ContinuityApprovalToolInput } from "../eve/private-continuity-approval";
 import type { OperatorSelection } from "./hosted-operator-contract";
 import type { SandboxNetworkPolicy, SandboxSession } from "eve/sandbox";
 import { z } from "zod";
@@ -16,7 +16,7 @@ import planTool from "../../agent/tools/plan-app-hosted-runtime";
 import continuityTool from "../../agent/tools/run-app-continuity-tests";
 import {
   createPrivateContinuityApprovalCapture,
-  continuityApprovalInputSchema,
+  continuityApprovalToolInputSchema,
 } from "../eve/private-continuity-approval";
 import {
   authority,
@@ -33,7 +33,7 @@ const hooks = vi.hoisted(() => ({
   projection: vi.fn(),
   repository: vi.fn(),
   sleep: vi.fn(),
-  approval: vi.fn<(ctx: ApprovalContext<ContinuityApprovalInput>) => Promise<ApprovalStatus>>(),
+  approval: vi.fn<(ctx: ApprovalContext<ContinuityApprovalToolInput>) => Promise<ApprovalStatus>>(),
 }));
 vi.mock("eve/context", () => ({
   defineState: <T>(key: string, initial: () => T) => ({
@@ -52,7 +52,7 @@ vi.mock("eve/tools", () => ({
   defineTool: <T>(tool: T) => tool,
   defineWorkflowTool: <
     T extends {
-      approval: (ctx: ApprovalContext<ContinuityApprovalInput>) => Promise<ApprovalStatus>;
+      approval: (ctx: ApprovalContext<ContinuityApprovalToolInput>) => Promise<ApprovalStatus>;
     },
   >(
     tool: T,
@@ -232,7 +232,7 @@ it("uses actual planning and approval workflow tools to recover retained source 
   );
   const saved = z.object({ plan: z.object({ intentId: z.string() }) }).parse(planned);
   const successor = await f.operations.readPlan(context, saved.plan.intentId);
-  const input = continuityApprovalInputSchema.parse({ ...successor.request, plan: successor.plan });
+  const input = continuityApprovalToolInputSchema.parse(successor.request);
   expect(successor.plan.predecessorIntentId).toBe(old.plan.intentId);
   expect(successor.plan.runtime.root).not.toBe("/workspace/stale");
   expect(successor.plan.runtime.browserSelection).toEqual(browserSelection);
@@ -243,7 +243,7 @@ it("uses actual planning and approval workflow tools to recover retained source 
   // Run the real workflow approval callback: a planned successor must ask for fresh consent.
   expect(
     await hooks.approval(
-      z.custom<ApprovalContext<ContinuityApprovalInput>>().parse({ ...ctx, toolInput: input }),
+      z.custom<ApprovalContext<ContinuityApprovalToolInput>>().parse({ ...ctx, toolInput: input }),
     ),
   ).toBe("user-approval");
   const capture = createPrivateContinuityApprovalCapture({
