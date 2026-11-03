@@ -946,7 +946,11 @@ export function createHostedEveSessionService(input: {
   now?: () => number;
   onSubmissionDiagnostic?: HostedSubmissionDiagnosticSink;
   sessionTimeoutPolicy?: HostedSessionTimeoutPolicy;
-}): EveSessionService {
+}): EveSessionService & {
+  reconcileOwnerDelivery: (
+    binding: SendObservationBinding & { sessionId: string },
+  ) => Promise<void>;
+} {
   // Presentation reuses private state already captured by this owned read/mutation. It never
   // causes a second checkpoint read or changes the requested public cursor.
   const presentationInputs = new Map<string, PrivateInputState | undefined>();
@@ -1208,6 +1212,7 @@ export function createHostedEveSessionService(input: {
     );
   const reconcileSendOperation = async (
     operation: HostedOperationRecord,
+    settle = true,
   ): Promise<EveSessionResult | undefined> => {
     if (operation.sendDelivery === undefined || operation.sessionId === undefined) {
       return undefined;
@@ -1249,6 +1254,9 @@ export function createHostedEveSessionService(input: {
       return projected?.result;
     }
     await assertSendOwner(current);
+    if (!settle) {
+      return result;
+    }
     const settled = await input.store.settleSucceeded({
       nowEpochMs: now(),
       operationId: operation.operationId,
@@ -5051,6 +5059,51 @@ export function createHostedEveSessionService(input: {
   // Keep canonical mutation/preflight results complete privately; sanitize every public result.
   return {
     ...service,
+    async reconcileOwnerDelivery(binding) {
+      const reader = input.store.readUnsettledSendAcknowledgements;
+      if (reader === undefined) {
+        return;
+      }
+      let cursor: SendAcknowledgementCursor | undefined;
+      do {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Recheck canonical ownership before each retained ACK page.
+        const current = toDurableHostedSessionRecord(await requireSession(binding.sessionId));
+        if (
+          current.adapterSessionId !== binding.adapterSessionId ||
+          current.adapterGeneration !== binding.adapterGeneration ||
+          (current.cancellationRevision ?? 0) !== binding.cancellationRevision
+        ) {
+          throw new HostedSubmissionUnknownError();
+        }
+        const page = unsettledSendAcknowledgementPageSchema.parse(
+          // oxlint-disable-next-line eslint/no-await-in-loop -- ACK pagination is sequential and performs no delivery.
+          await reader({
+            principal,
+            sessionId: binding.sessionId,
+            cursor,
+            limit: 100,
+          }),
+        );
+        for (const acknowledgement of page.acknowledgements) {
+          const operation = acknowledgement.operation;
+          const marker = operation.sendDelivery;
+          if (
+            marker?.resumeCancellationRevision === binding.cancellationRevision &&
+            acknowledgement.cancellationRevisionAtDispatch === binding.cancellationRevision &&
+            marker.adapterSessionId === binding.adapterSessionId &&
+            marker.adapterGeneration === binding.adapterGeneration
+          ) {
+            // This uses authenticated native delivery proof; ACKs never clear Stop.
+            // oxlint-disable-next-line eslint/no-await-in-loop -- Reconcile retained exact operations in canonical order, without resending.
+            await reconcileSendOperation(operation, false);
+          }
+        }
+        if (page.nextCursor !== undefined && canonical(page.nextCursor) === canonical(cursor)) {
+          throw new HostedSubmissionUnknownError();
+        }
+        cursor = page.nextCursor;
+      } while (cursor !== undefined);
+    },
     cancel: async (request) => present(await service.cancel(request)),
     get: async (request) => present(await service.get(request)),
     getStart: async (request) => present(await service.getStart(request)),
