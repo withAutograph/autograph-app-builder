@@ -746,3 +746,11 @@ configuration. The historical separate-project Preview inventory remains
 unchanged; it filters Preview and inherited rows and does not include
 Production-only bindings. A source declaration, unit test or hash alone is not
 independent hosted database, Auth or application acceptance evidence.
+
+The standard profile also supplies an independently reviewed
+`gatewayProductionWorkload` (`issuer`, `audience`, `subject`). Its projection is
+`standardRuntime.publicRealmWorkload`, explicitly `production` and bound to the
+recorded destination project and team. A Production subject is never obtained by
+editing or substituting an existing Preview subject. Public realm enrollment
+uses that native sender identity separately from the unchanged Preview installer
+resource classification.

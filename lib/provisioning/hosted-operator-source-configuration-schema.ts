@@ -84,6 +84,7 @@ export const hostedOperatorSourceConfigurationSchema = z.strictObject({
     .strictObject({
       profileId: id,
       authOwnership: z.strictObject({ kind: z.literal("dedicated-app-development"), resource }),
+      publicRealmWorkload: workload.extend({ environment: z.literal("production") }),
       productionDatabaseIdentity: z.string().regex(/^[a-z0-9.-]+\.neon\.tech\/[a-z][a-z0-9_]*$/u),
       provisioningRequestId: z.uuid(),
       provisioningDigest: digest,
@@ -197,7 +198,12 @@ export const validateHostedOperatorSourceConfiguration = (
         ),
     ),
     new Set([config.operator.projectId, config.gateway.projectId]).size === 2,
-    config.standardRuntime === undefined || config.composition === "single-project-services",
+    config.standardRuntime === undefined ||
+      [
+        config.composition === "single-project-services",
+        config.standardRuntime.publicRealmWorkload.projectId === config.gateway.projectId,
+        config.standardRuntime.publicRealmWorkload.ownerId === config.teamId,
+      ].every(Boolean),
     config.composition !== "single-project-services" || hasSingleProjectServicesTopology(config),
   ].every(Boolean);
   if (!ownedConfiguration) {

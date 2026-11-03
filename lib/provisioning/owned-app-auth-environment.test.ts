@@ -20,6 +20,14 @@ const fixture = () => {
   const profile: NonNullable<HostedOperatorSourceConfiguration["standardRuntime"]> = {
     profileId: "reviewed-isolated-profile",
     authOwnership: { kind: "dedicated-app-development", resource: { ...authResource } },
+    publicRealmWorkload: {
+      environment: "production",
+      ownerId: "team",
+      projectId: "owned-project",
+      issuer: "https://oidc.vercel.com/team",
+      audience: "https://vercel.com/team",
+      subject: "explicit-production-workload",
+    },
     productionDatabaseIdentity: "ep-customer-production.neon.tech/auth",
     provisioningRequestId: plan.project.provisioningRequestId,
     provisioningDigest: plan.project.provisioningDigest,

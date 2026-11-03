@@ -35,6 +35,7 @@ export const standardBuilderRuntimeProfileSchema = z.strictObject({
   publicOrigin: origin,
   productionDatabaseIdentity: z.string().regex(/^[a-z0-9.-]+\.neon\.tech\/[a-z][a-z0-9_]*$/u),
   gatewayWorkload: z.strictObject({ audience: z.url(), issuer: z.url(), subject: id }),
+  gatewayProductionWorkload: z.strictObject({ audience: z.url(), issuer: z.url(), subject: id }),
 });
 export interface StandardBuilderRuntimeCapture {
   selection: CompiledOperatorReleaseSelection;
@@ -97,6 +98,12 @@ export const assembleStandardBuilderRuntimeConfiguration = (input: {
     standardRuntime: {
       profileId: profile.resourceProfileId,
       authOwnership: profile.authOwnership,
+      publicRealmWorkload: {
+        ...profile.gatewayProductionWorkload,
+        environment: "production",
+        projectId: destination.projectId,
+        ownerId: destination.teamId,
+      },
       productionDatabaseIdentity: profile.productionDatabaseIdentity,
       provisioningRequestId: destination.provisioningRequestId,
       provisioningDigest: destination.provisioningDigest,

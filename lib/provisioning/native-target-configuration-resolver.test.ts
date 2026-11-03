@@ -582,6 +582,11 @@ describe("fresh normal same-project runtime assembly", () => {
           authOwnership: { kind: "dedicated-app-development", resource: base.authDatabase },
           publicOrigin: "https://apps-new-app.vercel.app",
           productionDatabaseIdentity: "ep-production.neon.tech/auth",
+          gatewayProductionWorkload: {
+            audience: workload.audience,
+            issuer: workload.issuer,
+            subject: "explicitly-reviewed-production-gateway",
+          },
           gatewayWorkload: {
             audience: workload.audience,
             issuer: workload.issuer,
@@ -632,6 +637,12 @@ describe("fresh normal same-project runtime assembly", () => {
       environment: "preview",
     });
     expect(result.gateway.deploymentId).toBeUndefined();
+    expect(result.standardRuntime?.publicRealmWorkload).toMatchObject({
+      environment: "production",
+      projectId: f.destination.projectId,
+      ownerId: f.destination.teamId,
+      subject: "explicitly-reviewed-production-gateway",
+    });
     expect(result.applications["new-app"]).toMatchObject({
       projectId: result.gateway.projectId,
       accessRoles: ["member"],
