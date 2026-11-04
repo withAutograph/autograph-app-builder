@@ -11,10 +11,10 @@ export const nativeRecoveryDescriptorSchema = z.strictObject({
   originalAuthoritySessionId: z.string().min(1),
   parentCancellationRevision: z.number().int().nonnegative(),
   sourceHandoffId: z.uuid().optional(),
-  /** Explicit owner-requested transfer of a parked native approval, never a user cancellation. */
+  /** Explicit owner-requested transfer of a parked native execution, never a user cancellation. */
   executionTransfer: z
     .strictObject({
-      kind: z.literal("pending-approval"),
+      kind: z.enum(["pending-approval", "idle-checkpoint"]),
       sourceCheckpointDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
     })
     .optional(),

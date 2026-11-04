@@ -3290,7 +3290,7 @@ new file mode 100644
 +}
 diff --git a/dist/src/execution/session/terminal-recovery.d.ts b/dist/src/execution/session/terminal-recovery.d.ts
 new file mode 100644
-index 0000000000000000000000000000000000000000..7631a183d9c8f02cbd1761e287736f5ffa155a3d
+index 0000000000000000000000000000000000000000..8741d927145f6b0b1eadd660280c57e92d2530a0
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.d.ts
 @@ -0,0 +1,132 @@
@@ -3309,7 +3309,7 @@ index 0000000000000000000000000000000000000000..7631a183d9c8f02cbd1761e287736f5f
 +  readonly originalAuthoritySessionId: string;
 +  readonly parentCancellationRevision: number;
 +  readonly sourceHandoffId?: string;
-+  readonly executionTransfer?: { readonly kind: "pending-approval"; readonly sourceCheckpointDigest: string };
++  readonly executionTransfer?: { readonly kind: "pending-approval" | "idle-checkpoint"; readonly sourceCheckpointDigest: string };
 +}
 +export interface TerminalRecoveryProvenance {
 +  readonly kind: "terminal-finalizer-input" | "completed-terminal-turn-input" | "failed-turn-input" | "committed-turn-output";
@@ -3399,7 +3399,7 @@ index 0000000000000000000000000000000000000000..7631a183d9c8f02cbd1761e287736f5f
 +export declare function terminalRecoveryActivationToken(auth: SessionAuthContext, descriptor: TerminalRecoveryDescriptor): string;
 +export declare function terminalRecoveryPolicy(entry: unknown): Pick<SessionCheckpoint, "capabilities" | "retention" | "sessionTimeoutMs"> | undefined;
 +export declare function deriveTerminalRecoveryResumePhase(reconciled: { readonly checkpointCore: Pick<SessionCheckpoint, "serializedContext" | "sessionState">; readonly replayInput?: TerminalRecoveryWorkflowEntryInput["replayInput"]; readonly carriedInbox?: TerminalRecoveryWorkflowEntryInput["carriedInbox"] }): Promise<"await-input" | "replay" | undefined>;
-+export declare function quiesceLiveRecoverySource(input: TerminalRecoveryAuthorityInput & { readonly ports: TerminalRecoveryPorts }, dependencies: TerminalRecoveryDependencies, onStopMayHaveOccurred?: () => void, parkedRecoveryBinding?: TerminalRecoveryBinding): Promise<{ readonly kind: "ready"; readonly ownerRunIds: readonly string[]; readonly stopMayHaveOccurred: boolean; readonly resumePhase: "await-input" | "replay" } | { readonly kind: "unavailable" | "uncertain"; readonly reason: string }>;
++export declare function quiesceLiveRecoverySource(input: TerminalRecoveryAuthorityInput & { readonly ports: TerminalRecoveryPorts }, dependencies: TerminalRecoveryDependencies, onStopMayHaveOccurred?: () => void, parkedRecoveryBinding?: TerminalRecoveryBinding): Promise<{ readonly kind: "ready"; readonly ownerRunIds: readonly string[]; readonly stopMayHaveOccurred: boolean; readonly resumePhase: "await-input" | "replay"; readonly checkpointOrigin?: { readonly slot: number; readonly stepId: string; readonly eventId: string } } | { readonly kind: "unavailable" | "uncertain"; readonly reason: string }>;
 +export declare function recoverTerminalSession(input: TerminalRecoveryAuthorityInput & { readonly ports: TerminalRecoveryPorts }, dependencies: TerminalRecoveryDependencies): Promise<{ readonly kind: "accepted"; readonly recoveryBinding: TerminalRecoveryBinding } | { readonly kind: "unavailable" | "uncertain"; readonly reason: string }>;
 +export declare function activateTerminalSession(input: TerminalRecoveryAuthorityInput & { readonly ports: TerminalRecoveryPorts }, dependencies: Pick<TerminalRecoveryDependencies, "getHook" | "resumeHook" | "isHookNotFound">): Promise<{ readonly kind: "accepted"; readonly recoveryBinding: TerminalRecoveryBinding }>;
 +export declare function handleTerminalRecoveryRequest(input: {
@@ -3428,10 +3428,10 @@ index 0000000000000000000000000000000000000000..7631a183d9c8f02cbd1761e287736f5f
 +export declare function observeTerminalSession(input: TerminalRecoveryAuthorityInput & { readonly ports: Pick<TerminalRecoveryPorts, "authorize" | "readReceipt" | "observeCandidateFacts" | "observeRecoveryHolderBinding"> }, dependencies: TerminalRecoveryObservationDependencies): Promise<{ readonly kind: "accepted"; readonly sessionId: string }>;
 diff --git a/dist/src/execution/session/terminal-recovery.js b/dist/src/execution/session/terminal-recovery.js
 new file mode 100644
-index 0000000000000000000000000000000000000000..49731b34622c08e3cae92a8fbcc6af954c4287af
+index 0000000000000000000000000000000000000000..4906d5929f96346c49e4d3d9c7c08828b4b8af0d
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.js
-@@ -0,0 +1,765 @@
+@@ -0,0 +1,783 @@
 +import { deriveTerminalRecoveryResumePhase } from "#execution/session/recovery-resume-phase.js";
 +export { deriveTerminalRecoveryResumePhase };
 +import { createHash } from "node:crypto";
@@ -3442,7 +3442,7 @@ index 0000000000000000000000000000000000000000..49731b34622c08e3cae92a8fbcc6af95
 +const provenanceKeys = ["kind", "sourceStepId", "sourceEventId", "sourceSlot", "checkpointVersion", "checkpointOwnerRunId", "resumePhase"];
 +const sameTransfer = (left, right) => left === undefined && right === undefined || record(left) && record(right) && left.kind === right.kind && left.sourceCheckpointDigest === right.sourceCheckpointDigest;
 +const refusalReasons = new Set([
-+  "source-not-terminal", "native-data-expired", "handoff-discovery-unavailable", "handoff-owner-ambiguous", "handoff-parent-frontier-uncertain", "paired-native-checkpoint-unavailable", "native-checkpoint-identity-mismatch", "source-policy-unavailable", "checkpoint-origin-unavailable", "checkpoint-identity-mismatch", "live-transfer-unsupported", "source-approval-not-parked", "source-effect-steps-unsettled", "source-lineage-effects-unsettled", "source-not-parked", "source-physical-owner-changed", "source-stop-not-owned", "source-stop-unconfirmed", "approval-transcript-unavailable", "cancelled-call-history-unreconciled", "cancelled-turn-replay", "conflicting-retained-history", "coordination-results-incomplete", "delivery-consumption-unreconciled", "failed-turn-effects-unreconciled", "later-coordination-input-unreconciled", "native-stream-incomplete", "runtime-result-consumption-ambiguous", "runtime-result-owner-unreconciled", "unconsumed-native-inbox-input", "unreadable-native-effect-frontier", "uncommitted-action-result", "uncommitted-action-dispatch", "cancelled-call-result-unreconciled",
++  "source-not-terminal", "native-data-expired", "handoff-discovery-unavailable", "handoff-owner-ambiguous", "handoff-parent-frontier-uncertain", "paired-native-checkpoint-unavailable", "native-checkpoint-identity-mismatch", "source-policy-unavailable", "checkpoint-origin-unavailable", "checkpoint-identity-mismatch", "live-transfer-unsupported", "source-approval-not-parked", "source-idle-not-parked", "source-checkpoint-changed", "source-effect-steps-unsettled", "source-lineage-effects-unsettled", "source-not-parked", "source-physical-owner-changed", "source-stop-not-owned", "source-stop-unconfirmed", "approval-transcript-unavailable", "cancelled-call-history-unreconciled", "cancelled-turn-replay", "conflicting-retained-history", "coordination-results-incomplete", "delivery-consumption-unreconciled", "failed-turn-effects-unreconciled", "later-coordination-input-unreconciled", "native-stream-incomplete", "runtime-result-consumption-ambiguous", "runtime-result-owner-unreconciled", "unconsumed-native-inbox-input", "unreadable-native-effect-frontier", "uncommitted-action-result", "uncommitted-action-dispatch", "cancelled-call-result-unreconciled",
 +]);
 +const refusalStages = new Set(["dependencies", "source_authorization", "receipt_read", "receipt_validate", "live_transfer_preflight", "candidate_collect", "candidate_authorization", "candidate_read", "candidate_reconcile", "source_policy", "checkpoint_prepare", "pre_start_authorization", "pre_start_receipt_read", "pre_start_receipt_validate", "owner_start", "owner_readiness_wait", "owner_readiness_deadline", "receipt_authorization", "receipt_commit", "holder_authorization", "holder_receipt_read", "holder_closure", "post_holder_authorization", "post_holder_receipt_read", "post_holder_receipt_validate", "candidate_receipt_read"]);
 +const refusalReason = (value) => typeof value === "string" && refusalReasons.has(value) ? value : "other";
@@ -3518,7 +3518,7 @@ index 0000000000000000000000000000000000000000..49731b34622c08e3cae92a8fbcc6af95
 +  }
 +  if (!Number.isSafeInteger(value.sourceAdapterGeneration) || value.sourceAdapterGeneration < 1 || !Number.isSafeInteger(value.parentCancellationRevision) || value.parentCancellationRevision < 0) return;
 +  if (value.sourceHandoffId !== undefined && (typeof value.sourceHandoffId !== "string" || value.sourceHandoffId.length === 0 || value.sourceHandoffId.length > 200)) return;
-+  if (value.executionTransfer !== undefined && (!record(value.executionTransfer) || Object.keys(value.executionTransfer).some((key) => !["kind", "sourceCheckpointDigest"].includes(key)) || value.executionTransfer.kind !== "pending-approval" || !/^sha256:[a-f0-9]{64}$/.test(value.executionTransfer.sourceCheckpointDigest))) return;
++  if (value.executionTransfer !== undefined && (!record(value.executionTransfer) || Object.keys(value.executionTransfer).some((key) => !["kind", "sourceCheckpointDigest"].includes(key)) || !["pending-approval", "idle-checkpoint"].includes(value.executionTransfer.kind) || !/^sha256:[a-f0-9]{64}$/.test(value.executionTransfer.sourceCheckpointDigest))) return;
 +  return Object.fromEntries(descriptorKeys.filter((key) => value[key] !== undefined).map((key) => [key, value[key]]));
 +}
 +
@@ -3577,6 +3577,7 @@ index 0000000000000000000000000000000000000000..49731b34622c08e3cae92a8fbcc6af95
 +  }
 +  let transferOwnerRunIds;
 +  let transferResumePhase;
++  let transferCheckpointOrigin;
 +  let ready = await findReady("initial_ready");
 +  if (ready !== undefined && descriptor.executionTransfer !== undefined) markStopMayHaveOccurred();
 +  if (descriptor.executionTransfer !== undefined) {
@@ -3585,6 +3586,7 @@ index 0000000000000000000000000000000000000000..49731b34622c08e3cae92a8fbcc6af95
 +    if (stopped.kind !== "ready") return stopped;
 +    transferOwnerRunIds = stopped.ownerRunIds;
 +    transferResumePhase = stopped.resumePhase;
++    transferCheckpointOrigin = stopped.checkpointOrigin;
 +  }
 +  if (ready === undefined && dependencies.closeHolder !== undefined) {
 +    const authorizeCurrent = async () => {
@@ -3647,7 +3649,8 @@ index 0000000000000000000000000000000000000000..49731b34622c08e3cae92a8fbcc6af95
 +    preparing("candidate_reconcile");
 +    const reconciled = await dependencies.reconcile(collected.candidate, repeatableCallIds === undefined ? undefined : { repeatableCallIds });
 +    if (reconciled.kind !== "ready") return reconciled;
-+    if (transferResumePhase !== undefined && await deriveTerminalRecoveryResumePhase(reconciled) !== transferResumePhase) return { kind: "uncertain", reason: "source-approval-not-parked" };
++    if (transferResumePhase !== undefined && await deriveTransferResumePhase(descriptor, reconciled) !== transferResumePhase) return { kind: "uncertain", reason: descriptor.executionTransfer?.kind === "idle-checkpoint" ? "source-idle-not-parked" : "source-approval-not-parked" };
++    if (transferCheckpointOrigin !== undefined && !sameCheckpointOrigin(transferCheckpointOrigin, reconciled.provenance.selectedOrigin)) return { kind: "uncertain", reason: "source-checkpoint-changed" };
 +    let policy;
 +    preparing("source_policy");
 +    try { policy = terminalRecoveryPolicy(await dependencies.readEntry(payload)); }
@@ -3942,6 +3945,18 @@ index 0000000000000000000000000000000000000000..49731b34622c08e3cae92a8fbcc6af95
 +  return true;
 +}
 +
++/** Idle transfer is an actual completed turn, not merely absence of pending approval. */
++async function deriveTransferResumePhase(descriptor, reconciled) {
++  const phase = await deriveTerminalRecoveryResumePhase(reconciled);
++  if (descriptor.executionTransfer?.kind !== "idle-checkpoint") return phase;
++  if (phase !== "await-input") return;
++  const [{ readDurableSession }, { isHarnessBetweenTurns }] = await Promise.all([
++    import("#execution/durable-session-store.js"), import("#harness/emission-state.js"),
++  ]);
++  return isHarnessBetweenTurns(readDurableSession(reconciled.checkpointCore.sessionState)) ? phase : undefined;
++}
++const sameCheckpointOrigin = (left, right) => left !== undefined && right !== undefined && left.slot === right.slot && left.stepId === right.stepId && left.eventId === right.eventId;
++
 +/** Transfer an owned parked execution only after complete retained-state preflight. */
 +const lineageOwnerIds = (payload) => [...new Set([...payload.handoffChain.map((entry) => entry.parentRunId), payload.checkpointOwnerRunId])];
 +const sameOwnerIds = (left, right) => left.length === right.length && left.every((id, index) => id === right[index]);
@@ -3966,8 +3981,9 @@ index 0000000000000000000000000000000000000000..49731b34622c08e3cae92a8fbcc6af95
 +    const reconciled = await dependencies.reconcileLineagePreflight(result.preflight);
 +    if (reconciled.kind !== "ready") return reconciled;
 +    const payload = dependencies.readLineagePreflight(result.preflight);
-+    const resumePhase = await deriveTerminalRecoveryResumePhase(reconciled);
-+    if (resumePhase === undefined) return { kind: "unavailable", reason: "source-approval-not-parked" };
++    const resumePhase = await deriveTransferResumePhase(descriptor, reconciled);
++    if (resumePhase === undefined) return { kind: "unavailable", reason: descriptor.executionTransfer.kind === "idle-checkpoint" ? "source-idle-not-parked" : "source-approval-not-parked" };
++    const checkpointOrigin = descriptor.executionTransfer.kind === "idle-checkpoint" ? { ...reconciled.provenance.selectedOrigin } : undefined;
 +    const ownerRunIds = lineageOwnerIds(payload);
 +    const observations = [];
 +    for (const runId of ownerRunIds) {
@@ -3996,7 +4012,7 @@ index 0000000000000000000000000000000000000000..49731b34622c08e3cae92a8fbcc6af95
 +    const final = observations.at(-1);
 +    if (inbox === undefined && ["pending", "running"].includes(final.status)) return { kind: "unavailable", reason: "source-approval-not-parked" };
 +    await authorize();
-+    return { kind: "preflight", ownerRunIds, observations, resumePhase };
++    return { kind: "preflight", ownerRunIds, observations, resumePhase, ...(checkpointOrigin === undefined ? {} : { checkpointOrigin }) };
 +  };
 +  const initial = await preflight();
 +  if (initial.kind !== "preflight") return initial;
@@ -4005,6 +4021,7 @@ index 0000000000000000000000000000000000000000..49731b34622c08e3cae92a8fbcc6af95
 +    const current = await preflight();
 +    if (current.kind !== "preflight") return current;
 +    if (current.resumePhase !== initial.resumePhase || !sameOwnerIds(current.ownerRunIds, ownerRunIds)) return { kind: "uncertain", reason: "source-physical-owner-changed" };
++    if (initial.checkpointOrigin !== undefined && !sameCheckpointOrigin(initial.checkpointOrigin, current.checkpointOrigin)) return { kind: "uncertain", reason: "source-checkpoint-changed" };
 +    const observed = current.observations.find((run) => run.runId === runId);
 +    if (["completed", "failed", "cancelled"].includes(observed.status)) continue;
 +    await authorize();
@@ -4019,8 +4036,9 @@ index 0000000000000000000000000000000000000000..49731b34622c08e3cae92a8fbcc6af95
 +  const terminal = await preflight();
 +  if (terminal.kind !== "preflight") return terminal;
 +  if (terminal.resumePhase !== initial.resumePhase || !sameOwnerIds(terminal.ownerRunIds, ownerRunIds) || terminal.observations.some((run) => !["completed", "failed", "cancelled"].includes(run.status))) return { kind: "uncertain", reason: "source-physical-owner-changed" };
++  if (initial.checkpointOrigin !== undefined && !sameCheckpointOrigin(initial.checkpointOrigin, terminal.checkpointOrigin)) return { kind: "uncertain", reason: "source-checkpoint-changed" };
 +  await authorize();
-+  return { kind: "ready", ownerRunIds, resumePhase: initial.resumePhase };
++  return { kind: "ready", ownerRunIds, resumePhase: initial.resumePhase, ...(initial.checkpointOrigin === undefined ? {} : { checkpointOrigin: initial.checkpointOrigin }) };
 +}
 +
 +export async function createNativeTerminalRecoveryDependencies() { return await nativeDependencies(); }

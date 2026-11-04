@@ -651,6 +651,14 @@ export const hostedOperationRecordSchema = z
 
 export type HostedOperationRecord = z.infer<typeof hostedOperationRecordSchema>;
 
+/** Reservation freshness only; native recovery independently proves the actual parked phase. */
+export const matchesNativeExecutionTransferCheckpoint = (
+  source: HostedSessionRecord,
+  transfer: NonNullable<NativeRecoveryDescriptor["executionTransfer"]>,
+): boolean =>
+  source.status === (transfer.kind === "idle-checkpoint" ? "waiting" : "input_required") &&
+  toDurableHostedSessionRecord(source).checkpointDigest === transfer.sourceCheckpointDigest;
+
 /** Current canonical source identity, never checkpoint/model prose, authorizes native access. */
 // oxlint-disable-next-line eslint/complexity -- Every canonical source identity and cancellation fence is mandatory.
 export const assertNativeRecoverySourceBinding = (
@@ -1498,9 +1506,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       );
       if (
         source === undefined ||
-        source.status !== "input_required" ||
-        toDurableHostedSessionRecord(source).checkpointDigest !==
-          parsed.nativeRecovery.executionTransfer.sourceCheckpointDigest
+        !matchesNativeExecutionTransferCheckpoint(source, parsed.nativeRecovery.executionTransfer)
       ) {
         return { disposition: "conflict" };
       }

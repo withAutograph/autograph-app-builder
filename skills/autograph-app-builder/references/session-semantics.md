@@ -34,6 +34,15 @@
   it is never answered with `autograph_respond`. Refresh the same session after
   the user returns, and rely only on the server's access re-read.
 - `waiting` means the current turn settled and the session may accept a follow-up.
+- When the owner explicitly requests recovery of retained state in a waiting
+  hosted session, `autograph_start` accepts `resumeMode: "recover-idle"` with
+  that `resumeSessionId` and one stable `clientRequestId`. The server verifies
+  an idle native checkpoint, closes the original execution, and returns its
+  recovered continuation. Preserve both handles and the result; exact retries
+  return the same recovery. This does not answer approvals, resend messages, or
+  authorize publication. Pending-approval transfer remains the distinct
+  `resumeMode: "recover"` path. Neither mode bypasses an uncertain SEND or a
+  busy response.
 - `cancelled` proves a turn reached its cancellation boundary. Ordinary
   `autograph_get` calls never resume Stop. When the user intends to resume,
   a new explicit `autograph_send` may continue the same session once the server

@@ -59,7 +59,7 @@ export interface EveSessionService {
     /** Internal only: set after authenticated handoff resolution, never by MCP input. */
     sourceHandoffId?: string;
     resumeSessionId?: string;
-    resumeMode?: "recover";
+    resumeMode?: "recover" | "recover-idle";
     clientRequestId: string;
   }) => Promise<EveSessionResult>;
   /** Internal lost-response recovery for an already-bound start operation. */
@@ -733,7 +733,7 @@ export function createLocalEveSessionService(
 
   const service = Object.create(Object.prototype) as EveSessionService;
   service.start = async ({ prompt, resumeSessionId, clientRequestId, resumeMode }) => {
-    if (resumeMode === "recover") throw new LocalSessionRecoveryUnavailableError();
+    if (resumeMode !== undefined) throw new LocalSessionRecoveryUnavailableError();
     if (resumeSessionId !== undefined) {
       const snapshot = await readLocalSnapshot(resumeSessionId);
       localSessionEvents.set(resumeSessionId, [...snapshot.events]);
