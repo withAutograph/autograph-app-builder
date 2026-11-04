@@ -1,3 +1,4 @@
+import { resolveDraftReviewedWorkflow } from "@/lib/agent/draft-reviewed-lineage";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
@@ -19,8 +20,10 @@ export default defineTool({
   description:
     "Normalize one dependency already declared by the selected app in the current private draft candidate into the repository's shared Bun catalog, preserving its existing concrete version across consumers. Regenerate lock metadata with the repository-pinned Bun and disabled install scripts. No arbitrary path, source, version upgrade, framework change, publication, or provider effect. Returns exact changed metadata paths; complete normal validation/review and approval before publication. Use this when app dependency declarations need shared catalog alignment; do not use frameworkUpgrade to repair generic dependency metadata.",
   async execute(input, ctx) {
+    ctx.abortSignal?.throwIfAborted();
     const candidate = draftReconciliationState.get();
-    const state = appBuilderWorkflowState.get();
+    const workflow = appBuilderWorkflowState.get();
+    const state = resolveDraftReviewedWorkflow(workflow, candidate) ?? workflow;
     if (
       candidate === null ||
       state.phase !== "reviewed" ||

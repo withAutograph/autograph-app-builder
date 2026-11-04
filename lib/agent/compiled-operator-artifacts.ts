@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import type { SandboxSession } from "eve/sandbox";
 import type { HostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 import { appBuilderWorkflowState } from "./workflow-state";
+import { resolveDraftReviewedWorkflow } from "./draft-reviewed-lineage";
 import { currentDraftCandidateSource } from "./published-draft-repair";
 import { assertApprovedPrivateApplySession } from "./private-apply-authority";
 import {
@@ -63,7 +64,9 @@ const assertApprovedCompilation = (input: {
   appSpecDigest: string;
   root: string;
 }) => {
-  const state = appBuilderWorkflowState.get();
+  const workflow = appBuilderWorkflowState.get();
+  const candidate = draftReconciliationState.get();
+  const state = resolveDraftReviewedWorkflow(workflow, candidate) ?? workflow;
   if (
     !("applyReceipt" in state) ||
     state.appSpec.appId !== input.appId ||
@@ -74,7 +77,6 @@ const assertApprovedCompilation = (input: {
   if (state.applyReceipt.applyRoot === input.root) {
     return;
   }
-  const candidate = draftReconciliationState.get();
   if (state.phase !== "reviewed" || candidate === null) {
     throw operatorArtifactUnavailable();
   }

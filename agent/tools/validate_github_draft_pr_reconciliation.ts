@@ -1,3 +1,4 @@
+import { resolveDraftReviewedWorkflow } from "@/lib/agent/draft-reviewed-lineage";
 import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { currentDraftCandidateSource } from "@/lib/agent/published-draft-repair";
 import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
@@ -49,7 +50,8 @@ const publishCandidateArtifacts = async (
   candidate: DraftReconciliationCandidate,
   sandbox: SandboxSession,
 ) => {
-  const state = appBuilderWorkflowState.get();
+  const workflow = appBuilderWorkflowState.get();
+  const state = resolveDraftReviewedWorkflow(workflow, candidate) ?? workflow;
   if (state.phase !== "reviewed") {
     throw new Error("The reviewed app no longer owns this compilation.");
   }
@@ -996,66 +998,78 @@ const runIncrementalValidation = async (
   };
 };
 
+// oxlint-disable-next-line eslint/complexity -- Preserve the existing ordered candidate command flow.
+export const validateDraftReconciliation = async (
+  input: {
+    additionalCheckTasks: string[];
+    expectedCommand?: string;
+    incremental: boolean;
+    runBrowserTests: boolean;
+  },
+  ctx: ToolContext,
+) => {
+  ctx.abortSignal?.throwIfAborted();
+  const candidate = draftReconciliationState.get();
+  const workflow = appBuilderWorkflowState.get();
+  const state = resolveDraftReviewedWorkflow(workflow, candidate) ?? workflow;
+  if (
+    candidate === null ||
+    state.phase !== "reviewed" ||
+    currentDraftCandidateSource(state, candidate) === undefined ||
+    state.reviewReceipt.digest !== candidate.originalReviewDigest
+  ) {
+    throw new Error(
+      "The prepared merge candidate no longer matches the selected app and source review. Prepare reconciliation again.",
+    );
+  }
+  const sandbox = withCandidateCommandEnvironment(await getSourceBoundSandbox(ctx));
+  if (candidate.validationRun?.schemaTaskCompleted !== true) {
+    await retireUnusedDraftWorktrees({
+      sandbox,
+      workspaceRoot: candidate.workspaceRoot,
+      retainedRoots: [
+        state.workspace.workspacePath,
+        state.applyReceipt.applyRoot,
+        ...state.validationReceipt.commands.map((command) => command.validationRoot),
+        candidate.root,
+        ...(candidate.preservedWorkspaces ?? []).map((workspace) => workspace.root),
+        ...draftReconciliationCompletions.get().map((completion) => completion.root),
+      ],
+      signal: ctx.abortSignal,
+    });
+  }
+  await attachCheckoutDependencyView({
+    sandbox,
+    checkoutRoot: `${candidate.workspaceRoot}/repository`,
+    candidateRoot: candidate.root,
+    workspaceRoot: candidate.workspaceRoot,
+  });
+  let current = candidate;
+  let expectedCommand = input.expectedCommand;
+  for (;;) {
+    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Single-call mode uses the same durable ordered steps as incremental mode.
+    const result = await runIncrementalValidation(
+      { ...input, expectedCommand },
+      ctx,
+      current,
+      sandbox,
+    );
+    if (input.incremental || result.status !== "in_progress") {
+      return result;
+    }
+    const latest = draftReconciliationState.get();
+    if (latest === null) {
+      throw new Error("The candidate is unavailable after its validation command.");
+    }
+    current = latest;
+    expectedCommand = result.nextCommand;
+  }
+};
+
 export default defineTool({
   description:
     "Restore this candidate's locked dependencies using the existing sandbox cache, compile the selected app once for this coherent candidate validation, then run repository app:check and all declared app:test shards without repeating their compile dependency, optional local/browser and check: tasks, and capture its actual checked release. Each coherent validation pass checks its own locked dependency graph before running checks; preserve earlier source and validation evidence. Failures identify the command and cause. This does not update GitHub.",
-  // oxlint-disable-next-line eslint/complexity -- ordered candidate checks need one exit for each named failure.
-  async execute(input, ctx) {
-    const candidate = draftReconciliationState.get();
-    const state = appBuilderWorkflowState.get();
-    if (
-      candidate === null ||
-      state.phase !== "reviewed" ||
-      currentDraftCandidateSource(state, candidate) === undefined ||
-      state.reviewReceipt.digest !== candidate.originalReviewDigest
-    ) {
-      throw new Error(
-        "The prepared merge candidate no longer matches the selected app and source review. Prepare reconciliation again.",
-      );
-    }
-    const sandbox = withCandidateCommandEnvironment(await getSourceBoundSandbox(ctx));
-    if (candidate.validationRun?.schemaTaskCompleted !== true) {
-      await retireUnusedDraftWorktrees({
-        sandbox,
-        workspaceRoot: candidate.workspaceRoot,
-        retainedRoots: [
-          state.workspace.workspacePath,
-          state.applyReceipt.applyRoot,
-          ...state.validationReceipt.commands.map((command) => command.validationRoot),
-          candidate.root,
-          ...(candidate.preservedWorkspaces ?? []).map((workspace) => workspace.root),
-          ...draftReconciliationCompletions.get().map((completion) => completion.root),
-        ],
-        signal: ctx.abortSignal,
-      });
-    }
-    await attachCheckoutDependencyView({
-      sandbox,
-      checkoutRoot: `${candidate.workspaceRoot}/repository`,
-      candidateRoot: candidate.root,
-      workspaceRoot: candidate.workspaceRoot,
-    });
-    let current = candidate;
-    let expectedCommand = input.expectedCommand;
-    for (;;) {
-      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Single-call mode uses the same durable ordered steps as incremental mode.
-      const result = await runIncrementalValidation(
-        { ...input, expectedCommand },
-        ctx,
-        current,
-        sandbox,
-      );
-      if (input.incremental || result.status !== "in_progress") {
-        return result;
-      }
-      const latest = draftReconciliationState.get();
-      if (latest === null) {
-        throw new Error("The candidate is unavailable after its validation command.");
-      }
-      current = latest;
-      expectedCommand = result.nextCommand;
-    }
-  },
+  execute: validateDraftReconciliation,
   inputSchema: z.strictObject({
     additionalCheckTasks: z.array(z.string().regex(/^check:[A-Za-z0-9:_-]+$/u)).default([]),
     expectedCommand: z.string().max(1024).optional(),

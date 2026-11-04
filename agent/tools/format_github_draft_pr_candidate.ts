@@ -1,3 +1,4 @@
+import { resolveDraftReviewedWorkflow } from "@/lib/agent/draft-reviewed-lineage";
 import { currentDraftCandidateSource } from "@/lib/agent/published-draft-repair";
 import { defineTool } from "eve/tools";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
@@ -22,8 +23,10 @@ export default defineTool({
   description:
     "Run the selected repository's app formatting task in Builder's isolated draft PR candidate. Builder accepts only changes under the selected app, then requires fresh validation and review of both diffs before any PR update. This does not update GitHub.",
   async execute(_input, ctx) {
+    ctx.abortSignal?.throwIfAborted();
     const candidate = draftReconciliationState.get();
-    const state = appBuilderWorkflowState.get();
+    const workflow = appBuilderWorkflowState.get();
+    const state = resolveDraftReviewedWorkflow(workflow, candidate) ?? workflow;
     if (
       candidate === null ||
       state.phase !== "reviewed" ||

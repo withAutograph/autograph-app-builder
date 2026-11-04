@@ -95,7 +95,10 @@ import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { z } from "zod";
 import { createRemoteJWKSet, customFetch } from "jose";
 import { createHostedOperatorNormalAuthTransport } from "./hosted-operator-normal-auth-transport";
-import { createHostedOperatorRealmHttpTransport } from "./hosted-operator-realm-http-transport";
+import {
+  createHostedOperatorRealmHttpTransport,
+  createHostedOperatorPublicJwksReader,
+} from "./hosted-operator-realm-http-transport";
 import { createHostedOperatorNormalActorOperations } from "./hosted-operator-normal-actor-operations";
 import type { NormalActorOperationsDependencies } from "./hosted-operator-normal-actor-operations";
 import { createHostedOperatorNormalActorProofCollector } from "./hosted-operator-normal-actor-proof";
@@ -3414,15 +3417,14 @@ export const createHostedOperatorControlPlane = async (input: {
             : {}),
         };
       },
-      async readPublicJwks(context, url) {
-        const transport = await normalRealmFetch({ context, origin: new URL(url).origin });
-        const response = await transport(url, { method: "GET", redirect: "error" });
-        if (!response.ok) {
-          throw new HostedOperatorError("operator_unavailable");
-        }
-        const value: unknown = await response.json();
-        return value;
-      },
+      readPublicJwks: createHostedOperatorPublicJwksReader(
+        {
+          configuration,
+          assertPlanningAuthorized: owner.assertPlanningAuthorized,
+          assertCurrentOwner: owner.assertArtifactAuthorized,
+        },
+        { fetch: input.fetch },
+      ),
     });
     const continuities = createHostedContinuityOperations({
       store: continuityStore,
