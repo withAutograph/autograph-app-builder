@@ -79,6 +79,7 @@ export interface PreparedRuntimeExecutionContext {
 export interface PreparedRuntimeExecution {
   /** Canonical native browser origin from the protected bindings read, for test commands only. */
   readonly browserTestBaseUrl?: string;
+  readonly browserTestEntryPath?: string | null;
   installationProof: {
     appId: string;
     branch: string;
@@ -162,6 +163,7 @@ export const runtimeFilesForOrigin = (files: PrivateRuntimeFiles, origin: string
 export const restorePreparedRuntimeExecution = async (input: {
   appId: string;
   browserTestBaseUrl?: string;
+  browserTestEntryPath?: string | null;
   root: string;
   normalActors?: NormalActorRuntimeProjection;
   /** Additional server-owned values that must never enter diagnostics or streamed output. */
@@ -360,6 +362,9 @@ export const restorePreparedRuntimeExecution = async (input: {
       }
     };
   return {
+    ...(input.browserTestEntryPath === undefined
+      ? {}
+      : { browserTestEntryPath: input.browserTestEntryPath }),
     ...((input.browserTestBaseUrl ?? input.normalActors?.origin) === undefined
       ? {}
       : { browserTestBaseUrl: input.browserTestBaseUrl ?? input.normalActors?.origin }),

@@ -1,3 +1,4 @@
+import { browserEntryPathSchema } from "../repository/browser-entry-path";
 import type { SandboxSession } from "eve/sandbox";
 import path from "node:path";
 import { z } from "zod";
@@ -49,6 +50,27 @@ export const runAppBrowserTests = async (input: {
     appBrowserTestCommand(input.appId) + (selection === undefined ? "" : " (focused selection)");
   try {
     const runtime = input.runtime ?? (input.resolveRuntime ? await input.resolveRuntime() : null);
+    if (runtime?.browserTestEntryPath === null) {
+      return {
+        command,
+        exitCode: null,
+        status: "failed" as const,
+        problem:
+          "Browser verification needs an app-owned catalog entry. Declare autograph.browserEntryPath for ambiguous routes, then refresh the runtime binding. App creation, runtime preparation and release remain available.",
+        stderr: "",
+        stdout: "",
+      };
+    }
+    const entryPath =
+      runtime?.browserTestEntryPath === undefined
+        ? undefined
+        : browserEntryPathSchema.parse(runtime.browserTestEntryPath);
+    const browserEnvironment = {
+      ...(runtime?.browserTestBaseUrl === undefined
+        ? {}
+        : { APP_TEST_BASE_URL: runtime.browserTestBaseUrl }),
+      ...(entryPath === undefined ? {} : { APP_TEST_ENTRY_PATH: entryPath }),
+    };
     const runTask = async () => {
       if (runtime) {
         return await runtime.runTask({
@@ -56,9 +78,9 @@ export const runAppBrowserTests = async (input: {
           task: "test-e2e",
           ...(selection === undefined ? {} : { browserSelection: selection }),
           ...input.continuation,
-          ...(runtime.browserTestBaseUrl === undefined
+          ...(Object.keys(browserEnvironment).length === 0
             ? {}
-            : { environment: { APP_TEST_BASE_URL: runtime.browserTestBaseUrl } }),
+            : { environment: browserEnvironment }),
         });
       }
       if (selection !== undefined) {

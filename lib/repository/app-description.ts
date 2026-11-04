@@ -1,3 +1,4 @@
+import { browserEntryPathSchema } from "./browser-entry-path";
 import { appIntegrationsDescriptionSchema } from "./app-integration-metadata";
 import { z } from "zod";
 import type { SandboxSession } from "eve/sandbox";
@@ -6,7 +7,12 @@ import { generatedAppRoleSchema } from "./generated-app-role";
 
 const appId = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 export const appDescriptionSchema = z.object({
-  app: z.object({ id: appId, routes: z.array(z.string()), workspacePath: z.string() }),
+  app: z.object({
+    id: appId,
+    routes: z.array(z.string()),
+    workspacePath: z.string(),
+    browserEntryPath: browserEntryPathSchema.nullable().optional(),
+  }),
   integrations: appIntegrationsDescriptionSchema.optional(),
   deployment: z
     .object({

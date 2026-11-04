@@ -413,7 +413,9 @@ describe("approved hosted runtime consumers", () => {
       const bindings = vi.fn().mockResolvedValue({
         environment,
         nativePreview: publicOrigin === undefined || publicDelivery ? undefined : { publicOrigin },
-        ...(publicDelivery ? { publicDelivery: { publicOrigin } } : {}),
+        ...(publicDelivery
+          ? { publicDelivery: { publicOrigin, appEntryPath: "/actual-catalog-route" } }
+          : {}),
         operationRef,
         plan: operatorPlan,
         proof: {
@@ -436,6 +438,9 @@ describe("approved hosted runtime consumers", () => {
         { ...mocks, operatorClient },
       );
       expect(runtime?.browserTestBaseUrl).toBe(publicOrigin);
+      expect(runtime?.browserTestEntryPath).toBe(
+        publicDelivery ? "/actual-catalog-route" : undefined,
+      );
       const restoredEnvironment = fixture.provider.writeFiles.mock.calls
         .flatMap(([restored]) => restored)
         .find((file) => file.path.endsWith("/environment.json"));

@@ -363,3 +363,55 @@ describe("private app browser tests", () => {
     expect(result.problem).toContain("command runner");
   });
 });
+
+it.each(["/actual-catalog-route", null, undefined])(
+  "keeps browser entry %s separate from Auth origin and never tests the Shell for an unresolved app",
+  async (browserTestEntryPath) => {
+    const runTask = vi
+      .fn<PreparedRuntimeExecution["runTask"]>()
+      .mockResolvedValue({ exitCode: 0, stdout: "passed", stderr: "" });
+    const runtime: PreparedRuntimeExecution = {
+      browserTestBaseUrl: "https://public-owned.example",
+      browserTestEntryPath,
+      environmentPath: "/private/environment.json",
+      stateDirectory: "/private",
+      installationProof: {
+        actors: 1,
+        appId: "spend-review",
+        artifactHash: "a".repeat(64),
+        authenticatedBehavior: "unassessed",
+        branch: "draft",
+        environment: "preview",
+        observation: "database-verification",
+        observedAt: "2026-10-20T00:00:00Z",
+        releaseId: "release",
+        tenants: 1,
+      },
+      prepareAuthenticatedOrigin: vi.fn(),
+      runTask,
+    };
+    const result = await runResolvedAppBrowserTests({
+      appId: "spend-review",
+      root: "/workspace/repository",
+      sandbox: { run: vi.fn() },
+      runtime,
+    });
+    if (browserTestEntryPath === null) {
+      expect(result.status).toBe("failed");
+      expect(runTask).not.toHaveBeenCalled();
+      return;
+    }
+    expect(result.status).toBe("passed");
+    expect(runTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        environment: {
+          APP_TEST_BASE_URL: "https://public-owned.example",
+          ...(browserTestEntryPath === undefined
+            ? {}
+            : { APP_TEST_ENTRY_PATH: browserTestEntryPath }),
+        },
+      }),
+    );
+    expect(runtime.prepareAuthenticatedOrigin).not.toHaveBeenCalled();
+  },
+);

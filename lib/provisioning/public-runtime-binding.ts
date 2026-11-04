@@ -1,3 +1,4 @@
+import { browserEntryPathSchema } from "../repository/browser-entry-path";
 import { z } from "zod";
 import { operatorPlanDigest, HostedOperatorError } from "./hosted-operator-contract";
 import type { HostedOperatorPlan } from "./hosted-operator-contract";
@@ -24,6 +25,7 @@ export const publicRuntimeBindingSchema = z.strictObject({
   publicOrigin: z
     .url()
     .refine((value) => new URL(value).protocol === "https:" && new URL(value).origin === value),
+  appEntryPath: browserEntryPathSchema.nullable().optional(),
   deploymentId: z.string().min(1),
   releaseId: z.string().min(1),
 });
@@ -41,14 +43,16 @@ export const assertPublicRuntimeBinding = (
     binding.projectId !== plan.selection.projectId ||
     binding.releaseId !== plan.release.id ||
     binding.publicOrigin !== plan.deploymentBoundary?.verification.publicOrigin
-  )
-    {throw fail();}
+  ) {
+    throw fail();
+  }
 };
 
 /** All selection inputs come from the current owned source/normal destination, never listing order or timestamps. */
 export const readVerifiedPublicRuntimeBinding = async (input: {
   plan: HostedOperatorPlan;
   operationRef: string;
+  appEntryPath?: string | null;
   readCandidates: () => Promise<
     readonly { requestId: string; requestDigest: string; record: unknown }[]
   >;
@@ -62,7 +66,9 @@ export const readVerifiedPublicRuntimeBinding = async (input: {
   await input.assertCurrent();
   const rows = await input.readCandidates();
   await input.assertCurrent();
-  if (rows.length !== 1) {throw fail();}
+  if (rows.length !== 1) {
+    throw fail();
+  }
   const row = rows[0];
   const record: PublicReleaseRecord = publicReleaseRecordSchema.parse(row.record);
   const plan = record.plan;
@@ -85,8 +91,9 @@ export const readVerifiedPublicRuntimeBinding = async (input: {
         !record.bindings[entry.key]?.acceptedEnvId,
     ) ||
     !record.approvalReceipts?.length
-  )
-    {throw fail();}
+  ) {
+    throw fail();
+  }
   for (const receipt of record.approvalReceipts ?? []) {
     // Consent is re-read sequentially from the actual owner's native history.
     // oxlint-disable-next-line eslint/no-await-in-loop -- Each complete consent is independently verified before the public read.
@@ -100,8 +107,9 @@ export const readVerifiedPublicRuntimeBinding = async (input: {
     observed.publicOrigin !== plan.publicOrigin ||
     observed.releaseId !== plan.runtime.releaseId ||
     observed.deploymentId !== record.observation.deploymentId
-  )
-    {throw fail();}
+  ) {
+    throw fail();
+  }
   const binding = publicRuntimeBindingSchema.parse({
     kind: "public-application-runtime-v1",
     operationRef: row.requestId,
@@ -111,6 +119,7 @@ export const readVerifiedPublicRuntimeBinding = async (input: {
     projectId: observed.projectId,
     environment: observed.environment,
     publicOrigin: observed.publicOrigin,
+    ...(input.appEntryPath === undefined ? {} : { appEntryPath: input.appEntryPath }),
     deploymentId: observed.deploymentId,
     releaseId: observed.releaseId,
   });

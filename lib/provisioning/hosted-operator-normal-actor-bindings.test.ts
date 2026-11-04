@@ -611,6 +611,7 @@ const publicBoundFixture = async () => {
   const observe = vi.fn(async () => ({ ...observation }));
   f.deps.publicRuntimeBinding = async (input) =>
     await readVerifiedPublicRuntimeBinding({
+      appEntryPath: "/actual-catalog-route",
       plan: input.plan,
       operationRef: input.operationRef,
       readCandidates,
@@ -721,6 +722,7 @@ describe("normal public application runtime handoff", () => {
         // oxlint-disable-next-line typescript/no-unsafe-assignment -- Vitest's documented asymmetric matcher is intentionally untyped.
         env: expect.objectContaining({
           APP_TEST_BASE_URL: normalProgram.origin,
+          APP_TEST_ENTRY_PATH: "/actual-catalog-route",
           APP_TEST_IDENTITIES_FILE: `/tmp/app-builder-operator/${f.request.operationRef}/normal-actors/identities.json`,
         }),
       }),

@@ -1,4 +1,9 @@
-import type { PublicReleaseEffectContext,PublicReleasePorts,PublicReleaseInvocation } from "./public-release-handler";
+import { describedBrowserEntryPath } from "../repository/browser-entry-path";
+import type {
+  PublicReleaseEffectContext,
+  PublicReleasePorts,
+  PublicReleaseInvocation,
+} from "./public-release-handler";
 import { and, eq, sql } from "drizzle-orm";
 import { builderProvisioningJournals } from "../db/schema";
 import { readVerifiedPublicRuntimeBinding } from "./public-runtime-binding";
@@ -367,7 +372,9 @@ export const createPublicReleaseDeployment = (input: {
           }),
         fetch: input.fetch,
       });
-      if (retained === undefined) {return undefined;}
+      if (retained === undefined) {
+        return undefined;
+      }
       const removal =
         original.purpose === "application"
           ? await readPublicReleaseIntegrationRemoval({
@@ -598,14 +605,21 @@ export const createPublicReleaseDeployment = (input: {
       assertCurrent: async () => {
         await base(effect.invocation, effect.plan);
         const row = await store.read(effect.invocation.authority, effect.operationRef);
-        if (row?.record.planDigest !== publicReleasePlanDigest(effect.plan)) {throw fail();}
+        if (row?.record.planDigest !== publicReleasePlanDigest(effect.plan)) {
+          throw fail();
+        }
         if (consent) {
           await assertApproved(effect.invocation, effect.plan);
-          if (heldFence === undefined) {throw fail();}
+          if (heldFence === undefined) {
+            throw fail();
+          }
         } else {
-          if ((row.record.approvalReceipts?.length ?? 0) === 0) {throw fail();}
-          for (const receipt of row.record.approvalReceipts ?? [])
-            {await approval(effect.plan, receipt.approvedByCallId);}
+          if ((row.record.approvalReceipts?.length ?? 0) === 0) {
+            throw fail();
+          }
+          for (const receipt of row.record.approvalReceipts ?? []) {
+            await approval(effect.plan, receipt.approvedByCallId);
+          }
         }
         await heldFence?.();
       },
@@ -954,36 +968,41 @@ export const createPublicReleaseDeployment = (input: {
         ],
       }),
       reconcileEffect: async (effect) => {
-        if (effect.effect === "fence-app-integration-authority")
-          {return await requireIntegrationRemovalPorts(input.integrationRemoval).reconcile(
+        if (effect.effect === "fence-app-integration-authority") {
+          return await requireIntegrationRemovalPorts(input.integrationRemoval).reconcile(
             removalContext(effect, false),
-          );}
+          );
+        }
         if (
           effect.plan.integrationRemoval !== undefined &&
           (await requireIntegrationRemovalPorts(input.integrationRemoval).reconcile({
             ...removalContext(effect, false),
             effect: "fence-app-integration-authority",
           })) !== "applied"
-        )
-          {throw new PublicReleasePrerequisiteError("public_release_integration_removal_required");}
+        ) {
+          throw new PublicReleasePrerequisiteError("public_release_integration_removal_required");
+        }
         return effect.effect === "bind-production-runtime"
           ? await vercel.reconcileBindings(effect)
           : await github.reconcile(effect);
       },
       applyEffect: async (effect) => {
-        if (effect.effect === "fence-app-integration-authority")
-          { await requireIntegrationRemovalPorts(input.integrationRemoval).apply(
+        if (effect.effect === "fence-app-integration-authority") {
+          await requireIntegrationRemovalPorts(input.integrationRemoval).apply(
             removalContext(effect, true),
-          );; return;}
+          );
+          return;
+        }
         if (
           effect.plan.integrationRemoval !== undefined &&
           (await requireIntegrationRemovalPorts(input.integrationRemoval).reconcile({
             ...removalContext(effect, false),
             effect: "fence-app-integration-authority",
           })) !== "applied"
-        )
-          {throw new PublicReleasePrerequisiteError("public_release_integration_removal_required");}
-         effect.effect === "bind-production-runtime"
+        ) {
+          throw new PublicReleasePrerequisiteError("public_release_integration_removal_required");
+        }
+        effect.effect === "bind-production-runtime"
           ? await vercel.bindRuntime(effect)
           : await github.publish(effect);
       },
@@ -1004,8 +1023,9 @@ export const createPublicReleaseDeployment = (input: {
     }) => {
       const { request, context, plan, operationRef } = binding;
       const owner = context.ownerContext;
-      if (owner === undefined || plan.runtimePreparation !== "single-project-resources-v1")
-        {throw fail();}
+      if (owner === undefined || plan.runtimePreparation !== "single-project-resources-v1") {
+        throw fail();
+      }
       const assertCurrentOwner = async () => {
         request.signal.throwIfAborted();
         await input.owner.assertCanonicalAppOwner({
@@ -1026,8 +1046,9 @@ export const createPublicReleaseDeployment = (input: {
       if (
         current.operator.operationRef !== operationRef ||
         current.operator.planDigest !== operatorPlanDigest(plan)
-      )
-        {throw fail();}
+      ) {
+        throw fail();
+      }
       let ports: PublicReleasePorts | undefined;
       let selectedPlan: PublicReleasePlan | undefined;
       const invocation = {
@@ -1057,10 +1078,13 @@ export const createPublicReleaseDeployment = (input: {
             },
           });
         }
-        if (!isDeepStrictEqual(selected, selectedPlan)) {throw fail();}
+        if (!isDeepStrictEqual(selected, selectedPlan)) {
+          throw fail();
+        }
         return ports;
       };
       return await readVerifiedPublicRuntimeBinding({
+        appEntryPath: describedBrowserEntryPath(current.description.app),
         plan,
         operationRef,
         assertCurrent: assertCurrentOwner,
@@ -1101,8 +1125,11 @@ export const createPublicReleaseDeployment = (input: {
             context.authority,
             publicReleaseOperationRef(selected),
           );
-          if (!reread?.record.approvalReceipts?.some((entry) => isDeepStrictEqual(entry, receipt)))
-            {throw fail();}
+          if (
+            !reread?.record.approvalReceipts?.some((entry) => isDeepStrictEqual(entry, receipt))
+          ) {
+            throw fail();
+          }
         },
         observe: async (selected) => await (await getPorts(selected)).observe(invocation, selected),
       });
