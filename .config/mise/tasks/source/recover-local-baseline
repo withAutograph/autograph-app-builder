@@ -1,0 +1,4 @@
+#!/bin/sh
+#MISE description="Recover exact source-only local baseline custody from verified Git and archive bytes"
+set -eu
+exec .config/mise/scripts/trusted-node-launcher "$(mise which node)" --import tsx scripts/recover-local-source-baseline.mts "$@"

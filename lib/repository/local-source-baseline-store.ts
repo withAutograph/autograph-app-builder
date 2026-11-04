@@ -1,5 +1,6 @@
 /* oxlint-disable eslint/no-bitwise, eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Exact ordered Git streams and owner-only filesystem publication are deliberate. */
 import { createHash } from "node:crypto";
+import { constants } from "node:fs";
 import type { ChildProcess } from "node:child_process";
 import { execFileSync, spawn } from "node:child_process";
 import { Readable } from "node:stream";
@@ -10,7 +11,6 @@ import {
   mkdir,
   mkdtemp,
   open,
-  readFile,
   readdir,
   realpath,
   rename,
@@ -52,6 +52,7 @@ export const localBaselineGit = (root: string, args: string[], input?: Uint8Arra
         PATH: "/usr/bin:/bin",
         HOME: path.dirname(root),
         GIT_CONFIG_NOSYSTEM: "1",
+        GIT_NO_REPLACE_OBJECTS: "1",
         GIT_CONFIG_GLOBAL: "/dev/null",
         GIT_TERMINAL_PROMPT: "0",
       },
@@ -97,6 +98,7 @@ export const committedDevelopmentInventory = async (gitRoot: string, sourceSha: 
       NODE_ENV: "test",
       PATH: "/usr/bin:/bin",
       GIT_CONFIG_NOSYSTEM: "1",
+      GIT_NO_REPLACE_OBJECTS: "1",
       GIT_CONFIG_GLOBAL: "/dev/null",
     },
     stdio: ["pipe", "pipe", "pipe"],
@@ -189,15 +191,25 @@ const fsyncTree = async (root: string) => {
     await handle.close();
   }
 };
+const readOwnedManifest = async (root: string, uid: number) => {
+  await ownedDirectory(root, uid);
+  const handle = await open(
+    path.join(root, "manifest.json"),
+    constants.O_RDONLY | constants.O_NOFOLLOW,
+  );
+  try {
+    const info = await handle.stat();
+    if (!info.isFile() || info.uid !== uid || (info.mode & 0o077) !== 0)
+      {throw new Error("source_baseline_manifest_unavailable");}
+    return localSourceBaselineManifestSchema.parse(JSON.parse(await handle.readFile("utf-8")));
+  } finally {
+    await handle.close();
+  }
+};
 const validateStored = async (root: string, manifest: LocalSourceBaselineManifest, uid: number) => {
   await ownedDirectory(root, uid);
   await ownedDirectory(path.join(root, "source.git"), uid);
-  const file = path.join(root, "manifest.json");
-  const info = await lstat(file);
-  if (!info.isFile() || info.isSymbolicLink() || info.uid !== uid || (info.mode & 0o077) !== 0) {
-    throw new Error("source_baseline_manifest_unavailable");
-  }
-  const stored = localSourceBaselineManifestSchema.parse(JSON.parse(await readFile(file, "utf-8")));
+  const stored = await readOwnedManifest(root, uid);
   if (
     stored.originalSourceSha !== manifest.originalSourceSha ||
     stored.workspaceDigest !== manifest.workspaceDigest ||
@@ -218,8 +230,9 @@ const validateStored = async (root: string, manifest: LocalSourceBaselineManifes
     localBaselineGit(gitRoot, ["rev-parse", `${manifest.originalSourceSha}^{commit}`])
       .toString()
       .trim() !== manifest.originalSourceSha
-  )
-    { throw new Error("source_baseline_original_identity_mismatch"); }
+  ) {
+    throw new Error("source_baseline_original_identity_mismatch");
+  }
   const observed = await committedDevelopmentInventory(gitRoot, manifest.sourceSha);
   if (observed.workspaceDigest !== manifest.workspaceDigest) {
     throw new Error("source_baseline_inventory_mismatch");
@@ -246,9 +259,7 @@ export const retainLocalSourceBaseline = async (input: {
   const root = path.join(parent, manifest.workspaceDigest);
   try {
     await lstat(root);
-    const stored = localSourceBaselineManifestSchema.parse(
-      JSON.parse(await readFile(path.join(root, "manifest.json"), "utf-8")),
-    );
+    const stored = await readOwnedManifest(root, input.authority.ownerUid);
     if (
       stored.originalSourceSha !== manifest.originalSourceSha ||
       stored.workspaceDigest !== manifest.workspaceDigest ||
@@ -278,6 +289,7 @@ export const retainLocalSourceBaseline = async (input: {
       NODE_ENV: "test",
       PATH: "/usr/bin:/bin",
       GIT_CONFIG_NOSYSTEM: "1",
+      GIT_NO_REPLACE_OBJECTS: "1",
       GIT_CONFIG_GLOBAL: "/dev/null",
     },
     stdio: ["pipe", "ignore", "pipe"],

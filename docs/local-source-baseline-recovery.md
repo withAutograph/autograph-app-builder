@@ -33,3 +33,56 @@ remain separate. An explicit source-only recovery can reconstruct missing custod
 from genuine original Git objects and verified archives only when the entire
 computed inventory exactly matches the declared frozen digest. It cannot admit
 an approximate current checkout or change the meaning of a previous plan.
+
+## Explicit archive recovery
+
+Run the maintained operation only after reviewing a source-only request:
+
+```sh
+mise run source:recover-local-baseline -- \
+  --runs-root /absolute/existing-instance/state/runs \
+  --request /absolute/reviewed-source-recovery.json
+```
+
+`--runs-root` must be the actual closed launcher's existing directory. The task
+derives the inner authority state root from its parent and verifies that root,
+`runs`, OS ownership/private permissions and the existing sibling `eve-cycle`
+binding. It never creates a cycle or infers the root from an outer command-line
+`--state-root` name. The request is strict JSON:
+
+```json
+{
+  "originalSourceRoot": "/absolute/genuine-git-checkout",
+  "originalSourceSha": "<40 lowercase hex characters>",
+  "workspaceDigest": "<64 lowercase hex characters from the frozen plan>",
+  "archives": [{
+    "path": "/absolute/source-only.tar.gz",
+    "sha256": "<actual archive SHA256>",
+    "files": [{
+      "path": "apps/example/source.ts",
+      "mode": "100644",
+      "sha256": "<actual raw file SHA256>"
+    }],
+    "ignoredMetadata": [{
+      "path": "recovery-manifest.json",
+      "sha256": "<actual raw metadata SHA256>"
+    }]
+  }]
+}
+```
+
+Every regular archive entry must be declared exactly once as source or ignored
+metadata. Directories are traversed only as archive metadata: no archive entry is
+extracted into a filesystem destination. Traversal, links, special entries,
+duplicate source declarations across archives, secret/runtime paths, incorrect
+archive/file hashes and executable-mode mismatches are rejected. The source union
+may replace genuine original Git files only with the explicitly declared bytes.
+Ignored metadata is verified but never becomes repository source.
+
+The operation creates a new capture commit with explicit recovery provenance,
+retains genuine original commit/tree/blob objects and shallow boundaries, checks
+the complete frozen inventory, and publishes through the shared immutable writer.
+It reports only custody path and bounded identities. Private scratch capture packs
+remain separate for inspection. No native state, approval, database, provider
+configuration or app data is imported or rewritten. Matching custody is not a new
+approval; normal product continuation still owns subsequent planning and effects.
