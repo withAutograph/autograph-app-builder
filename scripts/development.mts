@@ -1,3 +1,4 @@
+import { prepareDevelopmentEveWrapperEnvironment } from "../lib/development/eve-wrapper-environment";
 import { maintainLocalDevelopmentOidcLease } from "../lib/development/local-oidc-lease";
 import { prepareDevelopmentEmulatedWeb } from "../lib/development/emulated-web";
 import { spawn } from "node:child_process";
@@ -122,43 +123,6 @@ function nextEnvironment(input: {
   } satisfies NodeJS.ProcessEnv;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function eveWrapperEnvironment(input: {
-  closed: Readonly<Record<string, string>>;
-  applicationRoot: string;
-  runsRoot: string;
-  supervisorRoot: string;
-  runtimeHome: string;
-  web?: Awaited<ReturnType<typeof prepareDevelopmentEmulatedWeb>>;
-  workflowData: string;
-}) {
-  const runtimeEnvironment = {
-    HOME: input.runtimeHome,
-    LANG: process.env.LANG ?? "C",
-    LC_ALL: process.env.LC_ALL ?? "C",
-    NODE_ENV: "production" as const,
-    PATH: `${nodePath.dirname(requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"))}:/usr/bin:/bin`,
-    TMPDIR: process.env.TMPDIR ?? "/tmp",
-    TZ: process.env.TZ ?? "UTC",
-  };
-  return {
-    ...runtimeEnvironment,
-    ...input.closed,
-    APP_BUILDER_DEV_EVE_ROOT: input.applicationRoot,
-    APP_BUILDER_DEV_RUNS_ROOT: input.runsRoot,
-    APP_BUILDER_DEV_RUNTIME_HOME: input.runtimeHome,
-    APP_BUILDER_DEV_SUPERVISOR_ROOT: input.supervisorRoot,
-    APP_BUILDER_EVE_PORT: new URL(input.closed.EVE_AGENT_HOST).port,
-    // Eve's world-local queue must use the same explicitly selected loopback
-    // endpoint as the public adapter.  Leaving this unset makes world-local
-    // probe arbitrary ports, which can route a redelivery to Next instead of
-    // the Eve worker and replay a turn without durable progress.
-    WORKFLOW_LOCAL_BASE_URL: input.closed.EVE_AGENT_HOST,
-    WORKFLOW_LOCAL_DATA_DIR: input.workflowData,
-    WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0",
-  } satisfies NodeJS.ProcessEnv;
-}
-
 // oxlint-disable-next-line eslint/func-style, eslint/complexity -- Explicit retained-cycle recovery shares the same owned process shutdown path.
 async function runEveCycle(input: {
   cycleFile: string;
@@ -264,16 +228,32 @@ async function runEveCycle(input: {
       sourceSha: snapshot.commit,
       sourceTree: snapshot.tree,
     });
+    const wrapperEnvironment = await prepareDevelopmentEveWrapperEnvironment({
+      cycleFile: input.cycleFile,
+      closed,
+      applicationRoot: cycle.application.root,
+      runsRoot: input.runsRoot,
+      supervisorRoot: nodePath.dirname(cycle.root),
+      runtimeHome: cycle.runtimeHome,
+      workflowData: cycle.workflowData,
+      repositoryRoot,
+      nodeExecutable: requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"),
+      vercelExecutable: requiredEnvironment("APP_BUILDER_DEV_VERCEL_BIN"),
+      environment: process.env,
+      signal: input.signal,
+    });
+    input.signal.throwIfAborted();
     const stopOidcLease = maintainLocalDevelopmentOidcLease({
       repositoryRoot,
       applicationRoot: cycle.application.root,
       runtimeHome: cycle.runtimeHome,
       vercelExecutable: requiredEnvironment("APP_BUILDER_DEV_VERCEL_BIN"),
       miseExecutable: requiredEnvironment("APP_BUILDER_DEV_MISE_BIN"),
-      onUnavailable: () =>
+      onUnavailable: () => {
         console.warn(
           "Builder model credential renewal is unavailable; saved work is preserved. Check the existing Vercel login.",
-        ),
+        );
+      },
     });
     const eve = spawn(
       requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"),
@@ -292,14 +272,7 @@ async function runEveCycle(input: {
         // every descendant in a separate process group so Ctrl+C cleans up
         // the whole Eve cycle instead of leaving its listener on the port.
         detached: process.platform !== "win32",
-        env: eveWrapperEnvironment({
-          applicationRoot: cycle.application.root,
-          closed,
-          runsRoot: input.runsRoot,
-          runtimeHome: cycle.runtimeHome,
-          supervisorRoot: nodePath.dirname(cycle.root),
-          workflowData: cycle.workflowData,
-        }),
+        env: wrapperEnvironment,
         stdio: "inherit",
       },
     );
