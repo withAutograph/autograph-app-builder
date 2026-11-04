@@ -593,3 +593,66 @@ describe("opaque App Builder handoffs", () => {
     ).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
   });
 });
+
+describe("application source handoff authority", () => {
+  const sourceCandidate = {
+    kind: "application-source-candidate-v1" as const,
+    uploadId: "46024567-225f-4169-9b78-2b2e19ba8848",
+    appId: intent.appId,
+    manifestDigest: "a".repeat(64),
+  };
+  it("preserves the digest of omitted legacy source fields", () => {
+    const parsed = builderHandoffIntentSchema.parse(intent);
+    expect(Object.hasOwn(parsed, "sourceCandidate")).toBe(false);
+    expect(
+      builderHandoffRequestDigest({
+        authority,
+        creationRequestId: "46024567-225f-4169-9b78-2b2e19ba8848",
+        intent: parsed,
+      }),
+    ).toBe(
+      builderHandoffRequestDigest({
+        authority,
+        creationRequestId: "46024567-225f-4169-9b78-2b2e19ba8848",
+        intent,
+      }),
+    );
+  });
+  it("rejects source candidates without independent owned artifact validation", async () => {
+    const service = createBuilderHandoffService({ store: memoryStore() });
+    await expect(
+      service.create({
+        authority,
+        creationRequestId: randomUUID(),
+        intent: { ...intent, sourceCandidate },
+      }),
+    ).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
+    expect(() =>
+      builderHandoffIntentSchema.parse({
+        ...intent,
+        sourceCandidate: { ...sourceCandidate, appId: "other-app" },
+      }),
+    ).toThrow();
+  });
+  it("revalidates completed source at redemption and preserves one-session binding", async () => {
+    const validate = vi.fn(async () => {
+      await Promise.resolve();
+    });
+    const service = createBuilderHandoffService({
+      store: memoryStore(),
+      validateSourceCandidate: validate,
+    });
+    const created = await service.create({
+      authority,
+      creationRequestId: randomUUID(),
+      intent: { ...intent, sourceCandidate },
+    });
+    const initial = await service.resolve({ authority, handoffId: created.handoffId });
+    expect(initial.status).toBe("unredeemed");
+    expect(validate).toHaveBeenCalledTimes(2);
+    validate.mockRejectedValueOnce(new BuilderHandoffUnavailableError());
+    await expect(
+      service.resolve({ authority, handoffId: created.handoffId }),
+    ).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
+  });
+});

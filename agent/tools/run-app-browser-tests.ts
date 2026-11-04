@@ -1,3 +1,9 @@
+import { workingPreviewState } from "@/lib/agent/working-preview-state";
+import { hasCurrentProductBehaviorPreview } from "@/lib/agent/product-behavior-state";
+import {
+  PrivatePreviewBrowserPrerequisiteError,
+  withPrivatePreviewBrowserAccess,
+} from "@/lib/agent/private-preview-browser-access";
 import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
 import { defineTool } from "eve/tools";
@@ -15,7 +21,10 @@ import type {
   PreparedRuntimeExecutionContext,
 } from "@/lib/agent/prepared-runtime-execution";
 
-import { runAppBrowserTests as runResolvedAppBrowserTests } from "../../lib/agent/app-browser-test-runner";
+import {
+  appBrowserTestCommand,
+  runAppBrowserTests as runResolvedAppBrowserTests,
+} from "../../lib/agent/app-browser-test-runner";
 
 export { appBrowserTestCommand } from "../../lib/agent/app-browser-test-runner";
 
@@ -24,7 +33,7 @@ const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 export const runAppBrowserTests = async (input: {
   appId: string;
   root: string;
-  sandbox: Pick<SandboxSession, "run">;
+  sandbox: Pick<SandboxSession, "run"> & Partial<Pick<SandboxSession, "writeTextFile">>;
   signal?: AbortSignal;
   execution?: PreparedRuntimeExecutionContext;
   selection?: BrowserTestSelection;
@@ -36,10 +45,68 @@ export const runAppBrowserTests = async (input: {
   };
 }) => {
   const { execution, ...runInput } = input;
-  return await runResolvedAppBrowserTests({
-    ...runInput,
-    resolveRuntime: execution ? () => resolvePreparedRuntimeExecution(execution) : undefined,
-  });
+  const runtime =
+    input.runtime ?? (execution ? await resolvePreparedRuntimeExecution(execution) : null);
+  const run = (environment?: Record<string, string>) =>
+    runResolvedAppBrowserTests({
+      ...runInput,
+      runtime,
+      ...(environment ? { privateBrowserEnvironment: environment } : {}),
+    });
+  if (runtime || !execution) {
+    return await run();
+  }
+  const preview = workingPreviewState.get();
+  if (!preview) {
+    return await run();
+  }
+  const identity = (value: typeof preview) =>
+    JSON.stringify([
+      value.commandId,
+      value.providerSessionId,
+      value.sandboxId,
+      value.receipt.appId,
+      value.receipt.url,
+      value.receipt.expiresAt,
+      value.requestDigest,
+    ]);
+  const frozenIdentity = identity(preview);
+  try {
+    const assertCurrent = () => {
+      const current = workingPreviewState.get();
+      if (
+        !current ||
+        identity(current) !== frozenIdentity ||
+        !hasCurrentProductBehaviorPreview(preview.commandId)
+      ) {
+        throw new PrivatePreviewBrowserPrerequisiteError();
+      }
+    };
+    return await withPrivatePreviewBrowserAccess({
+      appId: input.appId,
+      root: input.root,
+      sandboxId: execution.sandboxId,
+      preview,
+      sandbox: input.sandbox,
+      signal: input.signal,
+      assertCurrent,
+      operation: run,
+    });
+  } catch (error) {
+    input.signal?.throwIfAborted();
+    if (!(error instanceof PrivatePreviewBrowserPrerequisiteError)) {
+      throw error;
+    }
+    return {
+      status: "failed" as const,
+      reason: error.code,
+      problem: error.message,
+      command: appBrowserTestCommand(input.appId),
+      exitCode: null,
+      stdout: "",
+      stderr: "",
+    };
+  }
 };
 
 export default defineTool({

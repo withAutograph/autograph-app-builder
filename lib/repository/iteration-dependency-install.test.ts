@@ -125,7 +125,16 @@ const fixture = (
       proposal,
       sandbox,
     });
-  return { cueCommand: () => cueCommand, cueFailure, events, execute, failure, policies, sandbox };
+  return {
+    cueCommand: () => cueCommand,
+    cueFailure,
+    events,
+    execute,
+    failure,
+    policies,
+    sandbox,
+    proposal,
+  };
 };
 
 const executeCueActivation = async function executeCueActivation(
@@ -262,4 +271,63 @@ describe("existing-app dependency installation", () => {
     await executeCueActivation(command, "development/bin");
     await executeCueActivation(command, "hosted/node_modules/.bin");
   });
+});
+
+it("applies the exact imported application catalog plan only within the approved build", async () => {
+  const f = fixture();
+  const topology = '{"applications":{}}';
+  const proposed = '{"applications":{"vendor":{}}}';
+  const sandbox = {
+    ...f.sandbox,
+    readTextFile: vi.fn<BuilderSandboxSession["readTextFile"]>(async () => {
+      await Promise.resolve();
+      return topology;
+    }),
+    writeTextFile: vi.fn<BuilderSandboxSession["writeTextFile"]>(async (input) => {
+      if (input.path.endsWith("microfrontends.json")) {
+        f.events.push("registration");
+        return;
+      }
+      await f.sandbox.writeTextFile(input);
+    }),
+  };
+  const proposal = targetIterationProposalSchema.parse({
+    ...f.proposal,
+    applicationSourceImport: {
+      appId: "vendor",
+      manifestDigest: "a".repeat(64),
+      importedSessionId: "new-hosted-session",
+      registration: {
+        oldDigest: digest(topology),
+        newDigest: digest(proposed),
+        proposedBytes: proposed,
+        projectName: "vendor",
+        assetRoute: "/asset/:path*",
+      },
+    },
+  });
+  const result = await sandboxApplyCommandExecutor()({
+    appId: "vendor",
+    applyRoot: "/workspace/repository",
+    proposal,
+    sandbox,
+  });
+  expect(result.exitCode).toBe(0);
+  expect(f.events.indexOf("registration")).toBeLessThan(f.events.indexOf("install"));
+  expect(targetApplyCommandReceiptSchema.parse(JSON.parse(result.stdout)).topology).toEqual({
+    oldDigest: digest(topology),
+    newDigest: digest(proposed),
+    path: "microfrontends.json",
+  });
+  sandbox.readTextFile.mockResolvedValue("changed-by-other-writer");
+  f.events.length = 0;
+  const stale = await sandboxApplyCommandExecutor()({
+    appId: "vendor",
+    applyRoot: "/workspace/repository",
+    proposal,
+    sandbox,
+  });
+  expect(stale.exitCode).toBe(2);
+  expect(f.events).not.toContain("registration");
+  expect(f.events).not.toContain("install");
 });

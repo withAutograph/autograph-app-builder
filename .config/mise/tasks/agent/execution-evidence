@@ -1,0 +1,4 @@
+#!/bin/sh
+#MISE description="Read current-turn versus historical execution evidence from one local Builder instance"
+set -eu
+exec .config/mise/scripts/trusted-node-launcher "$(mise which node)" --import tsx .config/mise/scripts/repository/inspect-turn-execution.mts "$@"

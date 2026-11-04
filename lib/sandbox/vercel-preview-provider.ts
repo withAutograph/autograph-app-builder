@@ -1,3 +1,4 @@
+import { assertPrivateComputeResumeAllowed } from "./private-compute-resume";
 import { Sandbox } from "@vercel/sandbox";
 
 // Authenticated provider handles own this association, never tool input.
@@ -56,7 +57,15 @@ export const getVercelPreviewProvider = async (
   if (resume && provider.status !== "running") {
     registration.resuming ??= (async () => {
       try {
-        const reattached = await Sandbox.get({ name: provider.name, resume, signal });
+        const observed = await Sandbox.get({ name: provider.name, resume: false, signal });
+        if (observed.status !== "running")
+          await assertPrivateComputeResumeAllowed(observed, () => {
+            signal?.throwIfAborted();
+          });
+        const reattached =
+          observed.status === "running"
+            ? observed
+            : await Sandbox.get({ name: provider.name, resume, signal });
         // Cleanup waits for this owned resume, including when close has begun.
         if (providers.get(sandboxId) === registration) {
           registration.provider = reattached;
@@ -73,4 +82,28 @@ export const getVercelPreviewProvider = async (
     return reattached;
   }
   return provider;
+};
+/** Replace only the same owned registration after a verified same-name provider session transition. */
+export const replaceVercelPreviewProvider = (
+  id: string,
+  expected: Sandbox,
+  replacement: Sandbox,
+): void => {
+  const registration = providers.get(id);
+  if (
+    !registration ||
+    registration.closing ||
+    registration.provider !== expected ||
+    expected.name !== id ||
+    replacement.name !== id ||
+    JSON.stringify(expected.mounts) !== JSON.stringify(replacement.mounts)
+  )
+    throw new Error("The provider registration changed during the private compute transition.");
+  registration.provider = replacement;
+};
+
+/** Observe an existing local SDK registration without provider network or resume effects. */
+export const peekVercelPreviewProvider = (sandboxId: string): Sandbox | undefined => {
+  const registration = providers.get(sandboxId);
+  return registration === undefined || registration.closing ? undefined : registration.provider;
 };

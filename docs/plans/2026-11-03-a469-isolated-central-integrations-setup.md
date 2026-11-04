@@ -1,6 +1,10 @@
 # A-469: isolated central integration infrastructure
 
-Status: implementation plan; no central setup or hosted acceptance is claimed.
+Status: retained legacy isolated-host implementation plan; no central setup or
+hosted acceptance is claimed. Fresh normal app capability/public-release plans
+must use the [normal existing-platform reference](../optional-integrations-delivery.md#normal-existing-platform-reference).
+This isolated Preview path is not their prerequisite or fallback. Existing frozen
+isolated plans, approvals, receipts and catalog entries retain their meaning.
 This extends the [normal Builder acceptance plan](2026-11-03-a469-normal-builder-public-delivery.md).
 
 The generated app keeps its one normal `apps-<app-id>` Services project and

@@ -1,3 +1,4 @@
+import { operatorWorkerSourceCaptureSchema } from "./operator-worker-source-capture";
 import { z } from "zod";
 
 import { hostedOperatorAppProjectSettingsSchema } from "./hosted-operator-app-project-settings";
@@ -81,6 +82,7 @@ export const nativeTargetOnboardingPlanSchema = z
       }),
     }),
     worker: z.strictObject({
+      sourceCapture: operatorWorkerSourceCaptureSchema.optional(),
       id,
       executablePath: id,
       sha256: digest,

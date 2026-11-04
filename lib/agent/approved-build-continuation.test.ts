@@ -103,6 +103,7 @@ describe("approved stopped build continuation", () => {
       requestPrivateApplyApproval(scope, "approve");
       recordApprovedPrivateApply(scope, "approve");
       for (const reason of [
+        "tooling-prerequisite",
         "execution-error",
         "command-timeout",
         "materialization-failed",
@@ -135,6 +136,35 @@ describe("approved stopped build continuation", () => {
       expect(decide(failed, { blocked: true }).decision).toBe("blocked");
     });
   });
+  it.each(["native-tool-panic", "missing-app-task"])(
+    "retains typed %s facts as blocked while an ordinary new user turn remains possible",
+    (failureClass) => {
+      contextStorage.run(new ContextContainer(), () => {
+        requestPrivateApplyApproval(scope, "approve");
+        recordApprovedPrivateApply(scope, "approve");
+        // SAFETY: Change only source-owned fatal validation facts while preserving the real retained approval.
+        const state = {
+          ...failed,
+          validationFailure: {
+            ...failed.validationFailure,
+            reason: "tooling-prerequisite",
+            commandFailure: { name: "check-build", exitCode: 134, failureClass },
+          },
+        } as AppBuilderWorkflowState;
+        expect(decide(state)).toMatchObject({
+          decision: "blocked",
+          validation: {
+            exitCode: 134,
+            reason: "tooling-prerequisite",
+            failureClass,
+          },
+        });
+        // SAFETY: An actual later apply phase has no pending validation failure authority.
+        const reapplied = { ...failed, phase: "applied" } as AppBuilderWorkflowState;
+        expect(decide(reapplied).decision).toBe("runnable");
+      });
+    },
+  );
   it("current accepted spec is projected separately from an old or missing build approval", () => {
     contextStorage.run(new ContextContainer(), () => {
       requestPrivateApplyApproval(scope, "approve");
@@ -150,4 +180,83 @@ describe("approved stopped build continuation", () => {
       expect(result.decision).toBe("blocked");
     });
   });
+});
+
+it("projects only the independently acquired existing repository into private destination recovery", async () => {
+  const { recordRepositoryAccessReceipt } = await import("./repository-access-state");
+  const access = recordRepositoryAccessReceipt({
+    current: undefined,
+    sessionId: scope.sessionId,
+    confirmedByCallId: "actual-repository-acquisition",
+    access: {
+      status: "ready",
+      accessDigest: "3".repeat(64),
+      repository: {
+        archived: false,
+        defaultBranch: "main",
+        headSha: "1".repeat(40),
+        headTree: "2".repeat(40),
+        name: "existing-app",
+        owner: "owned",
+        repositoryId: "200",
+        repositoryVariableNames: [],
+        visibility: "private",
+      },
+      scope: { accountLogin: "owned", accountType: "Organization", installationId: "10" },
+    },
+  });
+  const state = {
+    ...failed,
+    sourceReceipt: { ...failed.sourceReceipt, sourceKind: "existing-repository" as const },
+    githubSource: {
+      version: 2 as const,
+      repository: {
+        version: 2 as const,
+        repositoryId: "200",
+        name: "existing-app",
+        owner: "owned",
+        visibility: "private" as const,
+        defaultBranch: "main",
+        headSha: "1".repeat(40),
+        headTree: "2".repeat(40),
+        installationIdentityDigest: "4".repeat(64),
+        releaseGate: { name: "REPOSITORY_RELEASE_ENABLED" as const, configured: true },
+        digest: "5".repeat(64),
+      },
+      installationIdentityDigest: "4".repeat(64),
+      resolvedRef: "refs/heads/main",
+      resolvedSha: "1".repeat(40),
+      resolvedTree: "2".repeat(40),
+      resolvedByCallId: "actual-source-acquisition",
+      digest: "6".repeat(64),
+    },
+  };
+  const project = (repositoryAccess = access) =>
+    decideApprovedBuildContinuation({
+      state,
+      repositoryAccess,
+      adapterSessionId: scope.sessionId,
+      approvalMatches: () => false,
+      blocked: false,
+      pendingInput: false,
+      turnId: "revision-turn",
+      turnSequence: 1,
+    });
+  expect(project().existingRepositorySource).toEqual(access);
+  expect(
+    project({ ...access, repository: { ...access.repository, repositoryId: "201" } })
+      .existingRepositorySource,
+  ).toBeUndefined();
+  expect(
+    decideApprovedBuildContinuation({
+      state: { ...state, sourceReceipt: { ...state.sourceReceipt, sourceKind: "fresh-template" } },
+      repositoryAccess: access,
+      adapterSessionId: scope.sessionId,
+      approvalMatches: () => false,
+      blocked: false,
+      pendingInput: false,
+      turnId: "revision-turn",
+      turnSequence: 1,
+    }).existingRepositorySource,
+  ).toBeUndefined();
 });

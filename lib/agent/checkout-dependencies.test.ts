@@ -585,3 +585,43 @@ describe("saved validation dependency recovery", () => {
     expect(spawn).not.toHaveBeenCalled();
   });
 });
+
+describe("authored workspace preview dependencies", () => {
+  it("retains a failed reconciliation attempt instead of reporting installed dependencies", async () => {
+    const attempts: DependencyAttemptResult[] = [];
+    const spawn = vi.fn().mockResolvedValue(process(1, [], ["workspace dependency missing"]));
+    await expect(
+      ensureCheckoutDependencies({
+        ...input(spawn),
+        reconcileWorkspace: true,
+        onAttempt: (attempt) => {
+          attempts.push(attempt);
+        },
+      }),
+    ).rejects.toThrow(/bun install.*status 1/u);
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]).toMatchObject({
+      command: "dependency-install",
+      exitCode: 1,
+      completion: "complete",
+    });
+  });
+
+  it("rechecks the selected app after installation before allowing startup", async () => {
+    let checks = 0;
+    const spawn = vi.fn().mockResolvedValue(process(0));
+    await expect(
+      ensureCheckoutDependencies({
+        ...input(spawn),
+        reconcileWorkspace: true,
+        assertCurrent: () => {
+          checks += 1;
+          if (checks === 2) {
+            throw new Error("app changed");
+          }
+        },
+      }),
+    ).rejects.toThrow("app changed");
+    expect(checks).toBe(2);
+  });
+});

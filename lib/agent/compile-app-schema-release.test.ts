@@ -376,3 +376,26 @@ it("keeps decorated structured compiler payloads and credentials private", async
   );
   expect(safeCommandOutput('["private-default-array"]')).not.toContain("private-default-array");
 });
+
+it("retains the compiler error category before a redacted structured diagnostic", async () => {
+  const result = await compileAppSchemaRelease({
+    appId: "example",
+    root: "/workspace/repository",
+    sandbox: {
+      run: vi
+        .fn()
+        .mockResolvedValue({
+          exitCode: 1,
+          stdout: "",
+          stderr:
+            '[app:compile] schema-compiler: manifest compilation failed: invalid role grants: ["private-grant-canary"]\n[app:compile] Retry: compile the selected schema',
+        }),
+    },
+  });
+  expect(result.stderr).toContain(
+    "schema-compiler: manifest compilation failed: invalid role grants:",
+  );
+  expect(result.stderr).toContain("[structured output redacted]");
+  expect(result.stderr).toContain("Retry: compile the selected schema");
+  expect(JSON.stringify(result)).not.toContain("private-grant-canary");
+});

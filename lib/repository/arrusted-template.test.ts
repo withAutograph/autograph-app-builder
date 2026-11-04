@@ -22,6 +22,18 @@ describe("canonical Arrusted source preparation", () => {
     const run = vi.fn(async ({ command }: { command: string }) => {
       await Promise.resolve();
       commands.push(command);
+      if (command.includes("canonical-main-acquisition-proof-v1"))
+        return {
+          exitCode: 0,
+          stderr: "",
+          stdout: JSON.stringify({
+            sourceSha: "a".repeat(40),
+            sourceTree: "b".repeat(40),
+            mainSha: "a".repeat(40),
+            mainTree: "b".repeat(40),
+            originMatches: true,
+          }),
+        };
       return {
         exitCode: command.startsWith("test -L ") ? 1 : 0,
         stderr: "",
@@ -58,6 +70,18 @@ describe("canonical Arrusted source preparation", () => {
     });
     const run = vi.fn(async ({ command }: { command: string }) => {
       await Promise.resolve();
+      if (command.includes("canonical-main-acquisition-proof-v1"))
+        return {
+          exitCode: 0,
+          stderr: "",
+          stdout: JSON.stringify({
+            sourceSha,
+            sourceTree,
+            mainSha: sourceSha,
+            mainTree: sourceTree,
+            originMatches: true,
+          }),
+        };
       if (command.startsWith("test -e ") || command.startsWith("test -L ")) {
         return { exitCode: 1, stderr: "", stdout: "" };
       }
@@ -89,6 +113,7 @@ describe("canonical Arrusted source preparation", () => {
     expect(materializeGitSource).toHaveBeenCalledWith({
       token: "test-token",
       url: "https://github.com/withAutograph/arrusted-development.git",
+      revision: "main",
     });
   });
 

@@ -41,6 +41,194 @@ function installation(scopeType: "team" | "user") {
 }
 
 describe("Vercel project provisioning", () => {
+  it.each([
+    ["prod_deployment_urls_and_all_previews", true, "team", "succeeded"],
+    ["all", true, "team", "failed"],
+    [null, true, "team", "failed"],
+    ["prod_deployment_urls_and_all_previews", false, "team", "failed"],
+    ["prod_deployment_urls_and_all_previews", true, "global", "failed"],
+  ] as const)(
+    "verifies public-app access policy %s / OIDC %s / %s before success",
+    async (deploymentType, enabled, issuerMode, status) => {
+      let created = false;
+      const writes: unknown[] = [];
+      // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
+      const request = vi.fn<typeof fetch>(async (_url, init) => {
+        if (init?.method === "POST") {
+          writes.push(JSON.parse(String(init.body)));
+          created = true;
+          return Response.json({ id: "prj_public" }, { status: 201 });
+        }
+        return created
+          ? Response.json({
+              framework: "services",
+              id: "prj_public",
+              name: "apps-vendor-portal",
+              rootDirectory: ".",
+              ssoProtection: deploymentType === null ? null : { deploymentType },
+              oidcTokenConfig: { enabled, issuerMode },
+            })
+          : Response.json({}, { status: 404 });
+      });
+      const result = await provisionVercelProject({
+        appId: "vendor-portal",
+        deploymentAccess: "public-app",
+        fetch: request,
+        github: { code: "not_selected", retryable: false, status: "skipped" },
+        githubSelected: false,
+        installation: installation("team"),
+        persistAbsent: vi.fn(),
+        persistCandidate: vi.fn(),
+        persistedAbsentCandidates: [],
+        persistedCandidates: [],
+        token: "vercel-token",
+      });
+      expect(result.status).toBe(status);
+      expect(writes).toHaveLength(1);
+      expect(writes[0]).toMatchObject({
+        framework: "services",
+        rootDirectory: ".",
+        ssoProtection: { deploymentType: "prod_deployment_urls_and_all_previews" },
+        oidcTokenConfig: { enabled: true, issuerMode: "team" },
+      });
+      expect(request.mock.calls.every(([, init]) => init?.method !== "PATCH")).toBe(true);
+    },
+  );
+
+  it.each([
+    [
+      JSON.stringify({ error: { code: "forbidden", message: "secret" } }),
+      "iad1::failure_123",
+      { statusCode: 403, code: "forbidden", requestRef: "iad1::failure_123" },
+    ],
+    [
+      JSON.stringify({ error: { code: "secret", message: "secret" }, token: "secret" }),
+      "https://secret.example",
+      { statusCode: 403 },
+    ],
+    ["not-json", "iad1::failure_123", { statusCode: 403, requestRef: "iad1::failure_123" }],
+  ])("retains only allowlisted provider failure facts", async (body, requestRef, diagnostic) => {
+    // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
+    const request = vi.fn<typeof fetch>(async (_url, init) => {
+      if (init?.method !== "POST") return Response.json({}, { status: 404 });
+      return new Response(body, { status: 403, headers: { "x-vercel-id": requestRef } });
+    });
+    const result = await provisionVercelProject({
+      appId: "vendor-portal",
+      fetch: request,
+      github: { code: "not_selected", retryable: false, status: "skipped" },
+      githubSelected: false,
+      installation: installation("team"),
+      persistAbsent: vi.fn(),
+      persistCandidate: vi.fn(),
+      persistedAbsentCandidates: [],
+      persistedCandidates: [],
+      token: "secret",
+    });
+    expect(result).toMatchObject({
+      status: "failed",
+      code: "provider_permission_denied",
+      providerDiagnostic: diagnostic,
+    });
+    expect(JSON.stringify(result)).not.toContain("secret");
+    expect(request.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+  });
+
+  it.each([
+    ["prod_deployment_urls_and_all_previews", true, "team", "succeeded"],
+    ["all", true, "team", "failed"],
+    [null, true, "team", "failed"],
+    ["prod_deployment_urls_and_all_previews", false, "team", "failed"],
+    ["prod_deployment_urls_and_all_previews", true, "global", "failed"],
+  ] as const)(
+    "verifies public-app access policy %s / OIDC %s / %s before success",
+    async (deploymentType, enabled, issuerMode, status) => {
+      let created = false;
+      const writes: unknown[] = [];
+      // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
+      const request = vi.fn<typeof fetch>(async (_url, init) => {
+        if (init?.method === "POST") {
+          writes.push(JSON.parse(String(init.body)));
+          created = true;
+          return Response.json({ id: "prj_public" }, { status: 201 });
+        }
+        return created
+          ? Response.json({
+              framework: "services",
+              id: "prj_public",
+              name: "apps-vendor-portal",
+              rootDirectory: ".",
+              ssoProtection: deploymentType === null ? null : { deploymentType },
+              oidcTokenConfig: { enabled, issuerMode },
+            })
+          : Response.json({}, { status: 404 });
+      });
+      const result = await provisionVercelProject({
+        appId: "vendor-portal",
+        deploymentAccess: "public-app",
+        fetch: request,
+        github: { code: "not_selected", retryable: false, status: "skipped" },
+        githubSelected: false,
+        installation: installation("team"),
+        persistAbsent: vi.fn(),
+        persistCandidate: vi.fn(),
+        persistedAbsentCandidates: [],
+        persistedCandidates: [],
+        token: "vercel-token",
+      });
+      expect(result.status).toBe(status);
+      expect(writes).toHaveLength(1);
+      expect(writes[0]).toMatchObject({
+        framework: "services",
+        rootDirectory: ".",
+        ssoProtection: { deploymentType: "prod_deployment_urls_and_all_previews" },
+        oidcTokenConfig: { enabled: true, issuerMode: "team" },
+      });
+      expect(request.mock.calls.every(([, init]) => init?.method !== "PATCH")).toBe(true);
+    },
+  );
+
+  it.each([
+    [
+      { error: { code: "forbidden", message: "secret" } },
+      "iad1::failure_123",
+      { statusCode: 403, code: "forbidden", requestRef: "iad1::failure_123" },
+    ],
+    [
+      { error: { code: "secret", message: "secret" }, token: "secret" },
+      "https://secret.example",
+      { statusCode: 403 },
+    ],
+    ["not-json", "iad1::failure_123", { statusCode: 403, requestRef: "iad1::failure_123" }],
+  ])("retains only allowlisted provider failure facts", async (body, requestRef, diagnostic) => {
+    // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
+    const request = vi.fn<typeof fetch>(async (_url, init) => {
+      if (init?.method !== "POST") return Response.json({}, { status: 404 });
+      return typeof body === "string"
+        ? new Response(body, { status: 403, headers: { "x-vercel-id": String(requestRef) } })
+        : Response.json(body, { status: 403, headers: { "x-vercel-id": String(requestRef) } });
+    });
+    const result = await provisionVercelProject({
+      appId: "vendor-portal",
+      fetch: request,
+      github: { code: "not_selected", retryable: false, status: "skipped" },
+      githubSelected: false,
+      installation: installation("team"),
+      persistAbsent: vi.fn(),
+      persistCandidate: vi.fn(),
+      persistedAbsentCandidates: [],
+      persistedCandidates: [],
+      token: "secret",
+    });
+    expect(result).toMatchObject({
+      status: "failed",
+      code: "provider_permission_denied",
+      providerDiagnostic: diagnostic,
+    });
+    expect(JSON.stringify(result)).not.toContain("secret");
+    expect(request.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+  });
+
   it("pauses when an expired write may already have created a project", async () => {
     // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
     const request = vi.fn<typeof fetch>(async () =>
@@ -135,7 +323,11 @@ describe("Vercel project provisioning", () => {
       },
       token: "vercel-token",
     });
-    expect(result).toEqual({ code: "provider_rate_limited", retryable: true, status: "failed" });
+    expect(result).toMatchObject({
+      code: "provider_rate_limited",
+      retryable: true,
+      status: "failed",
+    });
     expect(observed).toEqual([37_000]);
     expect(request.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
   });
@@ -198,6 +390,8 @@ describe("Vercel project provisioning", () => {
         if (init?.method === "POST") {
           created = true;
           const body = JSON.parse(String(init.body));
+          expect(body).not.toHaveProperty("ssoProtection");
+          expect(body).not.toHaveProperty("oidcTokenConfig");
           expect(body).toMatchObject({
             framework: "services",
             gitRepository: {

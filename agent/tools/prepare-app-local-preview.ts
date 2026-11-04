@@ -1,3 +1,5 @@
+import { runSandboxCommandWithExcerpt } from "@/lib/sandbox/command-output-excerpt";
+import { sourceDeclaredToolchainActivationCommand } from "../../lib/repository/source-toolchain";
 import { resolveAcceptanceRuntimeRoot } from "@/lib/agent/acceptance-runtime-root";
 import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
@@ -59,9 +61,11 @@ const safeOutput = (value: string): string =>
 export const prepareAppLocalPreview = async (input: {
   appId: string;
   root: string;
-  sandbox: Pick<SandboxSession, "run">;
+  sandbox: Pick<SandboxSession, "run"> & Partial<Pick<SandboxSession, "spawn">>;
   signal?: AbortSignal;
   authOrigin?: string;
+  /** Read from the exact server-owned local runtime binding; never model input. */
+  expectedPreviousAuthOrigin?: string;
   execution?: PreparedRuntimeExecutionContext;
 }) => {
   const runtime = input.execution ? await resolvePreparedRuntimeExecution(input.execution) : null;
@@ -85,7 +89,7 @@ export const prepareAppLocalPreview = async (input: {
           .string()
           .regex(/^https:\/\/[a-z0-9-]+\.vercel\.run$/u)
           .parse(input.authOrigin);
-  const command = localPreviewExecutionCommand(input.appId);
+  let command = localPreviewExecutionCommand(input.appId);
   try {
     const description = await describeSelectedApp({
       appId: input.appId,
@@ -95,6 +99,9 @@ export const prepareAppLocalPreview = async (input: {
     });
     const roles =
       description.backend.kind === "generated-postgres" ? description.backend.roles : [];
+    if (description.backend.kind === "generated-postgres") {
+      command = `${sourceDeclaredToolchainActivationCommand()}\n${command}`;
+    }
     const env: LocalPreviewEnvironment = {
       APP_RUNTIME_STATE_DIR: path.posix.dirname(
         localRuntimeEnvironmentPath(input.root, input.appId),
@@ -106,22 +113,34 @@ export const prepareAppLocalPreview = async (input: {
     if (origin !== undefined) {
       env.APP_RUNTIME_AUTH_ORIGIN = origin;
     }
-    const result =
-      input.signal === undefined
-        ? await input.sandbox.run({ command, env, workingDirectory: input.root })
-        : await input.sandbox.run({
-            abortSignal: input.signal,
-            command,
-            env,
-            workingDirectory: input.root,
-          });
+    if (input.expectedPreviousAuthOrigin !== undefined) {
+      env.APP_RUNTIME_PREVIOUS_AUTH_ORIGIN = z
+        .string()
+        .regex(/^(?:http:\/\/localhost:3000|https:\/\/[a-z0-9-]+\.vercel\.run)$/u)
+        .parse(input.expectedPreviousAuthOrigin);
+    }
+    const result = await runSandboxCommandWithExcerpt({
+      sandbox: input.sandbox,
+      options: {
+        command,
+        env,
+        workingDirectory: input.root,
+        ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
+      },
+      sanitize: safeOutput,
+    });
     const stdout = safeOutput(result.stdout);
     const stderr = safeOutput(result.stderr);
     if (result.exitCode !== 0) {
       return {
         command,
         exitCode: result.exitCode,
-        problem: `The selected app's repository-owned local setup exited with status ${result.exitCode}. Inspect the output for a repository-pinned tool installation failure, local database startup failure, or schema error. Repair that cause in the private sandbox and retry setup before opening the app preview.`,
+        problem:
+          description.backend.kind === "generated-postgres" &&
+          roles.length === 0 &&
+          `${stderr}\n${stdout}`.includes("Authenticated runtime requires schema-declared roles")
+            ? "The selected app's authenticated runtime rejected its checked schema release because it declares no application roles. Repair this app's CUE authorization roles and model/operation grants from the accepted access requirements through the ordinary implementation repair flow, then regenerate its checked release and retry validation. Use the compiler's canonical role IDs. AppSpec prose or role strings in application code do not declare database authorization; do not inject APP_RUNTIME_ROLES or grant a default role to bypass the missing policy."
+            : `The selected app's repository-owned local setup exited with status ${result.exitCode}. Inspect the output for a repository-pinned tool installation failure, local database startup failure, or schema error. Repair that cause in the private sandbox and retry setup before opening the app preview.`,
         status: "failed" as const,
         stderr,
         stdout,

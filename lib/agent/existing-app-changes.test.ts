@@ -3,6 +3,34 @@ import { describe, expect, it } from "vitest";
 import { existingAppChangesSchema } from "./existing-app-changes";
 
 describe("existing app planning changes", () => {
+  it.each([
+    "app/[id]/page.tsx",
+    "app/auth/[...view]/page.tsx",
+    "app/[[...slug]]/page.tsx",
+    "app/(finance)/page.tsx",
+    "app/@modal/(.)details/page.tsx",
+    "app/@modal/(..)list/page.tsx",
+    "app/(finance)/it's $HOME/page.tsx",
+  ])("accepts the literal application filename %s", (file) => {
+    expect(
+      existingAppChangesSchema.parse([{ path: `apps/example/${file}`, content: "source" }]),
+    ).toEqual([{ path: `apps/example/${file}`, content: "source" }]);
+  });
+  it.each([
+    "/apps/example/page.tsx",
+    "../example/page.tsx",
+    "apps/../page.tsx",
+    "apps/./page.tsx",
+    "apps//page.tsx",
+    "apps/example/",
+    "apps\\example\\page.tsx",
+    "apps/example/\0page.tsx",
+    "apps/example/\npage.tsx",
+    "apps/example/\tpage.tsx",
+    "apps/example/\u007Fpage.tsx",
+  ])("rejects a noncanonical application filename %j", (path) => {
+    expect(existingAppChangesSchema.safeParse([{ path, content: "source" }]).success).toBe(false);
+  });
   it("accepts more files and content than the former Builder schema ceilings", () => {
     const parsed = existingAppChangesSchema.parse(
       Array.from({ length: 40 }, (_, index) => ({

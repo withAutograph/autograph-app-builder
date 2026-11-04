@@ -145,3 +145,93 @@ This overview summarizes the detailed [design workflow](../agent/skills/design-a
 [create-app workflow](../agent/skills/create-app/SKILL.md), [orchestration
 workflow](../skills/autograph-app-builder/SKILL.md), and [session
 semantics](../skills/autograph-app-builder/references/session-semantics.md).
+
+### Generic development runtime for a normal destination
+
+A deployment may configure `standardDevelopmentRuntime` with kind
+`standard-development-runtime-policy-v1`, its immutable policy ID, an existing
+reviewed synthetic-only Neon enrollment and nondefault branch, the genuine
+Production database identity to exclude, and `workloadIdentity:
+vercel-team-oidc-v1`. This is a generic development custody preset, not an
+app-specific alias of a historical onboarding profile. Existing explicit
+owner/app runtime profiles retain precedence and their original meaning.
+
+Builder resolves the canonical current owner and the settled ordinary
+provisioning receipt, independently reads that exact team/project/repository,
+and captures the accepted release. The generic path independently lists the
+project's domains and requires exactly one verified, nonredirecting production
+domain; missing or ambiguous selection is a typed prerequisite. It also verifies
+current Standard Protection and enabled team-mode OIDC. The actual team slug and
+project name produce the exact Preview and Production workload subjects. Neither
+a project name nor an old Gateway can stand in for domain or workload proof.
+
+The canonical owner, app ID and recorded destination/provisioning tuple derive
+stable, distinct app and Auth database/role names and a new profile identity.
+The preset cannot replace an already configured app resource. The selected
+branch must belong to the reviewed development enrollment, differ from its root,
+and exclude the recorded Production endpoint. This selection creates no resource
+and grants no effect. The ordinary resource/Auth/environment plan describes the
+actual selected names and origin and requires a fresh concrete approval. Existing
+owned-resource custody and retained schema receipts handle revisions; they do
+not blindly reinstall Auth or transfer another app's approval.
+
+Different owners and apps receive distinct restricted app/Auth roles. This does
+not invent organization IDs or tenant memberships: those still come from normal
+verified Realm capture. Sharing a tenant-owned provider connection continues to
+use distinct application bindings in the shared integration control plane.
+Runtime policy selection, source publication, provider activation and actual
+BetterAuth/public-app behavior remain separate acceptance evidence.
+
+When a project has multiple eligible production domains, automatic runtime
+assembly reports `builder_public_domain_selection_required` until the owner
+chooses through the saved-session destination page. Its same-origin
+authenticated Server Action lists current verified production domains on the
+recorded project, stores the selected origin against the canonical owner and
+unchanged provisioning tuple using expected-origin compare-and-swap, and
+re-reads that exact choice against current provider domains before runtime
+assembly. Both generic and explicit-profile paths compare the choice again after
+the final owner read; a concurrent change rejects the fresh plan without changing
+any frozen intent. The provider-verified origin must also equal the captured
+explicit choice, so an A/B/A metadata race cannot return a different fresh origin. Both direct and handoff sessions use this ordinary page. Provider
+pagination is consumed in order under owner fences; duplicate cursors fail
+closed. Branch/custom-environment domains, redirects, unverified domains and
+wildcards cannot become the app's public Auth origin.
+
+Choice metadata uses the existing journal table under the separate
+`builder-public-origin-choice-v1` record kind, deterministic owner/destination
+UUID key and record-level `selectionState: selected`. The existing table
+requires the storage-column vocabulary `settled`; for this typed metadata record
+that means the selection is durably stored, never that any provider effect has
+settled. It is neither a
+provisioning operation nor a settlement, approval or resource-ownership receipt;
+old provisioning and uncertain operations remain untouched. Routine history
+retention excludes current origin-choice metadata through the shared persistent-kind
+policy. Explicit authorized tenant forget retains its existing scope and may remove
+this non-effect choice; no native/provider operation is replayed or settled by cleanup. Choosing an origin
+grants no resource, publication or deployment effect. Auth and release plans
+freeze the chosen origin under their ordinary fresh approval; changing the
+choice cannot reinterpret a previously approved plan. An origin choice that conflicts
+with an explicit frozen runtime profile is reported as a configuration prerequisite
+rather than silently replacing or ignoring that profile. The generated app's public
+domain uses BetterAuth and does not require a Vercel account. Actual domain
+existence/verification and public application behavior remain hosted acceptance
+checks; project creation metadata alone does not prove either.
+
+The dynamic configuration resolver explicitly admits per-app runtime/Auth,
+public release, capability plan/prepare, continuity/managed-runtime and export
+transport families. Capability preparation selects the app/session from its
+complete frozen plan; the protected handler still verifies that plan and effect
+approval. Revision and removal reuse their ordinary runtime/public-release
+selectors. Normal actors and Realm callbacks resolve owner-bound nonce/journal
+context through their existing handlers. Independent Neon consent and shared
+central control/setup/event requests retain separate base authority; unknown
+routes never become an inferred generic app operation.
+
+Owned revision-resource custody (`owned-app-resource-source-v1`) is persistent
+credential provenance, not expired operation history. A revision rechecks the
+original approved setup and private checkpoint and still needs its own fresh
+approval. Routine retention preserves both that pointer and only the exact
+same-owner `app-runtime` row whose request matches its source target; other
+unreferenced history keeps its existing retention behavior. Explicit authorized
+tenant forget remains separate. A custody pointer cannot survive meaningfully
+while its backing encrypted checkpoint is silently pruned.

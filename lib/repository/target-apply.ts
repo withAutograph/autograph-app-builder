@@ -1,3 +1,5 @@
+import { applyPrivateComputeCheckPolicy } from "./private-compute-check-policy";
+import { sourceDeclaredToolchainActivationCommand } from "./source-toolchain";
 import type { FrameworkVersions } from "./framework-upgrade";
 import { frameworkUpgradeCommand, frameworkSharedPaths } from "./framework-upgrade";
 import { setBuilderSandboxNetworkPolicy } from "../sandbox/builder-sandbox";
@@ -83,6 +85,17 @@ export const iterationBaselineSnapshot = (
     files: normalized,
     treeDigest: createHash("sha256").update(JSON.stringify(normalized)).digest("hex"),
   };
+};
+
+/** Import provenance proves this app root was absent in the acquired platform base. */
+export const applicationImportBaselineSnapshot = (
+  snapshot: OverlaySnapshot,
+  appRoot: string,
+): OverlaySnapshot => {
+  const files = canonicalOverlayFiles(
+    snapshot.files.filter((file) => !file.path.startsWith(`${appRoot}/`)),
+  );
+  return { files, treeDigest: createHash("sha256").update(JSON.stringify(files)).digest("hex") };
 };
 
 // Existing-app review follows the selected app. Unrelated repository or
@@ -633,22 +646,6 @@ async function stageCreatedAppSpec(input: {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function sourceDeclaredCueActivationCommand() {
-  return String.raw`set -euo pipefail
-config_file="$PWD/.config/mise/config.toml"
-runtime_bin="$(dirname "$(command -v bun)")"
-test -f "$config_file"
-test -x "$runtime_bin/bun"
-export MISE_CONFIG_FILE="$config_file"
-mise trust --yes "$config_file"
-mise install --locked cue
-cue_bin="$(mise which cue)"
-test -x "$cue_bin"
-ln -sfn "$cue_bin" "$runtime_bin/cue"
-"$runtime_bin/cue" version >/dev/null`;
-}
-
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
   return async ({ sandbox, appId, applyRoot, proposal }) => {
     if ("operation" in proposal) {
@@ -684,6 +681,35 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
               path: `${relativeRoot}/${change.path}`,
             }));
       }
+    }
+    if ("operation" in proposal && proposal.applicationSourceImport !== undefined) {
+      const registration = proposal.applicationSourceImport.registration;
+      if (
+        registration === undefined ||
+        registration.projectName !== appId ||
+        sha256(registration.proposedBytes) !== registration.newDigest
+      ) {
+        return {
+          exitCode: 2,
+          stdout: "",
+          stderr: "Imported app registration is missing from the approved proposal.",
+          failedCommand: "verify approved application registration",
+        };
+      }
+      const topologyPath = `${applyRoot.replace(/^\/workspace\//u, "")}/microfrontends.json`;
+      const currentTopology = await sandbox.readTextFile({ path: topologyPath });
+      if (
+        currentTopology === null ||
+        ![registration.oldDigest, registration.newDigest].includes(sha256(currentTopology))
+      ) {
+        return {
+          exitCode: 2,
+          stdout: "",
+          stderr: "Imported app registration preimage changed.",
+          failedCommand: "verify approved application registration",
+        };
+      }
+      await sandbox.writeTextFile({ path: topologyPath, content: registration.proposedBytes });
     }
     // The writable checkout is the execution environment. Prepared dependency
     // roots are only a cache optimization; a checkout-backed flow can have no
@@ -726,21 +752,27 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
       return { ...install, failedCommand: installCommand };
     }
     const cue = await sandbox.run({
-      command: sourceDeclaredCueActivationCommand(),
+      command: sourceDeclaredToolchainActivationCommand(),
       workingDirectory: applyRoot,
     });
     if (cue.exitCode !== 0) {
-      return { ...cue, failedCommand: sourceDeclaredCueActivationCommand() };
+      return { ...cue, failedCommand: sourceDeclaredToolchainActivationCommand() };
     }
     if ("operation" in proposal) {
-      const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
+      const oldDigest =
+        proposal.applicationSourceImport?.registration?.oldDigest ??
+        proposal.plan.topology.currentDigest ??
+        "0".repeat(64);
       const receipt: TargetApplyCommandReceipt = {
         appId: proposal.contract.appId,
         mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
         omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
         recovered: false,
         topology: {
-          newDigest: proposal.plan.topology.proposedDigest ?? oldDigest,
+          newDigest:
+            proposal.applicationSourceImport?.registration?.newDigest ??
+            proposal.plan.topology.proposedDigest ??
+            oldDigest,
           oldDigest,
           path: "microfrontends.json",
         },
@@ -918,6 +950,11 @@ export async function executeProposalBoundApply(input: {
     before = await snapshotter(input.sandbox, overlay.applyRoot);
     if ("operation" in input.proposal) {
       before = iterationBaselineSnapshot(before, input.proposal.iteration.changes);
+      if (input.proposal.applicationSourceImport !== undefined)
+        before = applicationImportBaselineSnapshot(
+          before,
+          `apps/${input.proposal.applicationSourceImport.appId}`,
+        );
     }
     if (input.proposal.frameworkUpgrade !== undefined) {
       before = iterationBaselineSnapshot(before, input.proposal.frameworkUpgrade.baseline);
@@ -938,6 +975,13 @@ export async function executeProposalBoundApply(input: {
       proposal: input.proposal,
       sandbox: input.sandbox,
     });
+    if (command.exitCode === 0 && input.proposal.privateCompute !== undefined) {
+      await applyPrivateComputeCheckPolicy({
+        sandbox: input.sandbox,
+        applyRoot: overlay.applyRoot,
+        profile: input.proposal.privateCompute,
+      });
+    }
     await stageCreatedAppSpec({
       acceptedAppSpec: overlay.acceptedAppSpec,
       applyRoot: overlay.applyRoot,

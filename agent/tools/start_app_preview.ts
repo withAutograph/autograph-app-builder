@@ -1,3 +1,4 @@
+import { readLocalPreviewAuthOrigin } from "@/lib/repository/local-preview-auth-origin";
 import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
 import { createHash } from "node:crypto";
@@ -54,29 +55,6 @@ const validationAttemptDigest = (
     return state.validationAttempt.digest;
   }
   return undefined;
-};
-
-const nextDependencyManifest = z.object({
-  dependencies: z.object({ next: z.string().optional() }).optional(),
-  devDependencies: z.object({ next: z.string().optional() }).optional(),
-});
-
-const usesNext = (source: string | null): boolean => {
-  if (source === null) {
-    return false;
-  }
-  try {
-    const parsed = nextDependencyManifest.safeParse(JSON.parse(source));
-    return (
-      parsed.success &&
-      (parsed.data.dependencies?.next !== undefined ||
-        parsed.data.devDependencies?.next !== undefined)
-    );
-  } catch {
-    throw new Error(
-      "The selected app's package.json is not valid JSON. Repair its manifest before starting the private preview.",
-    );
-  }
 };
 
 const dependencyLogStore = (ctx: ToolContext): ValidationLogStore | undefined => {
@@ -208,9 +186,16 @@ export default defineTool({
       }
     }
     const { appId } = selected;
-    const packageManifest = await sandbox.readTextFile({ path: `${cwd}/package.json` });
     const logStore = dependencyLogStore(ctx);
     const dependencyInput = {
+      assertCurrent: () => {
+        ctx.abortSignal.throwIfAborted();
+        if (currentProductBehaviorGeneration() !== evidenceGeneration) {
+          throw new Error(
+            "The selected app changed while preparing preview dependencies. Retry the preview for the current app.",
+          );
+        }
+      },
       checkoutIdentity: selected.revision,
       logStore,
       onAttempt: (attempt: DependencyAttemptResult) => {
@@ -223,16 +208,13 @@ export default defineTool({
               },
         );
       },
+      reconcileWorkspace: true,
       root: selected.root,
       sandbox,
       sessionId: ctx.session.id,
       signal: ctx.abortSignal,
     };
-    const dependencies = await ensureCheckoutDependencies(
-      usesNext(packageManifest)
-        ? { ...dependencyInput, requiredExecutable: "next" }
-        : dependencyInput,
-    );
+    const dependencies = await ensureCheckoutDependencies(dependencyInput);
     let environmentPath = runtime?.environmentPath;
     if (!runtime && (await appDeclaresLocalSetup({ appId, root: selected.root, sandbox }))) {
       const setup = await prepareAppLocalPreview({
@@ -254,15 +236,24 @@ export default defineTool({
     let prepareAuthenticatedOrigin = runtime?.prepareAuthenticatedOrigin;
     if (!runtime && environmentPath !== undefined) {
       prepareAuthenticatedOrigin = async (authOrigin) => {
+        const expectedPreviousAuthOrigin = await readLocalPreviewAuthOrigin({
+          appId,
+          root: selected.root,
+          sandbox,
+          signal: ctx.abortSignal,
+        });
         const setup = await prepareAppLocalPreview({
           appId,
           authOrigin,
+          expectedPreviousAuthOrigin,
           root: selected.root,
           sandbox,
           signal: ctx.abortSignal,
         });
         if (setup.status === "failed") {
-          throw new Error(setup.problem);
+          const diagnostic =
+            setup.stderr || setup.stdout || "No setup command output was returned.";
+          throw new Error(`${setup.problem}\n${diagnostic}`);
         }
       };
     }

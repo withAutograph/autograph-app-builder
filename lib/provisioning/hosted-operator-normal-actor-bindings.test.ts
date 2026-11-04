@@ -1,3 +1,14 @@
+import { resolvePreparedRuntimeExecution } from "../agent/prepared-runtime-execution";
+import type { RuntimeTransport } from "../agent/prepared-runtime-execution";
+import { runAppBrowserTests } from "../agent/app-browser-test-runner";
+import { readVerifiedPublicRuntimeBinding } from "./public-runtime-binding";
+import {
+  publicReleasePlanSchema,
+  publicReleaseRecordSchema,
+  publicReleasePlanDigest,
+  publicReleaseOperationRef,
+} from "./public-release-contract";
+import { plan as publicPlanFixture } from "./public-release-test-fixture";
 /* oxlint-disable eslint/require-await, eslint/no-await-in-loop -- Synthetic typed private ports run sequentially against one actual in-memory journal. */
 import { z } from "zod";
 import { describe, expect, it, vi } from "vitest";
@@ -292,6 +303,7 @@ const fixture = () => {
   };
   const handler = createProtectedHostedOperatorHandler(deps);
   const client = createHostedOperatorClient({
+    sessionId: selection.sessionId,
     endpoint: "https://operator.example",
     fetch: async (url, init) =>
       await handler(new Request(url instanceof Request ? url.url : url, init)),
@@ -521,5 +533,225 @@ describe("private normal actor bindings producer", () => {
       return actorProjection;
     };
     await expect(f.client.bindings(f.request)).rejects.toThrow("operation_in_progress");
+  });
+});
+
+const publicBoundFixture = async () => {
+  const f = await boundFixture();
+  const row = f.base.row;
+  if (!row?.record.operator) throw new Error("Missing prepared fixture");
+  const {
+    delivery: _delivery,
+    gatewayDelivery: _gatewayDelivery,
+    ...prior
+  } = row.record.operator.plan;
+  const selectedPlan = hostedOperatorPlanSchema.parse({
+    ...prior,
+    runtimePreparation: "single-project-resources-v1",
+    effects: prior.effects.filter(
+      (effect) => !["bindings", "delivery", "gateway-delivery"].includes(effect.kind),
+    ),
+    deploymentBoundary: {
+      ...prior.deploymentBoundary,
+      composition: "single-project-services",
+      gateway: { ...prior.deploymentBoundary?.gateway, projectId: selection.projectId },
+    },
+    publicGateway: { ...prior.publicGateway, projectId: selection.projectId },
+  });
+  row.record.operator.plan = selectedPlan;
+  row.record.operator.planDigest = operatorPlanDigest(selectedPlan);
+  delete row.record.operator.deliveryCandidates;
+  delete row.record.operator.gatewayDeliveryCandidates;
+  delete row.record.operator.deliveredDeploymentId;
+  delete row.record.operator.deliveredGatewayDeploymentId;
+  row.record.step = "resource-ready";
+  row.record.environmentBound = false;
+  const publicPlan = publicReleasePlanSchema.parse({
+    ...publicPlanFixture,
+    purpose: "application",
+    authority,
+    selection: { appId: selectedPlan.selection.appId, sessionId: selectedPlan.selection.sessionId },
+    project: { ...publicPlanFixture.project, projectId: selection.projectId },
+    runtime: {
+      ...publicPlanFixture.runtime,
+      operationRef: f.request.operationRef,
+      planDigest: operatorPlanDigest(selectedPlan),
+      releaseId: selectedPlan.release.id,
+    },
+    publicOrigin: normalProgram.origin,
+  });
+  const observation = {
+    status: "ready" as const,
+    deploymentId: "dpl_public",
+    projectId: selection.projectId,
+    environment: "production" as const,
+    publicOrigin: normalProgram.origin,
+    releaseId: selectedPlan.release.id,
+  };
+  const record = publicReleaseRecordSchema.parse({
+    kind: "public-app-release-v1",
+    plan: publicPlan,
+    planDigest: publicReleasePlanDigest(publicPlan),
+    effects: { "bind-production-runtime": "applied", "publish-release-source": "applied" },
+    bindings: Object.fromEntries(
+      publicPlan.environment.map((entry) => [
+        entry.key,
+        { state: "applied", acceptedEnvId: "provider-owned-env" },
+      ]),
+    ),
+    approvalReceipts: [
+      { approvalId: "real-public-consent", approvedByCallId: "original-public-call" },
+    ],
+    observation,
+  });
+  const readCandidates = vi.fn(async () => [
+    { requestId: publicReleaseOperationRef(publicPlan), requestDigest: record.planDigest, record },
+  ]);
+  const assertApproved = vi.fn(async () => {});
+  const observe = vi.fn(async () => ({ ...observation }));
+  f.deps.publicRuntimeBinding = async (input) =>
+    await readVerifiedPublicRuntimeBinding({
+      appEntryPath: "/actual-catalog-route",
+      plan: input.plan,
+      operationRef: input.operationRef,
+      readCandidates,
+      assertApproved,
+      observe,
+      assertCurrent: async () => await f.deps.assertAuthorized(input),
+    });
+  return { ...f, record, observation, readCandidates, assertApproved, observe, selectedPlan };
+};
+describe("normal public application runtime handoff", () => {
+  it("uses an approved freshly observed public release without creating a Preview delivery", async () => {
+    const f = await publicBoundFixture();
+    const result = await f.client.bindings(f.request);
+    expect(result.nativePreview).toBeUndefined();
+    expect(result.publicDelivery).toMatchObject({
+      kind: "public-application-runtime-v1",
+      environment: "production",
+      deploymentId: "dpl_public",
+      publicOrigin: actorProjection.origin,
+    });
+    expect(result.normalActors).toEqual(actorProjection);
+    expect(f.assertApproved).toHaveBeenCalledWith(f.record.plan, f.record.approvalReceipts?.[0]);
+    expect(f.observe).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(result.publicDelivery)).not.toContain("actual%2Fencoded");
+  });
+  it("runs the normal browser tool through service, private client and prepared execution at the verified public destination", async () => {
+    const f = await publicBoundFixture();
+    const description = {
+      version: 1,
+      app: { id: selection.appId, routes: [], workspacePath: `apps/${selection.appId}` },
+      backend: {
+        authorization: "declared-policy",
+        kind: "generated-postgres",
+        roles: ["reviewer"],
+        schemaReceipt: null,
+        release: {
+          id: f.selectedPlan.release.id,
+          directory: "schema/releases/current",
+          artifactHash: `sha256:${proof.artifactHash}`,
+        },
+        runtime: { databaseEnvironment: "SPEND_REVIEW_DATABASE_URL" },
+      },
+      validation: {
+        browser: { task: "test-e2e" },
+        check: { task: "check" },
+        test: { shards: 1, task: "test" },
+      },
+    };
+    const close = vi.fn();
+    const logs = Object.assign(
+      async function* logs() {
+        yield { data: "repository browser checks passed", stream: "stdout" as const };
+      },
+      { close },
+    );
+    const command = {
+      exitCode: 0,
+      kill: vi.fn(),
+      logs: () => Object.assign(logs(), { close }),
+      stdout: async () => "",
+      wait: async () => ({ exitCode: 0 }),
+    };
+    const provider: RuntimeTransport = {
+      fs: { mkdir: vi.fn(), rm: vi.fn() },
+      writeFiles: vi.fn(),
+      runCommand: vi
+        .fn<RuntimeTransport["runCommand"]>()
+        .mockResolvedValueOnce({ ...command, stdout: async () => JSON.stringify(description) })
+        .mockResolvedValue(command),
+    };
+    const fallback = vi.fn(() => {
+      throw new Error("No legacy/local runtime fallback");
+    });
+    const runtime = await resolvePreparedRuntimeExecution(
+      {
+        appId: selection.appId,
+        root: "/workspace/repository",
+        sandboxId: "private-browser-runner",
+        sessionAuth: {},
+        sessionId: selection.sessionId,
+        state: { phase: "empty" },
+      },
+      {
+        ...selection,
+        operationRef: f.request.operationRef,
+        planDigest: operatorPlanDigest(f.selectedPlan),
+      },
+      {
+        operatorClient: async () => f.client,
+        assertAuthority: async () => {},
+        getProvider: async () => provider,
+        observeInstallation: fallback,
+        readBinding: fallback,
+      },
+    );
+    const sandboxRun = vi.fn(() => {
+      throw new Error("Must use prepared runtime");
+    });
+    const result = await runAppBrowserTests({
+      appId: selection.appId,
+      root: "/workspace/repository",
+      sandbox: { run: sandboxRun },
+      runtime,
+    });
+    expect(result.status).toBe("passed");
+    expect(provider.runCommand).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Vitest's documented asymmetric matcher is intentionally untyped.
+        env: expect.objectContaining({
+          APP_TEST_BASE_URL: normalProgram.origin,
+          APP_TEST_ENTRY_PATH: "/actual-catalog-route",
+          APP_TEST_IDENTITIES_FILE: `/tmp/app-builder-operator/${f.request.operationRef}/normal-actors/identities.json`,
+        }),
+      }),
+    );
+    expect(fallback).not.toHaveBeenCalled();
+    expect(sandboxRun).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain("actual%2Fencoded%3Dcookie");
+  });
+  it.each([
+    "pending",
+    "missing env receipt",
+    "missing consent",
+    "runtime mismatch",
+    "public identity mismatch",
+    "missing projection",
+    "revoked consent",
+  ])("denies %s before exporting jars", async (fault) => {
+    const f = await publicBoundFixture();
+    if (fault === "pending") f.record.effects["publish-release-source"] = "pending";
+    if (fault === "missing env receipt")
+      delete f.record.bindings[f.record.plan.environment[0].key].acceptedEnvId;
+    if (fault === "missing consent") f.record.approvalReceipts = [];
+    if (fault === "runtime mismatch")
+      f.record.plan.runtime.operationRef = "99999999-9999-4999-a999-999999999999";
+    if (fault === "public identity mismatch")
+      f.observe.mockResolvedValue({ ...f.observation, deploymentId: "dpl_foreign" });
+    if (fault === "missing projection") delete f.deps.publicRuntimeBinding;
+    if (fault === "revoked consent") f.assertApproved.mockRejectedValue(new Error("revoked"));
+    await expect(f.client.bindings(f.request)).rejects.toThrow();
+    expect(f.producer).not.toHaveBeenCalled();
   });
 });

@@ -27,6 +27,8 @@ interface DependencyRecoveryInput {
   checkoutIdentity: string;
   signal?: AbortSignal;
   requiredExecutable?: string;
+  /** Authored workspace manifests may legitimately require a package-manager lockfile update. */
+  reconcileWorkspace?: boolean;
   logStore?: ValidationLogStore;
   onAttempt?: (attempt: DependencyAttemptResult) => void | Promise<void>;
   assertCurrent?: () => void;
@@ -315,7 +317,7 @@ export const repairCheckoutDependenciesAfterValidationFailure = async (
   input.assertCurrent();
 };
 
-/** Reinstalls repository dependencies only when replacement compute lacks them. */
+/** Reconcile authored workspaces, or restore a frozen checkout missing its dependencies. */
 export const ensureCheckoutDependencies = async (
   input: DependencyRecoveryInput,
 ): Promise<{ status: "reused" | "installed"; attempts: readonly DependencyAttemptResult[] }> => {
@@ -324,6 +326,12 @@ export const ensureCheckoutDependencies = async (
     !/^[A-Za-z0-9_-]{1,80}$/u.test(input.requiredExecutable)
   ) {
     throw new Error("The required repository executable name is invalid.");
+  }
+  if (input.reconcileWorkspace === true) {
+    const install = await dependencyAttempt(input, "dependency-install", "bun install");
+    input.signal?.throwIfAborted();
+    input.assertCurrent?.();
+    return { attempts: [install], status: "installed" };
   }
   const probe = await dependencyAttempt(
     input,

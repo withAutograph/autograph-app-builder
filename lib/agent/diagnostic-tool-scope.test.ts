@@ -1,3 +1,4 @@
+import { appBuilderWorkflowState, APP_BUILDER_WORKFLOW_VERSION } from "./workflow-state";
 import { describe, expect, it, vi } from "vitest";
 import preparedContext, { scopedPreparedAppContext } from "../../agent/tools/prepared_app_context";
 import inspectToolchain from "../../agent/tools/inspect_sandbox_toolchain";
@@ -120,7 +121,7 @@ describe("scoped internal diagnostics", () => {
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The fixture exposes only this tool's consumed getSandbox capability.
     const context = { getSandbox: async () => await Promise.resolve(sandbox) } as never;
     const result = await inspectToolchain.execute({}, context);
-    if (!("tools" in result)) {
+    if (!("tools" in result) || result.tools === undefined || result.required === undefined) {
       throw new Error("Expected a non-streaming inspection result");
     }
     expect(result).toMatchObject({
@@ -142,6 +143,32 @@ describe("scoped internal diagnostics", () => {
           input.command.startsWith("command -v ") || input.command.endsWith(" --version"),
       ),
     ).toBe(true);
+  });
+
+  it("keeps compute metadata inspection reachable when runtime diagnostics are also requested", async () => {
+    const state = vi
+      .spyOn(appBuilderWorkflowState, "get")
+      .mockReturnValue({ phase: "empty", version: APP_BUILDER_WORKFLOW_VERSION });
+    const getSandbox = vi
+      .fn()
+      .mockRejectedValue(new Error("A pending compute operation must not open a VM"));
+    try {
+      // SAFETY: the no-workspace branch consumes only saved state; this fixture detects any accidental VM access.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The fixture intentionally exposes only the denied getSandbox boundary.
+      const context = { getSandbox } as never;
+      const result = await inspectToolchain.execute(
+        { computeState: true, runtimeDiagnostics: true },
+        context,
+      );
+      expect(result).toMatchObject({
+        status: "no-private-workspace",
+        readinessScope: "private-compute-observation",
+      });
+      expect(getSandbox).not.toHaveBeenCalled();
+      expect(result).not.toHaveProperty("runtimeResources");
+    } finally {
+      state.mockRestore();
+    }
   });
 
   it("propagates an actual Sandbox command refusal without a guessed readiness result", async () => {

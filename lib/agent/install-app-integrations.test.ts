@@ -1,5 +1,6 @@
 /* oxlint-disable anti-slop/no-module-mocking -- Isolate Eve workflow authority at the real tool execute boundary. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import type { ToolContext } from "eve/tools";
 import installTool, {
   appIntegrationsInstallCommand,
@@ -45,6 +46,34 @@ const context: ToolContext = {
 };
 
 describe("private app integrations installation", () => {
+  it("preserves the repository installer's readiness endpoint as a capability contract, not executed proof", async () => {
+    const readiness = {
+      protocol: "app-integration-readiness-v1",
+      path: "/spend-review/api/integrations/readiness",
+    };
+    hooks.sandbox.run.mockResolvedValueOnce({
+      exitCode: 0,
+      stderr: "",
+      stdout: JSON.stringify({
+        appId: "spend-review",
+        status: "installed",
+        files: [],
+        providers: ["quickbooks"],
+        readiness,
+      }),
+    });
+    const result = await installAppIntegrations({
+      appId: "spend-review",
+      root: "/private/approved-checkout",
+      sandbox: hooks.sandbox,
+    });
+    expect(result).toMatchObject({
+      status: "installed",
+      capabilityState: "source-installed",
+      readiness,
+      providerReadiness: "unverified",
+    });
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     hooks.state.phase = "applied";
@@ -64,7 +93,7 @@ describe("private app integrations installation", () => {
     const result = await installTool.execute({}, context);
     expect(hooks.sandbox.run).toHaveBeenCalledWith(
       expect.objectContaining({
-        command: "mise run integrations:install spend-review",
+        command: "mise //apps/integrations:install spend-review",
         workingDirectory: "/private/approved-checkout",
       }),
     );
@@ -112,6 +141,7 @@ describe("private app integrations installation", () => {
     });
     expect(omitted).toMatchObject({
       status: "omitted",
+      capabilityState: "source-omitted",
       files: [],
       providerReadiness: "unverified",
     });
@@ -131,6 +161,66 @@ describe("private app integrations installation", () => {
       stderr: "provider recipe unavailable",
     });
   });
+
+  it("continues an explicitly deferred source revision without provider or cleanup authority", async () => {
+    hooks.sandbox.run.mockResolvedValueOnce({
+      exitCode: 0,
+      stderr: "",
+      stdout: JSON.stringify({
+        appId: "spend-review",
+        status: "omitted",
+        providers: [],
+        files: ["apps/spend-review/app/integrations/.installed.json"],
+      }),
+    });
+    const result = await installTool.execute({}, context);
+    expect(result).toMatchObject({
+      status: "omitted",
+      capabilityState: "source-omitted",
+      providers: [],
+      providerReadiness: "unverified",
+    });
+    const nextStep = z.object({ nextStep: z.string() }).parse(result).nextStep;
+    expect(nextStep).toContain("normal app validation and delivery");
+    expect(nextStep).toContain("preserve retained bindings and resources");
+    expect(result).not.toHaveProperty("readiness");
+    expect(hooks.sandbox.run).toHaveBeenCalledTimes(1);
+    expect(hooks.sandbox.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: "mise //apps/integrations:install spend-review",
+        workingDirectory: "/private/approved-checkout",
+      }),
+    );
+  });
+  it.each([
+    { status: "omitted", providers: ["quickbooks"] },
+    {
+      status: "omitted",
+      providers: [],
+      readiness: {
+        protocol: "app-integration-readiness-v1",
+        path: "/spend-review/api/integrations/readiness",
+      },
+    },
+    { status: "installed", providers: [] },
+  ])(
+    "refuses an inconsistent capability claim instead of turning it into omitted success",
+    async (receipt) => {
+      hooks.sandbox.run.mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout: JSON.stringify({ appId: "spend-review", files: [], ...receipt }),
+      });
+      const result = await installAppIntegrations({
+        appId: "spend-review",
+        root: "/private/approved-checkout",
+        sandbox: hooks.sandbox,
+      });
+      expect(result.status).toBe("failed");
+      expect(result).not.toHaveProperty("capabilityState");
+      expect(result).not.toHaveProperty("nextStep");
+    },
+  );
 
   it("reports the app-bound capability problem from the repository's JSON failure receipt", async () => {
     hooks.sandbox.run.mockResolvedValueOnce({

@@ -1,3 +1,4 @@
+import { capturedGenericWorkerFixture } from "./operator-worker-source-capture.test-fixture";
 import { describe, expect, it } from "vitest";
 import {
   assertNoConfiguredNativeTarget,
@@ -42,14 +43,28 @@ describe("native target deployment-owned resource selection", () => {
     expect(() => nativeTargetDatabaseNames("../different-app")).toThrow();
   });
 
-  it("reuses a configured generic installer, prefers an app-specific configured capability, and rejects absence", () => {
-    const workers = { platform: access, existing: generic };
-    expect(selectNativeTargetInstaller(workers, "fresh-app")).toEqual(generic);
-    const selected = { ...generic, id: "app-specific" };
-    expect(selectNativeTargetInstaller({ ...workers, "fresh-app": selected }, "fresh-app")).toEqual(
-      selected,
+  it("requires an explicit captured generic for fresh apps instead of inferring it from per-app aliases", () => {
+    const workers = { existing: generic, alias: generic };
+    expect(() => selectNativeTargetInstaller(workers, "fresh-app")).toThrow(
+      "generic_installer_configuration_required",
     );
-    expect(() => selectNativeTargetInstaller({ platform: access }, "fresh-app")).toThrow();
+    expect(selectNativeTargetInstaller(workers, "fresh-app", capturedGenericWorkerFixture)).toEqual(
+      capturedGenericWorkerFixture,
+    );
+    expect(
+      selectNativeTargetInstaller(
+        { ...workers, "fresh-app": generic },
+        "fresh-app",
+        capturedGenericWorkerFixture,
+      ),
+    ).toEqual(generic);
+    expect(() =>
+      selectNativeTargetInstaller(
+        { "fresh-app": access },
+        "fresh-app",
+        capturedGenericWorkerFixture,
+      ),
+    ).toThrow();
   });
 
   it("blocks a second dedicated project for an app with an existing configured physical target", () => {

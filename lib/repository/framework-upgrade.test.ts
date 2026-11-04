@@ -1,3 +1,4 @@
+import { developmentExecutionEnvironment } from "../development/execution-environment.mjs";
 /* oxlint-disable eslint/require-await -- Async sandbox and registry fixtures implement Promise-returning I/O ports without real network/process work. */
 import {
   reviewableChanges,
@@ -234,6 +235,96 @@ describe("framework upgrade planning and apply", () => {
     expect(ordinary.proposal.frameworkUpgrade).toBeUndefined();
     expect(resolver).toHaveBeenCalledTimes(2);
   });
+  it("plans a fresh local base-only iteration without inventing app edits or framework upgrades", async () => {
+    const sandbox = sandboxFixture({
+      readBinaryFile: async () => null,
+      readTextFile: async () => null,
+      writeTextFile: async () => {},
+      removePath: async () => {},
+      run: async ({ command }: { command: string }) => ({
+        exitCode: fixtureCommandExit(command, true),
+        stderr: "",
+        stdout: command.startsWith("mise run --no-deps app:describe")
+          ? JSON.stringify({
+              version: 1,
+              app: { id: "example", routes: ["/example"], workspacePath: "apps/example" },
+              backend: { kind: "static" },
+              validation: {
+                check: { task: "check" },
+                test: { task: "test", shards: 1 },
+                browser: null,
+              },
+            })
+          : "",
+      }),
+    });
+    const sourceReceipt = {
+      adapter: "arrusted-development-v0" as const,
+      contractDigest: "e".repeat(64),
+      digest: "f".repeat(64),
+      eligibilityDigest: "d".repeat(64),
+      releaseEnabled: false as const,
+      sourceKind: "fresh-template" as const,
+      sourcePath: "/fixture/source",
+      sourceSha: "a".repeat(40),
+      sourceTree: "b".repeat(40),
+      version: 3 as const,
+    };
+    const localSourceReconciliation = {
+      kind: "local-source-reconciliation-v1" as const,
+      appId: "example",
+      appSpecDigest: "a".repeat(64),
+      workspaceId: "saved-workspace",
+      previousApplyDigest: "b".repeat(64),
+      previousProposalDigest: "c".repeat(64),
+      previousSourceReceiptDigest: "d".repeat(64),
+      sourceReceiptDigest: sourceReceipt.digest,
+      previousWorkspaceDigest: "1".repeat(64),
+      workspaceDigest: "2".repeat(64),
+      sourceSnapshotTree: "3".repeat(40),
+      checkpointRef: `refs/app-builder/local-source-checkpoints/${"4".repeat(64)}/${"5".repeat(40)}/${"6".repeat(40)}`,
+      reconciledByCallId: "prepare-new-base",
+    };
+    const input = {
+      sandbox,
+      appId: "example",
+      appSpecContent: "Accepted unchanged product",
+      appSpecDigest: "a".repeat(64),
+      artifactRevision: "b".repeat(64),
+      executor: fixtureTargetCommandExecutor(),
+      environment: developmentExecutionEnvironment,
+      sourceReceipt,
+      localSourceReconciliation,
+    };
+    const result = await executeTargetIdentityAndPlanning(input);
+    expect(result.proposal).toMatchObject({
+      operation: "iterate-existing-app",
+      sourceReconciliation: localSourceReconciliation,
+      iteration: { changes: [] },
+    });
+    expect(result.proposal.frameworkUpgrade).toBeUndefined();
+    await expect(executeTargetIdentityAndPlanning({ ...input, environment: {} })).rejects.toThrow(
+      "does not belong",
+    );
+    await expect(
+      executeTargetIdentityAndPlanning({
+        ...input,
+        localSourceReconciliation: {
+          ...localSourceReconciliation,
+          sourceReceiptDigest: "0".repeat(64),
+        },
+      }),
+    ).rejects.toThrow("does not belong");
+    await expect(
+      executeTargetIdentityAndPlanning({ ...input, localSourceReconciliation: undefined }),
+    ).rejects.toThrow();
+    expect(
+      targetIterationProposalSchema.safeParse({
+        ...result.proposal,
+        sourceReconciliation: { ...localSourceReconciliation, appId: "other" },
+      }).success,
+    ).toBe(false);
+  });
   it("captures original shared file preimages so a retry still reviews their edits", async () => {
     const sandbox = sandboxFixture({
       readBinaryFile: async ({ path }: { path: string }) =>
@@ -394,4 +485,32 @@ describe("framework upgrade planning and apply", () => {
       );
     }).toThrow("outside");
   });
+});
+
+it("plans an unchanged imported application under its own fresh Build proposal", () => {
+  const { frameworkUpgrade: _upgrade, ...base } = proposal();
+  expect(() => targetIterationProposalSchema.parse(base)).toThrow();
+  const imported = targetIterationProposalSchema.parse({
+    ...base,
+    applicationSourceImport: {
+      appId: "example",
+      manifestDigest: "c".repeat(64),
+      importedSessionId: "new-authenticated-session",
+      registration: {
+        oldDigest: "d".repeat(64),
+        newDigest: "e".repeat(64),
+        proposedBytes: "{}",
+        projectName: "example",
+        assetRoute: "/example/:path*",
+      },
+    },
+  });
+  expect(imported.operation).toBe("iterate-existing-app");
+  expect(imported.iteration.changes).toEqual([]);
+  expect(() =>
+    targetIterationProposalSchema.parse({
+      ...base,
+      applicationSourceImport: { ...imported.applicationSourceImport, appId: "different-app" },
+    }),
+  ).toThrow();
 });

@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import nodePath from "node:path";
 import { materializeFreshApplyOverlay } from "./target-apply";
 import type { SandboxSession } from "eve/sandbox";
 
@@ -36,6 +40,68 @@ const planningCommandOutput = (command: string, mode: string): string => {
 };
 
 describe("planning from the current checkout", () => {
+  it("binds the literal route's real mode despite a matching shell glob and quoted filename", async () => {
+    const root = mkdtempSync(nodePath.join(tmpdir(), "builder-literal-route-"));
+    const files = [
+      "apps/inventory-queue/app/auth/[...view]/page.tsx",
+      "apps/inventory-queue/app/(finance)/it's $HOME/page.tsx",
+    ];
+    const collider = "apps/inventory-queue/app/auth/v/page.tsx";
+    try {
+      for (const file of [...files, collider]) {
+        mkdirSync(nodePath.dirname(nodePath.join(root, file)), { recursive: true });
+        writeFileSync(nodePath.join(root, file), `original ${file}`);
+        chmodSync(nodePath.join(root, file), file === collider ? 0o644 : 0o755);
+      }
+      const modeProgram =
+        'process.stdout.write((require("node:fs").statSync(process.argv[1]).mode & 0o777).toString(8))';
+      const quotedNode = `'${process.execPath.replaceAll("'", "'\\''")}'`;
+      const sandbox = {
+        readBinaryFile: async ({ path }: { path: string }) =>
+          await Promise.resolve(
+            readFileSync(nodePath.join(root, path.replace(/^repository\//u, ""))),
+          ),
+        readTextFile: async () => await Promise.resolve(null),
+        removePath: () => Promise.resolve(),
+        writeTextFile: () => Promise.resolve(),
+        run: async ({ command }: { command: string }) => {
+          const stdout = command.startsWith("stat ")
+            ? execFileSync(
+                "/bin/sh",
+                [
+                  "-c",
+                  command
+                    .replace(/^stat -c %a(?: --)? /u, `${quotedNode} -e '${modeProgram}' -- `)
+                    .replaceAll("/workspace/repository", root),
+                ],
+                { encoding: "utf-8" },
+              )
+            : planningCommandOutput(command, "644");
+          return await Promise.resolve({ exitCode: 0, stderr: "", stdout });
+        },
+      } as unknown as SandboxSession;
+      const result = await executeTargetIdentityAndPlanning({
+        appId: "inventory-queue",
+        appSpecContent: "Keep the existing authenticated app",
+        appSpecDigest: "b".repeat(64),
+        artifactRevision: "a".repeat(64),
+        executor: fixtureTargetCommandExecutor(),
+        existingAppChanges: files.map((path) => ({ path, content: `changed ${path}` })),
+        sandbox,
+      });
+      if (!("operation" in result.proposal)) throw new Error("Expected an existing-app plan");
+      expect(
+        result.proposal.iteration.changes.map((change) => ({
+          path: change.path,
+          before: change.before?.mode,
+          after: change.after?.mode,
+        })),
+      ).toEqual(files.map((path) => ({ path, before: "755", after: "755" })));
+      expect(readFileSync(nodePath.join(root, collider), "utf-8")).toBe(`original ${collider}`);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
   it("plans with checkout execution despite an irrelevant hosted image setting", () => {
     expect(
       targetExecutionBinding(undefined, {
@@ -258,7 +324,15 @@ describe("planning from the current checkout", () => {
     expect(executor.mock.calls.map(([request]) => request.command)).toEqual(["identity"]);
   });
 
-  it("plans existing-app edits with the repository's project name", async () => {
+  it.each([
+    "app/page.tsx",
+    "app/[id]/page.tsx",
+    "app/auth/[...view]/page.tsx",
+    "app/[[...slug]]/page.tsx",
+    "app/(finance)/page.tsx",
+    "app/@modal/(.)details/page.tsx",
+    "app/@modal/(..)list/page.tsx",
+  ])("plans literal existing-app edits for %s with the repository's project name", async (file) => {
     const before = Buffer.from("old component");
     const fixture = fixtureTargetCommandExecutor();
     const executor = async (request: Parameters<typeof fixture>[0]) => {
@@ -293,7 +367,7 @@ describe("planning from the current checkout", () => {
       appSpecDigest: "b".repeat(64),
       artifactRevision: "a".repeat(64),
       executor,
-      existingAppChanges: [{ content: "new component", path: "apps/inventory-queue/app/page.tsx" }],
+      existingAppChanges: [{ content: "new component", path: `apps/inventory-queue/${file}` }],
       sandbox,
     });
     expect(result.proposal).toMatchObject({
@@ -309,7 +383,7 @@ describe("planning from the current checkout", () => {
       plan: { topology: { projectName: "inventory-queue" } },
     });
     expect(sandbox.readBinaryFile).toHaveBeenCalledWith({
-      path: "repository/apps/inventory-queue/app/page.tsx",
+      path: `repository/apps/inventory-queue/${file}`,
     });
     expect(sandbox.readBinaryFile).not.toHaveBeenCalledWith({
       path: "repository/microfrontends.json",

@@ -29,7 +29,8 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "**/*.mts"
+    "**/*.mts",
+    ".config/mise/scripts/repository/build-operator-worker-catalog.mts"
   ],
   "exclude": ["node_modules"]
 }

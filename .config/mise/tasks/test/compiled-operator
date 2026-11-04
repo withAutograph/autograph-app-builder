@@ -1,0 +1,5 @@
+#!/bin/sh
+#MISE description="Compile the real native operator and exercise every closed Services ingress without private credentials or network effects"
+set -eu
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" "$(mise which node)" --import tsx \
+  .config/mise/scripts/repository/compiled-operator-proof.mts "$@"

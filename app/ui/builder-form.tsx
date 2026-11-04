@@ -16,6 +16,7 @@ export function Builder({
   const controller = useBuilderController(props);
   const {
     submissionPending,
+    sourceUploadPending,
     preparingSubmission,
     submit,
     interactive,
@@ -28,14 +29,14 @@ export function Builder({
       <main
         className={styles.authenticatedPage}
         id="main-content"
-        inert={submissionPending || preparingSubmission}
-        aria-busy={submissionPending || preparingSubmission}
+        inert={submissionPending || preparingSubmission || sourceUploadPending}
+        aria-busy={submissionPending || preparingSubmission || sourceUploadPending}
       >
         <form className={styles.builderCard} onSubmit={submit}>
           {draftStatus}
           <fieldset
             className={styles.builderControls}
-            disabled={!interactive}
+            disabled={!interactive || sourceUploadPending}
             aria-busy={!interactive}
           >
             {children}

@@ -222,6 +222,7 @@ describe("prepared provider continuity", () => {
         env: [credential.token],
         id: "prj_1",
         name: "renamed-stock",
+        link: { productionBranch: "release/published-app" },
         token: credential.token,
       }),
     );
@@ -245,7 +246,7 @@ describe("prepared provider continuity", () => {
       redirect: "error",
     });
     expect(result).toEqual({
-      project: { id: "prj_1", name: "renamed-stock" },
+      project: { id: "prj_1", name: "renamed-stock", productionBranch: "release/published-app" },
       scope: {
         id: "team_1",
         installationId: "icfg_1",
@@ -444,4 +445,42 @@ describe("prepared provider continuity", () => {
       })(auth),
     ).toEqual({ status: "not-prepared" });
   });
+});
+
+describe("normal app public configuration proof", () => {
+  const project = {
+    id: "prj_1",
+    name: "apps-stock",
+    accountId: "team_1",
+    ssoProtection: { deploymentType: "prod_deployment_urls_and_all_previews" },
+    oidcTokenConfig: { enabled: true, issuerMode: "team" },
+  };
+  it.each([
+    [project, "ready"],
+    [
+      { ...project, oidcTokenConfig: { enabled: false, issuerMode: "team" } },
+      "provider-unavailable",
+    ],
+    [
+      { ...project, oidcTokenConfig: { enabled: true, issuerMode: "global" } },
+      "provider-unavailable",
+    ],
+    [
+      { ...project, oidcTokenConfig: { enabled: "true", issuerMode: "team" } },
+      "provider-unavailable",
+    ],
+    [{ ...project, ssoProtection: { deploymentType: "all" } }, "provider-unavailable"],
+  ])(
+    "requires actual team OIDC and public production domain protection (%j)",
+    async (observed, status) => {
+      const result = await readPreparedVercelAccess({
+        authority,
+        intent,
+        requirePublicAppConfiguration: true,
+        fetch: vi.fn().mockResolvedValue(Response.json(observed)),
+        readCredential: vi.fn().mockResolvedValue(credential),
+      });
+      expect(result.status).toBe(status);
+    },
+  );
 });

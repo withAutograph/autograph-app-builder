@@ -555,14 +555,18 @@ export function useBuilderController({
         ),
       )
     : allModelOptions;
+  const [sourceUploadPending, setSourceUploadPending] = useState(false);
   let validAppId = false;
   try {
-    deriveBuilderAppId(form.appName);
+    if (form.sourceCandidate === undefined) {
+      deriveBuilderAppId(form.appName);
+    }
     validAppId = true;
   } catch {
     // Invalid app names simply keep submission disabled.
   }
   const canSubmit = Boolean(
+    !sourceUploadPending &&
     form.brief.trim() &&
     (!form.appName.trim() || validAppId) &&
     (form.buildDestination !== "web" || (integrations.models.status === "ready" && model)),
@@ -969,6 +973,8 @@ export function useBuilderController({
     repositoryNameFromAppName,
     router,
     search,
+    setSourceUploadPending,
+    sourceUploadPending,
     setConnectionFlow,
     setDeploymentProvider,
     setDraftSaveError,

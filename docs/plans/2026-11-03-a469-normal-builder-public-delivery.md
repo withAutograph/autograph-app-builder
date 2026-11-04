@@ -168,16 +168,45 @@ its own concrete scope and approval.
 - [Hosted runtime and protected Preview contract](../hosted-app-runtime.md)
 - [Public MCP contract](../public-mcp-contract.md)
 - [Production handoff](../production-readiness-handoff.md)
+## Resource preparation and public release are separate approvals
 
-The optional integration service's missing isolated infrastructure and app-scoped
-credential boundary are specified separately in
-[isolated central integration setup](2026-11-03-a469-isolated-central-integrations-setup.md).
-This does not add a generated-app destination or change the public release goal.
+Fresh standard single-project setup plans carry
+`runtimePreparation: single-project-resources-v1`. Auth bootstrap prepares the
+isolated resources and verifies the installed Auth schema. Application setup
+installs and independently reads the selected schema and grants the approved
+application access. Neither setup plan binds a Vercel environment nor deploys a
+Preview. Completed application setup records its actual restricted-role SQL
+proof as `prepared/resource-ready`, with `environmentBound: false`.
 
-## Consolidated repair closure
+A separately approved public release binds the app-owned Production runtime
+configuration and publishes through native Git deployment. Resource readiness
+alone does not establish public delivery or authenticated browser acceptance.
+Previously frozen plans keep their original effects and semantics.
+The normal Auth handoff is selected from one owner-, app-, session-, and
+project-bound READY public Auth bootstrap release. The callback rechecks the
+original resource approval and actual public release approval history, the
+sealed enrollment and runtime configuration, the exact Auth resource and the
+app-owned public signing key. Public callbacks use the explicitly reviewed
+Production workload identity; earlier Preview identities remain unchanged.
+Normal account capture and organization proof challenges retain the separate
+public release binding alongside the original account setup digest.
 
-The [cross-layer repair scope](2026-11-03-a469-repair-closure-scope.md) records
-the complete audited handoff chain, concrete remaining code/configuration gaps
-and required integration probes before another saved-app attempt. It preserves
-this accepted outcome and the original operation/approval meanings. Local source
-qualification and full functional acceptance remain separate.
+These local contracts and tests establish implementation behavior, not hosted
+acceptance evidence. Public delivery, normal sign-in, persistent app actions and
+provider lifecycle observations still require the progressive product run.
+A separate existing-app revision session recovers its original normal Builder
+destination from the authenticated owner's settled provisioning receipt, keyed
+by the accepted app ID and the independently acquired GitHub repository and
+installation IDs. This read-only recovery does not copy the creation session,
+reuse an effect approval, adopt a project by name, or create another project.
+Ambiguous or mismatched receipts remain unavailable. New resource verification
+and public release approvals still belong to the revision session.
+Separate-session revisions retain the original restricted Auth and application
+database password pairs. Normal setup records app-owned private credential
+provenance after actual Auth schema readiness. A later resource plan identifies
+that exact checkpoint and receives a fresh approval to verify and reuse it.
+The operator rechecks original consent and current ownership, then encrypts the
+same pairs for the new session. Existing-resource steps run the fixed worker's
+read-only ownership, role, and login inspection; an absent or mismatched
+resource is a blocker, never permission to recreate it or rotate passwords.
+New session enrollment and approved schema/access changes remain separate.

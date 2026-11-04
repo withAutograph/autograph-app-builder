@@ -1,18 +1,13 @@
-import {
-  lstat,
-  mkdir,
-  mkdtemp,
-  realpath,
-  readdir,
-  chmod,
-  rename,
-  rm,
-  symlink,
-} from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, realpath, readdir, chmod, rename, rm } from "node:fs/promises";
 import nodePath from "node:path";
 
 import { createDevelopmentSnapshot, removeDevelopmentSnapshot } from "./local-mode";
 import type { DevelopmentSnapshot } from "./local-mode";
+import {
+  bindDevelopmentApplicationDependencies,
+  assertOwnedDevelopmentDependencyLink,
+  readSelectedDevelopmentDependencies,
+} from "./application-dependencies";
 import { runSequentially } from "../async-sequential";
 
 /**
@@ -67,18 +62,10 @@ export async function createDevelopmentApplication(input: {
       sourceRoot: input.repositoryRoot,
     });
     await makeDevelopmentWorkAreaWritable(application.root);
-    const modules = await realpath(nodePath.join(input.repositoryRoot, "node_modules"));
-    const modulesInfo = await lstat(modules);
-    if (
-      !modulesInfo.isDirectory() ||
-      modulesInfo.isSymbolicLink() ||
-      modulesInfo.uid !== process.getuid?.() ||
-      // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-      (modulesInfo.mode & 0o022) !== 0
-    ) {
-      throw new Error("App Builder node_modules was not owner-bound.");
-    }
-    await symlink(modules, nodePath.join(application.root, "node_modules"));
+    await bindDevelopmentApplicationDependencies({
+      repositoryRoot: input.repositoryRoot,
+      applicationRoot: application.root,
+    });
     try {
       await lstat(nodePath.join(application.root, ".eve"));
       throw new Error("A development Eve application inherited stale state.");
@@ -134,8 +121,8 @@ export async function createDevelopmentCycle(input: {
 
 /**
  * Replaces only the application code that Eve executes for the current local
- * cycle.  Eve's own `.eve` state and the checkout-owned dependency symlink are
- * deliberately retained: they are runtime state, not live application code.
+ * cycle. Eve's own `.eve` state is retained. The dependency link is rebound to
+ * the selected checkout; it is code/dependency selection, not session authority.
  *
  * The staging snapshot makes a runtime restart observe the current checkout
  * without ever letting a watcher see a partially copied application tree.
@@ -147,6 +134,10 @@ export async function refreshDevelopmentApplication(input: {
   runRoot: string;
 }): Promise<void> {
   const applicationRoot = await realpath(input.applicationRoot);
+  // Validate before changing any application bytes; never hide a stale install
+  // behind freshly copied authored source.
+  await readSelectedDevelopmentDependencies(input.repositoryRoot);
+  await assertOwnedDevelopmentDependencyLink(applicationRoot);
   const runRoot = await realpath(input.runRoot);
   const stageRoot = await mkdtemp(nodePath.join(runRoot, "eve-application-stage-"));
   try {
@@ -164,8 +155,8 @@ export async function refreshDevelopmentApplication(input: {
     }
     // The stage's baseline identity is immutable, but its filesystem is a
     // mutable local work area. Normalize the whole incoming tree before
-    // moving it. `.eve` and `node_modules` remain retained runtime state in
-    // the destination.
+    // moving it. `.eve` remains native state; the owned dependency link is
+    // replaced separately after installing the selected authored source.
     await makeDevelopmentWorkAreaWritable(snapshot.root);
     await makeDevelopmentWorkAreaWritable(applicationRoot, true);
     await runSequentially(await readdir(applicationRoot), async (entry) => {
@@ -175,6 +166,10 @@ export async function refreshDevelopmentApplication(input: {
     });
     await runSequentially(await readdir(snapshot.root), async (entry) => {
       await rename(nodePath.join(snapshot.root, entry), nodePath.join(applicationRoot, entry));
+    });
+    await bindDevelopmentApplicationDependencies({
+      repositoryRoot: input.repositoryRoot,
+      applicationRoot,
     });
     // `rename` preserves modes.  Reassert the work-area contract after the
     // refresh so every installed application file remains writable for live

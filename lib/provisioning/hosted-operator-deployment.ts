@@ -1,4 +1,11 @@
-import { gatewayDeliverySourceForPlan } from "./hosted-operator-gateway-delivery-source";
+import { createPostgresPublicRealmCallbackResolver } from "./public-realm-callback-resolution";
+import type { PublicRealmReleaseBinding } from "./public-realm-enrollment";
+import { createPublicReleaseApprovalAuthority } from "./public-release-approval-authority";
+import { createPublicReleaseDeployment } from "./public-release-deployment";
+import { createPostgresBuilderProvisionJournalStore } from "./postgres-journal";
+
+import { createOwnedAppResourceCustody } from "./owned-app-resource-custody";
+
 import {
   canReserveIdentityLink,
   isIdlePendingAccountCapture,
@@ -198,10 +205,7 @@ import {
   createHostedOperatorReadApproval,
   createHostedOperatorReadApprovedPlan,
 } from "./hosted-operator-owner";
-import {
-  createHostedOperatorOwnerContextResolver,
-  createHostedOperatorApprovalReadAuthority,
-} from "./hosted-operator-owner-context";
+import { createHostedOperatorOwnerContextResolver } from "./hosted-operator-owner-context";
 import type {
   HostedOperatorContext,
   HostedOperatorEffectContext,
@@ -677,7 +681,12 @@ export const createRetainedAppInstallationCustomerReader = (
     },
   });
 
+interface HostedOperatorPublicRuntimePort {
+  readPublicRuntimeBinding?: ProtectedHostedOperatorDependencies["publicRuntimeBinding"];
+}
+
 export const createHostedOperatorControlPlane = async (input: {
+  request?: Request;
   environment?: Readonly<Record<string, string | undefined>>;
   workloadPolicy: OperatorWorkloadPolicy;
   sourceConfiguration: HostedOperatorSourceConfiguration;
@@ -763,6 +772,10 @@ export const createHostedOperatorControlPlane = async (input: {
         installationId,
       });
     const owner = createHostedOperatorOwnerAuthority({
+      readProvisioning: createPostgresBuilderProvisionJournalStore(database).read,
+      findProvisioningForAppRepository:
+        createPostgresBuilderProvisionJournalStore(database).findSettledAppRepository,
+
       eve,
       journal: store,
       realmContinuation: {
@@ -824,11 +837,39 @@ export const createHostedOperatorControlPlane = async (input: {
     const operatorIdentity = createVercelWorkloadIdentity();
     const approvalObserver = createHostedOperatorApprovalObserver({
       builderOrigin: new URL(config.resource).origin,
-      verifyReadAuthority: createHostedOperatorApprovalReadAuthority({
-        sessions: eve,
-        resolveOwnerContext: ownerContextResolver,
-        forwardSessionAuth: forwardedSessionAuth,
-      }),
+      verifyReadAuthority: async ({ adapterSessionId, principal, sessionId }) => {
+        try {
+          const rawSession = await eve.getSessionByAdapterSessionId?.(principal, adapterSessionId);
+          const parsed = hostedSessionRecordSchema.safeParse(rawSession);
+          if (!parsed.success) {
+            return false;
+          }
+          const durableSession = toDurableHostedSessionRecord(parsed.data);
+          if (
+            durableSession.sessionId !== sessionId ||
+            durableSession.adapterSessionId !== adapterSessionId ||
+            !samePrincipal(durableSession.principal, principal)
+          ) {
+            return false;
+          }
+          const sourceHandoffId =
+            parsed.data.version === 2 ? parsed.data.sourceHandoffId : undefined;
+          const resolved = await ownerContextResolver({
+            adapterSessionId,
+            authority: {
+              audience: principal.audience,
+              issuer: principal.issuer,
+              ownerUserId: principal.ownerUserId,
+              workspaceId: principal.workspaceId,
+            },
+            principal,
+            sessionAuth: forwardedSessionAuth(principal, sourceHandoffId),
+          });
+          return resolved.sessionId === sessionId && resolved.adapterSessionId === adapterSessionId;
+        } catch {
+          return false;
+        }
+      },
       workloadIdentity: operatorIdentity,
     });
     const readApproval = (
@@ -995,6 +1036,64 @@ export const createHostedOperatorControlPlane = async (input: {
         throw new HostedOperatorError("operation_in_progress");
       }
     };
+    const resolvePublicRealm = async (
+      context: HostedOperatorContext,
+      binding?: PublicRealmReleaseBinding,
+    ) =>
+      await createPostgresPublicRealmCallbackResolver({
+        database,
+        keyring: tokenKeyring,
+        configuration: input.sourceConfiguration,
+        assertCurrentOwner: owner.assertPlanningAuthorized,
+        readRuntime: async (selected) => {
+          await owner.assertPlanningAuthorized(selected);
+          const current = await store.read(selected);
+          if (current === undefined) {
+            throw new HostedOperatorError("auth_schema_not_ready");
+          }
+          return current.record;
+        },
+        assertSourceApproval: async (selected, source) => {
+          const receipt = await readApproval({
+            ...selected,
+            action: "prepare",
+            callId: source.approvedByCallId,
+            planDigest: source.planDigest,
+          });
+          if (!receipt?.approved || receipt.approvalId !== source.approvalId) {
+            throw new HostedOperatorError("authorization_required");
+          }
+        },
+        assertPublicApproval: async (selected, plan, receipt) => {
+          const canonical = operatorOwnerContextSchema.parse(selected.ownerContext);
+          const token = await operatorIdentity.token();
+          const read = createPublicReleaseApprovalAuthority({
+            database,
+            builderOrigin: input.sourceConfiguration.builderCallbackOrigin,
+            owner: canonical,
+            authority: owner,
+            assertCurrentOwner: async () => {
+              await owner.assertPlanningAuthorized(selected);
+            },
+            request: new Request(
+              `${input.sourceConfiguration.builderCallbackOrigin}/api/hosted-operator/realm-identity`,
+              { headers: { authorization: `Bearer ${token}` } },
+            ),
+            ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
+          });
+          const observed = await read(plan, receipt.approvedByCallId);
+          if (
+            observed.approvalId !== receipt.approvalId ||
+            observed.approvedByCallId !== receipt.approvedByCallId
+          ) {
+            throw new HostedOperatorError("authorization_required");
+          }
+        },
+      })(context, binding);
+
+    // oxlint-disable-next-line eslint/complexity -- The reservation validates old and explicitly approved public realm scopes before the same atomic nonce write.
+
+    // oxlint-disable-next-line eslint/complexity -- The reservation validates old and explicitly approved public realm scopes before the same atomic nonce write.
     const reserveRealmIdentityLink = async (
       linkInput: RealmIdentityLinkInput,
       expectedOrganizationRefresh?: {
@@ -1041,7 +1140,20 @@ export const createHostedOperatorControlPlane = async (input: {
       } else if (linkInput.browserSession !== undefined) {
         throw new HostedOperatorError("authorization_required");
       }
+      const publicRealm =
+        input.sourceConfiguration.standardRuntime === undefined
+          ? undefined
+          : await resolvePublicRealm(linkInput.context);
+      if (
+        publicRealm !== undefined &&
+        [linkInput.browserOrigin, linkInput.endpointOrigin, linkInput.issuer].some(
+          (origin) => origin !== publicRealm.plan.publicOrigin,
+        )
+      ) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
       const link = operatorRealmIdentityLinkSchema.parse({
+        ...(publicRealm === undefined ? {} : { publicRelease: publicRealm.binding }),
         audience: linkInput.audience,
         authResourceId: linkInput.authResourceId,
         bootstrapPlanDigest: linkInput.bootstrapPlanDigest,
@@ -1163,7 +1275,7 @@ export const createHostedOperatorControlPlane = async (input: {
       );
       return { link, nonce };
     };
-    const readCanonicalPendingIdentity = async (pendingInput: {
+    const readCanonicalIdentityOwner = async (pendingInput: {
       ownerSessionId: string;
       nonceSha256: string;
       authority?: HostedOperatorContext["authority"];
@@ -1239,6 +1351,29 @@ export const createHostedOperatorControlPlane = async (input: {
       });
       const record = hostedRuntimeJournalRecordSchema.parse(saved.record);
       const context = { authority, ownerContext, target: record.request };
+      const pending = record.operator?.identityLink;
+      /* oxlint-disable sonarjs/expression-complexity -- All canonical owner and nonce admission checks are required together. */
+      /* oxlint-disable sonarjs/expression-complexity -- All canonical owner and nonce admission checks are required together. */
+      if (
+        record.request.sessionId !== sessionId ||
+        pending?.ownerSessionId !== sessionId ||
+        pending.nonceSha256 !== nonceSha256 ||
+        pending.consumedAt !== undefined ||
+        Date.parse(pending.expiresAt) <= Date.now()
+      ) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      /* oxlint-enable sonarjs/expression-complexity */
+      /* oxlint-enable sonarjs/expression-complexity */
+      return { context, record, sessionId, nonceSha256, durable, ownerContext };
+    };
+    const readCanonicalPendingIdentity = async (pendingInput: {
+      ownerSessionId: string;
+      nonceSha256: string;
+      authority?: HostedOperatorContext["authority"];
+    }) => {
+      const { context, record, sessionId, nonceSha256, durable, ownerContext } =
+        await readCanonicalIdentityOwner(pendingInput);
       const known = await readKnownAuthBootstrap(
         context,
         record.operator?.identityLink?.browserSession !== undefined,
@@ -1258,8 +1393,56 @@ export const createHostedOperatorControlPlane = async (input: {
       if (!current || link === undefined) {
         throw new HostedOperatorError("authorization_required");
       }
-      return { context, known, link };
+      const publicRealm =
+        link.publicRelease === undefined
+          ? undefined
+          : await resolvePublicRealm(context, link.publicRelease);
+      return { context, known, link, publicRealm };
     };
+    const ownedAppResources = createOwnedAppResourceCustody({
+      database,
+      configuration: input.sourceConfiguration,
+      keyring: tokenKeyring,
+      store,
+      assertCurrentOwner: owner.assertPlanningAuthorized,
+      readApproval,
+      isExistingRevision: async (context) => {
+        const current = await owner.readCurrentPlanningOwner(context);
+        return current.session.privateBuildDecision?.existingRepositorySource !== undefined;
+      },
+      sourceContext: async (context, target) => {
+        await owner.assertPlanningAuthorized(context);
+        if (isDeepStrictEqual(context.target, target)) {
+          return context;
+        }
+        const currentOwner = operatorOwnerContextSchema.parse(context.ownerContext);
+        const stored = await eve.getSession(currentOwner.principal, target.sessionId);
+        if (stored === null) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        const { current } = await readCurrentRealmSession(stored);
+        if (
+          current.appId !== target.appId ||
+          !isDeepStrictEqual(
+            hostedTenantAuthoritySchema.parse(current.principal),
+            context.authority,
+          )
+        ) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        const ownerContext = await ownerContextResolver({
+          adapterSessionId: current.adapterSessionId,
+          authority: context.authority,
+          principal: current.principal,
+          sessionAuth: forwardedSessionAuth(current.principal, current.sourceHandoffId),
+        });
+        const source = { authority: context.authority, ownerContext, target };
+        await owner.assertArtifactAuthorized(source);
+        await owner.assertPlanningAuthorized(context);
+        return source;
+      },
+    });
+
     const sharedAuth = createHostedOperatorSharedAuthAdoption({
       assertAuthorized: owner.assertAuthorized,
       assertPlanningAuthorized: owner.assertPlanningAuthorized,
@@ -1861,6 +2044,9 @@ export const createHostedOperatorControlPlane = async (input: {
         await owner.assertPlanningAuthorized(linkInput.context);
         const current = await store.read(linkInput.context);
         const pending = current?.record.operator?.identityLink;
+        if (pending?.publicRelease !== undefined) {
+          await resolvePublicRealm(linkInput.context, pending.publicRelease);
+        }
         const capture = current?.record.accountPreparation?.captures.find(
           (candidate) =>
             candidate.nonceSha256 === linkInput.nonceSha256 &&
@@ -1919,6 +2105,10 @@ export const createHostedOperatorControlPlane = async (input: {
         await owner.assertPlanningAuthorized(linkInput.context);
         return operatorRealmIdentityLinkSchema.parse(saved.record.operator?.identityLink);
       },
+      readApprovedPublicAuthBootstrap: resolvePublicRealm,
+      readOwnedAppResourceSource: ownedAppResources.readReference,
+      checkpointOwnedAppResourceSource: ownedAppResources.checkpoint,
+
       prepareRealmIdentityLink,
       async prepareNormalActorCapture(
         captureInput: HostedOperatorContext & {
@@ -1963,55 +2153,82 @@ export const createHostedOperatorControlPlane = async (input: {
         ) {
           throw new HostedOperatorError("authorization_required");
         }
-        const candidate = operator.gatewayDeliveryCandidates?.find(
-          (entry) =>
-            entry.deploymentId === operator.deliveredGatewayDeploymentId &&
-            entry.readyState === "READY",
-        );
-        const boundary = operator.plan.deploymentBoundary;
-        const { gatewayBindings } = operator.plan;
-        if (candidate === undefined || boundary === undefined || gatewayBindings === undefined) {
-          throw new HostedOperatorError("reconciliation_required");
-        }
-        await readHostedOperatorProviderInventory({
-          assertCurrentOwner: async () => {
-            await owner.assertPlanningAuthorized(captureInput);
-          },
-          configuration: {
-            app: { ...boundary.app, environment: "preview" },
-            gateway: {
-              branch: candidate.branch,
-              deploymentId: candidate.deploymentId,
-              environment: "preview",
-              projectId: candidate.projectId,
-            },
-            operator: boundary.operator,
-            verification: {
-              gatewayOrigin: candidate.origin,
-              publicOrigin: boundary.verification.publicOrigin,
-            },
-          },
-          context: captureInput,
-          phase: "bootstrap-planning",
-          readVercelCredential: async ({ authority, installationId }) =>
-            await readCredential(authority, installationId),
-          fetch: input.fetch,
-        });
-        const pending = await prepareRealmIdentityLink({
-          context: captureInput,
-          audience: gatewayBindings.operatorOrigin,
-          authResourceId: operator.plan.authDatabase.resourceId,
-          bootstrapPlanDigest: preparation.accountPlanDigest,
-          browserSession: {
-            operationRef: preparation.accountOperationRef,
-            participantProgramDigest: preparation.programDigest,
-          },
-          browserOrigin: preparation.program.origin,
-          endpointOrigin: candidate.origin,
-          expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-          issuer: boundary.verification.publicOrigin,
-          organizationId: null,
-        });
+        const publicRealm =
+          operator.plan.runtimePreparation === undefined
+            ? undefined
+            : await resolvePublicRealm(captureInput);
+        const pending =
+          publicRealm === undefined
+            ? await (async () => {
+                const candidate = operator.gatewayDeliveryCandidates?.find(
+                  (entry) =>
+                    entry.deploymentId === operator.deliveredGatewayDeploymentId &&
+                    entry.readyState === "READY",
+                );
+                const boundary = operator.plan.deploymentBoundary;
+                const { gatewayBindings } = operator.plan;
+                if (
+                  candidate === undefined ||
+                  boundary === undefined ||
+                  gatewayBindings === undefined
+                ) {
+                  throw new HostedOperatorError("reconciliation_required");
+                }
+                await readHostedOperatorProviderInventory({
+                  assertCurrentOwner: async () => {
+                    await owner.assertPlanningAuthorized(captureInput);
+                  },
+                  configuration: {
+                    app: { ...boundary.app, environment: "preview" },
+                    gateway: {
+                      branch: candidate.branch,
+                      deploymentId: candidate.deploymentId,
+                      environment: "preview",
+                      projectId: candidate.projectId,
+                    },
+                    operator: boundary.operator,
+                    verification: {
+                      gatewayOrigin: candidate.origin,
+                      publicOrigin: boundary.verification.publicOrigin,
+                    },
+                  },
+                  context: captureInput,
+                  phase: "bootstrap-planning",
+                  readVercelCredential: async ({ authority, installationId }) =>
+                    await readCredential(authority, installationId),
+                  fetch: input.fetch,
+                });
+                return await prepareRealmIdentityLink({
+                  context: captureInput,
+                  audience: gatewayBindings.operatorOrigin,
+                  authResourceId: operator.plan.authDatabase.resourceId,
+                  bootstrapPlanDigest: preparation.accountPlanDigest,
+                  browserSession: {
+                    operationRef: preparation.accountOperationRef,
+                    participantProgramDigest: preparation.programDigest,
+                  },
+                  browserOrigin: preparation.program.origin,
+                  endpointOrigin: candidate.origin,
+                  expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+                  issuer: boundary.verification.publicOrigin,
+                  organizationId: null,
+                });
+              })()
+            : await prepareRealmIdentityLink({
+                context: captureInput,
+                audience: input.sourceConfiguration.operator.origin,
+                authResourceId: operator.plan.authDatabase.resourceId,
+                bootstrapPlanDigest: preparation.accountPlanDigest,
+                browserSession: {
+                  operationRef: preparation.accountOperationRef,
+                  participantProgramDigest: preparation.programDigest,
+                },
+                browserOrigin: preparation.program.origin,
+                endpointOrigin: publicRealm.plan.publicOrigin,
+                expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+                issuer: publicRealm.plan.publicOrigin,
+                organizationId: null,
+              });
         await normalActorJournal.registerPendingCapture(captureInput, {
           actorKey: captureInput.actorKey,
           organizationId: captureInput.organizationId,
@@ -2062,14 +2279,34 @@ export const createHostedOperatorControlPlane = async (input: {
         ) {
           throw new HostedOperatorError("operation_in_progress");
         }
-        const prepared = prepareHostedOperatorResourceCredentials({
-          ...effectInput,
-          config: tokenKeyring,
-          record: await readCurrentResourceCredentialRecord({
+        let record = await readCurrentResourceCredentialRecord({
+          assertAuthorized: owner.assertAuthorized,
+          effect: effectInput,
+          store,
+        });
+        if (effectInput.plan.existingResources !== undefined) {
+          const privateState = await ownedAppResources.rewrap(
+            effectInput,
+            effectInput.plan,
+            record,
+          );
+          await effectInput.checkpoint(privateState);
+          record = await readCurrentResourceCredentialRecord({
             assertAuthorized: owner.assertAuthorized,
             effect: effectInput,
             store,
-          }),
+          });
+          assertResourceCredentialCheckpoint(record.privateState, privateState);
+        } else if (input.sourceConfiguration.standardRuntime !== undefined) {
+          const current = await owner.readCurrentPlanningOwner(effectInput);
+          if (current.session.privateBuildDecision?.existingRepositorySource !== undefined) {
+            throw new HostedOperatorError("reconciliation_required");
+          }
+        }
+        const prepared = prepareHostedOperatorResourceCredentials({
+          ...effectInput,
+          config: tokenKeyring,
+          record,
         });
         // The journal callback commits under the active lease before plaintext can escape.
         await effectInput.checkpoint(prepared.privateState);
@@ -2206,7 +2443,8 @@ export const createHostedOperatorControlPlane = async (input: {
         ownerSessionId: string;
         nonceSha256: string;
       }) {
-        const { context, known, link } = await readCanonicalPendingIdentity(stagingInput);
+        const { context, known, link, publicRealm } =
+          await readCanonicalPendingIdentity(stagingInput);
         const { operator } = known;
         if (link.browserSession !== undefined) {
           const prepared = await normalActorJournal.read(context);
@@ -2245,6 +2483,16 @@ export const createHostedOperatorControlPlane = async (input: {
           },
           jwksUrl: `${link.endpointOrigin}/_platform/jwks.json`,
           link: projectPendingRealmIdentityLink(link),
+          ...(publicRealm === undefined
+            ? {}
+            : {
+                publicRealm: {
+                  binding: publicRealm.binding,
+                  enrollment: publicRealm.enrollment,
+                  publicJwk: publicRealm.publicJwk,
+                  sender: publicRealm.linkConfiguration.identityHandoff.sender,
+                },
+              }),
         };
       },
       async readRealmIdentityLink(context: HostedOperatorContext) {
@@ -2376,6 +2624,17 @@ export const createHostedOperatorControlPlane = async (input: {
       },
       reserveRealmIdentityLink: (linkInput: RealmIdentityLinkInput) =>
         reserveRealmIdentityLink(linkInput),
+      async resolveRealmIdentityCallbackOwnerContext(selector: {
+        ownerSessionId: string;
+        nonceSha256: string;
+        authority?: HostedOperatorContext["authority"];
+      }) {
+        const current = await readCanonicalIdentityOwner(selector);
+        return {
+          context: current.context,
+          publicRelease: current.record.operator?.identityLink?.publicRelease,
+        };
+      },
       async resolveRealmIdentityCallbackContext(callbackInput: {
         authority?: HostedOperatorContext["authority"];
         ownerSessionId: string;
@@ -2497,10 +2756,25 @@ export const createHostedOperatorControlPlane = async (input: {
       if (current === undefined || operator?.plan.stage !== "app") {
         return await readKnownAuthBootstrap(context);
       }
+      if (operator.plan.runtimePreparation !== undefined) {
+        await resolvePublicRealm(context);
+        await owner.assertPlanningAuthorized(context);
+        return { ...current, operator };
+      }
+      if (operator.plan.runtimePreparation !== undefined) {
+        await resolvePublicRealm(context);
+        await owner.assertPlanningAuthorized(context);
+        return { ...current, operator };
+      }
       const bootstrap = inspectPlanningParticipantBootstrap(
         {
           ...operator.plan,
-          gatewayDelivery: gatewayDeliverySourceForPlan(configuration, operator.plan),
+          gatewayDelivery: {
+            branch: configuration.gateway.branch,
+            gitSha: configuration.gateway.gitSha,
+            projectId: configuration.gateway.projectId,
+            repoId: configuration.gateway.repoId,
+          },
         },
         current.record,
       );
@@ -2547,10 +2821,141 @@ export const createHostedOperatorControlPlane = async (input: {
         await owner.assertArtifactAuthorized(context);
         return ownedArtifacts(context);
       },
+      // oxlint-disable-next-line eslint/complexity -- Keep legacy Preview and canonical approved public transport selection separate.
       resolveRealmBinding: async ({ context, preparation }) => {
         const known = await readParticipantBootstrapForPlanning(context);
         // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Recheck original account approval and decrypt its AAD-bound state after selecting the planning bootstrap.
         const current = await normalActorJournal.read(context);
+        if (known.operator.plan.runtimePreparation !== undefined) {
+          const released = await resolvePublicRealm(context);
+          const samePreparation = [
+            current !== undefined,
+            current?.preparation.accountOperationRef === preparation.accountOperationRef,
+            current?.preparation.accountPlanDigest === preparation.accountPlanDigest,
+            current?.preparation.programDigest === preparation.programDigest,
+            current?.preparation.accountApprovalId === preparation.accountApprovalId,
+            current?.preparation.accountApprovedByCallId === preparation.accountApprovedByCallId,
+            preparation.program.origin === released.plan.publicOrigin,
+          ].every(Boolean);
+          if (!samePreparation) {
+            throw new HostedOperatorError("auth_identity_required");
+          }
+          const transport = createHostedOperatorRealmHttpTransport(
+            configuration,
+            "operator",
+            { fetch: input.fetch },
+            released.plan.publicOrigin,
+          );
+          return {
+            audience: configuration.operator.origin,
+            authResourceId: released.enrollment.sourceBootstrap.authResourceId,
+            bootstrapPlanDigest: preparation.accountPlanDigest,
+            publicRelease: released.binding,
+            builderCallbackOrigin: configuration.builderCallbackOrigin,
+            endpointOrigin: released.plan.publicOrigin,
+            issuer: preparation.program.origin,
+            resource: released.enrollment.resource,
+            getKey: createRemoteJWKSet(
+              new URL(`${released.plan.publicOrigin}/_platform/jwks.json`),
+              {
+                [customFetch]: async (...args) => {
+                  await resolvePublicRealm(context, released.binding);
+                  const response = await transport(...args);
+                  if (!response.ok) {
+                    return response;
+                  }
+                  const payload = z
+                    .object({ keys: z.array(z.record(z.string(), z.unknown())) })
+                    .parse(await response.json());
+                  const pin = released.publicJwk;
+                  if (
+                    !payload.keys.some(
+                      (key) =>
+                        key.kid === pin.kid &&
+                        key.kty === pin.kty &&
+                        key.crv === pin.crv &&
+                        key.x === pin.x,
+                    )
+                  ) {
+                    throw new HostedOperatorError("auth_identity_required");
+                  }
+                  return Response.json({ keys: [pin] });
+                },
+              },
+            ),
+            readback: async (request: Request) => {
+              await resolvePublicRealm(context, released.binding);
+              return await transport(request);
+            },
+            transportSource: configuration.nativeNeon.configuration.operator,
+          };
+        }
+        if (known.operator.plan.runtimePreparation !== undefined) {
+          const released = await resolvePublicRealm(context);
+          if (current === undefined) {
+            throw new HostedOperatorError("auth_identity_required");
+          }
+          const sameAccountPreparation = [
+            current.preparation.accountOperationRef === preparation.accountOperationRef,
+            current.preparation.accountPlanDigest === preparation.accountPlanDigest,
+            current.preparation.programDigest === preparation.programDigest,
+            current.preparation.accountApprovalId === preparation.accountApprovalId,
+            current.preparation.accountApprovedByCallId === preparation.accountApprovedByCallId,
+            preparation.program.origin === released.plan.publicOrigin,
+          ].every(Boolean);
+          if (!sameAccountPreparation) {
+            throw new HostedOperatorError("auth_identity_required");
+          }
+          const transport = createHostedOperatorRealmHttpTransport(
+            configuration,
+            "operator",
+            { fetch: input.fetch },
+            released.plan.publicOrigin,
+          );
+          return {
+            audience: configuration.operator.origin,
+            authResourceId: released.enrollment.sourceBootstrap.authResourceId,
+            bootstrapPlanDigest: preparation.accountPlanDigest,
+            publicRelease: released.binding,
+            builderCallbackOrigin: configuration.builderCallbackOrigin,
+            endpointOrigin: released.plan.publicOrigin,
+            issuer: preparation.program.origin,
+            resource: released.enrollment.resource,
+            getKey: createRemoteJWKSet(
+              new URL(`${released.plan.publicOrigin}/_platform/jwks.json`),
+              {
+                [customFetch]: async (...args) => {
+                  await resolvePublicRealm(context, released.binding);
+                  const response = await transport(...args);
+                  if (!response.ok) {
+                    return response;
+                  }
+                  const payload = z
+                    .object({ keys: z.array(z.record(z.string(), z.unknown())) })
+                    .parse(await response.json());
+                  const pin = released.publicJwk;
+                  if (
+                    !payload.keys.some(
+                      (key) =>
+                        key.kid === pin.kid &&
+                        key.kty === pin.kty &&
+                        key.crv === pin.crv &&
+                        key.x === pin.x,
+                    )
+                  ) {
+                    throw new HostedOperatorError("auth_identity_required");
+                  }
+                  return Response.json({ keys: [pin] });
+                },
+              },
+            ),
+            readback: async (request: Request) => {
+              await resolvePublicRealm(context, released.binding);
+              return await transport(request);
+            },
+            transportSource: configuration.nativeNeon.configuration.operator,
+          };
+        }
         const candidate = known.operator.gatewayDeliveryCandidates?.find(
           (entry) =>
             entry.deploymentId === known.operator.deliveredGatewayDeploymentId &&
@@ -2560,7 +2965,12 @@ export const createHostedOperatorControlPlane = async (input: {
         const bindings = preparation.accountPlan.gatewayBindings;
         const desired = {
           ...known.operator.plan,
-          gatewayDelivery: gatewayDeliverySourceForPlan(configuration, known.operator.plan),
+          gatewayDelivery: {
+            branch: configuration.gateway.branch,
+            gitSha: configuration.gateway.gitSha,
+            projectId: configuration.gateway.projectId,
+            repoId: configuration.gateway.repoId,
+          },
         };
         const bootstrap = inspectPlanningParticipantBootstrap(desired, known.record);
         if (
@@ -3560,10 +3970,44 @@ export const createHostedOperatorControlPlane = async (input: {
     const nativeTargetPort: Pick<ProtectedHostedOperatorDependencies, "nativeTargetRequest"> = {
       nativeTargetRequest,
     };
+    const publicReleaseRequest = createPublicReleaseDeployment({
+      database,
+      owner,
+      configuration: input.sourceConfiguration,
+      environment,
+      keyring: tokenKeyring,
+      databaseUrl: config.databaseUrl,
+      readResourceBindings,
+      assertRuntimeAuthorized: owner.assertAuthorized,
+      readInstallationScopes: controlPlane.readAppInstallationMetadataScopes,
+      bindRuntimeWorkload: (context, token, signal) => {
+        approvalObserver.bindWorkload(context, token, signal);
+      },
+      ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
+    });
+    const publicReleasePort: Pick<ProtectedHostedOperatorDependencies, "publicReleaseRequest"> = {
+      publicReleaseRequest,
+    };
+    const publicRuntimePort: HostedOperatorPublicRuntimePort = {
+      readPublicRuntimeBinding: async ({ request, plan, operationRef, ...context }) =>
+        await publicReleaseRequest.readRuntimeBinding({ request, context, plan, operationRef }),
+    };
+
+    // Deferred capabilities retain their ordinary unavailable ingress contract,
+    // without constructing a control service, provider adapter or effect dispatcher.
+    const deferredIntegrationPorts: Pick<
+      ProtectedHostedOperatorDependencies,
+      | "appIntegrationCapabilityRequest"
+      | "centralIntegrationHostRequest"
+      | "centralIntegrationDeploymentReceiptRequest"
+    > = {};
     return {
       ...controlPlane,
       ...normalActors,
+      ...deferredIntegrationPorts,
       ...nativeTargetPort,
+      ...publicReleasePort,
+      ...publicRuntimePort,
       exportRequest,
       continuityRequest,
       readNormalActorRuntimeBindings: createNormalActorRuntimeBindings(

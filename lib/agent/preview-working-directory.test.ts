@@ -281,7 +281,7 @@ describe("preview command working directory", () => {
       mocks.prepare.mock.invocationCallOrder[0] ?? 0,
     );
     expect(mocks.dependencies).toHaveBeenCalledWith(
-      expect.objectContaining({ requiredExecutable: "next", root: "/workspace/repository" }),
+      expect.objectContaining({ reconcileWorkspace: true, root: "/workspace/repository" }),
     );
     expect(mocks.prepare.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.start.mock.invocationCallOrder[0] ?? 0,

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { PRIVATE_COMPUTE_CHECK_TASK } from "../sandbox/private-compute-profile";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // oxlint-disable-next-line sonarjs/no-internal-api-use -- This focused profile fixture uses actual Eve context only in tests.
@@ -136,6 +138,37 @@ describe("behavior evidence invalidation during validation repair", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+  });
+
+  it("rejects deletion of an approved profile check before sandbox resolution or source writes", async () => {
+    const current = workflow("validated");
+    mocks.state.current = {
+      ...current,
+      proposal: {
+        ...current.proposal,
+        target: {
+          ...current.proposal.target,
+          privateCompute: { checkPolicy: { path: "apps/app/.config/mise/tasks/check" } },
+        },
+      },
+    };
+    const getSandbox = vi.fn();
+    const result = await validateAppCreation.execute(
+      { implementationFiles: [{ operation: "delete", path: "apps/app/.config/mise/tasks/check" }] },
+      {
+        callId: "delete-frozen-check",
+        getSandbox,
+        session: { id: "session" },
+      } as never,
+    );
+    expect(result).toMatchObject({
+      status: "needs_repair",
+      reason: "validation-tooling-prerequisite",
+      failureClass: "private-compute-check-policy",
+    });
+    expect(getSandbox).not.toHaveBeenCalled();
+    expect(mocks.state.update).not.toHaveBeenCalled();
+    expect(mocks.execute).not.toHaveBeenCalled();
   });
 
   it("correlates the previously silent boundaries with finite outcomes and preserves operation order", async () => {
@@ -705,6 +738,132 @@ describe("behavior evidence invalidation during validation repair", () => {
       expect(result).toMatchObject({ reused: false, status: "validated" });
     },
   );
+  it.each(["missing-app-task", "native-tool-panic"])(
+    "does not rerun unchanged validation within the same turn after %s",
+    async (failureClass) => {
+      const saved = {
+        ...workflow("validated"),
+        phase: "validation_failed",
+        validationFailure: {
+          reason: "tooling-prerequisite",
+          attemptDigest: "saved-attempt",
+          commandFailure: {
+            name: "check-build",
+            exitCode: 1,
+            failureClass,
+            hint: "Restore the retained task prerequisite.",
+          },
+        },
+      };
+      mocks.state.current = saved;
+      const getSandbox = vi.fn();
+      for (const callId of ["first-unchanged", "second-unchanged"]) {
+        // SAFETY: The early no-effects preflight consumes only callId and the retained workflow.
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Repeated calls must observe the same unchanged retained state sequentially.
+        const result = await validateAppCreation.execute({ implementationFiles: [] }, {
+          callId,
+          getSandbox,
+          session: { id: "session", auth: {} },
+        } as never);
+        expect(result).toMatchObject({
+          status: "needs_repair",
+          reason: "validation-tooling-prerequisite",
+          failureClass,
+        });
+      }
+      expect(mocks.state.current).toBe(saved);
+      expect(mocks.state.update).not.toHaveBeenCalled();
+      expect(getSandbox).not.toHaveBeenCalled();
+      expect(mocks.execute).not.toHaveBeenCalled();
+    },
+  );
+  it("allows explicit ordinary app repair after a retained tooling prerequisite", async () => {
+    mocks.state.current = {
+      ...workflow("validated"),
+      phase: "validation_failed",
+      validationFailure: {
+        reason: "tooling-prerequisite",
+        attemptDigest: "saved-attempt",
+        commandFailure: { name: "check-build", exitCode: 1, failureClass: "missing-app-task" },
+      },
+    };
+    const writeTextFile = vi.fn();
+    // SAFETY: The existing faithful validation ports own all effects in this product-tool regression.
+    const result = await validateAppCreation.execute({ implementationFiles }, {
+      callId: "explicit-repair",
+      getSandbox: () => Promise.resolve({ id: "validation-sandbox", writeTextFile }),
+      session: { id: "session", auth: {} },
+    } as never);
+    expect(writeTextFile).toHaveBeenCalledOnce();
+    expect(mocks.execute).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ status: "validated", reused: false });
+  });
+  it("returns exact reviewed task guidance only to the bound approved repair without source effects", async () => {
+    await contextStorage.run(new ContextContainer(), async () => {
+      const taskPath = "apps/app/.config/mise/tasks/check";
+      const scope = {
+        appId: "app",
+        appSpecDigest: "a",
+        proposalDigest: "proposal",
+        workspaceId: "workspace",
+        sessionId: "session",
+      };
+      const current = {
+        ...workflow("validated"),
+        workspace: {
+          workspaceId: scope.workspaceId,
+          workspaceDigest: "workspace-digest",
+          workspacePath: "/workspace/repository",
+        },
+        sourceReceipt: { digest: "source-digest" },
+        proposal: {
+          digest: scope.proposalDigest,
+          target: {
+            contract: { appId: "app", appSpec: { sha256: "a" } },
+            privateCompute: {
+              checkPolicy: {
+                path: taskPath,
+                beforeSha256: "old-hash",
+                afterSha256: createHash("sha256").update(PRIVATE_COMPUTE_CHECK_TASK).digest("hex"),
+              },
+            },
+          },
+        },
+        applyReceipt: {
+          ...workflow("validated").applyReceipt,
+          appSpecDigest: "a",
+          proposalDigest: scope.proposalDigest,
+          workspaceDigest: "workspace-digest",
+          sourceReceiptDigest: "source-digest",
+        },
+      };
+      mocks.state.current = current;
+      const getSandbox = vi.fn();
+      const writeTextFile = vi.fn();
+      // SAFETY: Scope rejection and trusted guidance both finish before any Sandbox operation.
+      const context = {
+        callId: "reviewed-recipe",
+        getSandbox,
+        session: { id: scope.sessionId, auth: {} },
+      } as never;
+      const input = { implementationFiles: [{ path: taskPath, content: "guessed recipe" }] };
+      await expect(validateAppCreation.execute(input, context)).rejects.toThrow();
+      requestPrivateApplyApproval(scope, "approve");
+      recordApprovedPrivateApply(scope, "approve");
+      expect(await validateAppCreation.execute(input, context)).toMatchObject({
+        status: "needs_repair",
+        reason: "reviewed-check-recipe-required",
+        implementationFiles: [
+          { path: taskPath, operation: "upsert", content: PRIVATE_COMPUTE_CHECK_TASK },
+        ],
+      });
+      expect(getSandbox).not.toHaveBeenCalled();
+      expect(writeTextFile).not.toHaveBeenCalled();
+      expect(mocks.state.update).not.toHaveBeenCalled();
+      expect(mocks.execute).not.toHaveBeenCalled();
+      expect(mocks.state.current).toBe(current);
+    });
+  });
   const missingDependencyFailure = {
     attemptDigest: "saved-attempt",
     commandFailure: { exitCode: 1, name: "check-build" },

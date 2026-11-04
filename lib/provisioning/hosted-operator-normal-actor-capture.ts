@@ -1,4 +1,10 @@
 /* oxlint-disable eslint/no-await-in-loop, eslint/complexity, sonarjs/expression-complexity -- The closed two-phase credential boundary validates every native sender, program, proof and actual-account binding. */
+import { isDeepStrictEqual } from "node:util";
+import { publicRealmEnrollmentSchema } from "./public-realm-enrollment";
+import type { PublicRealmEnrollment } from "./public-realm-enrollment";
+
+
+
 import { createHash } from "node:crypto";
 import type { JWTVerifyGetKey } from "jose";
 import { z } from "zod";
@@ -38,14 +44,18 @@ export const normalActorCaptureRequestSchema = z.discriminatedUnion("phase", [
   envelope.extend({ phase: z.literal("authorize") }),
   envelope.extend({ phase: z.literal("capture"), normalCookie: normalActorCaptureCookieSchema }),
 ]);
-export interface NormalActorCaptureSender {
+interface RealmNativeSenderFields {
   issuer: string;
   audience: string;
   ownerId: string;
   projectId: string;
-  environment: "preview";
   subject: string;
 }
+export type NormalActorCaptureSender = RealmNativeSenderFields &
+  (
+    | { environment: "preview"; publicEnrollment?: never }
+    | { environment: "production"; publicEnrollment: PublicRealmEnrollment }
+  );
 export interface NormalActorCapturePorts {
   builderOrigin: string;
   sender: NormalActorCaptureSender;
@@ -146,6 +156,25 @@ export const createNormalActorCaptureHandler =
       const nonceSha256 = realmIdentityNonceSha256(input.reviewedNonce);
       const pending = await ports.pending({ ownerSessionId: input.ownerSessionId, nonceSha256 });
       const { link, context } = pending;
+      if (ports.sender.environment === "production") {
+        const enrollment = publicRealmEnrollmentSchema.parse(ports.sender.publicEnrollment);
+        if (link.publicRelease?.enrollmentRef !== enrollment.enrollmentRef || link.ownerSessionId !== enrollment.ownerSessionId || input.origin !== enrollment.publicOrigin || context.target.appId !== enrollment.appId || !isDeepStrictEqual(context.authority,enrollment.authority) || !isDeepStrictEqual(pending.resource,enrollment.resource) || ports.sender.projectId !== enrollment.project.projectId || ports.sender.ownerId !== enrollment.project.ownerId) throw new Error("realm_browser_session_capture_unavailable");
+      } else if (link.publicRelease !== undefined) throw new Error("realm_browser_session_capture_unavailable");
+      if (ports.sender.environment === "production") {
+        const enrollment = publicRealmEnrollmentSchema.parse(ports.sender.publicEnrollment);
+        if (
+          link.publicRelease?.enrollmentRef !== enrollment.enrollmentRef ||
+          link.ownerSessionId !== enrollment.ownerSessionId ||
+          input.origin !== enrollment.publicOrigin ||
+          context.target.appId !== enrollment.appId ||
+          !isDeepStrictEqual(context.authority, enrollment.authority) ||
+          !isDeepStrictEqual(pending.resource, enrollment.resource) ||
+          ports.sender.projectId !== enrollment.project.projectId ||
+          ports.sender.ownerId !== enrollment.project.ownerId
+        )
+          {throw new Error("realm_browser_session_capture_unavailable");}
+      } else if (link.publicRelease !== undefined)
+        {throw new Error("realm_browser_session_capture_unavailable");}
       if (
         link.consumedAt !== undefined ||
         link.ownerSessionId !== input.ownerSessionId ||

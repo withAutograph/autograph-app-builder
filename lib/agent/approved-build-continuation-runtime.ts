@@ -1,3 +1,6 @@
+import { currentLocalSourcePrerequisite } from "./local-source-prerequisite-state";
+import { repositoryAccessReceiptState } from "./repository-access-state";
+
 import { defineState } from "eve/context";
 import { hostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 import { hasTestCapability } from "../testing/test-capability";
@@ -149,6 +152,7 @@ export const emitCurrentBuildWorkflowProjection = async (
   ]);
   const decision = decideApprovedBuildContinuation({
     adapterSessionId: ctx.session.id,
+    repositoryAccess: repositoryAccessReceiptState.get(),
     approvalMatches: (scope) => {
       try {
         assertApprovedPrivateApplySession(scope);
@@ -160,6 +164,10 @@ export const emitCurrentBuildWorkflowProjection = async (
     blocked: false,
     pendingInput: false,
     state: appBuilderWorkflowState.get(),
+    sourcePrerequisite: currentLocalSourcePrerequisite(
+      appBuilderWorkflowState.get(),
+      ctx.session.id,
+    ),
     turnId: ctx.session.turn.id,
     turnSequence: ctx.session.turn.sequence,
   });

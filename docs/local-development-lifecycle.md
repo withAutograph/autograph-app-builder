@@ -16,8 +16,8 @@ mutations; provider resources and release effects retain their concrete approval
    checkout, and the existing project-scoped Vercel OIDC setup. The launcher
    checks/refreshes that OIDC setup; do not supply static provider keys. Missing
    dependencies or credentials are concrete setup work, not a reason to deploy
-   Builder to debug it. If another local Builder is running, select an isolated
-   supported client profile **before launch** as described below.
+   Builder to debug it. Use an explicit endpoint client with installation disabled,
+   or select an isolated client profile before enabling installation.
 2. From the Builder checkout, run this command, substituting the Arrusted path
    and unused ports and durable private directories for your instance. Important
    app and session work must survive a restart; use a persistent checkout and
@@ -28,26 +28,27 @@ mutations; provider resources and release effects retain their concrete approval
    mkdir -p "$builder_instance_root"
    chmod 700 "$builder_instance_root"
    builder_instance_root="$(cd "$builder_instance_root" && pwd -P)"
-   mise run dev -- --arrusted-root /absolute/path/to/durable/arrusted --next-port 3100 --eve-port 2100 --state-root "$builder_instance_root/state" --destination-root "$builder_instance_root/apps"
+   mise run dev -- --arrusted-root /absolute/path/to/durable/arrusted --next-port 3100 --eve-port 2100 --state-root "$builder_instance_root/state" --destination-root "$builder_instance_root/apps" --install-plugin false
    ```
 
    Leave this terminal running. Wait for the ready message and the printed
    loopback endpoint. By default this is the HTTP MCP development loop, for
    example `http://127.0.0.1:3100/mcp`; it is not the synthetic authenticated web
-   product. The current launcher installs `app-builder@autograph-dev` in the
-   active client profile, disabled globally and enabled by the repository's
-   `.codex/config.toml`.
+   product. The command above leaves plugin registrations unchanged. Omit
+   `--install-plugin false` only when you want to install `app-builder@autograph-dev`
+   in the selected client profile, disabled globally and enabled by this
+   repository's `.codex/config.toml`.
    If Turbopack reports a resolver failure on linked dependencies, rerun the
    same command with `--next-bundler webpack`; this is the supported development
    fallback and does not require a package rebuild or hosted deployment.
 
-3. Open a fresh Codex task in this Builder checkout and select **Autograph App
-   Builder (Development)**. A supported explicit MCP client may instead connect
-   to the printed `/mcp` endpoint. Before submitting a brief, verify the selected
-   server uses this instance's loopback host/port, not the hosted Builder URL or
-   another worktree's endpoint. Explicit client connection does not itself stop
-   the launcher's profile installation; parallel launches still require the
-   profile isolation below.
+3. Connect a supported explicit MCP client to the printed `/mcp` endpoint.
+   If you enabled plugin installation, open a fresh Codex task in this checkout
+   and select **Autograph App Builder (Development)** instead. Before submitting
+   a brief, verify the selected server uses this instance's loopback host/port,
+   not the hosted Builder URL or another worktree's endpoint. Connecting explicitly
+   does not itself disable installation; use `--install-plugin false` to preserve
+   the selected profile.
 4. Submit an ordinary product brief. Use the same public Builder interaction as
    a user: answer product questions and concrete approval requests, inspect the
    preview, and retain the returned session ID and cursor. With an explicit MCP
@@ -131,12 +132,10 @@ make the work durable. Its checkout also owns its build outputs (including
 `.next`); do not share build output directories or writable runtime state between instances. Read-only package
 caches may be reused under the ordinary dependency lifecycle.
 
-Before running either parallel command, select a different supported isolated
-client profile for each launcher. Current main installs the same development
-plugin selector in the active profile, so different ports and explicit endpoint
-clients alone do not prevent registration replacement. If profile isolation is
-unavailable, do not launch a second default instance against the shared active
-profile. Preserve the existing task's registration and report the limitation.
+Use `--install-plugin false` for explicit endpoint clients so parallel launchers
+cannot replace each other's shared plugin registration. If installation is wanted,
+select a different supported isolated client profile for each launcher first.
+Ports and filesystem paths alone do not isolate a shared client profile.
 
 Install the repository-pinned dependencies once inside each Builder and Arrusted
 checkout. Package-manager download caches may be reused, but do not link a
@@ -151,7 +150,7 @@ builder_a_root="$HOME/Library/Application Support/Autograph Builder/development/
 mkdir -p "$builder_a_root"
 chmod 700 "$builder_a_root"
 builder_a_root="$(cd "$builder_a_root" && pwd -P)"
-mise run dev -- --arrusted-root /absolute/path/to/durable/arrusted-a --next-port 3100 --eve-port 2100 --state-root "$builder_a_root/state" --destination-root "$builder_a_root/apps"
+mise run dev -- --arrusted-root /absolute/path/to/durable/arrusted-a --next-port 3100 --eve-port 2100 --state-root "$builder_a_root/state" --destination-root "$builder_a_root/apps" --install-plugin false
 ```
 
 ```sh
@@ -159,7 +158,7 @@ builder_b_root="$HOME/Library/Application Support/Autograph Builder/development/
 mkdir -p "$builder_b_root"
 chmod 700 "$builder_b_root"
 builder_b_root="$(cd "$builder_b_root" && pwd -P)"
-mise run dev -- --arrusted-root /absolute/path/to/durable/arrusted-b --next-port 3200 --eve-port 2200 --state-root "$builder_b_root/state" --destination-root "$builder_b_root/apps"
+mise run dev -- --arrusted-root /absolute/path/to/durable/arrusted-b --next-port 3200 --eve-port 2200 --state-root "$builder_b_root/state" --destination-root "$builder_b_root/apps" --install-plugin false
 ```
 
 The paths and ports are examples. Check availability first; choose other unused
@@ -172,14 +171,10 @@ Separate Next/Eve ports alone do not isolate its database or emulators.
 Connect the browser and public-tool client explicitly to the intended instance's
 loopback origin and `/mcp` endpoint (HTTPS in emulated web mode). Confirm the
 endpoint before starting or continuing a session. Development MCP identity and
-version already distinguish ports; the launcher nevertheless installs the same
-`app-builder@autograph-dev` plugin selector into the active client profile.
-Concurrent launchers must not silently replace that shared registration. Use
-supported isolated client profiles for installation, and bind each client to its
-intended endpoint. Do not globally swap a running task's plugin registration to
-point at another instance. A client connected directly to `/mcp` still requires
-the launcher's installation to have used an isolated profile; it is not a
-no-install launch option on current main.
+version distinguish ports. The commands above disable plugin installation and
+bind each explicit client to its intended endpoint. If you enable installation,
+use supported isolated profiles; never globally swap another running task's
+registration to point at this instance.
 
 When qualifying parallel-instance support, run instances A and B from different
 branches with clients bound to their explicit endpoints. Demonstrate that each
@@ -415,3 +410,239 @@ reads those same owner/session-bound pages after compute cleanup. Interrupted
 capture remains distinguishable from completed output. Hosted validation retains
 its authenticated PostgreSQL store. Diagnostic simulated-target fixtures do not
 publish app releases or stand in for hosted product qualification.
+
+## Save a local app as portable source
+
+Once the accepted app's apply or validation command has stopped, ask the same
+Builder conversation to save its current app source. The internal
+`export-application-source` tool captures the actual owning Sandbox workspace,
+not the initial host checkout or an earlier compiled artifact. The five public
+Builder lifecycle tools stay unchanged: use an ordinary `autograph_send` only
+when that saved session is waiting without unresolved input.
+
+The public session result exposes `applicationSource.downloadPath`. Open that
+path on the same local Builder origin to download an attachment containing the
+app-owned code, binary assets, executable-file modes and checked schema history.
+The manifest reports omitted credentials, local runtime/session state,
+dependencies/caches, symlinks and unsupported entries. A changing source or
+cancelled owner produces no usable receipt. Inspect omissions before upload;
+this is source transfer, not a database backup.
+
+Downloads remain in the original owner-only local cycle state. They are served
+as `application/octet-stream` attachments with `nosniff`, never inline HTML.
+The download route is available only to the exact loopback development origin
+and actual local cycle. This does not create an authenticated hosted principal.
+A later authenticated Builder session receives these files as untrusted source;
+its app registration, dependencies, identity, destination, resource setup,
+approvals and publication remain ordinary fresh Builder work. No native journal,
+provider installation, Auth session, data or old approval is transferred.
+
+## Resumed local preview Auth origin
+
+For a single-app local data runtime in a resumed private Sandbox, Builder reads
+its exact private environment's previous Auth origin before accepting the new
+provider-issued preview domain. The runtime reconciles that origin with an
+explicit compare-and-swap and retains its owned cluster, credentials, identities,
+and data. This handoff cannot rotate shared-context Auth or Production-bound
+state. A stale checkpoint remains visible; retrying never resets it to localhost
+or reprovisions resources to bypass the mismatch.
+
+## Native checker prerequisites
+
+A native validation-checker panic is a tooling prerequisite, not an app lint or
+type failure. Builder retains the actual exit status and bounded sanitized log
+references and stops automatic private-build continuation for that observation.
+An exit code such as 134 without a positive panic diagnostic does not establish
+a cause or prove an out-of-memory condition. Preserve the same app/session and
+source; inspect the actual tooling/compute prerequisite and obtain the ordinary
+fresh approval before changing a compute profile. A later ordinary user turn
+may retry validation after that prerequisite is addressed. Existing failed
+receipts are historical facts and are never rewritten to claim a later result.
+
+For a qualifying native-checker failure, the read-only
+`prepare_app_creation({privateCompute: "private-checks-16gib-v1"})` path can offer
+the supported larger profile. It must resolve the current Sandbox/Drive,
+maintained check task and linked-team capacity, then obtain a fresh Build card
+for 8 vCPU/16 GiB and ephemeral billing before applying that same proposal.
+Failure to qualify remains a visible prerequisite; it never authorizes a blind
+retry, silent resize or replacement app.
+
+Both fresh and reused private-compute plans expose the canonical reviewed check
+task as ready-to-submit `implementationFiles`, with its SHA-256 in separate
+metadata. Builder can pass those exact bytes through the ordinary apply or
+validation-repair input without guessing a replacement recipe. This read-only
+projection must match the frozen profile's approved after-hash. It does not
+change the profile or proposal, edit source, or authorize an effect; a new plan
+still needs its ordinary Build approval.
+
+The approved check-policy apply changes only the exact frozen task preimage (or
+verifies its exact installed replacement). It retains executable mode `0755` and
+reads back bytes and mode before acknowledging application. A missing task,
+symlink, changed task, failed command, or invalid readback fails the apply; it
+does not recreate an absent task or grant permission to edit a custom task.
+Existing failed receipts remain historical facts. A normal newly approved apply
+can consume the repaired implementation. Existing approved private builds can
+use the ordinary explicit validation-repair input under their exact retained
+app, proposal, session and workspace authority; a reused apply receipt alone
+performs no recovery and proves no later filesystem state.
+
+Local source planning distinguishes the historical source receipt from the full
+captured working-tree baseline. Snapshot Git staging uses the exact already
+captured source inventory, retaining originally tracked files even if the
+snapshot's ignore rules would hide them. It does not recursively force-add
+ignored dependency, credential, or runtime directories.
+
+If the exact original baseline cannot be proven, Builder records a typed source
+prerequisite bound to the current app, session, source, workspace, and proposal.
+That observation stops automatic retries of an older app-validator failure.
+Original validation and approval facts remain retained. Normal explicit user
+turns can recover the immutable source and prepare a fresh plan. A successful
+same-scope reconciliation records resolution; it does not transfer the old Build
+approval to changed source.
+
+Local source reconciliation must use the saved planning workspace's exact file
+inventory digest as its original merge base. A Git commit alone omits initial
+dirty or untracked source. If candidate Git metadata is absent, Builder may
+recover a distinct original snapshot commit from its own private retained run
+sources only when file bytes, modes and the complete inventory match that frozen
+digest. Snapshot Git objects supply committed bytes; originally tracked paths
+omitted when snapshot Git applied ignore rules may use their actual retained
+source files. Those extra bytes are captured into a distinct private commit and
+must pass the same complete frozen digest check. Current app files cannot
+establish the old baseline. The historical source commit remains unchanged and is retained
+separately from the recovered snapshot commit/tree. Installing that proven Git
+metadata does not check out or replace candidate files. Missing or mismatched
+original artifacts remain an explicit prerequisite; an old approval never
+acquires a changed source or destination.
+
+Before freezing a local workspace receipt, Builder now retains the exact selected
+live source as an immutable private source baseline, including its raw byte
+inventory and distinct snapshot commit/tree. This happens at preparation time;
+the launcher's earlier copy is not assumed to contain later host edits. Baselines
+live under the instance's `source-baselines/<original-source-sha>/<workspace-digest>/` namespace. They
+are source artifacts only, never a restored native checkpoint or transferred
+approval. Recovery requires the same historical source identity and exact frozen
+workspace digest before the ordinary new-plan workflow can continue.
+
+Transferred Sandbox file bytes are independently checked against the frozen
+inventory before preparation writes the workspace receipt. A mixed or corrupt
+transfer remains a visible failure. Historical regular-file digests cannot prove
+dirty symlink targets; legacy symlink recovery fails closed. New preparation
+artifacts separately retain their exact captured Git tree, and a conflicting tree
+cannot replace an existing original-source/digest artifact.
+
+Local Builder workflow qualification includes the installed Eve authored-channel
+bundle and Workflow bundle build. Relative lazy imports can create unsupported
+split authored modules even when TypeScript and focused unit tests pass. Shared
+source custody uses a static, acyclic module graph; qualify that actual compiler
+boundary before restarting a saved development cycle.
+
+The same custody rule applies after each local source reconciliation, before its
+new generation becomes a frozen planning baseline. Builder reuses the verified
+capture rather than rereading the large source tree. Each artifact names that
+new generation's actual source commit and inventory digest; future metadata
+recovery uses that exact tuple, while earlier source receipts and approvals
+remain historical facts.
+
+Development transport receipts use the captured generation's eligibility identity
+(`sha256(sourceSha)`), including receipts produced by reconciliation. The reviewed
+SourceReceipt separately retains its canonical SHA/Git-tree identity. An already
+frozen reconciliation that used that canonical identity remains readable only
+when its exact current workspace, parsed SourceReceipt and completed private
+Native call match the trusted reconciliation history. Reading it neither rewrites
+the receipt nor carries an old Build approval into a new plan. Ordinary moving
+host source is observed by the next planning reconciliation.
+
+A later no-op preparation may return the same frozen receipt under a new Native
+call ID. Compatibility still requires the original completed reconciliation call
+and its identical receipt in the same complete owned history; the later no-op
+does not create or replace that historical proof.
+
+A native `mise ERROR no task //apps/<selected-app>:check found` failure is a
+validation tooling prerequisite, not an ordinary app lint or test failure. Builder
+retains that typed failure and stops automatic validation continuation. Inspect
+the selected app-owned task's source and executable mode before explicitly
+retrying. A source repair must use an available normal Builder edit/replan path
+and its ordinary approvals; if no supported repair path is available, report that
+product gap rather than retrying validation; this grants no new
+provider, destination, or source-change authority. Other apps' tasks and ordinary
+compiler, lint, and assertion failures do not acquire this classification.
+
+For an already approved private-check profile, ordinary
+`validate_app_creation` repair may explicitly upsert that same app's reviewed
+check task. The supplied content must match its frozen old or new recipe; Builder
+rechecks the exact retained Build scope before writing and before reasserting the
+policy, including executable mode. No-files validation, deletion, another path,
+custom recipe, or changed app/proposal/workspace cannot trigger this repair. It
+creates no approval and cannot resize compute or change provider resources.
+
+A retained typed validation tooling prerequisite also suppresses repeated
+no-files `validate_app_creation` command dispatch within the same turn. Builder
+returns the existing failure and repair hint without resetting workflow state or
+running commands. Explicit implementation repair and normal source reconciliation
+remain available; no retry counter or retry deadline is involved.
+
+Private browser tasks use the checked `app:describe` catalog entry independently
+of the exact Auth origin. A restored private runtime projects that entry even
+without a public-delivery binding; an explicit public-delivery entry retains its
+meaning. Unknown entries remain a browser prerequisite. The repository's normal
+`app:runtime run <app> test-e2e` path supplies the same catalog-derived
+`APP_TEST_ENTRY_PATH` for local execution. Existing authored tests must opt into
+`appTestPath()` and the normal actor fixture where their scenario requires them;
+a supplied environment does not rewrite navigation or authenticate an anonymous
+Playwright `page` fixture.
+
+When an explicit reviewed check-task upsert has incorrect bytes, the normal
+validation tool returns the exact installed canonical recipe and path as repair
+guidance only after rechecking the retained app/spec/proposal/workspace/session
+approval and the recipe's frozen after-hash. It writes no source and opens no
+Sandbox for that response. Foreign scope or a mismatched installed policy cannot
+obtain this guidance; the agent must submit the explicit normal repair again.
+
+### Frozen private compute check integrity
+
+A selected `private-checks-16gib-v1` plan binds its app-owned executable check recipe as well as the compute resources. Validation rejects an explicit deletion of that task before writing any implementation files. After an explicit repair and policy readback, and before technical setup or checks, Builder reads the actual `mise tasks info //apps/<app>:check --json` projection and independently checks the frozen task bytes and executable mode. A TOML override, changed task source or working directory, missing file, or changed recipe returns a tooling prerequisite requiring an explicit Builder repair. Unrelated app repairs remain available; plans without this profile do not use this guard. A changed check policy requires a new plan and ordinary fresh approval. Historical receipts are preserved.
+
+This read-only prerequisite check does not run the app task or establish lint, type, test, browser, or hosted acceptance. Those observations remain separate.
+
+## Observing Builder runtime edits
+
+The local source observer must cover every shared Builder library and maintained
+dependency patch, including provisioning, Auth, provider adapters and workflow
+recovery. A source-change notice means the existing Eve worker is still pinned
+to its loaded generation; it does not mean that new code is executing. Next's
+page/component HMR remains independent.
+
+To exercise changed Builder runtime code, use a separate branch/checkout, ports
+and state root for parallel work, or deliberately stop an owned idle instance
+and resume its exact saved cycle with the qualified checkout. Install changed
+pinned dependencies before launching it. Verify the copied authored modules and
+the installed dependency modules actually used by that cycle, then continue the
+saved session through ordinary public controls. Never replace a running worker
+mid-effect, copy another instance's journal, or repeat an uncertain operation.
+
+### Resume the selected dependency installation with the saved cycle
+
+A cycle retains native `.eve` sessions, queues and workflow data. Its application
+code and dependency binding come from the deliberately selected Builder checkout.
+When resuming a stopped cycle, Builder atomically rebinds only its owned
+`node_modules` link to that checkout's canonical owner-bound installation. An
+intentional owner-bound dependency cache at the selected checkout is supported;
+it must not leave Eve resolving from an ancestor or a stale per-package link in
+another checkout. Native session bytes and ownership do not change.
+
+Before launch, the supervisor reports `[builder:development:dependencies]` with
+the selected modules root, source/installed lock SHA256 values and actual resolved
+Eve package path. A fresh metadata-only Node process verifies resolution from the
+cycle and selected checkout, avoiding stale in-process symlink caches. This
+prevents a new CLI and old authored-tool dependency tree from being mixed. It
+does not claim that every previous harness invocation used the same tree.
+
+If the actual installed pnpm lock differs from the selected lock, run
+`pnpm install --frozen-lockfile` in that selected checkout, then resume the
+stopped cycle normally. This is an actionable installation mismatch, not a
+source/template/SHA drift gate; ordinary app and platform edits remain valid
+planning input. The separate Arrusted dependency cache key does not certify the
+Builder's installed runtime. Neither a copied source fingerprint nor a READY
+message replaces actual dependency-resolution readback. Do not copy or rewrite
+native state to repair a dependency installation.
