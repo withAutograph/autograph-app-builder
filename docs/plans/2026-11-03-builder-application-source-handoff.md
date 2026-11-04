@@ -174,6 +174,33 @@ clientRequestId})`; all five public tools remain unchanged.
    completion. Preserve original app content; reconcile platform compatibility
    through the shared workflow instead of making the evaluator finish the app.
 
+### Canonical platform acquisition identity
+
+A new hosted fresh-template acquisition explicitly requests the canonical
+`refs/heads/main` revision from the Git source adapter. Before issuing its
+main-labelled platform receipt, independently observe the repository URL,
+actual HEAD/tree and resolved canonical branch commit in that same checkout;
+HEAD must equal that observed canonical branch commit. A provider default branch
+or an occupied checkout for the same remote is insufficient evidence of main.
+This check applies to new acquisition, including a preexisting provider-created
+checkout encountered during that acquisition. On mismatch, preserve the checkout
+and report a source-selection prerequisite; never silently reset, rebase, fetch
+or replace it to make it pass.
+
+Existing saved sessions retain their original frozen source receipts and actual
+workspace binding. Reinspection must not refresh their branch or reinterpret a
+historical commit as the latest main. Uploaded app source stays paired with the
+actual selected platform receipt and cannot select its old local platform. The
+final shared platform must be published to canonical main before starting the
+final hosted acquisition; a current worker image or unpublished branch does not
+update that source. This is source acquisition provenance, not Git ancestry as
+deployment authority.
+
+Qualification must cover a provider whose default branch differs from main,
+an occupied same-remote checkout at the wrong revision, a genuine main checkout,
+and unchanged reinspection of a previously saved frozen receipt. Preserve both
+platform and app-import receipts and app-owned specification/schema history.
+
 Keep source and destination decisions separate. Reuse an existing Supplier Spend
 repository/project only when exact owner-scoped settled normal provisioning
 receipts and independent GitHub/Vercel readback agree. Do not adopt by name,
