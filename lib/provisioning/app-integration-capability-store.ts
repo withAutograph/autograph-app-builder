@@ -1,7 +1,4 @@
-import {
-  readIntegrationCapabilityEffect,
-  
-} from "./app-integration-capability-contract";
+import { readIntegrationCapabilityEffect } from "./app-integration-capability-contract";
 import { isDeepStrictEqual } from "node:util";
 import { and, eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
