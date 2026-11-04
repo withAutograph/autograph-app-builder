@@ -31,6 +31,24 @@
       "destination": {
         "service": "operator"
       }
+    },
+    {
+      "source": "/v1/app-integrations",
+      "destination": {
+        "service": "operator"
+      }
+    },
+    {
+      "source": "/v1/central-integrations",
+      "destination": {
+        "service": "operator"
+      }
+    },
+    {
+      "source": "/v1/central-deployment-events",
+      "destination": {
+        "service": "operator"
+      }
     }
   ]
 }
