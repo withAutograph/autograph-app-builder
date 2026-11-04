@@ -1,3 +1,4 @@
+import { runSandboxCommandWithExcerpt } from "@/lib/sandbox/command-output-excerpt";
 import { sourceDeclaredToolchainActivationCommand } from "../../lib/repository/source-toolchain";
 import { resolveAcceptanceRuntimeRoot } from "@/lib/agent/acceptance-runtime-root";
 import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
@@ -60,9 +61,11 @@ const safeOutput = (value: string): string =>
 export const prepareAppLocalPreview = async (input: {
   appId: string;
   root: string;
-  sandbox: Pick<SandboxSession, "run">;
+  sandbox: Pick<SandboxSession, "run"> & Partial<Pick<SandboxSession, "spawn">>;
   signal?: AbortSignal;
   authOrigin?: string;
+  /** Read from the exact server-owned local runtime binding; never model input. */
+  expectedPreviousAuthOrigin?: string;
   execution?: PreparedRuntimeExecutionContext;
 }) => {
   const runtime = input.execution ? await resolvePreparedRuntimeExecution(input.execution) : null;
@@ -110,15 +113,22 @@ export const prepareAppLocalPreview = async (input: {
     if (origin !== undefined) {
       env.APP_RUNTIME_AUTH_ORIGIN = origin;
     }
-    const result =
-      input.signal === undefined
-        ? await input.sandbox.run({ command, env, workingDirectory: input.root })
-        : await input.sandbox.run({
-            abortSignal: input.signal,
-            command,
-            env,
-            workingDirectory: input.root,
-          });
+    if (input.expectedPreviousAuthOrigin !== undefined) {
+      env.APP_RUNTIME_PREVIOUS_AUTH_ORIGIN = z
+        .string()
+        .regex(/^(?:http:\/\/localhost:3000|https:\/\/[a-z0-9-]+\.vercel\.run)$/u)
+        .parse(input.expectedPreviousAuthOrigin);
+    }
+    const result = await runSandboxCommandWithExcerpt({
+      sandbox: input.sandbox,
+      options: {
+        command,
+        env,
+        workingDirectory: input.root,
+        ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
+      },
+      sanitize: safeOutput,
+    });
     const stdout = safeOutput(result.stdout);
     const stderr = safeOutput(result.stderr);
     if (result.exitCode !== 0) {
