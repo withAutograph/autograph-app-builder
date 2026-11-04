@@ -15,7 +15,10 @@ import { once } from "node:events";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { captureLocalPlanningSource } from "./local-planning-source";
+import { captureLocalPlanningSource, reconcileLocalPlanningSource } from "./local-planning-source";
+import { localSourceBaselineManifestSchema } from "./local-source-baseline-contract";
+import { retainPreparedLocalSourceBaseline } from "./local-source-baseline-retention";
+import type { SandboxSession } from "eve/sandbox";
 import {
   initializeLocalPlanningGitBaseProgram,
   importLocalPlanningCurrentCommitProgram,
@@ -430,6 +433,193 @@ describe("retained dirty planning baseline", () => {
       expect(observed.capturedBase().sourceSha).toBe(observed.snapshotSha);
     } finally {
       capture?.dispose();
+      f.dispose();
+    }
+  });
+  it("retains each new generation across successive real reconciliations and later Git metadata recovery", async () => {
+    const f = fixture();
+    const directory = path.dirname(f.source);
+    const stateRoot = path.join(directory, "baseline-custody");
+    mkdirSync(stateRoot, { mode: 0o700 });
+    const authority = { kind: "local" as const, ownerUid: process.getuid?.() ?? -1, stateRoot };
+    const readAuthority = () => Promise.resolve(authority);
+    const localPath = (name: string) => {
+      const mapped = name
+        .replaceAll("/workspace/repository", f.candidate)
+        .replaceAll("/workspace", directory);
+      const resolved = path.resolve(directory, mapped);
+      if (resolved !== directory && !resolved.startsWith(directory + path.sep)) {
+        throw new Error("Fixture source escaped owned root");
+      }
+      return resolved;
+    };
+    const unavailable = () =>
+      Promise.reject(new Error("Unexpected process/stream operation in source-only fixture"));
+    const sandbox: SandboxSession & { id: string } = {
+      id: "saved-workspace",
+      resolvePath: localPath,
+      spawn: unavailable,
+      readFile: unavailable,
+      run: ({ command, workingDirectory }) => {
+        const mapped = command
+          .replaceAll("/workspace/repository", f.candidate)
+          .replaceAll("/workspace", directory);
+        const result = spawnSync("/bin/sh", ["-c", mapped], {
+          cwd: localPath(workingDirectory ?? "/workspace"),
+          encoding: "utf-8",
+          env: { ...process.env, PATH: `${path.dirname(process.execPath)}:/usr/bin:/bin` },
+        });
+        if (result.status === null) {
+          throw new Error("Fixture command did not finish");
+        }
+        return Promise.resolve({
+          exitCode: result.status,
+          stdout: result.stdout,
+          stderr: result.stderr,
+        });
+      },
+      readTextFile: ({ path: name }) => {
+        try {
+          return Promise.resolve(readFileSync(localPath(name), "utf-8"));
+        } catch (error) {
+          if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+            return Promise.resolve(null);
+          }
+          throw error;
+        }
+      },
+      readBinaryFile: ({ path: name }) => {
+        try {
+          return Promise.resolve(readFileSync(localPath(name)));
+        } catch (error) {
+          if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+            return Promise.resolve(null);
+          }
+          throw error;
+        }
+      },
+      writeTextFile: ({ path: name, content }) => {
+        const file = localPath(name);
+        mkdirSync(path.dirname(file), { recursive: true });
+        writeFileSync(file, content);
+        return Promise.resolve();
+      },
+      writeBinaryFile: ({ path: name, content }) => {
+        const file = localPath(name);
+        mkdirSync(path.dirname(file), { recursive: true });
+        writeFileSync(file, content);
+        return Promise.resolve();
+      },
+      writeFile: async ({ path: name, content }) => {
+        const file = localPath(name);
+        mkdirSync(path.dirname(file), { recursive: true });
+        writeFileSync(file, Buffer.from(await new Response(content).arrayBuffer()));
+      },
+      removePath: ({ path: name, recursive, force }) => {
+        rmSync(localPath(name), { recursive, force });
+        return Promise.resolve();
+      },
+    };
+    const retainedReceipts: { sourceSha: string; workspaceDigest: string; sourceTree: string }[] =
+      [];
+    const reconcile = async (previousSha: string, previousDigest: string, revision: number) => {
+      const capture = await captureLocalPlanningSource(f.source, previousSha, { readAuthority });
+      try {
+        const result = await reconcileLocalPlanningSource(
+          {
+            assertCurrent: () => {},
+            sandbox,
+            sessionId: "saved-session",
+            appId: "example",
+            callId: `revision-${revision}`,
+            originalSourceSha: previousSha,
+            originalWorkspaceDigest: previousDigest,
+            workspaceId: sandbox.id,
+            receipt: {
+              sourceSha: capture.sourceSha,
+              sourceTree: capture.snapshotTree,
+              eligibilityDigest: capture.generation.eligibilityDigest,
+            },
+            capture,
+          },
+          {
+            retainBaseline: (generation, dependencies) =>
+              retainPreparedLocalSourceBaseline(generation, { ...dependencies, readAuthority }),
+          },
+        );
+        const manifest = localSourceBaselineManifestSchema.parse(
+          JSON.parse(
+            readFileSync(
+              path.join(
+                stateRoot,
+                "source-baselines",
+                capture.sourceSha,
+                capture.generation.workspaceDigest,
+                "manifest.json",
+              ),
+              "utf-8",
+            ),
+          ),
+        );
+        expect(manifest.originalSourceSha).toBe(capture.sourceSha);
+        retainedReceipts.push({
+          sourceSha: capture.sourceSha,
+          workspaceDigest: capture.generation.workspaceDigest,
+          sourceTree: capture.snapshotTree,
+        });
+        expect(readFileSync(path.join(f.candidate, "apps/example/app/page.tsx"), "utf-8")).toBe(
+          "saved product\n",
+        );
+        expect(
+          readFileSync(
+            path.join(f.candidate, "apps/example/schema/release/v1/release.json"),
+            "utf-8",
+          ),
+        ).toBe("immutable\n");
+        return result;
+      } finally {
+        capture.dispose();
+      }
+    };
+    try {
+      const original = await captureLocalPlanningSource(f.source, f.originalSha, { readAuthority });
+      const originalDigest = original.generation.workspaceDigest;
+      original.dispose();
+      f.write(f.source, "shared.txt", "platform revision one\n");
+      f.git(f.source, "add", "shared.txt");
+      f.git(f.source, "commit", "--quiet", "-m", "first platform revision");
+      const first = await reconcile(f.originalSha, originalDigest, 1);
+      const firstCheckpoint = f.git(f.candidate, "rev-parse", first.checkpointRef);
+      const firstReceipt = JSON.stringify(retainedReceipts[0]);
+      f.write(f.source, "platform-two.txt", "platform revision two\n");
+      f.git(f.source, "add", "platform-two.txt");
+      f.git(f.source, "commit", "--quiet", "-m", "second platform revision");
+      f.write(f.source, "second-dirty.txt", "genuine uncommitted generation two source\n");
+      const second = await reconcile(first.workspace.sourceSha, first.workspace.workspaceDigest, 2);
+      expect(f.git(f.candidate, "rev-parse", first.checkpointRef)).toBe(firstCheckpoint);
+      expect(JSON.stringify(retainedReceipts[0])).toBe(firstReceipt);
+      // Exercise the supported missing-Git recovery path using generation two,
+      // rather than falling back to the original first-generation source.
+      rmSync(path.join(f.candidate, ".git"), { recursive: true });
+      f.write(f.source, "platform-three.txt", "platform revision three\n");
+      f.git(f.source, "add", "platform-three.txt");
+      f.git(f.source, "commit", "--quiet", "-m", "third platform revision");
+      const third = await reconcile(
+        second.workspace.sourceSha,
+        second.workspace.workspaceDigest,
+        3,
+      );
+      expect(third.restoredOriginalBase?.originalSourceSha).toBe(second.workspace.sourceSha);
+      expect(third.restoredOriginalBase?.sourceSha).not.toBe(second.workspace.sourceSha);
+      expect(readFileSync(path.join(f.candidate, "second-dirty.txt"), "utf-8")).toBe(
+        "genuine uncommitted generation two source\n",
+      );
+      expect(third.workspace.sourceSha).not.toBe(f.originalSha);
+      expect(readFileSync(path.join(f.candidate, "platform-three.txt"), "utf-8")).toBe(
+        "platform revision three\n",
+      );
+      expect(retainedReceipts).toHaveLength(3);
+    } finally {
       f.dispose();
     }
   });

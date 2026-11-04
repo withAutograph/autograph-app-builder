@@ -1,3 +1,4 @@
+import { retainPreparedLocalSourceBaseline } from "./local-source-baseline-retention";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import type { SandboxSession } from "eve/sandbox";
@@ -27,20 +28,31 @@ const reconciliationOutcome = z.strictObject({
   sourceSha: objectId,
   sourceTree: objectId,
 });
+const retainSourceGeneration = async (
+  capture: Awaited<ReturnType<typeof captureLocalPlanningSource>>,
+  dependencies?: { retainBaseline?: typeof retainPreparedLocalSourceBaseline },
+) => {
+  await (dependencies?.retainBaseline ?? retainPreparedLocalSourceBaseline)(capture.generation, {
+    captured: capture,
+  });
+};
 /** Reuse the one owned three-way reconciliation engine. No provider/GitHub operation or old approval is replayed. */
-export const reconcileLocalPlanningSource = async (input: {
-  assertCurrent: () => void;
-  sandbox: SandboxSession;
-  sessionId: string;
-  appId: string;
-  callId: string;
-  originalSourceSha: string;
-  originalWorkspaceDigest: string;
-  sourceOverlay?: { sourceSha: string; workspaceDigest: string };
-  workspaceId: string;
-  receipt: Pick<SourceReceipt, "sourceSha" | "sourceTree" | "eligibilityDigest">;
-  capture: Awaited<ReturnType<typeof captureLocalPlanningSource>>;
-}) => {
+export const reconcileLocalPlanningSource = async (
+  input: {
+    assertCurrent: () => void;
+    sandbox: SandboxSession;
+    sessionId: string;
+    appId: string;
+    callId: string;
+    originalSourceSha: string;
+    originalWorkspaceDigest: string;
+    sourceOverlay?: { sourceSha: string; workspaceDigest: string };
+    workspaceId: string;
+    receipt: Pick<SourceReceipt, "sourceSha" | "sourceTree" | "eligibilityDigest">;
+    capture: Awaited<ReturnType<typeof captureLocalPlanningSource>>;
+  },
+  dependencies?: { retainBaseline?: typeof retainPreparedLocalSourceBaseline },
+) => {
   const { capture, sandbox } = input;
   if (capture.sourceSha !== input.receipt.sourceSha) {
     throw new Error(
@@ -51,6 +63,10 @@ export const reconcileLocalPlanningSource = async (input: {
   if (getBuilderSandboxId(sandbox) !== input.workspaceId) {
     throw new Error("The original local source belongs to another saved workspace.");
   }
+  // Every newly frozen source generation needs independent custody, even
+  // when the candidate already has its older private Git reconciliation base.
+  await retainSourceGeneration(capture, dependencies);
+  input.assertCurrent();
   const presence = await sandbox.run({
     command: `node -e ${quote(localPlanningGitPresenceProgram)} ${quote(JSON.stringify({ root: "/workspace/repository" }))}`,
     workingDirectory: "/workspace",

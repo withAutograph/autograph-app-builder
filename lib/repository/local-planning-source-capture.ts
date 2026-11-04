@@ -194,6 +194,7 @@ export const captureLocalPlanningSource = async (
       baseSha: string,
       expectedWorkspaceDigest: string,
       linksCapturedAtPreparation = false,
+      authoritySourceSha = originalSourceSha,
     ):
       | {
           originalSourceSha: string;
@@ -311,12 +312,12 @@ export const captureLocalPlanningSource = async (
       }
       const objects = [
         ...new Set([
-          originalSourceSha,
+          authoritySourceSha,
           ...git([
             "rev-list",
             "--objects",
             "--no-object-names",
-            `${originalSourceSha}^{tree}`,
+            `${authoritySourceSha}^{tree}`,
           ]).split("\n"),
           baseSha,
           baseTree,
@@ -326,7 +327,7 @@ export const captureLocalPlanningSource = async (
       const prefix = path.join(directory, "original-base");
       const packId = objectId.parse(git(["pack-objects", prefix], `${objects.join("\n")}\n`));
       return {
-        originalSourceSha,
+        originalSourceSha: authoritySourceSha,
         sourceSha: baseSha,
         sourceTree: baseTree,
         streamPack: () => processStdoutByteStream("/bin/cat", [`${prefix}-${packId}.pack`]),
@@ -544,7 +545,7 @@ export const captureLocalPlanningSource = async (
       generation,
       originalBase,
       capturedBase: () => {
-        const base = packOriginalBase(snapshotSha, generation.workspaceDigest, true);
+        const base = packOriginalBase(snapshotSha, generation.workspaceDigest, true, sourceSha);
         if (base === undefined) {
           throw new LocalPlanningSourcePrerequisiteError(
             originalSourceSha,

@@ -59,6 +59,25 @@ describe("retained first local planning baseline", () => {
     });
     expect(dispose).toHaveBeenCalledOnce();
   });
+  it("retains an already verified reconciliation capture without rereading or disposing its owner's bytes", async () => {
+    mock.authority.mockResolvedValue({ kind: "local", ownerUid: 501, stateRoot: "/owned/state" });
+    const dispose = vi.fn();
+    const pack = new ReadableStream<Uint8Array>();
+    const captured = {
+      generation: expected,
+      capturedBase: () => ({
+        sourceSha: "e".repeat(40),
+        sourceTree: "f".repeat(40),
+        streamPack: () => pack,
+      }),
+      dispose,
+    };
+    await retainPreparedLocalSourceBaseline(expected, { ...dependencies, captured });
+    expect(mock.capture).not.toHaveBeenCalled();
+    expect(mock.retain).toHaveBeenCalledOnce();
+    expect(dispose).not.toHaveBeenCalled();
+  });
+
   it("does not freeze an original baseline if the actual selected source moved", async () => {
     mock.authority.mockResolvedValue({ kind: "local", ownerUid: 501, stateRoot: "/owned/state" });
     const dispose = vi.fn();

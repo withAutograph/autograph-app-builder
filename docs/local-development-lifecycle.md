@@ -518,3 +518,10 @@ bundle and Workflow bundle build. Relative lazy imports can create unsupported
 split authored modules even when TypeScript and focused unit tests pass. Shared
 source custody uses a static, acyclic module graph; qualify that actual compiler
 boundary before restarting a saved development cycle.
+
+The same custody rule applies after each local source reconciliation, before its
+new generation becomes a frozen planning baseline. Builder reuses the verified
+capture rather than rereading the large source tree. Each artifact names that
+new generation's actual source commit and inventory digest; future metadata
+recovery uses that exact tuple, while earlier source receipts and approvals
+remain historical facts.

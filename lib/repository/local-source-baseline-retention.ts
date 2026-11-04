@@ -4,23 +4,22 @@ import { retainLocalSourceBaseline } from "./local-source-baseline-store";
 import type { retainLocalSourceBaseline as RetainLocalSourceBaseline } from "./local-source-baseline-store";
 import type { inspectDevelopmentSourceGeneration } from "./development-source-generation";
 
-/** Retain the exact first live planning input before its workspace receipt can freeze. */
+interface CapturedLocalBaselineSource {
+  generation: { workspaceDigest: string; sourceSha: string };
+  capturedBase: () => {
+    sourceSha: string;
+    sourceTree: string;
+    streamPack: () => ReadableStream<Uint8Array>;
+  };
+  dispose: () => void;
+}
+/** Retain the exact new live planning input before its workspace receipt can freeze. */
 export const retainPreparedLocalSourceBaseline = async (
   expected: Awaited<ReturnType<typeof inspectDevelopmentSourceGeneration>>,
   dependencies: {
     readAuthority?: typeof readLocalOperatorArtifactAuthority;
-    capture?: (
-      sourcePath: string,
-      sourceSha: string,
-    ) => Promise<{
-      generation: { workspaceDigest: string; sourceSha: string };
-      capturedBase: () => {
-        sourceSha: string;
-        sourceTree: string;
-        streamPack: () => ReadableStream<Uint8Array>;
-      };
-      dispose: () => void;
-    }>;
+    capture?: (sourcePath: string, sourceSha: string) => Promise<CapturedLocalBaselineSource>;
+    captured?: CapturedLocalBaselineSource;
     retain?: typeof RetainLocalSourceBaseline;
   } = {},
 ) => {
@@ -28,10 +27,12 @@ export const retainPreparedLocalSourceBaseline = async (
   if (authority === undefined) {
     return;
   }
-  const capture = await (dependencies.capture ?? captureLocalPlanningSource)(
-    expected.sourcePath,
-    expected.sourceSha,
-  );
+  const capture =
+    dependencies.captured ??
+    (await (dependencies.capture ?? captureLocalPlanningSource)(
+      expected.sourcePath,
+      expected.sourceSha,
+    ));
   try {
     if (
       capture.generation.workspaceDigest !== expected.workspaceDigest ||
@@ -56,6 +57,8 @@ export const retainPreparedLocalSourceBaseline = async (
       pack: baseline.streamPack(),
     });
   } finally {
-    capture.dispose();
+    if (dependencies.captured === undefined) {
+      capture.dispose();
+    }
   }
 };
