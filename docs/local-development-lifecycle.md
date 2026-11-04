@@ -496,3 +496,19 @@ separately from the recovered snapshot commit/tree. Installing that proven Git
 metadata does not check out or replace candidate files. Missing or mismatched
 original artifacts remain an explicit prerequisite; an old approval never
 acquires a changed source or destination.
+
+Before freezing a local workspace receipt, Builder now retains the exact selected
+live source as an immutable private source baseline, including its raw byte
+inventory and distinct snapshot commit/tree. This happens at preparation time;
+the launcher's earlier copy is not assumed to contain later host edits. Baselines
+live under the instance's `source-baselines/<original-source-sha>/<workspace-digest>/` namespace. They
+are source artifacts only, never a restored native checkpoint or transferred
+approval. Recovery requires the same historical source identity and exact frozen
+workspace digest before the ordinary new-plan workflow can continue.
+
+Transferred Sandbox file bytes are independently checked against the frozen
+inventory before preparation writes the workspace receipt. A mixed or corrupt
+transfer remains a visible failure. Historical regular-file digests cannot prove
+dirty symlink targets; legacy symlink recovery fails closed. New preparation
+artifacts separately retain their exact captured Git tree, and a conflicting tree
+cannot replace an existing original-source/digest artifact.

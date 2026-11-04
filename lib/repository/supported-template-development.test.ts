@@ -128,6 +128,13 @@ describe("development Sandbox workspace refresh", () => {
     });
     const sandbox = {
       id: "sandbox",
+      readBinaryFile: vi.fn(({ path: target }: { path: string }) => {
+        const value = files.get(target);
+        if (value === undefined) {
+          return Promise.resolve(null);
+        }
+        return Promise.resolve(Buffer.isBuffer(value) ? value : Buffer.from(value));
+      }),
       readTextFile: vi.fn(({ path: target }) => {
         const value = files.get(target);
         if (value === undefined) {
@@ -183,7 +190,30 @@ describe("development Sandbox workspace refresh", () => {
     expect(files.has("repository/deleted.txt")).toBe(false);
     expect(files.get("repository/apps/generated/page.tsx")).toBe("generated");
     expect(removePath).not.toHaveBeenCalledWith(expect.objectContaining({ path: "repository" }));
+    const readActual = ({ path: target }: { path: string }) => {
+      const value = files.get(target);
+      if (value === undefined) {
+        return Promise.resolve(null);
+      }
+      return Promise.resolve(Buffer.isBuffer(value) ? value : Buffer.from(value));
+    };
+    sandbox.readBinaryFile.mockImplementation((input) => {
+      if (input.path === "repository/changed.txt") {
+        return Promise.resolve(Buffer.from("corrupt transferred bytes"));
+      }
+      return readActual(input);
+    });
+    sandbox.writeTextFile.mockClear();
+    await expect(
+      prepareDevelopmentSandboxWorkspace(source, sandbox as never, "corrupt-readback"),
+    ).rejects.toThrow("drifted or is missing");
+    expect(
+      sandbox.writeTextFile.mock.calls.some(([input]) =>
+        input.path.endsWith("prepared-workspace.json"),
+      ),
+    ).toBe(false);
 
+    sandbox.readBinaryFile.mockImplementation(readActual);
     files.set(".app-builder/source-files.json", "not json");
     writeFileSync(path.join(source, "changed.txt"), "after corrupt receipt");
     await prepareDevelopmentSandboxWorkspace(source, sandbox as never, "third");

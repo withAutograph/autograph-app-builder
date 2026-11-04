@@ -301,6 +301,25 @@ describe("retained dirty planning baseline", () => {
       expect(baseline.originalSourceSha).toBe(f.originalSha);
       expect(baseline.sourceSha).toBe(retainedSha);
       expect(baseline.sourceSha).not.toBe(f.originalSha);
+      const artifact = path.join(stateRoot, "source-baselines", f.originalSha, expected);
+      mkdirSync(artifact, { recursive: true, mode: 0o700 });
+      const artifactGit = path.join(artifact, "source.git");
+      execFileSync("/usr/bin/git", ["clone", "--bare", "--quiet", snapshot, artifactGit]);
+      chmodSync(artifactGit, 0o700);
+      writeFileSync(
+        path.join(artifact, "manifest.json"),
+        JSON.stringify({
+          version: 1,
+          kind: "local-planning-source-baseline",
+          originalSourceSha: f.originalSha,
+          workspaceDigest: expected,
+          sourceSha: baseline.sourceSha,
+          sourceTree: baseline.sourceTree,
+          provenance: { kind: "recovered-source" },
+        }),
+        { mode: 0o600 },
+      );
+      expect(capture.originalBase(expected).sourceSha).toBe(retainedSha);
       const packPath = path.join(path.dirname(f.source), "retained-base.pack");
       writeFileSync(packPath, Buffer.from(await new Response(baseline.streamPack()).arrayBuffer()));
       rmSync(path.join(f.candidate, ".git"), { recursive: true });
@@ -389,6 +408,26 @@ describe("retained dirty planning baseline", () => {
       expect(() => observedCapture.originalBase(fullExpected)).toThrow(
         "recover its original source artifact",
       );
+    } finally {
+      capture?.dispose();
+      f.dispose();
+    }
+  });
+  it("does not infer historical symlink targets from a legacy regular-file digest", async () => {
+    const f = fixture();
+    let capture: Awaited<ReturnType<typeof captureLocalPlanningSource>> | undefined;
+    try {
+      symlinkSync("shared.txt", path.join(f.source, "source-link"));
+      f.git(f.source, "add", "source-link");
+      f.git(f.source, "commit", "--quiet", "-m", "actual linked source");
+      const sha = f.git(f.source, "rev-parse", "HEAD");
+      capture = await captureLocalPlanningSource(f.source, sha);
+      const observed = capture;
+      expect(() => observed.originalBase(observed.generation.workspaceDigest)).toThrow(
+        "recover its original source artifact",
+      );
+      // A new preparation can retain the actual separately captured tree.
+      expect(observed.capturedBase().sourceSha).toBe(observed.snapshotSha);
     } finally {
       capture?.dispose();
       f.dispose();

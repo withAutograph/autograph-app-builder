@@ -1,5 +1,6 @@
 import { readLocalOperatorArtifactAuthority } from "../provisioning/local-operator-artifact-store";
 import { LocalPlanningSourcePrerequisiteError } from "./local-planning-source-prerequisite";
+import { localSourceBaselineManifestSchema } from "./local-source-baseline-contract";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import {
@@ -207,6 +208,7 @@ export const captureLocalPlanningSource = async (
     const packOriginalBase = (
       baseSha: string,
       expectedWorkspaceDigest: string,
+      linksCapturedAtPreparation = false,
     ):
       | {
           originalSourceSha: string;
@@ -224,7 +226,7 @@ export const captureLocalPlanningSource = async (
         .filter(Boolean)
         .map((line) => {
           const match =
-            /^(?<mode>040000|100644|100755) (?<type>tree|blob) (?<oid>[a-f0-9]{40})\t(?<path>.+)$/u.exec(
+            /^(?<mode>040000|100644|100755|120000) (?<type>tree|blob) (?<oid>[a-f0-9]{40})\t(?<path>.+)$/u.exec(
               line,
             )?.groups;
           if (
@@ -243,6 +245,12 @@ export const captureLocalPlanningSource = async (
             path: match.path,
           };
         });
+      if (!linksCapturedAtPreparation && entries.some((entry) => entry.mode === "120000")) {
+        // Legacy regular-file digests do not prove an original dirty symlink.
+        // A first-preparation artifact records its separate exact captured tree.
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- Legacy symlink baseline is unproven.
+        return undefined;
+      }
       const blobs = [
         ...new Set(entries.flatMap((entry) => (entry.type === "blob" ? [entry.oid] : []))),
       ];
@@ -290,7 +298,7 @@ export const captureLocalPlanningSource = async (
         throw new Error("The retained original source object stream has unexpected bytes.");
       }
       const files = entries
-        .filter((entry) => entry.type === "blob")
+        .filter((entry) => entry.type === "blob" && entry.mode !== "120000")
         .toSorted((a, b) => {
           if (a.path < b.path) {
             return -1;
@@ -391,10 +399,94 @@ export const captureLocalPlanningSource = async (
       const completeBase = packOriginalBase(capturedBase, expectedWorkspaceDigest);
       return completeBase;
     };
+    const artifactOriginalBase = (
+      expectedWorkspaceDigest: string,
+    ): ReturnType<typeof packOriginalBase> => {
+      if (authority === undefined) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- No local artifact authority is available.
+        return undefined;
+      }
+      {
+        const artifact = path.join(
+          authority.stateRoot,
+          "source-baselines",
+          originalSourceSha,
+          expectedWorkspaceDigest,
+        );
+        const manifestPath = path.join(artifact, "manifest.json");
+        const sourceGit = path.join(artifact, "source.git");
+        if (existsSync(artifact)) {
+          for (const name of [
+            path.dirname(path.dirname(artifact)),
+            path.dirname(artifact),
+            artifact,
+            sourceGit,
+            manifestPath,
+          ]) {
+            const info = lstatSync(name);
+            const validType = name === manifestPath ? info.isFile() : info.isDirectory();
+            // oxlint-disable-next-line eslint/no-bitwise -- Read only owner-private artifact metadata.
+            const privateOwner = info.uid === authority.ownerUid && (info.mode & 0o077) === 0;
+            if (
+              !validType ||
+              info.isSymbolicLink() ||
+              !privateOwner ||
+              realpathSync(name) !== name
+            ) {
+              throw new LocalPlanningSourcePrerequisiteError(
+                originalSourceSha,
+                expectedWorkspaceDigest,
+              );
+            }
+          }
+          const manifest = localSourceBaselineManifestSchema.parse(
+            JSON.parse(readFileSync(manifestPath, "utf-8")),
+          );
+          if (
+            manifest.originalSourceSha !== originalSourceSha ||
+            manifest.workspaceDigest !== expectedWorkspaceDigest
+          ) {
+            throw new LocalPlanningSourcePrerequisiteError(
+              originalSourceSha,
+              expectedWorkspaceDigest,
+            );
+          }
+          git([
+            "fetch",
+            "--quiet",
+            "--no-tags",
+            "--no-write-fetch-head",
+            "--no-recurse-submodules",
+            sourceGit,
+            manifest.sourceSha,
+          ]);
+          if (git(["rev-parse", `${manifest.sourceSha}^{tree}`]) !== manifest.sourceTree) {
+            throw new LocalPlanningSourcePrerequisiteError(
+              originalSourceSha,
+              expectedWorkspaceDigest,
+            );
+          }
+          const retained = packOriginalBase(manifest.sourceSha, expectedWorkspaceDigest, true);
+          if (retained === undefined) {
+            throw new LocalPlanningSourcePrerequisiteError(
+              originalSourceSha,
+              expectedWorkspaceDigest,
+            );
+          }
+          return retained;
+        }
+      }
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- Artifact is explicitly absent.
+      return undefined;
+    };
     const originalBase = (expectedWorkspaceDigest: string) => {
       const historical = packOriginalBase(originalSourceSha, expectedWorkspaceDigest);
       if (historical !== undefined) {
         return historical;
+      }
+      const retainedArtifact = artifactOriginalBase(expectedWorkspaceDigest);
+      if (retainedArtifact !== undefined) {
+        return retainedArtifact;
       }
       // Only the closed launcher's owner-only retained run roots are candidates.
       // Read committed snapshot objects, never mutable snapshot or app bytes.
@@ -466,6 +558,16 @@ export const captureLocalPlanningSource = async (
     return {
       generation,
       originalBase,
+      capturedBase: () => {
+        const base = packOriginalBase(snapshotSha, generation.workspaceDigest, true);
+        if (base === undefined) {
+          throw new LocalPlanningSourcePrerequisiteError(
+            originalSourceSha,
+            generation.workspaceDigest,
+          );
+        }
+        return base;
+      },
       currentCommit,
       sourceSha,
       snapshotSha,

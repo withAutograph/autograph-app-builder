@@ -1575,7 +1575,9 @@ export const inspectDevelopmentSourceGeneration = async (sourcePathInput: string
       lstatSync(absolutePath);
       return true;
     } catch (error) {
-      if (error instanceof Error && "code" in error && error.code === "ENOENT") return false;
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+        return false;
+      }
       throw error;
     }
   });
@@ -1637,6 +1639,18 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
     workspaceDigest,
     generation,
   } = await inspectDevelopmentSourceGeneration(sourcePathInput);
+  // Retain actual selected live bytes before effects or an immutable workspace
+  // receipt; the launcher's earlier snapshot can describe different input.
+  const { retainPreparedLocalSourceBaseline } = await import("./local-source-baseline-retention");
+  await retainPreparedLocalSourceBaseline({
+    sourcePath,
+    sourceSha,
+    eligibilityDigest,
+    names,
+    sourceFiles,
+    workspaceDigest,
+    generation,
+  });
 
   // The previous manifest describes only files managed by the live source
   // transport.  It must not turn sandbox-generated plans, caches, or other
@@ -1775,6 +1789,9 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
     workspaceId: getBuilderSandboxId(sandbox),
     workspacePath: "/workspace/repository",
   };
+  // Independently prove the bytes that actually reached the Sandbox before a
+  // workspace receipt freezes their digest; source can move during transport.
+  await verifyPreparedSandboxWorkspace(sandbox, record);
   await sandbox.writeTextFile({
     content: `${JSON.stringify(record, null, 2)}\n`,
     path: sandboxRecordPath,
