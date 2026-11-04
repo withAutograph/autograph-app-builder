@@ -5,6 +5,28 @@ functional acceptance remain incomplete. No further saved-app continuation until
 the coherent repair set and its prerequisites are qualified. Source findings
 refer to development branches; this document is not a deployment receipt.
 
+## Scope update: independent app lifecycle (2026-11-04)
+
+The immediate milestone is the saved app's ordinary Builder creation, review,
+public delivery, BetterAuth access and same-project revision. Third-party user-app
+connection, activation, ingestion, shared-connection lifecycle and the legacy
+shared Integrations browser shell are deferred to the integrations redesign.
+Earlier central-integration requirements in this document remain historical
+work and are not prerequisites for this milestone. Preserve their source,
+resources, receipts and unresolved effects.
+
+Use the existing per-app isolated-development Auth path. Defer the saved app's
+optional integration declaration through ordinary Builder authoring; do not
+bypass installed-capability or retention checks. An unavailable capability must
+not appear connected or successful. Verify actual app behavior, public Auth,
+tenant isolation, persistent data and a same-destination revision. Full A-469
+integration acceptance remains open until its deferred criteria are exercised.
+
+The catalog and runtime must use one explicit selected source, with source,
+lockfile, catalog, worker and runtime evidence aligned. Keep local Builder for
+development and preserve the original recovery session and uncertain operations.
+Any release or resource effect requires its own concrete authorization.
+
 ## Intended outcome
 
 Use the local Builder for development, with isolated branches, ports and state
