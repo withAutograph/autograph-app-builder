@@ -655,6 +655,56 @@ describe("target validation", () => {
     });
   });
 
+  it.each(["streamed", "returned"])(
+    "classifies a positively observed native checker panic from %s output as a prerequisite",
+    async (delivery) => {
+      const { sandbox } = sandboxFixture();
+      const panic =
+        "thread 'tokio-rt-worker' (14920) panicked at crates/oxc_allocator/src/pool/fixed_size.rs:112:67:\ncalled `Result::unwrap()` on an `Err` value: ()";
+      const result = await executeProposalBoundValidation({
+        appId: "example",
+        apply,
+        attempt: createTargetValidationAttempt(apply, "checker-panic"),
+        sandbox,
+        dependencyLayout: { kind: "fixture", roots: [], version: 1, workspaceLinks: [] },
+        executor: async ({ onChunk }) => {
+          if (delivery === "streamed") {
+            await onChunk?.("stderr", panic.slice(0, 65));
+            await onChunk?.("stderr", panic.slice(65));
+          }
+          return { exitCode: 134, stderr: delivery === "returned" ? panic : "", stdout: "" };
+        },
+      });
+      expect(result).toMatchObject({
+        ok: false,
+        receipt: {
+          reason: "tooling-prerequisite",
+          commandFailure: {
+            name: "check-build",
+            exitCode: 134,
+            failureClass: "native-tool-panic",
+            // oxlint-disable-next-line typescript/no-unsafe-assignment -- Vitest asymmetric matcher checks the safe prerequisite hint.
+            hint: expect.stringContaining("ordinary fresh Build approval"),
+          },
+        },
+      });
+    },
+  );
+  it("does not classify exit134 alone as a native tooling prerequisite", async () => {
+    const { sandbox } = sandboxFixture();
+    const result = await executeProposalBoundValidation({
+      appId: "example",
+      apply,
+      attempt: createTargetValidationAttempt(apply, "unknown-134"),
+      sandbox,
+      dependencyLayout: { kind: "fixture", roots: [], version: 1, workspaceLinks: [] },
+      executor: () => Promise.resolve({ exitCode: 134, stderr: "no diagnostic", stdout: "" }),
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      receipt: { reason: "command-failed", commandFailure: { exitCode: 134 } },
+    });
+  });
   it("identifies a provider failure before the first validation command returns", async () => {
     const { sandbox } = sandboxFixture();
     const failure = new Error("Sandbox command launch failed", {

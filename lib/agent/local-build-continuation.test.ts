@@ -126,4 +126,30 @@ describe("actual private local approved build continuation", () => {
     await chmod(f.stateRoot, 0o755);
     await expect(readLocalBuildDecision(f.decision.adapterSessionId)).rejects.toThrow();
   });
+  it("does not dispatch another automatic turn after a typed native checker panic", async () => {
+    const f = await fixture();
+    await recordLocalBuildDecision(f.ctx, {
+      ...f.decision,
+      decision: "blocked",
+      validation: {
+        attemptDigest: "c".repeat(64),
+        command: "check-build",
+        exitCode: 134,
+        reason: "tooling-prerequisite",
+        failureClass: "native-tool-panic",
+      },
+    });
+    const dispatch = vi.fn(() => Promise.resolve());
+    expect(
+      await continueApprovedLocalBuild({
+        active: false,
+        pendingInput: false,
+        sessionId: f.decision.adapterSessionId,
+        dispatch,
+      }),
+    ).toBe(false);
+    expect(dispatch).not.toHaveBeenCalled();
+    const retained = await readLocalBuildDecision(f.decision.adapterSessionId);
+    expect(retained?.validation?.failureClass).toBe("native-tool-panic");
+  });
 });

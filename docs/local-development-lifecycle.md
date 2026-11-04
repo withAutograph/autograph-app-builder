@@ -446,3 +446,23 @@ explicit compare-and-swap and retains its owned cluster, credentials, identities
 and data. This handoff cannot rotate shared-context Auth or Production-bound
 state. A stale checkpoint remains visible; retrying never resets it to localhost
 or reprovisions resources to bypass the mismatch.
+
+## Native checker prerequisites
+
+A native validation-checker panic is a tooling prerequisite, not an app lint or
+type failure. Builder retains the actual exit status and bounded sanitized log
+references and stops automatic private-build continuation for that observation.
+An exit code such as 134 without a positive panic diagnostic does not establish
+a cause or prove an out-of-memory condition. Preserve the same app/session and
+source; inspect the actual tooling/compute prerequisite and obtain the ordinary
+fresh approval before changing a compute profile. A later ordinary user turn
+may retry validation after that prerequisite is addressed. Existing failed
+receipts are historical facts and are never rewritten to claim a later result.
+
+For a qualifying native-checker failure, the read-only
+`prepare_app_creation({privateCompute: "private-checks-16gib-v1"})` path can offer
+the supported larger profile. It must resolve the current Sandbox/Drive,
+maintained check task and linked-team capacity, then obtain a fresh Build card
+for 8 vCPU/16 GiB and ephemeral billing before applying that same proposal.
+Failure to qualify remains a visible prerequisite; it never authorizes a blind
+retry, silent resize or replacement app.

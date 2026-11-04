@@ -1,3 +1,7 @@
+import {
+  createValidationToolingFailureObserver,
+  toolingFailureHint,
+} from "./validation-tooling-failure";
 import { createHash } from "node:crypto";
 import nodePath from "node:path";
 import { localRuntimeEnvironmentPath } from "./runtime-environment";
@@ -101,6 +105,7 @@ export type TargetValidationFailureReason =
   | "materialization-failed"
   | "input-tree-mismatch"
   | "command-failed"
+  | "tooling-prerequisite"
   | "command-timeout"
   | "output-limit"
   | "execution-error"
@@ -117,6 +122,7 @@ export type TargetValidationFailureReceipt = ValidationReceiptBase & {
     name: TargetValidationCommandName;
     exitCode: number;
     operation?: "run-validation-command";
+    failureClass?: "native-tool-panic";
     hint?: string;
   };
   digest: string;
@@ -643,6 +649,7 @@ export const executeProposalBoundValidation = (input: {
           stderr: Awaited<ReturnType<ValidationLogWriter["finish"]>>;
         }
       | undefined;
+    const toolingFailure = createValidationToolingFailureObserver();
     const startedAt = new Date().toISOString();
     const startedMonotonic = performance.now();
     try {
@@ -662,14 +669,14 @@ export const executeProposalBoundValidation = (input: {
         environment: input.environment,
         sandbox: input.sandbox,
         validationRoot: planned.validationRoot,
-        ...(stdoutLog === undefined || stderrLog === undefined
-          ? {}
-          : {
-              onChunk: async (channel: ValidationLogChannel, content: string) => {
-                await (channel === "stdout" ? stdoutLog : stderrLog).append(content);
-              },
-            }),
+        onChunk: async (channel: ValidationLogChannel, content: string) => {
+          toolingFailure.observe(channel, content);
+          const writer = channel === "stdout" ? stdoutLog : stderrLog;
+          await writer?.append(content);
+        },
       });
+      toolingFailure.observe("stdout", result.stdout);
+      toolingFailure.observe("stderr", result.stderr);
       const finishedAt = new Date().toISOString();
       const elapsedMs = Math.round(performance.now() - startedMonotonic);
       if (stdoutLog !== undefined && stderrLog !== undefined) {
@@ -753,10 +760,13 @@ export const executeProposalBoundValidation = (input: {
         receipt: failureReceipt(
           input.attempt,
           commands,
-          "command-failed",
+          toolingFailure.classification() === undefined ? "command-failed" : "tooling-prerequisite",
           {
             exitCode: result.exitCode,
             name: planned.name,
+            ...(toolingFailure.classification() === undefined
+              ? {}
+              : { failureClass: toolingFailure.classification(), hint: toolingFailureHint }),
             ...(/(?:script not found|missing script|task .* not found)/iu.test(
               `${result.stderr}\n${result.stdout}`,
             )

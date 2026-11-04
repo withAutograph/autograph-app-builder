@@ -36,7 +36,8 @@ export const approvedBuildDecisionSchema = z.strictObject({
       attemptDigest: digest,
       command: z.enum(["check-build", "test"]),
       exitCode: z.number().int(),
-      reason: z.literal("command-failed"),
+      reason: z.enum(["command-failed", "tooling-prerequisite"]),
+      failureClass: z.literal("native-tool-panic").optional(),
     })
     .optional(),
   version: z.literal(1),
@@ -114,22 +115,6 @@ export const decideApprovedBuildContinuation = (input: {
   if (existingRepositorySource !== undefined) {
     Object.assign(base, { existingRepositorySource });
   }
-  const access = input.repositoryAccess;
-  const workflow = input.state;
-  if (
-    workflow.phase !== "empty" &&
-    workflow.sourceReceipt?.sourceKind === "existing-repository" &&
-    workflow.githubSource !== undefined &&
-    access !== undefined &&
-    access.sessionId === input.adapterSessionId &&
-    access.repository.repositoryId === workflow.githubSource.repository.repositoryId &&
-    access.repository.owner === workflow.githubSource.repository.owner &&
-    access.repository.name === workflow.githubSource.repository.name &&
-    workflow.githubSource.installationIdentityDigest ===
-      workflow.githubSource.repository.installationIdentityDigest
-  ) {
-    Object.assign(base, { existingRepositorySource: repositoryAccessReceiptSchema.parse(access) });
-  }
   if ("appSpec" in input.state) {
     const { state } = input;
     const currentSpec: NonNullable<ApprovedBuildDecision["currentSpec"]> = {
@@ -168,6 +153,20 @@ export const decideApprovedBuildContinuation = (input: {
   }
   const failure = state.validationFailure;
   const command = failure.commandFailure;
+  if (failure.reason === "tooling-prerequisite" && command?.failureClass === "native-tool-panic") {
+    return approvedBuildDecisionSchema.parse({
+      ...base,
+      decision: "blocked",
+      scope,
+      validation: {
+        attemptDigest: failure.attemptDigest,
+        command: command.name,
+        exitCode: command.exitCode,
+        reason: failure.reason,
+        failureClass: command.failureClass,
+      },
+    });
+  }
   // The validator runs the approved app's check/test command. Diagnostic paths
   // describe stack frames, not repair ownership: unchanged tests and shared
   // runtime frames must not stop the approved app's private repair loop.
