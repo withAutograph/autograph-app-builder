@@ -1,3 +1,5 @@
+import type { withSourceUploadAuthority } from "@/lib/handoff/source-upload-deployment";
+import { readAuthenticatedSourceUploadContext } from "@/lib/handoff/source-upload-deployment";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { continueBuilderHandoff, continueHandoffProvisioning } from "./builder";
 import { getAuthenticatedBuilderDraftContext } from "@/lib/builder-drafts/deployment";
@@ -7,6 +9,7 @@ import {
 } from "@/lib/handoff/deployment";
 
 const providerInputs = vi.hoisted(() => [] as { deploymentAccess?: string; operation: string }[]);
+const sourceRead = vi.hoisted(() => vi.fn());
 const calls = vi.hoisted(() => [] as string[]);
 const drafts = vi.hoisted(() => ({ archive: vi.fn(), read: vi.fn() }));
 const draftId = "123e4567-e89b-42d3-a456-426614174003";
@@ -28,6 +31,14 @@ const input = {
   requestId: "123e4567-e89b-42d3-a456-426614174000",
   version: 1 as const,
 };
+
+vi.mock("@/lib/handoff/source-upload-deployment", async (importOriginal) => {
+  const actual = await importOriginal<{
+    readAuthenticatedSourceUploadContext: typeof readAuthenticatedSourceUploadContext;
+    withSourceUploadAuthority: typeof withSourceUploadAuthority;
+  }>();
+  return { ...actual, readAuthenticatedSourceUploadContext: vi.fn() };
+});
 
 vi.mock("@/lib/builder-drafts/deployment", () => ({
   getAuthenticatedBuilderDraftContext: vi.fn(),
@@ -138,6 +149,54 @@ afterEach(() => {
 });
 
 describe("continueBuilderHandoff", () => {
+  it("verifies uploaded ownership before provisioning and preserves app ID independently of display name", async () => {
+    const reference = {
+      kind: "application-source-candidate-v1",
+      uploadId: "123e4567-e89b-42d3-a456-426614174099",
+      appId: "supplier-spend",
+      manifestDigest: "a".repeat(64),
+    };
+    drafts.read.mockResolvedValueOnce({
+      draftId,
+      revision: 4,
+      record: {
+        draft: {
+          form: { ...storedForm, appName: "Different display name", sourceCandidate: reference },
+        },
+      },
+    });
+    const current = await getAuthenticatedBuilderDraftContext({
+      environment: process.env,
+      headers: new Headers(),
+    });
+    if (current === undefined) {
+      throw new Error("Expected signed-in draft context");
+    }
+    sourceRead.mockResolvedValue({ manifest: { appId: "supplier-spend" } });
+    vi.mocked(readAuthenticatedSourceUploadContext).mockResolvedValue({
+      authority: current.authority,
+      store: { readCompleted: sourceRead },
+    } as never);
+    expect(await continueBuilderHandoff(undefined, input)).toMatchObject({ status: "ready" });
+    expect(sourceRead).toHaveBeenCalledWith(expect.objectContaining({ reference }));
+    expect(providerInputs[0]).toMatchObject({ appName: "supplier-spend" });
+  });
+  it("denies an incomplete or foreign source before any provider reservation", async () => {
+    const reference = {
+      kind: "application-source-candidate-v1",
+      uploadId: "123e4567-e89b-42d3-a456-426614174099",
+      appId: "supplier-spend",
+      manifestDigest: "a".repeat(64),
+    };
+    drafts.read.mockResolvedValueOnce({
+      draftId,
+      revision: 4,
+      record: { draft: { form: { ...storedForm, sourceCandidate: reference } } },
+    });
+    vi.mocked(readAuthenticatedSourceUploadContext).mockResolvedValue(globalThis.undefined);
+    expect(await continueBuilderHandoff(undefined, input)).toEqual({ status: "error" });
+    expect(calls).toEqual([]);
+  });
   it("accepts only an opaque checkpoint, never a second client form payload", async () => {
     expect(
       await continueBuilderHandoff(undefined, { ...input, form: storedForm } as never),

@@ -13,6 +13,11 @@ import {
 import { getBuilderProvisioningDeploymentHandler } from "@/lib/provisioning/deployment";
 import { builderProvisionRequestSchema } from "@/lib/provisioning/contracts";
 import type { BuilderProvisionResponse } from "@/lib/provisioning/contracts";
+import { sourceCandidateReferenceSchema } from "@/lib/handoff/application-source-contract";
+import {
+  readAuthenticatedSourceUploadContext,
+  withSourceUploadAuthority,
+} from "@/lib/handoff/source-upload-deployment";
 import { deriveBuilderAppId } from "@/lib/provisioning/names";
 
 const resolvedHandoffContinuationInputSchema = z
@@ -21,6 +26,7 @@ const resolvedHandoffContinuationInputSchema = z
     form: z
       .object({
         appName: z.string().trim().min(1).max(120),
+        sourceCandidate: sourceCandidateReferenceSchema.optional(),
         brief: z.string().trim().min(1).max(32_000),
         buildDestination: z.enum(["web", "codex", "cursor"]),
         connections: z.array(z.string().trim().min(1).max(100)).max(50),
@@ -172,6 +178,7 @@ export async function createBuilderHandoff(input: {
   brief: string;
   modelId: string;
   connections: string[];
+  sourceCandidate?: z.infer<typeof sourceCandidateReferenceSchema>;
 }) {
   const path = "/api/builder/handoffs";
   const response = await getBuilderHandoffDeploymentHandler(process.env)(
@@ -194,7 +201,7 @@ function provisioningInput(
   operation: "github" | "vercel",
 ) {
   return builderProvisionRequestSchema.parse({
-    appName: input.form.appName,
+    appName: input.form.sourceCandidate?.appId ?? input.form.appName,
     deploymentAccess: "public-app",
     operation,
     providers: {
@@ -245,7 +252,7 @@ function unavailableProvisioning(
     };
   };
   return {
-    appId: deriveBuilderAppId(input.form.appName),
+    appId: input.form.sourceCandidate?.appId ?? deriveBuilderAppId(input.form.appName),
     github: result("github"),
     requestDigest: "0".repeat(64),
     requestId: input.requestId,
@@ -269,6 +276,9 @@ async function createContinuationHandoff(
       ? {}
       : { provisioningRequestId: provisioning.requestId }),
     appName: input.form.appName,
+    ...(input.form.sourceCandidate === undefined
+      ? {}
+      : { sourceCandidate: input.form.sourceCandidate }),
     brief: input.form.brief,
     connections: input.form.connections,
     modelId: input.form.modelId,
@@ -312,6 +322,38 @@ export async function continueBuilderHandoff(
       ...request,
       form: draft.record.draft.form,
     });
+    if (input.form.sourceCandidate !== undefined) {
+      const reference = input.form.sourceCandidate;
+      await withSourceUploadAuthority(
+        async () =>
+          await readAuthenticatedSourceUploadContext({
+            environment: process.env,
+            headers: await headers(),
+          }),
+        async ({ authority, store }) => {
+          if (
+            [
+              authority.issuer,
+              authority.audience,
+              authority.workspaceId,
+              authority.ownerUserId,
+            ].join("\0") !==
+            [
+              context.authority.issuer,
+              context.authority.audience,
+              context.authority.workspaceId,
+              context.authority.ownerUserId,
+            ].join("\0")
+          ) {
+            throw new Error("source_upload_authentication_required");
+          }
+          const artifact = await store.readCompleted({ authority, reference });
+          if (artifact === undefined || artifact.manifest.appId !== reference.appId) {
+            throw new Error("source_upload_incomplete");
+          }
+        },
+      );
+    }
     let provisioning = unavailableProvisioning(
       input,
       input.provisioningEnabled ? "provider_unavailable" : "feature_disabled",
