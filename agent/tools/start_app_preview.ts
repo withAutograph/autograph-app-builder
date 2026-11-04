@@ -1,3 +1,4 @@
+import { readLocalPreviewAuthOrigin } from "@/lib/repository/local-preview-auth-origin";
 import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
 import { createHash } from "node:crypto";
@@ -235,9 +236,16 @@ export default defineTool({
     let prepareAuthenticatedOrigin = runtime?.prepareAuthenticatedOrigin;
     if (!runtime && environmentPath !== undefined) {
       prepareAuthenticatedOrigin = async (authOrigin) => {
+        const expectedPreviousAuthOrigin = await readLocalPreviewAuthOrigin({
+          appId,
+          root: selected.root,
+          sandbox,
+          signal: ctx.abortSignal,
+        });
         const setup = await prepareAppLocalPreview({
           appId,
           authOrigin,
+          expectedPreviousAuthOrigin,
           root: selected.root,
           sandbox,
           signal: ctx.abortSignal,

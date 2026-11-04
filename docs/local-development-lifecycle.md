@@ -436,3 +436,13 @@ A later authenticated Builder session receives these files as untrusted source;
 its app registration, dependencies, identity, destination, resource setup,
 approvals and publication remain ordinary fresh Builder work. No native journal,
 provider installation, Auth session, data or old approval is transferred.
+
+## Resumed local preview Auth origin
+
+For a single-app local data runtime in a resumed private Sandbox, Builder reads
+its exact private environment's previous Auth origin before accepting the new
+provider-issued preview domain. The runtime reconciles that origin with an
+explicit compare-and-swap and retains its owned cluster, credentials, identities,
+and data. This handoff cannot rotate shared-context Auth or Production-bound
+state. A stale checkpoint remains visible; retrying never resets it to localhost
+or reprovisions resources to bypass the mismatch.
