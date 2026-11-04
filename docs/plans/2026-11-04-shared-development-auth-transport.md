@@ -236,3 +236,36 @@ Integrations control custody and per-app enrollment receipts. Only this
 completed, independently revalidated custody can populate the eligible choice
 port. Later app enrollment still uses its own fresh plan/approval and captured
 role policy; no setup approval transfers to a generated app's release.
+
+## Public cohosting and initial realm account setup
+
+The shared Development handler may coexist inside an existing privileged normal
+Auth Services service at its ordinary public Production origin. This is a
+separate scoped handler and isolated Development pool; it does not replace the
+service's existing global Auth handler, environment, database, users or sessions.
+The explicit shared-host configuration binds the isolated resource, actual
+Neon project/branch/endpoint custody and schema target/readback to the host's
+verified Production workload. Validate the supplied Development resource through
+the scoped constructor, never by overriding `VERCEL_ENV` or relabeling the
+global resource. Keep the private pool locator and realm master secret only on
+that privileged host. Its fixed bridge endpoint verifies each enrolled app's
+actual Production caller before opening the scoped handler.
+
+The Auth operation discloses this existing service's exact public Production
+host target independently from the normal Integrations control assembly's
+Preview target. They may share a project and reviewed source composition, but
+neither target nor receipt grants authority over the other. Public origin comes
+from independent provider readback of the existing host, never a guessed future
+Preview alias. Standard app and development protections retain their scope; no
+Vercel SSO bypass or protection weakening makes the bridge reachable.
+
+A fresh isolated realm also needs genuine accounts and organizations. Supply
+ordinary scoped realm onboarding/sign-in and organization management within that
+same existing Auth service, using the maintained BetterAuth/UI components and
+the realm's explicit signup policy. Authenticate current setup ownership before
+offering owner actions; use actual realm-produced sessions and normal membership
+and role checks. The generated-app bridge keeps its closed allowlist and cannot
+create users, organizations or grants. Do not copy global accounts, password
+hashes, org IDs or cookies, silently seed evaluator identities, or treat a
+Builder subject string as an already authenticated realm actor. Only observed
+real realm ownership/org proof enables app enrollment.
