@@ -480,3 +480,19 @@ Original validation and approval facts remain retained. Normal explicit user
 turns can recover the immutable source and prepare a fresh plan. A successful
 same-scope reconciliation records resolution; it does not transfer the old Build
 approval to changed source.
+
+
+Local source reconciliation must use the saved planning workspace's exact file
+inventory digest as its original merge base. A Git commit alone omits initial
+dirty or untracked source. If candidate Git metadata is absent, Builder may
+recover a distinct original snapshot commit from its own private retained run
+sources only when file bytes, modes and the complete inventory match that frozen
+digest. Snapshot Git objects supply committed bytes; originally tracked paths
+omitted when snapshot Git applied ignore rules may use their actual retained
+source files. Those extra bytes are captured into a distinct private commit and
+must pass the same complete frozen digest check. Current app files cannot
+establish the old baseline. The historical source commit remains unchanged and is retained
+separately from the recovered snapshot commit/tree. Installing that proven Git
+metadata does not check out or replace candidate files. Missing or mismatched
+original artifacts remain an explicit prerequisite; an old approval never
+acquires a changed source or destination.

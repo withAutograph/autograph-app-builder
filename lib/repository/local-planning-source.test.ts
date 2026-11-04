@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { execFileSync, spawnSync, spawn } from "node:child_process";
 import {
+  chmodSync,
   mkdtempSync,
   realpathSync,
   mkdirSync,
@@ -15,7 +16,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { captureLocalPlanningSource } from "./local-planning-source";
-import { importLocalPlanningCurrentCommitProgram } from "./local-planning-git-base";
+import {
+  initializeLocalPlanningGitBaseProgram,
+  importLocalPlanningCurrentCommitProgram,
+} from "./local-planning-git-base";
 import { planningSourceReconciliationProgram } from "./planning-source-reconciliation";
 
 const fixture = () => {
@@ -100,7 +104,9 @@ const fixture = () => {
     write,
     run,
     importCapture,
-    dispose: () => rmSync(directory, { recursive: true, force: true }),
+    dispose: () => {
+      rmSync(directory, { recursive: true, force: true });
+    },
   };
 };
 
@@ -145,8 +151,9 @@ describe("local planning base adoption", () => {
           [".config/app-specs/example.md", "accepted product\n"],
           [".env.local", "private retained\n"],
           ["node_modules/cache", "cache retained\n"],
-        ])
+        ]) {
           expect(readFileSync(path.join(f.candidate, file), "utf-8")).toBe(bytes);
+        }
         expect(
           f.git(f.candidate, "show", `${result.checkpointRef}:apps/example/app/page.tsx`),
         ).toBe("saved product");
@@ -256,6 +263,126 @@ describe("local planning base adoption", () => {
       );
       expect(f.git(f.candidate, "rev-parse", "HEAD")).toBe(f.originalSha);
     } finally {
+      f.dispose();
+    }
+  });
+});
+
+describe("retained dirty planning baseline", () => {
+  it("uses real owned snapshot Git bytes as a distinct base while preserving historical identity", async () => {
+    const f = fixture();
+    let capture: Awaited<ReturnType<typeof captureLocalPlanningSource>> | undefined;
+    try {
+      f.write(f.source, "dirty-initial.txt", "initial dirty bytes\n");
+      const initial = await captureLocalPlanningSource(f.source, f.originalSha);
+      const expected = initial.generation.workspaceDigest;
+      initial.dispose();
+      const stateRoot = path.join(path.dirname(f.source), "retained");
+      const snapshot = path.join(stateRoot, "runs", "run-ABC123", "source");
+      mkdirSync(path.dirname(snapshot), { recursive: true, mode: 0o700 });
+      execFileSync("/usr/bin/git", ["clone", "--quiet", f.source, snapshot]);
+      chmodSync(snapshot, 0o700);
+      chmodSync(path.join(snapshot, ".git"), 0o700);
+      f.git(snapshot, "config", "user.name", "Fixture");
+      f.git(snapshot, "config", "user.email", "fixture@example.test");
+      f.write(snapshot, "dirty-initial.txt", "initial dirty bytes\n");
+      f.git(snapshot, "add", ".");
+      f.git(snapshot, "commit", "--quiet", "-m", "real retained initial snapshot");
+      const retainedSha = f.git(snapshot, "rev-parse", "HEAD");
+      // Filesystem drift does not authorize baseline bytes; committed objects do.
+      f.write(snapshot, "dirty-initial.txt", "later mutable snapshot file\n");
+      f.write(f.source, "dirty-initial.txt", "new platform bytes\n");
+      capture = await captureLocalPlanningSource(f.source, f.originalSha, {
+        readAuthority: () =>
+          Promise.resolve({ kind: "local", ownerUid: process.getuid?.() ?? -1, stateRoot }),
+      });
+      const baseline = capture.originalBase(expected);
+      expect(baseline.originalSourceSha).toBe(f.originalSha);
+      expect(baseline.sourceSha).toBe(retainedSha);
+      expect(baseline.sourceSha).not.toBe(f.originalSha);
+      const packPath = path.join(path.dirname(f.source), "retained-base.pack");
+      writeFileSync(packPath, Buffer.from(await new Response(baseline.streamPack()).arrayBuffer()));
+      rmSync(path.join(f.candidate, ".git"), { recursive: true });
+      execFileSync(process.execPath, [
+        "-e",
+        initializeLocalPlanningGitBaseProgram,
+        JSON.stringify({
+          root: f.candidate,
+          stateRoot: path.join(stateRoot, "initialization"),
+          packPath,
+          sourceSha: baseline.sourceSha,
+          sourceTree: baseline.sourceTree,
+        }),
+      ]);
+      expect(f.git(f.candidate, "rev-parse", "HEAD")).toBe(retainedSha);
+      expect(f.git(f.candidate, "cat-file", "-t", f.originalSha)).toBe("commit");
+      expect(readFileSync(path.join(f.candidate, "apps/example/app/page.tsx"), "utf-8")).toBe(
+        "saved product\n",
+      );
+      expect(f.git(snapshot, "status", "--porcelain")).toContain("dirty-initial.txt");
+      const observedCapture = capture;
+      expect(() => observedCapture.originalBase("f".repeat(64))).toThrow(
+        "recover its original source artifact",
+      );
+    } finally {
+      capture?.dispose();
+      f.dispose();
+    }
+  });
+  it("recovers actually retained originally tracked ignored bytes only after exact inventory proof", async () => {
+    const f = fixture();
+    let capture: Awaited<ReturnType<typeof captureLocalPlanningSource>> | undefined;
+    try {
+      f.write(f.source, ".gitignore", "ignored-tracked.txt\n");
+      f.write(f.source, "ignored-tracked.txt", "original copied bytes\n");
+      f.git(f.source, "add", "-f", "ignored-tracked.txt", ".gitignore");
+      f.git(f.source, "commit", "--quiet", "-m", "tracked ignored source");
+      const originalSha = f.git(f.source, "rev-parse", "HEAD");
+      const initial = await captureLocalPlanningSource(f.source, originalSha);
+      const expected = initial.generation.workspaceDigest;
+      initial.dispose();
+      const stateRoot = path.join(path.dirname(f.source), "retained");
+      const snapshot = path.join(stateRoot, "runs", "run-ABC123", "source");
+      mkdirSync(path.dirname(snapshot), { recursive: true, mode: 0o700 });
+      execFileSync("/usr/bin/git", ["clone", "--quiet", f.source, snapshot]);
+      chmodSync(snapshot, 0o700);
+      chmodSync(path.join(snapshot, ".git"), 0o700);
+      f.git(snapshot, "config", "user.name", "Fixture");
+      f.git(snapshot, "config", "user.email", "fixture@example.test");
+      // An actual dirty starting file belongs to the original workspace too.
+      f.write(snapshot, "dirty-start.txt", "retained dirty start\n");
+      f.write(f.source, "dirty-start.txt", "retained dirty start\n");
+      const fullInitial = await captureLocalPlanningSource(f.source, originalSha);
+      const fullExpected = fullInitial.generation.workspaceDigest;
+      fullInitial.dispose();
+      expect(fullExpected).not.toBe(expected);
+      f.git(snapshot, "rm", "--cached", "ignored-tracked.txt");
+      f.git(snapshot, "add", "dirty-start.txt");
+      f.git(
+        snapshot,
+        "commit",
+        "--quiet",
+        "-m",
+        "genuine copied snapshot with ignored index omission",
+      );
+      const snapshotSha = f.git(snapshot, "rev-parse", "HEAD");
+      f.write(f.source, "shared.txt", "new platform source\n");
+      capture = await captureLocalPlanningSource(f.source, originalSha, {
+        readAuthority: () =>
+          Promise.resolve({ kind: "local", ownerUid: process.getuid?.() ?? -1, stateRoot }),
+      });
+      const baseline = capture.originalBase(fullExpected);
+      expect(baseline.originalSourceSha).toBe(originalSha);
+      expect(baseline.sourceSha).not.toBe(snapshotSha);
+      expect(baseline.sourceSha).not.toBe(originalSha);
+      expect(f.git(snapshot, "rev-parse", "HEAD")).toBe(snapshotSha);
+      f.write(snapshot, "ignored-tracked.txt", "changed retained bytes\n");
+      const observedCapture = capture;
+      expect(() => observedCapture.originalBase(fullExpected)).toThrow(
+        "recover its original source artifact",
+      );
+    } finally {
+      capture?.dispose();
       f.dispose();
     }
   });

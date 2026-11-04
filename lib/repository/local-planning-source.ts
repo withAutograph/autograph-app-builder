@@ -1,6 +1,17 @@
+import { readLocalOperatorArtifactAuthority } from "../provisioning/local-operator-artifact-store";
+import { LocalPlanningSourcePrerequisiteError } from "./local-planning-source-prerequisite";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, mkdtempSync, readlinkSync, realpathSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  realpathSync,
+  rmSync,
+} from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import type { SandboxSession } from "eve/sandbox";
@@ -60,7 +71,7 @@ const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 const runGit = (args: readonly string[], input?: string | Buffer) =>
   execFileSync(gitExecutable, [...fixedGitArgs, ...args], {
-    encoding: "utf8",
+    encoding: "utf-8",
     env: gitEnvironment,
     input,
     maxBuffer: Infinity,
@@ -106,8 +117,15 @@ const selectedLocalSourcePath = (root: string, name: string) => {
 };
 
 /** Capture actual live bytes into private Git objects; original checkout, refs and index stay untouched. */
-export const captureLocalPlanningSource = async (sourcePath: string, originalSourceSha: string) => {
+export const captureLocalPlanningSource = async (
+  sourcePath: string,
+  originalSourceSha: string,
+  dependencies: { readAuthority?: typeof readLocalOperatorArtifactAuthority } = {},
+) => {
   objectId.parse(originalSourceSha);
+  const authority = await (dependencies.readAuthority ?? readLocalOperatorArtifactAuthority)();
+  const retainedRunsRoot =
+    authority === undefined ? undefined : path.join(authority.stateRoot, "runs");
   const generation = await inspectDevelopmentSourceGeneration(sourcePath);
   const root = generation.sourcePath;
   const directory = realpathSync(mkdtempSync(path.join(tmpdir(), "app-builder-local-planning-")));
@@ -127,10 +145,11 @@ export const captureLocalPlanningSource = async (sourcePath: string, originalSou
       runGit(["--git-dir", gitDir, ...args], input);
     git(["cat-file", "-e", `${originalSourceSha}^{commit}`]);
     const sourceSha = objectId.parse(git(["rev-parse", "HEAD"]));
-    if (sourceSha !== generation.sourceSha)
+    if (sourceSha !== generation.sourceSha) {
       throw new Error(
         "The local source advanced while its planning input was captured. Retry preparation; the app checkout is unchanged.",
       );
+    }
     git(["read-tree", "--empty"]);
     const regular: { name: string; absolute: string; mode: string }[] = [];
     const records: string[] = [];
@@ -148,10 +167,11 @@ export const captureLocalPlanningSource = async (sourcePath: string, originalSou
       } else if (info.isFile()) {
         // oxlint-disable-next-line eslint/no-bitwise -- Preserve the actual executable mode.
         regular.push({ name, absolute, mode: (info.mode & 0o111) === 0 ? "100644" : "100755" });
-      } else
+      } else {
         throw new Error(
           "The local source contains a non-file Git entry that cannot be reconciled; the app checkout is unchanged.",
         );
+      }
     }
     // Batch argv for the operating system's command limit, without a total file limit.
     for (let offset = 0; offset < regular.length; offset += 256) {
@@ -165,13 +185,14 @@ export const captureLocalPlanningSource = async (sourcePath: string, originalSou
       ])
         .split("\n")
         .map((value) => objectId.parse(value));
-      if (ids.length !== batch.length)
+      if (ids.length !== batch.length) {
         throw new Error("Git did not capture every selected local source file.");
+      }
       for (const [index, file] of batch.entries()) {
         records.push(`${file.mode} ${ids[index]}\t${file.name}`);
       }
     }
-    git(["update-index", "-z", "--index-info"], Buffer.from(records.join("\0") + "\0"));
+    git(["update-index", "-z", "--index-info"], Buffer.from(`${records.join("\0")}\0`));
     const snapshotTree = objectId.parse(git(["write-tree"]));
     await assertStableCaptureGeneration(root, generation, links);
     // This is a private planning tree, not host Git history. Parent only the
@@ -183,12 +204,22 @@ export const captureLocalPlanningSource = async (sourcePath: string, originalSou
         "Current local Builder planning source\n",
       ),
     );
-    const originalBase = (expectedWorkspaceDigest: string) => {
+    const packOriginalBase = (
+      baseSha: string,
+      expectedWorkspaceDigest: string,
+    ):
+      | {
+          originalSourceSha: string;
+          sourceSha: string;
+          sourceTree: string;
+          streamPack: () => ReadableStream<Uint8Array>;
+        }
+      | undefined => {
       z.string()
         .regex(/^[a-f0-9]{64}$/u)
         .parse(expectedWorkspaceDigest);
-      const baseTree = objectId.parse(git(["rev-parse", `${originalSourceSha}^{tree}`]));
-      const entries = git(["ls-tree", "-rz", "-t", "--full-tree", originalSourceSha])
+      const baseTree = objectId.parse(git(["rev-parse", `${baseSha}^{tree}`]));
+      const entries = git(["ls-tree", "-rz", "-t", "--full-tree", baseSha])
         .split("\0")
         .filter(Boolean)
         .map((line) => {
@@ -220,7 +251,7 @@ export const captureLocalPlanningSource = async (sourcePath: string, originalSou
         [...fixedGitArgs, "--git-dir", gitDir, "cat-file", "--batch"],
         {
           env: gitEnvironment,
-          input: blobs.join("\n") + "\n",
+          input: `${blobs.join("\n")}\n`,
           maxBuffer: Infinity,
           stdio: ["pipe", "pipe", "pipe"],
         },
@@ -282,20 +313,128 @@ export const captureLocalPlanningSource = async (sourcePath: string, originalSou
           };
         });
       if (hash(JSON.stringify(files)) !== expectedWorkspaceDigest) {
-        throw new Error(
-          "The retained original source Git bytes do not match the saved planning baseline. The candidate is unchanged; recover its original source artifact before reconciling.",
-        );
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- A nonmatching candidate is explicitly absent.
+        return undefined;
       }
       const objects = [
-        ...new Set([originalSourceSha, baseTree, ...entries.map((entry) => entry.oid)]),
+        ...new Set([originalSourceSha, baseSha, baseTree, ...entries.map((entry) => entry.oid)]),
       ];
       const prefix = path.join(directory, "original-base");
-      const packId = objectId.parse(git(["pack-objects", prefix], objects.join("\n") + "\n"));
+      const packId = objectId.parse(git(["pack-objects", prefix], `${objects.join("\n")}\n`));
       return {
-        sourceSha: originalSourceSha,
+        originalSourceSha,
+        sourceSha: baseSha,
         sourceTree: baseTree,
         streamPack: () => processStdoutByteStream("/bin/cat", [`${prefix}-${packId}.pack`]),
       };
+    };
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing retained paths explicitly yield no matching base.
+    const captureOmittedRetainedPaths = (
+      snapshot: string,
+      baseSha: string,
+      expectedWorkspaceDigest: string,
+    ) => {
+      // Snapshot creation copied originally tracked files before its new
+      // Git index applied ignore rules. Recover only those omitted paths
+      // from the actual retained source, with exact full-inventory proof.
+      const originalPaths = git(["ls-tree", "-rz", "--name-only", originalSourceSha])
+        .split("\0")
+        .filter(Boolean);
+      const committedPaths = new Set(git(["ls-tree", "-rz", "--name-only", baseSha]).split("\0"));
+      const omitted = originalPaths.filter((name) => !committedPaths.has(name));
+      if (omitted.length === 0) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- No matching original retained inventory.
+        return undefined;
+      }
+      git(["read-tree", baseSha]);
+      let complete = true;
+      for (const name of omitted) {
+        const absolute = selectedLocalSourcePath(snapshot, name);
+        if (!existsSync(absolute)) {
+          complete = false;
+          break;
+        }
+        const info = lstatSync(absolute);
+        if (!info.isFile() || info.isSymbolicLink() || info.uid !== process.getuid?.()) {
+          complete = false;
+          break;
+        }
+        const oid = objectId.parse(
+          git(["hash-object", "-w", "--no-filters", "--stdin"], readFileSync(absolute)),
+        );
+        // oxlint-disable-next-line eslint/no-bitwise -- Preserve the actual retained executable mode.
+        const mode = info.mode & 0o100 ? "100755" : "100644";
+        git(["update-index", "--add", "--cacheinfo", mode, oid, name]);
+      }
+      if (!complete) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- No matching original retained inventory.
+        return undefined;
+      }
+      const retainedTree = objectId.parse(git(["write-tree"]));
+      const capturedBase = objectId.parse(
+        git(
+          ["commit-tree", retainedTree, "-p", originalSourceSha],
+          "Captured original retained development source\n",
+        ),
+      );
+      const completeBase = packOriginalBase(capturedBase, expectedWorkspaceDigest);
+      return completeBase;
+    };
+    const originalBase = (expectedWorkspaceDigest: string) => {
+      const historical = packOriginalBase(originalSourceSha, expectedWorkspaceDigest);
+      if (historical !== undefined) {
+        return historical;
+      }
+      // Only the closed launcher's owner-only retained run roots are candidates.
+      // Read committed snapshot objects, never mutable snapshot or app bytes.
+      if (retainedRunsRoot !== undefined) {
+        for (const entry of readdirSync(retainedRunsRoot, { withFileTypes: true })) {
+          if (!entry.isDirectory() || !/^run-[a-zA-Z0-9]+$/u.test(entry.name)) {
+            continue;
+          }
+          const run = path.join(retainedRunsRoot, entry.name);
+          const snapshot = path.join(run, "source");
+          if (!existsSync(snapshot)) {
+            continue;
+          }
+          const owned = [run, snapshot, path.join(snapshot, ".git")].every((name) => {
+            const info = lstatSync(name);
+            const ownedUid = info.uid === process.getuid?.();
+            // oxlint-disable-next-line eslint/no-bitwise -- Enforce private retained source ownership.
+            const privateMode = (info.mode & 0o077) === 0;
+            const isDirectory = info.isDirectory() && !info.isSymbolicLink();
+            return isDirectory && ownedUid && privateMode && realpathSync(name) === name;
+          });
+          if (!owned) {
+            continue;
+          }
+          const baseSha = objectId.parse(runGit(["-C", snapshot, "rev-parse", "HEAD"]));
+          // Fetch objects into this operation's private Git store only. No
+          // retained snapshot refs/index or candidate bytes are changed.
+          git([
+            "fetch",
+            "--quiet",
+            "--no-tags",
+            "--no-write-fetch-head",
+            "--no-recurse-submodules",
+            snapshot,
+            baseSha,
+          ]);
+          const retained = packOriginalBase(baseSha, expectedWorkspaceDigest);
+          if (retained !== undefined) {
+            return retained;
+          }
+          const completeBase = captureOmittedRetainedPaths(
+            snapshot,
+            baseSha,
+            expectedWorkspaceDigest,
+          );
+          if (completeBase !== undefined) {
+            return completeBase;
+          }
+        }
+      }
+      throw new LocalPlanningSourcePrerequisiteError(originalSourceSha, expectedWorkspaceDigest);
     };
     const currentCommit = () => {
       const sourceTree = objectId.parse(git(["rev-parse", `${sourceSha}^{tree}`]));
@@ -336,7 +475,9 @@ export const captureLocalPlanningSource = async (sourcePath: string, originalSou
           ],
           { env: gitEnvironment },
         ),
-      dispose: () => rmSync(directory, { recursive: true, force: true }),
+      dispose: () => {
+        rmSync(directory, { recursive: true, force: true });
+      },
     };
   } catch (error) {
     rmSync(directory, { recursive: true, force: true });
@@ -365,10 +506,11 @@ export const reconcileLocalPlanningSource = async (input: {
   capture: Awaited<ReturnType<typeof captureLocalPlanningSource>>;
 }) => {
   const { capture, sandbox } = input;
-  if (capture.sourceSha !== input.receipt.sourceSha)
+  if (capture.sourceSha !== input.receipt.sourceSha) {
     throw new Error(
       "The selected local source advanced during capture. Prepare again; the candidate is retained.",
     );
+  }
   input.assertCurrent();
   if (getBuilderSandboxId(sandbox) !== input.workspaceId) {
     throw new Error("The original local source belongs to another saved workspace.");
@@ -383,11 +525,19 @@ export const reconcileLocalPlanningSource = async (input: {
       `The saved local candidate Git boundary is unavailable; its source is retained. ${sanitizeValidationDiagnosticText(presence.stderr || presence.stdout)}`,
     );
   }
+  let restoredOriginalBase:
+    | { originalSourceSha: string; sourceSha: string; sourceTree: string }
+    | undefined;
   if (!z.strictObject({ present: z.boolean() }).parse(JSON.parse(presence.stdout)).present) {
     const baseline = capture.originalBase(input.originalWorkspaceDigest);
-    if (baseline.sourceSha !== input.originalSourceSha) {
+    if (baseline.originalSourceSha !== input.originalSourceSha) {
       throw new Error("The verified original Git base does not match this saved planning source.");
     }
+    restoredOriginalBase = {
+      originalSourceSha: baseline.originalSourceSha,
+      sourceSha: baseline.sourceSha,
+      sourceTree: baseline.sourceTree,
+    };
     const pack = `.app-builder/local-source/${hash(input.sessionId)}/original-${baseline.sourceSha}.pack`;
     await ensureSandboxDirectories(sandbox, [path.posix.dirname(pack)]);
     input.assertCurrent();
@@ -456,10 +606,11 @@ export const reconcileLocalPlanningSource = async (input: {
     command: commands.join(" && "),
     workingDirectory: "/workspace/repository",
   });
-  if (imported.exitCode !== 0)
+  if (imported.exitCode !== 0) {
     throw new Error(
       `Builder could not read the original private source base or import current local planning objects. The candidate is retained. ${sanitizeValidationDiagnosticText(imported.stderr || imported.stdout)}`,
     );
+  }
   const request = {
     appId: input.appId,
     branchRef: "refs/app-builder/local-source",
@@ -485,10 +636,11 @@ export const reconcileLocalPlanningSource = async (input: {
     command: `node -e ${quote(planningSourceReconciliationProgram)} ${quote(JSON.stringify(request))}`,
     workingDirectory: "/workspace/repository",
   });
-  if (reconciled.exitCode !== 0)
+  if (reconciled.exitCode !== 0) {
     throw new Error(
       `Builder could not reconcile current local source. Original app and platform bytes remain checkpointed; resolve the reported conflict and prepare again. ${sanitizeValidationDiagnosticText(reconciled.stderr || reconciled.stdout)}`,
     );
+  }
   const outcome = reconciliationOutcome.parse(JSON.parse(reconciled.stdout));
   const { generation } = capture;
   input.assertCurrent();
@@ -504,14 +656,14 @@ export const reconcileLocalPlanningSource = async (input: {
   input.assertCurrent();
   await sandbox.writeTextFile({
     path: ".app-builder/source-files.json",
-    content: JSON.stringify(generation.sourceFiles) + "\n",
+    content: `${JSON.stringify(generation.sourceFiles)}\n`,
   });
   input.assertCurrent();
   await sandbox.writeTextFile({
     path: ".app-builder/source-checksums.sha256",
-    content:
-      generation.sourceFiles.map((file) => `${file.sha256}  repository/${file.path}`).join("\n") +
-      "\n",
+    content: `${generation.sourceFiles
+      .map((file) => `${file.sha256}  repository/${file.path}`)
+      .join("\n")}\n`,
   });
   return {
     workspace,
@@ -519,5 +671,6 @@ export const reconcileLocalPlanningSource = async (input: {
     selectedSourceSha: input.receipt.sourceSha,
     selectedSourceTree: input.receipt.sourceTree,
     sourceSnapshotTree: capture.snapshotTree,
+    ...(restoredOriginalBase === undefined ? {} : { restoredOriginalBase }),
   };
 };
