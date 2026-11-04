@@ -34,6 +34,17 @@ Never resend `a469-preview-target-approved-batch` or invent its settlement.
    genuine completed native tool result for the same owner/session/workspace,
    rather than trusting candidate metadata or replacing old plan provenance.
    Add a regression through the workflow adapter and actual history shape.
+   **Correction from the execution audit:** the qualified continuation in turn
+   17 read historical workflow status; it made no new planning, reconciliation,
+   validation or preview call. Its retained revision marker did not prove a
+   stale callback was dispatched. The last actual reconciliation failure was
+   in turn 16. Do not introduce a cache bypass or rewrite checkpoints on that
+   evidence. Verify new-idle-turn versus in-flight generation selection through
+   actual dispatch, and report current attempts separately from historical
+   failures. The source-history reader must use the same verified local recovery
+   profile and must not silently downgrade to incomplete ancestor history when
+   its cycle variable is missing. See the
+   [execution alignment audit and plan](2026-11-03-builder-execution-alignment.md).
 
 2. **Connect the development execution path to actual release capabilities.**
    The current private local launcher disables publication/bootstrap and does

@@ -23,6 +23,15 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   Follow the parallel-instance instructions in the local lifecycle guide.
   Local startup does not authorize outward provider mutations; retain effect
   approvals and never transplant hosted sessions or replay uncertain requests.
+- Keep important local worktrees, session state and generated destinations in
+  durable storage. Never use `/tmp`, `/private/tmp` or other disposable roots for
+  work that must survive a restart. Temporary roots are for throwaway fixtures
+  only. Preserve the original instance's native journals, public request/cursor
+  records, cycle custody and selected source together; transcripts and provider
+  workspaces cannot reconstruct missing Builder authority. Use only supported
+  recovery when moving a stopped instance, with no journal rewriting, approval
+  transfer or uncertain-request replay. See the lifecycle guide's durable-state
+  instructions.
 - Use Vercel Sandbox as the execution backend and project-scoped Vercel OIDC as
   its credential boundary. Use supported source/file APIs and structured
   commands; do not add shell wrappers or static provider keys.

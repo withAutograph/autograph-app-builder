@@ -19,10 +19,16 @@ mutations; provider resources and release effects retain their concrete approval
    Builder to debug it. If another local Builder is running, select an isolated
    supported client profile **before launch** as described below.
 2. From the Builder checkout, run this command, substituting the Arrusted path
-   and unused ports and private directories for your instance:
+   and unused ports and durable private directories for your instance. Important
+   app and session work must survive a restart; use a persistent checkout and
+   state outside operating-system temporary directories. On macOS, for example:
 
    ```sh
-   mise run dev -- --arrusted-root /absolute/path/to/arrusted --next-port 3100 --eve-port 2100 --state-root /private/tmp/builder-local-state --destination-root /private/tmp/builder-local-apps
+   builder_instance_root="$HOME/Library/Application Support/Autograph Builder/development/local"
+   mkdir -p "$builder_instance_root"
+   chmod 700 "$builder_instance_root"
+   builder_instance_root="$(cd "$builder_instance_root" && pwd -P)"
+   mise run dev -- --arrusted-root /absolute/path/to/durable/arrusted --next-port 3100 --eve-port 2100 --state-root "$builder_instance_root/state" --destination-root "$builder_instance_root/apps"
    ```
 
    Leave this terminal running. Wait for the ready message and the printed
@@ -72,12 +78,57 @@ approvals into local state, replay an uncertain request, or claim a local test
 continued the saved hosted creation journey. See
 [interrupted public sessions](#interrupted-public-sessions) for recovery limits.
 
+## Durable state and recovery
+
+Use temporary directories only for explicitly disposable exercises. Do not put
+an important checkout, saved app, generated destination, local session state or
+its recovery evidence under `/tmp`, `/private/tmp` or another location that may
+be cleared on restart or cleanup. A local Git commit in a discarded temporary
+checkout is not a source backup. Preserve completed source changes through the
+normal Git workflow without making publication a prerequisite for every edit.
+
+The default non-emulated launcher state at `.artifacts/development` is durable
+only when its checkout is durable and retained. An explicit durable
+`--state-root` keeps instance state independent of checkout retirement. The
+emulated web mode still has a temporary default; pass durable state and
+destination paths explicitly for any work that matters. These storage choices
+do not change the launcher's defaults or add a backup service.
+
+Treat one instance's recovery material as a unit: its original state root,
+native journals, original cycle and custody, retained source generation,
+compiled-artifact/log records, and public request/session/cursor records. Keep
+the selected Builder and Arrusted checkouts and generated destination with that
+same instance. Do not combine a journal, cycle, source or public projection from
+different instances or transfer an old approval to another target. Where the
+current adapter holds the public request index only in memory, a filesystem copy
+does not make that index durable; the limitations below still apply.
+
+Before moving an existing instance, stop only that owned instance and preserve
+its complete original state and destination. Use a genuine recoverable checkpoint
+or backup and the recovery flow supported by the selected Builder version.
+Resume with the original state root, destination and exact saved cycle; do not
+start a replacement cycle and insert old records into it. Use `--resume-cycle` only in a qualified Builder version that actually
+implements that option, with the original cycle path. Earlier versions may not
+support it. Never infer recovery support from a folder name or from these storage
+examples.
+
+Keep owner-only access on state and backups. Do not commit private journals,
+actor sessions or credentials to Git. Verify that a backup contains the actual
+native journals and cycle custody before relying on it; a transcript, command
+log, provider workspace or code archive alone cannot reconstruct them. A retained
+Sandbox/Drive can preserve app files while local Builder authority is missing.
+Report that distinction and retain uncertain operations; do not fabricate their
+settlement or replay them. Confirm recovery through an accepted continuation of
+the same session before calling it resumed.
+
 ## Parallel branch instances
 
 Use a separate checkout/worktree for each branch instance. Give each instance its
-own Next and Eve ports, owner-only state root and generated destination root.
-Its checkout also owns its build outputs (including `.next`); do not share build
-output directories or writable runtime state between instances. Read-only package
+own Next and Eve ports, durable owner-only state root and generated destination
+root. Use distinct instance directories under persistent storage, including for
+the worktrees themselves; different names under a temporary directory do not
+make the work durable. Its checkout also owns its build outputs (including
+`.next`); do not share build output directories or writable runtime state between instances. Read-only package
 caches may be reused under the ordinary dependency lifecycle.
 
 Before running either parallel command, select a different supported isolated
@@ -96,11 +147,19 @@ not rewrite this instance's dependencies. Restarts reuse that instance's install
 Then, in two different worktrees with their selected Arrusted checkout:
 
 ```sh
-mise run dev -- --arrusted-root /absolute/path/to/arrusted-a --next-port 3100 --eve-port 2100 --state-root /private/tmp/builder-a-state --destination-root /private/tmp/builder-a-apps
+builder_a_root="$HOME/Library/Application Support/Autograph Builder/development/branch-a"
+mkdir -p "$builder_a_root"
+chmod 700 "$builder_a_root"
+builder_a_root="$(cd "$builder_a_root" && pwd -P)"
+mise run dev -- --arrusted-root /absolute/path/to/durable/arrusted-a --next-port 3100 --eve-port 2100 --state-root "$builder_a_root/state" --destination-root "$builder_a_root/apps"
 ```
 
 ```sh
-mise run dev -- --arrusted-root /absolute/path/to/arrusted-b --next-port 3200 --eve-port 2200 --state-root /private/tmp/builder-b-state --destination-root /private/tmp/builder-b-apps
+builder_b_root="$HOME/Library/Application Support/Autograph Builder/development/branch-b"
+mkdir -p "$builder_b_root"
+chmod 700 "$builder_b_root"
+builder_b_root="$(cd "$builder_b_root" && pwd -P)"
+mise run dev -- --arrusted-root /absolute/path/to/durable/arrusted-b --next-port 3200 --eve-port 2200 --state-root "$builder_b_root/state" --destination-root "$builder_b_root/apps"
 ```
 
 The paths and ports are examples. Check availability first; choose other unused
@@ -326,8 +385,11 @@ explicit setup error; the mode does not silently fall back to HTTP.
 
 Runtime certificates, emulator configuration and persistent database files live
 under the selected state root. When omitted in this mode, the state root defaults
-to a stable private temporary directory outside the checkout. The development command stops its owned local
-processes and any database it started, retaining data for the next invocation;
+to a stable private temporary directory outside the checkout. That default is
+for disposable runs: its stable name does not guarantee survival across restart
+or cleanup. Pass a durable private state root and destination for important
+sessions. The development command stops its owned local processes and any
+database it started, retaining data for the next invocation;
 it does not stop a previously running database. The existing auth acceptance
 lane keeps its original defaults and reset lifecycle. Configure its existing
 local database/emulator port settings through mise when another local stack
