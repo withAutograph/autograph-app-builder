@@ -295,7 +295,206 @@ const setup = () => {
   };
 };
 
+const retainPreDispatchAttempt = async (f: ReturnType<typeof setup>) => {
+  const planned = await f.operations.plan(context, selection.runtime, "retained-session-request");
+  f.approve();
+  const original = vi.mocked(f.deps.runtime.start).getMockImplementation();
+  if (original === undefined) {
+    throw new Error("Missing controlled runtime");
+  }
+  vi.mocked(f.deps.runtime.start).mockImplementationOnce(
+    async (ctx, record, capabilities, guard, checkpoint) => {
+      await original(ctx, record, capabilities, guard, async (patch) => {
+        if (patch.locator === undefined || patch.current === undefined) {
+          throw new Error("Missing controlled runtime checkpoint");
+        }
+        const locator = { ...patch.locator };
+        delete locator.commandId;
+        await checkpoint({
+          locator,
+          current: { ...patch.current, state: "starting" },
+        });
+        throw new Error("Interrupted before runtime dispatch");
+      });
+    },
+  );
+  await expect(f.operations.execute(context, planned.request, "continuity-call")).rejects.toThrow();
+  return { planned, retained: f.read() };
+};
+
+const sessionRebindPatch = (record: ContinuityRecord) => {
+  if (record.locator === undefined || record.current === undefined) {
+    throw new Error("Missing retained runtime identity");
+  }
+  return {
+    locator: { ...record.locator, providerSessionId: "resumed-provider-session" },
+    current: {
+      ...record.current,
+      owner: { ...record.current.owner },
+      providerSessionId: "resumed-provider-session",
+      leaseExpiresAt: "2027-01-01T01:00:00.000Z",
+    },
+  };
+};
+
+const resumeControlledSession = (f: ReturnType<typeof setup>, beforeCheckpoint?: () => void) => {
+  vi.mocked(f.deps.runtime.start).mockImplementation(
+    async (_ctx, record, _capabilities, guard, checkpoint) => {
+      await guard();
+      beforeCheckpoint?.();
+      const patch = sessionRebindPatch(record);
+      await checkpoint(patch);
+      f.events.push("launch-after-session-checkpoint");
+      await checkpoint({
+        locator: { ...patch.locator, dispatchAttempted: true, commandId: "runtime-command" },
+        current: { ...patch.current, state: "ready" },
+      });
+    },
+  );
+};
+
 describe("approved managed app continuity service", () => {
+  it("commits a resumed session pair before launch and preserves the approved attempt through suite cleanup", async () => {
+    const f = setup();
+    const { planned, retained } = await retainPreDispatchAttempt(f);
+    resumeControlledSession(f);
+    const result = await f.operations.execute(context, planned.request, "resumed-call");
+    expect(result.state).toBe("settled");
+    expect(f.read()).toMatchObject({
+      approval: retained.approval,
+      attemptId: retained.attemptId,
+      fence: retained.fence,
+      privateState: retained.privateState,
+      locator: { ...retained.locator, providerSessionId: "resumed-provider-session" },
+    });
+    expect(
+      f.records.every(
+        (record) => record.locator?.providerSessionId === record.current?.providerSessionId,
+      ),
+    ).toBe(true);
+    expect(f.events.filter((event) => event === "dispatch-suite")).toHaveLength(1);
+    expect(f.events.lastIndexOf("close")).toBeLessThan(f.events.lastIndexOf("revoke-owned-rows"));
+    const events = [...f.events];
+    await f.operations.execute(context, planned.request, "another-call");
+    expect(f.events).toEqual(events);
+  });
+
+  it("does not launch or partially rebind on CAS conflict, then resumes the same attempt after a fresh read", async () => {
+    const f = setup();
+    const { planned, retained } = await retainPreDispatchAttempt(f);
+    resumeControlledSession(f, f.rejectNextCas);
+    await expect(
+      f.operations.execute(context, planned.request, "conflicting-call"),
+    ).rejects.toThrow();
+    expect(f.read().locator).toEqual(retained.locator);
+    expect(f.read().current).toEqual(retained.current);
+    expect(f.events).not.toContain("launch-after-session-checkpoint");
+    resumeControlledSession(f);
+    const resumed = await f.operations.execute(context, planned.request, "resumed-call");
+    expect(resumed.state).toBe("settled");
+    expect(f.read().attemptId).toBe(retained.attemptId);
+    expect(f.events.filter((event) => event === "dispatch-suite")).toHaveLength(1);
+  });
+
+  it("does not renew an undispatched old session and renews only the rebound identity once dispatch may exist", async () => {
+    vi.useFakeTimers();
+    try {
+      const f = setup();
+      const { planned } = await retainPreDispatchAttempt(f);
+      vi.mocked(f.deps.runtime.start).mockImplementationOnce(
+        async (_ctx, record, _capabilities, guard, checkpoint) => {
+          await guard();
+          await vi.advanceTimersByTimeAsync(15_000);
+          expect(f.deps.runtime.renew).not.toHaveBeenCalled();
+          const patch = sessionRebindPatch(record);
+          await checkpoint(patch);
+          await vi.advanceTimersByTimeAsync(15_000);
+          expect(f.deps.runtime.renew).not.toHaveBeenCalled();
+          // Even an uncertain launch needs renewal once its durable marker exists.
+          await checkpoint({ locator: { ...patch.locator, dispatchAttempted: true } });
+          await vi.advanceTimersByTimeAsync(15_000);
+          expect(f.deps.runtime.renew).toHaveBeenCalledTimes(1);
+          const renewed = vi.mocked(f.deps.runtime.renew).mock.calls[0]?.[1];
+          expect(renewed?.locator?.providerSessionId).toBe("resumed-provider-session");
+          expect(renewed?.current?.providerSessionId).toBe("resumed-provider-session");
+          await checkpoint({
+            locator: { ...patch.locator, dispatchAttempted: true, commandId: "runtime-command" },
+            current: { ...patch.current, state: "ready" },
+          });
+        },
+      );
+      const result = await f.operations.execute(context, planned.request, "resumed-call");
+      expect(result.state).toBe("settled");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reads back a committed session pair after response loss without changing the attempt or duplicating dispatch", async () => {
+    const f = setup();
+    const { planned, retained } = await retainPreDispatchAttempt(f);
+    const compareAndSet = f.deps.store.compareAndSet;
+    let responseLost = false;
+    f.deps.store.compareAndSet = async (input) => {
+      const saved = await compareAndSet(input);
+      if (!responseLost && input.record.locator?.providerSessionId === "resumed-provider-session") {
+        responseLost = true;
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- A committed CAS can lose its response.
+        return undefined;
+      }
+      return saved;
+    };
+    resumeControlledSession(f);
+    await expect(
+      f.operations.execute(context, planned.request, "response-lost-call"),
+    ).rejects.toThrow();
+    expect(f.read().locator?.providerSessionId).toBe("resumed-provider-session");
+    expect(f.read().current?.providerSessionId).toBe("resumed-provider-session");
+    expect(f.events).not.toContain("launch-after-session-checkpoint");
+    const resumed = await f.operations.execute(context, planned.request, "readback-call");
+    expect(resumed.state).toBe("settled");
+    expect(f.read().attemptId).toBe(retained.attemptId);
+    expect(f.events.filter((event) => event === "dispatch-suite")).toHaveLength(1);
+  });
+
+  it.each(["locator-only", "current-only", "attempt-directory", "owner", "capabilities"])(
+    "refuses a %s session checkpoint without launching or changing the retained pair",
+    async (kind) => {
+      const f = setup();
+      const { planned, retained } = await retainPreDispatchAttempt(f);
+      vi.mocked(f.deps.runtime.start).mockImplementationOnce(
+        async (_ctx, record, _capabilities, guard, checkpoint) => {
+          await guard();
+          const patch: Partial<ContinuityRecord> = sessionRebindPatch(record);
+          if (kind === "locator-only") {
+            delete patch.current;
+          }
+          if (kind === "current-only") {
+            delete patch.locator;
+          }
+          if (kind === "attempt-directory" && patch.locator !== undefined) {
+            patch.locator.rootDirectory = "/another-attempt";
+          }
+          if (kind === "owner" && patch.current !== undefined) {
+            patch.current.owner.ownerUserId = "another-owner";
+          }
+          if (kind === "capabilities") {
+            patch.privateState = retained.privateState;
+          }
+          await checkpoint(patch);
+          f.events.push("unexpected-launch");
+        },
+      );
+      await expect(
+        f.operations.execute(context, planned.request, "invalid-call"),
+      ).rejects.toThrow();
+      expect(f.read().locator).toEqual(retained.locator);
+      expect(f.read().current).toEqual(retained.current);
+      expect(f.events).not.toContain("unexpected-launch");
+      expect(f.events).not.toContain("dispatch-suite");
+    },
+  );
+
   it("returns the original saved plan and request without consulting newer setup or executing work", async () => {
     const f = setup();
     const planned = await f.operations.plan(context, selection.runtime, "saved-original-request");

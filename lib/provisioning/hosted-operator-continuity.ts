@@ -9,6 +9,7 @@ import type { HostedOperatorContext } from "./hosted-operator-service";
 import type { PhysicalResourceLeaseInput } from "./postgres-physical-resource-lease";
 import {
   continuityRecordSchema,
+  canRebindUndispatchedContinuityRuntime,
   continuityPlanDigest,
   continuityStatus,
   hostedContinuityPlanSchema,
@@ -508,6 +509,49 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
             await assertFence();
             current = await update(current, (value) => ({ ...value, workerAsset }));
           };
+          const checkpointRuntime: Parameters<
+            HostedContinuityDependencies["runtime"]["start"]
+          >[4] = async (patch) => {
+            await assertCurrent();
+            current = await update(current, (value) => {
+              const sessionChanged = [
+                patch.locator !== undefined &&
+                  value.locator !== undefined &&
+                  patch.locator.providerSessionId !== value.locator.providerSessionId,
+                patch.current !== undefined &&
+                  value.current !== undefined &&
+                  patch.current.providerSessionId !== value.current.providerSessionId,
+              ].some(Boolean);
+              if (sessionChanged) {
+                const nextSession = patch.locator?.providerSessionId;
+                if (
+                  !canRebindUndispatchedContinuityRuntime(value) ||
+                  nextSession === undefined ||
+                  patch.current === undefined
+                ) {
+                  throw unavailable();
+                }
+                const validPair = [
+                  patch.current.providerSessionId === nextSession,
+                  Object.keys(patch).every((key) => key === "locator" || key === "current"),
+                  isDeepStrictEqual(patch.locator, {
+                    ...value.locator,
+                    providerSessionId: nextSession,
+                  }),
+                  isDeepStrictEqual(patch.current, {
+                    ...value.current,
+                    providerSessionId: nextSession,
+                    leaseExpiresAt: patch.current.leaseExpiresAt,
+                  }),
+                  Date.parse(patch.current.leaseExpiresAt) > now().getTime(),
+                ].every(Boolean);
+                if (!validPair) {
+                  throw unavailable();
+                }
+              }
+              return { ...value, ...patch };
+            });
+          };
           let renewalTask: Promise<void> | undefined;
           let stopping = false;
           const renewal = setInterval(() => {
@@ -517,7 +561,13 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
             renewalTask = (async () => {
               try {
                 await assertCurrent();
-                if (!stopping) {
+                // Before dispatch there is no owned process lease to renew. In
+                // particular, do not let a queued renewal overwrite a resumed
+                // worker's identity with the old physical session after rebind.
+                const processMayExist =
+                  current.locator?.dispatchAttempted === true ||
+                  current.locator?.commandId !== undefined;
+                if (!stopping && processMayExist) {
                   await deps.runtime.renew(context, current);
                 }
               } catch (error) {
@@ -615,10 +665,7 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
                 current,
                 capabilities,
                 assertCurrent,
-                async (patch) => {
-                  await assertCurrent();
-                  current = await update(current, (value) => ({ ...value, ...patch }));
-                },
+                checkpointRuntime,
               );
               runtimeObserved = true;
               await assertCurrent();
@@ -637,10 +684,7 @@ export const createHostedContinuityOperations = (deps: HostedContinuityDependenc
                   current,
                   capabilities,
                   assertCurrent,
-                  async (patch) => {
-                    await assertCurrent();
-                    current = await update(current, (value) => ({ ...value, ...patch }));
-                  },
+                  checkpointRuntime,
                 );
               }
               await deps.projection.publish(
