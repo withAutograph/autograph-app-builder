@@ -135,6 +135,43 @@ Never resend `a469-preview-target-approved-batch` or invent its settlement.
    create an arbitrary replacement acceptance project. The generated app still
    uses its one ordinary Builder-owned destination.
 
+## Further handoffs within this same repair batch
+
+The following concrete source findings extend groups 2 and 3 above. They must
+be repaired before the one shared release; they are not reasons to run another
+live effect or reinterpret an existing approval.
+
+- **Authenticated browser bindings after public delivery.** Normal resource
+  setup ends at `resource-ready`, while the old browser lane requires `bound`
+  and a delivered protected Preview candidate. Add an explicit verified public
+  delivery projection from the exact READY application release, selected normal
+  destination, runtime checkpoint, current owner, original/current consent and
+  live Auth/runtime observation. Use its public origin and real selected actor
+  jars for normal authenticated browser tests. Preserve the old Preview
+  projection; do not relabel it as Production or invent a Preview deployment.
+- **Real provider delivery destinations.** An app's `readObjects.destination`
+  is currently an opaque name. Normal setup neither resolves its actual
+  Ampersand webhook URL nor reads back its signing key, and the central reader
+  uses one global key. Add an explicit new capability version with a concrete
+  approved `prepare-provider-destination` effect. Freeze the exact provider
+  project/name and source-owned app ingress/public origin. Read the named
+  destination first; create once only when absent, seal its accepted identity
+  and key before acknowledgement, then independently read back the same
+  resource. Do not retarget a mismatched existing destination or resend an
+  uncertain create. Keep each destination's key encrypted and central-only;
+  verify delivery with the exact registered app/provider authority. Preserve
+  legacy global mode and all frozen v1 effects. Publish and verify the public
+  app before human Connect/Activate can cause provider reads.
+- **Integration-only resource worker selection.** Both integration setup
+  adapters currently select the generic `resourcesWorker`, which is also used
+  by unrelated Auth/app setup. Add a separate integration resource descriptor
+  instead of replacing that legacy worker globally. Central setup already pins
+  its resource executable; the new app capability version must also freeze its
+  resource worker identity/hash. Resolve only the exact approved artifact from
+  the trusted catalog. Old v1 operations retain their original selection and
+  meaning; absent or mismatched artifacts remain a prerequisite. Coordinate
+  this field with the capability version and final selected image/profile cut.
+
 ## Evidence gaps, distinct from established code defects
 
 - Working private app and verified isolated runtime/Auth bindings.
