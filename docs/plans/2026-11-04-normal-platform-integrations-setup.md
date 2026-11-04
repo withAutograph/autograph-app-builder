@@ -105,7 +105,10 @@ Only completed resource/schema effects plus independent native-Neon/SQL readback
 can publish the normal control custody receipt. Bind owner authority, actual
 resource/profile IDs, Neon project/branch/endpoint, host/database, migrator and
 central-runtime roles, installed schema and dedicated-development data scope.
-Store its immutable receipt reference and digest. A selected or pending app/Auth
+Store its immutable receipt reference and digest. Routine settled-history pruning
+must preserve current control custody, encrypted private custody, shared ready
+selection and current grant authority; explicit authorized forget remains a
+separate policy. A metadata selection is never provider-effect settlement. A selected or pending app/Auth
 policy, reflected environment IDs or an old app onboarding row cannot substitute.
 Do not invent a customer Production database identity merely to satisfy an old
 exclusion field: use genuine known exclusion metadata or an additive normal
@@ -124,6 +127,32 @@ Resolve newly completed normal setup from its owner-scoped journal/custody rathe
 than asking the operator or evaluator to paste a READY JSON/env entry for each
 app. The deployment policy chooses allowed infrastructure; real recorded receipts
 supply completed facts and encrypted custody supplies protected values.
+
+## Fresh normal app capability profile
+
+A fresh normal app must not require an administrator to add its app ID to the
+old per-app capability environment map. Retain those frozen explicit profiles
+for their original callers; introduce an explicit normal enrollment policy and
+derive the restricted control SQL identity from the authenticated owner, app,
+recorded project and provisioning receipt. The derivation remains stable across
+ordinary revisions and distinct between apps; it transfers no old approval.
+
+Service membership is separate from a human app role. Read the checked,
+source-declared supported integration service policy from the selected schema
+release and prove its actual service actor/role privileges. Read the real Auth
+realm/enrollment, organization ownership and app-assignment scope independently.
+If organization selection is missing, use an ordinary product choice; do not
+invent tenant IDs, duplicate another realm's organization ID, substitute a human
+Finance role or import an acceptance fixture. The same-tenant/two-app connection
+journey must use a real supported tenant/realm binding or approved development
+realm reuse, rather than fabricating shared tenant identity across app databases.
+
+Freeze the selected policy and actor/org/assignment evidence into the fresh V3
+capability plan and disclose those grants in its ordinary approval. The fixed
+membership worker must validate the installed service policy and actual scope
+before applying a grant, and independently read it back. Removing/changing real
+permission authority needs the corresponding fresh normal plan; ordinary source
+changes alone are not a reason to rescope resources or rewrite history.
 
 ## Fresh app caller registration
 
