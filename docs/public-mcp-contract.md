@@ -86,7 +86,10 @@ their short-lived compute leases.
 
 The existing `autograph_start` tool accepts `resumeMode: "recover"` only with
 `resumeSessionId`. This explicit owner request transfers a parked hosted native
-execution through the existing structured recovery path; ordinary resume is
+approval through the existing structured recovery path. An owner may instead
+request `resumeMode: "recover-idle"` for a waiting session with a retained
+checkpoint. This separate mode admits only a natively verified inbox wait;
+pending approvals still require the original recovery mode. Ordinary resume is
 unchanged and discovery still returns five tools. Admission requires the complete
 retained checkpoint and independently closed native effect steps across the entire
 verified handoff lineage. A source with pending approvals retains those exact

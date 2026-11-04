@@ -72,6 +72,12 @@ owner-authenticated native session history at the supported recovery boundary.
 Compact review summaries and unverified proposal metadata cannot reconstruct
 it. Recovery preserves the latest draft and its edits, does not roll back the
 current workflow, and grants no permission to replay an external effect.
+For an already waiting hosted session, an explicit owner `recover-idle` request
+reaches that boundary through the existing native recovery reservation and
+receipt. Normal resume keeps the healthy handle and does not reconstruct
+history. Idle recovery must independently prove a closed, unchanged native
+inbox wait before stopping the old owner; it cannot recover a pending approval
+or treat missing approval evidence as consent.
 
 Initial source selection is separate from publication. In a new session,
 `resolve_github_source` accepts a named branch or any open same-repository PR,
