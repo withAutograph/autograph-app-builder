@@ -1,6 +1,10 @@
 import { authorizeRepeatablePrivateApplyCalls } from "./native-recovery-repeatable-apply";
 import { authorizeRepeatableDraftReconciliationCalls } from "./native-recovery-repeatable-draft-reconciliation";
 import { observePrivateApplyRecoveryCandidate } from "./native-recovery-apply-observation";
+import {
+  draftReviewedLineageContextKey,
+  recoverDraftReviewedLineage,
+} from "./native-recovery-draft-reviewed-lineage";
 import { openHostedPostgresDatabase } from "../db/hosted-postgres";
 import {
   exactForwardedSessionAuthority,
@@ -453,6 +457,16 @@ export function createHostedNativeRecoveryBinding(
           expectedPrincipalId: principalFor(input).ownerUserId,
         }),
       ]),
+    applicationStateRecovery: {
+      contextKey: draftReviewedLineageContextKey,
+      field: "reviewedLineage",
+      async recover(call: Parameters<typeof recoverDraftReviewedLineage>[0] & RecoveryCall) {
+        await get().authorize(call);
+        const lineage = recoverDraftReviewedLineage(call);
+        await get().authorize(call);
+        return lineage;
+      },
+    },
     observeCandidateFacts: (input: Parameters<typeof observePrivateApplyRecoveryCandidate>[0]) =>
       Promise.resolve(observePrivateApplyRecoveryCandidate(input)),
     authorize: (call: RecoveryCall) => get().authorize(call),

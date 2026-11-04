@@ -119,6 +119,13 @@ set -- "$executable" "$@"
 if [ -z "${APP_BUILDER_DEV_RUNTIME_HOME:-}" ] && [ "${XDG_DATA_HOME+x}" = x ]; then
   set -- "XDG_DATA_HOME=$XDG_DATA_HOME" "$@"
 fi
+# Explicit non-secret assembled-test configuration; unset values stay absent.
+if [ "${ARRUSTED_MANAGED_RUNTIME_TEST_ROOT+x}" = x ]; then
+  set -- "ARRUSTED_MANAGED_RUNTIME_TEST_ROOT=$ARRUSTED_MANAGED_RUNTIME_TEST_ROOT" "$@"
+fi
+if [ "${BUN_BINARY+x}" = x ]; then
+  set -- "BUN_BINARY=$BUN_BINARY" "$@"
+fi
 
 case "$kind" in
   node|pnpm)

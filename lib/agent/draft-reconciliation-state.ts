@@ -9,6 +9,7 @@ import type { CompiledOperatorReleaseSelection } from "../provisioning/hosted-op
 import type { PrivateApplyScope } from "./private-apply-authority";
 import type { PublishedAppSourceReview } from "./published-app-source";
 import type { ValidationLogReference } from "../repository/validation-log";
+import type { DraftReviewedWorkflow } from "./draft-reviewed-lineage";
 
 import type {
   ExistingDraftReconciliationProposal,
@@ -83,6 +84,8 @@ export interface PreservedDraftWorkspace {
 }
 
 interface DraftCandidateFields {
+  /** Original complete app review, retained independently from creation-workspace revalidation. */
+  reviewedLineage?: DraftReviewedWorkflow;
   dependencyCatalogPending?: CandidateDependencyCatalogIntent;
   version: 1;
   appId: string;

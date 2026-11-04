@@ -1,7 +1,7 @@
 /* oxlint-disable promise/avoid-new -- Controlled listeners and owned child completion expose Node event-to-Promise interfaces. */
 import { createHash, generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { execFile } from "node:child_process";
-import { access, chmod, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { createServer, request } from "node:http";
 import path from "node:path";
 import { tmpdir } from "node:os";
@@ -69,6 +69,11 @@ const exchange = async (port: number, token: string, transport: string, body: Bu
     outgoing.end(body);
   });
 const observationSchema = z.object({
+  verified: z.object({
+    actorId: z.string(),
+    organizationId: z.string(),
+    grants: z.array(z.object({ role: z.string(), fenceGeneration: z.number() })),
+  }),
   generation: z.number().int().positive(),
   pid: z.number().int().positive(),
   method: z.string(),
@@ -102,6 +107,21 @@ const awaitFile = async (file: string, closed: Promise<unknown>) => {
   throw new Error("Controlled compiled worker did not become ready.");
 };
 
+// The first shim dispatches the maintained repository launcher unchanged. Only
+// its final app-specific task is a controlled fixture, never the env loader.
+const installRepositoryRuntimeShim = async (directory: string, selectedArrustedRoot: string) => {
+  const bun = process.env.BUN_BINARY ?? "bun";
+  const resolved = await executeFile(bun, ["-e", "process.stdout.write(process.execPath)"], {
+    encoding: "utf-8",
+  });
+  const script = path.join(selectedArrustedRoot, ".config/mise/scripts/repository/app-runtime.ts");
+  await writeFile(
+    path.join(directory, "bin", "mise"),
+    `#!${process.execPath}\nimport{existsSync,writeFileSync,readFileSync,statSync}from'node:fs';import path from'node:path';const directory=${JSON.stringify(directory)};const args=process.argv.slice(2);if(JSON.stringify(args)===JSON.stringify(['run','app:runtime','run','orchard','dev'])){const stateDirectory=process.env.APP_RUNTIME_STATE_DIR;const environmentPath=path.join(stateDirectory,'environment.json');writeFileSync(path.join(directory,'launch.json'),JSON.stringify({inputRemoved:!existsSync(path.join(directory,'runtime-input.json')),argv:args,stateDirectory,stateMode:statSync(stateDirectory).mode&0o777,environmentMode:statSync(environmentPath).mode&0o777,runtimeEnvironment:JSON.parse(readFileSync(environmentPath,'utf8'))}));process.execve(${JSON.stringify(resolved.stdout)},[${JSON.stringify(resolved.stdout)},${JSON.stringify(script)},...args.slice(2)],process.env);}else if(JSON.stringify(args)===JSON.stringify(['run','//apps/orchard:dev'])){writeFileSync(path.join(directory,'terminal.json'),JSON.stringify({cwd:process.cwd(),argv:args,environment:process.env}));process.chdir(directory);process.execve(${JSON.stringify(process.execPath)},[${JSON.stringify(process.execPath)},path.join(directory,'app.mjs')],process.env);}else throw Error('Unexpected repository runtime task');\n`,
+    { mode: 0o700 },
+  );
+};
+
 test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
   "compiled managed entry unlinks private input, verifies real principals and replaces only its owned app process",
   async () => {
@@ -133,18 +153,28 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
           .update(await readFile(executable))
           .digest("hex"),
       );
-      const shim = `#!${process.execPath}\nimport{existsSync,writeFileSync,readFileSync,statSync}from'node:fs';import path from'node:path';if(JSON.stringify(process.argv.slice(2))!==JSON.stringify(['run','app:runtime','run','orchard','dev']))throw Error('Unexpected controlled launch');const stateDirectory=process.env.APP_RUNTIME_STATE_DIR;const environmentPath=path.join(stateDirectory,'environment.json');const runtimeEnvironment=JSON.parse(readFileSync(environmentPath,'utf8'));writeFileSync('launch.json',JSON.stringify({inputRemoved:!existsSync('runtime-input.json'),argv:process.argv.slice(2),stateDirectory,stateMode:statSync(stateDirectory).mode&0o777,environmentMode:statSync(environmentPath).mode&0o777,runtimeEnvironment}));const environment={...process.env,...runtimeEnvironment};delete environment.APP_RUNTIME_STATE_DIR;process.execve(process.execPath,[process.execPath,path.resolve('app.mjs')],environment);\n`;
-      await writeFile(path.join(bin, "mise"), shim, { mode: 0o700 });
-      await chmod(path.join(bin, "mise"), 0o700);
-      // Generic controlled app: no generated-app roles, routes or data are frozen.
-      // The fixture self-exits if its owning worker disappears during a failed test.
+      await installRepositoryRuntimeShim(directory, selectedArrustedRoot);
+      // Generic app fixture, with the maintained app-side verifier bundled from
+      // the selected repository. Neither generated app source nor roles are copied.
       await writeFile(
-        path.join(directory, "app.mjs"),
-        `import{createServer}from'node:http';import{readFileSync,writeFileSync}from'node:fs';const owner=process.ppid;let generation=1;try{generation=JSON.parse(readFileSync('app-generation.json','utf8')).generation+1}catch{};writeFileSync('app-generation.json',JSON.stringify({generation,pid:process.pid}));setInterval(()=>{if(process.ppid!==owner)process.exit(0)},100).unref();createServer(async(req,res)=>{const chunks=[];for await(const chunk of req)chunks.push(chunk);res.end(JSON.stringify({generation,pid:process.pid,method:req.method,target:req.url,body:Buffer.concat(chunks).toString('base64'),headers:req.headers,environment:process.env,argv:process.argv}));}).listen(Number(process.env.PORT),'127.0.0.1');`,
+        path.join(directory, "app.ts"),
+        `import{createServer}from'node:http';import{readFileSync,writeFileSync}from'node:fs';import{createManagedGatewayVerification}from ${JSON.stringify(path.join(selectedArrustedRoot, "packages/platform-microfrontends/src/policy/managed-gateway-verification.ts"))};import{verifyZoneRequestPrincipal}from ${JSON.stringify(path.join(selectedArrustedRoot, "packages/platform-microfrontends/src/policy/zone-ingress.ts"))};const profile=JSON.parse(process.env.PLATFORM_MANAGED_GATEWAY_PUBLIC_PROFILE!);const boundary=JSON.parse(process.env.PLATFORM_APP_BOUNDARY!);if(boundary.verification.publicOrigin!==process.env.PLATFORM_PUBLIC_ORIGIN)throw Error('Public boundary origin differs');const verification=createManagedGatewayVerification({profile,appId:'orchard',publicOrigin:process.env.PLATFORM_PUBLIC_ORIGIN!,jwksUrl:profile.jwksUrl});const owner=process.ppid;let generation=1;try{generation=JSON.parse(readFileSync('app-generation.json','utf8')).generation+1}catch{};writeFileSync('app-generation.json',JSON.stringify({generation,pid:process.pid}));setInterval(()=>{if(process.ppid!==owner)process.exit(0)},100).unref();createServer(async(req,res)=>{if(req.url==='/'){res.end('ready');return;}try{const chunks=[];for await(const chunk of req)chunks.push(chunk);const headers=new Headers();for(const[name,value]of Object.entries(req.headers))if(value!==undefined)headers.set(name,Array.isArray(value)?value.join(','):value);const principal=await verifyZoneRequestPrincipal({...verification,headers,method:req.method!,path:req.url!});res.end(JSON.stringify({verified:{actorId:principal.sub,organizationId:principal.organizationId,grants:principal.appActorGrants},generation,pid:process.pid,method:req.method,target:req.url,body:Buffer.concat(chunks).toString('base64'),headers:req.headers,environment:process.env,argv:process.argv}));}catch{res.statusCode=403;res.end('App principal denied');}}).listen(Number(process.env.PORT),'127.0.0.1');`,
+      );
+      await executeFile(
+        bun,
+        [
+          "build",
+          path.join(directory, "app.ts"),
+          "--target=node",
+          "--outfile",
+          path.join(directory, "app.mjs"),
+        ],
+        { cwd: selectedArrustedRoot, encoding: "utf-8", timeout: 30_000 },
       );
       const capabilities = createPrivateManagedRuntimeCapabilities();
       const { privateKey, publicKey } = generateKeyPairSync("ed25519");
-      const publicOrigin = "https://gateway.example";
+      const publicOrigin = "https://gateway-preview.example";
+      const nativeOrigin = "https://gateway-immutable.example";
       const appPort = await availablePort();
       const bridgePort = await availablePort();
       const current = {
@@ -189,7 +219,22 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
         bridgePort,
         appEnvironment: {
           ORCHARD_DATABASE_URL: "postgresql://controlled.invalid/same-resource",
-          PLATFORM_ORIGIN: publicOrigin,
+          PLATFORM_ORIGIN: nativeOrigin,
+          PLATFORM_PUBLIC_ORIGIN: publicOrigin,
+          PLATFORM_JWKS_URL: `${nativeOrigin}/_platform/jwks.json`,
+          PLATFORM_APP_BOUNDARY: JSON.stringify({
+            version: 1,
+            mode: "protected-gateway-v1",
+            appId: "orchard",
+            verification: { publicOrigin, jwksUrl: `${nativeOrigin}/_platform/jwks.json` },
+            runtime: {
+              hostname: "controlled.invalid",
+              port: 5432,
+              database: "orchard",
+              runtimeRole: "orchard_runtime",
+              environment: "hosted",
+            },
+          }),
         },
         lifecycleSha256: capabilities.lifecycleSha256,
         transportSha256: capabilities.projection.transportSha256,
@@ -280,6 +325,23 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
         target: "/orchard/action?view=one",
         body: body.toString("base64"),
       });
+      expect(first.verified).toEqual({
+        actorId: "fixture-actor",
+        organizationId: "fixture-organization",
+        grants: [{ role: "fixture_operator", fenceGeneration: 1 }],
+      });
+      const terminal = await readJson(
+        path.join(directory, "terminal.json"),
+        z.object({
+          cwd: z.string(),
+          argv: z.array(z.string()),
+          environment: z.record(z.string(), z.string()),
+        }),
+      );
+      expect(terminal.cwd).toBe(selectedArrustedRoot);
+      expect(terminal.argv).toEqual(["run", "//apps/orchard:dev"]);
+      expect(terminal.environment.MISE_ENV?.split(",")).toContain("app-validation");
+      expect(terminal.environment.APP_RUNTIME_STATE_DIR).toBeUndefined();
       expect(first.headers.authorization).toBeUndefined();
       expect(first.headers["x-platform-managed-suite"]).toBeUndefined();
       expect(first.headers["x-vercel-oidc-token"]).toBeUndefined();
@@ -288,6 +350,9 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
         expect(JSON.stringify(first.environment)).not.toContain(bearer);
       }
       expect(first.environment.APP_RUNTIME_STATE_DIR).toBeUndefined();
+      expect(first.environment.PLATFORM_ORIGIN).toBe(nativeOrigin);
+      expect(first.environment.PLATFORM_PUBLIC_ORIGIN).toBe(publicOrigin);
+      expect(first.environment.PLATFORM_ORIGIN).not.toBe(first.environment.PLATFORM_PUBLIC_ORIGIN);
       expect(
         JSON.parse(first.environment.PLATFORM_MANAGED_GATEWAY_PUBLIC_PROFILE ?? "null"),
       ).toEqual(input.profile);
@@ -384,11 +449,7 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
         ],
         { cwd: process.cwd(), timeout: 30_000, encoding: "utf-8" },
       );
-      await writeFile(
-        path.join(bin, "mise"),
-        `#!${process.execPath}\nimport path from'node:path';import{readFileSync}from'node:fs';if(JSON.stringify(process.argv.slice(2))!==JSON.stringify(['run','app:runtime','run','orchard','dev']))throw Error('Unexpected controlled launch');const runtimeEnvironment=JSON.parse(readFileSync(path.join(process.env.APP_RUNTIME_STATE_DIR,'environment.json'),'utf8'));const environment={...process.env,...runtimeEnvironment};delete environment.APP_RUNTIME_STATE_DIR;process.execve(process.execPath,[process.execPath,path.resolve('app.mjs')],environment);\n`,
-        { mode: 0o700 },
-      );
+      await installRepositoryRuntimeShim(directory, selectedArrustedRoot);
       // The real entry's readiness HTTP request establishes this barrier. The
       // controlled child never responds, so cancellation is definitely pre-ready.
       // A fixture-owned filesystem release is emergency cleanup only, after proof.
@@ -398,7 +459,8 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
       );
       const capabilities = createPrivateManagedRuntimeCapabilities();
       const { publicKey } = generateKeyPairSync("ed25519");
-      const publicOrigin = "https://gateway.example";
+      const publicOrigin = "https://gateway-preview.example";
+      const nativeOrigin = "https://gateway-immutable.example";
       const appPort = await availablePort();
       const bridgePort = await availablePort();
       const input = managedRuntimeEntryInputSchema.parse({
@@ -442,7 +504,22 @@ test.skipIf(arrustedRoot === undefined || arrustedRoot.length === 0)(
         bridgePort,
         appEnvironment: {
           ORCHARD_DATABASE_URL: "postgresql://controlled.invalid/same-resource",
-          PLATFORM_ORIGIN: publicOrigin,
+          PLATFORM_ORIGIN: nativeOrigin,
+          PLATFORM_PUBLIC_ORIGIN: publicOrigin,
+          PLATFORM_JWKS_URL: `${nativeOrigin}/_platform/jwks.json`,
+          PLATFORM_APP_BOUNDARY: JSON.stringify({
+            version: 1,
+            mode: "protected-gateway-v1",
+            appId: "orchard",
+            verification: { publicOrigin, jwksUrl: `${nativeOrigin}/_platform/jwks.json` },
+            runtime: {
+              hostname: "controlled.invalid",
+              port: 5432,
+              database: "orchard",
+              runtimeRole: "orchard_runtime",
+              environment: "hosted",
+            },
+          }),
         },
         lifecycleSha256: capabilities.lifecycleSha256,
         transportSha256: capabilities.projection.transportSha256,

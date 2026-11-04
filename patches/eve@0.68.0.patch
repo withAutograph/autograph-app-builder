@@ -3290,10 +3290,10 @@ new file mode 100644
 +}
 diff --git a/dist/src/execution/session/terminal-recovery.d.ts b/dist/src/execution/session/terminal-recovery.d.ts
 new file mode 100644
-index 0000000..a3f1892
+index 0000000000000000000000000000000000000000..7631a183d9c8f02cbd1761e287736f5ffa155a3d
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.d.ts
-@@ -0,0 +1,123 @@
+@@ -0,0 +1,132 @@
 +import type { SessionAuthContext } from "#channel/types.js";
 +import type { SessionCheckpoint } from "#execution/session/handoff.js";
 +import type { TerminalRecoveryWorkflowEntryInput } from "#execution/session/entry-input.js";
@@ -3352,6 +3352,15 @@ index 0000000..a3f1892
 +  authorize(input: TerminalRecoveryAuthorityInput): Promise<void>;
 +  /** Authorizes exact retained calls using app-owned call-bound repeatability proof; missing or failed decisions grant no calls. */
 +  authorizeRepeatableRecoveryCalls?(input: TerminalRecoveryRepeatableCallsInput): Promise<readonly string[] | undefined>;
++  /** Optional trusted recovery of one missing app-state metadata field; cannot overwrite SDK context or existing fields. */
++  readonly applicationStateRecovery?: {
++    readonly contextKey: string;
++    readonly field: string;
++    recover(input: TerminalRecoveryRepeatableCallsInput & {
++      readonly selectedOrigin: { readonly slot: number; readonly stepId: string; readonly eventId: string };
++      readonly serializedContext: Readonly<Record<string, unknown>>;
++    }): Promise<unknown | undefined>;
++  };
 +  /** Trusted read-only projection, called only inside a currently authorized exact-owner observation. */
 +  observeCandidateFacts?(input: TerminalRecoveryCandidateFactsInput): Promise<TerminalRecoveryCandidateFacts | undefined>;
 +  /** Trusted read-only canonical binding facts for the authenticated logical inbox holder. */
@@ -3419,9 +3428,10 @@ index 0000000..a3f1892
 +export declare function observeTerminalSession(input: TerminalRecoveryAuthorityInput & { readonly ports: Pick<TerminalRecoveryPorts, "authorize" | "readReceipt" | "observeCandidateFacts" | "observeRecoveryHolderBinding"> }, dependencies: TerminalRecoveryObservationDependencies): Promise<{ readonly kind: "accepted"; readonly sessionId: string }>;
 diff --git a/dist/src/execution/session/terminal-recovery.js b/dist/src/execution/session/terminal-recovery.js
 new file mode 100644
+index 0000000000000000000000000000000000000000..49731b34622c08e3cae92a8fbcc6af954c4287af
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.js
-@@ -0,0 +1,751 @@
+@@ -0,0 +1,765 @@
 +import { deriveTerminalRecoveryResumePhase } from "#execution/session/recovery-resume-phase.js";
 +export { deriveTerminalRecoveryResumePhase };
 +import { createHash } from "node:crypto";
@@ -3655,7 +3665,21 @@ new file mode 100644
 +      checkpointVersion: 1,
 +      ...(transferResumePhase === "await-input" ? { resumePhase: "await-input" } : {}),
 +    };
-+    const checkpoint = { ...reconciled.checkpointCore, ...policy, version: SESSION_CHECKPOINT_VERSION };
++    let checkpoint = { ...reconciled.checkpointCore, ...policy, version: SESSION_CHECKPOINT_VERSION };
++    if (ports.applicationStateRecovery !== undefined) {
++      const recovery = ports.applicationStateRecovery;
++      const forbidden = (key) => typeof key !== "string" || key.length === 0 || ["__proto__", "prototype", "constructor"].includes(key);
++      if (forbidden(recovery.contextKey) || recovery.contextKey.startsWith("eve.") || forbidden(recovery.field)) return { kind: "unavailable", reason: "application-state-recovery-configuration" };
++      const existingState = checkpoint.serializedContext[recovery.contextKey];
++      if (record(existingState) && !Object.hasOwn(existingState, recovery.field)) {
++        await ports.authorize(call);
++        if (await ports.readReceipt(call) != null) throw new Error("Recovery receipt changed during application state recovery.");
++        const value = await recovery.recover({ ...call, binding: payload.binding, payload, selectedOrigin: selected.origin, serializedContext: checkpoint.serializedContext });
++        await ports.authorize(call);
++        if (await ports.readReceipt(call) != null) throw new Error("Recovery receipt changed during application state recovery.");
++        if (value !== undefined) checkpoint = { ...checkpoint, serializedContext: { ...checkpoint.serializedContext, [recovery.contextKey]: { ...existingState, [recovery.field]: structuredClone(value) } } };
++      }
++    }
 +    if (checkpoint.sessionState.sessionId !== descriptor.logicalSessionId || checkpoint.serializedContext["eve.sessionId"] !== descriptor.logicalSessionId) return { kind: "uncertain", reason: "checkpoint-identity-mismatch" };
 +    preparing("pre_start_authorization");
 +    await ports.authorize(call);

@@ -8,6 +8,7 @@ import { assertOwnedPublicationReconciliationScope } from "../repository/github-
 import { assertExactImmutableGitHubSourceReceipt } from "../repository/github-publication";
 import type { ImmutableGitHubSourceReceipt } from "../repository/github-publication";
 import type { ExistingDraftObservation } from "../repository/github-draft-update";
+import { resolveDraftReviewedWorkflow } from "./draft-reviewed-lineage";
 
 /** A second acquired source; the accepted fresh-template workflow remains its origin. */
 export interface PublishedDraftRepairSource {
@@ -127,11 +128,12 @@ export const createPublishedDraftRepairSource = (
 
 /** One authority predicate for every candidate consumer, including compiled source capture. */
 export const currentDraftCandidateSource = (
-  state: AppBuilderWorkflowState,
+  workflow: AppBuilderWorkflowState,
   candidate: DraftReconciliationCandidate | null,
 ): ImmutableGitHubSourceReceipt | undefined => {
+  const state = resolveDraftReviewedWorkflow(workflow, candidate);
   if (
-    state.phase !== "reviewed" ||
+    state === undefined ||
     candidate === null ||
     state.reviewReceipt.digest !== candidate.originalReviewDigest
   ) {

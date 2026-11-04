@@ -146,6 +146,16 @@ relabel the runtime as local, fetch OIDC, or copy a signer. The similarly named
 `APP_TEST_MANAGED_PUBLIC_PROFILE` belongs to the suite; private suite selectors
 and lifecycle capabilities are never app environment variables.
 
+The host reads public keys through the existing server Realm HTTP transport,
+using the operator project's verified native OIDC identity and the exact
+configured public Gateway `/_platform/jwks.json` GET endpoint. Normal-account
+Auth transport remains restricted to its Auth routes and is not used for this
+read. Planning and current-owner authority surround the read; app, project,
+branch, Preview environment and team must retain the approved resource binding.
+The managed profile's public Gateway key URL may differ from the immutable
+native deployment's key URL. Consumers bind the managed profile to their app
+and public origin rather than substituting native credential-based key loading.
+
 ## Managed execution and routing
 
 Ports are server-derived by one fixed structured Node command holding two
