@@ -53,6 +53,19 @@ requires fresh exact effect approval. The old intent exposes `supersededBy`
 and cannot execute again. An uncertain active attempt must instead reconcile
 its original intent; recovery never reinterprets old approval for a new root.
 
+An existing attempt can also resume the same named Sandbox after its provider
+process session changes, but only before any runtime or suite dispatch,
+publication, cancellation or supersession. The owner rechecks the original
+approval and attempt fence, then atomically records the new provider session in
+both locator and current identity with its observed lease expiry. The attempt,
+approval, capabilities, root and worker remain unchanged. A conflicting or lost
+journal response must be reconciled before launch; installed worker bytes are
+verified again through the normal asset helper. Once dispatch is attempted,
+even without a returned command ID, a changed provider session remains blocked.
+Before dispatch, owner checks continue but no process lease is written. Renewal
+starts with the durable dispatch marker, including an uncertain command response,
+so an old-session renewal cannot overwrite the newly rebound worker identity.
+
 Before requesting consent, Builder owner-verifies the saved exact plan and
 reconciles any previously recorded native approval, including when the intent
 still says `planned`. A verified receipt advances that same intent to `approved`
