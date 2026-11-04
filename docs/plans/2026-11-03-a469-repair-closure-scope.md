@@ -37,15 +37,15 @@ Never resend `a469-preview-target-approved-batch` or invent its settlement.
 
 ## Repairs already implemented, but not yet working-app evidence
 
-| Area | Current source evidence | Remaining proof |
-| --- | --- | --- |
-| Local tool exposure and saved-cycle recovery | Normal internal planning tool is exposed through the same five public controls; saved local cycle is retained. | Complete actual saved planning/apply/preview sequence. |
-| Original source import | Exact original archive baseline, compact host-tree import, merge-parent handling and repeated replans are implemented. | Actual saved app must complete reconciliation. |
-| Earlier source overlay | Engine and native receipt-to-workflow adapter authenticate the completed retained transport and preserve app/checkpoint/genuine shared changes. | Actual saved app must exercise this recovered baseline; adapter checks alone are not a successful app run. |
-| Build capacity and checks | Fresh 8-vCPU/16-GiB, one-worker plan, normal Build approval and durable SDK-operation journal; lint plugins/types remain enabled. | New actual approval, same-workspace update/readback, validation. No resize has run. |
-| Dependencies and runtime tools | Ordinary dependency reconciliation and repository tool environment fixes are implemented. | Actual saved app dependency install, checks and preview startup. |
-| Local Auth origin | Owned local cluster and complete private-checkpoint checks precede initial localhost-to-preview HTTPS handoff. Real disposable PostgreSQL/BetterAuth checks pass. | Actual app's loaded origin, login/session/logout and persistent action. |
-| Normal destination/public-release/revision helpers | Owner-scoped destination, credential retention, fresh release approvals and same-project delivery mechanics exist. | Consumed local/operator composition and complete public product journey. |
+| Area                                               | Current source evidence                                                                                                                                           | Remaining proof                                                                                            |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Local tool exposure and saved-cycle recovery       | Normal internal planning tool is exposed through the same five public controls; saved local cycle is retained.                                                    | Complete actual saved planning/apply/preview sequence.                                                     |
+| Original source import                             | Exact original archive baseline, compact host-tree import, merge-parent handling and repeated replans are implemented.                                            | Actual saved app must complete reconciliation.                                                             |
+| Earlier source overlay                             | Engine and native receipt-to-workflow adapter authenticate the completed retained transport and preserve app/checkpoint/genuine shared changes.                   | Actual saved app must exercise this recovered baseline; adapter checks alone are not a successful app run. |
+| Build capacity and checks                          | Fresh 8-vCPU/16-GiB, one-worker plan, normal Build approval and durable SDK-operation journal; lint plugins/types remain enabled.                                 | New actual approval, same-workspace update/readback, validation. No resize has run.                        |
+| Dependencies and runtime tools                     | Ordinary dependency reconciliation and repository tool environment fixes are implemented.                                                                         | Actual saved app dependency install, checks and preview startup.                                           |
+| Local Auth origin                                  | Owned local cluster and complete private-checkpoint checks precede initial localhost-to-preview HTTPS handoff. Real disposable PostgreSQL/BetterAuth checks pass. | Actual app's loaded origin, login/session/logout and persistent action.                                    |
+| Normal destination/public-release/revision helpers | Owner-scoped destination, credential retention, fresh release approvals and same-project delivery mechanics exist.                                                | Consumed local/operator composition and complete public product journey.                                   |
 
 ## Confirmed cross-layer gaps to close together
 
