@@ -55,6 +55,16 @@ describe("untrusted application source bytes", () => {
     c.files.pop();
     expect(() => validateApplicationSourceArtifact(c)).toThrow();
   });
+  it("rejects case-colliding source destinations", () => {
+    const a = artifact();
+    const bytes = Buffer.from("x");
+    a.manifest.files = [entry("apps/my-app/Logo.bin", bytes), entry("apps/my-app/logo.bin", bytes)];
+    a.files = a.manifest.files.map((file) => ({
+      path: file.path,
+      contentBase64: bytes.toString("base64"),
+    }));
+    expect(() => validateApplicationSourceArtifact(a)).toThrow();
+  });
   it.each([
     "../escape",
     "apps/other-app/code.ts",

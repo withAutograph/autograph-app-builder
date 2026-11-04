@@ -21,13 +21,25 @@ const sourcePath = z
       value.split("/").every((part) => part !== "" && part !== "." && part !== ".."),
     "An unambiguous repository-relative source path is required",
   );
-export const applicationSourceOmissionReason = (value: string) => {
-  const parts = value.split("/");
+const sourceOmissionKindSchema = z.enum(["credential", "runtime-state", "dependency-cache"]);
+export const applicationSourceOmissionReason = (
+  value: string,
+): z.infer<typeof sourceOmissionKindSchema> | undefined => {
+  const parts = value.split("/").slice(2);
   if (
     parts.some(
       (part) =>
         /^\.env(?:\.|$)/u.test(part) ||
-        [".npmrc", ".pypirc", "credentials.json", "cookies.json"].includes(part) ||
+        [
+          ".npmrc",
+          ".pypirc",
+          ".netrc",
+          ".aws",
+          ".ssh",
+          ".kube",
+          "credentials.json",
+          "cookies.json",
+        ].includes(part) ||
         /\.(?:pem|key|p12|pfx)$/iu.test(part),
     )
   ) {
@@ -49,9 +61,8 @@ export const applicationSourceOmissionReason = (value: string) => {
     return "runtime-state";
   }
   if (
-    parts.some((part) =>
-      ["node_modules", ".next", ".turbo", ".cache", "coverage", "dist", "build"].includes(part),
-    )
+    parts.some((part) => ["node_modules", ".turbo", ".cache"].includes(part)) ||
+    [".next", "coverage", "dist", "build"].includes(parts[0] ?? "")
   ) {
     return "dependency-cache";
   }
@@ -86,7 +97,7 @@ export const applicationSourceManifestSchema = z
   })
   .superRefine((manifest, context) => {
     const paths = [...manifest.files, ...manifest.omissions].map((entry) => entry.path);
-    if (new Set(paths).size !== paths.length) {
+    if (new Set(paths.map((entry) => entry.normalize("NFC").toLowerCase())).size !== paths.length) {
       context.addIssue({ code: "custom", message: "Source inventory paths must be unique" });
     }
     if (manifest.files.some((entry) => applicationSourceOmissionReason(entry.path) !== undefined)) {
@@ -123,3 +134,14 @@ export const sourceCandidateReferenceSchema = z.strictObject({
   manifestDigest: digest,
 });
 export type SourceCandidateReference = z.infer<typeof sourceCandidateReferenceSchema>;
+
+export const applicationSourceExportReferenceSchema = z.strictObject({
+  kind: z.literal("application-source-export-v1"),
+  appId: z.string(),
+  sourceSessionId: z.string(),
+  manifestDigest: digest,
+  downloadPath: z.string().regex(/^\/application-source\/[A-Za-z0-9._:@-]+\/[a-f0-9]{64}$/u),
+  fileCount: z.number().int().nonnegative(),
+  bytes: z.number().int().nonnegative(),
+  omissionCount: z.number().int().nonnegative(),
+});

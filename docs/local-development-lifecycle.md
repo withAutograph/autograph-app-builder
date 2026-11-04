@@ -410,3 +410,29 @@ reads those same owner/session-bound pages after compute cleanup. Interrupted
 capture remains distinguishable from completed output. Hosted validation retains
 its authenticated PostgreSQL store. Diagnostic simulated-target fixtures do not
 publish app releases or stand in for hosted product qualification.
+
+## Save a local app as portable source
+
+Once the accepted app's apply or validation command has stopped, ask the same
+Builder conversation to save its current app source. The internal
+`export-application-source` tool captures the actual owning Sandbox workspace,
+not the initial host checkout or an earlier compiled artifact. The five public
+Builder lifecycle tools stay unchanged: use an ordinary `autograph_send` only
+when that saved session is waiting without unresolved input.
+
+The public session result exposes `applicationSource.downloadPath`. Open that
+path on the same local Builder origin to download an attachment containing the
+app-owned code, binary assets, executable-file modes and checked schema history.
+The manifest reports omitted credentials, local runtime/session state,
+dependencies/caches, symlinks and unsupported entries. A changing source or
+cancelled owner produces no usable receipt. Inspect omissions before upload;
+this is source transfer, not a database backup.
+
+Downloads remain in the original owner-only local cycle state. They are served
+as `application/octet-stream` attachments with `nosniff`, never inline HTML.
+The download route is available only to the exact loopback development origin
+and actual local cycle. This does not create an authenticated hosted principal.
+A later authenticated Builder session receives these files as untrusted source;
+its app registration, dependencies, identity, destination, resource setup,
+approvals and publication remain ordinary fresh Builder work. No native journal,
+provider installation, Auth session, data or old approval is transferred.

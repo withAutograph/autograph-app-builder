@@ -1,3 +1,4 @@
+import { applicationSourceExportReferenceSchema } from "../handoff/application-source-contract";
 import { z } from "zod";
 
 import { githubRepositoryAccessSchema } from "../integrations/store-in-view-model";
@@ -232,6 +233,7 @@ export const eveSessionResultSchema = z
     error: z.object({ code: z.string(), message: z.string() }).strict().optional(),
     events: z.array(publicEveEventSchema),
     inputRequests: z.array(publicInputRequestSchema).optional(),
+    applicationSource: applicationSourceExportReferenceSchema.optional(),
     prototype: publicPrototypeSchema.optional(),
     prototypeRef: publicPrototypeReferenceSchema.optional(),
     sessionId: z.string(),

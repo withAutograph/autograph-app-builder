@@ -1,3 +1,4 @@
+import { latestInstalledApplicationSource } from "./public-application-source";
 import {
   guardRequestIds,
   pendingFrameworkGuardIds,
@@ -339,6 +340,7 @@ function resultForEvents(
   const projected = projectInstalledEveEvents(snapshotEvents);
   const events = projected.slice(cursor, cursor + limit);
   const inputRequests = outstandingInstalledEveRequests(snapshotEvents);
+  const applicationSource = latestInstalledApplicationSource(snapshotEvents);
   const prototype = latestInstalledPrototype(snapshotEvents);
   const uiPreview = latestInstalledUiPreview(snapshotEvents);
   const workingPreview = latestInstalledWorkingPreview(snapshotEvents);
@@ -350,6 +352,7 @@ function resultForEvents(
     ...(inputRequests.length === 0 || options.suppressInputRequests === true
       ? {}
       : { inputRequests }),
+    ...(applicationSource === undefined ? {} : { applicationSource }),
     ...(prototype === undefined ? {} : { prototype }),
     ...(uiPreview === undefined ? {} : { uiPreview }),
     ...(workingPreview === undefined ? {} : { workingPreview }),
@@ -362,6 +365,7 @@ function acceptedResult(
   sessionId: string,
   snapshotEvents: readonly MessageStreamEvent[] = [],
 ): EveSessionResult {
+  const applicationSource = latestInstalledApplicationSource(snapshotEvents);
   const prototype = latestInstalledPrototype(snapshotEvents);
   const uiPreview = latestInstalledUiPreview(snapshotEvents);
   const workingPreview = latestInstalledWorkingPreview(snapshotEvents);
@@ -370,6 +374,7 @@ function acceptedResult(
     events: [],
     sessionId,
     status: "working",
+    ...(applicationSource === undefined ? {} : { applicationSource }),
     ...(prototype === undefined ? {} : { prototype }),
     ...(uiPreview === undefined ? {} : { uiPreview }),
     ...(workingPreview === undefined ? {} : { workingPreview }),
