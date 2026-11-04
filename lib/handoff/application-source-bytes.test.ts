@@ -1,0 +1,72 @@
+import { createHash } from "node:crypto";
+import { describe, expect, it } from "vitest";
+import {
+  applicationSourceManifestDigest,
+  validateApplicationSourceArtifact,
+} from "./application-source-bytes";
+
+const entry = (path: string, bytes: Buffer) => ({
+  path,
+  mode: "100644" as const,
+  bytes: bytes.length,
+  sha256: createHash("sha256").update(bytes).digest("hex"),
+});
+const artifact = () => {
+  const binary = Buffer.from([0, 255, 2, 128]);
+  const code = Buffer.from("export default 1;");
+  return {
+    manifest: {
+      version: 1 as const,
+      kind: "application-source-v1" as const,
+      appId: "my-app",
+      displayName: "My App",
+      sourceSessionId: "new-session",
+      files: [
+        entry("apps/my-app/public/logo.bin", binary),
+        entry("apps/my-app/schema/release/v1/code.ts", code),
+      ],
+      omissions: [],
+    },
+    files: [
+      { path: "apps/my-app/public/logo.bin", contentBase64: binary.toString("base64") },
+      { path: "apps/my-app/schema/release/v1/code.ts", contentBase64: code.toString("base64") },
+    ],
+  };
+};
+describe("untrusted application source bytes", () => {
+  it("preserves binary and historical app schema bytes with deterministic inventory digest", () => {
+    const a = artifact();
+    const result = validateApplicationSourceArtifact(a);
+    expect(result.files.find((f) => f.path.endsWith("logo.bin"))?.bytes).toEqual(
+      Buffer.from([0, 255, 2, 128]),
+    );
+    expect(
+      applicationSourceManifestDigest({ ...a.manifest, files: a.manifest.files.toReversed() }),
+    ).toBe(result.manifestDigest);
+  });
+  it("rejects byte corruption, duplicates and file inventory mismatch", () => {
+    const a = artifact();
+    a.files[0].contentBase64 = "AQ==";
+    expect(() => validateApplicationSourceArtifact(a)).toThrow();
+    const b = artifact();
+    b.files.push(b.files[0]);
+    expect(() => validateApplicationSourceArtifact(b)).toThrow();
+    const c = artifact();
+    c.files.pop();
+    expect(() => validateApplicationSourceArtifact(c)).toThrow();
+  });
+  it.each([
+    "../escape",
+    "apps/other-app/code.ts",
+    "apps/my-app/.env.local",
+    "apps/my-app/node_modules/code.ts",
+    "apps/my-app/.eve/journal.json",
+    "apps/my-app/public/../secret",
+  ])("rejects unsafe imported path %s", (path) => {
+    const a = artifact();
+    const bytes = Buffer.from("x");
+    a.manifest.files = [entry(path, bytes)];
+    a.files = [{ path, contentBase64: bytes.toString("base64") }];
+    expect(() => validateApplicationSourceArtifact(a)).toThrow();
+  });
+});
