@@ -1,8 +1,13 @@
+import { git, gitByteInvocation, gitNulRecords } from "./source-read-git";
+import { inspectDevelopmentSourceGeneration } from "./development-source-generation";
+import type { PreparedSourceFile } from "./development-source-generation";
+
+import { retainPreparedLocalSourceBaseline } from "./local-source-baseline-retention";
 import { getBuilderSandboxId } from "../sandbox/builder-sandbox";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { createReadStream, existsSync, lstatSync } from "node:fs";
+import { createReadStream } from "node:fs";
 import { realpath } from "node:fs/promises";
 import nodePath from "node:path";
 import { tmpdir } from "node:os";
@@ -17,11 +22,13 @@ import {
   digestProcessStdout,
   digestProcessStdoutSync,
   processStdoutByteStream,
-  streamProcessStdout,
 } from "./captured-process-output";
 import { safeSourcePath } from "./source-path";
 import { hasTestCapability } from "../testing/test-capability";
 import { runSequentially } from "../async-sequential";
+
+export { inspectDevelopmentSourceGeneration } from "./development-source-generation";
+export type { PreparedSourceFile } from "./development-source-generation";
 
 export const SUPPORTED_TEMPLATE_ADAPTER = "arrusted-development-v0";
 
@@ -187,18 +194,6 @@ const sha256 = function sha256(value: string | Uint8Array): string {
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting.
-async function hashFile(filePath: string): Promise<string> {
-  const hash = createHash("sha256");
-  for await (const chunk of createReadStream(filePath)) {
-    if (!(chunk instanceof Uint8Array)) {
-      throw new Error("The development source returned non-byte file content.");
-    }
-    hash.update(chunk);
-  }
-  return hash.digest("hex");
-}
-
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting.
 function fileReadableStream(filePath: string): ReadableStream<Uint8Array> {
   const file = createReadStream(filePath);
   const iterator = file[Symbol.asyncIterator]();
@@ -233,106 +228,9 @@ export interface SupportedTemplateDependencyClosure {
   digest: string;
 }
 
-const git = function git(path: string, args: string[]): string {
-  const executable = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
-  return captureProcessStdout(
-    executable,
-    [
-      "-c",
-      "core.hooksPath=/dev/null",
-      "-c",
-      "core.fsmonitor=false",
-      "-c",
-      "core.attributesfile=/dev/null",
-      "-C",
-      path,
-      ...args,
-    ],
-    {
-      env: {
-        GIT_ATTR_NOSYSTEM: "1",
-        GIT_CONFIG_GLOBAL: "/dev/null",
-        GIT_CONFIG_NOSYSTEM: "1",
-        GIT_CONFIG_SYSTEM: "/dev/null",
-        HOME: "/dev/null",
-        LANG: "C.UTF-8",
-        LC_ALL: "C.UTF-8",
-        NODE_ENV: process.env.NODE_ENV ?? "production",
-        PATH: "/usr/bin:/bin",
-        TMPDIR: "/tmp",
-        XDG_CONFIG_HOME: "/dev/null",
-      },
-    },
-  )
-    .toString("utf-8")
-    .trim();
-};
-
-const gitByteInvocation = (path: string, args: string[]) => ({
-  args: [
-    "-c",
-    "core.hooksPath=/dev/null",
-    "-c",
-    "core.fsmonitor=false",
-    "-c",
-    "core.attributesfile=/dev/null",
-    "-c",
-    "credential.helper=",
-    "-c",
-    "protocol.allow=never",
-    "-C",
-    path,
-    ...args,
-  ],
-  command: existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git",
-  options: {
-    env: {
-      GIT_ATTR_NOSYSTEM: "1",
-      GIT_CONFIG_GLOBAL: "/dev/null",
-      GIT_CONFIG_NOSYSTEM: "1",
-      GIT_CONFIG_SYSTEM: "/dev/null",
-      GIT_NO_LAZY_FETCH: "1",
-      GIT_TERMINAL_PROMPT: "0",
-      HOME: "/dev/null",
-      LANG: "C.UTF-8",
-      LC_ALL: "C.UTF-8",
-      NODE_ENV: process.env.NODE_ENV ?? "production",
-      PATH: "/usr/bin:/bin",
-      TMPDIR: "/tmp",
-      XDG_CONFIG_HOME: "/dev/null",
-    },
-  },
-});
-
 const gitBytes = function gitBytes(path: string, args: string[]): Buffer {
   const command = gitByteInvocation(path, args);
   return captureProcessStdout(command.command, command.args, command.options);
-};
-
-const gitStream = (path: string, args: string[]): AsyncGenerator<Uint8Array> => {
-  const command = gitByteInvocation(path, args);
-  return streamProcessStdout(command.command, command.args, command.options);
-};
-
-const gitNulRecords = async function* gitNulRecords(
-  stream: AsyncIterable<Uint8Array>,
-): AsyncGenerator<string> {
-  let pending = Buffer.alloc(0);
-  for await (const chunk of stream) {
-    if (!(chunk instanceof Uint8Array)) {
-      throw new Error("Git emitted a non-byte source record.");
-    }
-    const bytes = pending.byteLength === 0 ? Buffer.from(chunk) : Buffer.concat([pending, chunk]);
-    let start = 0;
-    for (let index = bytes.indexOf(0); index !== -1; index = bytes.indexOf(0, start)) {
-      yield bytes.subarray(start, index).toString("utf-8");
-      start = index + 1;
-    }
-    pending = bytes.subarray(start);
-  }
-  if (pending.byteLength > 0) {
-    throw new Error("Git returned an incomplete source-tree record.");
-  }
 };
 
 export const inspectSupportedTemplateDependencyClosure =
@@ -841,13 +739,6 @@ const sandboxSourceChecksumsPath = ".app-builder/source-checksums.sha256";
 const sandboxSourceArchivePath = ".app-builder/source-tree.tar.gz";
 
 const fixtureSandboxEnabled = () => hasTestCapability("simulated-target");
-
-export interface PreparedSourceFile {
-  mode: "100644" | "100755";
-  objectId: string;
-  path: string;
-  sha256: string;
-}
 
 const exactKeys = function exactKeys(
   value: Record<string, unknown>,
@@ -1549,76 +1440,6 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
  * snapshot transport above: normal edits are live planning input, while the
  * sandbox-owned repository remains the mutable execution overlay.
  */
-export const inspectDevelopmentSourceGeneration = async (sourcePathInput: string) => {
-  const sourcePath = await realpath(nodePath.resolve(sourcePathInput));
-  const sourceSha = git(sourcePath, ["rev-parse", "HEAD"]);
-  const eligibilityDigest = sha256(sourceSha);
-
-  const listedNames: string[] = [];
-  for await (const name of gitNulRecords(
-    gitStream(sourcePath, ["ls-files", "-z", "--cached", "--others", "--exclude-standard"]),
-  )) {
-    listedNames.push(name);
-  }
-  const names = listedNames.toSorted().filter((path) => {
-    if (!safeSourcePath(path)) {
-      throw new Error("The development source contains an unsafe path.");
-    }
-    const absolutePath = nodePath.resolve(sourcePath, path);
-    if (!within(sourcePath, absolutePath)) {
-      throw new Error("The development source escapes its root.");
-    }
-    // `git ls-files --cached` keeps a deleted tracked path until it is
-    // staged. Development follows the working tree, so that path is a
-    // managed deletion rather than a failed source snapshot.
-    try {
-      lstatSync(absolutePath);
-      return true;
-    } catch (error) {
-      if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-        return false;
-      }
-      throw error;
-    }
-  });
-  const sourceFiles: PreparedSourceFile[] = [];
-  for (const path of names) {
-    const absolutePath = nodePath.resolve(sourcePath, path);
-    const info = lstatSync(absolutePath);
-    // Tar carries symlinks, submodule directories, and other ordinary Git
-    // working-tree entries. They do not need to fit the old regular-file
-    // receipt shape in order for the repository to run.
-    if (!info.isFile() || info.isSymbolicLink()) {
-      continue;
-    }
-    // oxlint-disable-next-line eslint/no-await-in-loop -- Hash source files incrementally to avoid whole-file buffering.
-    const digest = await hashFile(absolutePath);
-    sourceFiles.push({
-      // oxlint-disable-next-line eslint/no-bitwise -- Intentional executable-mode bitmask.
-      mode: (info.mode & 0o111) === 0 ? "100644" : "100755",
-      // The live working tree has no stable Git object for edited/untracked
-      // files. Its byte digest is the development-generation identity.
-      objectId: digest.slice(0, 40),
-      path,
-      sha256: digest,
-    });
-  }
-  if (sourceFiles.length === 0) {
-    throw new Error("The development source contains no files.");
-  }
-  const workspaceDigest = sha256(JSON.stringify(sourceFiles));
-  const generation = workspaceDigest.slice(0, 40);
-
-  return {
-    sourcePath,
-    sourceSha,
-    eligibilityDigest,
-    names,
-    sourceFiles,
-    workspaceDigest,
-    generation,
-  };
-};
 
 export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopmentSandboxWorkspace(
   sourcePathInput: string,
@@ -1641,7 +1462,6 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
   } = await inspectDevelopmentSourceGeneration(sourcePathInput);
   // Retain actual selected live bytes before effects or an immutable workspace
   // receipt; the launcher's earlier snapshot can describe different input.
-  const { retainPreparedLocalSourceBaseline } = await import("./local-source-baseline-retention");
   await retainPreparedLocalSourceBaseline({
     sourcePath,
     sourceSha,

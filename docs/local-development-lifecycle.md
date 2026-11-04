@@ -512,3 +512,9 @@ transfer remains a visible failure. Historical regular-file digests cannot prove
 dirty symlink targets; legacy symlink recovery fails closed. New preparation
 artifacts separately retain their exact captured Git tree, and a conflicting tree
 cannot replace an existing original-source/digest artifact.
+
+Local Builder workflow qualification includes the installed Eve authored-channel
+bundle and Workflow bundle build. Relative lazy imports can create unsupported
+split authored modules even when TypeScript and focused unit tests pass. Shared
+source custody uses a static, acyclic module graph; qualify that actual compiler
+boundary before restarting a saved development cycle.

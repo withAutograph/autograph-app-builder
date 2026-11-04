@@ -1,6 +1,8 @@
 import { readLocalOperatorArtifactAuthority } from "../provisioning/local-operator-artifact-store";
+import { captureLocalPlanningSource } from "./local-planning-source-capture";
+import { retainLocalSourceBaseline } from "./local-source-baseline-store";
 import type { retainLocalSourceBaseline as RetainLocalSourceBaseline } from "./local-source-baseline-store";
-import type { inspectDevelopmentSourceGeneration } from "./supported-template";
+import type { inspectDevelopmentSourceGeneration } from "./development-source-generation";
 
 /** Retain the exact first live planning input before its workspace receipt can freeze. */
 export const retainPreparedLocalSourceBaseline = async (
@@ -26,10 +28,6 @@ export const retainPreparedLocalSourceBaseline = async (
   if (authority === undefined) {
     return;
   }
-  const [{ captureLocalPlanningSource }, { retainLocalSourceBaseline }] = await Promise.all([
-    import("./local-planning-source"),
-    import("./local-source-baseline-store"),
-  ]);
   const capture = await (dependencies.capture ?? captureLocalPlanningSource)(
     expected.sourcePath,
     expected.sourceSha,
