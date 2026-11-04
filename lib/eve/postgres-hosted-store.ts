@@ -25,6 +25,7 @@ import {
   assertRecoveredBuildContinuationChild,
   recoveredBuildDecision,
   inheritRecoveryBuildDecision,
+  matchesNativeExecutionTransferCheckpoint,
 } from "./hosted-store";
 import {
   nativeRecoveryDescriptorSchema,
@@ -1318,9 +1319,10 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           }
           if (
             candidate.nativeRecovery?.executionTransfer !== undefined &&
-            (source.status !== "input_required" ||
-              toDurableHostedSessionRecord(source).checkpointDigest !==
-                candidate.nativeRecovery.executionTransfer.sourceCheckpointDigest)
+            !matchesNativeExecutionTransferCheckpoint(
+              source,
+              candidate.nativeRecovery.executionTransfer,
+            )
           ) {
             return { disposition: "conflict" as const };
           }

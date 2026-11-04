@@ -306,7 +306,7 @@ export const eveStartInputSchema = z
     handoffId: z.string().uuid().optional(),
     prompt: z.string().trim().min(1).max(32_000).optional(),
     resumeSessionId: z.string().min(1).max(200).optional(),
-    resumeMode: z.literal("recover").optional(),
+    resumeMode: z.enum(["recover", "recover-idle"]).optional(),
   })
   .strict()
   .superRefine(({ prompt, handoffId, resumeSessionId, resumeMode }, context) => {

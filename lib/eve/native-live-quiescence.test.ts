@@ -81,7 +81,11 @@ const actor = {
   principalId: "owner",
   attributes: {},
 };
-const fixture = () => {
+const fixture = (transferKind: "pending-approval" | "idle-checkpoint" = "pending-approval") => {
+  const selectedDescriptor: TerminalRecoveryDescriptor = {
+    ...descriptor,
+    executionTransfer: { kind: transferKind, sourceCheckpointDigest: `sha256:${"a".repeat(64)}` },
+  };
   let nativeStatus = "running";
   let physicalOwner = "old-native";
   let lineageParents: string[] = [];
@@ -176,7 +180,7 @@ const fixture = () => {
     }),
   );
   const start = vi.fn<TerminalRecoveryDependencies["start"]>((input) => {
-    ready = { ...descriptor, ownerRunId: "new-native", provenance: input.provenance };
+    ready = { ...input.descriptor, ownerRunId: "new-native", provenance: input.provenance };
     return Promise.resolve();
   });
   const stopSource = vi.fn<NonNullable<TerminalRecoveryDependencies["stopSource"]>>(
@@ -250,7 +254,11 @@ const fixture = () => {
     candidates: [
       {
         kind: "committed-turn-output",
-        origin: { stepId: "step", eventId: "event", slot: 1 },
+        origin: {
+          stepId: provenance.selectedOrigin.stepId,
+          eventId: provenance.selectedOrigin.eventId,
+          slot: provenance.selectedOrigin.slot,
+        },
         sessionState: after,
         serializedContext: { "eve.sessionId": "logical" },
       },
@@ -293,11 +301,36 @@ const fixture = () => {
     stopSource,
     before,
     after,
-    run: () => runtime.recoverTerminalSession({ auth: actor, descriptor, ports }, dependencies),
+    run: () =>
+      runtime.recoverTerminalSession(
+        { auth: actor, descriptor: selectedDescriptor, ports },
+        dependencies,
+      ),
     getNativeStatus: () => nativeStatus,
     setCheckpointState: (state: typeof before) => {
       before = state;
       after = state;
+    },
+    setTurnState: (turnId: string) => {
+      const state = durable.createDurableSessionState({
+        session: {
+          ...session,
+          state: {
+            "eve.harness.emission": { sessionStarted: true, sequence: 1, stepIndex: 0, turnId },
+          },
+          history: [{ role: "assistant", content: "Completed ordinary turn" }],
+        },
+      });
+      before = state;
+      after = state;
+    },
+    setCheckpointOrigin: (slot: number) => {
+      provenance.selectedOrigin = {
+        ...provenance.selectedOrigin,
+        slot,
+        stepId: `step-${slot}`,
+        eventId: `event-${slot}`,
+      };
     },
     setLineage: (parents: string[]) => {
       lineageParents = parents;
@@ -1557,6 +1590,90 @@ describe("idle source execution transfer", () => {
     const result = await f.run();
     expect(result.kind).toBe("unavailable");
     expect(f.stopSource).not.toHaveBeenCalled();
+    expect(f.start).not.toHaveBeenCalled();
+  });
+});
+
+describe("explicit idle-checkpoint execution transfer", () => {
+  it("recovers a completed idle checkpoint through the same owned stop and native receipt path", async () => {
+    const f = fixture("idle-checkpoint");
+    f.setTurnState("");
+    const result = await f.run();
+    expect(result).toMatchObject({
+      kind: "accepted",
+      recoveryBinding: {
+        executionTransfer: { kind: "idle-checkpoint" },
+        provenance: { resumePhase: "await-input" },
+      },
+    });
+    expect(f.stopSource).toHaveBeenCalledWith(
+      "old-native",
+      "Builder native execution transfer transfer",
+    );
+    expect(f.start).toHaveBeenCalledTimes(1);
+  });
+  it("does not treat a pending tool approval as an idle checkpoint", async () => {
+    const f = fixture("idle-checkpoint");
+    expect(await f.run()).toMatchObject({ kind: "unavailable", reason: "source-idle-not-parked" });
+    expect(f.stopSource).not.toHaveBeenCalled();
+    expect(f.start).not.toHaveBeenCalled();
+  });
+  it("rejects an active ordinary turn even when no tool or approval is pending", async () => {
+    const f = fixture("idle-checkpoint");
+    f.setTurnState("active-ordinary-turn");
+    expect(await f.run()).toMatchObject({ kind: "unavailable", reason: "source-idle-not-parked" });
+    expect(f.stopSource).not.toHaveBeenCalled();
+    expect(f.start).not.toHaveBeenCalled();
+  });
+  it("refuses a different completed checkpoint before stopping the same physical owner", async () => {
+    const f = fixture("idle-checkpoint");
+    f.setTurnState("");
+    const reconcile = f.dependencies.reconcileLineagePreflight;
+    if (reconcile === undefined) {
+      throw new Error("Missing native preflight fixture");
+    }
+    let observed = false;
+    f.dependencies.reconcileLineagePreflight = async (input) => {
+      if (observed) {
+        f.setCheckpointOrigin(2);
+      }
+      observed = true;
+      return await reconcile(input);
+    };
+    expect(await f.run()).toMatchObject({ kind: "uncertain", reason: "source-checkpoint-changed" });
+    expect(f.stopSource).not.toHaveBeenCalled();
+    expect(f.start).not.toHaveBeenCalled();
+  });
+  it("retains uncertainty when checkpoint identity changes after the owned stop", async () => {
+    const f = fixture("idle-checkpoint");
+    f.setTurnState("");
+    const stop = f.stopSource.getMockImplementation();
+    if (stop === undefined) {
+      throw new Error("Missing owned stop fixture");
+    }
+    f.stopSource.mockImplementation(async (...input) => {
+      await stop(...input);
+      f.setCheckpointOrigin(2);
+    });
+    expect(await f.run()).toMatchObject({ kind: "uncertain", reason: "source-checkpoint-changed" });
+    expect(f.stopSource).toHaveBeenCalledTimes(1);
+    expect(f.start).not.toHaveBeenCalled();
+  });
+  it("pins the final terminal recollection to the exact idle checkpoint proved before stop", async () => {
+    const f = fixture("idle-checkpoint");
+    f.setTurnState("");
+    const collect = f.collect.getMockImplementation();
+    if (collect === undefined) {
+      throw new Error("Missing collector fixture");
+    }
+    f.collect.mockImplementation(async (input) => {
+      if (input.allowParked !== true) {
+        f.setCheckpointOrigin(2);
+      }
+      return await collect(input);
+    });
+    expect(await f.run()).toMatchObject({ kind: "uncertain", reason: "source-checkpoint-changed" });
+    expect(f.stopSource).toHaveBeenCalledTimes(1);
     expect(f.start).not.toHaveBeenCalled();
   });
 });

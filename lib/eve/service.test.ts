@@ -50,6 +50,26 @@ describe("Eve input response mapping", () => {
 });
 
 describe("local Eve acceptance", () => {
+  it.each(["recover", "recover-idle"] as const)(
+    "refuses hosted-only %s without replacing a local session",
+    async (resumeMode) => {
+      const attach = vi.fn();
+      const create = vi.fn();
+      const service = createLocalEveSessionService(
+        { sessions: { attach, create } as never },
+        { stateGeneration: `hosted-only-${resumeMode}` },
+      );
+      await expect(
+        service.start({
+          clientRequestId: "recover-original",
+          resumeSessionId: "original",
+          resumeMode,
+        }),
+      ).rejects.toBeInstanceOf(LocalSessionRecoveryUnavailableError);
+      expect(attach).not.toHaveBeenCalled();
+      expect(create).not.toHaveBeenCalled();
+    },
+  );
   it("returns an actionable missing original request result without touching the adapter", async () => {
     const attach = vi.fn();
     const create = vi.fn();

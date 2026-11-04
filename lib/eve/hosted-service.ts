@@ -4566,11 +4566,15 @@ export function createHostedEveSessionService(input: {
           prior === undefined || prior === null
             ? undefined
             : hostedOperationRecordSchema.parse(prior).nativeRecovery;
-        const executionTransfer = request.resumeMode === "recover";
+        const executionTransfer = request.resumeMode !== undefined;
+        const transferKind =
+          request.resumeMode === "recover-idle" ? "idle-checkpoint" : "pending-approval";
         if (
           executionTransfer &&
           retainedRecovery?.executionTransfer === undefined &&
-          (existing.status !== "input_required" || existing.checkpointDigest === undefined)
+          (existing.status !==
+            (transferKind === "idle-checkpoint" ? "waiting" : "input_required") ||
+            existing.checkpointDigest === undefined)
         ) {
           throw new HostedSessionRecoveryUnavailableError();
         }
@@ -4594,7 +4598,7 @@ export function createHostedEveSessionService(input: {
                   ...(executionTransfer && existing.checkpointDigest !== undefined
                     ? {
                         executionTransfer: {
-                          kind: "pending-approval" as const,
+                          kind: transferKind,
                           sourceCheckpointDigest: existing.checkpointDigest,
                         },
                       }

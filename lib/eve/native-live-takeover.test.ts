@@ -111,6 +111,71 @@ const disposition = async (
 };
 
 describe("explicit live native takeover", () => {
+  it("reserves an explicit idle checkpoint once and fences later source sends", async () => {
+    const store = new InMemoryHostedEveStore();
+    const idle = { ...source, status: "waiting" as const };
+    await seed(store, idle);
+    const recovery = hostedOperationRecordSchema.parse({
+      ...transfer,
+      nativeRecovery: {
+        ...descriptor,
+        executionTransfer: { ...descriptor.executionTransfer, kind: "idle-checkpoint" },
+      },
+    });
+    expect(await disposition(store, recovery)).toBe("reserved");
+    expect(await disposition(store, recovery)).toBe("existing");
+    expect(await disposition(store, { ...response("reserved"), kind: "send" })).toBe("rejected");
+    const cancelled = await store.recordCancellationIntent({
+      principal,
+      sessionId: source.sessionId,
+      nowEpochMs: 3,
+    });
+    expect(() => {
+      assertNativeRecoverySourceBinding(recovery, cancelled, {
+        ...descriptor,
+        executionTransfer: { ...descriptor.executionTransfer, kind: "idle-checkpoint" },
+      });
+    }).toThrow();
+  });
+  it("does not reserve idle recovery over a pending approval or a changed checkpoint", async () => {
+    const recovery = hostedOperationRecordSchema.parse({
+      ...transfer,
+      nativeRecovery: {
+        ...descriptor,
+        executionTransfer: { ...descriptor.executionTransfer, kind: "idle-checkpoint" },
+      },
+    });
+    expect(await disposition(await fixture(), recovery)).toBe("conflict");
+    const store = new InMemoryHostedEveStore();
+    await seed(store, { ...source, status: "waiting" });
+    expect(await disposition(store, transfer)).toBe("conflict");
+    expect(
+      await disposition(store, {
+        ...recovery,
+        nativeRecovery: {
+          ...descriptor,
+          executionTransfer: {
+            kind: "idle-checkpoint",
+            sourceCheckpointDigest: `sha256:${"e".repeat(64)}`,
+          },
+        },
+      }),
+    ).toBe("conflict");
+  });
+  it("refuses an idle transfer while an ordinary source mutation is reserved", async () => {
+    const store = new InMemoryHostedEveStore();
+    await seed(store, { ...source, status: "waiting" });
+    await store.reserveOperation(principal, { ...response("reserved"), kind: "send" });
+    expect(
+      await disposition(store, {
+        ...transfer,
+        nativeRecovery: {
+          ...descriptor,
+          executionTransfer: { ...descriptor.executionTransfer, kind: "idle-checkpoint" },
+        },
+      }),
+    ).toBe("rejected");
+  });
   it("requires an explicit existing-session recovery request", () => {
     expect(
       eveStartInputSchema.safeParse({
