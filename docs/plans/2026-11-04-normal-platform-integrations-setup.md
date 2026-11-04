@@ -1,9 +1,18 @@
 # Normal existing-platform Integrations setup and custody
 
-Status: design before implementation or effects. The verified-reference consumer
-is implemented separately; it does not provision missing infrastructure. This
-plan closes that gap through the existing Builder product controls. No hosted
-acceptance, resource ownership or caller grant is asserted by this document.
+Status: documented before implementation or effects. The verified-reference
+consumer is implemented separately; it does not provision missing infrastructure.
+The normal setup contract, ordered operation service, owner-scoped custody,
+native approval-history adapter and separate encrypted private custody are
+implemented as source checkpoints. Normal transport has an explicit plan and
+owner-bound approval shape. The existing internal plan/prepare/read tools route
+normal intent separately from frozen legacy intent, with workload and canonical
+owner verification in both transports. Unconfigured normal ports return an
+explicit prerequisite with zero effects. Real product planning, provider/worker
+ports and native activation are not yet composed; the factory must supply those
+proofs before enabling effects. Source qualification is not hosted acceptance,
+resource ownership or a caller grant. This plan closes the remaining gap through
+Builder product controls.
 
 ## Destination and source ownership
 
@@ -61,6 +70,27 @@ branch/environment keys, access policy, costs and native event receiver. Keep
 private credential custody encrypted and separate from public plan/artifact data.
 Never reinterpret an old isolated plan, worker catalog, approval, receipt or
 `a469-preview-target-approved-batch`; uncertain outcomes retain their meaning.
+
+The separate Development Auth setup and control setup share one owner-scoped
+normal Services assembly: one composition intent, exact existing project,
+reviewed repository/source, service graph and owned branch. Reserve that immutable
+assembly as planning metadata before either effect plan. Its `selectionState:
+planning` is not approval or provider settlement, even when its persistent
+metadata row uses the storage table's `settled` vocabulary. Changed source/policy
+must expose the original saved assembly; do not overwrite it or transfer consent.
+Only completed Auth resource/schema custody supplies private startup bindings;
+actual native activation and runtime readback remain required for realm eligibility.
+
+Every effect requires the real held physical-target lease, with its actual
+monotone generation recorded before dispatch. Use the maintained common project,
+resource, role and source lock namespaces so other writers of the same physical
+target still serialize. An effect ordinal is not a lease generation. A later
+lease reconciles an existing uncertain attempt under its original attempt ID and
+fence; it must not replace or resend that attempt. Recheck the current lease and
+owner around IO. Reconciliation re-reads the actual historical approved native
+call recorded in the operation; the current read-tool call is neither that
+approval nor new consent. Authenticated cancellation and current revocation
+continue to deny effects.
 
 ## Setup effects and proof
 
