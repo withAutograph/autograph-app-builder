@@ -2,7 +2,7 @@
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { execFile } from "node:child_process";
 import { createServer } from "node:net";
-import { promisify } from "node:util";
+import { isDeepStrictEqual, promisify } from "node:util";
 import { z } from "zod";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -28,6 +28,9 @@ import {
   continuityRecordSchema,
 } from "../provisioning/hosted-operator-continuity-contract";
 import type { ContinuityRecord } from "../provisioning/hosted-operator-continuity-contract";
+import { createHostedContinuityOperations } from "../provisioning/hosted-operator-continuity";
+import type { HostedContinuityDependencies } from "../provisioning/hosted-operator-continuity";
+import { createContinuityCapabilityCustody } from "../provisioning/hosted-operator-continuity-custody";
 
 // The native operator executes the real managed suite without agent tool or inference packages.
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Reproduce the actual missing deployment dependency; no runtime implementation is replaced.
@@ -542,6 +545,283 @@ describe("managed runtime execution through supported SDK ports", () => {
     expect(f.source.delete).toHaveBeenCalledTimes(1);
     await f.start();
     expect(f.provider.runCommand).toHaveBeenCalledTimes(1);
+  });
+  it("rebinds an installed but undispatched attempt after persistent sandbox resume, then launches and runs once", async () => {
+    const f = setup();
+    vi.mocked(f.deps.readExecution).mockRejectedValueOnce(new Error("Interrupted after install"));
+    await expect(f.start()).rejects.toThrow("Interrupted after install");
+    const original = f.read();
+    f.replace({ ...original, state: "reconciliation-required", pendingStage: "runtime" });
+    f.setSession("resumed-physical-session");
+    await f.start();
+    const recovered = f.read();
+    expect(recovered).toMatchObject({
+      requestId: original.requestId,
+      attemptId: original.attemptId,
+      fence: original.fence,
+      approval: original.approval,
+      workerAsset: { installed: true, disposed: true },
+      locator: {
+        ...original.locator,
+        providerSessionId: "resumed-physical-session",
+        dispatchAttempted: true,
+        commandId: "runtime-command",
+      },
+      current: { state: "ready", providerSessionId: "resumed-physical-session" },
+    });
+    expect(f.deps.installWorkerAsset).toHaveBeenCalledTimes(2);
+    expect(f.readSourceCreates()).toBe(1);
+    expect(f.source.delete).toHaveBeenCalledTimes(1);
+    await f.start();
+    const checkpointSuite = async (suiteCommandId: string) => {
+      f.replace({ ...f.read(), suiteCommandId });
+    };
+    await f.runtime.runSuite(context, f.read(), f.capabilities, f.guard, checkpointSuite, true);
+    await f.runtime.runSuite(context, f.read(), f.capabilities, f.guard, checkpointSuite, false);
+    expect(
+      vi
+        .mocked(f.provider.runCommand)
+        .mock.calls.filter(([call]) => call.cmd === worker.executablePath),
+    ).toHaveLength(1);
+    expect(
+      vi
+        .mocked(f.provider.runCommand)
+        .mock.calls.filter(([call]) => call.args.includes("test-e2e")),
+    ).toHaveLength(1);
+    await f.runtime.close(context, f.read(), async () => {});
+    expect(f.workerCommand.kill).toHaveBeenCalledWith("SIGTERM");
+  });
+  it("settles the retained approved operation through service CAS, resumed runtime and real suite without replanning or new consent", async () => {
+    const f = setup();
+    vi.mocked(f.deps.readExecution).mockRejectedValueOnce(new Error("Interrupted after install"));
+    await expect(f.start()).rejects.toThrow("Interrupted after install");
+    const retained = f.read();
+    const custody = createContinuityCapabilityCustody({
+      tokenKey: Buffer.alloc(32, 7),
+      tokenKeyVersion: "controlled-key",
+    });
+    f.replace({
+      ...retained,
+      state: "reconciliation-required",
+      pendingStage: "runtime",
+      privateState: custody.seal(retained, f.capabilities),
+    });
+    f.setSession("resumed-physical-session");
+    const records: ContinuityRecord[] = [];
+    const resolvePlan = vi.fn<HostedContinuityDependencies["resolvePlan"]>(async () => {
+      throw new Error("Replanning is forbidden");
+    });
+    const readApproval = vi.fn<HostedContinuityDependencies["readApproval"]>(async () => {
+      throw new Error("New consent is forbidden");
+    });
+    const publish = vi.fn<HostedContinuityDependencies["projection"]["publish"]>(
+      async (_context, _record, _caps, assertCurrent) => {
+        await assertCurrent();
+      },
+    );
+    const revoke = vi.fn<HostedContinuityDependencies["projection"]["revoke"]>(
+      async (_context, _record, assertCurrent, checkpoint) => {
+        await assertCurrent();
+        await checkpoint([]);
+      },
+    );
+    const operations = createHostedContinuityOperations({
+      store: {
+        read: async (input) => {
+          const row = f.read();
+          if (
+            input.intentId !== row.requestId ||
+            !isDeepStrictEqual(input.authority, row.plan.authority)
+          ) {
+            throw new Error("Foreign controlled journal read");
+          }
+          return row;
+        },
+        reserve: async () => {
+          throw new Error("Replacement operation is forbidden");
+        },
+        compareAndSet: async (input) => {
+          expect(input.expectedRevision).toBe(f.read().revision);
+          f.replace(input.record);
+          records.push(f.read());
+          return f.read();
+        },
+      },
+      assertOwner: async (owner) => {
+        expect(owner).toEqual(context);
+      },
+      assertSetup: async (_context, plan) => {
+        expect(plan).toEqual(retained.plan);
+      },
+      resolvePlan,
+      readApproval,
+      seal: (record, caps) => custody.seal(record, caps),
+      unseal: (record) => custody.unseal(record),
+      withResourceLease: async (input, run) => {
+        await input.initializeUnderLock?.();
+        const fence = await input.readCurrentFence();
+        return await run(async () => {
+          expect(await input.readCurrentFence()).toEqual(fence);
+        });
+      },
+      runtime: f.runtime,
+      projection: { publish, revoke },
+    });
+    const request = {
+      action: "continuity" as const,
+      planRef: retained.plan.planRef,
+      planDigest: retained.planDigest,
+      idempotencyKey: retained.idempotencyKey,
+    };
+    const result = await operations.execute(context, request, "continuity-call");
+    expect(result.state).toBe("settled");
+    expect(result.outcome?.exitCode).toBe(0);
+    expect(f.read()).toMatchObject({
+      attemptId: retained.attemptId,
+      fence: retained.fence,
+      approval: retained.approval,
+      current: { state: "revoked", providerSessionId: "resumed-physical-session" },
+    });
+    expect(f.read().pendingStage).toBeUndefined();
+    expect(
+      records.some(
+        (row) =>
+          row.locator?.providerSessionId === "resumed-physical-session" &&
+          row.current?.providerSessionId === "resumed-physical-session" &&
+          row.locator.commandId === undefined,
+      ),
+    ).toBe(true);
+    expect(custody.unseal(f.read())).toEqual(f.capabilities);
+    expect(f.workerCommand.kill).toHaveBeenCalledWith("SIGTERM");
+    expect(f.source.delete).toHaveBeenCalledTimes(1);
+    expect(f.readSourceCreates()).toBe(1);
+    expect(publish).toHaveBeenCalledTimes(1);
+    expect(revoke).toHaveBeenCalledTimes(1);
+    expect(resolvePlan).not.toHaveBeenCalled();
+    expect(readApproval).not.toHaveBeenCalled();
+    const dispatches = vi.mocked(f.provider.runCommand).mock.calls.length;
+    await expect(operations.execute(context, request, "continuity-call")).resolves.toEqual(result);
+    expect(f.provider.runCommand).toHaveBeenCalledTimes(dispatches);
+    expect(
+      vi
+        .mocked(f.provider.runCommand)
+        .mock.calls.filter(([call]) => call.cmd === worker.executablePath),
+    ).toHaveLength(1);
+    expect(
+      vi
+        .mocked(f.provider.runCommand)
+        .mock.calls.filter(([call]) => call.args.includes("test-e2e")),
+    ).toHaveLength(1);
+    expect(publish).toHaveBeenCalledTimes(1);
+    expect(revoke).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    "command",
+    "dispatch",
+    "publication",
+    "cancelled",
+    "suite",
+    "owner",
+    "fence",
+    "approval",
+    "attempt",
+    "root",
+    "superseded",
+  ])("refuses session rebind with %s effects or identity mismatch", async (reason) => {
+    const f = setup();
+    vi.mocked(f.deps.readExecution).mockRejectedValueOnce(new Error("Interrupted after install"));
+    await expect(f.start()).rejects.toThrow("Interrupted after install");
+    const saved = f.read();
+    if (saved.locator === undefined || saved.current === undefined) {
+      throw new Error("Missing controlled locator");
+    }
+    const next = {
+      ...saved,
+      state: "reconciliation-required" as const,
+      pendingStage: "runtime" as const,
+    };
+    if (reason === "command") {
+      next.locator = { ...saved.locator, commandId: "runtime-command" };
+    }
+    if (reason === "dispatch") {
+      next.locator = { ...saved.locator, dispatchAttempted: true };
+    }
+    if (reason === "publication") {
+      next.deliveryAttempted = true;
+    }
+    if (reason === "cancelled") {
+      next.cancelled = true;
+    }
+    if (reason === "suite") {
+      next.suiteDispatched = true;
+    }
+    if (reason === "owner") {
+      next.current = {
+        ...saved.current,
+        owner: { ...saved.current.owner, sessionId: "foreign-session" },
+      };
+    }
+    if (reason === "fence") {
+      next.current = { ...saved.current, fence: saved.fence + 1 };
+    }
+    if (reason === "approval") {
+      next.current = { ...saved.current, approvalRef: "foreign-approval" };
+    }
+    if (reason === "attempt") {
+      next.locator = { ...saved.locator, attemptId: "40000000-0000-4000-8000-000000000004" };
+    }
+    if (reason === "root") {
+      next.locator = { ...saved.locator, root: "/foreign-root" };
+    }
+    if (reason === "superseded") {
+      next.supersededBy = "40000000-0000-4000-8000-000000000004";
+    }
+    f.replace(next);
+    f.setSession("resumed-physical-session");
+    await expect(f.start()).rejects.toMatchObject({ code: "reconciliation_required" });
+    expect(f.provider.runCommand).not.toHaveBeenCalled();
+    expect(f.deps.installWorkerAsset).toHaveBeenCalledTimes(1);
+    expect(f.read().locator?.providerSessionId).toBe(saved.locator.providerSessionId);
+  });
+  it("rechecks the owner fence before persisting a changed provider session", async () => {
+    const f = setup();
+    vi.mocked(f.deps.readExecution).mockRejectedValueOnce(new Error("Interrupted after install"));
+    await expect(f.start()).rejects.toThrow("Interrupted after install");
+    f.replace({ ...f.read(), pendingStage: "runtime" });
+    f.setSession("resumed-physical-session");
+    const guard = vi
+      .fn<() => Promise<void>>()
+      .mockImplementationOnce(async () => {})
+      .mockRejectedValueOnce(new Error("Owner fence changed"));
+    const checkpoint = vi.fn(f.checkpoint);
+    await expect(
+      f.runtime.start(context, f.read(), f.capabilities, guard, checkpoint),
+    ).rejects.toThrow("Owner fence changed");
+    expect(guard).toHaveBeenCalledTimes(2);
+    expect(checkpoint).not.toHaveBeenCalled();
+    expect(f.deps.installWorkerAsset).toHaveBeenCalledTimes(1);
+    expect(f.provider.runCommand).not.toHaveBeenCalled();
+  });
+  it("does not install or launch when the atomic session-rebind checkpoint loses its revision", async () => {
+    const f = setup();
+    vi.mocked(f.deps.readExecution).mockRejectedValueOnce(new Error("Interrupted after install"));
+    await expect(f.start()).rejects.toThrow("Interrupted after install");
+    const saved = f.read();
+    f.replace({ ...saved, pendingStage: "runtime" });
+    f.setSession("resumed-physical-session");
+    const checkpoint = vi.fn<Parameters<typeof f.runtime.start>[4]>(async () => {
+      throw new Error("Controlled CAS conflict");
+    });
+    await expect(
+      f.runtime.start(context, f.read(), f.capabilities, f.guard, checkpoint),
+    ).rejects.toThrow("Controlled CAS conflict");
+    expect(checkpoint).toHaveBeenCalledTimes(1);
+    const proposed = checkpoint.mock.calls[0]?.[0];
+    expect(proposed?.locator?.providerSessionId).toBe("resumed-physical-session");
+    expect(proposed?.current?.providerSessionId).toBe("resumed-physical-session");
+    expect(f.provider.runCommand).not.toHaveBeenCalled();
+    expect(f.deps.installWorkerAsset).toHaveBeenCalledTimes(1);
+    expect(f.read().locator).toEqual(saved.locator);
   });
   it("refuses altered target readback before worker launch and cleans its owned source", async () => {
     const f = setup();
