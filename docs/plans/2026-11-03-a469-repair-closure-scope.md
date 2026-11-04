@@ -34,6 +34,15 @@ Never resend `a469-preview-target-approved-batch` or invent its settlement.
    genuine completed native tool result for the same owner/session/workspace,
    rather than trusting candidate metadata or replacing old plan provenance.
    Add a regression through the workflow adapter and actual history shape.
+   The saved turn's retained output also resolves the previous authored bundle
+   even after the server's framework generation changes. A process restart or
+   fresh package is not proof that this action uses the repaired tool. Correct
+   the supported local resume/generation binding and exercise restored dispatch
+   against the current authored registry. Preserve historical checkpoints,
+   approvals and uncertain calls; do not rewrite opaque saved blobs or replay
+   their actions. The source-history reader must use the same verified local
+   recovery profile and must not silently downgrade to the original run's
+   incomplete ancestor history when its cycle variable is missing.
 
 2. **Connect the development execution path to actual release capabilities.**
    The current private local launcher disables publication/bootstrap and does
