@@ -317,7 +317,18 @@ export const captureLocalPlanningSource = async (
         return undefined;
       }
       const objects = [
-        ...new Set([originalSourceSha, baseSha, baseTree, ...entries.map((entry) => entry.oid)]),
+        ...new Set([
+          originalSourceSha,
+          ...git([
+            "rev-list",
+            "--objects",
+            "--no-object-names",
+            `${originalSourceSha}^{tree}`,
+          ]).split("\n"),
+          baseSha,
+          baseTree,
+          ...entries.map((entry) => entry.oid),
+        ]),
       ];
       const prefix = path.join(directory, "original-base");
       const packId = objectId.parse(git(["pack-objects", prefix], `${objects.join("\n")}\n`));
@@ -549,6 +560,7 @@ export const reconcileLocalPlanningSource = async (input: {
       packPath: `/workspace/${pack}`,
       sourceSha: baseline.sourceSha,
       sourceTree: baseline.sourceTree,
+      originalSourceSha: baseline.originalSourceSha,
     };
     const initialized = await sandbox.run({
       command: `node -e ${quote(initializeLocalPlanningGitBaseProgram)} ${quote(JSON.stringify(initialization))}`,

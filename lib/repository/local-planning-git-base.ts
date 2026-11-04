@@ -11,7 +11,7 @@ console.log(JSON.stringify({present:info!==undefined}));
 export const initializeLocalPlanningGitBaseProgram = String.raw`
 const fs=require("node:fs");const path=require("node:path");const {execFileSync}=require("node:child_process");
 const input=JSON.parse(process.argv[1]);
-if(!/^[a-f0-9]{40}$/.test(input.sourceSha)||!/^[a-f0-9]{40}$/.test(input.sourceTree))throw Error("Original source identity is invalid.");
+if(!/^[a-f0-9]{40}$/.test(input.sourceSha)||!/^[a-f0-9]{40}$/.test(input.sourceTree)||(input.originalSourceSha!==undefined&&!/^[a-f0-9]{40}$/.test(input.originalSourceSha)))throw Error("Original source identity is invalid.");
 const root=fs.realpathSync(input.root);if(root!==input.root||!fs.lstatSync(root).isDirectory())throw Error("Local candidate boundary is invalid.");
 const destination=path.join(root,".git");let existing;try{existing=fs.lstatSync(destination);}catch(error){if(error.code!=="ENOENT")throw error;}
 if(existing)throw Error("Local candidate Git metadata appeared during baseline recovery; the candidate is retained.");
@@ -27,7 +27,9 @@ try{
  if(run([...args,"rev-parse",input.sourceSha+"^{tree}"])!==input.sourceTree)throw Error("Imported original source tree does not match its proven baseline.");
  // Only this actual commit and its complete tree were transported. The exact
  // commit remains unchanged; standard shallow metadata bounds ancestry reads.
- fs.writeFileSync(path.join(gitDir,"shallow"),input.sourceSha+"\n",{mode:384});
+ const retained=[...new Set([input.sourceSha,...(input.originalSourceSha===undefined?[]:[input.originalSourceSha])])];
+ for(const sha of retained)run([...args,"cat-file","-e",sha+"^{commit}"]);
+ fs.writeFileSync(path.join(gitDir,"shallow"),retained.join("\n")+"\n",{mode:384});
  run([...args,"symbolic-ref","HEAD","refs/heads/app-builder-local-base"]);
  run([...args,"update-ref","refs/heads/app-builder-local-base",input.sourceSha]);
  run([...args,"read-tree",input.sourceSha]);

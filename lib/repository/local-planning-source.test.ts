@@ -274,6 +274,7 @@ describe("retained dirty planning baseline", () => {
     let capture: Awaited<ReturnType<typeof captureLocalPlanningSource>> | undefined;
     try {
       f.write(f.source, "dirty-initial.txt", "initial dirty bytes\n");
+      f.write(f.candidate, "dirty-initial.txt", "initial dirty bytes\n");
       const initial = await captureLocalPlanningSource(f.source, f.originalSha);
       const expected = initial.generation.workspaceDigest;
       initial.dispose();
@@ -312,10 +313,17 @@ describe("retained dirty planning baseline", () => {
           packPath,
           sourceSha: baseline.sourceSha,
           sourceTree: baseline.sourceTree,
+          originalSourceSha: baseline.originalSourceSha,
         }),
       ]);
       expect(f.git(f.candidate, "rev-parse", "HEAD")).toBe(retainedSha);
       expect(f.git(f.candidate, "cat-file", "-t", f.originalSha)).toBe("commit");
+      expect(f.git(f.candidate, "rev-parse", `${f.originalSha}^{tree}`)).toBe(
+        f.git(f.source, "rev-parse", `${f.originalSha}^{tree}`),
+      );
+      await f.importCapture(capture);
+      const reconciled = f.run(capture.snapshotSha);
+      expect(reconciled.status, reconciled.stderr).toBe(0);
       expect(readFileSync(path.join(f.candidate, "apps/example/app/page.tsx"), "utf-8")).toBe(
         "saved product\n",
       );
