@@ -251,7 +251,9 @@ export default defineTool({
           signal: ctx.abortSignal,
         });
         if (setup.status === "failed") {
-          throw new Error(setup.problem);
+          const diagnostic =
+            setup.stderr || setup.stdout || "No setup command output was returned.";
+          throw new Error(`${setup.problem}\n${diagnostic}`);
         }
       };
     }
