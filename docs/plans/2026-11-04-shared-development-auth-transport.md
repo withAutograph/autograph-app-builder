@@ -203,3 +203,36 @@ and independently verify every affected worker/catalog family from those cuts.
 Then exercise actual provider workload transport, public BetterAuth login/logout,
 same-tenant/two-app connection sharing and the remaining A-469 matrix. Source
 tests, matching IDs and READY deployment metadata are distinct evidence.
+
+## Explicit realm setup when no eligible realm exists
+
+An empty eligible-realm list is a setup prerequisite. Control-database custody
+proves no Auth resource, and a historical isolated Preview profile proves no
+current realm. Add a separate versioned Development Auth realm setup plan and
+immutable custody receipt before offering the new realm to an app owner.
+
+The trusted setup policy identifies an existing privileged platform Services
+project and its available canonical Auth slot, separately from the operator and
+all generated app projects. Independent current provider and native resource
+readback must show that the selected Development slot is not a current customer,
+global platform or generated app realm. An occupied slot cannot be rebound by
+this operation. If no such slot is available, leave a concrete prerequisite;
+never create a new Auth project or repurpose a live realm automatically.
+
+The ordinary effect plan freezes that host/slot, owner, nondefault isolated
+Development resource and restricted runtime/migrator roles, actual Production
+exclusion, selected maintained Auth schema and enrollment-registry assets,
+realm-only master-secret ownership, verified native workload and initial real
+owner/org policy. Approval permits only those disclosed effects. New resource
+bootstrap installs the normal Auth schema once; replays reconcile exact native
+receipts, never reprovision an enrolled realm or retry an uncertain dispatch.
+Runtime grants expose registry reads to the realm, while enrollment writes stay
+inside the privileged approved worker. Secrets remain only on the privileged
+Auth host; generated apps receive no realm database or signing credential.
+
+A completed custody receipt requires actual DB/schema/role and host/native
+readback plus genuine Auth owner/org evidence. Store it separately from central
+Integrations control custody and per-app enrollment receipts. Only this
+completed, independently revalidated custody can populate the eligible choice
+port. Later app enrollment still uses its own fresh plan/approval and captured
+role policy; no setup approval transfers to a generated app's release.
