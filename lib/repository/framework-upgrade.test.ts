@@ -486,3 +486,31 @@ describe("framework upgrade planning and apply", () => {
     }).toThrow("outside");
   });
 });
+
+it("plans an unchanged imported application under its own fresh Build proposal", () => {
+  const { frameworkUpgrade: _upgrade, ...base } = proposal();
+  expect(() => targetIterationProposalSchema.parse(base)).toThrow();
+  const imported = targetIterationProposalSchema.parse({
+    ...base,
+    applicationSourceImport: {
+      appId: "example",
+      manifestDigest: "c".repeat(64),
+      importedSessionId: "new-authenticated-session",
+      registration: {
+        oldDigest: "d".repeat(64),
+        newDigest: "e".repeat(64),
+        proposedBytes: "{}",
+        projectName: "example",
+        assetRoute: "/example/:path*",
+      },
+    },
+  });
+  expect(imported.operation).toBe("iterate-existing-app");
+  expect(imported.iteration.changes).toEqual([]);
+  expect(() =>
+    targetIterationProposalSchema.parse({
+      ...base,
+      applicationSourceImport: { ...imported.applicationSourceImport, appId: "different-app" },
+    }),
+  ).toThrow();
+});

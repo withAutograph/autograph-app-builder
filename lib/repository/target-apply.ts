@@ -87,6 +87,17 @@ export const iterationBaselineSnapshot = (
   };
 };
 
+/** Import provenance proves this app root was absent in the acquired platform base. */
+export const applicationImportBaselineSnapshot = (
+  snapshot: OverlaySnapshot,
+  appRoot: string,
+): OverlaySnapshot => {
+  const files = canonicalOverlayFiles(
+    snapshot.files.filter((file) => !file.path.startsWith(`${appRoot}/`)),
+  );
+  return { files, treeDigest: createHash("sha256").update(JSON.stringify(files)).digest("hex") };
+};
+
 // Existing-app review follows the selected app. Unrelated repository or
 // planning-file edits must not invalidate a reviewed app change set.
 export const reviewedOverlayTreeDigest = (
@@ -671,6 +682,35 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
             }));
       }
     }
+    if ("operation" in proposal && proposal.applicationSourceImport !== undefined) {
+      const registration = proposal.applicationSourceImport.registration;
+      if (
+        registration === undefined ||
+        registration.projectName !== appId ||
+        sha256(registration.proposedBytes) !== registration.newDigest
+      ) {
+        return {
+          exitCode: 2,
+          stdout: "",
+          stderr: "Imported app registration is missing from the approved proposal.",
+          failedCommand: "verify approved application registration",
+        };
+      }
+      const topologyPath = `${applyRoot.replace(/^\/workspace\//u, "")}/microfrontends.json`;
+      const currentTopology = await sandbox.readTextFile({ path: topologyPath });
+      if (
+        currentTopology === null ||
+        ![registration.oldDigest, registration.newDigest].includes(sha256(currentTopology))
+      ) {
+        return {
+          exitCode: 2,
+          stdout: "",
+          stderr: "Imported app registration preimage changed.",
+          failedCommand: "verify approved application registration",
+        };
+      }
+      await sandbox.writeTextFile({ path: topologyPath, content: registration.proposedBytes });
+    }
     // The writable checkout is the execution environment. Prepared dependency
     // roots are only a cache optimization; a checkout-backed flow can have no
     // roots at all. Let Bun establish the repository's actual dependency state
@@ -719,14 +759,20 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
       return { ...cue, failedCommand: sourceDeclaredToolchainActivationCommand() };
     }
     if ("operation" in proposal) {
-      const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
+      const oldDigest =
+        proposal.applicationSourceImport?.registration?.oldDigest ??
+        proposal.plan.topology.currentDigest ??
+        "0".repeat(64);
       const receipt: TargetApplyCommandReceipt = {
         appId: proposal.contract.appId,
         mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
         omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
         recovered: false,
         topology: {
-          newDigest: proposal.plan.topology.proposedDigest ?? oldDigest,
+          newDigest:
+            proposal.applicationSourceImport?.registration?.newDigest ??
+            proposal.plan.topology.proposedDigest ??
+            oldDigest,
           oldDigest,
           path: "microfrontends.json",
         },
@@ -904,6 +950,11 @@ export async function executeProposalBoundApply(input: {
     before = await snapshotter(input.sandbox, overlay.applyRoot);
     if ("operation" in input.proposal) {
       before = iterationBaselineSnapshot(before, input.proposal.iteration.changes);
+      if (input.proposal.applicationSourceImport !== undefined)
+        before = applicationImportBaselineSnapshot(
+          before,
+          `apps/${input.proposal.applicationSourceImport.appId}`,
+        );
     }
     if (input.proposal.frameworkUpgrade !== undefined) {
       before = iterationBaselineSnapshot(before, input.proposal.frameworkUpgrade.baseline);

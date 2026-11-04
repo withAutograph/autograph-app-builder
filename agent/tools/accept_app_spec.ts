@@ -1,3 +1,4 @@
+import { applicationSourceImportState } from "@/lib/agent/application-source-import-state";
 import { emitCurrentBuildWorkflowProjection } from "@/lib/agent/approved-build-continuation-runtime";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
@@ -109,6 +110,12 @@ export default defineTool({
     },
     ctx,
   ) {
+    const imported = applicationSourceImportState.get();
+    if (
+      imported !== undefined &&
+      (imported.reference.appId !== appId || imported.importedSessionId !== ctx.session.id)
+    )
+      throw new Error("Preserve the imported application identity in this session.");
     if (!validAppId(appId)) {
       throw new Error("App id must be one lowercase kebab-case segment.");
     }

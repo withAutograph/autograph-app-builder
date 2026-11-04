@@ -1,3 +1,7 @@
+import {
+  applicationSourceRegistrationSchema,
+  planApplicationSourceRegistration,
+} from "./application-source-registration";
 import { privateComputeProfileSchema } from "../sandbox/private-compute-profile";
 import type { PrivateComputeProfile } from "../sandbox/private-compute-profile";
 import {
@@ -140,6 +144,13 @@ const iterationChangeSchema = z
     }
   });
 
+const applicationSourceImportPlanningSchema = z.strictObject({
+  appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
+  manifestDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  importedSessionId: z.string().min(1),
+  registration: applicationSourceRegistrationSchema.optional(),
+});
+
 const targetIterationProposalSchemaForTopology = (topologyOwner: string) =>
   targetCreationProposalSchemaForTopology(topologyOwner)
     .safeExtend({
@@ -149,17 +160,39 @@ const targetIterationProposalSchemaForTopology = (topologyOwner: string) =>
       }),
       operation: z.literal("iterate-existing-app"),
       sourceReconciliation: localSourceReconciliationSchema.optional(),
+      applicationSourceImport: applicationSourceImportPlanningSchema.optional(),
     })
     .superRefine((proposal, context) => {
       if (
         proposal.iteration.changes.length === 0 &&
         proposal.frameworkUpgrade === undefined &&
         proposal.sourceReconciliation === undefined &&
-        proposal.privateCompute === undefined
+        proposal.privateCompute === undefined &&
+        proposal.applicationSourceImport === undefined
       ) {
         context.addIssue({
           code: "custom",
           message: "An existing-app iteration requires app changes or a framework upgrade",
+        });
+      }
+      if (
+        proposal.applicationSourceImport !== undefined &&
+        proposal.applicationSourceImport.registration === undefined
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "The imported app requires its platform registration plan.",
+          path: ["applicationSourceImport"],
+        });
+      }
+      if (
+        proposal.applicationSourceImport !== undefined &&
+        proposal.applicationSourceImport.appId !== proposal.contract.appId
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "The application source import belongs to another app.",
+          path: ["applicationSourceImport"],
         });
       }
       if (
@@ -472,6 +505,7 @@ export const executeTargetIdentityAndPlanning = async (input: {
   artifactRevision: string;
   existingAppChanges?: readonly ApplicationFileChange[];
   localSourceReconciliation?: LocalSourceReconciliation;
+  applicationSourceImport?: z.infer<typeof applicationSourceImportPlanningSchema>;
   privateCompute?: PrivateComputeProfile;
   frameworkUpgradeRequested?: boolean;
   resolveFrameworkVersions?: () => Promise<FrameworkVersions>;
@@ -489,6 +523,12 @@ export const executeTargetIdentityAndPlanning = async (input: {
     privateCompute.checkPolicy.path !== `apps/${input.appId}/.config/mise/tasks/check`
   )
     throw new Error("The private compute check policy belongs to another app.");
+  let applicationSourceImport =
+    input.applicationSourceImport === undefined
+      ? undefined
+      : applicationSourceImportPlanningSchema.parse(input.applicationSourceImport);
+  if (applicationSourceImport !== undefined && applicationSourceImport.appId !== input.appId)
+    throw new Error("The imported app identity must be preserved.");
   const sourceReconciliation =
     input.localSourceReconciliation === undefined
       ? undefined
@@ -536,7 +576,8 @@ export const executeTargetIdentityAndPlanning = async (input: {
     input.existingAppChanges === undefined &&
     frameworkUpgrade === undefined &&
     sourceReconciliation === undefined &&
-    privateCompute === undefined
+    privateCompute === undefined &&
+    applicationSourceImport === undefined
   ) {
     throw new ExistingApplicationChangesRequiredError();
   }
@@ -596,7 +637,8 @@ export const executeTargetIdentityAndPlanning = async (input: {
       changes.length === 0 &&
       frameworkUpgrade === undefined &&
       sourceReconciliation === undefined &&
-      privateCompute === undefined
+      privateCompute === undefined &&
+      applicationSourceImport === undefined
     ) {
       throw new Error("At least one existing-app change is required.");
     }
@@ -605,8 +647,21 @@ export const executeTargetIdentityAndPlanning = async (input: {
     const schemaChange = input.existingAppChanges?.find(
       (change) => change.path === identity.schemaCuePath,
     );
+    if (applicationSourceImport !== undefined) {
+      applicationSourceImport = {
+        ...applicationSourceImport,
+        registration: await planApplicationSourceRegistration(input.sandbox, input.appId),
+      };
+    }
+    const importedSchema =
+      applicationSourceImport === undefined
+        ? undefined
+        : await input.sandbox.run({
+            command: `test -f /workspace/repository/${identity.schemaCuePath}`,
+            workingDirectory: "/workspace/repository",
+          });
     const description =
-      schemaChange === undefined
+      schemaChange === undefined && applicationSourceImport === undefined
         ? await describeSelectedApp({
             appId: identity.appId,
             root: "/workspace/repository",
@@ -615,13 +670,16 @@ export const executeTargetIdentityAndPlanning = async (input: {
         : undefined;
     const hasSchema =
       schemaChange === undefined
-        ? description?.backend.kind === "generated-postgres"
+        ? applicationSourceImport === undefined
+          ? description?.backend.kind === "generated-postgres"
+          : importedSchema?.exitCode === 0
         : schemaChange.operation !== "delete";
     const proposal = targetIterationProposalSchemaForTopology("microfrontends.json").parse({
       ...creationPlan(identity, input.appSpecDigest, hasSchema),
       ...(frameworkUpgrade === undefined ? {} : { frameworkUpgrade }),
       iteration: { changes, digest: iterationDigest },
       operation: "iterate-existing-app",
+      ...(applicationSourceImport === undefined ? {} : { applicationSourceImport }),
       ...(sourceReconciliation === undefined ? {} : { sourceReconciliation }),
       ...(privateCompute === undefined ? {} : { privateCompute }),
     });

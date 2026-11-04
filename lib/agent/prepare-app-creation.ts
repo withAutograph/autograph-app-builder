@@ -1,3 +1,4 @@
+import { applicationSourceImportState } from "./application-source-import-state";
 import {
   preparePrivateComputePlanning,
   privateComputeProjection,
@@ -126,7 +127,24 @@ export const prepareAppCreation = async (
     current.appSpec.version === 2
       ? { appSpecStream: resolveAcceptedAppSpecStream(appSpecReference) }
       : { appSpecContent: await resolveAcceptedAppSpecContent(appSpecReference) };
+  const imported = applicationSourceImportState.get();
+  if (
+    imported !== undefined &&
+    (imported.reference.appId !== current.appSpec.appId ||
+      imported.importedSessionId !== ctx.session.id ||
+      imported.platformSourceReceiptDigest !== current.sourceReceipt.digest)
+  )
+    throw new Error("The app plan must retain its exact imported application source.");
   const result = await executeTargetIdentityAndPlanning({
+    ...(imported === undefined
+      ? {}
+      : {
+          applicationSourceImport: {
+            appId: imported.reference.appId,
+            manifestDigest: imported.reference.manifestDigest,
+            importedSessionId: imported.importedSessionId,
+          },
+        }),
     appId: current.appSpec.appId,
     ...appSpecSource,
     appSpecDigest: current.appSpec.digest,
