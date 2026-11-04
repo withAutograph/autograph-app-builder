@@ -1,3 +1,8 @@
+import {
+  localSourcePrerequisiteObservationSchema,
+  matchingLocalSourcePrerequisite,
+} from "./local-source-prerequisite-state";
+import type { LocalSourcePrerequisiteObservation } from "./local-source-prerequisite-state";
 import { z } from "zod";
 import { repositoryAccessReceiptSchema } from "./repository-access-state";
 import type { RepositoryAccessReceipt } from "./repository-access-state";
@@ -29,6 +34,7 @@ export const approvedBuildDecisionSchema = z.strictObject({
 
   decision: z.enum(["working", "runnable", "waiting-input", "blocked", "settled"]),
   scope: approvedBuildScopeSchema.optional(),
+  sourcePrerequisite: localSourcePrerequisiteObservationSchema.optional(),
   turnId: z.string().min(1),
   turnSequence: z.number().int().nonnegative(),
   validation: z
@@ -99,6 +105,7 @@ export const decideApprovedBuildContinuation = (input: {
 
   pendingInput: boolean;
   blocked: boolean;
+  sourcePrerequisite?: LocalSourcePrerequisiteObservation;
 }): ApprovedBuildDecision => {
   const base = {
     adapterSessionId: input.adapterSessionId,
@@ -130,6 +137,14 @@ export const decideApprovedBuildContinuation = (input: {
   }
   if (input.pendingInput) {
     return { ...base, decision: "waiting-input" };
+  }
+  const sourcePrerequisite = matchingLocalSourcePrerequisite({
+    state: input.state,
+    sessionId: input.adapterSessionId,
+    observations: input.sourcePrerequisite === undefined ? [] : [input.sourcePrerequisite],
+  });
+  if (sourcePrerequisite !== undefined) {
+    return { ...base, decision: "blocked", sourcePrerequisite };
   }
   if (input.blocked || !("applyReceipt" in input.state)) {
     return { ...base, decision: "blocked" };

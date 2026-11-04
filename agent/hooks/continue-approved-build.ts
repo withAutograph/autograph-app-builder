@@ -1,3 +1,4 @@
+import { currentLocalSourcePrerequisite } from "../../lib/agent/local-source-prerequisite-state";
 import { repositoryAccessReceiptState } from "../../lib/agent/repository-access-state";
 
 import { defineHook } from "eve/hooks";
@@ -29,10 +30,14 @@ const record = async (ctx: HookContext, forced?: "working" | "blocked") => {
     blocked: current.blocked,
     pendingInput: current.pendingInputs.length > 0,
     state: appBuilderWorkflowState.get(),
+    sourcePrerequisite: currentLocalSourcePrerequisite(
+      appBuilderWorkflowState.get(),
+      ctx.session.id,
+    ),
     turnId: ctx.session.turn.id,
     turnSequence: ctx.session.turn.sequence,
   });
-  if (forced !== undefined) {
+  if (forced === "blocked" || (forced === "working" && decision.sourcePrerequisite === undefined)) {
     decision.decision = forced;
   }
   if (decision.scope === undefined && decision.currentSpec === undefined) {
@@ -46,9 +51,13 @@ export default defineHook({
     async "action.result"(event, ctx) {
       if (
         event.data.result.kind === "tool-result" &&
-        ["accept_app_spec", "apply_app_creation", "validate_app_creation"].includes(
-          event.data.result.toolName,
-        )
+        [
+          "accept_app_spec",
+          "apply_app_creation",
+          "validate_app_creation",
+          "prepare_workspace",
+          "prepare_app_creation",
+        ].includes(event.data.result.toolName)
       ) {
         await record(ctx, "working");
       }

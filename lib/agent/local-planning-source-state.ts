@@ -7,6 +7,7 @@ export interface LocalPlanningSourceReceipt {
   previousSourceReceiptDigest: string;
   workspaceDigest: string;
   previousWorkspaceDigest: string;
+  restoredOriginalBase?: { originalSourceSha: string; sourceSha: string; sourceTree: string };
   recognizedSourceOverlay?: { sourceSha: string; workspaceDigest: string };
   sourceSnapshotTree: string;
   privateSourceCommit: string;

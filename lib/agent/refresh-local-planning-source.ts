@@ -1,3 +1,9 @@
+import { z } from "zod";
+import { LocalPlanningSourcePrerequisiteError } from "../repository/local-planning-source-prerequisite";
+import {
+  recordLocalSourcePrerequisite,
+  resolveLocalSourcePrerequisite,
+} from "./local-source-prerequisite-state";
 import { readCompletedLocalSourceTransport } from "./local-source-transport-history";
 /* oxlint-disable unicorn/no-useless-undefined -- Explicit absent results keep optional workflow returns consistent. */
 import { localPlanningSourceBase } from "./local-planning-source-base";
@@ -105,6 +111,7 @@ export const refreshLocalPlanningSource = async (
   const observed = await observe(current, completedTransport);
   try {
     if (!observed.changed) {
+      resolveLocalSourcePrerequisite(current, ctx.session.id, ctx.callId);
       return undefined;
     }
     if (purpose !== "planning") {
@@ -147,6 +154,17 @@ export const refreshLocalPlanningSource = async (
       sourceSnapshotTree: reconciled.sourceSnapshotTree,
       privateSourceCommit: reconciled.sourceSha,
       checkpointRef: reconciled.checkpointRef,
+      ...("restoredOriginalBase" in reconciled && reconciled.restoredOriginalBase !== undefined
+        ? {
+            restoredOriginalBase: z
+              .strictObject({
+                originalSourceSha: z.string().regex(/^[a-f0-9]{40}$/u),
+                sourceSha: z.string().regex(/^[a-f0-9]{40}$/u),
+                sourceTree: z.string().regex(/^[a-f0-9]{40}$/u),
+              })
+              .parse(reconciled.restoredOriginalBase),
+          }
+        : {}),
       ...(observed.baseline.sourceOverlay === undefined
         ? {}
         : { recognizedSourceOverlay: observed.baseline.sourceOverlay }),
@@ -176,7 +194,19 @@ export const refreshLocalPlanningSource = async (
       receipt: observed.receipt,
     }));
     localPlanningSourceHistory.update((history) => [...history, record]);
+    resolveLocalSourcePrerequisite(current, ctx.session.id, ctx.callId);
     return sandbox;
+  } catch (error) {
+    if (error instanceof LocalPlanningSourcePrerequisiteError) {
+      recordLocalSourcePrerequisite({
+        state: current,
+        sessionId: ctx.session.id,
+        callId: ctx.callId,
+        originalSourceSha: error.originalSourceSha,
+        originalWorkspaceDigest: error.originalWorkspaceDigest,
+      });
+    }
+    throw error;
   } finally {
     observed.capture.dispose();
   }

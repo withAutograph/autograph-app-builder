@@ -565,10 +565,18 @@ export const createDevelopmentSnapshot = async (input: {
       cwd: root,
       env: gitEnvironment(),
     });
-    execFileSync("/usr/bin/git", ["add", "--all", "--", "."], {
-      cwd: root,
-      env: gitEnvironment(),
-    });
+    // A fresh repository would reapply ignore rules to paths already tracked
+    // by the selected source. Stage exactly the captured inventory, including
+    // those files, without traversing ignored dependencies or private state.
+    execFileSync(
+      "/usr/bin/git",
+      ["--literal-pathspecs", "add", "--force", "--pathspec-from-file=-", "--pathspec-file-nul"],
+      {
+        cwd: root,
+        env: gitEnvironment(),
+        input: Buffer.from(`${entries.map((entry) => entry.path).join("\0")}\0`),
+      },
+    );
     execFileSync(
       "/usr/bin/git",
       [

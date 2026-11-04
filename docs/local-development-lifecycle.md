@@ -466,3 +466,17 @@ maintained check task and linked-team capacity, then obtain a fresh Build card
 for 8 vCPU/16 GiB and ephemeral billing before applying that same proposal.
 Failure to qualify remains a visible prerequisite; it never authorizes a blind
 retry, silent resize or replacement app.
+
+Local source planning distinguishes the historical source receipt from the full
+captured working-tree baseline. Snapshot Git staging uses the exact already
+captured source inventory, retaining originally tracked files even if the
+snapshot's ignore rules would hide them. It does not recursively force-add
+ignored dependency, credential, or runtime directories.
+
+If the exact original baseline cannot be proven, Builder records a typed source
+prerequisite bound to the current app, session, source, workspace, and proposal.
+That observation stops automatic retries of an older app-validator failure.
+Original validation and approval facts remain retained. Normal explicit user
+turns can recover the immutable source and prepare a fresh plan. A successful
+same-scope reconciliation records resolution; it does not transfer the old Build
+approval to changed source.

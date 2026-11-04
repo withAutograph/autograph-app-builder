@@ -1,3 +1,4 @@
+import { localSourcePrerequisiteResponse } from "@/lib/agent/local-source-prerequisite-response";
 import { PRIVATE_COMPUTE_PROFILE_ID } from "@/lib/sandbox/private-compute-profile";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
@@ -16,8 +17,12 @@ export default defineTool({
   }),
   async execute(input, ctx) {
     assertUpstreamMutationAllowed(appBuilderWorkflowState.get(), "implementation planning");
-    const result = await prepareAppCreation(input, ctx);
-    await emitCurrentBuildWorkflowProjection(ctx);
-    return result;
+    try {
+      const result = await prepareAppCreation(input, ctx);
+      await emitCurrentBuildWorkflowProjection(ctx);
+      return result;
+    } catch (error) {
+      return await localSourcePrerequisiteResponse(error, ctx);
+    }
   },
 });

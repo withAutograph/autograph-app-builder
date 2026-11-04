@@ -160,6 +160,36 @@ describe("development source snapshots", () => {
     expect(snapshot.fingerprint).not.toBe(empty);
   });
 
+  it("retains already captured tracked-but-ignored source in the actual snapshot Git tree", async () => {
+    const source = await fixture();
+    await writeFile(
+      join(source, ".gitignore"),
+      ".config/mise/config.toml\nignored-secret.env\nnode_modules/\n",
+    );
+    await writeFile(join(source, ".config/mise/config.toml"), '[tools]\nbun = "dirty-original"\n');
+    await writeFile(join(source, "ignored-secret.env"), "private synthetic value");
+    await mkdir(join(source, "node_modules"));
+    await writeFile(join(source, "node_modules/ignored.js"), "not source");
+    const runRoot = await realpath(await mkdtemp(join(tmpdir(), "app-builder-ignored-tracked-")));
+    roots.push(runRoot);
+    await chmod(runRoot, 0o700);
+    const snapshot = await createDevelopmentSnapshot({ sourceRoot: source, runRoot });
+    const { execFileSync } = await import("node:child_process");
+    const actual = execFileSync(
+      "/usr/bin/git",
+      ["-C", snapshot.root, "show", `${snapshot.commit}:.config/mise/config.toml`],
+      { encoding: "utf-8", env: { HOME: "/dev/null", PATH: "/usr/bin:/bin", NODE_ENV: "test" } },
+    );
+    expect(actual).toBe(await readFile(join(source, ".config/mise/config.toml"), "utf-8"));
+    expect(snapshot.fingerprint).toBe(await fingerprintDevelopmentSource(snapshot.root));
+    await expect(stat(join(snapshot.root, "ignored-secret.env"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(stat(join(snapshot.root, "node_modules/ignored.js"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
   it("captures dirty and untracked source in an owner-writable Git snapshot", async () => {
     const source = await fixture();
     await writeFile(join(source, "README.md"), "dirty\n");
