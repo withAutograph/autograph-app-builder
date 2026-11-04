@@ -147,6 +147,48 @@ Finance role or import an acceptance fixture. The same-tenant/two-app connection
 journey must use a real supported tenant/realm binding or approved development
 realm reuse, rather than fabricating shared tenant identity across app databases.
 
+### Explicit shared development Auth realm choice
+
+The compatible first implementation is approved reuse of a genuine shared
+development Auth realm. Keep dedicated per-app Auth as the ordinary independent
+app default. Before a **fresh hosted app's first Auth setup**, Builder may offer
+the authenticated owner a recorded, currently authorized development realm and
+its real organizations. This choice is part of the normal setup plan and fresh
+effect approval; a read allowlist alone cannot authorize enrollment or grants.
+No already-configured app changes realm, and the saved local app's current realm
+and data remain intact. Never provision the realm's existing Auth tables again.
+
+The deployment-owned reuse policy names an enrolled realm by immutable custody
+reference, not by an app-ID alias, copied organization string, arbitrary database
+URL or an assertion that two tenants are equivalent. Its custody binds the real
+realm owner, dedicated development resource identity, Auth deployment and
+installed schema. Independently re-read the actual resource, registered realm,
+organization ownership, current enrollment and app assignment before freezing
+the choice and again before applying it. Missing or ambiguous proof produces an
+ordinary owner choice or explicit prerequisite with no effects. Customer
+Production realms and the global platform/operator Auth realm are not candidates.
+
+Reuse must retain one real organization identity within that same realm, while
+creating a distinct registered application and least-privilege assignment for
+each app. A signed-in member without that app's assignment must still be denied.
+The central tenant is the proven organization in this genuine shared realm;
+Builder must not copy an organization ID into a different Auth database or infer
+a canonical tenant mapping across realms. Each app keeps its independent app
+database, project and capability binding, and disabling one app preserves the
+other app and shared tenant-owned connection.
+
+Qualify the credential boundary before enabling this choice. Prefer the existing
+supported Auth authority/transport with an app-scoped, audience-bound enrollment
+and verification capability. Do not copy realm migrator credentials, a global
+Auth signing secret, platform control keys or provider keys into a generated app
+project. If the current Auth adapter requires such broad credentials, implement
+and qualify its least-privilege shared-realm transport inside the shared product
+before offering reuse; do not weaken the boundary to make acceptance pass. Store
+the selected realm and completed app enrollment/assignment receipts durably,
+owner-scoped and protected from routine history pruning. Ordinary revisions
+preserve that choice; revocation, removal or a new destination requires its own
+explicit supported plan rather than transferring a previous approval.
+
 Freeze the selected policy and actor/org/assignment evidence into the fresh V3
 capability plan and disclose those grants in its ordinary approval. The fixed
 membership worker must validate the installed service policy and actual scope
