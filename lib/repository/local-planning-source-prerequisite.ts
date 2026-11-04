@@ -5,7 +5,7 @@ export class LocalPlanningSourcePrerequisiteError extends Error {
   readonly originalWorkspaceDigest: string;
   constructor(originalSourceSha: string, originalWorkspaceDigest: string) {
     super(
-      "The retained original source Git bytes do not match the saved planning baseline. The candidate is unchanged; recover its original source artifact before reconciling.",
+      "The retained original source Git bytes do not match the saved planning baseline. No new source changes were applied to the saved app workspace; recover its original source artifact before reconciling.",
     );
     this.originalSourceSha = originalSourceSha;
     this.originalWorkspaceDigest = originalWorkspaceDigest;
