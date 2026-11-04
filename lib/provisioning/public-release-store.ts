@@ -35,7 +35,7 @@ export const initialPublicReleaseRecord = (plan: PublicReleasePlan): PublicRelea
     plan,
     planDigest: publicReleasePlanDigest(plan),
     bindings: Object.fromEntries(plan.environment.map((entry) => [entry.key, { state: "idle" }])),
-    effects: { "bind-production-runtime": "idle", "publish-release-source": "idle" },
+    effects: Object.fromEntries(plan.effects.map((effect) => [effect, "idle"])),
   });
 const parse = (raw: typeof builderProvisioningJournals.$inferSelect): PublicReleaseRow => {
   const record = publicReleaseRecordSchema.parse(raw.record);
@@ -48,9 +48,8 @@ const parse = (raw: typeof builderProvisioningJournals.$inferSelect): PublicRele
     raw.audience !== authority.audience ||
     raw.ownerUserId !== authority.ownerUserId ||
     raw.workspaceId !== authority.workspaceId
-  ) {
+  )
     throw unavailable();
-  }
   return { operationRef: raw.requestId, revision: raw.revision, record };
 };
 export const createPostgresPublicReleaseStore = (database: Database): PublicReleaseStore => {
@@ -83,9 +82,8 @@ export const createPostgresPublicReleaseStore = (database: Database): PublicRele
         .onConflictDoNothing()
         .returning();
       const row = rows[0] === undefined ? await read(plan.authority, operationRef) : parse(rows[0]);
-      if (row === undefined || !isDeepStrictEqual(row.record.plan, record.plan)) {
+      if (row === undefined || !isDeepStrictEqual(row.record.plan, record.plan))
         throw unavailable();
-      }
       return row;
     },
     async compareAndSet(row, input) {
@@ -132,9 +130,8 @@ export const createPostgresPublicReleaseStore = (database: Database): PublicRele
         ) ||
         (record.observation?.status === "ready" &&
           Object.values(record.effects).some((value) => value !== "applied"))
-      ) {
+      )
         throw unavailable();
-      }
       const rows = await database
         .update(builderProvisioningJournals)
         .set({

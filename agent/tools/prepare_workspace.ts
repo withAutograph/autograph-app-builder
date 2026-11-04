@@ -1,3 +1,5 @@
+import { workspacePreparationTransition } from "../../lib/agent/workspace-preparation-transition";
+import { refreshLocalPlanningSource } from "@/lib/agent/refresh-local-planning-source";
 import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
@@ -37,6 +39,16 @@ export default defineTool({
     assertUpstreamMutationAllowed(current, "workspace preparation");
     if (sourceWorkflowState.get().phase === "empty" && development) {
       await sourceStatus.execute({}, ctx);
+    }
+    if (development && "appSpec" in current && current.githubSource === undefined) {
+      const reconciled = await refreshLocalPlanningSource(ctx, "planning");
+      if (reconciled !== undefined) {
+        const refreshed = appBuilderWorkflowState.get();
+        if (!("workspace" in refreshed)) {
+          throw new Error("The reconciled local app workspace is unavailable.");
+        }
+        return refreshed.workspace;
+      }
     }
     const source = sourceWorkflowState.get();
     if (source.phase === "empty") {
@@ -146,17 +158,15 @@ export default defineTool({
       expected: current,
       operation: "workspace preparation",
       transition: (latest) =>
-        latest.phase === "empty" || latest.phase === "prepared"
-          ? {
-              artifacts: [],
-              ...(githubSource === undefined ? {} : { githubSource }),
-              phase: "prepared",
-              preparedByCallId: ctx.callId,
-              sourceReceipt: currentReceipt,
-              version: APP_BUILDER_WORKFLOW_VERSION,
-              workspace,
-            }
-          : latest,
+        workspacePreparationTransition(latest, () => ({
+          artifacts: [],
+          ...(githubSource === undefined ? {} : { githubSource }),
+          phase: "prepared",
+          preparedByCallId: ctx.callId,
+          sourceReceipt: currentReceipt,
+          version: APP_BUILDER_WORKFLOW_VERSION,
+          workspace,
+        })),
     });
     return workspace;
   },

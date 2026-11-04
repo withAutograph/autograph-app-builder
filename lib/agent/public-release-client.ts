@@ -1,3 +1,4 @@
+import type { appIntegrationCapabilityPointerSchema } from "../provisioning/app-integration-release-contract";
 import {
   publicReleasePrerequisiteResponseSchema,
   PublicReleasePrerequisiteError,
@@ -79,9 +80,17 @@ export const publicReleaseClientForContext = async (ctx: WorkflowStepToolContext
   };
   return {
     sessionId: ownerContext.sessionId,
-    plan: async (appId: string) =>
+    plan: async (
+      appId: string,
+      integrationCapability?: z.infer<typeof appIntegrationCapabilityPointerSchema>,
+    ) =>
       await send(
-        { ...common, action: "public-release-plan", appId },
+        {
+          ...common,
+          action: "public-release-plan",
+          appId,
+          ...(integrationCapability === undefined ? {} : { integrationCapability }),
+        },
         publicReleasePlanResultSchema,
       ),
     release: async (input: PublicReleaseApprovalInput) =>

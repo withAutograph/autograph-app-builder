@@ -52,7 +52,7 @@ const fixture = () => {
     }
     return Response.json({
       token: "private-synthetic-installation-token",
-      expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+      expires_at: new Date(Date.now() + 3600000).toISOString(),
       permissions: { contents: "write", metadata: "read" },
       repository_selection: "selected",
       repositories: [{ id: 123 }],
@@ -64,7 +64,7 @@ const fixture = () => {
       GITHUB_APP_PRIVATE_KEY: privateKey.export({ format: "pem", type: "pkcs8" }),
     },
     installations: {
-      read: async () => {},
+      read: async () => undefined,
       list: async (authority) => {
         expect(authority).toEqual(plan.authority);
         return [
@@ -158,25 +158,4 @@ it("reads explicit source and provider-linked production refs without choosing a
     expectedProductionSha: f.plan.source.expectedProductionSha,
   });
   expect(f.mint).toHaveBeenCalledTimes(4);
-});
-
-it.each([
-  ["ABCD:1234:AA00:1234", { requestRef: "ABCD:1234:AA00:1234" }],
-  ["https://private.example/token", {}],
-])("retains only safe actual Octokit mint failure metadata for %s", async (header, retained) => {
-  const f = fixture();
-  f.mint.mockResolvedValue(
-    Response.json(
-      { message: "private-provider-token-and-customer-data", arbitrary: "sensitive" },
-      {
-        status: 403,
-        headers: { "x-github-request-id": header, "set-cookie": "private-cookie" },
-      },
-    ),
-  );
-  await expect(f.reader(f.invocation, f.plan)).rejects.toMatchObject({
-    name: "PublicReleaseProviderError",
-    diagnostic: { provider: "github", statusCode: 403, code: "forbidden", ...retained },
-  });
-  expect(f.mint).toHaveBeenCalledTimes(1);
 });

@@ -168,7 +168,6 @@ its own concrete scope and approval.
 - [Hosted runtime and protected Preview contract](../hosted-app-runtime.md)
 - [Public MCP contract](../public-mcp-contract.md)
 - [Production handoff](../production-readiness-handoff.md)
-
 ## Resource preparation and public release are separate approvals
 
 Fresh standard single-project setup plans carry
@@ -183,7 +182,6 @@ A separately approved public release binds the app-owned Production runtime
 configuration and publishes through native Git deployment. Resource readiness
 alone does not establish public delivery or authenticated browser acceptance.
 Previously frozen plans keep their original effects and semantics.
-
 The normal Auth handoff is selected from one owner-, app-, session-, and
 project-bound READY public Auth bootstrap release. The callback rechecks the
 original resource approval and actual public release approval history, the
@@ -196,7 +194,6 @@ public release binding alongside the original account setup digest.
 These local contracts and tests establish implementation behavior, not hosted
 acceptance evidence. Public delivery, normal sign-in, persistent app actions and
 provider lifecycle observations still require the progressive product run.
-
 A separate existing-app revision session recovers its original normal Builder
 destination from the authenticated owner's settled provisioning receipt, keyed
 by the accepted app ID and the independently acquired GitHub repository and
@@ -204,7 +201,6 @@ installation IDs. This read-only recovery does not copy the creation session,
 reuse an effect approval, adopt a project by name, or create another project.
 Ambiguous or mismatched receipts remain unavailable. New resource verification
 and public release approvals still belong to the revision session.
-
 Separate-session revisions retain the original restricted Auth and application
 database password pairs. Normal setup records app-owned private credential
 provenance after actual Auth schema readiness. A later resource plan identifies

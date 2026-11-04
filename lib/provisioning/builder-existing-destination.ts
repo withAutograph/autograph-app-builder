@@ -50,6 +50,7 @@ export const resolveExistingBuilderDestinationReference = async (input: {
   }
   const same = [
     row.record.response.status === "settled",
+    row.record.response.status === "settled",
     row.state === "settled",
     sameAuthority(row.authority, input.authority),
     row.record.response.appId === input.appId,

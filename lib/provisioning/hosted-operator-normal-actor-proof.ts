@@ -162,6 +162,11 @@ const readProof = async ({
       body.set("publicOperationRef", record.link.publicRelease.operationRef);
       body.set("publicPlanDigest", record.link.publicRelease.planDigest);
     }
+    if (record.link.publicRelease !== undefined) {
+      body.set("publicEnrollmentRef", record.link.publicRelease.enrollmentRef);
+      body.set("publicOperationRef", record.link.publicRelease.operationRef);
+      body.set("publicPlanDigest", record.link.publicRelease.planDigest);
+    }
     // Browser-session correlation would invoke the separate human capture callback; this nonce is already bound to the approved retained organization candidate.
     const cookie = cookieHeader(storageState, origin, path);
     observe({ stage: "proof_request", cookiePresent: cookie !== "" });
@@ -384,6 +389,7 @@ export const createHostedOperatorNormalActorProofCollector = (
           authResourceId: binding.authResourceId,
           bootstrapPlanDigest: binding.bootstrapPlanDigest,
           ...(binding.publicRelease === undefined ? {} : { publicRelease: binding.publicRelease }),
+
           browserOrigin: preparation.program.origin,
           endpointOrigin: binding.endpointOrigin,
           issuer: binding.issuer,

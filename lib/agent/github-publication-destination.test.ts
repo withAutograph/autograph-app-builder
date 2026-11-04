@@ -1,11 +1,20 @@
 /* oxlint-disable eslint/require-await -- Asynchronous owner/access ports preserve production semantics. */
+import type { ToolContext } from "eve/tools";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { ImmutableGitHubSourceReceipt } from "../repository/github-publication";
 import { recordRepositoryAccessReceipt } from "./repository-access-state";
-import { createPublicationTargetResolver } from "./github-publication-destination";
-
+import { resolvePublicationTargetForTool } from "./github-publication-destination";
+import { readBuilderPublicationDestinationForTool } from "./builder-publication-destination";
+import { resolveRepositoryAccessForTool } from "./repository-access-tool";
+vi.mock("./builder-publication-destination", () => ({
+  readBuilderPublicationDestinationForTool: vi.fn(),
+}));
+vi.mock("./repository-access-tool", () => ({ resolveRepositoryAccessForTool: vi.fn() }));
+vi.mock("./deployment-repository-access-runtime", () => ({
+  repositoryAccessRuntimeForSession: vi.fn(),
+}));
 const owned = { repository: "owner/app", repositoryId: "123", selectedInstallationId: "456" };
-const ctx = { callId: "review", session: { id: "saved", auth: {} } };
+const ctx = { callId: "review", session: { id: "saved", auth: {} } } as unknown as ToolContext;
 const repository = {
   version: 2 as const,
   repositoryId: "123",
@@ -29,46 +38,36 @@ const source: ImmutableGitHubSourceReceipt = {
   resolvedByCallId: "acquire",
   digest: "e".repeat(64),
 };
-const access = (installationId: string) => {
-  const observed = {
+const access = (installationId: string) => ({
+  kind: "ready" as const,
+  access: {
     status: "ready" as const,
     accessDigest: "f".repeat(64),
     repository: { ...repository, archived: false as const, repositoryVariableNames: [] },
     scope: { accountLogin: "owner", accountType: "Organization" as const, installationId },
-  };
-  return {
-    kind: "ready" as const,
-    access: observed,
-    receipt: recordRepositoryAccessReceipt({
-      current: undefined,
-      sessionId: "saved",
-      confirmedByCallId: "review",
-      access: observed,
-    }),
-  };
-};
+  },
+  receipt: recordRepositoryAccessReceipt({
+    current: undefined,
+    sessionId: "saved",
+    confirmedByCallId: "review",
+    access: {
+      status: "ready",
+      accessDigest: "f".repeat(64),
+      repository: { ...repository, archived: false, repositoryVariableNames: [] },
+      scope: { accountLogin: "owner", accountType: "Organization", installationId },
+    },
+  }),
+});
 const request = {
   ctx,
   appId: "app",
   sourceKind: "existing-repository" as const,
   githubSource: source,
 };
-const readOwned =
-  vi.fn<
-    NonNullable<
-      Parameters<typeof createPublicationTargetResolver<typeof ctx>>[0]["readOwnedDestination"]
-    >
-  >();
-const resolveAccess =
-  vi.fn<Parameters<typeof createPublicationTargetResolver<typeof ctx>>[0]["resolveAccess"]>();
-const resolvePublicationTargetForTool = createPublicationTargetResolver({
-  readOwnedDestination: readOwned,
-  resolveAccess,
-});
 beforeEach(() => {
   vi.resetAllMocks();
-  readOwned.mockResolvedValue(owned);
-  resolveAccess.mockResolvedValue(access("456"));
+  vi.mocked(readBuilderPublicationDestinationForTool).mockResolvedValue(owned);
+  vi.mocked(resolveRepositoryAccessForTool).mockResolvedValue(access("456"));
 });
 it("rechecks normal access and carries the saved installation through existing-app review", async () => {
   expect(await resolvePublicationTargetForTool(request)).toEqual({
@@ -83,29 +82,29 @@ it("rechecks normal access and carries the saved installation through existing-a
       },
     },
   });
-  expect(resolveAccess).toHaveBeenCalledWith(
-    owned,
+  expect(resolveRepositoryAccessForTool).toHaveBeenCalledWith(
+    { repository: owned.repository, selectedInstallationId: owned.selectedInstallationId },
     ctx,
+    undefined,
   );
-  expect(readOwned).toHaveBeenCalledTimes(2);
+  expect(readBuilderPublicationDestinationForTool).toHaveBeenCalledTimes(2);
   expect(request.githubSource).toBe(source);
 });
 it("denies a same-repository revision observed through a different installation", async () => {
-  resolveAccess.mockResolvedValue(access("999"));
+  vi.mocked(resolveRepositoryAccessForTool).mockResolvedValue(access("999"));
   await expect(resolvePublicationTargetForTool(request)).rejects.toThrow("destination changed");
 });
 it("denies canonical destination drift during revision access readback", async () => {
-  readOwned
+  vi.mocked(readBuilderPublicationDestinationForTool)
     .mockResolvedValueOnce(owned)
     .mockResolvedValueOnce({ ...owned, selectedInstallationId: "999" });
   await expect(resolvePublicationTargetForTool(request)).rejects.toThrow("destination changed");
 });
 it("retains the ordinary acquired source path for apps without a normal destination", async () => {
-  // oxlint-disable-next-line unicorn/no-useless-undefined -- Explicit absence preserves the existing acquired-source flow.
-  readOwned.mockResolvedValue(undefined);
+  vi.mocked(readBuilderPublicationDestinationForTool).mockResolvedValue(undefined);
   expect(await resolvePublicationTargetForTool(request)).toEqual({
     kind: "ready",
     target: { githubSource: source },
   });
-  expect(resolveAccess).not.toHaveBeenCalled();
+  expect(resolveRepositoryAccessForTool).not.toHaveBeenCalled();
 });

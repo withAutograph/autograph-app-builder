@@ -48,6 +48,7 @@ const operationStateSchema = z
     candidates: z.array(z.string().min(1).max(100)),
     failureDetail: z.string().max(2048).optional(),
     lastProviderDiagnostic: vercelProvisionDiagnosticSchema.optional(),
+
     leaseExpiresAt: z.string().datetime({ offset: true }).optional(),
     leaseId: z.string().uuid().optional(),
     nextRetryAt: z.string().datetime({ offset: true }).optional(),
@@ -91,6 +92,8 @@ export interface BuilderProvisionJournalStore {
     repositoryId: string;
     githubInstallationId: string;
   }) => Promise<readonly BuilderProvisionJournalRow[]>;
+
+  /** Exact owner/app/acquired repository identity; at most two rows establish uniqueness. */
 
   listDue?: (input: {
     now: Date;

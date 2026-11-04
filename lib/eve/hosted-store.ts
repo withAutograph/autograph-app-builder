@@ -3,6 +3,7 @@ import type {
   BuilderSessionDestination,
   BuilderDestinationEpoch,
 } from "../provisioning/builder-session-destination-contract";
+
 import type { NativeSendReadObservation } from "./hosted-submission-diagnostic";
 import {
   nativeRecoveryDescriptorSchema,
@@ -289,6 +290,7 @@ export const durableHostedSessionRecordSchema = z
     sessionId: z.string().min(1).max(200),
     sourceHandoffId: z.string().uuid().optional(),
     builderDestination: builderSessionDestinationSchema.optional(),
+
     stage: publicSessionStageSchema,
     status: sessionStatusSchema,
     title: z.string().min(1).max(200),

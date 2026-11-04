@@ -1259,3 +1259,28 @@ it("retains the exact public release nonce binding and rejects changed or missin
     }),
   ).rejects.toThrow("normal_actor_organization_proof_mismatch");
 });
+
+it("retains the exact public release nonce binding and rejects changed or missing public scope", async () => {
+  const { value, input } = await organizationProofFixture();
+  const publicRelease = {
+    enrollmentRef: "88888888-8888-4888-a888-888888888888",
+    operationRef: "99999999-9999-4999-a999-999999999999",
+    planDigest: "d".repeat(64),
+  };
+  const publicInput = { ...input, binding: { ...input.binding, publicRelease } };
+  const pending = await value.journal.prepareOrganizationProof(context, publicInput);
+  expect(pending.record.link.publicRelease).toEqual(publicRelease);
+  expect(await value.journal.prepareOrganizationProof(context, publicInput)).toEqual(pending);
+  await expect(value.journal.prepareOrganizationProof(context, input)).rejects.toThrow(
+    "normal_actor_organization_proof_mismatch",
+  );
+  await expect(
+    value.journal.prepareOrganizationProof(context, {
+      ...publicInput,
+      binding: {
+        ...publicInput.binding,
+        publicRelease: { ...publicRelease, planDigest: "e".repeat(64) },
+      },
+    }),
+  ).rejects.toThrow("normal_actor_organization_proof_mismatch");
+});

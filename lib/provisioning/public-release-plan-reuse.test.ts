@@ -3,6 +3,7 @@ import { reconcilePublicReleasePlanHistory } from "./public-release-plan-reuse";
 import { initialPublicReleaseRecord } from "./public-release-store";
 import { publicReleaseOperationRef, publicReleasePlanSchema } from "./public-release-contract";
 import { plan } from "./public-release-test-fixture";
+import { removal, retained } from "./public-release-integration-removal-test-fixture";
 
 describe("public release intent and prior row reconciliation", () => {
   it("resumes the identical frozen plan after native publication moved the production ref", () => {
@@ -37,14 +38,14 @@ describe("public release intent and prior row reconciliation", () => {
   });
   it("binds each provider-observed prior row to its exact own accepted journal receipt", () => {
     const record = initialPublicReleaseRecord(plan);
-    record.bindings.INVOICE_APP_DATABASE_URL = { state: "applied", acceptedEnvId: "env-owned" };
+    record.bindings.APP_DATABASE_URL = { state: "applied", acceptedEnvId: "env-owned" };
     record.effects = { "bind-production-runtime": "applied", "publish-release-source": "applied" };
     const candidate = publicReleasePlanSchema.parse({
       ...plan,
       runtime: { ...plan.runtime, releaseId: "next" },
     });
     const snapshot = {
-      key: "INVOICE_APP_DATABASE_URL",
+      key: "APP_DATABASE_URL",
       id: "env-owned",
       operationRef: publicReleaseOperationRef(plan),
       sha256: plan.environment[0].sha256,
@@ -75,7 +76,6 @@ describe("public release intent and prior row reconciliation", () => {
     ).toThrow();
   });
 });
-
 it("requires an ordinary reviewed source revision when runtime changes need a native build", () => {
   expect(() =>
     reconcilePublicReleasePlanHistory({
@@ -105,4 +105,19 @@ it("retains the original approved activation fence when the same intent is resum
   expect(
     reconcilePublicReleasePlanHistory({ candidate, records: [record], snapshots: [] }),
   ).toEqual(original);
+});
+
+it("a pending removal fence blocks a changed release before runtime or source writes", () => {
+  const original = publicReleasePlanSchema.parse({
+    ...plan,
+    purpose: "application",
+    integrationRemoval: removal,
+    retainedOptionalBindings: retained,
+    effects: ["fence-app-integration-authority", ...plan.effects],
+  });
+  const record = initialPublicReleaseRecord(original);
+  record.effects["fence-app-integration-authority"] = "pending";
+  expect(() =>
+    reconcilePublicReleasePlanHistory({ candidate: plan, records: [record], snapshots: [] }),
+  ).toThrow();
 });

@@ -1,0 +1,202 @@
+import type { AppIntegrationCapabilityRow } from "./app-integration-capability-store";
+import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
+import { z } from "zod";
+import type { openHostedPostgresDatabase } from "../mcp/hosted-route";
+import type { VercelTokenKeyringConfig } from "../integrations/vercel-installation";
+import type { OperatorOwnerContext } from "./hosted-operator-contract";
+import type { PublicReleaseRequestAuthority } from "./public-release-dispatcher";
+import type { readOwnedBuilderRuntime } from "./owned-builder-runtime";
+import type { ReadCentralIntegrationHostReady } from "./app-integration-central-authority";
+import { createPostgresAppIntegrationCapabilityStore } from "./app-integration-capability-store";
+import { createAppIntegrationCapabilityApprovalAuthority } from "./app-integration-capability-approval";
+import { createAppIntegrationPrivateCustody } from "./app-integration-private-custody";
+import {
+  appIntegrationReleaseAttachmentSchema,
+  preparedIntegrationScopeDigest,
+} from "./app-integration-release-contract";
+import type { AppIntegrationReleaseAttachment } from "./app-integration-release-contract";
+import {
+  readAppIntegrationCapabilityProfile,
+  selectedAppIntegrationCapabilityProfile,
+} from "./app-integration-capability-profile";
+import { AppIntegrationCapabilityPrerequisiteError } from "./app-integration-capability-prerequisite";
+const hash = (value: string) => createHash("sha256").update(value).digest("hex");
+const unavailable = () => new Error("public_release_integration_capability_unavailable");
+const requirePrepared = (row: AppIntegrationCapabilityRow | undefined, digest: string) => {
+  if (row === undefined || row.record.prepared === undefined) {
+    throw unavailable();
+  }
+  if (row.record.planDigest !== digest || row.record.approvalReceipts.length === 0) {
+    throw unavailable();
+  }
+  return { row, capability: row.record.prepared };
+};
+/** A model may select a reference; only the independent approved journal and private custody supply its values. */
+export const readAppIntegrationCapabilityForRelease = async (input: {
+  database: ReturnType<typeof openHostedPostgresDatabase>;
+  keyring: VercelTokenKeyringConfig;
+  pointer: { operationRef: string; planDigest: string };
+  owner: OperatorOwnerContext;
+  authority: PublicReleaseRequestAuthority;
+  owned: Awaited<ReturnType<typeof readOwnedBuilderRuntime>>;
+  publicOrigin: string;
+  builderOrigin: string;
+  request: Request;
+  assertCurrent: () => Promise<void>;
+  readCentralReady?: ReadCentralIntegrationHostReady;
+  environment: Readonly<Record<string, string | undefined>>;
+  fetch?: typeof fetch;
+}) => {
+  await input.assertCurrent();
+  const store = createPostgresAppIntegrationCapabilityStore(input.database);
+  const observedRow = await store.read(input.owner.authority, input.pointer.operationRef);
+  const { row, capability } = requirePrepared(observedRow, input.pointer.planDigest);
+  const plan = row.record.plan;
+  const owned = input.owned;
+  const selected = owned.description.integrations?.configuration?.find(
+    (entry) => entry.provider === "quickbooks",
+  );
+  const profile = readAppIntegrationCapabilityProfile(input.environment);
+  const currentProfile = selectedAppIntegrationCapabilityProfile(profile, plan.selection.appId);
+  const matches = [
+    input.owner.sessionId === plan.selection.sessionId,
+    owned.purpose === "application",
+    plan.selection.appId === owned.selection.appId,
+    owned.destination.projectId === plan.project.projectId,
+    owned.destination.teamId === plan.project.teamId,
+    owned.destination.installationId === plan.project.installationId,
+    owned.destination.provisioningRequestId === plan.project.provisioningRequestId,
+    owned.destination.provisioningDigest === plan.project.provisioningDigest,
+    owned.operator.operationRef === plan.runtime.operationRef,
+    owned.operator.planDigest === plan.runtime.planDigest,
+    owned.selection.releaseId === plan.release.id,
+    owned.selection.manifestSha256 === plan.release.manifestSha256,
+    owned.selection.appSpecDigest === plan.release.appSpecDigest,
+    owned.description.backend.kind === "generated-postgres" &&
+      owned.description.backend.release.artifactHash === plan.release.artifactSha256,
+    isDeepStrictEqual(
+      selected,
+      (() => {
+        const { artifactRef: sourceReference, ...configuration } = plan.providerConfiguration;
+        void sourceReference;
+        return configuration;
+      })(),
+    ),
+    isDeepStrictEqual(owned.description.integrations?.machineIngress, plan.machineIngress),
+    input.publicOrigin === plan.publicOrigin,
+    hash(JSON.stringify(currentProfile)) === plan.profileDigest,
+  ];
+  if (matches.includes(false)) {
+    throw unavailable();
+  }
+  if (input.readCentralReady === undefined) {
+    throw new AppIntegrationCapabilityPrerequisiteError("app_integration_central_host_required");
+  }
+  const central = await input.readCentralReady({
+    authority: input.owner.authority,
+    appId: plan.selection.appId,
+    appProjectId: plan.project.projectId,
+    teamId: plan.project.teamId,
+    assertCurrentOwner: input.assertCurrent,
+    signal: input.request.signal,
+  });
+  if (central === undefined) {
+    throw new AppIntegrationCapabilityPrerequisiteError("app_integration_central_host_required");
+  }
+  const centralMatches = [
+    central.setup.operationRef === plan.control.centralHostSetup.operationRef,
+    central.setup.planDigest === plan.control.centralHostSetup.planDigest,
+    central.callerSetup.operationRef === plan.control.centralHostSetup.callerOperationRef,
+    central.callerSetup.planDigest === plan.control.centralHostSetup.callerPlanDigest,
+    central.deployment.providerDeploymentId === plan.control.centralHostSetup.providerDeploymentId,
+    central.deployment.immutableOrigin === plan.control.origin,
+    central.caller.projectId === plan.project.projectId,
+    central.caller.ownerId === plan.project.teamId,
+    central.caller.trustedSourcesGrantSha256 ===
+      plan.control.centralHostSetup.trustedSourcesGrantSha256,
+  ];
+  if (centralMatches.includes(false)) {
+    throw unavailable();
+  }
+  const approval = createAppIntegrationCapabilityApprovalAuthority({
+    database: input.database,
+    builderOrigin: input.builderOrigin,
+    request: input.request,
+    owner: input.owner,
+    authority: input.authority,
+    assertCurrentOwner: input.assertCurrent,
+    fetch: input.fetch,
+  });
+  for (const receipt of row.record.approvalReceipts) {
+    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Each retained committed approval is independently re-read and may revoke capability custody.
+    const actual = await approval(plan, receipt.approvedByCallId);
+    if (!isDeepStrictEqual(actual, receipt)) {
+      throw unavailable();
+    }
+  }
+  const appScope = {
+    authority: plan.authority,
+    appId: plan.selection.appId,
+    projectId: plan.project.projectId,
+    provisioningRequestId: plan.project.provisioningRequestId,
+    provisioningDigest: plan.project.provisioningDigest,
+    resourceProfileId: plan.control.resourceProfileId,
+    controlResource: plan.control.database,
+    controlNeon: plan.control.neon,
+  };
+  const custody = createAppIntegrationPrivateCustody({
+    database: input.database,
+    keyring: input.keyring,
+    app: appScope,
+    assertCurrent: input.assertCurrent,
+  });
+  const scopeSha256 = preparedIntegrationScopeDigest(capability);
+  const configuration = await custody.read({
+    app: appScope,
+    purpose: "runtime-configuration",
+    version: 1,
+    checkpoint: `${row.record.planDigest}:${scopeSha256}`,
+  });
+  if (
+    configuration === undefined ||
+    configuration.reference !== capability.privateConfiguration.reference ||
+    configuration.sha256 !== capability.privateConfiguration.sha256
+  ) {
+    throw unavailable();
+  }
+  const serializedConfiguration = JSON.stringify(configuration.value);
+  const privateValue = z
+    .object({ reference: z.uuid(), scopeSha256: z.string(), setupProofSecret: z.string().min(32) })
+    .parse(configuration.value);
+  if (
+    privateValue.reference !== configuration.reference ||
+    privateValue.scopeSha256 !== scopeSha256
+  ) {
+    throw unavailable();
+  }
+  const attachment: AppIntegrationReleaseAttachment = appIntegrationReleaseAttachmentSchema.parse({
+    ...input.pointer,
+    capability,
+    scopeSha256,
+    readinessPath: plan.readinessPath,
+  });
+  await input.assertCurrent();
+  const latest = await store.read(input.owner.authority, input.pointer.operationRef);
+  if (
+    latest === undefined ||
+    latest.revision !== row.revision ||
+    !isDeepStrictEqual(latest.record, row.record)
+  ) {
+    throw unavailable();
+  }
+  return {
+    attachment,
+    serializedConfiguration,
+    setupProofSecret: privateValue.setupProofSecret,
+    environment: {
+      APP_INTEGRATIONS_CAPABILITY: JSON.stringify(capability),
+      APP_INTEGRATIONS_RUNTIME_CONFIGURATION: serializedConfiguration,
+    },
+  };
+};

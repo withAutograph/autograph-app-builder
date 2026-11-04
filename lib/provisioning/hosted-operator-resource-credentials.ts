@@ -609,6 +609,11 @@ export const rewrapOwnedAppResourceCredentials = (input: {
     !sameOperatorSelection(target.plan.selection, target.target),
     !isDeepStrictEqual(source.record.request, source.target),
     !isDeepStrictEqual(target.record.request, target.target),
+    source.target.scopeType !== target.target.scopeType,
+    !sameOperatorSelection(source.plan.selection, source.target),
+    !sameOperatorSelection(target.plan.selection, target.target),
+    !isDeepStrictEqual(source.record.request, source.target),
+    !isDeepStrictEqual(target.record.request, target.target),
     !isDeepStrictEqual(source.target, reference.source.target),
     operatorPlanDigest(source.plan) !== reference.source.planDigest,
     createHash("sha256").update(JSON.stringify(source.record.privateState)).digest("hex") !==
@@ -634,3 +639,5 @@ export const rewrapOwnedAppResourceCredentials = (input: {
   }
   return encryptHostedRuntimeFiles({ ...target, files: { [fileName]: JSON.stringify(original) } });
 };
+
+/** Rewrap both exact owned password pairs into a fresh session boundary without returning plaintext. */

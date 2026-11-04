@@ -1,3 +1,9 @@
+import {
+  preparePrivateComputePlanning,
+  privateComputeProjection,
+} from "./private-compute-planning";
+import { PRIVATE_COMPUTE_PROFILE_ID } from "../sandbox/private-compute-profile";
+import { localSourceReconciliationForPlanning } from "./refresh-local-planning-source";
 import { resolveLatestFrameworkVersions } from "../repository/framework-upgrade";
 import { refreshPlanningSource } from "./refresh-planning-source";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
@@ -34,7 +40,12 @@ export const prepareAppCreation = async (
   {
     existingAppChanges,
     frameworkUpgrade,
-  }: { existingAppChanges?: ExistingAppChange[]; frameworkUpgrade?: "latest" },
+    privateCompute,
+  }: {
+    existingAppChanges?: ExistingAppChange[];
+    frameworkUpgrade?: "latest";
+    privateCompute?: typeof PRIVATE_COMPUTE_PROFILE_ID;
+  },
   ctx: ToolContext,
 ) => {
   const state = appBuilderWorkflowState.get();
@@ -49,6 +60,12 @@ export const prepareAppCreation = async (
     );
   }
   const sandboxForPlanning = await refreshPlanningSource(ctx);
+  const computeProfile = await preparePrivateComputePlanning({
+    state,
+    sandbox: sandboxForPlanning,
+    requested: privateCompute,
+    callId: ctx.callId,
+  });
   const stateForPlanning = appBuilderWorkflowState.get();
   if (
     stateForPlanning.phase === "empty" ||
@@ -79,6 +96,9 @@ export const prepareAppCreation = async (
       appId: current.appSpec.appId,
       productAcceptance: productAcceptanceObligations(current.appSpec),
       reused: true,
+      ...(current.proposal.target.privateCompute === undefined
+        ? {}
+        : { privateCompute: current.proposal.target.privateCompute }),
     };
   }
 
@@ -116,6 +136,8 @@ export const prepareAppCreation = async (
       ? fixtureTargetCommandExecutor()
       : sandboxTargetCommandExecutor(sandbox),
     existingAppChanges,
+    localSourceReconciliation: localSourceReconciliationForPlanning(current),
+    privateCompute: computeProfile,
     ...frameworkPlanningOptions(
       execution.fixture,
       frameworkUpgrade,
@@ -192,5 +214,6 @@ export const prepareAppCreation = async (
     appId: current.appSpec.appId,
     productAcceptance: productAcceptanceObligations(current.appSpec),
     reused: false,
+    ...(computeProfile === undefined ? {} : { privateCompute: computeProfile }),
   };
 };

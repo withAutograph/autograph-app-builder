@@ -1,3 +1,4 @@
+import { sourceDeclaredToolchainActivationCommand } from "./source-toolchain";
 import { spawnSync } from "node:child_process";
 
 // oxlint-disable typescript/promise-function-async -- In-memory store fakes return settled Promises.
@@ -823,7 +824,13 @@ describe("target validation", () => {
       expect(run).toHaveBeenCalledExactlyOnceWith({
         command: `set +e
 log=$(mktemp /tmp/app-builder-validation.XXXXXX) || exit $?
-if [ -f '/tmp/autograph-app-runtime/b7a886d0cdd17479/example/environment.json' ]; then mise run --no-deps app:runtime run example ${command.includes(" app:check ") ? "repository-check" : "repository-test 1/1"}; else ${command}; fi > "$log" 2>&1
+(
+set -e
+(
+${sourceDeclaredToolchainActivationCommand()}
+)
+if [ -f '/tmp/autograph-app-runtime/b7a886d0cdd17479/example/environment.json' ]; then mise run --no-deps app:runtime run example ${command.includes(" app:check ") ? "repository-check" : "repository-test 1/1"}; else ${command}; fi
+) > "$log" 2>&1
 status=$?
 cat "$log"
 rm -f "$log"
@@ -852,10 +859,21 @@ exit "$status"`,
       const stateDirectory = path.posix.dirname(environmentPath);
       mkdirSync(stateDirectory, { mode: 0o700, recursive: true });
       writeFileSync(environmentPath, "{}", { mode: 0o600 });
+      mkdirSync(path.join(directory, ".config/mise"), { recursive: true });
+      writeFileSync(path.join(directory, ".config/mise/config.toml"), "[tools]\n");
+      writeFileSync(path.join(directory, "bun"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+      writeFileSync(path.join(directory, "source-cue"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
       const mise = path.join(directory, "mise");
       writeFileSync(
         mise,
         `#!/bin/sh
+case "$1" in
+ trust) exit 0 ;;
+ install) touch "$PWD/toolchain-ready"; exit 0 ;;
+ which) printf '%s\\n' "$PWD/source-cue"; exit 0 ;;
+esac
+if [ ! -f "$PWD/toolchain-ready" ]; then exit 25; fi
+if [ -n "$MISE_CONFIG_FILE" ]; then exit 26; fi
 if [ "$*" != "run --no-deps app:runtime run example ${runtimeTask}" ]; then exit 21; fi
 if [ "$APP_RUNTIME_STATE_DIR" != '${stateDirectory}' ]; then exit 22; fi
 if [ ! -f "$APP_RUNTIME_STATE_DIR/environment.json" ]; then exit 23; fi
@@ -881,7 +899,7 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
       };
       expect(
         execute({ command: `mise run --no-deps app:runtime run example ${runtimeTask}` }).exitCode,
-      ).toBe(22);
+      ).toBe(25);
       const run = vi.fn((input: Parameters<SandboxSession["run"]>[0]) =>
         Promise.resolve(execute(input)),
       );
@@ -928,12 +946,61 @@ printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
     },
   );
 
+  it("does not validate a resumed workspace when declared tool activation fails", async () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "builder-toolchain-failure-"));
+    try {
+      mkdirSync(path.join(directory, ".config/mise"), { recursive: true });
+      writeFileSync(path.join(directory, ".config/mise/config.toml"), "[tools]\n");
+      writeFileSync(path.join(directory, "bun"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+      writeFileSync(
+        path.join(directory, "mise"),
+        `#!/bin/sh
+case "$1" in
+ trust) exit 0 ;;
+ install) printf 'declared tool installation failed\\n' >&2; exit 13 ;;
+esac
+printf 'validation must not run\\n'
+exit 99
+`,
+        { mode: 0o755 },
+      );
+      const run = vi.fn((input: Parameters<SandboxSession["run"]>[0]) => {
+        const result = spawnSync("/bin/bash", ["-c", input.command], {
+          cwd: directory,
+          encoding: "utf-8",
+          env: { ...process.env, ...input.env, PATH: `${directory}:/usr/bin:/bin` },
+        });
+        if (result.error) throw result.error;
+        return Promise.resolve({
+          exitCode: result.status ?? -1,
+          stdout: result.stdout,
+          stderr: result.stderr,
+        });
+      });
+      const result = await sandboxValidationCommandExecutor()({
+        appId: "example",
+        command: "mise run --no-deps --skip-tools app:check example",
+        sandbox: { run } as unknown as SandboxSession,
+        validationRoot: directory,
+      });
+      expect(result.exitCode).toBe(13);
+      expect(result.stdout).toContain("declared tool installation failed");
+      expect(result.stdout).not.toContain("validation must not run");
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("returns a validation failure even when a local service keeps writing after the task exits", async () => {
     const directory = mkdtempSync(path.join(tmpdir(), "builder-validation-"));
+    mkdirSync(path.join(directory, ".config/mise"), { recursive: true });
+    writeFileSync(path.join(directory, ".config/mise/config.toml"), "[tools]\n");
+    writeFileSync(path.join(directory, "bun"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    writeFileSync(path.join(directory, "source-cue"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
     const mise = path.join(directory, "mise");
     writeFileSync(
       mise,
-      "#!/bin/sh\n(sleep 3; printf 'service log\\n') &\nprintf 'test failure\\n'\nexit 17\n",
+      "#!/bin/sh\ncase \"$1\" in trust|install) exit 0;; which) printf '%s\\n' \"$PWD/source-cue\"; exit 0;; esac\n(sleep 3; printf 'service log\\n') &\nprintf 'test failure\\n'\nexit 17\n",
     );
     chmodSync(mise, 0o755);
     try {

@@ -52,6 +52,38 @@ describe("native target deployment-owned resource selection", () => {
     expect(() => selectNativeTargetInstaller({ platform: access }, "fresh-app")).toThrow();
   });
 
+  it("deduplicates identical aliases independent of order and rejects distinct compatible workers", () => {
+    const alias = {
+      subcommand: generic.subcommand,
+      sha256: generic.sha256,
+      executablePath: generic.executablePath,
+      operationScope: generic.operationScope,
+      id: generic.id,
+    };
+    expect(selectNativeTargetInstaller({ first: generic, second: alias }, "new-app")).toEqual(
+      generic,
+    );
+    expect(selectNativeTargetInstaller({ second: alias, first: generic }, "new-app")).toEqual(
+      generic,
+    );
+    const another = { ...generic, sha256: "c".repeat(64) };
+    expect(() =>
+      selectNativeTargetInstaller({ first: generic, second: another }, "new-app"),
+    ).toThrow();
+    expect(() =>
+      selectNativeTargetInstaller({ second: another, first: generic }, "new-app"),
+    ).toThrow();
+    expect(
+      selectNativeTargetInstaller(
+        { first: generic, second: another, "new-app": generic },
+        "new-app",
+      ),
+    ).toEqual(generic);
+    expect(() =>
+      selectNativeTargetInstaller({ first: generic, "new-app": access }, "new-app"),
+    ).toThrow();
+  });
+
   it("blocks a second dedicated project for an app with an existing configured physical target", () => {
     const applications = {
       "requests-app": {

@@ -1,3 +1,5 @@
+import type { z } from "zod";
+import type { appIntegrationCapabilityPointerSchema } from "../provisioning/app-integration-release-contract";
 import type { publicReleaseClientForContext } from "./public-release-client";
 import {
   PublicReleasePrerequisiteError,
@@ -9,9 +11,12 @@ import { withBuilderDestinationGuidance } from "../provisioning/builder-destinat
 export const planPublicAppWithGuidance = async (
   client: Pick<Awaited<ReturnType<typeof publicReleaseClientForContext>>, "plan" | "sessionId">,
   appId: string,
+  integrationCapability?: z.infer<typeof appIntegrationCapabilityPointerSchema>,
 ) => {
   try {
-    return await client.plan(appId);
+    return integrationCapability === undefined
+      ? await client.plan(appId)
+      : await client.plan(appId, integrationCapability);
   } catch (error) {
     if (!(error instanceof PublicReleasePrerequisiteError)) {
       throw error;

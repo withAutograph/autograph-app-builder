@@ -291,3 +291,32 @@ describe("approval receipt", () => {
     ).toBe("user-approval");
   });
 });
+
+describe("saved continuity consent rendering", () => {
+  const compact = {
+    action: "continuity",
+    planRef: "_protected-operator/continuity-plans/20000000-0000-4000-8000-000000000002",
+    planDigest: "a".repeat(64),
+    idempotencyKey: "retained-intent",
+  };
+  it("renders fixed effects and an exact saved reference without inventing an actor roster", () => {
+    const description = publicApprovalDescription(compact, "run-app-continuity-tests");
+    expect(description).toContain("restart only this app's process");
+    expect(description).toContain("temporarily publish its test connection");
+    expect(description).toContain("remove the temporary connection");
+    expect(description).toContain("Saved plan: 20000000-0000-4000-8000-000000000002");
+    expect(description).toContain(`Plan fingerprint: ${compact.planDigest}`);
+    expect(description).toContain("verifies its full owner-scoped plan before execution");
+    expect(description).not.toContain("provider identity references");
+  });
+  it.each([
+    { ...compact, planRef: "untrusted/20000000-0000-4000-8000-000000000002" },
+    { ...compact, planDigest: "invalid" },
+    { ...compact, action: "prepare" },
+    { ...compact, plan: {} },
+    { ...compact, actors: ["invented"] },
+    { ...compact, idempotencyKey: "" },
+  ])("fails closed for malformed or augmented inputs", (input) => {
+    expect(publicApprovalDescription(input, "run-app-continuity-tests")).toBeUndefined();
+  });
+});

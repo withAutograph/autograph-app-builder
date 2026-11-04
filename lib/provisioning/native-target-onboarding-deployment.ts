@@ -57,6 +57,7 @@ type Current = NativeTargetCurrentOwner & { historyOwner: OperatorOwnerContext }
 interface AppOwner {
   verifyWorkload: (request: Request) => Promise<void>;
   assertNoStandardBuilderDestination?: AppOwner["assertCanonicalAppOwner"];
+
   assertCanonicalAppOwner: (input: {
     authority: OperatorOwnerContext["authority"];
     ownerContext: OperatorOwnerContext;
@@ -88,11 +89,35 @@ export const selectNativeTargetInstaller = (
   const compatible = (worker: typeof configured) =>
     worker?.operationScope === "generated-app-release-install-v1" &&
     worker.subcommand === "protected-generated-app-install";
-  const worker = compatible(configured) ? configured : Object.values(workers).find(compatible);
-  if (worker === undefined) {
+  if (configured !== undefined) {
+    if (!compatible(configured)) {
+      throw unavailable();
+    }
+    return configured;
+  }
+  const candidates = new Map<
+    string,
+    HostedOperatorSourceConfiguration["sandbox"]["workers"][string]
+  >();
+  for (const worker of Object.values(workers)) {
+    if (compatible(worker)) {
+      // Catalog aliases of the same immutable descriptor are one capability.
+      const identity = JSON.stringify([
+        worker.id,
+        worker.executablePath,
+        worker.sha256,
+        worker.operationScope,
+        worker.subcommand,
+      ]);
+      candidates.set(identity, worker);
+    }
+  }
+  if (candidates.size !== 1) {
     throw unavailable();
   }
-  return worker;
+  const candidate = candidates.values().next().value;
+  if (candidate === undefined) { throw unavailable(); }
+  return candidate;
 };
 
 /** A configured physical target already owns this app ID, including its existing resource names. */

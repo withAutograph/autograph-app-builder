@@ -102,6 +102,7 @@ describe("builder provisioning journal", () => {
     const dependencies = {
       journal: store,
       // oxlint-disable-next-line eslint/require-await -- Promise-returning credential test double.
+      // oxlint-disable-next-line eslint/require-await -- Promise-returning credential test double.
       readVercelCredential: async () => ({
         binding: {
           active: true,
@@ -115,6 +116,7 @@ describe("builder provisioning journal", () => {
         },
         token: secret,
       }),
+      // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
       // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
       fetch: async (_url: string, init?: RequestInit) => {
         if (init?.method === "POST") {
@@ -153,6 +155,94 @@ describe("builder provisioning journal", () => {
       authority,
       request: selected,
       dependencies,
+    });
+    expect(retry.vercel).toMatchObject({ status: "failed", code: "reconciliation_uncertain" });
+    const projection = await readBuilderProvisioning({
+      authority,
+      journal: store,
+      requestId: selected.requestId,
+    });
+    expect(
+      projection?.diagnostics?.find((value) => value.provider === "vercel")?.lastProviderDiagnostic,
+    ).toEqual({
+      statusCode: 403,
+      code: "integration_configuration_disabled",
+      requestRef: "iad1::denied_123",
+    });
+    expect(postCount).toBe(1);
+    const saved = await store.read({ authority, requestId: selected.requestId });
+    expect(JSON.stringify(saved)).not.toContain(secret);
+    expect(JSON.stringify(projection)).not.toContain(secret);
+    expect(
+      await readBuilderProvisioning({
+        authority: { ...authority, ownerUserId: "other" },
+        journal: store,
+        requestId: selected.requestId,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("persists sanitized provider denial evidence across reads and reconciliation retry", async () => {
+    const store = memoryStore();
+    const selected = builderProvisionRequestSchema.parse({
+      ...request,
+      operation: "vercel",
+      providers: { vercelInstallationId: "icfg_202" },
+    });
+    const secret = "private-credential-and-message";
+    let postCount = 0;
+    const dependencies = {
+      journal: store,
+      readVercelCredential: async () => ({
+        binding: {
+          active: true,
+          installationId: "icfg_202",
+          scopeType: "team",
+          scopeId: "team_1",
+          slug: "owner",
+          displayName: "Owner",
+          plan: "pro",
+          updatedAt: new Date(),
+        },
+        token: secret,
+      }),
+      fetch: async (_url: string, init?: RequestInit) => {
+        if (init?.method === "POST") {
+          postCount += 1;
+          return Response.json(
+            {
+              error: { code: "integration_configuration_disabled", message: secret },
+              token: secret,
+            },
+            {
+              status: 403,
+              headers: { "x-vercel-id": "iad1::denied_123" },
+            },
+          );
+        }
+        return postCount === 0
+          ? Response.json({}, { status: 404 })
+          : Response.json({ id: "unproven" });
+      },
+    };
+    const result = await executeBuilderProvisioning({
+      authority,
+      request: selected,
+      dependencies: dependencies as never,
+    });
+    expect(result.vercel).toMatchObject({
+      status: "failed",
+      code: "provider_permission_denied",
+      providerDiagnostic: {
+        statusCode: 403,
+        code: "integration_configuration_disabled",
+        requestRef: "iad1::denied_123",
+      },
+    });
+    const retry = await executeBuilderProvisioning({
+      authority,
+      request: selected,
+      dependencies: dependencies as never,
     });
     expect(retry.vercel).toMatchObject({ status: "failed", code: "reconciliation_uncertain" });
     const projection = await readBuilderProvisioning({

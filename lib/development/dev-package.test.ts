@@ -23,6 +23,30 @@ describe("development Codex package", () => {
         installPlugin: false,
         marketplaceRoot: "/private/another-instance/marketplace",
         version: "0.0.0-development.3200",
+        runner: async () => {
+          commands += 1;
+          throw new Error("An endpoint-only launch must not execute Codex commands.");
+        },
+      });
+      expect(result).toMatchObject({ installed: false });
+      expect(commands).toBe(0);
+      expect(await readFile(path.join(codexHome, "config.toml"), "utf-8")).toBe(existing);
+    } finally {
+      await rm(codexHome, { force: true, recursive: true });
+    }
+  });
+
+  it("leaves an existing client profile untouched when plugin installation is disabled", async () => {
+    const codexHome = await mkdtemp(path.join(tmpdir(), "codex-endpoint-only-"));
+    const existing = '[plugins."app-builder@autograph-dev"]\nenabled = true\n';
+    await writeFile(path.join(codexHome, "config.toml"), existing);
+    let commands = 0;
+    try {
+      const result = await registerDevelopmentPackage({
+        codexHome,
+        installPlugin: false,
+        marketplaceRoot: "/private/another-instance/marketplace",
+        version: "0.0.0-development.3200",
         runner: () => {
           commands += 1;
           return Promise.reject(

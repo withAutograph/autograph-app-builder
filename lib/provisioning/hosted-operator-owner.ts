@@ -1,7 +1,8 @@
-import { resolveExistingBuilderDestinationReference } from "./builder-existing-destination";
-import { isDeepStrictEqual } from "node:util";
 import type { BuilderProvisionResponse } from "./contracts";
 import type { BuilderProvisionJournalStore } from "./journal";
+import { resolveExistingBuilderDestinationReference } from "./builder-existing-destination";
+import { isDeepStrictEqual } from "node:util";
+
 import { readParticipantSuccessorPredecessor } from "./hosted-operator-participant-successor";
 import { readUnapprovedCapturePredecessor } from "./hosted-operator-unapproved-capture-history";
 import { readAppGatewaySourcePredecessor } from "./hosted-operator-app-gateway-source-successor";
@@ -78,6 +79,7 @@ type VerifierKeyResolver = Parameters<typeof createOperatorWorkloadVerifier>[1];
 export interface HostedOperatorOwnerDependencies {
   readProvisioning?: BuilderProvisionJournalStore["read"];
   findProvisioningForAppRepository?: BuilderProvisionJournalStore["findSettledAppRepository"];
+
   journal?: Pick<HostedRuntimeJournalStore, "read">;
   realmContinuation?: RealmContinuationVerificationOptions;
   workloadPolicy: OperatorWorkloadPolicy;
@@ -216,7 +218,7 @@ const readCurrentOwnedSession = async (
       adapterSessionId: current.adapterSessionId,
       nativeRecoveryBinding: currentBinding,
       privateBuildDecision: current.privateBuildDecision,
-      builderDestination: current.builderDestination,
+      builderDestination: current.builderDestination ?? original.builderDestination,
       resumability: current.resumability,
       stage: current.stage,
       status: current.status,
@@ -718,6 +720,8 @@ export const readOwnedStandardBuilderDestinationReference = async (
   return reference;
 };
 
+/** Recover an existing app destination only from its privately acquired repository and owned normal receipt. */
+
 const readDirectStandardBuilderDestination = async (
   deps: StandardDestinationDependencies,
   input: HostedOperatorAppOwnerContext,
@@ -727,6 +731,9 @@ const readDirectStandardBuilderDestination = async (
   if (reference === undefined || deps.readProvisioning === undefined) {
     // oxlint-disable-next-line unicorn/no-useless-undefined -- Explicit absent destination is part of this async result.
     return undefined;
+  }
+  if (reference.appId !== input.target.appId) {
+    throw resourceMismatch();
   }
   if (reference.appId !== input.target.appId) {
     throw resourceMismatch();
@@ -781,6 +788,8 @@ const readDirectStandardBuilderDestination = async (
     latestProject.installationId === project.installationId,
     latestProject.scope.id === project.scope.id,
     latestProject.scope.type === project.scope.type,
+    latestProject.scope.id === project.scope.id,
+    latestProject.scope.type === project.scope.type,
   ].every(Boolean);
   if (!unchanged) {
     throw unavailable();
@@ -791,8 +800,13 @@ const readDirectStandardBuilderDestination = async (
     installationId: project.installationId,
     name: access.project.name,
     productionBranch: access.project.productionBranch,
+
     repository: project.linkedGitHubRepository,
     ...standardRepository(row.record.response),
+    githubInstallationId:
+      row.record.response.github.status === "succeeded"
+        ? row.record.response.github.installationId
+        : undefined,
     provisioningRequestId: row.requestId,
     provisioningDigest: row.requestDigest,
     deploymentAccess: row.record.request.deploymentAccess,
@@ -871,13 +885,18 @@ export const readStandardBuilderDestination = async (
     installationId: project.installationId,
     name: access.project.name,
     productionBranch: access.project.productionBranch,
+
     repository: project.linkedGitHubRepository,
     ...standardRepository(receipt),
+    githubInstallationId:
+      receipt.github.status === "succeeded" ? receipt.github.installationId : undefined,
     provisioningRequestId: receipt.requestId,
     provisioningDigest: receipt.requestDigest,
     deploymentAccess: receipt.deploymentAccess,
   };
 };
+
+/** Only an existing normal Builder handoff receipt can identify this destination. */
 
 /** No project grant or provider credential is needed to read this owner's app registration. */
 export const createHostedOperatorAppOwnerAuthority = (

@@ -1,3 +1,4 @@
+import { localPlanningSourceRefreshRequirement } from "@/lib/agent/refresh-local-planning-source";
 import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { validationLogsWithReadInputs } from "@/lib/agent/validation-log-read-input";
 import { publishCompiledOperatorArtifactsForSession } from "@/lib/agent/compiled-operator-artifacts";
@@ -181,6 +182,13 @@ export const createAppValidationTool = (
       ) {
         throw new Error("Apply the requested changes before running the repository checks.");
       }
+      const localSourceRefresh = await localPlanningSourceRefreshRequirement(current);
+      if (localSourceRefresh !== undefined)
+        return {
+          status: "needs_repair" as const,
+          reason: "local-source-refresh-required",
+          problem: localSourceRefresh,
+        };
       assertExistingAppImplementationFiles(input.implementationFiles, current.proposal.target);
       validationPhase(ctx.callId, "resolving_sandbox");
       const sandbox = await ctx.getSandbox();

@@ -271,6 +271,7 @@ const resourcePreparationPlan = (plan: HostedOperatorPlan): HostedOperatorPlan =
     ),
   };
 };
+
 const appStageEffects = (
   effects: HostedOperatorPlan["effects"],
   gatewayBindings: HostedOperatorPlan["gatewayBindings"],
@@ -1563,6 +1564,7 @@ export const composeHostedOperatorDependencies = (
         appTrustedSources: oldAppTrustedSources,
         appDeliveryReplacement: oldAppDeliveryReplacement,
         runtimePreparation: oldRuntimePreparation,
+
         existingResources: oldExistingResources,
         ...cleanupBase
       } = retained;
@@ -1572,6 +1574,7 @@ export const composeHostedOperatorDependencies = (
       void oldGatewayDelivery;
       void oldAppTrustedSources;
       void oldAppDeliveryReplacement;
+      void oldRuntimePreparation;
       void oldRuntimePreparation;
       void oldExistingResources;
       return hostedOperatorPlanSchema.parse({
@@ -1875,6 +1878,7 @@ export const composeHostedOperatorDependencies = (
         ...(configuration.composition === "single-project-services"
           ? { runtimePreparation: "single-project-resources-v1" }
           : {}),
+
         contextId: selected.contextId ?? selected.currentSpec.appSpecDigest,
         cost: {
           class: "shared-recovery-group",
@@ -2027,6 +2031,19 @@ export const composeHostedOperatorDependencies = (
       gatewayPlan.normalActorProgram === undefined
         ? undefined
         : inspectPlanningParticipantBootstrapPreparation(gatewayPlan, current?.record);
+    // Resource setup alone never claims a live transport. New normal participant
+    // planning uses the independently approved READY public Auth release instead.
+    if (gatewayPlan.runtimePreparation !== undefined && bootstrapPreparation?.auth !== undefined) {
+      await controlPlane.readApprovedPublicAuthBootstrap(context);
+      await authReadiness.verify({
+        ...context,
+        plan: bootstrapPreparation.auth.plan,
+        assertCurrent: async () => {
+          await controlPlane.assertPlanningAuthorized(context);
+        },
+      });
+      participantsBootstrapPrepared = true;
+    }
     // Resource setup alone never claims a live transport. New normal participant
     // planning uses the independently approved READY public Auth release instead.
     if (gatewayPlan.runtimePreparation !== undefined && bootstrapPreparation?.auth !== undefined) {
@@ -2904,6 +2921,26 @@ export const composeHostedOperatorDependencies = (
         sessionId: input.target.sessionId,
       };
     }
+    if (operator.plan.runtimePreparation !== undefined) {
+      const released = await controlPlane.readApprovedPublicAuthBootstrap(input);
+      const pending = await controlPlane.prepareRealmIdentityLink({
+        audience: configuration.operator.origin,
+        authResourceId: operator.plan.authDatabase.resourceId,
+        bootstrapPlanDigest: operator.planDigest,
+        browserOrigin: released.plan.publicOrigin,
+        context: input,
+        endpointOrigin: released.plan.publicOrigin,
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+        issuer: released.plan.publicOrigin,
+        organizationId: organizationId ?? null,
+      });
+      return {
+        browserUrl: createRealmIdentityBrowserUrl(pending),
+        expiresAt: pending.link.expiresAt,
+        operationRef: input.operationRef,
+        sessionId: input.target.sessionId,
+      };
+    }
     const candidate = operator.gatewayDeliveryCandidates?.find(
       (value) =>
         value.deploymentId === operator.deliveredGatewayDeploymentId &&
@@ -2965,6 +3002,11 @@ export const composeHostedOperatorDependencies = (
     exportRequest: controlPlane.exportRequest,
     continuityRequest: controlPlane.continuityRequest,
     nativeTargetRequest: controlPlane.nativeTargetRequest,
+    publicReleaseRequest: controlPlane.publicReleaseRequest,
+    appIntegrationCapabilityRequest: controlPlane.appIntegrationCapabilityRequest,
+    centralIntegrationHostRequest: controlPlane.centralIntegrationHostRequest,
+    centralIntegrationDeploymentReceiptRequest:
+      controlPlane.centralIntegrationDeploymentReceiptRequest,
     assertAuthorized: controlPlane.assertAuthorized,
     readReadyDeliveryReplacementPlan: async (context) => {
       const policy = selectedApplication(configuration, context).hostProtection;
@@ -3006,6 +3048,7 @@ export const composeHostedOperatorDependencies = (
       controlPlane,
     ),
     bindings,
+    publicRuntimeBinding: controlPlane.readPublicRuntimeBinding,
     normalActorRuntimeBindings: async (input) =>
       await controlPlane.readNormalActorRuntimeBindings(input),
     executeEffect,
@@ -3198,6 +3241,7 @@ export const createRequestScopedHostedOperatorDependencies =
         environment: input.environment,
         sourceConfiguration: configuration,
         workloadPolicy: configuration.workloadPolicy,
+        request,
       });
     } catch (error) {
       reportHostedOperatorNativeFailure("control_plane", error);

@@ -1,3 +1,4 @@
+import { createHostedOperatorNativeHandler } from "./hosted-operator-native";
 import {
   captureFixture,
   context as captureContext,
@@ -54,6 +55,7 @@ import {
 } from "./hosted-operator-deployment";
 import { requireFinalResourceBindingPhase } from "./hosted-operator-resource-binding-phase";
 import {
+  createRequestScopedHostedOperatorDependencies,
   composeHostedOperatorDependencies,
   createDependencies,
   createConfiguredPreviewTargetResolver,
@@ -1165,6 +1167,8 @@ const unusedCompositionControlPlane = (): Parameters<
     reserveFenceGeneration: unexpectedPort,
   };
   return {
+    centralIntegrationHostRequest: unexpectedPort,
+    centralIntegrationDeploymentReceiptRequest: unexpectedPort,
     exportRequest: unexpectedPort,
     continuityRequest: unexpectedPort,
     readNormalActorRuntimeBindings: unexpectedPort,
@@ -1209,6 +1213,7 @@ const unusedCompositionControlPlane = (): Parameters<
     checkpointSharedAuthAdoption: unexpectedPort,
     close: unexpectedPort,
     consumeOwnerRealmIdentityCallback: unexpectedPort,
+    resolveRealmIdentityCallbackOwnerContext: unexpectedPort,
     prepareRealmIdentityLink: unexpectedPort,
     prepareNormalActorCapture: unexpectedPort,
     readPendingNormalActorCapture: unexpectedPort,
@@ -1232,7 +1237,6 @@ const unusedCompositionControlPlane = (): Parameters<
     readSharedGatewayRows: unexpectedPort,
     reserveRealmIdentityLink: unexpectedPort,
     resolveRealmIdentityCallbackContext: unexpectedPort,
-    resolveRealmIdentityCallbackOwnerContext: unexpectedPort,
     readApprovedPublicAuthBootstrap: unexpectedPort,
     readOwnedAppResourceSource: unexpectedPort,
     checkpointOwnedAppResourceSource: unexpectedPort,
@@ -5128,4 +5132,51 @@ it("plans same-project resource preparation without Preview effects or an enviro
       ],
     }),
   ).toThrow();
+});
+it("forwards all additive native delivery contracts through the actual request-scoped production composition", async () => {
+  const f = publicationFixture();
+  const base = unusedCompositionControlPlane();
+  const paths = [
+    "/v1/public-release",
+    "/v1/app-integrations",
+    "/v1/central-integrations",
+    "/v1/central-deployment-events",
+  ];
+  const seen: string[] = [];
+  const delegated = async (incomingRequest: Request) => {
+    if (incomingRequest.headers.get("authorization") !== "Bearer exact-workload")
+      return Response.json({ code: "denied" }, { status: 403 });
+    seen.push(new URL(incomingRequest.url).pathname);
+    return Response.json({ status: "native-owner-bound" });
+  };
+  const handler = createHostedOperatorNativeHandler({
+    createRequestDependencies: createRequestScopedHostedOperatorDependencies({
+      resolveConfiguration: () => Promise.resolve(f.configuration),
+      openControlPlane: (input) => {
+        expect(input.request).toBeInstanceOf(Request);
+        return Promise.resolve({
+          ...base,
+          publicReleaseRequest: delegated,
+          appIntegrationCapabilityRequest: delegated,
+          centralIntegrationHostRequest: delegated,
+          centralIntegrationDeploymentReceiptRequest: delegated,
+          close: () => Promise.resolve(),
+        });
+      },
+    }),
+  });
+  await Promise.all(
+    paths.map(async (path) => {
+      const response = await handler(
+        new Request(`https://operator.example${path}`, {
+          method: "POST",
+          headers: { authorization: "Bearer exact-workload" },
+          body: "{}",
+        }),
+      );
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ status: "native-owner-bound" });
+    }),
+  );
+  expect(seen.toSorted()).toEqual(paths.toSorted());
 });

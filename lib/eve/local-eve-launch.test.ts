@@ -49,7 +49,10 @@ function fixture() {
   ]) {
     mkdirSync(directoryPath, { mode: 0o700, recursive: true });
   }
+  const cycleFile = path.join(stateRoot, "eve-cycle");
+  writeFileSync(cycleFile, "c".repeat(64), { mode: 0o600 });
   const environment: Record<string, string> = {
+    APP_BUILDER_LOCAL_EVE_CYCLE_FILE: cycleFile,
     APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "0",
     APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY: "d".repeat(64),
     APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT: "c".repeat(64),
@@ -118,6 +121,41 @@ describe("closed local Eve launch", () => {
     expect(signals.listenerCount("SIGTERM")).toBe(0);
   });
 
+  it("forwards only the typed supervisor observation matching the linked project", () => {
+    const input = fixture();
+    input.environment.APP_BUILDER_PRIVATE_COMPUTE_LIMITS = "untrusted ambient value";
+    const options = {
+      environment: input.environment,
+      eveCli: "/repository/node_modules/.pnpm/eve/bin/eve.js",
+      oidcToken: "test-oidc",
+      pinnedNode: "/mise/node/24.18.0/bin/node",
+      repositoryRoot: input.repositoryRoot,
+      vercelProject: { orgId: "team_example", projectId: "prj_example" },
+    };
+    expect(
+      createLocalEveInvocation(options).environment.APP_BUILDER_PRIVATE_COMPUTE_LIMITS,
+    ).toBeUndefined();
+    const privateComputeLimits = {
+      version: 1 as const,
+      teamId: "team_example",
+      projectId: "prj_example",
+      plan: "pro" as const,
+      maxVcpus: 8 as const,
+      limited: false as const,
+      observedAt: "2026-11-03T12:00:00.000Z",
+    };
+    const invocation = createLocalEveInvocation({ ...options, privateComputeLimits });
+    expect(invocation.environment.APP_BUILDER_PRIVATE_COMPUTE_LIMITS).toBe(
+      JSON.stringify(privateComputeLimits),
+    );
+    expect(() =>
+      createLocalEveInvocation({
+        ...options,
+        privateComputeLimits: { ...privateComputeLimits, projectId: "prj_other" },
+      }),
+    ).toThrow("linked");
+  });
+
   it("projects project OIDC only into the fresh Eve application", () => {
     const input = fixture();
     const sentinel = "oidc-sentinel-must-not-leak";
@@ -147,6 +185,9 @@ describe("closed local Eve launch", () => {
     expect(invocation.environment.VERCEL_OIDC_TOKEN).toBe(sentinel);
     expect(invocation.environment.APP_BUILDER_SANDBOX_PROVIDER).toBe("vercel");
     expect(invocation.environment.APP_BUILDER_EXECUTION_BUNDLE).toBe("local-development");
+    expect(invocation.environment.APP_BUILDER_LOCAL_EVE_CYCLE_FILE).toBe(
+      input.environment.APP_BUILDER_LOCAL_EVE_CYCLE_FILE,
+    );
     expect(invocation.environment.WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS).toBe("0");
     expect(invocation.environment.REPOSITORY_LOCAL_ROOTS).toBe(
       realpathSync(path.join(path.dirname(input.repositoryRoot), "actual-arrusted")),
@@ -235,6 +276,41 @@ describe("closed local Eve launch", () => {
       }),
     ).toThrow();
   });
+});
+
+it("the real child launch can retain private planning artifacts without a hosted operator", async () => {
+  const f = fixture();
+  const invocation = createLocalEveInvocation({
+    repositoryRoot: f.repositoryRoot,
+    environment: f.environment,
+    pinnedNode: process.execPath,
+    eveCli: "/owned/eve-cli.mjs",
+    oidcToken: "synthetic-project-oidc",
+    vercelProject: { projectId: "project", orgId: "team" },
+  });
+  const authority = await readLocalOperatorArtifactAuthority(invocation.environment);
+  expect(authority).toBeDefined();
+  if (authority === undefined) {
+    throw new Error("missing local planning authority");
+  }
+  const context = {
+    authority,
+    target: { appId: "supplier-spend", sessionId: "saved-local-session" },
+  };
+  const artifacts = await createLocalOperatorArtifactStorage({
+    authority,
+    assertCurrentOwner: (current) => {
+      expect(current).toEqual(context);
+      return Promise.resolve();
+    },
+  });
+  const artifactRef = `_protected-operator/artifacts/source-review-context/supplier-spend/${"a".repeat(64)}`;
+  await artifacts.store.put(context, {
+    artifactRef,
+    chunkIndex: 0,
+    content: "private reviewed app plan",
+  });
+  expect(await artifacts.store.read(context, artifactRef, 0)).toBe("private reviewed app plan");
 });
 
 it("the real child launch can retain private planning artifacts without a hosted operator", async () => {

@@ -1,6 +1,7 @@
 /* oxlint-disable unicorn/no-useless-undefined -- Explicit empty registry results and void async mocks preserve the production port contracts. */
 import { describe, expect, it, vi } from "vitest";
 import { validateHostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration-schema";
+
 import { resolveNativeTargetEffectiveConfiguration } from "./native-target-effective-configuration";
 import { nativeTargetResourceProfileAuthorityDigest } from "./native-target-resource-profile";
 import type { NativeTargetReadyRegistration } from "./native-target-onboarding-contract";
@@ -772,6 +773,117 @@ describe("explicit standard single-project destination", () => {
     delete value.composition;
     expect(() => validateHostedOperatorSourceConfiguration(value)).toThrow();
   });
+
+  it("admits a coherent standard topology only when it is explicitly selected", () => {
+    const value = standard();
+    expect(validateHostedOperatorSourceConfiguration(value).composition).toBe(
+      "single-project-services",
+    );
+    delete value.composition;
+    expect(() => validateHostedOperatorSourceConfiguration(value)).toThrow();
+  });
+
+  it.each([true, false])(
+    "retains the selected Services destination with historical registration=%s",
+    async (registered) => {
+      const value = standard();
+      const readReady = vi.fn().mockResolvedValue(registered ? ready("sibling") : undefined);
+      const result = await resolveNativeTargetEffectiveConfiguration({
+        configuration: value,
+        invocation: "current-owner",
+        appId: "sibling",
+        readReady,
+      });
+      expect(readReady).toHaveBeenCalledWith("current-owner", "sibling");
+      expect(result.applications.sibling?.projectId).toBe(value.gateway.projectId);
+      expect(result.applications.sibling?.projectSettings).toEqual({
+        framework: "services",
+        rootDirectory: ".",
+      });
+      expect(result.applications.sibling?.nativeTargetRegistration).toBeUndefined();
+      expect(Object.isFrozen(result.applications.sibling)).toBe(true);
+    },
+  );
+
+  it.each([
+    "project",
+    "branch",
+    "root",
+    "framework",
+    "auth-origin",
+    "gateway-origin",
+    "repository",
+  ])("rejects an incoherent standard %s rather than mixing a legacy target", async (field) => {
+    const value = standard();
+    const app = value.applications.sibling;
+    if (field === "project") {
+      app.projectId = "old-app-project";
+    }
+    if (field === "branch") {
+      app.branch = "other-branch";
+    }
+    if (field === "root") {
+      app.projectSettings = { framework: "services", rootDirectory: "apps/sibling" };
+    }
+    if (field === "framework") {
+      app.projectSettings = { framework: "nextjs", rootDirectory: "." };
+    }
+    if (field === "auth-origin") {
+      value.gateway.authBrowserOrigin = "https://old-auth.example";
+    }
+    if (field === "gateway-origin") {
+      value.gateway.gatewayOrigin = "https://old-gateway.example";
+    }
+    if (field === "repository") {
+      app.repoId = "other-repository";
+    }
+    await expect(
+      resolveNativeTargetEffectiveConfiguration({
+        configuration: value,
+        invocation: "current-owner",
+        appId: "sibling",
+        readReady: vi.fn().mockResolvedValue(ready("sibling")),
+      }),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
+  });
+
+  it("does not bypass a revoked canonical owner", async () => {
+    await expect(
+      resolveNativeTargetEffectiveConfiguration({
+        configuration: standard(),
+        invocation: "revoked-owner",
+        appId: "sibling",
+        readReady: vi.fn().mockRejectedValue(new HostedOperatorError("authorization_required")),
+      }),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+  });
+
+  it("does not invent an unconfigured app from a legacy registration", async () => {
+    await expect(
+      resolveNativeTargetEffectiveConfiguration({
+        configuration: standard(),
+        invocation: "current-owner",
+        appId: "new-app",
+        readReady: vi.fn().mockResolvedValue(ready("new-app")),
+      }),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
+  });
+});
+
+describe("explicit standard single-project destination", () => {
+  const standard = (): HostedOperatorSourceConfiguration => {
+    const value = configuration();
+    value.composition = "single-project-services";
+    value.gateway.gatewayOrigin = value.gateway.publicOrigin;
+    value.gateway.authBrowserOrigin = value.gateway.publicOrigin;
+    value.applications.sibling = {
+      ...value.applications.sibling,
+      projectId: value.gateway.projectId,
+      branch: value.gateway.branch,
+      projectSettings: { framework: "services", rootDirectory: "." },
+    };
+    return value;
+  };
 
   it.each([true, false])(
     "retains the selected Services destination with historical registration=%s",

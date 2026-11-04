@@ -168,6 +168,15 @@ describe("private hosted runtime planning target", () => {
     });
     expect(hooks.request).not.toHaveBeenCalled();
   });
+  it("routes missing normal destination setup to the canonical saved session", async () => {
+    hooks.resolve.mockRejectedValueOnce(new HostedOperatorError("builder_destination_required"));
+    await expect(planTool.execute(input, toolCtx)).resolves.toMatchObject({
+      status: "blocked",
+      code: "builder_destination_required",
+      destinationPath: `/builds/${selection.sessionId}/destination`,
+    });
+    expect(hooks.request).not.toHaveBeenCalled();
+  });
   it("resolves cleanup using adapter fallback without prepare consent", async () => {
     hooks.client.mockResolvedValueOnce({
       request: hooks.request,

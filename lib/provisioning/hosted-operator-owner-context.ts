@@ -42,6 +42,9 @@ interface OwnerContextResolverDependencies {
   isActiveMember: (authority: HostedSessionTenantAuthority) => Promise<boolean>;
   issuer: string;
   audience: string;
+  reconcileOwnerDelivery?: (
+    session: ReturnType<typeof toDurableHostedSessionRecord>,
+  ) => Promise<void>;
 }
 
 const sameAuthority = (left: HostedSessionTenantAuthority, right: HostedSessionTenantAuthority) =>
@@ -95,6 +98,58 @@ const recoveryAuthoritySessionId = async (
   }
   return binding.originalAuthoritySessionId;
 };
+
+/** Verify the physical native history against its canonical public grant authority, including recovery lineage. */
+export const createHostedOperatorApprovalReadAuthority =
+  (input: {
+    sessions: Pick<HostedEveStore, "getSessionByAdapterSessionId">;
+    resolveOwnerContext: ReturnType<typeof createHostedOperatorOwnerContextResolver>;
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- The existing canonical resolver parses Eve's private forwarded auth shape below.
+    forwardSessionAuth: (principal: HostedPrincipal, sourceHandoffId?: string) => unknown;
+  }) =>
+  async (request: {
+    adapterSessionId: string;
+    principal: HostedPrincipal;
+    sessionId: string;
+  }): Promise<boolean> => {
+    try {
+      const { adapterSessionId, principal, sessionId } = request;
+      const rawSession = await input.sessions.getSessionByAdapterSessionId?.(
+        principal,
+        adapterSessionId,
+      );
+      const parsed = hostedSessionRecordSchema.safeParse(rawSession);
+      if (!parsed.success) {
+        return false;
+      }
+      const physical = toDurableHostedSessionRecord(parsed.data);
+      if (
+        physical.adapterSessionId !== adapterSessionId ||
+        !samePrincipal(physical.principal, principal)
+      ) {
+        return false;
+      }
+      const resolved = await input.resolveOwnerContext({
+        adapterSessionId,
+        authority: {
+          audience: principal.audience,
+          issuer: principal.issuer,
+          ownerUserId: principal.ownerUserId,
+          workspaceId: principal.workspaceId,
+        },
+        principal,
+        sessionAuth: input.forwardSessionAuth(
+          principal,
+          parsed.data.version === 2 ? parsed.data.sourceHandoffId : undefined,
+        ),
+      });
+      // The resolver validates recovered source/parent ownership before returning its original grant authority.
+      // A recovered worker's physical public session ID intentionally differs from that authority.
+      return resolved.sessionId === sessionId && resolved.adapterSessionId === adapterSessionId;
+    } catch {
+      return false;
+    }
+  };
 
 const resolveDirectOwnerContext = async (input: {
   adapterSessionId: string;
@@ -176,6 +231,7 @@ const resolveCallbackOwner = async (
   owner: OperatorOwnerContext,
   execution: HostedOperatorCallbackExecution | undefined,
   sessions: OwnerContextResolverDependencies["sessions"],
+  reconcileOwnerDelivery?: OwnerContextResolverDependencies["reconcileOwnerDelivery"],
 ): Promise<OperatorOwnerContext> => {
   if (execution === undefined) {
     return owner;
@@ -184,6 +240,7 @@ const resolveCallbackOwner = async (
     store: sessions,
     owner,
     execution,
+    reconcileOwnerDelivery,
   });
   return {
     ...owner,
@@ -259,7 +316,12 @@ export const createHostedOperatorOwnerContextResolver =
           principal: input.principal,
           sessions: dependencies.sessions,
         });
-        const current = await resolveCallbackOwner(result, input.execution, dependencies.sessions);
+        const current = await resolveCallbackOwner(
+          result,
+          input.execution,
+          dependencies.sessions,
+          dependencies.reconcileOwnerDelivery,
+        );
         const restricted = restrictRealmContinuationOwner(current, delegation, input.sessionAuth);
         emit("verified");
         return restricted;
@@ -338,6 +400,7 @@ export const createHostedOperatorOwnerContextResolver =
         },
         input.execution,
         dependencies.sessions,
+        dependencies.reconcileOwnerDelivery,
       );
       return restrictRealmContinuationOwner(current, delegation, input.sessionAuth);
     } catch (error) {
@@ -399,7 +462,7 @@ let deploymentResolver: Promise<
 type OwnerReaderConfiguration = ReturnType<typeof readHostedOperatorOwnerReaderConfiguration>;
 type OwnerReaderStores = Pick<
   OwnerContextResolverDependencies,
-  "handoffs" | "isActiveMember" | "sessions"
+  "handoffs" | "isActiveMember" | "sessions" | "reconcileOwnerDelivery"
 >;
 type OpenOwnerReaderStores = (
   configuration: OwnerReaderConfiguration,
@@ -522,13 +585,39 @@ const openOwnerReaderStores: OpenOwnerReaderStores = async (config) => {
       audience: config.resource,
       issuer: config.issuer,
     });
+    const sessions = createPostgresHostedEveStore(database);
     return {
+      reconcileOwnerDelivery: async (session) => {
+        const [
+          { createHostedEveSessionService },
+          { createSameOriginEveTransport },
+          { createVercelWorkloadIdentity },
+        ] = await Promise.all([
+          import("../eve/hosted-service"),
+          import("../eve/same-origin-http"),
+          import("../eve/vercel-workload-identity"),
+        ]);
+        const service = createHostedEveSessionService({
+          principal: session.principal,
+          store: sessions,
+          transport: createSameOriginEveTransport({
+            config: { baseUrl: new URL(config.resource).origin },
+            workloadIdentity: createVercelWorkloadIdentity(),
+          }),
+        });
+        await service.reconcileOwnerDelivery({
+          sessionId: session.sessionId,
+          adapterSessionId: session.adapterSessionId,
+          adapterGeneration: session.adapterGeneration,
+          cancellationRevision: session.cancellationRevision ?? 0,
+        });
+      },
       handoffs: createPostgresBuilderHandoffStore(database),
       isActiveMember: async (authority) => {
         const active = await membership.isActiveMember(authority);
         return active;
       },
-      sessions: createPostgresHostedEveStore(database),
+      sessions,
     };
   } catch {
     throw new OwnerInitializationError("owner_store_construction");

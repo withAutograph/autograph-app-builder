@@ -1,3 +1,5 @@
+import { assertPublicRuntimeBinding } from "./public-runtime-binding";
+import type { PublicRuntimeBinding } from "./public-runtime-binding";
 import { isIdlePendingAccountCapture } from "./hosted-operator-pending-account-capture";
 import {
   isParticipantProgramSuccessor,
@@ -268,6 +270,9 @@ export type HostedOperatorWorkerEffectContext = HostedOperatorEffectContext & {
 export interface ProtectedHostedOperatorDependencies {
   /** Additive public delivery contract, independently authenticated and approved. */
   publicReleaseRequest?: (request: Request) => Promise<Response>;
+  appIntegrationCapabilityRequest?: (request: Request) => Promise<Response>;
+  centralIntegrationHostRequest?: (request: Request) => Promise<Response>;
+  centralIntegrationDeploymentReceiptRequest?: (request: Request) => Promise<Response>;
   /** Dedicated pre-project native target dispatcher with current app-owner authority. */
   nativeTargetRequest?: (
     request: Request,
@@ -358,7 +363,10 @@ export interface ProtectedHostedOperatorDependencies {
   >;
   /** Pinned trusted installer + verified declarative artifact only. Guard immediately before every effect; checkpoint credentials before allocation. */
   executeEffect: (input: HostedOperatorWorkerEffectContext) => Promise<OperatorReceipt>;
-  /** Private actual normal sessions only, after prepared approval and native Preview verification. */
+  publicRuntimeBinding?: (
+    input: Context & { request: Request; plan: HostedOperatorPlan; operationRef: string },
+  ) => Promise<PublicRuntimeBinding>;
+  /** Private actual normal sessions only, after prepared approval and exact verified delivery. */
   normalActorRuntimeBindings?: (
     input: Context & { plan: HostedOperatorPlan; operationRef: string },
   ) => Promise<ReturnType<typeof projectNormalActorRuntime> | undefined>;
@@ -1688,6 +1696,7 @@ const handlePlanOperation = async (
 };
 
 const handleBindingsOperation = async (input: {
+  request: Request;
   context: Context;
   current: NonNullable<Awaited<ReturnType<HostedRuntimeJournalStore["read"]>>>;
   deps: ProtectedHostedOperatorDependencies;
@@ -1702,7 +1711,8 @@ const handleBindingsOperation = async (input: {
   if (
     current.record.leaseId !== undefined ||
     current.record.status !== "prepared" ||
-    current.record.step !== "bound" ||
+    current.record.step !==
+      (plan.runtimePreparation === "single-project-resources-v1" ? "resource-ready" : "bound") ||
     operator.approvalId === undefined ||
     operator.pendingEffectId !== undefined ||
     operator.pendingEffectAttempt !== undefined
@@ -1757,21 +1767,49 @@ const handleBindingsOperation = async (input: {
   if (nativePreview) {
     assertOperatorNativePreview(nativePreview, plan, operationRef, input.now());
   }
-  let normalActors: ReturnType<typeof projectNormalActorRuntime> | undefined;
-  if (plan.normalActorProgram !== undefined) {
-    if (nativePreview === undefined || deps.normalActorRuntimeBindings === undefined) {
+  let publicDelivery: PublicRuntimeBinding | undefined;
+  if (plan.runtimePreparation === "single-project-resources-v1") {
+    if (
+      deps.publicRuntimeBinding === undefined ||
+      nativePreview !== undefined ||
+      current.record.environmentBound !== false
+    ) {
       throw new HostedOperatorError("auth_identity_required");
     }
-    if (plan.normalActorProgram.origin !== nativePreview.publicOrigin) {
+    publicDelivery = await deps.publicRuntimeBinding({
+      ...context,
+      request: input.request,
+      plan,
+      operationRef,
+    });
+    assertPublicRuntimeBinding(publicDelivery, plan, operationRef);
+  }
+  const browserOrigin = publicDelivery?.publicOrigin ?? nativePreview?.publicOrigin;
+  let normalActors: ReturnType<typeof projectNormalActorRuntime> | undefined;
+  if (plan.normalActorProgram !== undefined) {
+    if (browserOrigin === undefined || deps.normalActorRuntimeBindings === undefined) {
+      throw new HostedOperatorError("auth_identity_required");
+    }
+    if (plan.normalActorProgram.origin !== browserOrigin) {
       throw new HostedOperatorError("resource_mismatch");
     }
     normalActors = await deps.normalActorRuntimeBindings({ ...context, plan, operationRef });
     if (normalActors === undefined) {
       throw new HostedOperatorError("auth_identity_required");
     }
-    if (normalActors.origin !== nativePreview.publicOrigin) {
+    if (normalActors.origin !== browserOrigin) {
       throw new HostedOperatorError("resource_mismatch");
     }
+  }
+  if (publicDelivery !== undefined) {
+    const latestDelivery = await deps.publicRuntimeBinding?.({
+      ...context,
+      request: input.request,
+      plan,
+      operationRef,
+    });
+    if (!isDeepStrictEqual(latestDelivery, publicDelivery))
+      {throw new HostedOperatorError("resource_mismatch");}
   }
   await deps.assertAuthorized({ ...context, plan });
   const latest = await read();
@@ -1781,6 +1819,7 @@ const handleBindingsOperation = async (input: {
   return response({
     environment,
     ...(nativePreview === undefined ? {} : { nativePreview }),
+    ...(publicDelivery === undefined ? {} : { publicDelivery }),
     ...(normalActors === undefined ? {} : { normalActors }),
     operationRef,
     plan,
@@ -1841,6 +1880,27 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
       request.headers.get(OPERATOR_PREPARATION_PROGRESS_HEADER) ===
       OPERATOR_PREPARATION_PROGRESS_PREFERENCE;
     try {
+      if (request.method === "POST" && new URL(request.url).pathname === "/v1/app-integrations") {
+        if (deps.appIntegrationCapabilityRequest === undefined)
+          {return response({ code: "protected_operator_required" }, 503);}
+        return await deps.appIntegrationCapabilityRequest(request);
+      }
+      if (
+        request.method === "POST" &&
+        new URL(request.url).pathname === "/v1/central-integrations"
+      ) {
+        if (deps.centralIntegrationHostRequest === undefined)
+          {return response({ code: "protected_operator_required" }, 503);}
+        return await deps.centralIntegrationHostRequest(request);
+      }
+      if (
+        request.method === "POST" &&
+        new URL(request.url).pathname === "/v1/central-deployment-events"
+      ) {
+        if (deps.centralIntegrationDeploymentReceiptRequest === undefined)
+          {return response({ code: "protected_operator_required" }, 503);}
+        return await deps.centralIntegrationDeploymentReceiptRequest(request);
+      }
       if (request.method === "POST" && new URL(request.url).pathname === "/v1/public-release") {
         if (deps.publicReleaseRequest === undefined) {
           return response({ code: "protected_operator_required" }, 503);
@@ -2151,6 +2211,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           throw new HostedOperatorError("auth_identity_required");
         }
         return await handleBindingsOperation({
+          request,
           context,
           current,
           deps,
@@ -3362,6 +3423,9 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           appId,
           authenticatedBehavior: "unassessed",
           code: error instanceof HostedOperatorError ? error.code : "operator_unavailable",
+          recoveryStage: error instanceof HostedOperatorError ? error.recoveryStage : undefined,
+          recoveryProgressAdvanced:
+            error instanceof HostedOperatorError ? error.recoveryProgressAdvanced : undefined,
           status: "blocked",
         }),
       );

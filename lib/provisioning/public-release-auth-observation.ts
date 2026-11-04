@@ -1,4 +1,3 @@
-import { ownedAppPublicEnvironmentKeys } from "./owned-app-auth-environment";
 import { createPublicKey } from "node:crypto";
 import { z } from "zod";
 import type { PublicReleaseInvocation } from "./public-release-handler";
@@ -106,11 +105,10 @@ export const createPublicReleaseAuthObservation =
       const proof = z
         .object({ runtimeBindingDigest: z.string().regex(/^[a-f0-9]{64}$/u) })
         .safeParse(health.data);
-      const authKeys = new Set(ownedAppPublicEnvironmentKeys(plan.selection.appId));
-      const expectedRuntime = publicReleaseRuntimeBindingDigest({
-        environment: plan.environment.filter((entry) => authKeys.has(entry.key)),
-      });
-      if (!proof.success || proof.data.runtimeBindingDigest !== expectedRuntime) {
+      if (
+        !proof.success ||
+        proof.data.runtimeBindingDigest !== publicReleaseRuntimeBindingDigest(plan)
+      ) {
         return false;
       }
     }

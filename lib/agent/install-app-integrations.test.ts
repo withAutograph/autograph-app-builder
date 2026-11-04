@@ -45,6 +45,33 @@ const context: ToolContext = {
 };
 
 describe("private app integrations installation", () => {
+  it("preserves the repository installer's readiness endpoint as a capability contract, not executed proof", async () => {
+    const readiness = {
+      protocol: "app-integration-readiness-v1",
+      path: "/spend-review/api/integrations/readiness",
+    };
+    hooks.sandbox.run.mockResolvedValueOnce({
+      exitCode: 0,
+      stderr: "",
+      stdout: JSON.stringify({
+        appId: "spend-review",
+        status: "installed",
+        files: [],
+        providers: ["quickbooks"],
+        readiness,
+      }),
+    });
+    const result = await installAppIntegrations({
+      appId: "spend-review",
+      root: "/private/approved-checkout",
+      sandbox: hooks.sandbox,
+    });
+    expect(result).toMatchObject({
+      status: "installed",
+      readiness,
+      providerReadiness: "unverified",
+    });
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     hooks.state.phase = "applied";
@@ -64,7 +91,7 @@ describe("private app integrations installation", () => {
     const result = await installTool.execute({}, context);
     expect(hooks.sandbox.run).toHaveBeenCalledWith(
       expect.objectContaining({
-        command: "mise run integrations:install spend-review",
+        command: "mise //apps/integrations:install spend-review",
         workingDirectory: "/private/approved-checkout",
       }),
     );

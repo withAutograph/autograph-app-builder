@@ -1,4 +1,5 @@
 import { ownedAppResourceSourceSchema } from "./owned-app-resource-source-contract";
+
 import { publicRealmReleaseBindingSchema } from "./public-realm-enrollment";
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -315,6 +316,7 @@ const hostedOperatorPlanDataSchema = z.strictObject({
   releaseIntent: z.literal("prepared-preview").optional(),
   runtimePreparation: z.literal("single-project-resources-v1").optional(),
   existingResources: ownedAppResourceSourceSchema.optional(),
+
   appDatabase: databaseResource,
   /** Schema installation scope is independent of actor and role grants. */
   appInstallation: z.strictObject({ customerIds: z.array(id).min(1) }).optional(),
@@ -727,6 +729,26 @@ const validateResourcePreparation = (
     }
   }
 
+  if (plan.existingResources !== undefined) {
+    const target = plan.existingResources.source.target;
+    if (
+      ![
+        plan.runtimePreparation === "single-project-resources-v1",
+        plan.authAdoption === undefined,
+        target.appId === plan.selection.appId,
+        target.projectId === plan.selection.projectId,
+        target.scopeId === plan.deploymentBoundary?.teamId,
+        target.installationId.length > 0,
+      ].every(Boolean)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["existingResources"],
+        message: "Existing credential reuse must remain in the same owned normal app and project.",
+      });
+    }
+  }
+
   if (
     plan.runtimePreparation !== undefined &&
     (plan.deploymentBoundary?.composition !== "single-project-services" ||
@@ -1035,6 +1057,25 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
   // Each phase has an observed receipt, including a no-op verification for already-existing resources.
   // Authority is opened only after install/grant verification, and closed before retirement.
   validateResourcePreparation(plan, ctx);
+  if (
+    plan.runtimePreparation !== undefined &&
+    (plan.deploymentBoundary?.composition !== "single-project-services" ||
+      plan.action !== "prepare" ||
+      plan.releaseIntent !== undefined ||
+      plan.delivery !== undefined ||
+      plan.gatewayDelivery !== undefined ||
+      plan.gatewayBindings !== undefined ||
+      plan.appTrustedSources !== undefined ||
+      plan.effects.some((effect) =>
+        ["bindings", "delivery", "gateway-bindings", "gateway-delivery"].includes(effect.kind),
+      ))
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["runtimePreparation"],
+      message: "Resource preparation cannot authorize deployment or environment binding effects.",
+    });
+  }
   const phases = authorizationPhases(plan);
   const kinds = plan.effects.map((effect) => effect.kind);
   const groups = kinds.filter((kind, index) => index === 0 || kind !== kinds[index - 1]);
@@ -1747,6 +1788,8 @@ const operatorPublicCodeSchema = z.enum([
   "protected_operator_required",
   "builder_destination_required",
   "builder_destination_configuration_required",
+  "builder_destination_required",
+  "builder_destination_configuration_required",
   "auth_identity_required",
   "auth_membership_required",
   "auth_schema_not_ready",
@@ -1773,9 +1816,17 @@ const operatorPublicStatusSchema = z.enum([
   "waiting_for_signup",
   "ready",
 ]);
+export const operatorRecoveryStageSchema = z.enum([
+  "canonical_read",
+  "setup",
+  "native_history",
+  "journal",
+]);
 export const operatorExecutionOutcomeSchema = z.strictObject({
   status: operatorPublicStatusSchema,
   code: operatorPublicCodeSchema.optional(),
+  recoveryStage: operatorRecoveryStageSchema.optional(),
+  recoveryProgressAdvanced: z.boolean().optional(),
 });
 export const operatorExecutionObservationSchema = z.discriminatedUnion("state", [
   z.strictObject({ state: z.literal("running") }),
@@ -1800,6 +1851,8 @@ export const operatorPublicResultSchema = z.strictObject({
   appId: id,
   authenticatedBehavior: z.literal("unassessed"),
   code: operatorPublicCodeSchema.optional(),
+  recoveryStage: operatorRecoveryStageSchema.optional(),
+  recoveryProgressAdvanced: z.boolean().optional(),
   operationRef: z.uuid().optional(),
   plan: hostedOperatorPlanSchema.optional(),
   planDigest: digest.optional(),
@@ -1812,10 +1865,20 @@ export const operatorPublicResultSchema = z.strictObject({
 export type OperatorPublicResult = z.infer<typeof operatorPublicResultSchema>;
 export class HostedOperatorError extends Error {
   readonly code: NonNullable<OperatorPublicResult["code"]>;
-  constructor(code: NonNullable<OperatorPublicResult["code"]>) {
-    super(code);
+  readonly recoveryStage?: z.infer<typeof operatorRecoveryStageSchema>;
+  readonly recoveryProgressAdvanced?: boolean;
+  constructor(
+    code: NonNullable<OperatorPublicResult["code"]>,
+    options?: ErrorOptions & {
+      recoveryStage?: z.infer<typeof operatorRecoveryStageSchema>;
+      recoveryProgressAdvanced?: boolean;
+    },
+  ) {
+    super(code, options);
     this.name = "HostedOperatorError";
     this.code = code;
+    this.recoveryStage = options?.recoveryStage;
+    this.recoveryProgressAdvanced = options?.recoveryProgressAdvanced;
   }
 }
 

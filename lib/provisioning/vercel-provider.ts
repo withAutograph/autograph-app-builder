@@ -47,6 +47,8 @@ export async function provisionVercelProject(input: {
   appId: string;
   /** Absent on frozen legacy requests; those retain their inherited provider policy. */
   deploymentAccess?: "public-app";
+  /** Absent on frozen legacy requests; those retain their inherited provider policy. */
+
   github: GitHubProvisionResult;
   githubSelected: boolean;
   persistedCandidates: readonly string[];
@@ -65,6 +67,7 @@ export async function provisionVercelProject(input: {
   }
   const request = input.fetch ?? fetch;
   let providerDiagnostic: VercelProvisionDiagnostic | undefined;
+
   const query =
     input.installation.scopeType === "team"
       ? `?teamId=${encodeURIComponent(input.installation.scopeId)}`
@@ -111,12 +114,30 @@ export async function provisionVercelProject(input: {
         ...(requestRef.success ? { requestRef: requestRef.data } : {}),
       };
     }
+
+    if (failed) {
+      const requestRef = vercelProvisionDiagnosticSchema.shape.requestRef.safeParse(
+        response.headers.get("x-vercel-id"),
+      );
+      providerDiagnostic = {
+        statusCode: response.status,
+        ...(requestRef.success ? { requestRef: requestRef.data } : {}),
+      };
+    }
     let body: unknown;
     try {
       body = response.body === null ? undefined : await response.json();
     } catch {
       if (!failed) {
         throw new Error("invalid-response");
+      }
+    }
+    if (failed && providerDiagnostic !== undefined) {
+      const error = z
+        .object({ error: z.object({ code: vercelProvisionDiagnosticSchema.shape.code }) })
+        .safeParse(body);
+      if (error.success && error.data.error.code !== undefined) {
+        providerDiagnostic.code = error.data.error.code;
       }
     }
     if (failed && providerDiagnostic !== undefined) {
@@ -298,6 +319,10 @@ export async function provisionVercelProject(input: {
         if (
           project.name !== candidate ||
           project.rootDirectory !== "." ||
+          (input.deploymentAccess === "public-app" &&
+            (project.ssoProtection?.deploymentType !== "prod_deployment_urls_and_all_previews" ||
+              project.oidcTokenConfig?.enabled !== true ||
+              project.oidcTokenConfig?.issuerMode !== "team")) ||
           (input.deploymentAccess === "public-app" &&
             (project.ssoProtection?.deploymentType !== "prod_deployment_urls_and_all_previews" ||
               project.oidcTokenConfig?.enabled !== true ||

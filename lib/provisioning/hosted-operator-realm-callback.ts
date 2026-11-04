@@ -1,5 +1,6 @@
 /* oxlint-disable eslint/no-await-in-loop -- Bounded callback body is read sequentially; the reader cancels immediately at the byte limit. */
 import { publicRealmEnrollmentSchema } from "./public-realm-enrollment";
+
 import { verifyVercelOidcToken } from "@vercel/oidc";
 import { createHash, randomBytes } from "node:crypto";
 import { createRemoteJWKSet, customFetch } from "jose";
@@ -214,6 +215,14 @@ export const createRealmIdentityHandoffSenderVerifier =
       ) {
         throw new Error("realm_handoff_sender");
       }
+    }
+    if (sender.environment === "production") {
+      const enrollment = publicRealmEnrollmentSchema.parse(sender.publicEnrollment);
+      if (
+        sender.projectId !== enrollment.project.projectId ||
+        sender.ownerId !== enrollment.project.ownerId
+      )
+        throw new Error("realm_handoff_sender");
     }
     const verified = await verify(bearer, {
       audience: sender.audience,
@@ -644,6 +653,7 @@ export const createRealmIdentityCallbackDeploymentHandler =
   async (request: Request): Promise<Response> => {
     let resources: Awaited<ReturnType<typeof openHostedOperatorCompositionResources>> | undefined;
     let initialResources: typeof resources;
+
     try {
       const [
         { openHostedOperatorCompositionResources },
@@ -668,6 +678,7 @@ export const createRealmIdentityCallbackDeploymentHandler =
       initialResources = resources;
       let { configuration, controlPlane } = resources;
       const initialControlPlane = controlPlane;
+
       const runtime = readPreviewOAuthRuntimeConfig({ ...environment });
       if (new URL(runtime.issuer).origin !== configuration.builderCallbackOrigin) {
         throw new Error("realm_callback_configuration");
@@ -746,6 +757,7 @@ export const createRealmIdentityCallbackDeploymentHandler =
           });
         }
       };
+
       const stageArtifacts = createPostgresOperatorArtifactStore({
         assertCurrentOwner: async (artifactContext) => {
           const context = await controlPlane.resolveRealmIdentityCallbackContext({
@@ -764,6 +776,7 @@ export const createRealmIdentityCallbackDeploymentHandler =
       return await createRealmIdentityCallbackHandler({
         assertCurrent,
         authenticate: async (incoming, selector) => {
+          await selectCanonicalRuntime(selector);
           await selectCanonicalRuntime(selector);
           const session = await ensurePreviewOAuthDeploymentSessionOrganization({
             environment: { ...environment },
@@ -894,6 +907,9 @@ export const createRealmIdentityCallbackDeploymentHandler =
       );
     } finally {
       await resources?.controlPlane.close();
+      if (initialResources !== undefined && initialResources !== resources) {
+        await initialResources.controlPlane.close();
+      }
       if (initialResources !== undefined && initialResources !== resources) {
         await initialResources.controlPlane.close();
       }

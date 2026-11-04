@@ -8,7 +8,6 @@ import {
   publicReleaseSelectionSchema,
   publicReleaseObservationSchema,
   publicReleaseRecordSchema,
-  publicReleaseEffects,
 } from "./public-release-contract";
 import type {
   PublicReleasePlan,
@@ -150,7 +149,7 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
         }
         let phase: PublicReleaseEffect | "observe-production" = "bind-production-runtime";
         try {
-          for (const effect of publicReleaseEffects) {
+          for (const effect of plan.effects) {
             phase = effect;
             await authorize(invocation, plan, true);
             if (row.record.effects[effect] === "applied") {
@@ -189,7 +188,7 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
               plan,
               operationRef,
               effect,
-              priorPhase: row.record.effects[effect],
+              priorPhase: row.record.effects[effect] ?? "idle",
               bindings: {
                 read: async () => {
                   await authorize(invocation, plan, true);

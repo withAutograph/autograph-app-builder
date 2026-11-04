@@ -37,12 +37,49 @@ update the app-owned integration import when compiling a new release. Do not
 edit checked release artifacts, mock the marker, or copy schema metadata into
 an app integration definition.
 
-Bind the platform's configured provider adapters and shared installation
-lifecycle through `createAppIntegrationHost` from
-`@autograph/integration-runtime/app-host`; do not reimplement that lifecycle
-in each app. Its small app-owned server module is named by `hostModule` and
-exports `integrationHost.ingress(provider, rawBody, request)`, `loadSurface()`
-and `onAction(request)`. Missing platform adapters stay explicitly unavailable.
+For the configured public development path, the executable definition also
+includes `readObjects` for every selected provider and
+`checkedRelease: { directory, sourceCue }` in `defineAppIntegrations`. Use the
+actual supported typed provider read configuration: object name, destination,
+schedule and selected field/value mappings as applicable. Use an app-scoped
+destination name for its actual installed ingress and public origin. Two apps
+may share a tenant connection but retain distinct destinations, delivery URLs and
+signing keys. Never copy another app's static destination name or manually
+retarget an existing destination; revise a mismatched source declaration through
+the normal Builder flow. The provider signing key stays in encrypted central
+authority, never generated app code or environment. Do not invent provider
+object names, recipe IDs or mapping defaults from UI labels. The current
+configured public adapter supports one QuickBooks selection; a generic recipe
+export for another provider does not establish configured public delivery.
+
+Resolve `directory` and `sourceCue` from the app's real checked release selection,
+matching the generated definition import and the app DAL. The configured runtime
+verifies the source CUE, release manifest and artifact hashes, recipe identity
+and exact readObjects digest. Keep those source facts importable by the Bun
+installer without runtime credentials or Next-only `server-only` imports. When
+a normal schema revision selects a new checked release, update these references
+together. Installer inventory alone is not runtime readiness.
+
+Use the existing shared Next host in the app-owned server module named by
+`hostModule`:
+
+```ts
+import "server-only";
+import { createConfiguredAppIntegrationHost } from "@autograph/platform-microfrontends/app-integration-host";
+import { integrationDefinition } from "./definition";
+
+export const integrationHost = createConfiguredAppIntegrationHost({
+  definition: integrationDefinition,
+});
+```
+
+This host supplies the normal authenticated request/DAL, central control client,
+connection setup, activation, app-specific disable/drain and shared read ingress.
+Do not compose new provider clients, SQL pools, service actors, signing keys or
+central adapters in the generated app. The lower-level `createAppIntegrationHost`
+is a platform composition primitive; it is not the normal generated Next host.
+Missing separately approved capability or central configuration stays an explicit
+prerequisite. Installing this module does not grant provider access.
 
 Connection setup also exposes protected `prepareConnection(providerId)` and
 `completeConnection(providerId, setupId)` server callbacks. Use the shared
@@ -73,7 +110,7 @@ connection, activation, disconnect and ingestion mechanics; thin generated
 routes call this supported boundary.
 
 After the accepted private build is applied, call `install-app-integrations`.
-It invokes the one repository-owned installer, `mise run integrations:install
+It invokes the one repository-owned installer, `mise //apps/integrations:install
 <app>`, in the selected approved checkout. Do not invoke this operation through
 generic shell access or invent an adapter command. An omitted result means no
 opt-in was installed. A failed result is a concrete repair or capability gap;
@@ -97,3 +134,15 @@ when applicable. Report source installation, focused tests, live connection,
 activation and hosted ingestion as separate evidence. Connecting accounts,
 activating shared access, disconnecting accounts and other outward effects
 retain their existing approvals.
+For a public isolated development release, installing the shared UI does not
+configure provider access. After normal app/Auth resource setup and capture of the
+checked executable provider read settings, use `plan-app-integration-capability`.
+Resolve any concrete central-host/profile prerequisite through Builder. Obtain
+ordinary approval for its complete new v2 five-effect plan, including creation
+or explicitly disclosed owned reuse of the exact provider delivery destination, with
+`prepare-app-integration-capability`; unknown effects retain their original
+operation. Then plan a new public release for the same app/project that explicitly
+includes the separately approved optional configuration. A prepared capability is
+not a live provider connection or hosted acceptance evidence. Finish public
+release and readiness before the human Connect/Activate starts provider reads.
+Frozen v1 plans retain their original four effects and legacy signing mode.

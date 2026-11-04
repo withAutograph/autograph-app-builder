@@ -1,3 +1,4 @@
+import { maintainLocalDevelopmentOidcLease } from "../lib/development/local-oidc-lease";
 import { prepareDevelopmentEmulatedWeb } from "../lib/development/emulated-web";
 import { spawn } from "node:child_process";
 import type { HostedSessionConnection } from "../lib/development/dev-package";
@@ -263,6 +264,17 @@ async function runEveCycle(input: {
       sourceSha: snapshot.commit,
       sourceTree: snapshot.tree,
     });
+    const stopOidcLease = maintainLocalDevelopmentOidcLease({
+      repositoryRoot,
+      applicationRoot: cycle.application.root,
+      runtimeHome: cycle.runtimeHome,
+      vercelExecutable: requiredEnvironment("APP_BUILDER_DEV_VERCEL_BIN"),
+      miseExecutable: requiredEnvironment("APP_BUILDER_DEV_MISE_BIN"),
+      onUnavailable: () =>
+        console.warn(
+          "Builder model credential renewal is unavailable; saved work is preserved. Check the existing Vercel login.",
+        ),
+    });
     const eve = spawn(
       requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"),
       [
@@ -373,6 +385,7 @@ async function runEveCycle(input: {
       }
       return await Promise.race([eveExited, input.nextExited, stopping]);
     } finally {
+      stopOidcLease();
       watchers.abort();
       await stopDevelopmentChild(eve, { processGroup: true });
       await waitForDevelopmentPortRelease(input.evePort);
@@ -475,6 +488,7 @@ try {
       packageState,
       runsRoot,
       resumeCycle: args.resumeCycle,
+
       shutdownExitCode: shutdown.exitCode,
       signal: shutdown.signal,
       sourceRoot,

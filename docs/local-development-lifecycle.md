@@ -1,6 +1,6 @@
 # Local development lifecycle
 
-`mise run dev` is the fast, live-code loop: edit the checkout and use Next HMR and live Arrusted inputs. Eve retains the worker that owns existing sessions. Do not rebuild artifacts, reinstall the plugin, run broad suites, publish, or deploy after each edit.
+`mise run dev` is the fast, live-code loop: edit the checkout, let Next HMR or the affected Eve/package process reload, and retry the behavior. Do not rebuild artifacts, reinstall the plugin, run broad suites, publish, or deploy after each edit.
 
 This is the default development loop for Builder itself, not only generated app
 work. Implement and verify shared workflow repairs locally before requesting a
@@ -16,31 +16,39 @@ mutations; provider resources and release effects retain their concrete approval
    checkout, and the existing project-scoped Vercel OIDC setup. The launcher
    checks/refreshes that OIDC setup; do not supply static provider keys. Missing
    dependencies or credentials are concrete setup work, not a reason to deploy
-   Builder to debug it. If another local Builder is running, select an isolated
-   supported client profile **before launch** as described below.
+   Builder to debug it. Use an explicit endpoint client with installation disabled,
+   or select an isolated client profile before enabling installation.
 2. From the Builder checkout, run this command, substituting the Arrusted path
-   and unused ports and private directories for your instance:
+   and unused ports and durable private directories for your instance. Important
+   app and session work must survive a restart; use a persistent checkout and
+   state outside operating-system temporary directories. On macOS, for example:
 
    ```sh
-   mise run dev -- --arrusted-root /absolute/path/to/arrusted --next-port 3100 --eve-port 2100 --state-root /private/tmp/builder-local-state --destination-root /private/tmp/builder-local-apps
+   builder_instance_root="$HOME/Library/Application Support/Autograph Builder/development/local"
+   mkdir -p "$builder_instance_root"
+   chmod 700 "$builder_instance_root"
+   builder_instance_root="$(cd "$builder_instance_root" && pwd -P)"
+   mise run dev -- --arrusted-root /absolute/path/to/durable/arrusted --next-port 3100 --eve-port 2100 --state-root "$builder_instance_root/state" --destination-root "$builder_instance_root/apps" --install-plugin false
    ```
 
    Leave this terminal running. Wait for the ready message and the printed
    loopback endpoint. By default this is the HTTP MCP development loop, for
    example `http://127.0.0.1:3100/mcp`; it is not the synthetic authenticated web
-   product. Unless `--install-plugin false` is passed, the launcher installs `app-builder@autograph-dev` in the
-   active client profile, disabled globally and enabled by the repository's
-   `.codex/config.toml`.
+   product. The command above leaves plugin registrations unchanged. Omit
+   `--install-plugin false` only when you want to install `app-builder@autograph-dev`
+   in the selected client profile, disabled globally and enabled by this
+   repository's `.codex/config.toml`.
    If Turbopack reports a resolver failure on linked dependencies, rerun the
    same command with `--next-bundler webpack`; this is the supported development
    fallback and does not require a package rebuild or hosted deployment.
 
-3. Open a fresh Codex task in this Builder checkout and select **Autograph App
-   Builder (Development)**. A supported explicit MCP client may instead connect
-   to the printed `/mcp` endpoint. Before submitting a brief, verify the selected
-   server uses this instance's loopback host/port, not the hosted Builder URL or
-   another worktree's endpoint. For an explicit endpoint client, pass `--install-plugin false` so the launcher
-   leaves existing profile registrations alone. Otherwise use profile isolation below.
+3. Connect a supported explicit MCP client to the printed `/mcp` endpoint.
+   If you enabled plugin installation, open a fresh Codex task in this checkout
+   and select **Autograph App Builder (Development)** instead. Before submitting
+   a brief, verify the selected server uses this instance's loopback host/port,
+   not the hosted Builder URL or another worktree's endpoint. Connecting explicitly
+   does not itself disable installation; use `--install-plugin false` to preserve
+   the selected profile.
 4. Submit an ordinary product brief. Use the same public Builder interaction as
    a user: answer product questions and concrete approval requests, inspect the
    preview, and retain the returned session ID and cursor. With an explicit MCP
@@ -48,10 +56,8 @@ mutations; provider resources and release effects retain their concrete approval
    complete current input batch with `autograph_respond`, and send ordinary
    follow-ups with `autograph_send` only when waiting without unresolved input.
    Do not force internal stages or finish the generated app manually.
-5. Edit local Builder or Arrusted source and keep Next.js HMR running. Active
-   and waiting Eve sessions retain their pinned worker across runtime edits.
-   To exercise changed agent/runtime code, launch a separate isolated instance,
-   or explicitly end the original instance's runs before stopping/restarting it;
+5. Edit local Builder or Arrusted source, let HMR or the affected process reload,
+   then retry the affected behavior. Restart only the process that needs it;
    do not open a PR, deploy Preview/Production, or reinstall the plugin for each
    iteration. Run focused checks for concrete repairs and one final local
    walkthrough when ready. A reviewed shared release and hosted acceptance come
@@ -73,28 +79,86 @@ approvals into local state, replay an uncertain request, or claim a local test
 continued the saved hosted creation journey. See
 [interrupted public sessions](#interrupted-public-sessions) for recovery limits.
 
+## Durable state and recovery
+
+Use temporary directories only for explicitly disposable exercises. Do not put
+an important checkout, saved app, generated destination, local session state or
+its recovery evidence under `/tmp`, `/private/tmp` or another location that may
+be cleared on restart or cleanup. A local Git commit in a discarded temporary
+checkout is not a source backup. Preserve completed source changes through the
+normal Git workflow without making publication a prerequisite for every edit.
+
+The default non-emulated launcher state at `.artifacts/development` is durable
+only when its checkout is durable and retained. An explicit durable
+`--state-root` keeps instance state independent of checkout retirement. The
+emulated web mode still has a temporary default; pass durable state and
+destination paths explicitly for any work that matters. These storage choices
+do not change the launcher's defaults or add a backup service.
+
+Treat one instance's recovery material as a unit: its original state root,
+native journals, original cycle and custody, retained source generation,
+compiled-artifact/log records, and public request/session/cursor records. Keep
+the selected Builder and Arrusted checkouts and generated destination with that
+same instance. Do not combine a journal, cycle, source or public projection from
+different instances or transfer an old approval to another target. Where the
+current adapter holds the public request index only in memory, a filesystem copy
+does not make that index durable; the limitations below still apply.
+
+Before moving an existing instance, stop only that owned instance and preserve
+its complete original state and destination. Use a genuine recoverable checkpoint
+or backup and the recovery flow supported by the selected Builder version.
+Resume with the original state root, destination and exact saved cycle; do not
+start a replacement cycle and insert old records into it. Use `--resume-cycle` only in a qualified Builder version that actually
+implements that option, with the original cycle path. Earlier versions may not
+support it. Never infer recovery support from a folder name or from these storage
+examples.
+
+Keep owner-only access on state and backups. Do not commit private journals,
+actor sessions or credentials to Git. Verify that a backup contains the actual
+native journals and cycle custody before relying on it; a transcript, command
+log, provider workspace or code archive alone cannot reconstruct them. A retained
+Sandbox/Drive can preserve app files while local Builder authority is missing.
+Report that distinction and retain uncertain operations; do not fabricate their
+settlement or replay them. Confirm recovery through an accepted continuation of
+the same session before calling it resumed.
+
 ## Parallel branch instances
 
 Use a separate checkout/worktree for each branch instance. Give each instance its
-own Next and Eve ports, owner-only state root and generated destination root.
-Its checkout also owns its build outputs (including `.next`); do not share build
-output directories or writable runtime state between instances. Read-only package
+own Next and Eve ports, durable owner-only state root and generated destination
+root. Use distinct instance directories under persistent storage, including for
+the worktrees themselves; different names under a temporary directory do not
+make the work durable. Its checkout also owns its build outputs (including
+`.next`); do not share build output directories or writable runtime state between instances. Read-only package
 caches may be reused under the ordinary dependency lifecycle.
 
-For explicit MCP clients, pass `--install-plugin false` in both instances and
-connect each client to its own printed endpoint. This avoids modifying the
-shared active plugin profile. If using plugin installation instead, select a
-different supported isolated client profile for each launcher. Never replace
-another task's active registration.
+Use `--install-plugin false` for explicit endpoint clients so parallel launchers
+cannot replace each other's shared plugin registration. If installation is wanted,
+select a different supported isolated client profile for each launcher first.
+Ports and filesystem paths alone do not isolate a shared client profile.
+
+Install the repository-pinned dependencies once inside each Builder and Arrusted
+checkout. Package-manager download caches may be reused, but do not link a
+checkout's `node_modules` to a different checkout: development snapshots reject
+source links that escape their own checkout, and another branch's install must
+not rewrite this instance's dependencies. Restarts reuse that instance's install.
 
 Then, in two different worktrees with their selected Arrusted checkout:
 
 ```sh
-mise run dev -- --arrusted-root /absolute/path/to/arrusted-a --next-port 3100 --eve-port 2100 --state-root /private/tmp/builder-a-state --destination-root /private/tmp/builder-a-apps --install-plugin false
+builder_a_root="$HOME/Library/Application Support/Autograph Builder/development/branch-a"
+mkdir -p "$builder_a_root"
+chmod 700 "$builder_a_root"
+builder_a_root="$(cd "$builder_a_root" && pwd -P)"
+mise run dev -- --arrusted-root /absolute/path/to/durable/arrusted-a --next-port 3100 --eve-port 2100 --state-root "$builder_a_root/state" --destination-root "$builder_a_root/apps" --install-plugin false
 ```
 
 ```sh
-mise run dev -- --arrusted-root /absolute/path/to/arrusted-b --next-port 3200 --eve-port 2200 --state-root /private/tmp/builder-b-state --destination-root /private/tmp/builder-b-apps --install-plugin false
+builder_b_root="$HOME/Library/Application Support/Autograph Builder/development/branch-b"
+mkdir -p "$builder_b_root"
+chmod 700 "$builder_b_root"
+builder_b_root="$(cd "$builder_b_root" && pwd -P)"
+mise run dev -- --arrusted-root /absolute/path/to/durable/arrusted-b --next-port 3200 --eve-port 2200 --state-root "$builder_b_root/state" --destination-root "$builder_b_root/apps" --install-plugin false
 ```
 
 The paths and ports are examples. Check availability first; choose other unused
@@ -107,19 +171,10 @@ Separate Next/Eve ports alone do not isolate its database or emulators.
 Connect the browser and public-tool client explicitly to the intended instance's
 loopback origin and `/mcp` endpoint (HTTPS in emulated web mode). Confirm the
 endpoint before starting or continuing a session. Development MCP identity and
-version already distinguish ports; the launcher nevertheless installs the same
-`app-builder@autograph-dev` plugin selector into the active client profile.
-Concurrent launchers must not silently replace that shared registration. Use
-supported isolated client profiles for installation, and bind each client to its
-intended endpoint. Do not globally swap a running task's plugin registration to
-point at another instance. A client connected directly to `/mcp` should use `--install-plugin false`,
-or use a distinct client profile when plugin installation is enabled.
-
-For an explicit-endpoint client, add `--install-plugin false` to `mise run dev`.
-The launcher still prepares the local package and checks MCP readiness, but it
-does not execute Codex registration commands or read/write the client profile.
-It prints the endpoint for the client to connect to explicitly. Omit the option
-or use `--install-plugin true` for the existing profile installation behavior.
+version distinguish ports. The commands above disable plugin installation and
+bind each explicit client to its intended endpoint. If you enable installation,
+use supported isolated profiles; never globally swap another running task's
+registration to point at this instance.
 
 When qualifying parallel-instance support, run instances A and B from different
 branches with clients bound to their explicit endpoints. Demonstrate that each
@@ -144,21 +199,9 @@ it does not install packages or change the execution backend.
 
 Eve reads the canonical `--arrusted-root` checkout directly. Ordinary Arrusted
 source edits become the next planning input without cycling Eve or replacing
-its local queue. Builder agent/runtime/skill edits produce a notification only:
-the existing Eve instance stays pinned to its original runtime so active and
-waiting sessions retain their worker. To exercise changed agent/runtime code,
-launch a separate isolated branch instance and explicit client endpoint, or
-explicitly stop and restart after choosing to end that instance's runs. Next HMR
-continues independently. The watcher updates its observed baseline after each
-edit; a notification or observation error is never a worker shutdown condition.
-Snapshot identities remain diagnostics and do not gate live source reads or
-dependency setup.
-
-This retention prevents new source edits from killing local sessions; it does
-not restore an already lost worker. Preserve such sessions and report recovery
-unavailable unless a supported recovery is independently verified. Do not enable
-an undocumented recovery flag, transplant hosted state, replay approvals, or
-silently start a replacement session.
+its local queue. App Builder runtime edits and child lifecycle events retain
+their existing restart behavior. Snapshot identities remain diagnostics and do
+not gate live source reads or dependency setup.
 
 Vercel Sandbox is the execution backend. Use project-scoped OIDC, supported Sandbox source/file APIs, and structured commands. Do not add static keys, fallback runtimes, shell wrappers, or provider-internals checks. The checkout and generated files are writable.
 
@@ -266,15 +309,6 @@ or loosen resource validation.
 
 ## Persistent Sandbox reattachment
 
-Streaming source archives use bounded chunk uploads through the supported
-Sandbox SDK. Builder assembles them with a structured Node command and
-atomically replaces the target only after all bytes arrive; cancellation or
-transfer failure leaves an existing target intact and attempts cleanup of the
-owned staging files. This avoids the SDK `fs.appendFile` helper, which rereads and uploads the
-entire growing file for each incoming stream chunk. The transfer holds the
-normal active-command lease and keeps backpressure without limiting total
-archive size. Source bytes and provider responses are not diagnostic logs.
-
 The Eve 0.68 provider records the persistent Sandbox name as immutable session
 state. Reopening that state uses `Sandbox.get({ name, resume: true })`; it does
 not resolve a new Git source, upload new seeds, or repeat initialization.
@@ -346,8 +380,11 @@ explicit setup error; the mode does not silently fall back to HTTP.
 
 Runtime certificates, emulator configuration and persistent database files live
 under the selected state root. When omitted in this mode, the state root defaults
-to a stable private temporary directory outside the checkout. The development command stops its owned local
-processes and any database it started, retaining data for the next invocation;
+to a stable private temporary directory outside the checkout. That default is
+for disposable runs: its stable name does not guarantee survival across restart
+or cleanup. Pass a durable private state root and destination for important
+sessions. The development command stops its owned local processes and any
+database it started, retaining data for the next invocation;
 it does not stop a previously running database. The existing auth acceptance
 lane keeps its original defaults and reset lifecycle. Configure its existing
 local database/emulator port settings through mise when another local stack
@@ -373,35 +410,3 @@ reads those same owner/session-bound pages after compute cleanup. Interrupted
 capture remains distinguishable from completed output. Hosted validation retains
 its authenticated PostgreSQL store. Diagnostic simulated-target fixtures do not
 publish app releases or stand in for hosted product qualification.
-
-## Explicit recovery of a stopped local cycle
-
-A Builder runtime edit does not automatically restart an active or waiting Eve
-session. To load a runtime repair while retaining that instance's actual saved
-sessions, stop only that instance and pass its printed `cycleRoot` to the same
-local entrypoint with its original explicit state root and separate ports:
-
-```sh
-mise run dev -- --arrusted-root /absolute/path/to/arrusted --next-port 3100 --eve-port 2100 --state-root /private/tmp/builder-a-state --destination-root /private/tmp/builder-a-apps --install-plugin false --resume-cycle /private/tmp/builder-a-state/state/runs/supervisor-EXAMPLE/cycle-EXAMPLE
-```
-
-Use the actual printed path. Recovery refuses a running listener, another state
-root, and non-owned or linked runtime directories. The existing kernel advisory
-lock on the state root prevents concurrent instances, including recovery.
-It refreshes Builder application code while retaining the original `.eve`
-workflow history, local home and saved Sandbox association. It never copies a
-hosted checkpoint, changes an approval, starts a replacement app or replays a
-public request. Read the original session through `autograph_get` first, then
-continue it through ordinary public controls. If the installed Eve runtime
-cannot recover that history, preserve the original IDs and report the concrete
-failure; source tests alone do not establish successful recovery.
-
-The explicit recovery option also selects Eve’s documented `dev --resume` recovery. Reading retained history alone does not establish that a stopped run can accept another message; verify the same session through public `autograph_get` and an ordinary continuation. Do not resend any message with an uncertain dispatch outcome.
-
-The development toolchain registers the repository's locked Rust toolchain and
-components through mise before repository commands run; standalone compiler
-binaries alone do not initialize mise's rustup backend. Rust manager state stays
-in the instance's private toolchain directories. Every command reapplies the
-configured toolchain environment, including commands after reconnecting to the
-same compute instance. This setup does not change the selected source's tool
-versions or authorize app/provider effects.

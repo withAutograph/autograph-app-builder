@@ -156,6 +156,7 @@ const hostedRuntimeJournalRecordBaseSchema = z.strictObject({
     "verified",
     "bound",
     "resource-ready",
+    "resource-ready",
     "environment-removed",
     "cleaned",
   ]),

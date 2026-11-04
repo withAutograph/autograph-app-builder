@@ -1,4 +1,3 @@
-import { resolveExistingBuilderDestinationReference } from "./builder-existing-destination";
 import { ensurePreviewOAuthDeploymentSessionOrganization } from "../auth/preview-oauth-deployment";
 import { readPreviewOAuthRuntimeConfig } from "../auth/preview-oauth-runtime";
 import { builderResourceProvisioningFlag } from "../feature-flags";
@@ -18,9 +17,7 @@ export const openBuilderSessionDestination = async (
 ) => {
   const readOwner = () => ensurePreviewOAuthDeploymentSessionOrganization({ headers, environment });
   const owner = await readOwner();
-  if (owner === null || owner === undefined) {
-    throw new Error("Sign in to continue this build.");
-  }
+  if (owner === null || owner === undefined) throw new Error("Sign in to continue this build.");
   const config = readPreviewOAuthRuntimeConfig(environment);
   const authority = {
     issuer: config.issuer,
@@ -57,42 +54,16 @@ export const openBuilderSessionDestination = async (
     }),
     readPage: async (sessionId: string) => {
       const stored = await sessions.getSession(principal, sessionId);
-      if (stored === null) {
-        throw new Error("This build is unavailable.");
-      }
-      const original = toDurableHostedSessionRecord(stored);
-      const session =
-        sessions.readCurrentBuildSession === undefined
-          ? original
-          : await sessions.readCurrentBuildSession({
-              principal,
-              authoritySessionId:
-                original.nativeRecoveryBinding?.originalAuthoritySessionId ?? original.sessionId,
-              logicalSessionId:
-                original.nativeRecoveryBinding?.logicalSessionId ?? original.adapterSessionId,
-            });
-      if (session.appId === undefined) {
+      if (stored === null) throw new Error("This build is unavailable.");
+      const session = toDurableHostedSessionRecord(stored);
+      if (session.appId === undefined)
         throw new Error("Choose an app before selecting its destination.");
-      }
-      const reference = await resolveExistingBuilderDestinationReference({
-        session,
-        authority,
-        appId: session.appId,
-        findProvisioningForAppRepository: dependencies.journal.findSettledAppRepository,
-      });
-      await assertMember(principal);
+      const reference = session.builderDestination;
       const row =
         reference === undefined
           ? undefined
           : await dependencies.journal.read({ authority, requestId: reference.requestId });
-      if (
-        reference !== undefined &&
-        [
-          reference.appId !== session.appId,
-          row?.requestDigest !== reference.requestDigest,
-          row?.record.response.appId !== session.appId,
-        ].some(Boolean)
-      ) {
+      if (reference !== undefined && row?.requestDigest !== reference.requestDigest) {
         throw new Error("This build's saved destination is unavailable.");
       }
       const integrations = await loadBuilderIntegrationState({
@@ -103,7 +74,7 @@ export const openBuilderSessionDestination = async (
         workspaceId: owner.organization.workspaceId,
       });
       return {
-        sessionId: session.sessionId,
+        sessionId,
         appId: session.appId,
         title: session.title,
         expected: {
@@ -113,11 +84,8 @@ export const openBuilderSessionDestination = async (
           checkpointDigest: session.checkpointDigest,
         },
         request: row?.record.request,
-        ready: row?.state === "settled" && row.record.response.vercel.status === "succeeded",
-        selectable:
-          session.status === "waiting" &&
-          session.sourceHandoffId === undefined &&
-          session.privateBuildDecision?.existingRepositorySource === undefined,
+        ready: row?.record.response.vercel.status === "succeeded",
+        selectable: session.status === "waiting" && session.sourceHandoffId === undefined,
         enabled: await builderResourceProvisioningFlag(),
         github: integrations.github.scopes,
         vercel: integrations.vercel.scopes,

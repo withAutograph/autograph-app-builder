@@ -249,6 +249,52 @@ export const continuityRecordSchema = z
     }
   });
 export type ContinuityRecord = z.infer<typeof continuityRecordSchema>;
+
+/** Only an approved attempt with no possible process or publication dispatch may follow a resumed VM session. */
+export const canRebindUndispatchedContinuityRuntime = (record: ContinuityRecord): boolean => {
+  const { locator, current, approval, attemptId, plan } = record;
+  if (
+    locator === undefined ||
+    current === undefined ||
+    approval === undefined ||
+    attemptId === undefined
+  ) {
+    return false;
+  }
+  return [
+    ["starting", "reconciliation-required"].includes(record.state),
+    record.pendingStage === "runtime",
+    record.supersededBy === undefined,
+    record.cancelled !== true,
+    record.failure === undefined,
+    record.outcome === undefined,
+    record.fence > 0,
+    locator.commandId === undefined,
+    locator.dispatchAttempted !== true,
+    locator.attemptId === attemptId,
+    locator.sandboxId === plan.runtime.sandboxId,
+    locator.root === plan.runtime.root,
+    record.projection === undefined,
+    record.environmentRows.length === 0,
+    record.environmentWrites.length === 0,
+    record.deliveryCandidates.length === 0,
+    record.deliveryAttempted !== true,
+    record.suiteDispatched !== true,
+    record.suiteCommandId === undefined,
+    current.state === "starting",
+    isDeepStrictEqual(continuityIdentitySchema.strip().parse(current), {
+      intentId: record.requestId,
+      approvalRef: approval.approvalId,
+      owner: { ...plan.authority, sessionId: plan.target.sessionId },
+      appId: plan.target.appId,
+      runtimeAttemptId: attemptId,
+      fence: record.fence,
+      sandboxId: locator.sandboxId,
+      providerSessionId: locator.providerSessionId,
+    }),
+  ].every(Boolean);
+};
+
 export const continuityStatus = (record: ContinuityRecord) => ({
   intentId: record.requestId,
   planRef: record.plan.planRef,

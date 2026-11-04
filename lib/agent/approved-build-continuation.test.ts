@@ -230,3 +230,81 @@ it("projects only the independently acquired existing repository into private de
     }).existingRepositorySource,
   ).toBeUndefined();
 });
+it("projects only the independently acquired existing repository into private destination recovery", async () => {
+  const { recordRepositoryAccessReceipt } = await import("./repository-access-state");
+  const access = recordRepositoryAccessReceipt({
+    current: undefined,
+    sessionId: scope.sessionId,
+    confirmedByCallId: "actual-repository-acquisition",
+    access: {
+      status: "ready",
+      accessDigest: "3".repeat(64),
+      repository: {
+        archived: false,
+        defaultBranch: "main",
+        headSha: "1".repeat(40),
+        headTree: "2".repeat(40),
+        name: "existing-app",
+        owner: "owned",
+        repositoryId: "200",
+        repositoryVariableNames: [],
+        visibility: "private",
+      },
+      scope: { accountLogin: "owned", accountType: "Organization", installationId: "10" },
+    },
+  });
+  const state = {
+    ...failed,
+    sourceReceipt: { ...failed.sourceReceipt, sourceKind: "existing-repository" as const },
+    githubSource: {
+      version: 2 as const,
+      repository: {
+        version: 2 as const,
+        repositoryId: "200",
+        name: "existing-app",
+        owner: "owned",
+        visibility: "private" as const,
+        defaultBranch: "main",
+        headSha: "1".repeat(40),
+        headTree: "2".repeat(40),
+        installationIdentityDigest: "4".repeat(64),
+        releaseGate: { name: "REPOSITORY_RELEASE_ENABLED" as const, configured: true },
+        digest: "5".repeat(64),
+      },
+      installationIdentityDigest: "4".repeat(64),
+      resolvedRef: "refs/heads/main",
+      resolvedSha: "1".repeat(40),
+      resolvedTree: "2".repeat(40),
+      resolvedByCallId: "actual-source-acquisition",
+      digest: "6".repeat(64),
+    },
+  };
+  const project = (repositoryAccess = access) =>
+    decideApprovedBuildContinuation({
+      state,
+      repositoryAccess,
+      adapterSessionId: scope.sessionId,
+      approvalMatches: () => false,
+      blocked: false,
+      pendingInput: false,
+      turnId: "revision-turn",
+      turnSequence: 1,
+    });
+  expect(project().existingRepositorySource).toEqual(access);
+  expect(
+    project({ ...access, repository: { ...access.repository, repositoryId: "201" } })
+      .existingRepositorySource,
+  ).toBeUndefined();
+  expect(
+    decideApprovedBuildContinuation({
+      state: { ...state, sourceReceipt: { ...state.sourceReceipt, sourceKind: "fresh-template" } },
+      repositoryAccess: access,
+      adapterSessionId: scope.sessionId,
+      approvalMatches: () => false,
+      blocked: false,
+      pendingInput: false,
+      turnId: "revision-turn",
+      turnSequence: 1,
+    }).existingRepositorySource,
+  ).toBeUndefined();
+});

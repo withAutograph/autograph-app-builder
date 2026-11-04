@@ -49,7 +49,13 @@ export const createHostedOperatorNativeHandler = (
   return async (request: Request) => {
     if (
       request.method !== "POST" ||
-      !["/v1/runtime", "/v1/public-release"].includes(new URL(request.url).pathname)
+      ![
+        "/v1/runtime",
+        "/v1/public-release",
+        "/v1/app-integrations",
+        "/v1/central-integrations",
+        "/v1/central-deployment-events",
+      ].includes(new URL(request.url).pathname)
     ) {
       return Response.json(
         { code: "not_found" },

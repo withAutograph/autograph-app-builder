@@ -89,9 +89,7 @@ const open = (record: z.infer<typeof savedSchema>, keyring: VercelTokenKeyringCo
       }),
     ),
   );
-  if (!isDeepStrictEqual(configuration.publicEnrollment, record.enrollment)) {
-    throw unavailable();
-  }
+  if (!isDeepStrictEqual(configuration.publicEnrollment, record.enrollment)) {throw unavailable();}
   return configuration;
 };
 /** Read-only enrollment metadata; READY public release and genuine approval verification remain mandatory at callback resolution. */
@@ -115,16 +113,13 @@ export const readPublicRealmLinkConfiguration = async (input: {
     )
     .limit(2);
   await input.assertCurrentOwner();
-  if (rows.length !== 1 || rows[0] === undefined) {
-    throw unavailable();
-  }
+  if (rows.length !== 1 || rows[0] === undefined) {throw unavailable();}
   const record = savedSchema.parse(rows[0].record);
   if (
     !isDeepStrictEqual(record.enrollment.authority, input.authority) ||
     rows[0].requestDigest !== record.scopeDigest
-  ) {
-    throw unavailable();
-  }
+  )
+    {throw unavailable();}
   return open(record, input.keyring);
 };
 /** Server-only fresh normal setup facts. No public/model input can create provider or membership authority here. */
@@ -217,10 +212,7 @@ export const resolvePublicRealmEnrollment = async (input: {
       .limit(1);
     await input.assertCurrentOwner();
     const row = rows[0];
-    if (row === undefined) {
-      // oxlint-disable-next-line unicorn/no-useless-undefined -- A missing internal metadata row is reserved once below.
-      return undefined;
-    }
+    if (row === undefined) {return undefined;}
     const record = savedSchema.parse(row.record);
     if (
       record.scopeDigest !== digest ||
@@ -232,9 +224,8 @@ export const resolvePublicRealmEnrollment = async (input: {
           .parse(record.enrollment),
         scope,
       )
-    ) {
-      throw unavailable();
-    }
+    )
+      {throw unavailable();}
     return open(record, input.keyring);
   };
   let linkConfiguration = await read();
@@ -289,8 +280,6 @@ export const resolvePublicRealmEnrollment = async (input: {
     await input.assertCurrentOwner();
     linkConfiguration = await read();
   }
-  if (linkConfiguration === undefined) {
-    throw unavailable();
-  }
+  if (linkConfiguration === undefined) {throw unavailable();}
   return { enrollmentRef: linkConfiguration.publicEnrollment.enrollmentRef, linkConfiguration };
 };

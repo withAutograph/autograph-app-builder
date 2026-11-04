@@ -1,0 +1,4 @@
+#!/bin/sh
+#MISE description="Assemble an offline code-only central worker release bundle"
+set -eu
+exec .config/mise/scripts/trusted-node-launcher "$(mise which node)" --import tsx scripts/assemble-central-worker-bundle.mts "$@"

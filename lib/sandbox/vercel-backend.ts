@@ -1,3 +1,4 @@
+import { assertPrivateComputeResumeAllowed } from "./private-compute-resume";
 import { APIError, DEFAULT_SANDBOX_REGION, Drive, Sandbox } from "@vercel/sandbox";
 import type {
   SandboxProviderHandle,
@@ -163,6 +164,7 @@ const shouldInitializeSeed = async (
 const SEED_UPLOAD_BATCH_BYTES = 8 * 1024 * 1024;
 
 /* oxlint-disable eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Preserve retained-file probes and bounded upload backpressure in source order. */
+/* oxlint-disable eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Preserve retained-file probes and bounded upload backpressure in source order. */
 const initializeSeeds = async (input: {
   native: Sandbox;
   files: BuilderArtifact["files"];
@@ -207,6 +209,7 @@ const initializeSeeds = async (input: {
   await flush();
 };
 /* oxlint-enable eslint/no-await-in-loop, react-doctor/async-await-in-loop */
+/* oxlint-enable eslint/no-await-in-loop, react-doctor/async-await-in-loop */
 
 export const createBuilderVercelProvider = (
   options?: BuilderVercelEnvironmentOptions,
@@ -247,6 +250,7 @@ export const createBuilderVercelProvider = (
         if (native.status === "running") {
           return { native, recovered: true };
         }
+        await assertPrivateComputeResumeAllowed(native, () => {});
         const resumed = await Sandbox.get({
           ...transport,
           name: input.name,
@@ -375,6 +379,12 @@ export const createBuilderVercelProvider = (
     },
     async resume(context, _artifact, state) {
       // Reconnect only: do not recreate source selection or initialization.
+      const current = await Sandbox.get({ ...transport, name: state.name, resume: false });
+      if (current.status === "running")
+        return handle(current, context.session.id, state.workspaceDrive);
+      await assertPrivateComputeResumeAllowed(current, async () => {
+        await assertHostedSandboxCommandAuthority({ sessionId: context.session.id });
+      });
       const native = await Sandbox.get({ ...transport, name: state.name, resume: true });
       return handle(native, context.session.id, state.workspaceDrive);
     },

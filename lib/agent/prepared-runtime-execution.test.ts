@@ -394,9 +394,13 @@ describe("approved hosted runtime consumers", () => {
       );
     },
   );
-  it.each([undefined, "https://apps-preview.example.test"])(
-    "preserves the verified native browser origin %s without adding runtime bindings",
-    async (publicOrigin) => {
+  it.each([
+    { publicOrigin: undefined, publicDelivery: false },
+    { publicOrigin: "https://apps-preview.example.test", publicDelivery: false },
+    { publicOrigin: "https://public-app.example.test", publicDelivery: true },
+  ])(
+    "preserves the verified browser destination $publicOrigin with publicDelivery=$publicDelivery",
+    async ({ publicOrigin, publicDelivery }) => {
       const fixture = transport();
       const operationRef = "11111111-1111-4111-8111-111111111111";
       const environment = {
@@ -408,7 +412,8 @@ describe("approved hosted runtime consumers", () => {
       };
       const bindings = vi.fn().mockResolvedValue({
         environment,
-        nativePreview: publicOrigin === undefined ? undefined : { publicOrigin },
+        nativePreview: publicOrigin === undefined || publicDelivery ? undefined : { publicOrigin },
+        ...(publicDelivery ? { publicDelivery: { publicOrigin } } : {}),
         operationRef,
         plan: operatorPlan,
         proof: {

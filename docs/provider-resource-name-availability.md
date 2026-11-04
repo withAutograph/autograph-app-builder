@@ -62,3 +62,23 @@ build profile to the repository, but does not replace the project's Services
 preset or root with that app's Next.js preset/workspace. App-root legacy
 destinations continue to use the captured app descriptor. The selected release's
 actual published source remains delivery provenance in either case.
+
+## Safe provider rejection evidence
+
+Standard Vercel provisioning retains only an HTTP failure status, an optional
+closed allowlisted provider error code, and an optional bounded `x-vercel-id`
+request reference in Vercel's region-prefixed format. Unknown codes, response
+messages, bodies, URLs and credentials are not retained. An unreadable error
+body does not discard the observed rejection status or its safe request reference.
+The durable operation preserves the latest such observation through a later
+reconciliation failure; tenant-scoped provisioning diagnostics expose those
+same bounded facts. They describe the prior rejection, not permission for a
+retry, proof of creation, or resolution of an uncertain write. Successful
+provisioning does not present the prior rejection as a current failure.
+
+Published app delivery retains an explicitly selected root Services project's
+build settings. An individual app's descriptor still supplies its own package
+build profile to the repository, but does not replace the project's Services
+preset or root with that app's Next.js preset/workspace. App-root legacy
+destinations continue to use the captured app descriptor. The selected release's
+actual published source remains delivery provenance in either case.

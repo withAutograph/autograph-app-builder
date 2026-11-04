@@ -1,4 +1,3 @@
-/* oxlint-disable sonarjs/no-nested-functions -- The test database intentionally implements the exact bounded Drizzle read chain. */
 import { describe, expect, it, vi } from "vitest";
 import type { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import {
@@ -9,7 +8,6 @@ import {
 import { hostedRuntimeJournalRecordSchema } from "./hosted-runtime-journal";
 import { operatorOwnerContextSchema } from "./hosted-operator-contract";
 import { readPublicReleasePreparedRuntime } from "./public-release-readiness";
-
 const bootstrap = () => {
   const { record } = captureFixture();
   const auth = requiredFixture(record.retainedAuth);
@@ -49,8 +47,7 @@ describe("public bootstrap runtime staging", () => {
     const record = bootstrap();
     expect(record.proof).toBeUndefined();
     expect(record.status).toBe("pending");
-    const observed = await read([record]);
-    expect(observed.purpose).toBe("auth-bootstrap");
+    expect((await read([record])).purpose).toBe("auth-bootstrap");
   });
   it("denies missing Auth schema receipt, approval and a mismatched exact destination", async () => {
     const record = bootstrap();

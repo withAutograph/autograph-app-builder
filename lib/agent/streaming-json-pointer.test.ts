@@ -84,3 +84,17 @@ it.each([
   ]);
   expect(observed.matches).toEqual([matches]);
 });
+it.each([
+  ['"90071992547409931234"', true],
+  ["90071992547409931234", true],
+  ["90071992547409931235", false],
+  ["9e4", false],
+  ["null", false],
+  ["true", false],
+  ['"another"', false],
+])("compares exact provider decimal ID %s without numeric rounding", async (encoded, matches) => {
+  const observed = await readJsonStringChecks(stream(`{"link":{"repoId":${encoded}}}`, 1), [
+    { pointer: "/link/repoId", expectedDecimal: "90071992547409931234" },
+  ]);
+  expect(observed.matches).toEqual([matches]);
+});

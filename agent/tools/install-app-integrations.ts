@@ -1,3 +1,4 @@
+import { appIntegrationInstallReadinessSchema } from "../../lib/repository/app-integration-metadata";
 import { defineTool } from "eve/tools";
 import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
@@ -9,7 +10,7 @@ import { appBuilderWorkflowState, updateExactWorkflow } from "@/lib/agent/workfl
 const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 
 export const appIntegrationsInstallCommand = (appId: string): string =>
-  `mise run integrations:install ${appIdSchema.parse(appId)}`;
+  `mise //apps/integrations:install ${appIdSchema.parse(appId)}`;
 
 const installationFailureProblem = (stdout: string, appId: string): string | undefined => {
   try {
@@ -61,6 +62,7 @@ export const installAppIntegrations = async (input: {
         status: z.enum(["omitted", "installed"]),
         files: z.array(z.string()),
         providers: z.array(z.enum(["quickbooks", "xero", "ramp"])),
+        readiness: appIntegrationInstallReadinessSchema.optional(),
       })
       .parse(JSON.parse(result.stdout));
     return {
@@ -69,6 +71,7 @@ export const installAppIntegrations = async (input: {
       status: receipt.status,
       files: receipt.files.map((file) => safeCommandOutput(file)),
       providers: receipt.providers,
+      ...(receipt.readiness === undefined ? {} : { readiness: receipt.readiness }),
       providerReadiness: "unverified" as const,
       stderr,
     };

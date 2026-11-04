@@ -1,5 +1,6 @@
 import { createHostedOperatorControlPlane } from "./hosted-operator-deployment";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration-schema";
+
 import type { OperatorWorkloadPolicy } from "./hosted-operator-workload";
 import {
   hostedOperatorSourceConfigurationSchema,

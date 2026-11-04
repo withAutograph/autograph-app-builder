@@ -22,6 +22,13 @@ plan and request through the separate `run-app-continuity-tests` approval.
 The human-visible plan is an echo; the operator's saved plan and exact
 owner-authenticated approval receipt provide authority.
 
+The model may submit only the compact saved-plan request (`action`, `planRef`,
+`planDigest`, `idempotencyKey`). The public confirmation must present that same
+request without requiring the model to reconstruct its full resource payload.
+Execution still reloads the owner-scoped canonical plan and verifies its exact
+request, digest and approval. A displayable confirmation does not grant authority
+or prove that the suite ran.
+
 Approval covers the named app/session, existing resources and actors, owned
 Sandbox process, temporary worker-asset transfer/disposal, one app-authored
 suite, and an isolated managed Gateway target with its normal refresh and
@@ -46,11 +53,39 @@ requires fresh exact effect approval. The old intent exposes `supersededBy`
 and cannot execute again. An uncertain active attempt must instead reconcile
 its original intent; recovery never reinterprets old approval for a new root.
 
-Before requesting consent, Builder owner-verifies the saved exact plan without
-scanning historical approvals. After consent, partial or temporarily unavailable
-native approval reads retry with durable backoff and respect cancellation;
-execution waits for a completed exact approval receipt. An owner denial is not
-retryable and never becomes permission to execute.
+An existing attempt can also resume the same named Sandbox after its provider
+process session changes, but only before any runtime or suite dispatch,
+publication, cancellation or supersession. The owner rechecks the original
+approval and attempt fence, then atomically records the new provider session in
+both locator and current identity with its observed lease expiry. The attempt,
+approval, capabilities, root and worker remain unchanged. A conflicting or lost
+journal response must be reconciled before launch; installed worker bytes are
+verified again through the normal asset helper. Once dispatch is attempted,
+even without a returned command ID, a changed provider session remains blocked.
+Before dispatch, owner checks continue but no process lease is written. Renewal
+starts with the durable dispatch marker, including an uncertain command response,
+so an old-session renewal cannot overwrite the newly rebound worker identity.
+
+Before requesting consent, Builder owner-verifies the saved exact plan and
+reconciles any previously recorded native approval, including when the intent
+still says `planned`. A verified receipt advances that same intent to `approved`
+without asking for duplicate consent. A fresh complete read with no matching
+approval request may ask for ordinary approval. An existing request awaiting
+settlement, an incomplete read or an unavailable read cannot issue another prompt.
+
+Partial native history reads continue only after their cursor and capture have
+been durably saved. Non-advancing temporary failures use the existing workflow
+step retry policy, retaining a closed recovery stage and operator error code
+instead of appearing as missing consent. A concurrent journal writer is reread;
+only the identical saved receipt can settle a competing approval write. Native
+cancellation, foreign ownership and conflicting evidence remain refused.
+
+An explicit continuation after Stop must prove its native message delivery
+before protected callbacks pass the existing cancellation-revision guard. The
+callback may reconcile that already submitted message through the same owner
+and session; it cannot submit another message or optimistically undo Stop.
+Execution and cleanup remain bound to the original intent and attempt. Neither
+a displayable approval nor a local regression result proves hosted acceptance.
 
 ## Deployment-owned worker setup
 
@@ -80,6 +115,12 @@ the configured executable's verified binary bytes through supported file APIs,
 writes mode `0755`, verifies target readback, and disposes only its owned source
 VM without deleting the shared snapshot. Unknown creation outcomes reconnect by
 the same owned name; they do not create another VM blindly.
+
+The same helper rechecks the current target bytes on a pre-dispatch recovery;
+an earlier installation receipt alone is not verification. Its successful target
+readback establishes the approved executable digest before startup. Startup does
+not add a second checksum subprocess or depend on its textual output. Missing or
+incorrect source bytes and failed target readback still prevent execution.
 
 Access to the existing target Sandbox instead uses the exact verified incoming
 **Builder workload carrier**, retained in a request-bound private closure. The

@@ -37,13 +37,7 @@ export const createBuilderSessionDestinationService = <
     if (stored === null || deps.sessions.attachBuilderDestination === undefined) {
       throw new Error("Builder session destination is unavailable.");
     }
-    const attach = deps.sessions.attachBuilderDestination.bind(deps.sessions);
     const session = toDurableHostedSessionRecord(stored);
-    if (session.privateBuildDecision?.existingRepositorySource !== undefined) {
-      throw new Error(
-        "This existing app retains its original Builder destination; continue its saved revision instead of creating another project.",
-      );
-    }
     const request = builderProvisionRequestSchema.parse(input.request);
     if (request.operation !== "vercel" || session.appId === undefined) {
       throw new Error("Select a Vercel destination for this app.");
@@ -90,7 +84,7 @@ export const createBuilderSessionDestinationService = <
       throw new Error("The provisioning request does not belong to this app.");
     }
     await deps.assertMember(input.principal);
-    await attach({
+    await deps.sessions.attachBuilderDestination({
       principal: input.principal,
       sessionId: input.sessionId,
       expected: input.expected,
@@ -99,8 +93,7 @@ export const createBuilderSessionDestinationService = <
     });
     const assertCurrent = async () => {
       await deps.assertMember(input.principal);
-      await assertNoLegacyEffects();
-      await attach({
+      await deps.sessions.attachBuilderDestination?.({
         principal: input.principal,
         sessionId: input.sessionId,
         expected: input.expected,

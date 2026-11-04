@@ -25,11 +25,10 @@ export const createBuilderPublicationDestinationReader =
     readSelection: () => Promise<Selection>;
     readProvisioning: BuilderProvisionJournalStore["read"];
   }) =>
-  async (): Promise<OwnedDestination | undefined> => {
+  async () => {
     const selected = await deps.readSelection();
     const ref = selected.destination;
     if (ref === undefined) {
-      // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional destination is an explicit result of this typed async reader.
       return undefined;
     }
     const row = await deps.readProvisioning({
@@ -38,16 +37,14 @@ export const createBuilderPublicationDestinationReader =
     });
     const retainedReceipt = JSON.stringify(row);
     const response = row?.record.response;
-    const matches = [
-      ref.appId === selected.appId,
-      row?.state === "settled",
-      row?.requestDigest === ref.requestDigest,
-      response?.appId === selected.appId,
-    ].every(Boolean);
     if (
-      !matches ||
-      response?.github.status !== "succeeded" ||
-      response.vercel.status !== "succeeded"
+      ref.appId !== selected.appId ||
+      row?.state !== "settled" ||
+      row.requestDigest !== ref.requestDigest ||
+      response?.appId !== selected.appId ||
+      response.github.status !== "succeeded" ||
+      response.vercel.status !== "succeeded" ||
+      response.github.fullName !== response.vercel.linkedGitHubRepository
     ) {
       throw new Error("The saved Builder app destination is unavailable for publication.");
     }

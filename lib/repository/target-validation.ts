@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import nodePath from "node:path";
 import { localRuntimeEnvironmentPath } from "./runtime-environment";
+import { sourceDeclaredToolchainActivationCommand } from "./source-toolchain";
 import type { PreparedRuntimeExecution } from "../agent/prepared-runtime-execution";
 
 import type { SandboxSession } from "eve/sandbox";
@@ -486,7 +487,13 @@ export const sandboxValidationCommandExecutor =
       APP_RUNTIME_STATE_DIR: nodePath.posix.dirname(environmentPath),
       ...(options?.alreadyCompiled === true ? { APP_RUNTIME_ALREADY_COMPILED: "1" } : {}),
     };
-    const executionCommand = `if [ -f '${environmentPath}' ]; then mise run --no-deps app:runtime run ${appId} ${runtimeTask}${shard}; else ${command}; fi`;
+    const executionCommand = `(
+set -e
+(
+${sourceDeclaredToolchainActivationCommand()}
+)
+if [ -f '${environmentPath}' ]; then mise run --no-deps app:runtime run ${appId} ${runtimeTask}${shard}; else ${command}; fi
+)`;
     const detachedCommand = `set +e
 log=$(mktemp /tmp/app-builder-validation.XXXXXX) || exit $?
 ${executionCommand} > "$log" 2>&1

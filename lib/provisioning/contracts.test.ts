@@ -14,6 +14,7 @@ import {
   initialBuilderProvisionJournalRecord,
   builderProvisionJournalRecordSchema,
 } from "./journal";
+
 import { deriveBuilderAppId, suffixedProviderName } from "./names";
 
 const request = {
@@ -29,6 +30,37 @@ const request = {
 } as const;
 
 describe("builder provisioning contracts", () => {
+  it("persists public access intent while preserving legacy request digests and journal rows", () => {
+    const legacy = builderProvisionRequestSchema.parse(request);
+    const oldDigest = createHash("sha256")
+      .update(
+        JSON.stringify({
+          appName: request.appName,
+          providers: request.providers,
+          repository: request.repository,
+          requestId: request.requestId,
+          version: request.version,
+        }),
+      )
+      .digest("hex");
+    expect(builderProvisionRequestDigest(legacy)).toBe(oldDigest);
+    const publicRequest = builderProvisionRequestSchema.parse({
+      ...request,
+      deploymentAccess: "public-app",
+    });
+    expect(builderProvisionRequestDigest(publicRequest)).not.toBe(oldDigest);
+    const now = new Date("2026-11-03T00:00:00Z");
+    const journal = initialBuilderProvisionJournalRecord(publicRequest, now);
+    expect(builderProvisionJournalRecordSchema.parse(journal).request.deploymentAccess).toBe(
+      "public-app",
+    );
+    expect(journal.response.deploymentAccess).toBe("public-app");
+    expect(initialBuilderProvisionResponse(legacy, now)).not.toHaveProperty("deploymentAccess");
+    expect(initialBuilderProvisionJournalRecord(legacy, now).request).not.toHaveProperty(
+      "deploymentAccess",
+    );
+  });
+
   it("persists public access intent while preserving legacy request digests and journal rows", () => {
     const legacy = builderProvisionRequestSchema.parse(request);
     const oldDigest = createHash("sha256")

@@ -7,6 +7,8 @@ export const readJsonStringChecks = async (
     expected?: string;
     /** Exact decimal identity, encoded by a provider as a JSON string or integer. */
     expectedDecimal?: string;
+    /** Exact decimal identity, encoded by a provider as a JSON string or integer. */
+
     expectedLiteral?: "true" | "false";
     optional?: boolean;
     capture?: boolean;

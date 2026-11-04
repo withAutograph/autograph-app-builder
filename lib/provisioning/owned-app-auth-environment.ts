@@ -1,3 +1,4 @@
+import { appIntegrationOptionalEnvironmentKeys } from "./app-integration-release-contract";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import type { HostedOperatorPlan } from "./hosted-operator-contract";
@@ -105,7 +106,7 @@ const sensitiveProjectKey = (key: string) =>
   [
     key.includes("DATABASE_URL"),
     key.startsWith("POSTGRES_"),
-    key.startsWith("PG"),
+    ["PGPASSWORD", "PGUSER", "PGHOST", "PGHOST_UNPOOLED", "PGDATABASE"].includes(key),
     /(?:MIGRAT(?:OR|ION)|MAINTENANCE|ADMIN|ROOT)_(?:URL|PASSWORD|TOKEN|KEY)$/u.test(key),
     /(?:SECRET|PRIVATE_KEY|ENCRYPTION_KEY|SIGNING_KEY|CONTROL_KEY|OPERATOR_TOKEN)$/u.test(key),
     [
@@ -114,6 +115,7 @@ const sensitiveProjectKey = (key: string) =>
       "NEON_API_KEY",
       "BETTER_AUTH_URL",
       "BETTER_AUTH_APP_NAME",
+      ...appIntegrationOptionalEnvironmentKeys,
     ].includes(key),
   ].some(Boolean);
 
@@ -123,11 +125,23 @@ export const assertOwnedAppProductionEnvironment = (
   productionKeys: readonly string[],
 ) => {
   const allowed = new Set(ownedAppPublicEnvironmentKeys(plan.selection.appId));
+  if (plan.integrationCapability !== undefined) {
+    for (const key of appIntegrationOptionalEnvironmentKeys) {
+      allowed.add(key);
+    }
+  }
   const planned = new Set(plan.environment.map((entry) => entry.key));
+  const retained = new Set<string>(plan.retainedOptionalBindings?.map((entry) => entry.key));
+  for (const key of retained) {
+    allowed.add(key);
+  }
+
   if (
     plan.environment.some((entry) => !allowed.has(entry.key)) ||
     productionKeys.some(
-      (key) => sensitiveProjectKey(key) && (!allowed.has(key) || !planned.has(key)),
+      (key) =>
+        sensitiveProjectKey(key) &&
+        (!allowed.has(key) || (!planned.has(key) && !retained.has(key))),
     )
   ) {
     throw unavailable();
@@ -147,4 +161,42 @@ export const ownedAppPublicEnvironmentManifest = (
   return keys
     .toSorted()
     .map((key) => ({ key, sha256: createHash("sha256").update(values[key]).digest("hex") }));
+};
+
+/** A separately approved attachment admits exactly its two hashed configuration keys. Auth remains fifteen keys. */
+export const ownedAppReleaseEnvironmentManifest = (
+  appId: string,
+  values: Readonly<Record<string, string>>,
+  integration?: PublicReleasePlan["integrationCapability"],
+) => {
+  if (integration === undefined) {
+    return ownedAppPublicEnvironmentManifest(appId, values);
+  }
+  const auth = Object.fromEntries(
+    Object.entries(values).filter(
+      ([key]) => !new Set<string>(appIntegrationOptionalEnvironmentKeys).has(key),
+    ),
+  );
+  const manifest = ownedAppPublicEnvironmentManifest(appId, auth);
+  const capability = values.APP_INTEGRATIONS_CAPABILITY;
+  const configuration = values.APP_INTEGRATIONS_RUNTIME_CONFIGURATION;
+  if (capability === undefined || configuration === undefined) {
+    throw unavailable();
+  }
+  const valid = [
+    Object.keys(values).length === manifest.length + 2,
+    capability === JSON.stringify(integration.capability),
+    createHash("sha256").update(configuration).digest("hex") ===
+      integration.capability.privateConfiguration.sha256,
+  ];
+  if (valid.includes(false)) {
+    throw unavailable();
+  }
+  return [
+    ...manifest,
+    ...appIntegrationOptionalEnvironmentKeys.map((key) => ({
+      key,
+      sha256: createHash("sha256").update(values[key]).digest("hex"),
+    })),
+  ].toSorted((a, b) => a.key.localeCompare(b.key));
 };

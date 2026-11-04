@@ -1,10 +1,11 @@
+import { appIntegrationCapabilityPointerSchema } from "./app-integration-release-contract";
 import { z } from "zod";
 import { operatorOwnerContextSchema } from "./hosted-operator-contract";
 import {
   publicReleaseApprovalInputSchema,
   publicReleasePlanSchema,
+  publicReleaseEffectSchema,
 } from "./public-release-contract";
-
 const common = {
   ownerContext: operatorOwnerContextSchema,
   adapterSessionId: z.string().min(1),
@@ -21,6 +22,7 @@ export const publicReleaseTransportRequestSchema = z
       ...common,
       action: z.literal("public-release-plan"),
       appId: publicReleasePlanSchema.shape.selection.shape.appId,
+      integrationCapability: appIntegrationCapabilityPointerSchema.optional(),
     }),
     z.strictObject({
       ...common,
@@ -60,6 +62,6 @@ export const publicReleaseResultSchema = z.union([
   z.strictObject({
     status: z.literal("reconciliation-required"),
     operationRef: z.uuid(),
-    effect: z.enum(["bind-production-runtime", "publish-release-source"]),
+    effect: publicReleaseEffectSchema,
   }),
 ]);

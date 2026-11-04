@@ -127,6 +127,56 @@ describe("private local preview setup", () => {
     });
   });
 
+  it("reports an actual authenticated missing-roles failure as an app authoring repair without a fallback grant", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout: descriptor({ ...generated, authorization: "app-owned", roles: [] }),
+      })
+      .mockResolvedValueOnce({
+        exitCode: 1,
+        stdout: "",
+        stderr:
+          "Authenticated runtime requires schema-declared roles or explicit accepted AppSpec roles in APP_RUNTIME_ROLES",
+      });
+    const result = await prepareAppLocalPreview({
+      appId: "spend-review",
+      root: "/workspace/repository",
+      sandbox: { run },
+    });
+    expect(result).toMatchObject({ status: "failed", exitCode: 1 });
+    expect(result.problem).toContain("CUE authorization roles and model/operation grants");
+    expect(result.problem).toContain("ordinary implementation repair");
+    expect(run).toHaveBeenLastCalledWith({
+      command: localPreviewExecutionCommand("spend-review"),
+      workingDirectory: "/workspace/repository",
+      env: { APP_RUNTIME_STATE_DIR: runtimeStateDirectory },
+    });
+  });
+  it("preserves successful empty-role runtime setup instead of imposing an authentication requirement", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout: descriptor({ ...generated, authorization: "app-owned", roles: [] }),
+      })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "Runtime ready", stderr: "" });
+    const result = await prepareAppLocalPreview({
+      appId: "spend-review",
+      root: "/workspace/repository",
+      sandbox: { run },
+    });
+    expect(result).toMatchObject({ status: "prepared", exitCode: 0 });
+    expect(run).toHaveBeenLastCalledWith({
+      command: localPreviewExecutionCommand("spend-review"),
+      workingDirectory: "/workspace/repository",
+      env: { APP_RUNTIME_STATE_DIR: runtimeStateDirectory },
+    });
+  });
+
   it("runs the selected app's repository task in its checkout", async () => {
     const run = vi
       .fn()
@@ -193,6 +243,23 @@ describe("private local preview setup", () => {
     expect(result.problem).toContain("local database startup");
     expect(result.stderr).toContain("pg_ctl");
     expect(JSON.stringify(result)).not.toContain("secret");
+  });
+
+  it("leaves static app setup free of Rust activation", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: descriptor({ kind: "static" }) })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "Runtime ready", stderr: "" });
+    await prepareAppLocalPreview({
+      appId: "spend-review",
+      root: "/workspace/repository",
+      sandbox: { run },
+    });
+    expect(run).toHaveBeenLastCalledWith({
+      command: localPreviewExecutionCommand("spend-review"),
+      env: { APP_RUNTIME_STATE_DIR: runtimeStateDirectory },
+      workingDirectory: "/workspace/repository",
+    });
   });
 
   it("leaves static app setup free of Rust activation", async () => {

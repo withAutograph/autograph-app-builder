@@ -24,6 +24,7 @@ export interface NormalActorCaptureDeploymentResources {
   publicRealm?: Awaited<
     ReturnType<CompositionResources["controlPlane"]["readPendingRealmIdentityLinkForStaging"]>
   >["publicRealm"];
+
   controlPlane: Pick<
     CompositionResources["controlPlane"],
     | "normalActorJournalPorts"
@@ -31,6 +32,7 @@ export interface NormalActorCaptureDeploymentResources {
     | "readPendingNormalActorCapture"
     | "readPendingRealmIdentityLinkForStaging"
     | "close"
+    | "resolveRealmIdentityCallbackOwnerContext"
     | "resolveRealmIdentityCallbackOwnerContext"
   >;
 }
@@ -113,6 +115,7 @@ export const createNormalActorCaptureDeploymentPorts = (
         staging.jwksUrl === `${link.endpointOrigin}/_platform/jwks.json`,
         isDeepStrictEqual(staging.link, projectPendingRealmIdentityLink(link)),
         isDeepStrictEqual(staging.publicRealm, resources.publicRealm),
+        isDeepStrictEqual(staging.publicRealm, resources.publicRealm),
       ].every(Boolean);
       if (!matches) {
         throw unavailable();
@@ -159,6 +162,11 @@ export const createNormalActorCaptureDeploymentPorts = (
           const latest = await controlPlane.readPendingNormalActorCapture(selector);
           // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Revalidate public release authority after the canonical current capture snapshot.
           const latestStaging = await controlPlane.readPendingRealmIdentityLinkForStaging(selector);
+          if (!isDeepStrictEqual(latestStaging.publicRealm, resources.publicRealm))
+            throw unavailable();
+          // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Revalidate public release authority after the canonical current capture snapshot.
+          // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Revalidate public release authority after the canonical current capture snapshot.
+
           if (!isDeepStrictEqual(latestStaging.publicRealm, resources.publicRealm)) {
             throw unavailable();
           }
@@ -212,6 +220,7 @@ export const createNormalActorCaptureDeploymentHandler =
   async (request: Request): Promise<Response> => {
     let resources: NormalActorCaptureDeploymentResources | undefined;
     let initialResources: typeof resources;
+
     try {
       const open =
         io.openResources ??
@@ -226,6 +235,77 @@ export const createNormalActorCaptureDeploymentHandler =
         // nonce, public approval, signed proof and actual cookie before capture.
         const clone = request.clone();
         const reader = clone.body?.getReader();
+        if (reader === undefined) throw unavailable();
+        const chunks: Uint8Array[] = [];
+        let size = 0;
+        for (;;) {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- Consume the bounded routing copy in stream order.
+          const next = await reader.read();
+          if (next.done) break;
+          size += next.value.byteLength;
+          if (size > 32768) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- Stop the bounded stream before rejecting an oversized routing copy.
+            await reader.cancel();
+            throw unavailable();
+          }
+          chunks.push(next.value);
+        }
+        const hint = normalActorCaptureRequestSchema.parse(
+          JSON.parse(Buffer.concat(chunks).toString("utf8")),
+        );
+        const selector = {
+          ownerSessionId: hint.ownerSessionId,
+          nonceSha256: realmIdentityNonceSha256(hint.reviewedNonce),
+        };
+        const selected =
+          await resources.controlPlane.resolveRealmIdentityCallbackOwnerContext(selector);
+        if (selected.publicRelease !== undefined) {
+          const {
+            openNativeTargetConfigurationResources,
+            resolveOwnedStandardRuntimeConfiguration,
+          } = await import("./native-target-configuration-resolver");
+          const { openHostedOperatorConfigurationResources } =
+            await import("./hosted-operator-source-configuration");
+          const native = await openNativeTargetConfigurationResources(
+            resources.configuration,
+            environment,
+          );
+          try {
+            const configuration = await resolveOwnedStandardRuntimeConfiguration({
+              configuration: resources.configuration,
+              resources: native,
+              environment,
+              context: {
+                authority: selected.context.authority,
+                ownerContext: operatorOwnerContextSchema.parse(selected.context.ownerContext),
+                target: {
+                  appId: selected.context.target.appId,
+                  sessionId: selected.context.target.sessionId,
+                },
+              },
+            });
+            const canonical = await openHostedOperatorConfigurationResources(
+              configuration,
+              environment,
+            );
+            resources = canonical;
+            const staging =
+              await canonical.controlPlane.readPendingRealmIdentityLinkForStaging(selector);
+            if (staging.publicRealm === undefined) {
+              throw unavailable();
+            }
+            resources = { ...canonical, publicRealm: staging.publicRealm };
+          } finally {
+            await native.close();
+          }
+        }
+      }
+      initialResources = resources;
+      if (environment.PROTECTED_HOSTED_OPERATOR_STANDARD_RUNTIME_PROFILES !== undefined) {
+        // Routing hint only; the ordinary handler still verifies native sender,
+        // nonce, public approval, signed proof and actual cookie before capture.
+        const clone = request.clone();
+        const reader = clone.body?.getReader();
         if (reader === undefined) {
           throw unavailable();
         }
@@ -233,12 +313,14 @@ export const createNormalActorCaptureDeploymentHandler =
         let size = 0;
         for (;;) {
           // oxlint-disable-next-line eslint/no-await-in-loop -- Consume the bounded routing copy in stream order.
+          // oxlint-disable-next-line eslint/no-await-in-loop -- Consume the bounded routing copy in stream order.
           const next = await reader.read();
           if (next.done) {
             break;
           }
           size += next.value.byteLength;
           if (size > 32_768) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- Stop the bounded stream before rejecting an oversized routing copy.
             // oxlint-disable-next-line eslint/no-await-in-loop -- Stop the bounded stream before rejecting an oversized routing copy.
             await reader.cancel();
             throw unavailable();
@@ -308,6 +390,11 @@ export const createNormalActorCaptureDeploymentHandler =
       );
     } finally {
       await resources?.controlPlane.close();
+      if (
+        initialResources !== undefined &&
+        initialResources.controlPlane !== resources?.controlPlane
+      )
+        await initialResources.controlPlane.close();
       if (
         initialResources !== undefined &&
         initialResources.controlPlane !== resources?.controlPlane

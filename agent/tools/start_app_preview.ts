@@ -56,29 +56,6 @@ const validationAttemptDigest = (
   return undefined;
 };
 
-const nextDependencyManifest = z.object({
-  dependencies: z.object({ next: z.string().optional() }).optional(),
-  devDependencies: z.object({ next: z.string().optional() }).optional(),
-});
-
-const usesNext = (source: string | null): boolean => {
-  if (source === null) {
-    return false;
-  }
-  try {
-    const parsed = nextDependencyManifest.safeParse(JSON.parse(source));
-    return (
-      parsed.success &&
-      (parsed.data.dependencies?.next !== undefined ||
-        parsed.data.devDependencies?.next !== undefined)
-    );
-  } catch {
-    throw new Error(
-      "The selected app's package.json is not valid JSON. Repair its manifest before starting the private preview.",
-    );
-  }
-};
-
 const dependencyLogStore = (ctx: ToolContext): ValidationLogStore | undefined => {
   const databaseUrl = process.env.DATABASE_URL;
   if (databaseUrl === undefined || databaseUrl.length === 0) {
@@ -208,9 +185,16 @@ export default defineTool({
       }
     }
     const { appId } = selected;
-    const packageManifest = await sandbox.readTextFile({ path: `${cwd}/package.json` });
     const logStore = dependencyLogStore(ctx);
     const dependencyInput = {
+      assertCurrent: () => {
+        ctx.abortSignal.throwIfAborted();
+        if (currentProductBehaviorGeneration() !== evidenceGeneration) {
+          throw new Error(
+            "The selected app changed while preparing preview dependencies. Retry the preview for the current app.",
+          );
+        }
+      },
       checkoutIdentity: selected.revision,
       logStore,
       onAttempt: (attempt: DependencyAttemptResult) => {
@@ -223,16 +207,13 @@ export default defineTool({
               },
         );
       },
+      reconcileWorkspace: true,
       root: selected.root,
       sandbox,
       sessionId: ctx.session.id,
       signal: ctx.abortSignal,
     };
-    const dependencies = await ensureCheckoutDependencies(
-      usesNext(packageManifest)
-        ? { ...dependencyInput, requiredExecutable: "next" }
-        : dependencyInput,
-    );
+    const dependencies = await ensureCheckoutDependencies(dependencyInput);
     let environmentPath = runtime?.environmentPath;
     if (!runtime && (await appDeclaresLocalSetup({ appId, root: selected.root, sandbox }))) {
       const setup = await prepareAppLocalPreview({

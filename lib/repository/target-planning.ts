@@ -1,3 +1,10 @@
+import { privateComputeProfileSchema } from "../sandbox/private-compute-profile";
+import type { PrivateComputeProfile } from "../sandbox/private-compute-profile";
+import {
+  localSourceReconciliationSchema,
+  type LocalSourceReconciliation,
+} from "./local-source-reconciliation-contract";
+import { canAutoSelectDevelopmentSource } from "./development-source";
 import {
   frameworkUpgradeSchema,
   planFrameworkUpgrade,
@@ -57,39 +64,52 @@ const appSpecBindingSchema = z.strictObject({
 // Persisted creation state can contain retired metadata. Parse only the current
 // fields without rewriting the stored receipt or its digest on resume.
 const targetCreationProposalSchemaForTopology = (topologyOwner: string) =>
-  z.strictObject({
-    blockers: z.array(z.string()),
-    frameworkUpgrade: frameworkUpgradeSchema.optional(),
-    contract: z.strictObject({
-      appId,
-      appSpec: appSpecBindingSchema,
-      version: z.literal(1),
-    }),
-    mutations: z.tuple([]),
-    plan: z.strictObject({
-      product: z.strictObject({
+  z
+    .strictObject({
+      blockers: z.array(z.string()),
+      frameworkUpgrade: frameworkUpgradeSchema.optional(),
+      privateCompute: privateComputeProfileSchema.optional(),
+      contract: z.strictObject({
+        appId,
         appSpec: appSpecBindingSchema,
+        version: z.literal(1),
       }),
-      source: z.strictObject({
-        packageName: z.string().min(1),
-        runtime: z.literal("nextjs"),
-        schema: z.discriminatedUnion("kind", [
-          z.strictObject({ kind: z.literal("none") }),
-          z.strictObject({ kind: z.literal("kernel"), path: repositoryPath }),
-        ]),
-        workspacePath: repositoryPath,
+      mutations: z.tuple([]),
+      plan: z.strictObject({
+        product: z.strictObject({
+          appSpec: appSpecBindingSchema,
+        }),
+        source: z.strictObject({
+          packageName: z.string().min(1),
+          runtime: z.literal("nextjs"),
+          schema: z.discriminatedUnion("kind", [
+            z.strictObject({ kind: z.literal("none") }),
+            z.strictObject({ kind: z.literal("kernel"), path: repositoryPath }),
+          ]),
+          workspacePath: repositoryPath,
+        }),
+        topology: z.strictObject({
+          assetRoute: z.string().startsWith("/").optional(),
+          configPath: z.literal(topologyOwner),
+          currentDigest: digest.optional(),
+          packageName: z.string().min(1),
+          projectName: appId,
+          proposedDigest: digest.optional(),
+          routes: z.array(z.string().startsWith("/")),
+        }),
       }),
-      topology: z.strictObject({
-        assetRoute: z.string().startsWith("/").optional(),
-        configPath: z.literal(topologyOwner),
-        currentDigest: digest.optional(),
-        packageName: z.string().min(1),
-        projectName: appId,
-        proposedDigest: digest.optional(),
-        routes: z.array(z.string().startsWith("/")),
-      }),
-    }),
-  });
+    })
+    .superRefine((proposal, context) => {
+      if (
+        proposal.privateCompute !== undefined &&
+        proposal.privateCompute.checkPolicy.path !==
+          `apps/${proposal.contract.appId}/.config/mise/tasks/check`
+      )
+        context.addIssue({
+          code: "custom",
+          message: "The compute check policy must belong to the exact app contract.",
+        });
+    });
 
 export const targetCreationProposalSchema =
   targetCreationProposalSchemaForTopology("microfrontends.json");
@@ -122,20 +142,35 @@ const iterationChangeSchema = z
 
 const targetIterationProposalSchemaForTopology = (topologyOwner: string) =>
   targetCreationProposalSchemaForTopology(topologyOwner)
-    .extend({
+    .safeExtend({
       iteration: z.strictObject({
         changes: z.array(iterationChangeSchema),
         digest,
       }),
       operation: z.literal("iterate-existing-app"),
+      sourceReconciliation: localSourceReconciliationSchema.optional(),
     })
     .superRefine((proposal, context) => {
-      if (proposal.iteration.changes.length === 0 && proposal.frameworkUpgrade === undefined) {
+      if (
+        proposal.iteration.changes.length === 0 &&
+        proposal.frameworkUpgrade === undefined &&
+        proposal.sourceReconciliation === undefined &&
+        proposal.privateCompute === undefined
+      ) {
         context.addIssue({
           code: "custom",
           message: "An existing-app iteration requires app changes or a framework upgrade",
         });
       }
+      if (
+        proposal.sourceReconciliation !== undefined &&
+        (proposal.sourceReconciliation.appId !== proposal.contract.appId ||
+          proposal.sourceReconciliation.appSpecDigest !== proposal.contract.appSpec.sha256)
+      )
+        context.addIssue({
+          code: "custom",
+          message: "Local source reconciliation must retain its exact app and accepted product.",
+        });
       if (sha256(JSON.stringify(proposal.iteration.changes)) !== proposal.iteration.digest) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
@@ -436,6 +471,8 @@ export const executeTargetIdentityAndPlanning = async (input: {
   appSpecDigest: string;
   artifactRevision: string;
   existingAppChanges?: readonly ApplicationFileChange[];
+  localSourceReconciliation?: LocalSourceReconciliation;
+  privateCompute?: PrivateComputeProfile;
   frameworkUpgradeRequested?: boolean;
   resolveFrameworkVersions?: () => Promise<FrameworkVersions>;
   sourceReceipt?: SourceReceipt;
@@ -443,6 +480,27 @@ export const executeTargetIdentityAndPlanning = async (input: {
   onIdentity?: (identity: TargetIdentity) => void | Promise<void>;
 }) => {
   planningMarker("target-identity-and-planning", "start");
+  const privateCompute =
+    input.privateCompute === undefined
+      ? undefined
+      : privateComputeProfileSchema.parse(input.privateCompute);
+  if (
+    privateCompute !== undefined &&
+    privateCompute.checkPolicy.path !== `apps/${input.appId}/.config/mise/tasks/check`
+  )
+    throw new Error("The private compute check policy belongs to another app.");
+  const sourceReconciliation =
+    input.localSourceReconciliation === undefined
+      ? undefined
+      : localSourceReconciliationSchema.parse(input.localSourceReconciliation);
+  if (
+    sourceReconciliation !== undefined &&
+    (!canAutoSelectDevelopmentSource(input.environment) ||
+      sourceReconciliation.appId !== input.appId ||
+      sourceReconciliation.appSpecDigest !== input.appSpecDigest ||
+      sourceReconciliation.sourceReceiptDigest !== input.sourceReceipt?.digest)
+  )
+    throw new Error("Local source reconciliation does not belong to this planning input.");
   const overlay = await materializePlanningOverlay(input);
   const identity = parseOutput(
     await input.executor({
@@ -476,7 +534,9 @@ export const executeTargetIdentityAndPlanning = async (input: {
   if (
     existingApplication &&
     input.existingAppChanges === undefined &&
-    frameworkUpgrade === undefined
+    frameworkUpgrade === undefined &&
+    sourceReconciliation === undefined &&
+    privateCompute === undefined
   ) {
     throw new ExistingApplicationChangesRequiredError();
   }
@@ -532,7 +592,12 @@ export const executeTargetIdentityAndPlanning = async (input: {
         path: requested.path,
       });
     }
-    if (changes.length === 0 && frameworkUpgrade === undefined) {
+    if (
+      changes.length === 0 &&
+      frameworkUpgrade === undefined &&
+      sourceReconciliation === undefined &&
+      privateCompute === undefined
+    ) {
       throw new Error("At least one existing-app change is required.");
     }
     const iterationDigest = sha256(JSON.stringify(changes));
@@ -557,6 +622,8 @@ export const executeTargetIdentityAndPlanning = async (input: {
       ...(frameworkUpgrade === undefined ? {} : { frameworkUpgrade }),
       iteration: { changes, digest: iterationDigest },
       operation: "iterate-existing-app",
+      ...(sourceReconciliation === undefined ? {} : { sourceReconciliation }),
+      ...(privateCompute === undefined ? {} : { privateCompute }),
     });
     const result = { identity, proposal, ...overlay };
     planningMarker("target-identity-and-planning", "finish");
@@ -568,6 +635,7 @@ export const executeTargetIdentityAndPlanning = async (input: {
     workingDirectory: "/workspace/repository",
   });
   const proposal = {
+    ...(privateCompute === undefined ? {} : { privateCompute }),
     ...creationPlan(identity, input.appSpecDigest, cue.exitCode === 0),
     ...(frameworkUpgrade === undefined ? {} : { frameworkUpgrade }),
   };

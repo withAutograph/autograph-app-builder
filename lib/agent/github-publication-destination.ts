@@ -1,4 +1,5 @@
 import { readBuilderPublicationDestinationForTool } from "./builder-publication-destination";
+
 import type { GitHubPublicationDestinationIdentity } from "./github-publication-runtime";
 import { repositoryAccessReceiptSchema } from "./repository-access-state";
 import type { RepositoryAccessReceipt } from "./repository-access-state";
@@ -88,6 +89,12 @@ const assertPublicationDestinationConstraints = (
       throw new Error("The revision source differs from this Builder app's repository.");
     }
     if (
+      ownedDestination !== undefined &&
+      input.githubSource.repository.repositoryId !== ownedDestination.repositoryId
+    ) {
+      throw new Error("The revision source differs from this Builder app's repository.");
+    }
+    if (
       input.destination !== undefined &&
       input.destination.repository.toLowerCase() !==
         `${input.githubSource.repository.owner}/${input.githubSource.repository.name}`.toLowerCase()
@@ -155,6 +162,7 @@ export const createPublicationTargetResolver =
     return { kind: "ready", target: { destination: selected } };
   };
 
+// oxlint-disable-next-line eslint/complexity -- Canonical app destination checks preserve the existing fresh, revision, retained-review and access-selection branches.
 export const resolvePublicationTargetForTool = createPublicationTargetResolver<ToolContext>({
   readOwnedDestination: readBuilderPublicationDestinationForTool,
   resolveAccess: async (destination, ctx) =>

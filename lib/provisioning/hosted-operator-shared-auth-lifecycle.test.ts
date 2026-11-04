@@ -383,6 +383,8 @@ const composed = (active = true) => {
     return preparedCredentials(input);
   });
   const controlPlane: ControlPlane = {
+    centralIntegrationHostRequest: unavailable,
+    centralIntegrationDeploymentReceiptRequest: unavailable,
     continuityRequest: unavailable,
     exportRequest: unavailable,
     readApprovedPlan: unavailable,

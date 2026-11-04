@@ -40,6 +40,8 @@ interface VercelCredential {
 export interface BuilderProvisioningDependencies {
   /** Current saved-session owner/epoch, checked again by each provider write lease. */
   assertCurrent?: () => Promise<void>;
+  /** Current saved-session owner/epoch, checked again by each provider write lease. */
+
   journal: BuilderProvisionJournalStore;
   githubInstallations: HostedGitHubInstallationStore;
   githubCredentials: GitHubUserCredentialStore;
@@ -314,6 +316,10 @@ export async function executeBuilderProvisioning(input: {
           (current.operations[request.operation].attemptCount ?? 0) + 1;
         current.operations[request.operation].outcomeKnown = result.status === "succeeded";
         if (result.status === "failed") {
+          if (result.providerDiagnostic !== undefined) {
+            current.operations[request.operation].lastProviderDiagnostic =
+              result.providerDiagnostic;
+          }
           if (result.providerDiagnostic !== undefined) {
             current.operations[request.operation].lastProviderDiagnostic =
               result.providerDiagnostic;

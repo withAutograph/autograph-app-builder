@@ -1,3 +1,4 @@
+import { publicRuntimeBindingSchema, assertPublicRuntimeBinding } from "./public-runtime-binding";
 import type { HostedOperatorCallbackExecution } from "./hosted-operator-callback-owner";
 import {
   continuityTransportRequestSchema,
@@ -75,6 +76,7 @@ const operatorDispatcher = createHostedOperatorDispatcher();
 const bindingSchema = z.strictObject({
   environment: z.record(z.string(), z.string()),
   nativePreview: operatorNativePreviewSchema.optional(),
+  publicDelivery: publicRuntimeBindingSchema.optional(),
   normalActors: z
     .strictObject({
       origin: z.url(),
@@ -388,7 +390,10 @@ export const createHostedOperatorClient = (input: {
       stage = "client_response_validation";
       const blocked = operatorPublicResultSchema.safeParse(value);
       if (blocked.success) {
-        throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable");
+        throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable", {
+          recoveryStage: blocked.data.recoveryStage,
+          recoveryProgressAdvanced: blocked.data.recoveryProgressAdvanced,
+        });
       }
       try {
         return resultSchema.parse(value);
@@ -497,7 +502,7 @@ export const createHostedOperatorClient = (input: {
           action: "continuity-approval",
           ownerContext: exportOwner(),
         },
-        z.strictObject({ approved: z.boolean() }),
+        z.strictObject({ approved: z.boolean(), pending: z.boolean().optional() }),
         signal,
       );
     },
@@ -617,7 +622,13 @@ export const createHostedOperatorClient = (input: {
       if (value.nativePreview) {
         assertOperatorNativePreview(value.nativePreview, value.plan, request.operationRef);
       }
-      if (value.normalActors && value.normalActors.origin !== value.nativePreview?.publicOrigin) {
+      if (value.publicDelivery)
+        {assertPublicRuntimeBinding(value.publicDelivery, value.plan, request.operationRef);}
+      if (
+        value.normalActors &&
+        value.normalActors.origin !==
+          (value.publicDelivery?.publicOrigin ?? value.nativePreview?.publicOrigin)
+      ) {
         throw new HostedOperatorError("resource_mismatch");
       }
       return {

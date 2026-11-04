@@ -2,7 +2,6 @@
 import { expect, it, vi } from "vitest";
 import { createRealmIdentityHandoffSenderVerifier } from "./hosted-operator-realm-callback";
 import { publicRealmEnrollmentSchema } from "./public-realm-enrollment";
-
 const enrollment = publicRealmEnrollmentSchema.parse({
   version: 1,
   kind: "public-isolated-realm-v1",

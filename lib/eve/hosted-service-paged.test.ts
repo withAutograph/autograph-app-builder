@@ -378,6 +378,50 @@ describe("unchanged paged observation reuse", () => {
     },
   );
 
+  it("restores a failed presentation summary when the same native cursor exposes its retained approval", async () => {
+    const f = await unchangedPollFixture();
+    Object.assign(f.saved, {
+      status: "failed",
+      resumability: "terminal",
+      stage: "needs_attention",
+    });
+    const request = {
+      allowFreeform: false,
+      kind: "approval" as const,
+      requestId: "retained-approval",
+      title: "Run saved exercise",
+      description: "Use the same approved resources.",
+    };
+    const state = f.observation.nativeObservationState;
+    if (state === undefined) {
+      throw new Error("Missing retained native state");
+    }
+    f.metadata.nativeObservationState = { ...state, invalidInput: true };
+    f.metadata.status = "failed";
+    f.observation.status = "input_required";
+    f.observation.pendingRequests = [request];
+    f.observation.publicEventCount = 4;
+    state.pendingRequests = [request];
+    state.publicEventCount = 4;
+    f.observe.mockImplementationOnce(async (input) => {
+      await input.onEvent({ index: 3, type: "input.requested", request });
+      return structuredClone(f.observation);
+    });
+    vi.mocked(f.adapter.start).mockClear();
+    const result = await f.service.get({ cursor: 3, limit: 10, sessionId: f.sessionId });
+    expect(result).toMatchObject({ status: "input_required", cursor: 4, inputRequests: [request] });
+    expect(result.events.map((event) => event.index)).toEqual([3]);
+    const stored = await f.getSession(principal, f.sessionId);
+    expect(stored).toMatchObject({
+      status: "input_required",
+      resumability: "live",
+      adapterSessionId: "adapter_1",
+    });
+    expect(f.adapter.start).not.toHaveBeenCalled();
+    expect(f.adapter.send).not.toHaveBeenCalled();
+    expect(f.adapter.respond).not.toHaveBeenCalled();
+  });
+
   it("does not preserve a failed summary without a complete unchanged native observation", async () => {
     const f = await unchangedPollFixture();
     Object.assign(f.saved, {

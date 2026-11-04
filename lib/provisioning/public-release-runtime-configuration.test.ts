@@ -5,7 +5,6 @@ const input = {
   publicOrigin: "https://app.example",
   appId: "invoice-app",
   authResource: {
-    environment: "preview" as const,
     hostname: "ep-synthetic.aws.neon.tech",
     port: 5432 as const,
     database: "app_auth",
@@ -29,6 +28,7 @@ describe("fresh public app Auth configuration", () => {
     expect(first.BETTER_AUTH_SECRET).not.toBe(second.BETTER_AUTH_SECRET);
     expect(first).not.toHaveProperty("BETTER_AUTH_API_KEY");
     expect(JSON.parse(first.AUTH_DATABASE_RESOURCE)).toMatchObject({
+      environment: "isolated-development",
       ...input.authResource,
     });
     expect(first).not.toHaveProperty("VERCEL_ENV");

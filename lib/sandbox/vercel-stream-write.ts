@@ -69,14 +69,10 @@ export const writeVercelStream = async (input: {
     };
     lease.signal.addEventListener("abort", kill, { once: true });
     try {
-      if (lease.signal.aborted) {
-        kill();
-      }
+      if (lease.signal.aborted) kill();
       const result = await running.wait({ signal: lease.signal });
       lease.signal.throwIfAborted();
-      if (result.exitCode !== 0) {
-        throw new Error("The Builder stream transfer could not complete.");
-      }
+      if (result.exitCode !== 0) throw new Error("The Builder stream transfer could not complete.");
     } catch (error) {
       kill();
       throw error;
@@ -120,14 +116,10 @@ export const writeVercelStream = async (input: {
         buffer.set(chunk.subarray(offset, offset + length), used);
         used += length;
         offset += length;
-        if (used === CHUNK_BYTES) {
-          await upload();
-        }
+        if (used === CHUNK_BYTES) await upload();
       }
     }
-    if (used > 0) {
-      await upload();
-    }
+    if (used > 0) await upload();
     await command(commitStage, [stage, input.target, String(count)]);
   } finally {
     if (created) {

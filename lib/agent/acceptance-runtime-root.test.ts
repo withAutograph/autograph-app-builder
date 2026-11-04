@@ -180,7 +180,14 @@ describe("acceptance workspace recovery", () => {
       }) => {
         try {
           return {
-            ...(await run("/bin/sh", ["-c", command], { cwd: workingDirectory })),
+            ...(await run(
+              "/bin/sh",
+              [
+                "-c",
+                command.replace(/^node /u, `'${process.execPath.replaceAll("'", "'\"'\"'")}' `),
+              ],
+              { cwd: workingDirectory },
+            )),
             exitCode: 0,
           };
         } catch {

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { repositoryAccessReceiptSchema } from "./repository-access-state";
 import type { RepositoryAccessReceipt } from "./repository-access-state";
+
 import type { AppBuilderWorkflowState } from "./workflow-state";
 import type { PrivateApplyScope } from "./private-apply-authority";
 
@@ -25,6 +26,7 @@ export const approvedBuildDecisionSchema = z.strictObject({
     })
     .optional(),
   existingRepositorySource: repositoryAccessReceiptSchema.optional(),
+
   decision: z.enum(["working", "runnable", "waiting-input", "blocked", "settled"]),
   scope: approvedBuildScopeSchema.optional(),
   turnId: z.string().min(1),
@@ -93,6 +95,7 @@ export const decideApprovedBuildContinuation = (input: {
   turnSequence: number;
   approvalMatches: (scope: PrivateApplyScope) => boolean;
   repositoryAccess?: RepositoryAccessReceipt;
+
   pendingInput: boolean;
   blocked: boolean;
 }): ApprovedBuildDecision => {
@@ -110,6 +113,22 @@ export const decideApprovedBuildContinuation = (input: {
   );
   if (existingRepositorySource !== undefined) {
     Object.assign(base, { existingRepositorySource });
+  }
+  const access = input.repositoryAccess;
+  const workflow = input.state;
+  if (
+    workflow.phase !== "empty" &&
+    workflow.sourceReceipt?.sourceKind === "existing-repository" &&
+    workflow.githubSource !== undefined &&
+    access !== undefined &&
+    access.sessionId === input.adapterSessionId &&
+    access.repository.repositoryId === workflow.githubSource.repository.repositoryId &&
+    access.repository.owner === workflow.githubSource.repository.owner &&
+    access.repository.name === workflow.githubSource.repository.name &&
+    workflow.githubSource.installationIdentityDigest ===
+      workflow.githubSource.repository.installationIdentityDigest
+  ) {
+    Object.assign(base, { existingRepositorySource: repositoryAccessReceiptSchema.parse(access) });
   }
   if ("appSpec" in input.state) {
     const { state } = input;

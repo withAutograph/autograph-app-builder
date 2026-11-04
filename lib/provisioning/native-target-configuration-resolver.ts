@@ -1,4 +1,6 @@
+import { CENTRAL_DEPLOYMENT_RECEIPT_PATH } from "./central-integration-receipt-relay";
 import { createPostgresBuilderProvisionJournalStore } from "./postgres-journal";
+
 import { z } from "zod";
 import { publicReleaseTransportRequestSchema } from "./public-release-transport";
 import { assembleStandardBuilderRuntimeConfiguration } from "./standard-builder-runtime-configuration";
@@ -6,6 +8,7 @@ import type { StandardBuilderRuntimeCapture } from "./standard-builder-runtime-c
 import { createPostgresOperatorArtifactSelections } from "./hosted-operator-artifact-selection";
 import { createPostgresOperatorArtifactStore } from "./hosted-operator-artifact-store";
 import { createOperatorArtifactPublication } from "./hosted-operator-artifacts";
+
 import { resolveNativeTargetResourceProfile } from "./native-target-resource-profile";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -69,10 +72,12 @@ const configurationRequestSchema = z.union([
   continuityTransportRequestSchema,
   tenantExportTransportRequestSchema,
   publicReleaseTransportRequestSchema,
+  publicReleaseTransportRequestSchema,
 ]);
 type ConfigurationRequest = z.infer<typeof configurationRequestSchema>;
 const isPublicReleaseRequest = (input: ConfigurationRequest) =>
   input.action === "public-release-plan" || input.action === "public-release-run";
+
 interface RegistryInvocation {
   request: Request;
   ownerContext: OperatorOwnerContext;
@@ -89,6 +94,7 @@ export interface NativeTargetConfigurationResources {
   readStandardCapture?: (
     input: Parameters<typeof readStandardBuilderDestination>[1],
   ) => Promise<StandardBuilderRuntimeCapture>;
+
   close: () => Promise<void>;
 }
 
@@ -176,6 +182,9 @@ export const createNativeTargetConfigurationResolver =
   async (request: Request): Promise<HostedOperatorSourceConfiguration> => {
     let stage: Parameters<typeof reportHostedOperatorNativeFailure>[0] = "resolver_configuration";
     try {
+      // This closed global receipt path has no request-selected app. Its handler verifies exact Builder Production workload before bounded envelope parsing.
+      if (new URL(request.url).pathname === CENTRAL_DEPLOYMENT_RECEIPT_PATH)
+        {return structuredClone(input.configuration);}
       const parsed = configurationRequestSchema.safeParse(await request.json());
       // Consent and independently dispatched actions keep their existing handler authority.
       // Invalid requests remain the protected handler's responsibility, with no private reads here.
@@ -204,6 +213,63 @@ export const createNativeTargetConfigurationResolver =
             context,
             environment: input.environment,
           });
+        }
+        if (input.environment?.PROTECTED_HOSTED_OPERATOR_STANDARD_RUNTIME_PROFILES !== undefined) {
+          await resources.owner.verifyWorkload(request);
+          const context = {
+            authority: ownerContext.authority,
+            ownerContext,
+            target: { appId: selected.appId, sessionId: selected.sessionId },
+          };
+          await resources.owner.assertCanonicalAppOwner(context);
+          const destination = await resources.readStandardDestination?.(context);
+          if (destination === undefined)
+            {throw new HostedOperatorError("builder_destination_required");}
+          const captured = await resources.readStandardCapture?.(context);
+          if (captured === undefined)
+            {throw new HostedOperatorError("builder_destination_configuration_required");}
+          const configuration = assembleStandardBuilderRuntimeConfiguration({
+            base: input.configuration,
+            authority: ownerContext.authority,
+            appId: selected.appId,
+            destination,
+            captured,
+            environment: input.environment,
+          });
+          await resources.owner.assertCanonicalAppOwner(context);
+          return configuration;
+        }
+        if (input.configuration.composition === "single-project-services") {
+          await resources.owner.verifyWorkload(request);
+          await resources.owner.assertCanonicalAppOwner({
+            authority: ownerContext.authority,
+            ownerContext,
+            target: { appId: selected.appId, sessionId: selected.sessionId },
+          });
+          const destination = await resources.readStandardDestination?.({
+            authority: ownerContext.authority,
+            ownerContext,
+            target: { appId: selected.appId, sessionId: selected.sessionId },
+          });
+          if (destination === undefined) {
+            throw new HostedOperatorError("builder_destination_required");
+          }
+          const app = input.configuration.applications[selected.appId];
+          if (
+            app === undefined ||
+            destination.projectId !== app.projectId ||
+            destination.projectId !== input.configuration.gateway.projectId ||
+            destination.teamId !== input.configuration.teamId
+          ) {
+            throw new HostedOperatorError("builder_destination_configuration_required");
+          }
+        }
+        // Public delivery cannot borrow a historical dedicated Preview registration.
+        if (isPublicReleaseRequest(parsed.data)) {
+          if (input.configuration.composition !== "single-project-services") {
+            throw new HostedOperatorError("builder_destination_configuration_required");
+          }
+          return structuredClone(input.configuration);
         }
         if (input.configuration.composition === "single-project-services") {
           await resources.owner.verifyWorkload(request);
@@ -347,6 +413,7 @@ export const openNativeTargetConfigurationResources = async (
             readProvisioning: createPostgresBuilderProvisionJournalStore(database).read,
             findProvisioningForAppRepository:
               createPostgresBuilderProvisionJournalStore(database).findSettledAppRepository,
+
             readVercelCredential: (credential) =>
               readActiveVercelInstallationToken({
                 ...credential,
@@ -364,10 +431,7 @@ export const openNativeTargetConfigurationResources = async (
         }
         const artifactContext = { authority: context.authority, target: context.target };
         const assertCurrentOwner = async () => {
-          const current = await readCanonicalAppOwnerSession(ownerDependencies, context);
-          if (current.privateBuildDecision?.currentSpec?.appSpecDigest !== spec.appSpecDigest) {
-            throw new HostedOperatorError("authorization_required");
-          }
+          await readCanonicalAppOwnerSession(ownerDependencies, context);
         };
         const selections = createPostgresOperatorArtifactSelections({
           database,
@@ -388,6 +452,7 @@ export const openNativeTargetConfigurationResources = async (
         }
         return { selection, description: captured.description };
       },
+
       registry: createPostgresNativeTargetOnboardingStore(database),
       continuity: createPostgresContinuityJournalStore(database),
       exports: createPostgresTenantExportJournalStore(database),

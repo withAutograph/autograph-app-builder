@@ -4,4 +4,4 @@ set -eu
 postgres_bin=$(dirname "$(command -v initdb)")
 exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
   "$(mise which node)" --import tsx \
-  .config/mise/scripts/repository/builder-repository-lookup-proof/main.mts "$postgres_bin"
+  .config/mise/scripts/repository/test-postgres-builder-repository-lookup.mts "$postgres_bin"

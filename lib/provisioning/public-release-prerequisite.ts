@@ -2,6 +2,8 @@ import { z } from "zod";
 
 export const publicReleasePrerequisiteCodeSchema = z.enum([
   "public_release_git_revision_required",
+  "public_release_integration_capability_required",
+  "public_release_integration_removal_required",
   "builder_destination_required",
   "public_release_reconciliation_required",
   "prepared_runtime_required",
@@ -12,6 +14,10 @@ export const publicReleasePrerequisiteCodeSchema = z.enum([
 ]);
 export type PublicReleasePrerequisiteCode = z.infer<typeof publicReleasePrerequisiteCodeSchema>;
 const actions: Record<PublicReleasePrerequisiteCode, string> = {
+  public_release_integration_removal_required:
+    "Disable this app’s integrations in its existing Integrations page first. Builder must independently verify all bindings are stopped, then offer a fresh release approval naming the reversible app-only authority fence and read-only retention of its two existing settings before publishing the revised app.",
+  public_release_integration_capability_required:
+    "Complete and select this app’s separately approved integration capability through plan-app-integration-capability and prepare-app-integration-capability, then plan a fresh public application release with that exact operation reference.",
   public_release_git_revision_required:
     "Runtime configuration changed. Validate and review a new source revision through Builder before approving its native Git public release in this same project.",
   public_auth_enrollment_required:

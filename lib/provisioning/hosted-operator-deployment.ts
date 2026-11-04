@@ -1,9 +1,22 @@
-import { createPublicReleaseDeployment } from "./public-release-deployment";
-import { createPostgresBuilderProvisionJournalStore } from "./postgres-journal";
-import { createOwnedAppResourceCustody } from "./owned-app-resource-custody";
+import { createAppIntegrationCapabilityDeployment } from "./app-integration-capability-deployment";
+import type { ReadCentralIntegrationHostReady } from "./app-integration-central-authority";
+import type {
+  ReadCentralIntegrationHostPrivate,
+  CreateAppIntegrationCapabilityWorker,
+} from "./app-integration-capability-deployment";
+import type { PublicReleaseIntegrationRemovalPorts } from "./public-release-integration-removal";
+import { createHostedOperatorIntegrationRemoval } from "./hosted-operator-integration-removal";
+import { createCentralHostDeployment } from "./central-integration-host-deployment";
+import { AppIntegrationCapabilityPrerequisiteError } from "./app-integration-capability-prerequisite";
+import { CentralHostPrerequisiteError } from "./central-integration-host-prerequisite";
 import { createPostgresPublicRealmCallbackResolver } from "./public-realm-callback-resolution";
 import type { PublicRealmReleaseBinding } from "./public-realm-enrollment";
 import { createPublicReleaseApprovalAuthority } from "./public-release-approval-authority";
+import { createPublicReleaseDeployment } from "./public-release-deployment";
+import { createPostgresBuilderProvisionJournalStore } from "./postgres-journal";
+
+import { createOwnedAppResourceCustody } from "./owned-app-resource-custody";
+
 import {
   canReserveIdentityLink,
   isIdlePendingAccountCapture,
@@ -676,7 +689,19 @@ export const createRetainedAppInstallationCustomerReader = (
     },
   });
 
+interface HostedOperatorPublicRuntimePort {
+  readPublicRuntimeBinding?: ProtectedHostedOperatorDependencies["publicRuntimeBinding"];
+}
+
 export const createHostedOperatorControlPlane = async (input: {
+  readCentralIntegrationReady?: ReadCentralIntegrationHostReady;
+  readCentralIntegrationPrivate?: ReadCentralIntegrationHostPrivate;
+  createAppIntegrationWorker?: CreateAppIntegrationCapabilityWorker;
+  readAppIntegrationControlBootstrap?: Parameters<
+    typeof createAppIntegrationCapabilityDeployment
+  >[0]["readControlBootstrap"];
+  integrationRemoval?: PublicReleaseIntegrationRemovalPorts;
+  request?: Request;
   environment?: Readonly<Record<string, string | undefined>>;
   workloadPolicy: OperatorWorkloadPolicy;
   sourceConfiguration: HostedOperatorSourceConfiguration;
@@ -765,6 +790,7 @@ export const createHostedOperatorControlPlane = async (input: {
       readProvisioning: createPostgresBuilderProvisionJournalStore(database).read,
       findProvisioningForAppRepository:
         createPostgresBuilderProvisionJournalStore(database).findSettledAppRepository,
+
       eve,
       journal: store,
       realmContinuation: {
@@ -1081,6 +1107,8 @@ export const createHostedOperatorControlPlane = async (input: {
       })(context, binding);
 
     // oxlint-disable-next-line eslint/complexity -- The reservation validates old and explicitly approved public realm scopes before the same atomic nonce write.
+
+    // oxlint-disable-next-line eslint/complexity -- The reservation validates old and explicitly approved public realm scopes before the same atomic nonce write.
     const reserveRealmIdentityLink = async (
       linkInput: RealmIdentityLinkInput,
       expectedOrganizationRefresh?: {
@@ -1340,6 +1368,7 @@ export const createHostedOperatorControlPlane = async (input: {
       const context = { authority, ownerContext, target: record.request };
       const pending = record.operator?.identityLink;
       /* oxlint-disable sonarjs/expression-complexity -- All canonical owner and nonce admission checks are required together. */
+      /* oxlint-disable sonarjs/expression-complexity -- All canonical owner and nonce admission checks are required together. */
       if (
         record.request.sessionId !== sessionId ||
         pending?.ownerSessionId !== sessionId ||
@@ -1349,6 +1378,7 @@ export const createHostedOperatorControlPlane = async (input: {
       ) {
         throw new HostedOperatorError("authorization_required");
       }
+      /* oxlint-enable sonarjs/expression-complexity */
       /* oxlint-enable sonarjs/expression-complexity */
       return { context, record, sessionId, nonceSha256, durable, ownerContext };
     };
@@ -2093,6 +2123,7 @@ export const createHostedOperatorControlPlane = async (input: {
       readApprovedPublicAuthBootstrap: resolvePublicRealm,
       readOwnedAppResourceSource: ownedAppResources.readReference,
       checkpointOwnedAppResourceSource: ownedAppResources.checkpoint,
+
       prepareRealmIdentityLink,
       async prepareNormalActorCapture(
         captureInput: HostedOperatorContext & {
@@ -2745,6 +2776,11 @@ export const createHostedOperatorControlPlane = async (input: {
         await owner.assertPlanningAuthorized(context);
         return { ...current, operator };
       }
+      if (operator.plan.runtimePreparation !== undefined) {
+        await resolvePublicRealm(context);
+        await owner.assertPlanningAuthorized(context);
+        return { ...current, operator };
+      }
       const bootstrap = inspectPlanningParticipantBootstrap(
         {
           ...operator.plan,
@@ -2858,6 +2894,66 @@ export const createHostedOperatorControlPlane = async (input: {
                   ) {
                     throw new HostedOperatorError("auth_identity_required");
                   }
+                  return Response.json({ keys: [pin] });
+                },
+              },
+            ),
+            readback: async (request: Request) => {
+              await resolvePublicRealm(context, released.binding);
+              return await transport(request);
+            },
+            transportSource: configuration.nativeNeon.configuration.operator,
+          };
+        }
+        if (known.operator.plan.runtimePreparation !== undefined) {
+          const released = await resolvePublicRealm(context);
+          if (
+            current === undefined ||
+            current.preparation.accountOperationRef !== preparation.accountOperationRef ||
+            current.preparation.accountPlanDigest !== preparation.accountPlanDigest ||
+            current.preparation.programDigest !== preparation.programDigest ||
+            current.preparation.accountApprovalId !== preparation.accountApprovalId ||
+            current.preparation.accountApprovedByCallId !== preparation.accountApprovedByCallId ||
+            preparation.program.origin !== released.plan.publicOrigin
+          ) {
+            throw new HostedOperatorError("auth_identity_required");
+          }
+          const transport = createHostedOperatorRealmHttpTransport(
+            configuration,
+            "operator",
+            { fetch: input.fetch },
+            released.plan.publicOrigin,
+          );
+          return {
+            audience: configuration.operator.origin,
+            authResourceId: released.enrollment.sourceBootstrap.authResourceId,
+            bootstrapPlanDigest: preparation.accountPlanDigest,
+            publicRelease: released.binding,
+            builderCallbackOrigin: configuration.builderCallbackOrigin,
+            endpointOrigin: released.plan.publicOrigin,
+            issuer: preparation.program.origin,
+            resource: released.enrollment.resource,
+            getKey: createRemoteJWKSet(
+              new URL(`${released.plan.publicOrigin}/_platform/jwks.json`),
+              {
+                [customFetch]: async (...args) => {
+                  await resolvePublicRealm(context, released.binding);
+                  const response = await transport(...args);
+                  if (!response.ok) {return response;}
+                  const payload = z
+                    .object({ keys: z.array(z.record(z.string(), z.unknown())) })
+                    .parse(await response.json());
+                  const pin = released.publicJwk;
+                  if (
+                    !payload.keys.some(
+                      (key) =>
+                        key.kid === pin.kid &&
+                        key.kty === pin.kty &&
+                        key.crv === pin.crv &&
+                        key.x === pin.x,
+                    )
+                  )
+                    {throw new HostedOperatorError("auth_identity_required");}
                   return Response.json({ keys: [pin] });
                 },
               },
@@ -3884,28 +3980,130 @@ export const createHostedOperatorControlPlane = async (input: {
     const nativeTargetPort: Pick<ProtectedHostedOperatorDependencies, "nativeTargetRequest"> = {
       nativeTargetRequest,
     };
+    const central = createCentralHostDeployment({
+      database,
+      databaseUrl: config.databaseUrl,
+      keyring: tokenKeyring,
+      environment,
+      builderOrigin: new URL(config.resource).origin,
+      configuration: input.sourceConfiguration,
+      owner,
+      request: input.request,
+      fetch: input.fetch,
+      readSourceOwner: async (authority, target) => {
+        const rows = await database
+          .select()
+          .from(agentSessions)
+          .where(
+            and(
+              eq(agentSessions.issuer, authority.issuer),
+              eq(agentSessions.audience, authority.audience),
+              eq(agentSessions.workspaceId, authority.workspaceId),
+              eq(agentSessions.ownerUserId, authority.ownerUserId),
+              eq(agentSessions.sessionId, target.sessionId),
+            ),
+          )
+          .limit(1);
+        const saved = rows[0];
+        if (saved === undefined) {throw new HostedOperatorError("authorization_required");}
+        const { current } = await readCurrentRealmSession(parseHostedSessionRow(saved));
+        if (
+          current.appId !== target.appId ||
+          !isDeepStrictEqual(hostedTenantAuthoritySchema.parse(current.principal), authority)
+        )
+          {throw new HostedOperatorError("authorization_required");}
+        const resolved = await ownerContextResolver({
+          adapterSessionId: current.adapterSessionId,
+          authority,
+          principal: current.principal,
+          sessionAuth: forwardedSessionAuth(current.principal, current.sourceHandoffId),
+        });
+        await owner.assertCanonicalAppOwner({ authority, ownerContext: resolved, target });
+        return resolved;
+      },
+    });
+    const readCentralReady: ReadCentralIntegrationHostReady =
+      input.readCentralIntegrationReady ??
+      (async (scope) => {
+        try {
+          return await central.readReady(scope);
+        } catch (error) {
+          if (error instanceof CentralHostPrerequisiteError)
+            {throw new AppIntegrationCapabilityPrerequisiteError(
+              "app_integration_central_host_required",
+            );}
+          throw error;
+        }
+      });
+    const readCentralPrivate = input.readCentralIntegrationPrivate ?? central.readPrivate;
+    const integrationRemoval = createHostedOperatorIntegrationRemoval({
+      integrationRemoval: input.integrationRemoval,
+      database,
+      configuration: input.sourceConfiguration,
+      environment,
+      readCentralReady,
+      readCentralPrivate,
+      fetch: input.fetch,
+    });
+    const publicReleaseRequest = createPublicReleaseDeployment({
+      integrationRemoval,
+      readCentralReady,
+      database,
+      owner,
+      configuration: input.sourceConfiguration,
+      environment,
+      keyring: tokenKeyring,
+      databaseUrl: config.databaseUrl,
+      readResourceBindings,
+      assertRuntimeAuthorized: owner.assertAuthorized,
+      readInstallationScopes: controlPlane.readAppInstallationMetadataScopes,
+      bindRuntimeWorkload: (context, token, signal) => {
+        approvalObserver.bindWorkload(context, token, signal);
+      },
+      ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
+    });
     const publicReleasePort: Pick<ProtectedHostedOperatorDependencies, "publicReleaseRequest"> = {
-      publicReleaseRequest: createPublicReleaseDeployment({
+      publicReleaseRequest,
+    };
+    const publicRuntimePort: HostedOperatorPublicRuntimePort = {
+      readPublicRuntimeBinding: async ({ request, plan, operationRef, ...context }) =>
+        await publicReleaseRequest.readRuntimeBinding({ request, context, plan, operationRef }),
+    };
+
+    const appIntegrationCapabilityPort: Pick<
+      ProtectedHostedOperatorDependencies,
+      "appIntegrationCapabilityRequest"
+    > = {
+      appIntegrationCapabilityRequest: createAppIntegrationCapabilityDeployment({
         database,
         owner,
         configuration: input.sourceConfiguration,
         environment,
         keyring: tokenKeyring,
         databaseUrl: config.databaseUrl,
+        readCentralReady,
+        readCentralPrivate,
+        createWorker: input.createAppIntegrationWorker,
+        readControlBootstrap:
+          input.readAppIntegrationControlBootstrap ?? central.readControlBootstrap,
         readResourceBindings,
         assertRuntimeAuthorized: owner.assertAuthorized,
-        readInstallationScopes: controlPlane.readAppInstallationMetadataScopes,
         bindRuntimeWorkload: (context, token, signal) => {
           approvalObserver.bindWorkload(context, token, signal);
         },
         ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
       }),
     };
+
     return {
       ...controlPlane,
       ...normalActors,
       ...nativeTargetPort,
+      centralIntegrationHostRequest: central.request,
+      centralIntegrationDeploymentReceiptRequest: central.receive,
       ...publicReleasePort,
+      ...publicRuntimePort,
+      ...appIntegrationCapabilityPort,
       exportRequest,
       continuityRequest,
       readNormalActorRuntimeBindings: createNormalActorRuntimeBindings(

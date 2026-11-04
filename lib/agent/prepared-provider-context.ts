@@ -144,6 +144,7 @@ const readVercelProjectAccess = async (input: {
   projectId: string;
   requireServicesRoot?: boolean;
   requireExpectedRepositoryId?: string;
+
   projectName?: string;
   installationId: string;
   expectedScope?: { id: string; type: "team" | "user" };
@@ -328,6 +329,7 @@ export async function readOwnerVercelProjectAccess(input: {
   requireServicesRoot?: boolean;
   requireExpectedRepositoryId?: string;
   expectedScope?: VercelScope;
+
   installationId: string;
   readCredential: (input: {
     authority: Authority;
@@ -345,6 +347,7 @@ export async function readPreparedVercelAccess(input: {
   intent: PreparedIntent;
   requireServicesRoot?: boolean;
   requireExpectedRepositoryId?: string;
+
   authority: Authority;
   readCredential: (input: {
     authority: Authority;
@@ -370,6 +373,7 @@ export async function readPreparedVercelAccess(input: {
       expectedScope: project.scope,
       requireServicesRoot: input.requireServicesRoot,
       requireExpectedRepositoryId: input.requireExpectedRepositoryId,
+
       installationId,
       projectId: project.projectId,
       projectName: project.name,

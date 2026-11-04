@@ -265,9 +265,7 @@ export const createPostgresPublicRealmCallbackResolver = (input: {
         keyring: input.keyring,
         authority: context.authority,
         enrollmentRef,
-        assertCurrentOwner: async () => {
-          await input.assertCurrentOwner(context);
-        },
+        assertCurrentOwner: async () => await input.assertCurrentOwner(context),
       }),
     readValues: async (context, plan) => {
       const store = createPublicReleaseRuntimeConfigurationStore({
@@ -279,9 +277,7 @@ export const createPostgresPublicRealmCallbackResolver = (input: {
           sessionId: context.target.sessionId,
           projectId: context.target.projectId,
         },
-        assertCurrentOwner: async () => {
-          await input.assertCurrentOwner(context);
-        },
+        assertCurrentOwner: async () => await input.assertCurrentOwner(context),
       });
       const scope = {
         authority: context.authority,

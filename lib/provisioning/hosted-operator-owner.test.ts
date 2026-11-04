@@ -1,6 +1,7 @@
 import { recordRepositoryAccessReceipt } from "../agent/repository-access-state";
 import { initialBuilderProvisionJournalRecord } from "./journal";
 import type { BuilderProvisionJournalRow } from "./journal";
+
 import { nativeDeliveryForEvents } from "../eve/native-delivery-state";
 import type { ApprovedBuildDecision } from "../agent/approved-build-continuation";
 import { createAppGatewaySourceSuccessorPlan } from "./hosted-operator-app-gateway-source-successor";
@@ -1607,6 +1608,33 @@ describe("canonical app ownership before provider target creation", () => {
       expectNoProviderReads(fixture);
     },
   );
+});
+
+it("blocks new legacy target effects after selecting a standard destination while keeping owner reads", async () => {
+  const current = directSessionRecord();
+  current.builderDestination = {
+    appId: selection.appId,
+    requestId: "d16f6dd2-157a-42dc-8dfc-253ce9005502",
+    requestDigest: "a".repeat(64),
+  };
+  const f = makeFixture(current);
+  const reader = createHostedOperatorAppOwnerAuthority({
+    eve: f.eve,
+    handoffs: f.handoffs,
+    membership: f.membership,
+    workloadPolicy,
+    keyResolver,
+  });
+  const context = {
+    authority: directOwnerContext.authority,
+    ownerContext: directOwnerContext,
+    target: { appId: selection.appId, sessionId: directOwnerContext.sessionId },
+  };
+  await expect(reader.assertCanonicalAppOwner(context)).resolves.toBeUndefined();
+  await expect(reader.assertNoStandardBuilderDestination(context)).rejects.toThrow(
+    "builder_destination_configuration_required",
+  );
+  expectNoProviderReads(f);
 });
 
 it("blocks new legacy target effects after selecting a standard destination while keeping owner reads", async () => {
@@ -3472,6 +3500,39 @@ describe("normal Builder destination authority", () => {
     await expect(read(f)).rejects.toMatchObject({ code: "authorization_required" });
   });
 
+  it("rejects a destination changed while provider readback was in flight", async () => {
+    const f = makeFixture();
+    const originalRead = f.handoffs.read;
+    f.fetch.mockImplementation(async () => {
+      f.handoffs.read = async (lookup) => {
+        const handoff = await originalRead(lookup);
+        if (handoff?.intent.provisioning?.vercel.status !== "succeeded") {
+          throw new Error("Expected the normal provisioned fixture");
+        }
+        return {
+          ...handoff,
+          intent: {
+            ...handoff.intent,
+            provisioning: {
+              ...handoff.intent.provisioning,
+              vercel: { ...handoff.intent.provisioning.vercel, projectId: "changed-destination" },
+            },
+          },
+        };
+      };
+      return await Promise.resolve(
+        Response.json({
+          id: selection.projectId,
+          accountId: "team_1",
+          name: "apps-vendor-onboarding",
+          framework: "services",
+          rootDirectory: ".",
+        }),
+      );
+    });
+    await expect(read(f)).rejects.toMatchObject({ code: "authorization_required" });
+  });
+
   it("rechecks current membership after provider I/O", async () => {
     const f = makeFixture();
     f.fetch.mockImplementation(async () => {
@@ -3580,6 +3641,57 @@ describe("attached direct-session standard destination", () => {
       };
     }
     const findProvisioningForAppRepository = vi.fn(async () => await Promise.resolve([row]));
+    if (revision) {
+      delete f.currentSession.builderDestination;
+      row.record.response.github = {
+        status: "succeeded",
+        defaultBranch: "main",
+        fullName: "owned/vendor-onboarding",
+        name: "vendor-onboarding",
+        owner: "owned",
+        repositoryId: "200",
+        installationId: "10",
+        headSha: "1".repeat(40),
+        headTree: "2".repeat(40),
+        scope: { id: "20", login: "owned", type: "organization" },
+        starter: { sourceSha: "1".repeat(40), sourceTree: "2".repeat(40) },
+        url: "https://github.com/owned/vendor-onboarding",
+        visibility: "private",
+      };
+      if (row.record.response.vercel.status !== "succeeded") throw new Error("missing project");
+      row.record.response.vercel.linkedGitHubRepository = "owned/vendor-onboarding";
+      const existingRepositorySource = recordRepositoryAccessReceipt({
+        current: undefined,
+        sessionId: f.currentSession.adapterSessionId,
+        confirmedByCallId: "actual-acquisition",
+        access: {
+          status: "ready",
+          accessDigest: "3".repeat(64),
+          scope: { accountLogin: "owned", accountType: "Organization", installationId: "10" },
+          repository: {
+            archived: false,
+            defaultBranch: "main",
+            headSha: "1".repeat(40),
+            headTree: "2".repeat(40),
+            name: "vendor-onboarding",
+            owner: "owned",
+            repositoryId: "200",
+            repositoryVariableNames: [],
+            visibility: "private",
+          },
+        },
+      });
+      f.currentSession.privateBuildDecision = {
+        adapterSessionId: f.currentSession.adapterSessionId,
+        decision: "working",
+        turnId: "revision-turn",
+        turnSequence: 1,
+        workflowPhase: "app_spec_accepted",
+        version: 1,
+        existingRepositorySource,
+      };
+    }
+
     const readProvisioning = vi.fn(async () => await Promise.resolve(row));
     const read = () =>
       readStandardBuilderDestination(
@@ -3717,4 +3829,76 @@ describe("attached direct-session standard destination", () => {
       expect(x.f.currentSession.builderDestination).toBeUndefined();
     },
   );
+});
+
+describe("normal Builder destination authority", () => {
+  const read = (f: ReturnType<typeof makeFixture>, owner: OperatorOwnerContext = ownerContext) =>
+    readStandardBuilderDestination(
+      { ...f, workloadPolicy, apiOrigin: "https://vercel.example" },
+      {
+        authority: owner.authority,
+        ownerContext: owner,
+        target: { appId: selection.appId, sessionId: owner.sessionId },
+      },
+    );
+
+  it("reads the recorded standard destination with independent project topology readback", async () => {
+    const f = makeFixture();
+    f.fetch.mockImplementation(
+      async () =>
+        await Promise.resolve(
+          Response.json({
+            id: selection.projectId,
+            accountId: "team_1",
+            name: "apps-vendor-onboarding",
+            framework: "services",
+            rootDirectory: ".",
+          }),
+        ),
+    );
+    await expect(read(f)).resolves.toMatchObject({
+      projectId: selection.projectId,
+      teamId: "team_1",
+      installationId: "icfg_1",
+    });
+    expect(f.fetch).toHaveBeenCalledOnce();
+    expect(f.currentSession.appId).toBe(selection.appId);
+  });
+
+  it("returns no destination for a direct session instead of inventing a handoff", async () => {
+    const f = makeFixture();
+    delete f.currentSession.sourceHandoffId;
+    await expect(read(f, directOwnerContext)).resolves.toBeUndefined();
+    expect(f.fetch).not.toHaveBeenCalled();
+    expect(f.handoffs.read).not.toHaveBeenCalled();
+  });
+
+  it("rejects provider topology drift and leaves the standard receipt unchanged", async () => {
+    const f = makeFixture();
+    await expect(read(f)).rejects.toMatchObject({ code: "resource_mismatch" });
+  });
+
+  it("checks membership before reading a credential or provider", async () => {
+    const f = makeFixture(undefined, false, false);
+    await expect(read(f)).rejects.toMatchObject({ code: "authorization_required" });
+    expect(f.readVercelCredential).not.toHaveBeenCalled();
+    expect(f.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rechecks current membership after provider I/O", async () => {
+    const f = makeFixture();
+    f.fetch.mockImplementation(async () => {
+      f.membership.isMember = vi.fn().mockResolvedValue(false);
+      return await Promise.resolve(
+        Response.json({
+          id: selection.projectId,
+          accountId: "team_1",
+          name: "apps-vendor-onboarding",
+          framework: "services",
+          rootDirectory: ".",
+        }),
+      );
+    });
+    await expect(read(f)).rejects.toMatchObject({ code: "authorization_required" });
+  });
 });

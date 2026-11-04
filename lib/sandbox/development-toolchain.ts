@@ -49,6 +49,7 @@ export const DEVELOPMENT_SANDBOX_ENVIRONMENT = {
   MISE_CARGO_HOME: "/workspace/.app-builder/toolchain/cargo-home",
   MISE_RUSTUP_HOME: "/workspace/.app-builder/toolchain/rustup-home",
   RUSTUP_HOME: "/workspace/.app-builder/toolchain/rustup-home",
+
   MISE_EXEC_AUTO_INSTALL: "false",
   MISE_TASK_RUN_AUTO_INSTALL: "false",
   PATH: "/workspace/.app-builder/toolchain/bin:/workspace/.app-builder/toolchain/rust/bin:/usr/bin:/bin",

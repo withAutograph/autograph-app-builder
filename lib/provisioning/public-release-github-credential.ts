@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { githubReleaseFailure } from "./public-release-github-diagnostic";
 import { createGitHubApp, createGitHubTokenOctokit } from "../github/octokit";
 import { parseGitHubAppHttpProviderCredentials } from "../repository/github-app-http-provider";
 import { mergeHostedGitHubInstallationBindings } from "../repository/postgres-github-installation-store";
@@ -27,7 +26,10 @@ interface CredentialDependencies {
   installations: HostedGitHubInstallationStore;
   fetch?: typeof fetch;
 }
-const scopedCredential = (input: CredentialDependencies) => {
+/** Owner-scoped exact-repository token reader shared by approved source publication lanes. */
+export const createOwnerScopedGitHubRepositoryCredentialReader = (
+  input: CredentialDependencies,
+) => {
   const credentials = parseGitHubAppHttpProviderCredentials({
     appId: input.environment.GITHUB_APP_ID,
     privateKey: input.environment.GITHUB_APP_PRIVATE_KEY,
@@ -90,9 +92,9 @@ const scopedCredential = (input: CredentialDependencies) => {
         repositoryId: scope.repositoryId,
         installationId: scope.installationId,
       };
-    } catch (error) {
+    } catch {
       invocation.signal.throwIfAborted();
-      throw githubReleaseFailure(error) ?? unavailable();
+      throw unavailable();
     }
   };
 };
@@ -102,7 +104,7 @@ export const createPublicReleaseGitHubCredentialReader = (
     assertCurrent: PublicReleaseGitHubDependencies["assertCurrent"];
   },
 ): PublicReleaseGitHubDependencies["readCredential"] => {
-  const read = scopedCredential(input);
+  const read = createOwnerScopedGitHubRepositoryCredentialReader(input);
   return (invocation, plan) =>
     read(invocation, plan.source, () => input.assertCurrent(invocation, plan));
 };
@@ -116,7 +118,7 @@ export const createPublicReleaseGitHubDestinationReader = (
     ) => Promise<void>;
   },
 ) => {
-  const read = scopedCredential(input);
+  const read = createOwnerScopedGitHubRepositoryCredentialReader(input);
   return async (
     invocation: PublicReleaseInvocation,
     scope: PublicReleaseGitHubSourceScope &
@@ -177,9 +179,9 @@ export const createPublicReleaseGitHubDestinationReader = (
         sourceSha,
         expectedProductionSha,
       };
-    } catch (error) {
+    } catch {
       invocation.signal.throwIfAborted();
-      throw githubReleaseFailure(error) ?? unavailable();
+      throw unavailable();
     }
   };
 };

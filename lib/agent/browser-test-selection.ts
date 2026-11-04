@@ -8,6 +8,8 @@ export const browserTestSelectionSchema = z.strictObject({
     .max(160)
     // JSON Schema drops RegExp flags; explicit C0/C1 ranges remain portable.
     // oxlint-disable-next-line eslint/no-control-regex -- Reject every Unicode control character without a flag-dependent property escape.
+    // JSON Schema drops RegExp flags; explicit C0/C1 ranges remain portable.
+    // oxlint-disable-next-line eslint/no-control-regex -- Reject every Unicode control character without a flag-dependent property escape.
     .regex(/^[^\u0000-\u001F\u007F-\u009F]+$/u),
   workers: z.number().int().positive().optional(),
   retries: z.number().int().nonnegative().optional(),

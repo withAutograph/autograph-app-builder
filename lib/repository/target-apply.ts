@@ -1,3 +1,4 @@
+import { applyPrivateComputeCheckPolicy } from "./private-compute-check-policy";
 import { sourceDeclaredToolchainActivationCommand } from "./source-toolchain";
 import type { FrameworkVersions } from "./framework-upgrade";
 import { frameworkUpgradeCommand, frameworkSharedPaths } from "./framework-upgrade";
@@ -923,6 +924,13 @@ export async function executeProposalBoundApply(input: {
       proposal: input.proposal,
       sandbox: input.sandbox,
     });
+    if (command.exitCode === 0 && input.proposal.privateCompute !== undefined) {
+      await applyPrivateComputeCheckPolicy({
+        sandbox: input.sandbox,
+        applyRoot: overlay.applyRoot,
+        profile: input.proposal.privateCompute,
+      });
+    }
     await stageCreatedAppSpec({
       acceptedAppSpec: overlay.acceptedAppSpec,
       applyRoot: overlay.applyRoot,

@@ -66,6 +66,33 @@ const sandboxConfigurationFields = {
   membershipWorker: worker.optional(),
   projectId: id,
   resourcesWorker: worker,
+  integrationResourcesWorker: z
+    .strictObject({
+      executablePath: id,
+      id: z.literal("neon-resource-bootstrap-v1"),
+      operationScope: z.literal("neon-resource-bootstrap-v1"),
+      sha256: digest,
+      subcommand: z.literal("neon-resource-bootstrap"),
+    })
+    .optional(),
+  integrationWorker: z
+    .strictObject({
+      executablePath: id,
+      id: z.literal("app-integration-bootstrap-v1"),
+      operationScope: z.literal("app-integration-bootstrap-v1"),
+      sha256: digest,
+      subcommand: z.literal("integration-control-schema"),
+    })
+    .optional(),
+  centralIntegrationWorker: z
+    .strictObject({
+      executablePath: id,
+      id: z.literal("central-integration-bootstrap-v1"),
+      operationScope: z.literal("central-integration-bootstrap-v1"),
+      sha256: digest,
+      subcommand: z.literal("central-integration-schema"),
+    })
+    .optional(),
   teamId: id,
   workers: z.record(id, worker),
 };
@@ -92,6 +119,8 @@ export const hostedOperatorSourceConfigurationSchema = z.strictObject({
       capturedReleaseId: id,
     })
     .optional(),
+  /** Explicit deployment-owned topology; omitted configurations retain legacy behavior. */
+
   applications: z.record(
     id,
     z.strictObject({
@@ -166,6 +195,8 @@ export const hasSingleProjectServicesTopology = (config: HostedOperatorSourceCon
     ].every(Boolean),
   );
 
+/** A standard destination is supplied coherently, never assembled from an old Gateway. */
+
 /** Validate the same deployment ownership invariants for every configuration snapshot. */
 export const validateHostedOperatorSourceConfiguration = (
   value: HostedOperatorSourceConfiguration,
@@ -198,6 +229,19 @@ export const validateHostedOperatorSourceConfiguration = (
         ),
     ),
     new Set([config.operator.projectId, config.gateway.projectId]).size === 2,
+    config.standardRuntime === undefined ||
+      [
+        config.composition === "single-project-services",
+        config.standardRuntime.publicRealmWorkload.projectId === config.gateway.projectId,
+        config.standardRuntime.publicRealmWorkload.ownerId === config.teamId,
+      ].every(Boolean),
+    config.composition !== "single-project-services" || hasSingleProjectServicesTopology(config),
+    config.standardRuntime === undefined ||
+      [
+        config.composition === "single-project-services",
+        config.standardRuntime.publicRealmWorkload.projectId === config.gateway.projectId,
+        config.standardRuntime.publicRealmWorkload.ownerId === config.teamId,
+      ].every(Boolean),
     config.standardRuntime === undefined ||
       [
         config.composition === "single-project-services",

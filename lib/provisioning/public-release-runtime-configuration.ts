@@ -28,6 +28,14 @@ export const publicReleaseRuntimeConfigurationScopeSchema = z.strictObject({
   releaseId: id,
   publicOrigin: origin,
   realmEnrollmentRef: z.uuid().optional(),
+  integrationCapability: z
+    .strictObject({
+      operationRef: z.uuid(),
+      planDigest: digest,
+      capabilitySha256: digest,
+      configurationSha256: digest,
+    })
+    .optional(),
 });
 export type PublicReleaseRuntimeConfigurationScope = z.infer<
   typeof publicReleaseRuntimeConfigurationScopeSchema
@@ -45,7 +53,6 @@ const recordSchema = z.strictObject({
   sealed: sealedSchema,
 });
 const authResourceSchema = z.strictObject({
-  environment: z.enum(["preview", "isolated-development"]),
   hostname: z.string().regex(/^[a-z0-9.-]+\.neon\.tech$/u),
   port: z.literal(5432),
   database: z.string().regex(/^[a-z_][a-z0-9_]*$/u),
@@ -129,6 +136,7 @@ export const createFreshPublicAuthValues = (input: {
     PLATFORM_AUTH_DATABASE_URL: input.authRuntimeUrl,
     AUTH_DATABASE_RESOURCE: JSON.stringify({
       version: 1,
+      environment: "isolated-development",
       ...resource,
     }),
     AUTH_PRODUCTION_DATABASE_IDENTITY: input.productionDatabaseIdentity,

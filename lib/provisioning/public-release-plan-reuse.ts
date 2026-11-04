@@ -50,8 +50,7 @@ export const reconcilePublicReleasePlanHistory = (input: {
           (retained === undefined
             ? publicReleasePlanDigest(input.candidate)
             : publicReleasePlanDigest(retained)) &&
-        (record.effects["bind-production-runtime"] === "pending" ||
-          record.effects["publish-release-source"] === "pending"),
+        Object.values(record.effects).some((phase) => phase === "pending"),
     )
   ) {
     throw new PublicReleasePrerequisiteError("public_release_reconciliation_required");

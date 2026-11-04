@@ -156,19 +156,3 @@ it("canonicalizes only the approved key/value hashes, independent of order and p
     publicReleaseRuntimeBindingDigest(plan),
   );
 });
-
-it("keeps the loaded Auth proof scoped to the fixed app/Auth keys when optional configuration is added", async () => {
-  const selected = {
-    ...plan,
-    purpose: "application" as const,
-    environment: [
-      ...plan.environment,
-      { key: "OPTIONAL_INTEGRATIONS_CONFIGURATION_REF", sha256: "b".repeat(64) },
-    ],
-  };
-  const f = fixture();
-  f.fetcher.mockResolvedValueOnce(
-    Response.json({ status: "ok", runtimeBindingDigest: publicReleaseRuntimeBindingDigest(plan) }),
-  );
-  expect(await f.observe(f.invocation, selected)).toBe(true);
-});

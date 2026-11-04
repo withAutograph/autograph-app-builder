@@ -1,0 +1,11 @@
+#!/bin/sh
+#MISE description="Prove authored workspace dependency reconciliation with the execution repository's declared Bun"
+set -eu
+if [ "$#" -ne 1 ]; then
+  echo 'Usage: mise run test:workspace-dependencies -- /absolute/path/to/arrusted' >&2
+  exit 64
+fi
+bun_bin=$(mise -C "$1" which bun)
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+  "$(mise which node)" --import tsx \
+  .config/mise/scripts/repository/workspace-dependency-proof/main.mts "$bun_bin"

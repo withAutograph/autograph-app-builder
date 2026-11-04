@@ -1,3 +1,4 @@
+import { createHostedOperatorApprovalObserver } from "./hosted-operator-approval-observer";
 import type { HostedOperatorConsentDiagnosticSink } from "./hosted-operator-consent-diagnostic";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -27,6 +28,7 @@ import {
 } from "./hosted-operator-client";
 import {
   createHostedOperatorOwnerContextResolver,
+  createHostedOperatorApprovalReadAuthority,
   readHostedOperatorOwnerReaderConfiguration,
 } from "./hosted-operator-owner-context";
 
@@ -782,5 +784,198 @@ describe("Realm service continuation live owner checks", () => {
         });
       }),
     );
+  });
+});
+
+describe("approval history for recovered public grant authority", () => {
+  const recovered = (kind: "direct" | "handoff") => {
+    const source = durableHostedSessionRecordSchema.parse({
+      ...(kind === "direct" ? directSessionRecord() : session),
+      status: "failed",
+      resumability: "terminal",
+      stage: "needs_attention",
+    });
+    const child = durableHostedSessionRecordSchema.parse({
+      ...source,
+      adapterGeneration: 1,
+      adapterSessionId: "recovered-adapter",
+      originAdapterSessionId: "recovered-adapter",
+      parentSessionId: source.sessionId,
+      sessionId: "recovered-public-session",
+      status: "waiting",
+      resumability: "live",
+      nativeRecoveryBinding: {
+        version: 1,
+        operationId: "recovery-operation",
+        sourcePublicSessionId: source.sessionId,
+        sourceOwnerRunId: source.adapterSessionId,
+        sourceAdapterGeneration: source.adapterGeneration,
+        ...(source.sourceHandoffId === undefined
+          ? {}
+          : { sourceHandoffId: source.sourceHandoffId }),
+        logicalSessionId: source.adapterSessionId,
+        originalAuthoritySessionId: source.sessionId,
+        parentCancellationRevision: 0,
+        ownerRunId: "recovered-adapter",
+        provenance: {
+          kind: "failed-turn-input",
+          sourceStepId: "source-step",
+          sourceEventId: "source-event",
+          sourceSlot: 0,
+          checkpointVersion: 1,
+        },
+      },
+    });
+    const sessionsById = new Map([
+      [source.sessionId, source],
+      [child.sessionId, child],
+    ]);
+    const sessions = {
+      getSession: async (_principal: HostedPrincipal, requested: string) =>
+        await Promise.resolve(sessionsById.get(requested) ?? null),
+      getSessionByAdapterSessionId: async () => await Promise.resolve(child),
+    };
+    const resolver = createHostedOperatorOwnerContextResolver({
+      audience: authority.audience,
+      issuer: authority.issuer,
+      sessions,
+      handoffs: {
+        read: async () => await Promise.resolve(kind === "handoff" ? handoff : undefined),
+      },
+      isActiveMember: async () => await Promise.resolve(true),
+    });
+    const verifyReadAuthority = createHostedOperatorApprovalReadAuthority({
+      sessions,
+      resolveOwnerContext: resolver,
+      forwardSessionAuth: (_principal, sourceId) => sessionAuthFor(sourceId),
+    });
+    return { source, child, sessions, verifyReadAuthority };
+  };
+  it.each(["direct", "handoff"] as const)(
+    "reads the original approval pair from its %s recovered worker without confusing the physical public ID",
+    async (kind) => {
+      const f = recovered(kind);
+      const request = {
+        principal,
+        adapterSessionId: f.child.adapterSessionId,
+        sessionId: f.source.sessionId,
+      };
+      expect(f.child.sessionId === request.sessionId).toBe(false);
+      await expect(f.verifyReadAuthority(request)).resolves.toBe(true);
+      const nativeEvents = [
+        {
+          type: "input.requested",
+          data: {
+            sequence: 0,
+            stepIndex: 0,
+            turnId: "approval-turn",
+            requests: [
+              {
+                kind: "tool-approval",
+                requestId: "original-approval",
+                action: {
+                  kind: "tool-call",
+                  callId: "original-call",
+                  toolName: "run-app-continuity-tests",
+                  input: {
+                    action: "continuity",
+                    planRef:
+                      "_protected-operator/continuity-plans/00000000-0000-4000-8000-000000000001",
+                    planDigest: "a".repeat(64),
+                    idempotencyKey: "original-exercise",
+                  },
+                },
+              },
+            ],
+          },
+        },
+        {
+          type: "approval.settled",
+          data: {
+            sequence: 1,
+            stepIndex: 0,
+            turnId: "approval-turn",
+            requestId: "original-approval",
+            responderPrincipalId: principal.ownerUserId,
+            outcome: "approved",
+          },
+        },
+      ];
+      const fetchImplementation = vi.fn<typeof fetch>(() =>
+        Promise.resolve(
+          new Response(`${nativeEvents.map((event) => JSON.stringify(event)).join("\n")}\n`, {
+            headers: {
+              "content-type": "application/x-ndjson",
+              "x-eve-session-id": f.child.adapterSessionId,
+              "x-eve-stream-format": "ndjson",
+              "x-eve-stream-version": "25",
+              "x-eve-stream-tail-index": "1",
+            },
+          }),
+        ),
+      );
+      const observer = createHostedOperatorApprovalObserver({
+        builderOrigin: "https://builder.example",
+        verifyReadAuthority: f.verifyReadAuthority,
+        workloadIdentity: { token: () => Promise.resolve("controlled-workload") },
+        fetchImplementation,
+      });
+      const seen: string[] = [];
+      const observed = await observer.privateHistoryForContext({
+        authority,
+        target: {
+          appId: "fixture",
+          branch: "preview",
+          environment: "preview",
+          installationId: "installation",
+          projectId: "project",
+          scopeId: "team",
+          scopeType: "team",
+          sessionId: f.source.sessionId,
+        },
+      })({
+        ...request,
+        startIndex: 0,
+        onEvent: (event) => {
+          seen.push(event.type);
+        },
+      });
+      expect(observed).toMatchObject({ complete: true, nextNativeIndex: 2 });
+      expect(seen).toEqual(["input.requested", "approval.settled"]);
+    },
+  );
+  it.each([
+    "foreign-principal",
+    "different-adapter",
+    "changed-source-generation",
+    "changed-source-stop",
+    "different-authority",
+    "changed-handoff",
+  ])("refuses %s before fetching private native history", async (change) => {
+    const f = recovered("handoff");
+    const request = {
+      principal,
+      adapterSessionId: f.child.adapterSessionId,
+      sessionId: f.source.sessionId,
+    };
+    if (change === "foreign-principal") {
+      request.principal = { ...principal, workspaceId: "other-workspace" };
+    }
+    if (change === "different-adapter") {
+      request.adapterSessionId = "unowned-adapter";
+    }
+    if (change === "changed-source-generation") {
+      f.source.adapterGeneration += 1;
+    }
+    if (change === "changed-source-stop") {
+      f.source.cancellationRevision = 1;
+    }
+    if (change === "different-authority") {
+      request.sessionId = f.child.sessionId;
+    }
+    if (change === "changed-handoff") {
+      f.child.sourceHandoffId = "different-handoff";
+    }
+    await expect(f.verifyReadAuthority(request)).resolves.toBe(false);
   });
 });

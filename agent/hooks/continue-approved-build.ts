@@ -1,4 +1,5 @@
 import { repositoryAccessReceiptState } from "../../lib/agent/repository-access-state";
+
 import { defineHook } from "eve/hooks";
 import type { HookContext } from "eve/hooks";
 import { defineState } from "eve/context";
@@ -16,6 +17,7 @@ const record = async (ctx: HookContext, forced?: "working" | "blocked") => {
   const decision = decideApprovedBuildContinuation({
     adapterSessionId: ctx.session.id,
     repositoryAccess: repositoryAccessReceiptState.get(),
+
     approvalMatches: (scope) => {
       try {
         assertApprovedPrivateApplySession(scope);

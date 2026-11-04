@@ -77,6 +77,8 @@ export const vercelProvisionDiagnosticSchema = z.strictObject({
 });
 export type VercelProvisionDiagnostic = z.infer<typeof vercelProvisionDiagnosticSchema>;
 
+/** Bounded Vercel support facts, never a provider message or response body. */
+
 const failureSchema = z
   .object({
     code: z.enum([
@@ -211,6 +213,7 @@ export const builderProvisionResponseSchema = z
             outcomeKnown: z.boolean(),
             provider: z.enum(["github", "vercel"]),
             lastProviderDiagnostic: vercelProvisionDiagnosticSchema.optional(),
+
             recoveryAction: z.string().min(1),
           })
           .strict(),

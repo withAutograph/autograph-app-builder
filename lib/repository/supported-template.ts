@@ -929,7 +929,7 @@ const developmentWorkingTreeArchive = async function developmentWorkingTreeArchi
   }
 };
 
-const parsePreparedWorkspace = function parsePreparedWorkspace(
+export const parsePreparedWorkspace = function parsePreparedWorkspace(
   input: unknown,
 ): PreparedSandboxWorkspace {
   if (
@@ -1544,21 +1544,12 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
 };
 
 /**
- * Synchronizes the tracked and non-ignored working tree for an explicit local
+ * Observes the tracked and non-ignored working tree for an explicit local
  * development run.  This is intentionally separate from the reviewed Git
  * snapshot transport above: normal edits are live planning input, while the
  * sandbox-owned repository remains the mutable execution overlay.
  */
-export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopmentSandboxWorkspace(
-  sourcePathInput: string,
-  sandbox: SandboxSession,
-  callId: string,
-  _compatibility: "full" | "planning" = "full",
-): Promise<PreparedSandboxWorkspace> {
-  void _compatibility;
-  // Development snapshots are inputs, not candidates for a template
-  // certification gate. Run the repository and react to its real command
-  // failures instead of predicting compatibility from an expected shape.
+export const inspectDevelopmentSourceGeneration = async (sourcePathInput: string) => {
   const sourcePath = await realpath(nodePath.resolve(sourcePathInput));
   const sourceSha = git(sourcePath, ["rev-parse", "HEAD"]);
   const eligibilityDigest = sha256(sourceSha);
@@ -1580,7 +1571,13 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
     // `git ls-files --cached` keeps a deleted tracked path until it is
     // staged. Development follows the working tree, so that path is a
     // managed deletion rather than a failed source snapshot.
-    return existsSync(absolutePath);
+    try {
+      lstatSync(absolutePath);
+      return true;
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") return false;
+      throw error;
+    }
   });
   const sourceFiles: PreparedSourceFile[] = [];
   for (const path of names) {
@@ -1609,6 +1606,37 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
   }
   const workspaceDigest = sha256(JSON.stringify(sourceFiles));
   const generation = workspaceDigest.slice(0, 40);
+
+  return {
+    sourcePath,
+    sourceSha,
+    eligibilityDigest,
+    names,
+    sourceFiles,
+    workspaceDigest,
+    generation,
+  };
+};
+
+export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopmentSandboxWorkspace(
+  sourcePathInput: string,
+  sandbox: SandboxSession,
+  callId: string,
+  _compatibility: "full" | "planning" = "full",
+): Promise<PreparedSandboxWorkspace> {
+  void _compatibility;
+  // Development snapshots are inputs, not candidates for a template
+  // certification gate. Run the repository and react to its real command
+  // failures instead of predicting compatibility from an expected shape.
+  const {
+    sourcePath,
+    sourceSha,
+    eligibilityDigest,
+    names,
+    sourceFiles,
+    workspaceDigest,
+    generation,
+  } = await inspectDevelopmentSourceGeneration(sourcePathInput);
 
   // The previous manifest describes only files managed by the live source
   // transport.  It must not turn sandbox-generated plans, caches, or other
