@@ -58,6 +58,8 @@ const allowedWorkerEnvironment = new Set([
   "VERCEL_TEAM_ID",
   "VERCEL_PROJECT_ID",
   "APP_BUILDER_EVAL_BROWSER_EXECUTABLE",
+  "ARRUSTED_MANAGED_RUNTIME_TEST_ROOT",
+  "BUN_BINARY",
 ]);
 delete process.env.NODE_OPTIONS;
 

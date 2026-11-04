@@ -35,6 +35,30 @@ function taskFiles(directory: string): string[] {
 }
 
 describe("trusted Node launcher", () => {
+  it("forwards explicit assembled-test paths without admitting unrelated ambient credentials", () => {
+    const environment: NodeJS.ProcessEnv = {
+      ...process.env,
+      ARRUSTED_MANAGED_RUNTIME_TEST_ROOT: "/private/tmp/controlled-arrusted",
+      BUN_BINARY: "/private/tmp/controlled-bun",
+      UNRELATED_AMBIENT_CREDENTIAL: "must-not-be-forwarded",
+    };
+    delete environment.NODE_OPTIONS;
+    const result = spawnSync(
+      launcher,
+      [
+        pinnedNode,
+        "-e",
+        "process.stdout.write(JSON.stringify({root:process.env.ARRUSTED_MANAGED_RUNTIME_TEST_ROOT,bun:process.env.BUN_BINARY,unrelated:process.env.UNRELATED_AMBIENT_CREDENTIAL,nodeOptions:process.env.NODE_OPTIONS}))",
+      ],
+      { cwd: repositoryRoot, encoding: "utf-8", env: environment },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      root: environment.ARRUSTED_MANAGED_RUNTIME_TEST_ROOT,
+      bun: environment.BUN_BINARY,
+    });
+  });
+
   it("rejects data-URL NODE_OPTIONS before the first Node process", () => {
     const result = spawnSync(launcher, [pinnedNode, "-e", "process.stdout.write('node-ran')"], {
       cwd: repositoryRoot,

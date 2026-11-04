@@ -52,6 +52,27 @@ diff; a separate approval and GitHub atomic expected-OID update are required.
 If GitHub provenance cannot be verified, Builder reports that reason and leaves
 the PR branch untouched.
 
+An isolated existing-app draft retains the complete original reviewed workflow
+as private lineage. Authoring and technical validation can use that lineage if
+creation-workspace validation later loses its current review, provided the
+original app, apply, selected-source, repository, proposal, identity and workspace bindings still
+match. A different current review supersedes the retained lineage. The retained
+review does not assess edited candidate bytes or authorize their publication:
+the actual candidate still needs its own validation, diff review and exact
+publication approval.
+
+An ordinary no-edit validation of a currently owned draft selects the existing
+candidate validation service before changing creation-workspace state. Its
+result describes the candidate's actual source; creation-workspace results do
+not establish that separately authored candidate's correctness. Explicit
+creation repairs remain creation-workspace operations.
+
+Legacy recovery may recover a missing complete lineage only from the original
+owner-authenticated native session history at the supported recovery boundary.
+Compact review summaries and unverified proposal metadata cannot reconstruct
+it. Recovery preserves the latest draft and its edits, does not roll back the
+current workflow, and grants no permission to replay an external effect.
+
 Initial source selection is separate from publication. In a new session,
 `resolve_github_source` accepts a named branch or any open same-repository PR,
 including a PR already marked ready for review. It shows the selected branch

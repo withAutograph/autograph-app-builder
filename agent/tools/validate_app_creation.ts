@@ -11,6 +11,10 @@ import { runAppBrowserTests } from "./run-app-browser-tests";
 import { unavailableSourceAssessment } from "@/lib/agent/product-source-review";
 import { productRequestState } from "@/lib/agent/product-source-review-state";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
+import { draftReconciliationState } from "@/lib/agent/draft-reconciliation-state";
+import { resolveDraftReviewedWorkflow } from "@/lib/agent/draft-reviewed-lineage";
+import { validateDraftReconciliation } from "./validate_github_draft_pr_reconciliation";
+import { currentDraftCandidateSource } from "@/lib/agent/published-draft-repair";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { prepareValidationLocalData } from "./prepare-app-local-preview";
@@ -169,10 +173,22 @@ export const createAppValidationTool = (
 ) =>
   defineTool({
     description:
-      "Run the repository's normal validation commands against the current applied app. Command exit status is the technical validation result. Repository-owned local setup and technical checks precede full authenticated runtime preparation. For persistent apps, run any declared authenticated browser task after that preparation succeeds and report its result separately; a runtime block preserves the technical receipt. Independent paid source assessment is deferred to final accept_change_set after implementation and technical checks are ready; deferred evidence is unassessed and does not require another validation run. None of these results alone proves hosted durability. This does not publish or otherwise change an external repository.",
+      "With no implementation files and a current owned draft, validate that actual isolated candidate through the normal draft-validation service without changing creation-workspace review state. Otherwise validate the applied creation workspace at applyReceipt.applyRoot. Use validate_github_draft_pr_reconciliation for explicit candidate validation controls; creation-workspace results do not validate separate draft bytes. Command exit status is the technical validation result. Repository-owned local setup and technical checks precede full authenticated runtime preparation. For persistent apps, run any declared authenticated browser task after that preparation succeeds and report its result separately; a runtime block preserves the technical receipt. Independent paid source assessment is deferred to final accept_change_set after implementation and technical checks are ready; deferred evidence is unassessed and does not require another validation run. None of these results alone proves hosted durability. This does not publish or otherwise change an external repository.",
     // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Keep the workflow phase, cancellation and original failure receipt branches explicit.
     async execute(input, ctx) {
       const current = appBuilderWorkflowState.get();
+      const candidate = draftReconciliationState.get();
+      if (
+        input.implementationFiles.length === 0 &&
+        candidate !== null &&
+        resolveDraftReviewedWorkflow(current, candidate) !== undefined &&
+        currentDraftCandidateSource(current, candidate) !== undefined
+      ) {
+        return await validateDraftReconciliation(
+          { additionalCheckTasks: [], incremental: false, runBrowserTests: false },
+          ctx,
+        );
+      }
       if (
         current.phase !== "applied" &&
         current.phase !== "validation_pending" &&

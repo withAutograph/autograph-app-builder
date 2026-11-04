@@ -1,3 +1,4 @@
+import { resolveDraftReviewedWorkflow } from "@/lib/agent/draft-reviewed-lineage";
 import type { ToolContext } from "eve/tools";
 import type {
   DraftPublicationCompletion,
@@ -101,8 +102,12 @@ const publicationRecoveryCall = (completion: DraftPublicationCompletion) =>
 export default defineTool({
   description:
     "Optionally inspect a merge conflict, recorded change metadata, or exact raw diff bytes against base or the old PR head. Metadata cursors are change indexes; raw diff cursors are byte offsets and may be requested independently. A raw diff may target one repository-relative path. For app_source_publication_required, kind=publication-recovery lists retained publication context for the current app and accepted specification, even if its current candidate failed. Copy a returned nextCall to request normal approval and verify the original Git result before recording the equivalent current capture; listed receipts describe approval subjects and grant no approval. Inspection is not a sealing prerequisite and does not update GitHub.",
+  // oxlint-disable-next-line eslint/complexity -- Preserve source recovery and the existing independent owner/draft guards.
   async execute(input, ctx) {
-    const state = appBuilderWorkflowState.get();
+    ctx.abortSignal?.throwIfAborted();
+    const workflow = appBuilderWorkflowState.get();
+    const state =
+      resolveDraftReviewedWorkflow(workflow, draftReconciliationState.get()) ?? workflow;
     if (input.kind === "publication-recovery") {
       const currentAppSpec = "appSpec" in state ? state.appSpec : undefined;
       const completions = [

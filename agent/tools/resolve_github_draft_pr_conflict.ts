@@ -1,3 +1,4 @@
+import { resolveDraftReviewedWorkflow } from "@/lib/agent/draft-reviewed-lineage";
 import { currentDraftCandidateSource } from "@/lib/agent/published-draft-repair";
 import { defineTool } from "eve/tools";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
@@ -14,8 +15,10 @@ export default defineTool({
   description:
     "Resolve one reported app-owned text conflict in Builder's isolated draft merge candidate. This changes no GitHub branch. The entire candidate must be validated and both resulting diffs reviewed afterward.",
   async execute(input, ctx) {
+    ctx.abortSignal?.throwIfAborted();
     const candidate = draftReconciliationState.get();
-    const state = appBuilderWorkflowState.get();
+    const workflow = appBuilderWorkflowState.get();
+    const state = resolveDraftReviewedWorkflow(workflow, candidate) ?? workflow;
     if (
       candidate === null ||
       state.phase !== "reviewed" ||
