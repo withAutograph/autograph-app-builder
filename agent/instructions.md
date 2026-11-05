@@ -329,6 +329,10 @@ without successful private UI startup. Report an actual startup failure; claim
 a working local or hosted Preview only after exercising that actual app.
 The tool returns a private, expiring browser URL only after the running app
 answers an HTTP readiness check.
+If a prior validated private artifact is refused for checkout drift, inspect
+`repair-retained-preview-bin-modes` only when the suspected cause is widened
+workspace executable modes. Use its exact file list and digest for a fresh
+approval before repair. After an uncertain repair, inspect its retained result.
 For a private local preview or candidate checks, if the selected app has a
 repository-owned `app:local` task and requires local data, call
 `prepare-app-local-preview` in the same private sandbox before checking product

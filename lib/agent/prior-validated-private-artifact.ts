@@ -17,7 +17,7 @@ const unavailable = () =>
 const digestMatches = ({ digest, ...unsigned }: { digest: string }) =>
   digest === sha256(JSON.stringify(unsigned));
 
-export const priorValidatedPrivateArtifact = async (input: {
+export const resolvePriorValidatedPrivateArtifact = (input: {
   appId?: string;
   state: AppBuilderWorkflowState;
   sandbox: SandboxSession;
@@ -103,10 +103,32 @@ export const priorValidatedPrivateArtifact = async (input: {
       throw unavailable();
     }
   };
+  return {
+    appId: prior.appSpec.appId,
+    workspaceId: prior.workspace.workspaceId,
+    workspaceDigest: prior.workspace.workspaceDigest,
+    appSpecDigest: prior.appSpec.digest,
+    sourceReceiptDigest: prior.sourceReceipt.digest,
+    denialEvidenceDigest: denial.denialEvidenceDigest,
+    currentProposalDigest: state.proposal.digest,
+    root: apply.applyRoot,
+    apply,
+    validationDigest: validation.digest,
+    assertCurrent,
+  };
+};
+
+export const priorValidatedPrivateArtifact = async (
+  input: Parameters<typeof resolvePriorValidatedPrivateArtifact>[0],
+) => {
+  const selected = resolvePriorValidatedPrivateArtifact(input);
+  const { apply, assertCurrent } = selected;
   const verifyCurrent = async () => {
     assertCurrent();
     const observed = await inspectApplyOverlay(
-      { run: async (options) => await sandbox.run({ ...options, abortSignal: signal }) },
+      {
+        run: async (options) => await input.sandbox.run({ ...options, abortSignal: input.signal }),
+      },
       apply.applyRoot,
       "/workspace/repository",
     );
@@ -117,10 +139,10 @@ export const priorValidatedPrivateArtifact = async (input: {
   };
   await verifyCurrent();
   return {
-    appId: prior.appSpec.appId,
+    appId: selected.appId,
     root: apply.applyRoot,
     revision: apply.digest,
-    validationDigest: validation.digest,
+    validationDigest: selected.validationDigest,
     reusable: true,
     assertCurrent,
     verifyCurrent,

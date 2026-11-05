@@ -1,3 +1,4 @@
+import { retainedBinModeRepairDescription } from "../agent/retained-bin-mode-repair-input";
 import {
   PRIVATE_COMPUTE_PROFILE_ID,
   privateComputeApprovalDescription,
@@ -1176,6 +1177,7 @@ const inputRequest = (request: {
 }): PublicInputRequest | undefined => {
   const approvalTitles = {
     apply_app_creation: "Build this app?",
+    "repair-retained-preview-bin-modes": "Restore private preview executable permissions?",
     "cleanup-app-hosted-runtime": "Remove this app's Preview resources?",
     "prepare-app-hosted-runtime": "Do you approve creating a preview?",
     "prepare-app-native-target": "Create this app's Preview project?",
@@ -1217,7 +1219,10 @@ const inputRequest = (request: {
     toolName !== undefined &&
     toolName in approvalTitles
   ) {
-    description = publicApprovalDescription(request.action?.input, toolName);
+    description =
+      toolName === "repair-retained-preview-bin-modes"
+        ? retainedBinModeRepairDescription(request.action?.input)
+        : publicApprovalDescription(request.action?.input, toolName);
   }
   if (
     request.kind === "tool-approval" &&
