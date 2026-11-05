@@ -1,6 +1,9 @@
+import type { SourceCandidateReference } from "@/lib/handoff/application-source-contract";
+
 export type BuildDestination = "web" | "codex" | "cursor";
 
 export interface BuilderForm {
+  sourceCandidate?: SourceCandidateReference;
   appName: string;
   repository: string;
   brief: string;

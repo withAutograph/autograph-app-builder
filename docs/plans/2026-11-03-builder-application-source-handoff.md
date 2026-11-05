@@ -248,3 +248,5 @@ this row. Finish public BetterAuth, persistent action, normal revision, real
 QuickBooks Sandbox, two-app/two-tenant/unassigned, replay/drain and optionality
 acceptance separately. Customer Production rollout and cleanup remain outside
 this run.
+
+Canonical acquisition qualification uses real local Git repositories whose provider default branch differs from `main`. It also covers a wrong occupied checkout, a frozen saved receipt after branch movement, and app-only import onto a newer platform sentinel. These source checks do not establish hosted deployment or provider activation.

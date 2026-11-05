@@ -1,3 +1,4 @@
+import { sourceDeclaredToolchainActivationCommand } from "../repository/source-toolchain";
 import { describe, expect, it, vi } from "vitest";
 import type { z } from "zod";
 import type { appDescriptionSchema } from "../repository/app-description";
@@ -53,22 +54,76 @@ describe("private local preview setup", () => {
       .fn()
       .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: descriptor(generated) })
       .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: descriptor(generated) })
-      .mockResolvedValueOnce({ exitCode: 1, stderr: "pg_ctl failed", stdout: "" });
+      .mockResolvedValueOnce({
+        exitCode: 1,
+        stderr: "rustup: toolchain download failed",
+        stdout: "",
+      });
     await expect(
       prepareValidationLocalData({
         appId: "spend-review",
         root: "/workspace/repository",
         sandbox: { run },
       }),
-    ).rejects.toThrow(/Validation could not prepare.*pg_ctl failed/su);
+    ).rejects.toThrow(/Validation could not prepare.*rustup: toolchain download failed/su);
     expect(run).toHaveBeenCalledTimes(3);
     expect(run).toHaveBeenLastCalledWith({
-      command: localPreviewExecutionCommand("spend-review"),
+      command: `${sourceDeclaredToolchainActivationCommand()}\n${localPreviewExecutionCommand("spend-review")}`,
       env: {
         APP_RUNTIME_ROLES: "member",
         APP_RUNTIME_STATE_DIR: runtimeStateDirectory,
       },
       workingDirectory: "/workspace/repository",
+    });
+  });
+
+  it("reports an actual authenticated missing-roles failure as an app authoring repair without a fallback grant", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout: descriptor({ ...generated, authorization: "app-owned", roles: [] }),
+      })
+      .mockResolvedValueOnce({
+        exitCode: 1,
+        stdout: "",
+        stderr:
+          "Authenticated runtime requires schema-declared roles or explicit accepted AppSpec roles in APP_RUNTIME_ROLES",
+      });
+    const result = await prepareAppLocalPreview({
+      appId: "spend-review",
+      root: "/workspace/repository",
+      sandbox: { run },
+    });
+    expect(result).toMatchObject({ status: "failed", exitCode: 1 });
+    expect(result.problem).toContain("CUE authorization roles and model/operation grants");
+    expect(result.problem).toContain("ordinary implementation repair");
+    expect(run).toHaveBeenLastCalledWith({
+      command: `${sourceDeclaredToolchainActivationCommand()}\n${localPreviewExecutionCommand("spend-review")}`,
+      workingDirectory: "/workspace/repository",
+      env: { APP_RUNTIME_STATE_DIR: runtimeStateDirectory },
+    });
+  });
+  it("preserves successful empty-role runtime setup instead of imposing an authentication requirement", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout: descriptor({ ...generated, authorization: "app-owned", roles: [] }),
+      })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "Runtime ready", stderr: "" });
+    const result = await prepareAppLocalPreview({
+      appId: "spend-review",
+      root: "/workspace/repository",
+      sandbox: { run },
+    });
+    expect(result).toMatchObject({ status: "prepared", exitCode: 0 });
+    expect(run).toHaveBeenLastCalledWith({
+      command: `${sourceDeclaredToolchainActivationCommand()}\n${localPreviewExecutionCommand("spend-review")}`,
+      workingDirectory: "/workspace/repository",
+      env: { APP_RUNTIME_STATE_DIR: runtimeStateDirectory },
     });
   });
 
@@ -83,7 +138,7 @@ describe("private local preview setup", () => {
       sandbox: { run },
     });
     expect(run).toHaveBeenCalledWith({
-      command: localPreviewExecutionCommand("spend-review"),
+      command: `${sourceDeclaredToolchainActivationCommand()}\n${localPreviewExecutionCommand("spend-review")}`,
       env: {
         APP_RUNTIME_ROLES: "member",
         APP_RUNTIME_STATE_DIR: runtimeStateDirectory,
@@ -109,7 +164,7 @@ describe("private local preview setup", () => {
       sandbox: { run },
     });
     expect(run).toHaveBeenLastCalledWith({
-      command: localPreviewExecutionCommand("spend-review"),
+      command: `${sourceDeclaredToolchainActivationCommand()}\n${localPreviewExecutionCommand("spend-review")}`,
       env: {
         APP_RUNTIME_AUTH_ORIGIN: "https://spend-review.vercel.run",
         APP_RUNTIME_ROLES: "member,reviewer",
@@ -140,6 +195,64 @@ describe("private local preview setup", () => {
     expect(JSON.stringify(result)).not.toContain("secret");
   });
 
+  it("leaves static app setup free of Rust activation", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: descriptor({ kind: "static" }) })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "Runtime ready", stderr: "" });
+    await prepareAppLocalPreview({
+      appId: "spend-review",
+      root: "/workspace/repository",
+      sandbox: { run },
+    });
+    expect(run).toHaveBeenLastCalledWith({
+      command: localPreviewExecutionCommand("spend-review"),
+      env: { APP_RUNTIME_STATE_DIR: runtimeStateDirectory },
+      workingDirectory: "/workspace/repository",
+    });
+  });
+
+  it("retains streamed setup failure diagnostics while redacting split credentials", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValue({ exitCode: 0, stdout: descriptor(generated), stderr: "" });
+    const stream = (chunks: string[]) =>
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const chunk of chunks) {
+            controller.enqueue(new TextEncoder().encode(chunk));
+          }
+          controller.close();
+        },
+      });
+    const spawn = vi.fn().mockResolvedValue({
+      pid: 1,
+      stdout: stream(["Auth setup\n"]),
+      stderr: stream([
+        "The recorded Auth origin cannot change outside the owned local preview handoff\npassword=split-",
+        "secret postgres://user:private@host/db\n",
+      ]),
+      wait: () => Promise.resolve({ exitCode: 1 }),
+      kill: () => Promise.resolve(),
+    });
+    const result = await prepareAppLocalPreview({
+      appId: "spend-review",
+      root: "/workspace/repository",
+      sandbox: { run, spawn },
+      expectedPreviousAuthOrigin: "http://localhost:3000",
+    });
+    expect(result).toMatchObject({ status: "failed", exitCode: 1 });
+    expect(result.stderr).toContain("The recorded Auth origin cannot change");
+    expect(JSON.stringify(result)).not.toContain("split-secret");
+    expect(JSON.stringify(result)).not.toContain("postgres://");
+    expect(spawn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        // oxlint-disable-next-line typescript/no-unsafe-assignment -- Vitest matcher inspects only the approved private environment key.
+        env: expect.objectContaining({ APP_RUNTIME_PREVIOUS_AUTH_ORIGIN: "http://localhost:3000" }),
+      }),
+    );
+    expect(run).toHaveBeenCalledOnce();
+  });
   it("reports command-provider errors with a recovery action", async () => {
     const run = vi
       .fn()

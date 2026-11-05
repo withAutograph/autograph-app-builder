@@ -5,6 +5,10 @@ export const readJsonStringChecks = async (
   checks: readonly {
     pointer: string;
     expected?: string;
+    /** Exact decimal identity, encoded by a provider as a JSON string or integer. */
+    expectedDecimal?: string;
+    /** Exact decimal identity, encoded by a provider as a JSON string or integer. */
+
     expectedLiteral?: "true" | "false";
     optional?: boolean;
     capture?: boolean;
@@ -147,45 +151,53 @@ export const readJsonStringChecks = async (
       await requireCharacter(character);
     }
   };
-  const number = async (): Promise<void> => {
+  const number = async (expected?: string): Promise<boolean> => {
+    let index = 0;
+    let equal = expected !== undefined;
+    const digit = async () => {
+      const character = await take();
+      equal &&= character === expected?.[index];
+      index += 1;
+    };
     if ((await next()) === "-") {
-      await take();
+      await digit();
     }
     if ((await next()) === "0") {
-      await take();
+      await digit();
     } else {
       if (!/^[1-9]$/u.test((await next()) ?? "")) {
         throw new Error("Invalid JSON number.");
       }
       do {
         // oxlint-disable-next-line eslint/no-await-in-loop -- Consume a number digit.
-        await take();
+        await digit();
       } while (/^[0-9]$/u.test((await next()) ?? ""));
     }
     if ((await next()) === ".") {
-      await take();
+      await digit();
       if (!/^[0-9]$/u.test((await next()) ?? "")) {
         throw new Error("Invalid JSON number fraction.");
       }
       do {
         // oxlint-disable-next-line eslint/no-await-in-loop -- Consume a fraction digit.
-        await take();
+        await digit();
       } while (/^[0-9]$/u.test((await next()) ?? ""));
     }
     const exponent = await next();
     if (/^[eE]$/u.test(exponent ?? "")) {
-      await take();
+      await digit();
       if (/^[+-]$/u.test((await next()) ?? "")) {
-        await take();
+        await digit();
       }
       if (!/^[0-9]$/u.test((await next()) ?? "")) {
         throw new Error("Invalid JSON exponent.");
       }
       do {
         // oxlint-disable-next-line eslint/no-await-in-loop -- Consume an exponent digit.
-        await take();
+        await digit();
       } while (/^[0-9]$/u.test((await next()) ?? ""));
     }
+    return equal && index === expected?.length;
   };
   const value = async (depth: number, selected: readonly number[]): Promise<void> => {
     if (depth > 512) {
@@ -199,13 +211,17 @@ export const readJsonStringChecks = async (
     }
     if (character === '"') {
       const observed = await string(
-        target === undefined ? undefined : checks[target]?.expected,
+        target === undefined
+          ? undefined
+          : (checks[target]?.expected ?? checks[target]?.expectedDecimal),
         target === undefined ? false : checks[target]?.capture === true,
       );
       if (target !== undefined) {
         matched[target] =
           checks[target]?.expectedLiteral === undefined &&
-          (checks[target]?.expected === undefined ? observed.nonempty : observed.equal);
+          (checks[target]?.expected === undefined && checks[target]?.expectedDecimal === undefined
+            ? observed.nonempty
+            : observed.equal);
         values[target] = observed.value;
       }
     } else if (character === "{") {
@@ -276,7 +292,12 @@ export const readJsonStringChecks = async (
     } else if (character === "n") {
       await literal("null");
     } else {
-      await number();
+      const equal = await number(
+        target === undefined ? undefined : checks[target]?.expectedDecimal,
+      );
+      if (target !== undefined && checks[target]?.expectedDecimal !== undefined) {
+        matched[target] = equal;
+      }
     }
   };
   try {

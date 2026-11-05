@@ -1,3 +1,8 @@
+/* oxlint-disable sonarjs/no-internal-api-use -- Exercise request retention with the actual native state context used by workflow observers. */
+import {
+  ContextContainer,
+  contextStorage,
+} from "../../node_modules/eve/dist/src/context/container.js";
 import { afterEach, expect, it, vi } from "vitest";
 import hook from "../../agent/hooks/retain-product-request";
 import { productRequestState } from "./product-source-review-state";
@@ -16,7 +21,9 @@ const receive = async (sequence: number, message: string) => {
     data: { message, sequence, turnId: `turn_${sequence}` },
     type: "message.received",
   } as HookEvent<"message.received">;
-  await hook.events?.["message.received"]?.(event, context);
+  await contextStorage.run(new ContextContainer(), async () => {
+    await hook.events?.["message.received"]?.(event, context);
+  });
 };
 it("captures the original initial-turn message, never a legacy session follow-up", async () => {
   let state: RetainedProductRequest = { clarifications: [], original: null, sequences: [] };

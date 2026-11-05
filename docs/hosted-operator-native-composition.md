@@ -736,3 +736,20 @@ the exact revision read before replay. Owner rechecks and revision CAS prevent a
 stale writer from restoring the prior epoch; same-epoch rewinds remain rejected.
 An observation checkpoint is not approval settlement and does not resolve an
 unknown public response.
+
+## Native Services ingress inventory
+
+The operator Services configuration forwards these exact paths to the existing
+request-scoped operator factory: `/v1/key-custody/possession`, `/v1/runtime`,
+`/v1/public-release`, `/v1/app-integrations`, `/v1/central-integrations`, and
+`/v1/central-deployment-events`. The integration and deployment-event paths use
+the same closed workload authorization and owner-bound adapters as their existing
+factory handlers. Routing supplies reachability only; it grants no authorization
+or approval and adds no wildcard route or separate backend. Unknown child paths
+remain unavailable.
+
+Before a bundled release, run `mise run test:compiled-operator -- --bun-bin
+/absolute/installed/bun` to compile the actual Services entrypoint and exercise
+all six ingress paths without private configuration or network effects. Missing
+configuration must fail closed at every path. This proves the packaged ingress
+and factory composition, not authenticated installation or hosted acceptance.

@@ -84,6 +84,11 @@ export function builderHandoffPrompt(intentInput: BuilderHandoffIntent) {
     `Create ${intent.appName} with Autograph App Builder.`,
     "Call prepared-app-context before any provider work to recover the prepared app and its existing connections. Reuse those connections and resources through server-owned operations.",
     `App id: ${intent.appId}`,
+    ...(intent.sourceCandidate === undefined
+      ? []
+      : [
+          "Continue the uploaded application source through source_status. Acquire the genuine platform source, then materialize the attached untrusted source candidate. Call prepare_workspace and inspect_existing_app before ordinary existing-app planning. Preserve its app id and content. It carries no prior approval, credentials or publication authority. Use normal existing-app planning and fresh Build and publication approvals.",
+        ]),
     `Requested repository: ${repository}`,
     `Model preference: ${intent.modelId}`,
     intent.connections.length === 0
@@ -100,6 +105,10 @@ export function builderHandoffPrompt(intentInput: BuilderHandoffIntent) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createBuilderHandoffService(input: {
   store: BuilderHandoffStore;
+  validateSourceCandidate?: (input: {
+    authority: Authority;
+    intent: BuilderHandoffIntent;
+  }) => Promise<void>;
   now?: () => Date;
   createId?: () => string;
   lifetimeMs?: number;
@@ -166,6 +175,10 @@ export function createBuilderHandoffService(input: {
       const authority = hostedTenantAuthoritySchema.parse(value.authority);
       const creationRequestId = z.string().uuid().parse(value.creationRequestId);
       const intent = builderHandoffIntentSchema.parse(value.intent);
+      if (intent.sourceCandidate !== undefined) {
+        if (input.validateSourceCandidate === undefined) throw new BuilderHandoffUnavailableError();
+        await input.validateSourceCandidate({ authority, intent });
+      }
       const requestDigest = builderHandoffRequestDigest({
         authority,
         creationRequestId,
@@ -258,6 +271,10 @@ export function createBuilderHandoffService(input: {
 
     async resolve(value: { authority: Authority; handoffId: string }) {
       const record = await read(value);
+      if (record.intent.sourceCandidate !== undefined) {
+        if (input.validateSourceCandidate === undefined) throw new BuilderHandoffUnavailableError();
+        await input.validateSourceCandidate({ authority: record.authority, intent: record.intent });
+      }
       if (record.sessionId !== undefined) {
         return {
           deterministicClientRequestId: `handoff:${record.requestDigest}`,

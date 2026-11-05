@@ -11,11 +11,15 @@ import type {
 } from "../provisioning/hosted-runtime-service";
 import { hostedRuntimeProofSchema } from "../provisioning/hosted-runtime-journal";
 import { appDescriptionSchema } from "../repository/app-description";
+import type { AppDescription } from "../repository/app-description";
 import { sanitizeValidationDiagnosticText } from "../repository/validation-output-sanitize";
 import { normalActorBrowserFiles } from "./normal-actor-browser-state";
 import type { NormalActorRuntimeProjection } from "../provisioning/hosted-operator-normal-actor-program";
 import { browserTestSelectionArguments } from "./browser-test-selection";
 import type { BrowserTestSelection } from "./browser-test-selection";
+
+const selectedBrowserEntry = (selected: string | null | undefined, description: AppDescription) =>
+  selected === undefined ? (description.app.browserEntryPath ?? null) : selected;
 
 type PreparedRuntimeMismatchStage =
   | "app-description-command"
@@ -79,6 +83,7 @@ export interface PreparedRuntimeExecutionContext {
 export interface PreparedRuntimeExecution {
   /** Canonical native browser origin from the protected bindings read, for test commands only. */
   readonly browserTestBaseUrl?: string;
+  readonly browserTestEntryPath?: string | null;
   installationProof: {
     appId: string;
     branch: string;
@@ -162,6 +167,7 @@ export const runtimeFilesForOrigin = (files: PrivateRuntimeFiles, origin: string
 export const restorePreparedRuntimeExecution = async (input: {
   appId: string;
   browserTestBaseUrl?: string;
+  browserTestEntryPath?: string | null;
   root: string;
   normalActors?: NormalActorRuntimeProjection;
   /** Additional server-owned values that must never enter diagnostics or streamed output. */
@@ -279,6 +285,7 @@ export const restorePreparedRuntimeExecution = async (input: {
   if (description.backend.release.artifactHash.replace(/^sha256:/u, "") !== proof.artifactHash) {
     throw preparedRuntimeResourceMismatch("artifact-identity");
   }
+  const browserTestEntryPath = selectedBrowserEntry(input.browserTestEntryPath, description);
   const secretValues = new Set(privateValues);
   const jsonSchema = z.json();
   const collect = (value: z.infer<typeof jsonSchema>, key = "") => {
@@ -360,6 +367,7 @@ export const restorePreparedRuntimeExecution = async (input: {
       }
     };
   return {
+    browserTestEntryPath,
     ...((input.browserTestBaseUrl ?? input.normalActors?.origin) === undefined
       ? {}
       : { browserTestBaseUrl: input.browserTestBaseUrl ?? input.normalActors?.origin }),

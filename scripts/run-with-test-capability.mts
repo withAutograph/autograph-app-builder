@@ -52,6 +52,7 @@ const allowedEnvironment = [
   "APP_BUILDER_EVAL_BROWSER_EXECUTABLE",
   "ARRUSTED_MANAGED_RUNTIME_TEST_ROOT",
   "BUN_BINARY",
+  "APP_BUILDER_DEV_MISE_BIN",
 ] as const;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

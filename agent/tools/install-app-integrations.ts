@@ -1,3 +1,4 @@
+import { appIntegrationInstallReadinessSchema } from "../../lib/repository/app-integration-metadata";
 import { defineTool } from "eve/tools";
 import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
@@ -9,7 +10,25 @@ import { appBuilderWorkflowState, updateExactWorkflow } from "@/lib/agent/workfl
 const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 
 export const appIntegrationsInstallCommand = (appId: string): string =>
-  `mise run integrations:install ${appIdSchema.parse(appId)}`;
+  `mise //apps/integrations:install ${appIdSchema.parse(appId)}`;
+
+const integrationInstallReceipt = (appId: string) => {
+  const common = { appId: z.literal(appId), files: z.array(z.string()) };
+  return z.discriminatedUnion("status", [
+    z.object({
+      ...common,
+      status: z.literal("omitted"),
+      providers: z.array(z.enum(["quickbooks", "xero", "ramp"])).max(0),
+      readiness: z.never().optional(),
+    }),
+    z.object({
+      ...common,
+      status: z.literal("installed"),
+      providers: z.array(z.enum(["quickbooks", "xero", "ramp"])).min(1),
+      readiness: appIntegrationInstallReadinessSchema.optional(),
+    }),
+  ]);
+};
 
 const installationFailureProblem = (stdout: string, appId: string): string | undefined => {
   try {
@@ -55,20 +74,20 @@ export const installAppIntegrations = async (input: {
         stdout: safeCommandOutput(result.stdout),
       };
     }
-    const receipt = z
-      .object({
-        appId: z.literal(input.appId),
-        status: z.enum(["omitted", "installed"]),
-        files: z.array(z.string()),
-        providers: z.array(z.enum(["quickbooks", "xero", "ramp"])),
-      })
-      .parse(JSON.parse(result.stdout));
+    const receipt = integrationInstallReceipt(input.appId).parse(JSON.parse(result.stdout));
     return {
       command,
       exitCode: 0,
       status: receipt.status,
+      capabilityState:
+        receipt.status === "omitted" ? ("source-omitted" as const) : ("source-installed" as const),
+      nextStep:
+        receipt.status === "omitted"
+          ? "Continue normal app validation and delivery planning. Source opt-in is omitted; preserve retained bindings and resources through their existing release reconciliation."
+          : "Validate the installed source. Any runtime capability setup and provider effects remain separate approved operations.",
       files: receipt.files.map((file) => safeCommandOutput(file)),
       providers: receipt.providers,
+      ...(receipt.readiness === undefined ? {} : { readiness: receipt.readiness }),
       providerReadiness: "unverified" as const,
       stderr,
     };
@@ -87,7 +106,7 @@ export const installAppIntegrations = async (input: {
 
 export default defineTool({
   description:
-    "Install explicitly requested app integrations in the already approved private checkout using the repository-owned integrations:install operation. First author app/integrations/definition.ts with supported executable provider recipes bound to the app's generated schema, and a real authorized server host. The operation installs selected ingress and optional shared integrations page/navigation, leaves ordinary apps alone, and reports unavailable capabilities. It does not connect an account, activate a binding, publish, deploy, or establish provider readiness. Revalidate and review the resulting app changes afterward.",
+    "Install or reconcile explicitly requested app integrations in the already approved private checkout using the repository-owned integrations:install operation. For an active opt-in, first author app/integrations/definition.ts with supported executable provider recipes bound to the app's generated schema, and a real authorized server host. The operation installs selected ingress and optional shared integrations page/navigation, leaves ordinary apps alone, and reports unavailable capabilities. After an accepted revision defers integrations, remove the executable provider selection (or select providers:[]) and call this operation to reconcile unchanged generated surfaces. An omitted result continues ordinary app validation/delivery and never revokes retained bindings or deletes provider data. App-owned conflicts require an ordinary reviewed source repair. It does not connect an account, activate a binding, publish, deploy, or establish provider readiness. Revalidate and review the resulting app changes afterward.",
   inputSchema: z.strictObject({}),
   async execute(_input, ctx) {
     const current = appBuilderWorkflowState.get();

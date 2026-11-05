@@ -316,3 +316,31 @@ describe("canonical approved private build continuation", () => {
     ).toBe(false);
   });
 });
+
+it("returns the existing public waiting result without auto-dispatch after a typed source prerequisite", async () => {
+  const f = await fixture();
+  await f.store.recordPrivateBuildDecision({
+    principal,
+    sessionId: result.sessionId,
+    decision: {
+      ...decision,
+      decision: "blocked",
+      sourcePrerequisite: {
+        version: 1,
+        code: "local_source_baseline_required",
+        status: "blocked",
+        appId: decision.scope.appId,
+        appSpecDigest: decision.scope.appSpecDigest,
+        proposalDigest: decision.scope.proposalDigest,
+        sourceReceiptDigest: "d".repeat(64),
+        originalSourceSha: "e".repeat(40),
+        originalWorkspaceDigest: "f".repeat(64),
+        workspaceId: decision.scope.workspaceId,
+        sessionId: decision.adapterSessionId,
+        observedByCallId: "actual-source-prerequisite",
+      },
+    },
+  });
+  await expect(continueApprovedHostedBuild(f)).resolves.toEqual(result);
+  expect(f.sendAccepted).not.toHaveBeenCalled();
+});

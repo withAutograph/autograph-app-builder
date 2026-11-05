@@ -1,7 +1,7 @@
 # Separate protected operator host
 
-The native entrypoint wires the trusted `createDependencies` factory from
-`hosted-operator-composition.ts`. Missing or invalid deployment-owned
+The native entrypoint wires the trusted request-scoped configuration and
+composition factory from `native-target-configuration-resolver.ts`. Missing or invalid deployment-owned
 configuration returns HTTP 503 for `/v1/runtime`. Native deployment READY,
 module import and focused source checks do not prove operator readiness,
 installed resources or app behavior; see the
@@ -12,16 +12,17 @@ repository, with root `lib/provisioning/operator-host` and outside-root reposito
 source enabled. Its native config declares only the operator service rooted
 at `.` within that project root, using the `hono` preset and `entrypoint.ts`.
 Neither Builder web/Eve nor generated app processes are declared in this project.
-The only ingress rewrite is exact `/v1/runtime`;
-this is a reachable protected HTTP service, not an unrouteable private-only service.
+The exact service-targeted ingress paths are listed in the compiled qualification
+section below. Each is explicitly exposed to this protected service.
 
 The function uses Vercel's Web-standard `fetch(Request): Promise<Response>` export.
 It wraps the existing protected operator handler and does not implement planning,
 approvals, ownership, leases, effects, readback or resource orchestration again.
 Unknown paths/methods return 404 before initialization. Missing, failed or incomplete
 composition returns 503 with no readiness response, private error text or receipt.
-Successful initialization shares the dependency instance; failed initialization
-can retry. Construction/import itself performs no provider effect.
+Each native request opens its configured dependencies and disposes the scoped
+connections afterward. Failed initialization remains unavailable and can retry.
+Construction/import itself performs no provider effect.
 
 ## Trusted source composition
 
@@ -29,10 +30,12 @@ can retry. Construction/import itself performs no provider effect.
 factory into the native handler:
 
 ```ts
-import { createDependencies } from "./hosted-operator-composition";
-export default {
-  fetch: createHostedOperatorNativeHandler({ createDependencies }),
-};
+import { createNativeTargetRequestDependencies } from "./native-target-configuration-resolver";
+const runtime = createHostedOperatorNativeHandler({
+  createRequestDependencies: createNativeTargetRequestDependencies(),
+});
+// The entrypoint also dispatches the separate key-custody possession contract.
+export default { fetch: runtime };
 ```
 
 No request, model-selected module path, environment switch, global registry or
@@ -231,3 +234,21 @@ credentials only to those verified development targets. A native target plan
 reserves app database names; it does not approve database provisioning, identity
 enrollment or provider activation. A retained plan naming a Production-bound
 resource must not be treated as authorization for development database effects.
+
+### Compiled ingress qualification
+
+The operator Services route table exposes six exact paths: key-custody
+possession, runtime, public release, app capability, central setup/caller, and
+central deployment receipts. The central endpoints are `/v1/central-integrations`
+and `/v1/central-deployment-events`; mounting a Hono handler without these
+service-targeted rewrites does not expose it. No wildcard ingress is added.
+
+Run `mise run test:compiled-operator -- --bun-bin /absolute/path/to/bun` with the
+existing installed Bun. This repository-owned proof compiles the actual Hono
+entrypoint and default native factory, applies the actual closed Services route
+table, and executes every allowed endpoint with private configuration absent.
+It verifies closed failure, unknown-route denial and zero network calls. The
+owned temporary compiled files are removed afterward; it installs no toolchain.
+The separate PostgreSQL composition proof exercises successful planning,
+encrypted custody, signed callback relay and revision reuse with controlled I/O.
+Neither proof is hosted acceptance.

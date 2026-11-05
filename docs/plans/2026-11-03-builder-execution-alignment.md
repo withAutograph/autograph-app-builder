@@ -188,3 +188,15 @@ two-app/two-tenant/unassigned isolation, replay, drain and optional removal.
 Keep each evidence class separate. Do not resend
 `a469-preview-target-approved-batch`, fabricate settlement, clean up resources
 or include the A-481 customer Production rollout.
+
+### Current operator installer selection and complete catalog
+
+Fresh unregistered apps must select an explicit deployment-owned
+`genericInstallerWorker` with an immutable two-repository source receipt. Existing
+per-app worker aliases are historical selections, not evidence of a current
+generic installer. Preserve old pins and frozen approvals; a new plan freezes the
+new receipt and independently reads it before dispatch. See
+[the worker catalog contract](../operator-worker-catalog.md) for the maintained
+five-family offline build operation and the separate Linux/snapshot/configuration
+qualification boundaries. The central three-worker bundle alone does not cover
+Auth, generic install/access/export, or the cross-repository managed worker.

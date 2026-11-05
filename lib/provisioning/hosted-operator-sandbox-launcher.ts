@@ -1,3 +1,7 @@
+import { isDeepStrictEqual } from "node:util";
+import { verifyOperatorWorkerSourceCapture } from "./operator-worker-source-capture";
+import type { OperatorWorkerSourceCapture } from "./operator-worker-source-capture";
+import { centralHostCanonicalBytes } from "./central-integration-host-contract";
 /* oxlint-disable eslint/sort-keys, eslint/no-await-in-loop, eslint/complexity, sonarjs/cognitive-complexity, sonarjs/expression-complexity -- Rust context serialization order and per-frame authority/checkpoint relay order are protocol contracts. */
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
@@ -142,6 +146,8 @@ const workerScopeSchema = z.enum([
   MEMBERSHIP_SCOPE,
   RESOURCES_SCOPE,
   ACCESS_SCOPE,
+  "app-integration-bootstrap-v1",
+  "central-integration-bootstrap-v1",
 ]);
 const workerSubcommandSchema = z.enum([
   HC_COMMAND,
@@ -158,9 +164,21 @@ const workerSubcommandSchema = z.enum([
   ACCESS_COMMAND,
   ACCESS_INSPECT_COMMAND,
   GENERATED_INSPECT_COMMAND,
+  "integration-control-schema",
+  "integration-control-schema-readback",
+  "integration-fence-app-authority",
+  "integration-fence-app-authority-readback",
+  "integration-service-memberships",
+  "integration-service-memberships-readback",
+  "integration-register-central-app",
+  "integration-register-central-app-readback",
+  "central-integration-schema",
+  "central-integration-schema-readback",
+  "central-integration-source-capture",
 ]);
 
 export interface ProtectedInstallerWorkerDescriptor {
+  sourceCapture?: OperatorWorkerSourceCapture;
   executablePath: string;
   id: string;
   operationScope: z.infer<typeof workerScopeSchema>;
@@ -177,6 +195,9 @@ export type HostedOperatorSandboxConfiguration = HostedOperatorSandboxSource & {
   /** Shared Auth uses its own fixed catalog entry, separate from selected app workers. */
   authWorker?: ProtectedInstallerWorkerDescriptor;
   resourcesWorker?: ProtectedInstallerWorkerDescriptor;
+  integrationResourcesWorker?: ProtectedInstallerWorkerDescriptor;
+  integrationWorker?: ProtectedInstallerWorkerDescriptor;
+  centralIntegrationWorker?: ProtectedInstallerWorkerDescriptor;
   accessWorker?: ProtectedInstallerWorkerDescriptor;
   membershipWorker?: ProtectedInstallerWorkerDescriptor;
 };
@@ -212,14 +233,37 @@ export interface ResourceBootstrapContextWire extends Omit<
 > {
   kind: "neon_resource_bootstrap";
   resource: Omit<ProtectedInstallContextWire["resource"], "schema"> & {
-    scope: "app_database" | "auth_database";
+    scope: "app_database" | "auth_database" | "integration_control_database";
     maintenance_database: string;
     bootstrap_role: string;
     provider_endpoint_id: string;
     credentials_sha256: string;
   };
 }
-type WorkerContext = ProtectedInstallContextWire | ResourceBootstrapContextWire;
+export interface CentralIntegrationContextWire extends ProtectedInstallContextWire {
+  kind: "central_integration_schema";
+  app_id: "integrations";
+  resource: ProtectedInstallContextWire["resource"] & { provider_endpoint_id: string };
+}
+/** A fresh read-only protocol epoch; it carries no SQL connection or mutation grant. */
+export interface CentralSourceCaptureContextWire extends Omit<
+  CentralIntegrationContextWire,
+  "kind"
+> {
+  kind: "central_source_capture";
+  source: {
+    repository_id: string;
+    reviewed_source_sha: string;
+    deployment_profile: "isolated-central-integrations-v1";
+    services_manifest_sha256: string;
+    build_receipt_sha256: string;
+  };
+}
+type WorkerContext =
+  | ProtectedInstallContextWire
+  | ResourceBootstrapContextWire
+  | CentralIntegrationContextWire
+  | CentralSourceCaptureContextWire;
 
 interface PrivateSandboxWorkerInput {
   database: "appDatabase" | "authDatabase";
@@ -262,6 +306,23 @@ const accessReadbackSchema = z.strictObject({
   readback_sha256: digestSchema,
 });
 
+const removalReadbackSchema = z.strictObject({
+  version: z.literal(1),
+  operation_id: z.uuid(),
+  context_digest: digestSchema,
+  fence_generation: z.number().int().positive(),
+  status: z.enum(["applied", "not-applied", "unknown"]),
+  receipt: z
+    .strictObject({
+      operationRef: z.uuid(),
+      active: z.literal(false),
+      principalGeneration: z.number().int().positive(),
+      priorGeneration: z.number().int().positive(),
+      stoppedBindingsSha256: digestSchema,
+    })
+    .optional(),
+  readback_sha256: digestSchema.optional(),
+});
 const resourceReadbackSchema = z
   .strictObject({
     version: z.literal(1),
@@ -269,7 +330,7 @@ const resourceReadbackSchema = z
     context_digest: digestSchema,
     fence_generation: z.number().int().positive(),
     resource_id: z.string().min(1),
-    scope: z.enum(["app_database", "auth_database"]),
+    scope: z.enum(["app_database", "auth_database", "integration_control_database"]),
     status: z.enum(["applied", "absent", "unknown", "retryable"]),
     inspectionFailure: z.unknown().optional(),
     readback_sha256: digestSchema.optional(),
@@ -621,7 +682,10 @@ export const buildResourceBootstrapContext = (
 };
 
 const canonicalContextBytes = (context: WorkerContext) =>
-  Buffer.from(JSON.stringify(context), "utf-8");
+  "kind" in context &&
+  (context.kind === "central_integration_schema" || context.kind === "central_source_capture")
+    ? centralHostCanonicalBytes(z.json().parse(context))
+    : Buffer.from(JSON.stringify(context), "utf-8");
 
 const readSpoolJson = async (sandbox: OperatorSandbox, filePath: string, signal: AbortSignal) => {
   const stat = await sandbox.fs.lstat(filePath, { signal });
@@ -678,6 +742,15 @@ const verifyWorkerPin = async (
   const stdout = await result.stdout({ signal });
   const match = /^(?<digest>[a-f0-9]{64})[ \t]+\*?[^\r\n]+\n?$/u.exec(stdout);
   if (match?.groups?.digest !== worker.sha256) {
+    throw resourceMismatch();
+  }
+  try {
+    await verifyOperatorWorkerSourceCapture({
+      worker,
+      readFile: async (file) => await sandbox.fs.readFile(file, { signal }),
+    });
+  } catch {
+    signal.throwIfAborted();
     throw resourceMismatch();
   }
 };
@@ -740,6 +813,31 @@ const requestMatchesWorkerScope = (
       ([RESOURCES_RETIRE_COMMAND, RESOURCES_RETIRED_INSPECT_COMMAND].includes(worker.subcommand)
         ? context.resource.scope === "app_database" && effectId === "resources:retire"
         : ["resources:roles", "resources:database", "resources:acl"].includes(effectId))
+    );
+  }
+  if (worker.operationScope === "central-integration-bootstrap-v1") {
+    return (
+      "kind" in context &&
+      context.kind === "central_integration_schema" &&
+      context.app_id === "integrations" &&
+      context.tenant_targets.length === 0 &&
+      tenantId === null &&
+      worker.subcommand === "central-integration-schema" &&
+      effectId === "install-central-schema"
+    );
+  }
+  if (worker.operationScope === "app-integration-bootstrap-v1") {
+    const effects = {
+      "integration-control-schema": "install-control-schema",
+      "integration-service-memberships": "bind-service-memberships",
+      "integration-register-central-app": "register-central-app",
+      "integration-fence-app-authority": "fence-app-integration-authority",
+    } as const;
+    return (
+      tenantId === null &&
+      Object.entries(effects).some(
+        ([command, effect]) => worker.subcommand === command && effectId === effect,
+      )
     );
   }
   if (worker.operationScope === ACCESS_SCOPE) {
@@ -1009,6 +1107,12 @@ const runSandboxWorker = async (
       input.effect.kind !== "install") ||
     worker.id !== installer?.reference ||
     worker.sha256 !== installer.sha256 ||
+    (!resources &&
+      !access &&
+      !auth &&
+      !membership &&
+      input.plan.installer.sourceCapture !== undefined &&
+      !isDeepStrictEqual(input.plan.installer.sourceCapture, worker.sourceCapture)) ||
     (auth &&
       !membership &&
       (worker.operationScope !== AUTH_SCOPE ||
@@ -1176,6 +1280,94 @@ const runSandboxWorker = async (
     throw resourceMismatch();
   }
 
+  // oxlint-disable-next-line eslint/no-use-before-define -- Both fixed entry points share the transport declared below.
+  return await runPinnedFileSpoolTransport(
+    configuration,
+    createSandbox,
+    {
+      ...input,
+      legacyPlan: input.plan,
+      legacyEffect: input.effect,
+      effectKind: input.effect.kind,
+    },
+    execution,
+    {
+      context,
+      contextDigest,
+      worker,
+      runId,
+      assertCurrent,
+      allowedResources,
+      allowedTenants,
+      resourceCredentialBytes,
+      recordCheckpoint,
+      resources,
+      access,
+      membership,
+      installReadback,
+      generatedMetadata,
+      generatedFiles,
+      authPlanBytes,
+    },
+  );
+};
+
+type SharedSpoolInput = Pick<SandboxWorkerInput, "signal" | "readbackOnly" | "fenceGeneration"> & {
+  directDatabaseUrl?: string;
+  legacyPlan?: HostedOperatorPlan;
+  legacyEffect?: SandboxWorkerInput["effect"];
+  effectKind?: string;
+  membershipProof?: PrivateSandboxWorkerInput["membershipProof"];
+  accessConnections?: PrivateSandboxWorkerInput["accessConnections"];
+  startupFiles?: Readonly<Record<string, Buffer>>;
+};
+interface SharedSpoolSetup {
+  context: WorkerContext;
+  contextDigest: string;
+  worker: ProtectedInstallerWorkerDescriptor;
+  runId: string;
+  assertCurrent: () => Promise<void>;
+  allowedResources: Set<string>;
+  allowedTenants: Set<string>;
+  resourceCredentialBytes?: Buffer;
+  recordCheckpoint?: RecordWorkerCheckpoint;
+  authorizeAppIntegrationRemoval?: () => Promise<void>;
+  resources: boolean;
+  access: boolean;
+  membership: boolean;
+  installReadback: boolean;
+  authPlanBytes?: Buffer;
+  generatedMetadata?: GeneratedAppReleaseMetadata;
+  generatedFiles: readonly { member: string; content: Buffer }[];
+}
+const runPinnedFileSpoolTransport = async (
+  configuration: HostedOperatorSandboxConfiguration,
+  createSandbox: CreateSandbox,
+  input: SharedSpoolInput,
+  execution: LauncherExecution,
+  setup: SharedSpoolSetup,
+) => {
+  const {
+    context,
+    contextDigest,
+    worker,
+    runId,
+    assertCurrent,
+    allowedResources,
+    allowedTenants,
+    resourceCredentialBytes,
+    recordCheckpoint,
+    resources,
+    access,
+    membership,
+    installReadback,
+    generatedMetadata,
+    generatedFiles,
+    authPlanBytes,
+  } = setup;
+  if (membership && !input.legacyPlan) {
+    throw resourceMismatch();
+  }
   const leaseAbort = new AbortController();
   const signal = input.signal
     ? AbortSignal.any([input.signal, leaseAbort.signal])
@@ -1241,10 +1433,11 @@ const runSandboxWorker = async (
         }
         execution.workerFailure = fact.failure_code;
         if (
-          input.effect.kind === "resources" &&
+          input.effectKind === "resources" &&
           input.readbackOnly === true &&
           fact.failure_code === "readback_unknown" &&
-          "kind" in context
+          "kind" in context &&
+          context.kind === "neon_resource_bootstrap"
         ) {
           try {
             const observation = resourceReadbackSchema.safeParse(
@@ -1374,6 +1567,17 @@ const runSandboxWorker = async (
         throw unknownSeen ? reconciliationRequired() : resourceMismatch();
       }
       await assertCurrent();
+      if (worker.subcommand === "integration-fence-app-authority") {
+        if (
+          setup.authorizeAppIntegrationRemoval === undefined ||
+          request.effect_id !== "fence-app-integration-authority" ||
+          request.tenant_id !== null
+        ) {
+          throw resourceMismatch();
+        }
+        await setup.authorizeAppIntegrationRemoval();
+        await assertCurrent();
+      }
       await atomicReply(
         requireSandbox(),
         path.posix.join(SPOOL_ROOT, runId),
@@ -1518,12 +1722,45 @@ const runSandboxWorker = async (
     const startup = path.posix.join(spool, "startup");
     await sandbox.fs.mkdir(startup, { recursive: true, signal });
     await writePrivateJson(sandbox, path.posix.join(startup, "context.json"), context, signal);
-    await writePrivateJson(
-      sandbox,
-      path.posix.join(startup, "direct-database-url.json"),
-      input.directDatabaseUrl,
-      signal,
-    );
+    if (input.directDatabaseUrl !== undefined) {
+      await writePrivateJson(
+        sandbox,
+        path.posix.join(startup, "direct-database-url.json"),
+        input.directDatabaseUrl,
+        signal,
+      );
+    }
+    if (input.startupFiles) {
+      const allowed = new Set([
+        "app-integration-approved-plan.json",
+        "app-integration-connections.json",
+        "app-integration-authority.json",
+        ...([
+          "integration-fence-app-authority",
+          "integration-fence-app-authority-readback",
+        ].includes(worker.subcommand)
+          ? [
+              "app-integration-removal-approved-plan.json",
+              "app-integration-removal-source-plan.json",
+              "app-integration-removal-connections.json",
+            ]
+          : []),
+        ...(worker.operationScope === "central-integration-bootstrap-v1"
+          ? ["central-integration-approved-plan.json", "central-integration-connections.json"]
+          : []),
+      ]);
+      if (Object.keys(input.startupFiles).some((name) => !allowed.has(name))) {
+        throw resourceMismatch();
+      }
+      await sandbox.writeFiles(
+        Object.entries(input.startupFiles).map(([name, content]) => ({
+          path: path.posix.join(startup, name),
+          content,
+          mode: 0o600,
+        })),
+        { signal },
+      );
+    }
     if (resourceCredentialBytes !== undefined) {
       await sandbox.writeFiles(
         [
@@ -1537,9 +1774,14 @@ const runSandboxWorker = async (
       );
     }
     if (membership && input.membershipProof !== undefined) {
+      const legacyPlan = input.legacyPlan;
+      const legacyEffect = input.legacyEffect;
+      if (legacyPlan === undefined || legacyEffect === undefined) {
+        throw resourceMismatch();
+      }
       await sandbox.writeFiles(
         [
-          ...(input.plan.authMembership?.kind === "create-owned-organizations"
+          ...(legacyPlan.authMembership?.kind === "create-owned-organizations"
             ? [
                 {
                   content: Buffer.from(
@@ -1551,13 +1793,17 @@ const runSandboxWorker = async (
               ]
             : []),
           {
-            content: Buffer.from(JSON.stringify(input.plan)),
+            content: Buffer.from(JSON.stringify(legacyPlan)),
             mode: 0o600,
             path: path.posix.join(startup, "operator-plan.json"),
           },
           {
             content: Buffer.from(
-              JSON.stringify({ version: 1, effectId: input.effect.id, kind: input.effect.kind }),
+              JSON.stringify({
+                version: 1,
+                effectId: legacyEffect.id,
+                kind: input.effectKind,
+              }),
             ),
             mode: 0o600,
             path: path.posix.join(startup, "membership-effect.json"),
@@ -1567,13 +1813,16 @@ const runSandboxWorker = async (
               JSON.stringify({
                 version: 1,
                 environment: "preview",
-                hostname: input.plan.neon.endpoint,
+                hostname: legacyPlan.neon.endpoint,
                 port: 5432,
-                database: input.plan.authDatabase.database,
+                database: legacyPlan.authDatabase.database,
                 schema: "public",
-                migratorRole: input.plan.authDatabase.migratorRole,
-                runtimeRole: input.plan.authDatabase.runtimeRole,
-                neon: { projectId: input.plan.neon.projectId, branchId: input.plan.neon.branchId },
+                migratorRole: legacyPlan.authDatabase.migratorRole,
+                runtimeRole: legacyPlan.authDatabase.runtimeRole,
+                neon: {
+                  projectId: legacyPlan.neon.projectId,
+                  branchId: legacyPlan.neon.branchId,
+                },
               }),
             ),
             mode: 0o600,
@@ -1598,10 +1847,14 @@ const runSandboxWorker = async (
       );
     }
     if (authPlanBytes !== undefined) {
+      const legacyPlan = input.legacyPlan;
+      if (legacyPlan === undefined) {
+        throw resourceMismatch();
+      }
       await sandbox.writeFiles(
         [
           {
-            content: Buffer.from(JSON.stringify(input.plan)),
+            content: Buffer.from(JSON.stringify(legacyPlan)),
             mode: 0o600,
             path: path.posix.join(startup, "operator-plan.json"),
           },
@@ -1620,12 +1873,16 @@ const runSandboxWorker = async (
       );
     }
     const needsAccessConnections =
-      access || installReadback || (resources && input.effect.kind === "retire");
+      access || installReadback || (resources && input.effectKind === "retire");
     if (worker.operationScope === GENERATED_APP_SCOPE || needsAccessConnections) {
+      const legacyPlan = input.legacyPlan;
+      if (legacyPlan === undefined) {
+        throw resourceMismatch();
+      }
       const files = [
         {
           path: path.posix.join(startup, "approved-access-plan.json"),
-          content: Buffer.from(JSON.stringify(input.plan)),
+          content: Buffer.from(JSON.stringify(legacyPlan)),
           mode: 0o600,
         },
       ];
@@ -1718,11 +1975,27 @@ const runSandboxWorker = async (
       throw unknownSeen ? reconciliationRequired() : unavailable();
     }
     execution.stage = "readback";
-    if (input.readbackOnly === true && (access || installReadback || membership)) {
+    if (
+      input.readbackOnly === true &&
+      (access ||
+        installReadback ||
+        membership ||
+        worker.operationScope === "app-integration-bootstrap-v1" ||
+        worker.operationScope === "central-integration-bootstrap-v1")
+    ) {
       await assertCurrent();
-      const observed = accessReadbackSchema.parse(
-        await readSpoolJson(sandbox, path.posix.join(spool, "readback.json"), signal),
-      );
+      const raw = await readSpoolJson(sandbox, path.posix.join(spool, "readback.json"), signal);
+      /* oxlint-disable eslint/no-nested-ternary, sonarjs/no-nested-conditional -- Preserve the existing three wire-protocol readback selections. */
+      const schema =
+        worker.subcommand === "integration-fence-app-authority-readback"
+          ? removalReadbackSchema
+          : ["app-integration-bootstrap-v1", "central-integration-bootstrap-v1"].includes(
+                worker.operationScope,
+              )
+            ? accessReadbackSchema.extend({ receipt: z.unknown() })
+            : accessReadbackSchema;
+      /* oxlint-enable eslint/no-nested-ternary, sonarjs/no-nested-conditional */
+      const observed = schema.parse(raw);
       if (
         observed.operation_id !== context.operation.operation_id ||
         observed.context_digest !== contextDigest ||
@@ -1733,7 +2006,12 @@ const runSandboxWorker = async (
       await assertCurrent();
       return observed;
     }
-    if (input.readbackOnly === true && resources && "kind" in context) {
+    if (
+      input.readbackOnly === true &&
+      resources &&
+      "kind" in context &&
+      context.kind === "neon_resource_bootstrap"
+    ) {
       await assertCurrent();
       const observed = resourceReadbackSchema.parse(
         await readSpoolJson(sandbox, path.posix.join(spool, "resource-observation.json"), signal),
@@ -1805,6 +2083,124 @@ const runSandboxWorker = async (
   return null;
 };
 
+/** Runs a trusted already-approved fixed worker through the existing framed Sandbox transport. */
+export const runAppIntegrationFileSpool = async (
+  configuration: HostedOperatorSandboxConfiguration,
+  input: {
+    worker: ProtectedInstallerWorkerDescriptor;
+    context: WorkerContext;
+    resourceCredentialBytes?: Buffer;
+    runId: string;
+    directDatabaseUrl?: string;
+    startupFiles: Readonly<Record<string, Buffer>>;
+    readOnly: boolean;
+    signal: AbortSignal;
+    assertCurrent: () => Promise<void>;
+    recordCheckpoint?: RecordWorkerCheckpoint;
+    authorizeAppIntegrationRemoval?: () => Promise<void>;
+  },
+  dependencies: { createSandbox?: CreateSandbox } = {},
+) => {
+  const worker = z
+    .strictObject({
+      executablePath: z.string().min(1),
+      id: z.string().min(1),
+      operationScope: workerScopeSchema,
+      sha256: digestSchema,
+      subcommand: workerSubcommandSchema,
+    })
+    .parse(input.worker);
+  if (
+    !(
+      (worker.operationScope === "app-integration-bootstrap-v1" &&
+        worker.id === "app-integration-bootstrap-v1" &&
+        !("kind" in input.context)) ||
+      (worker.operationScope === RESOURCES_SCOPE &&
+        "kind" in input.context &&
+        input.context.kind === "neon_resource_bootstrap" &&
+        input.context.app_id === "integrations" &&
+        input.context.resource.scope === "integration_control_database" &&
+        [RESOURCES_COMMAND, RESOURCES_INSPECT_COMMAND].includes(worker.subcommand) &&
+        input.resourceCredentialBytes !== undefined) ||
+      (worker.operationScope === "central-integration-bootstrap-v1" &&
+        worker.id === "central-integration-bootstrap-v1" &&
+        "kind" in input.context &&
+        input.context.app_id === "integrations" &&
+        input.context.tenant_targets.length === 0 &&
+        ((input.context.kind === "central_integration_schema" &&
+          ["central-integration-schema", "central-integration-schema-readback"].includes(
+            worker.subcommand,
+          )) ||
+          (input.context.kind === "central_source_capture" &&
+            worker.subcommand === "central-integration-source-capture" &&
+            input.readOnly &&
+            input.directDatabaseUrl === undefined &&
+            input.resourceCredentialBytes === undefined &&
+            input.recordCheckpoint === undefined &&
+            Object.keys(input.startupFiles).every(
+              (key) => key === "central-integration-approved-plan.json",
+            ))))
+    )
+  ) {
+    throw resourceMismatch();
+  }
+  if (
+    !("kind" in input.context && input.context.kind === "central_source_capture") &&
+    (input.directDatabaseUrl === undefined || input.directDatabaseUrl.length === 0)
+  ) {
+    throw resourceMismatch();
+  }
+  const removal = worker.subcommand === "integration-fence-app-authority";
+  if (
+    (removal && (!input.authorizeAppIntegrationRemoval || input.readOnly)) ||
+    (!removal && input.authorizeAppIntegrationRemoval !== undefined)
+  ) {
+    throw resourceMismatch();
+  }
+  const context = input.context;
+  if (context.installer.id !== worker.id || context.installer.sha256 !== worker.sha256) {
+    throw resourceMismatch();
+  }
+  const bytes = canonicalContextBytes(context);
+  if (bytes.length > MAX_PROTOCOL_FRAME_BYTES) {
+    throw resourceMismatch();
+  }
+  return await runPinnedFileSpoolTransport(
+    configuration,
+    dependencies.createSandbox ??
+      (async (options) =>
+        await Sandbox.create({
+          ...options,
+          token: await getVercelOidcToken({ project: options.projectId, team: options.teamId }),
+        })),
+    {
+      directDatabaseUrl: input.directDatabaseUrl,
+      readbackOnly: input.readOnly ? true : undefined,
+      fenceGeneration: context.operation.fence_generation,
+      signal: input.signal,
+      startupFiles: input.startupFiles,
+    },
+    { stage: "sandbox_create", mode: input.readOnly ? "inspect" : "execute" },
+    {
+      context,
+      contextDigest: sha256(bytes),
+      worker,
+      runId: workerRunIdSchema.parse(input.runId),
+      assertCurrent: input.assertCurrent,
+      allowedResources: new Set([context.resource.resource_id]),
+      allowedTenants: new Set(context.tenant_targets),
+      recordCheckpoint: input.recordCheckpoint,
+      authorizeAppIntegrationRemoval: input.authorizeAppIntegrationRemoval,
+      resources: "kind" in input.context && input.context.kind === "neon_resource_bootstrap",
+      resourceCredentialBytes: input.resourceCredentialBytes,
+      access: false,
+      membership: false,
+      installReadback: false,
+      generatedFiles: [],
+    },
+  );
+};
+
 /** Creates a source-free, project-OIDC Sandbox and runs only a catalog-pinned installer. */
 export const createHostedOperatorSandboxLauncher = (
   configuration: HostedOperatorSandboxConfiguration,
@@ -1842,4 +2238,21 @@ export const createHostedOperatorSandboxLauncher = (
       await run(input);
     },
   };
+};
+
+/** Global central schema uses a distinct closed context through the same lease/checkpoint transport. */
+export const runCentralIntegrationFileSpool = async (
+  configuration: HostedOperatorSandboxConfiguration,
+  input: Omit<Parameters<typeof runAppIntegrationFileSpool>[1], "context"> & {
+    context: CentralIntegrationContextWire | CentralSourceCaptureContextWire;
+  },
+  dependencies: Parameters<typeof runAppIntegrationFileSpool>[2] = {},
+) => {
+  if (
+    input.worker.operationScope !== "central-integration-bootstrap-v1" ||
+    !["central_integration_schema", "central_source_capture"].includes(input.context.kind)
+  ) {
+    throw resourceMismatch();
+  }
+  return await runAppIntegrationFileSpool(configuration, input, dependencies);
 };

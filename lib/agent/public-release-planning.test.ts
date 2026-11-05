@@ -1,0 +1,55 @@
+import { expect, it, vi } from "vitest";
+import { planPublicAppWithGuidance } from "./public-release-planning";
+import { plan } from "../provisioning/public-release-test-fixture";
+import {
+  publicReleaseOperationRef,
+  publicReleasePlanDigest,
+} from "../provisioning/public-release-contract";
+import { PublicReleasePrerequisiteError } from "../provisioning/public-release-prerequisite";
+
+type Client = Parameters<typeof planPublicAppWithGuidance>[0];
+
+it("returns the canonical saved session destination control after public planning discovers no destination", async () => {
+  const client = {
+    sessionId: "saved/public?session",
+    plan: vi
+      .fn<Client["plan"]>()
+      .mockRejectedValue(new PublicReleasePrerequisiteError("builder_destination_required")),
+  };
+  const result = await planPublicAppWithGuidance(client, "invoice-app");
+  expect(result).toMatchObject({
+    status: "blocked",
+    code: "builder_destination_required",
+    authenticatedBehavior: "unassessed",
+    destinationPath: "/builds/saved%2Fpublic%3Fsession/destination",
+  });
+  expect(result).toHaveProperty("nextAction", expect.stringContaining("does not approve"));
+  expect(client.plan).toHaveBeenCalledExactlyOnceWith("invoice-app");
+});
+it("keeps a runtime prerequisite on the same app without offering another destination", async () => {
+  const client = {
+    sessionId: "saved-session",
+    plan: vi
+      .fn<Client["plan"]>()
+      .mockRejectedValue(new PublicReleasePrerequisiteError("prepared_runtime_required")),
+  };
+  const result = await planPublicAppWithGuidance(client, "invoice-app");
+  expect(result).toMatchObject({ status: "blocked", code: "prepared_runtime_required" });
+  expect(result).not.toHaveProperty("destinationPath");
+});
+it("preserves successful plans and unexpected failures without repeating the request", async () => {
+  const planned = {
+    plan,
+    operationRef: publicReleaseOperationRef(plan),
+    planDigest: publicReleasePlanDigest(plan),
+  };
+  const client = {
+    sessionId: "saved-session",
+    plan: vi.fn<Client["plan"]>().mockResolvedValue(planned),
+  };
+  expect(await planPublicAppWithGuidance(client, "invoice-app")).toBe(planned);
+  const failure = new Error("authorization-required");
+  client.plan.mockRejectedValue(failure);
+  await expect(planPublicAppWithGuidance(client, "invoice-app")).rejects.toBe(failure);
+  expect(client.plan).toHaveBeenCalledTimes(2);
+});

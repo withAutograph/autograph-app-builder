@@ -98,7 +98,7 @@ const removeStructuredPayloads = (value: string): string => {
       if (start === undefined) {
         safeLines.push(line);
       } else {
-        safeLines.push(structuredOutputRedacted);
+        safeLines.push(`${line.slice(0, start)}${structuredOutputRedacted}`);
         const endLine = structuredEndLine(lines, lineIndex, start);
         if (endLine === undefined) {
           break;

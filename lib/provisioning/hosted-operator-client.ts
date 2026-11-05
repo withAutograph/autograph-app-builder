@@ -1,3 +1,4 @@
+import { publicRuntimeBindingSchema, assertPublicRuntimeBinding } from "./public-runtime-binding";
 import type { HostedOperatorCallbackExecution } from "./hosted-operator-callback-owner";
 import {
   continuityTransportRequestSchema,
@@ -75,6 +76,7 @@ const operatorDispatcher = createHostedOperatorDispatcher();
 const bindingSchema = z.strictObject({
   environment: z.record(z.string(), z.string()),
   nativePreview: operatorNativePreviewSchema.optional(),
+  publicDelivery: publicRuntimeBindingSchema.optional(),
   normalActors: z
     .strictObject({
       origin: z.url(),
@@ -620,7 +622,14 @@ export const createHostedOperatorClient = (input: {
       if (value.nativePreview) {
         assertOperatorNativePreview(value.nativePreview, value.plan, request.operationRef);
       }
-      if (value.normalActors && value.normalActors.origin !== value.nativePreview?.publicOrigin) {
+      if (value.publicDelivery) {
+        assertPublicRuntimeBinding(value.publicDelivery, value.plan, request.operationRef);
+      }
+      if (
+        value.normalActors &&
+        value.normalActors.origin !==
+          (value.publicDelivery?.publicOrigin ?? value.nativePreview?.publicOrigin)
+      ) {
         throw new HostedOperatorError("resource_mismatch");
       }
       return {

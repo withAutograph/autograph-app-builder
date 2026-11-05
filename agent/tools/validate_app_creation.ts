@@ -1,3 +1,12 @@
+import {
+  ReviewedCheckRecipeRequiredError,
+  prepareValidationPrivateComputeRepair,
+} from "@/lib/agent/validation-private-compute-repair";
+import {
+  deletesPrivateComputeCheck,
+  verifyPrivateComputeCheckIntegrity,
+  privateComputeCheckIntegrityProblem,
+} from "@/lib/agent/private-compute-check-integrity";
 import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { validationLogsWithReadInputs } from "@/lib/agent/validation-log-read-input";
 import { publishCompiledOperatorArtifactsForSession } from "@/lib/agent/compiled-operator-artifacts";
@@ -198,6 +207,38 @@ export const createAppValidationTool = (
         throw new Error("Apply the requested changes before running the repository checks.");
       }
       assertExistingAppImplementationFiles(input.implementationFiles, current.proposal.target);
+      if (
+        deletesPrivateComputeCheck(
+          current.proposal.target.privateCompute,
+          input.implementationFiles,
+        )
+      ) {
+        return {
+          status: "needs_repair" as const,
+          reason: "validation-tooling-prerequisite",
+          failureClass: "private-compute-check-policy",
+          problem: privateComputeCheckIntegrityProblem,
+        };
+      }
+      let repairComputeCheck: ReturnType<typeof prepareValidationPrivateComputeRepair>;
+      try {
+        repairComputeCheck = prepareValidationPrivateComputeRepair({
+          state: current,
+          files: input.implementationFiles,
+          sessionId: ctx.session.id,
+          signal: ctx.abortSignal,
+        });
+      } catch (error) {
+        if (error instanceof ReviewedCheckRecipeRequiredError) {
+          return {
+            status: "needs_repair" as const,
+            reason: error.code,
+            problem: error.message,
+            implementationFiles: [error.implementationFile],
+          };
+        }
+        throw error;
+      }
       validationPhase(ctx.callId, "resolving_sandbox");
       const sandbox = await ctx.getSandbox();
       validationPhase(ctx.callId, "sandbox_ready");
@@ -232,8 +273,28 @@ export const createAppValidationTool = (
       if (input.implementationFiles.length > 0) {
         invalidateProductBehaviorEvidence("source-repair");
         validationPhase(ctx.callId, "writing_implementation_files");
+        ctx.abortSignal?.throwIfAborted();
+        repairComputeCheck?.assertAuthorized();
         await applyImplementationFiles(sandbox, relativeApplyRoot, input.implementationFiles);
+        await repairComputeCheck?.applyPolicy(sandbox);
         validationPhase(ctx.callId, "implementation_files_written");
+      }
+      if (
+        !fixture &&
+        !(await verifyPrivateComputeCheckIntegrity({
+          appId: current.appSpec.appId,
+          root: current.applyReceipt.applyRoot,
+          profile: current.proposal.target.privateCompute,
+          sandbox,
+          signal: ctx.abortSignal,
+        }))
+      ) {
+        return {
+          status: "needs_repair" as const,
+          reason: "validation-tooling-prerequisite",
+          failureClass: "private-compute-check-policy",
+          problem: privateComputeCheckIntegrityProblem,
+        };
       }
       let logStore: Awaited<ReturnType<typeof validationLogStoreForSession>> | undefined;
       if (current.phase === "validation_failed") {

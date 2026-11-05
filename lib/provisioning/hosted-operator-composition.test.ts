@@ -1,3 +1,4 @@
+import { createHostedOperatorNativeHandler } from "./hosted-operator-native";
 import {
   captureFixture,
   context as captureContext,
@@ -54,6 +55,7 @@ import {
 } from "./hosted-operator-deployment";
 import { requireFinalResourceBindingPhase } from "./hosted-operator-resource-binding-phase";
 import {
+  createRequestScopedHostedOperatorDependencies,
   composeHostedOperatorDependencies,
   createDependencies,
   createConfiguredPreviewTargetResolver,
@@ -1165,6 +1167,8 @@ const unusedCompositionControlPlane = (): Parameters<
     reserveFenceGeneration: unexpectedPort,
   };
   return {
+    centralIntegrationHostRequest: unexpectedPort,
+    centralIntegrationDeploymentReceiptRequest: unexpectedPort,
     exportRequest: unexpectedPort,
     continuityRequest: unexpectedPort,
     readNormalActorRuntimeBindings: unexpectedPort,
@@ -1209,6 +1213,7 @@ const unusedCompositionControlPlane = (): Parameters<
     checkpointSharedAuthAdoption: unexpectedPort,
     close: unexpectedPort,
     consumeOwnerRealmIdentityCallback: unexpectedPort,
+    resolveRealmIdentityCallbackOwnerContext: unexpectedPort,
     prepareRealmIdentityLink: unexpectedPort,
     prepareNormalActorCapture: unexpectedPort,
     readPendingNormalActorCapture: unexpectedPort,
@@ -1232,6 +1237,9 @@ const unusedCompositionControlPlane = (): Parameters<
     readSharedGatewayRows: unexpectedPort,
     reserveRealmIdentityLink: unexpectedPort,
     resolveRealmIdentityCallbackContext: unexpectedPort,
+    readApprovedPublicAuthBootstrap: unexpectedPort,
+    readOwnedAppResourceSource: unexpectedPort,
+    checkpointOwnedAppResourceSource: unexpectedPort,
     store,
     verifySharedAuthAdoption: unexpectedPort,
     withResourceLease: unexpectedPort,
@@ -5029,4 +5037,147 @@ it("uses only the same approved completed additive capture successor for app pla
   record.operator.approvalId = "new-approval";
   record.operator.pendingEffectId = "normal-accounts";
   expect(readCompletedCaptureBootstrap(successor, record)).toBeUndefined();
+});
+
+it("keeps legacy project separation frozen and accepts an explicitly planned single Services destination", async () => {
+  const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+  const original = bootstrapWithGatewayOrigin("https://apps.example");
+  const boundary = original.deploymentBoundary;
+  if (
+    boundary === undefined ||
+    original.publicGateway === undefined ||
+    original.gatewayDelivery === undefined ||
+    original.gatewayBindings === undefined
+  ) {
+    throw new Error("Missing fixture boundary");
+  }
+  const sameProject = {
+    ...original,
+    deploymentBoundary: {
+      ...boundary,
+      gateway: { ...boundary.gateway, projectId: context.target.projectId },
+    },
+    publicGateway: { ...original.publicGateway, projectId: context.target.projectId },
+    gatewayDelivery: { ...original.gatewayDelivery, projectId: context.target.projectId },
+    gatewayBindings: {
+      ...original.gatewayBindings,
+      sourceWorkload: {
+        ...original.gatewayBindings.sourceWorkload,
+        projectId: context.target.projectId,
+      },
+    },
+  };
+  expect(() => hostedOperatorPlanSchema.parse(sameProject)).toThrow();
+  const fresh = hostedOperatorPlanSchema.parse({
+    ...sameProject,
+    deploymentBoundary: {
+      ...sameProject.deploymentBoundary,
+      composition: "single-project-services",
+    },
+  });
+  f.configuration.composition = "single-project-services";
+  f.configuration.gateway.projectId = context.target.projectId;
+  f.configuration.gateway.workload.projectId = context.target.projectId;
+  const plan = await resolveFullPlan(fresh, context, f.configuration, f.controlPlane);
+  expect(plan.deploymentBoundary?.composition).toBe("single-project-services");
+  expect(plan.appTrustedSources).toBeUndefined();
+  expect(plan.selection.projectId).toBe(plan.publicGateway?.projectId);
+  expect(original.deploymentBoundary).toEqual(boundary);
+});
+
+it("plans same-project resource preparation without Preview effects or an environment claim", async () => {
+  const f = publicationFixture({ repoId: "actual-repository-id", gitSha: "c".repeat(40) });
+  f.configuration.composition = "single-project-services";
+  f.configuration.gateway.projectId = context.target.projectId;
+  f.configuration.gateway.workload.projectId = context.target.projectId;
+  const authorizedControlPlane = {
+    ...f.controlPlane,
+    assertPlanningAuthorized: () => Promise.resolve(),
+  };
+  const original = bootstrapWithGatewayOrigin("https://apps.example");
+  if (original.deploymentBoundary === undefined || original.publicGateway === undefined) {
+    throw new Error("missing fixture boundary");
+  }
+  const { gatewayBindings, gatewayDelivery, ...bootstrap } = original;
+  void gatewayBindings;
+  void gatewayDelivery;
+  const fresh = hostedOperatorPlanSchema.parse({
+    ...bootstrap,
+    runtimePreparation: "single-project-resources-v1",
+    deploymentBoundary: {
+      ...original.deploymentBoundary,
+      composition: "single-project-services",
+      gateway: { ...original.deploymentBoundary.gateway, projectId: context.target.projectId },
+    },
+    publicGateway: { ...original.publicGateway, projectId: context.target.projectId },
+    effects: original.effects.filter(
+      (effect) => !["gateway-bindings", "gateway-delivery"].includes(effect.kind),
+    ),
+  });
+  const result = await resolveFullPlan(fresh, context, f.configuration, authorizedControlPlane);
+  expect(result.stage).toBe("app");
+  expect(result.runtimePreparation).toBe("single-project-resources-v1");
+  expect(result.effects.map((effect) => effect.kind)).not.toEqual(
+    expect.arrayContaining(["bindings", "delivery", "gateway-bindings", "gateway-delivery"]),
+  );
+  expect(result.delivery).toBeUndefined();
+  expect(result.gatewayBindings).toBeUndefined();
+  expect(result.gatewayDelivery).toBeUndefined();
+  expect(() =>
+    hostedOperatorPlanSchema.parse({
+      ...result,
+      effects: [
+        ...result.effects,
+        { id: "bindings", kind: "bindings", description: "Not approved by a resource plan" },
+      ],
+    }),
+  ).toThrow();
+});
+it("forwards all additive native delivery contracts through the actual request-scoped production composition", async () => {
+  const f = publicationFixture();
+  const base = unusedCompositionControlPlane();
+  const paths = [
+    "/v1/public-release",
+    "/v1/app-integrations",
+    "/v1/central-integrations",
+    "/v1/central-deployment-events",
+  ];
+  const seen: string[] = [];
+  const delegated = async (incomingRequest: Request) => {
+    if (incomingRequest.headers.get("authorization") !== "Bearer exact-workload") {
+      return Response.json({ code: "denied" }, { status: 403 });
+    }
+    seen.push(new URL(incomingRequest.url).pathname);
+    return Response.json({ status: "native-owner-bound" });
+  };
+  const handler = createHostedOperatorNativeHandler({
+    createRequestDependencies: createRequestScopedHostedOperatorDependencies({
+      resolveConfiguration: () => Promise.resolve(f.configuration),
+      openControlPlane: (input) => {
+        expect(input.request).toBeInstanceOf(Request);
+        return Promise.resolve({
+          ...base,
+          publicReleaseRequest: delegated,
+          appIntegrationCapabilityRequest: delegated,
+          centralIntegrationHostRequest: delegated,
+          centralIntegrationDeploymentReceiptRequest: delegated,
+          close: () => Promise.resolve(),
+        });
+      },
+    }),
+  });
+  await Promise.all(
+    paths.map(async (path) => {
+      const response = await handler(
+        new Request(`https://operator.example${path}`, {
+          method: "POST",
+          headers: { authorization: "Bearer exact-workload" },
+          body: "{}",
+        }),
+      );
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ status: "native-owner-bound" });
+    }),
+  );
+  expect(seen.toSorted()).toEqual(paths.toSorted());
 });

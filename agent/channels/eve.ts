@@ -3,15 +3,26 @@ import { localDev, placeholderAuth, vercelOidc } from "eve/channels/auth";
 
 import { readHostedForwarderSubject } from "@/lib/eve/hosted-forwarder";
 import { createHostedNativeRecoveryBinding } from "@/lib/eve/native-recovery-binding";
+import { createLocalNativeRecovery } from "@/lib/eve/local-native-recovery";
 
 const hostedForwarderSubject = readHostedForwarderSubject(process.env);
+const localRecovery =
+  hostedForwarderSubject === undefined ? createLocalNativeRecovery(process.env) : undefined;
+
+const trustedForwarders: Parameters<typeof eveChannel>[0]["trustedForwarders"] =
+  hostedForwarderSubject === undefined
+    ? undefined
+    : (forwarder) => forwarder.subject === hostedForwarderSubject;
+const localTrustedForwarders: Parameters<typeof eveChannel>[0]["trustedForwarders"] =
+  localRecovery === undefined
+    ? undefined
+    : (forwarder, assertion) => localRecovery.trustForwarder(forwarder, assertion);
 
 export default eveChannel({
-  ...(hostedForwarderSubject === undefined
-    ? {}
-    : {
-        terminalRecovery: createHostedNativeRecoveryBinding(process.env),
-      }),
+  terminalRecovery:
+    hostedForwarderSubject === undefined
+      ? localRecovery?.ports
+      : createHostedNativeRecoveryBinding(process.env),
   auth: [
     // Lets the eve TUI and your Vercel deployments reach the deployed agent.
     vercelOidc(),
@@ -22,10 +33,7 @@ export default eveChannel({
     // or use none() for a public demo.
     placeholderAuth(),
   ],
-  // Only this exact Vercel project/environment may project a verified MCP
-  // principal into the canonical Eve session routes.
-  trustedForwarders:
-    hostedForwarderSubject === undefined
-      ? undefined
-      : (forwarder) => forwarder.subject === hostedForwarderSubject,
+  // Hosted MCP forwarding stays pinned to the exact configured workload.
+  // Local recovery accepts only the local-dev principal in its private cycle.
+  trustedForwarders: trustedForwarders ?? localTrustedForwarders,
 });

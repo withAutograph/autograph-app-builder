@@ -106,15 +106,36 @@ const removeTemporary = async (temporary: string) => {
     }
   }
 };
-const writeOnce = async (file: string, content: string) => {
+const writeOnce = async (file: string, content: string, durable = false, exclusive = false) => {
   const temporary = path.join(path.dirname(file), `.${randomUUID()}.tmp`);
   try {
-    await writeFile(temporary, content, { flag: "wx", mode: 0o600 });
+    if (durable) {
+      const handle = await open(temporary, "wx", 0o600);
+      try {
+        await handle.writeFile(content);
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+    } else {
+      await writeFile(temporary, content, { flag: "wx", mode: 0o600 });
+    }
     try {
       await link(temporary, file);
     } catch (error) {
       if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") {
         throw error;
+      }
+      if (exclusive) {
+        return false;
+      }
+    }
+    if (durable) {
+      const handle = await open(path.dirname(file), constants.O_RDONLY);
+      try {
+        await handle.sync();
+      } finally {
+        await handle.close();
       }
     }
     return (await readPrivate(file)) === content;
@@ -379,4 +400,12 @@ export const createLocalOperatorArtifactStorage = async (input: {
     },
   };
   return { selections, store };
+};
+
+/** Internal owner-scoped filesystem primitives, also used by private compute's resource journal. */
+export const localOperatorPrivateIo = {
+  assertDirectory,
+  ensureDirectory,
+  read: readPrivate,
+  writeOnce,
 };

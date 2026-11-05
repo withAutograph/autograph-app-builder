@@ -38,6 +38,10 @@ interface VercelCredential {
 }
 
 export interface BuilderProvisioningDependencies {
+  /** Current saved-session owner/epoch, checked again by each provider write lease. */
+  assertCurrent?: () => Promise<void>;
+  /** Current saved-session owner/epoch, checked again by each provider write lease. */
+
   journal: BuilderProvisionJournalStore;
   githubInstallations: HostedGitHubInstallationStore;
   githubCredentials: GitHubUserCredentialStore;
@@ -119,6 +123,7 @@ export async function executeBuilderProvisioning(input: {
 
   let leaseFailure: Error | undefined;
   const renewLease = async () => {
+    await input.dependencies.assertCurrent?.();
     if (leaseFailure) {
       throw leaseFailure;
     }
@@ -136,6 +141,7 @@ export async function executeBuilderProvisioning(input: {
         return current;
       },
     });
+    await input.dependencies.assertCurrent?.();
   };
   const tick = async () => {
     try {
@@ -249,6 +255,7 @@ export async function executeBuilderProvisioning(input: {
       if (credential?.binding.active) {
         result = await provisionVercelProject({
           appId: current.record.response.appId,
+          deploymentAccess: current.record.request.deploymentAccess,
           fetch: input.dependencies.fetch,
           github: current.record.response.github,
           githubSelected: request.providers.githubInstallationId !== undefined,
@@ -309,6 +316,14 @@ export async function executeBuilderProvisioning(input: {
           (current.operations[request.operation].attemptCount ?? 0) + 1;
         current.operations[request.operation].outcomeKnown = result.status === "succeeded";
         if (result.status === "failed") {
+          if (result.providerDiagnostic !== undefined) {
+            current.operations[request.operation].lastProviderDiagnostic =
+              result.providerDiagnostic;
+          }
+          if (result.providerDiagnostic !== undefined) {
+            current.operations[request.operation].lastProviderDiagnostic =
+              result.providerDiagnostic;
+          }
           current.operations[request.operation].failureDetail = result.code;
           if (
             result.code === "provider_unavailable" ||
@@ -375,6 +390,9 @@ export function projectBuilderProvisioning(row: BuilderProvisionJournalRow) {
       outcomeKnown: state.outcomeKnown ?? false,
       provider: operation,
       recoveryAction,
+      ...(state.lastProviderDiagnostic === undefined
+        ? {}
+        : { lastProviderDiagnostic: state.lastProviderDiagnostic }),
     };
     if (state.nextRetryAt) {
       diagnostic.nextRetryAt = state.nextRetryAt;

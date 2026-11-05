@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   getBuilderSandboxId,
   materializeBuilderSandboxGitSource,
@@ -65,6 +66,63 @@ function receiptReadinessDigest(input: Record<string, unknown>) {
   return createHash("sha256").update(JSON.stringify(input)).digest("hex");
 }
 
+/** New acquisitions only: independently bind the actual checkout to its cloned canonical main ref. */
+export const canonicalMainAcquisitionProofProgram = (root = SANDBOX_WORKSPACE) => `
+/* canonical-main-acquisition-proof-v1 */
+const {execFileSync}=require('node:child_process');
+try {
+ const root=${JSON.stringify(root)};
+ const read=(args)=>execFileSync('git',['--no-replace-objects','-C',root,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
+ const sourceSha=read(['rev-parse','--verify','HEAD']);
+ const sourceTree=read(['rev-parse','--verify','HEAD^{tree}']);
+ const mainSha=read(['rev-parse','--verify','refs/remotes/origin/main']);
+ const mainTree=read(['rev-parse','--verify','refs/remotes/origin/main^{tree}']);
+ const origin=new URL(read(['remote','get-url','origin']));
+ const expected=new URL(${JSON.stringify(ARRUSTED_TEMPLATE_REPOSITORY)});
+ const originMatches=origin.origin===expected.origin && origin.pathname.replace(/\\.git$/,'')===expected.pathname.replace(/\\.git$/,'') && origin.username==='' && origin.password==='' && origin.search==='' && origin.hash==='';
+ if(!originMatches || !/^[0-9a-f]{40}$/.test(sourceSha) || !/^[0-9a-f]{40}$/.test(sourceTree) || sourceSha!==mainSha || sourceTree!==mainTree) process.exit(2);
+ process.stdout.write(JSON.stringify({sourceSha,sourceTree,mainSha,mainTree,originMatches}));
+} catch { process.exit(2); }
+`;
+const quoteAcquisitionProgram = (text: string) => `'${text.replaceAll("'", "'\"'\"'")}'`;
+const assertNewCanonicalMain = async (
+  sandbox: SandboxSession,
+  snapshot: { sourceSha: string; sourceTree: string },
+) => {
+  const result = await sandbox.run({
+    command: `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_NO_REPLACE_OBJECTS=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 node -e ${quoteAcquisitionProgram(canonicalMainAcquisitionProofProgram())}`,
+    workingDirectory: "/workspace",
+  });
+  const fail = () =>
+    new Error(
+      "Fresh canonical source must match the observed origin/main commit and tree. Preserve this checkout and select a new source acquisition; no saved receipt was changed.",
+    );
+  if (result.exitCode !== 0) throw fail();
+  let raw: unknown;
+  try {
+    raw = JSON.parse(result.stdout);
+  } catch {
+    throw fail();
+  }
+  const proof = z
+    .strictObject({
+      sourceSha: z.string().regex(SHA),
+      sourceTree: z.string().regex(SHA),
+      mainSha: z.string().regex(SHA),
+      mainTree: z.string().regex(SHA),
+      originMatches: z.literal(true),
+    })
+    .safeParse(raw);
+  if (
+    !proof.success ||
+    proof.data.sourceSha !== snapshot.sourceSha ||
+    proof.data.sourceTree !== snapshot.sourceTree ||
+    proof.data.sourceSha !== proof.data.mainSha ||
+    proof.data.sourceTree !== proof.data.mainTree
+  )
+    throw fail();
+};
+
 /**
  * The fresh-template transport: exactly one detached clone, directly in the
  * session workspace. Its closed inspection snapshot produces the V4 receipt
@@ -85,7 +143,7 @@ export async function acquireCanonicalArrustedTemplate(input: {
     }
     configureVercelSessionGitSource({
       sessionId: input.sessionId,
-      source: { token: access.token, url: ARRUSTED_TEMPLATE_REPOSITORY },
+      source: { token: access.token, url: ARRUSTED_TEMPLATE_REPOSITORY, revision: "main" },
     });
   }
   const sandbox = typeof input.sandbox === "function" ? await input.sandbox() : input.sandbox;
@@ -94,9 +152,11 @@ export async function acquireCanonicalArrustedTemplate(input: {
       materializeBuilderSandboxGitSource(sandbox, {
         token: access.token,
         url: ARRUSTED_TEMPLATE_REPOSITORY,
+        revision: "main",
       }),
     ),
   );
+  await acquisitionStage("sandbox_clone", () => assertNewCanonicalMain(sandbox, snapshot));
   const workspaceDigest = receiptReadinessDigest({
     sourceSha: snapshot.sourceSha,
     sourceTree: snapshot.sourceTree,

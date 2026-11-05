@@ -56,6 +56,8 @@ type Database = PostgresJsDatabase<typeof databaseSchema>;
 type Current = NativeTargetCurrentOwner & { historyOwner: OperatorOwnerContext };
 interface AppOwner {
   verifyWorkload: (request: Request) => Promise<void>;
+  assertNoStandardBuilderDestination?: AppOwner["assertCanonicalAppOwner"];
+
   assertCanonicalAppOwner: (input: {
     authority: OperatorOwnerContext["authority"];
     ownerContext: OperatorOwnerContext;
@@ -78,20 +80,26 @@ export const nativeTargetDatabaseNames = (appId: string) => {
   };
 };
 
-/** Pick an actual configured generic installer capability; never synthesize worker bytes. */
+/** Existing per-app pins remain historical; fresh apps require an explicit captured generic capability. */
 export const selectNativeTargetInstaller = (
   workers: HostedOperatorSourceConfiguration["sandbox"]["workers"],
   appId: string,
+  generic?: HostedOperatorSourceConfiguration["sandbox"]["genericInstallerWorker"],
 ) => {
   const configured = workers[appId];
-  const compatible = (worker: typeof configured) =>
-    worker?.operationScope === "generated-app-release-install-v1" &&
-    worker.subcommand === "protected-generated-app-install";
-  const worker = compatible(configured) ? configured : Object.values(workers).find(compatible);
-  if (worker === undefined) {
-    throw unavailable();
+  if (configured !== undefined) {
+    if (
+      configured.operationScope !== "generated-app-release-install-v1" ||
+      configured.subcommand !== "protected-generated-app-install"
+    ) {
+      throw unavailable();
+    }
+    return configured;
   }
-  return worker;
+  if (generic === undefined) {
+    throw new HostedOperatorError("generic_installer_configuration_required");
+  }
+  return generic;
 };
 
 /** A configured physical target already owns this app ID, including its existing resource names. */
@@ -352,6 +360,15 @@ export const createNativeTargetOnboardingDeployment = (input: {
       target: { appId: request.input.appId, sessionId: historyOwner.sessionId },
     };
     await input.owner.assertCanonicalAppOwner(context);
+    if (
+      request.action === "native-target-prepare" ||
+      (request.action === "native-target-plan" && request.selectedApp !== undefined)
+    ) {
+      if (input.owner.assertNoStandardBuilderDestination === undefined) {
+        throw unavailable();
+      }
+      await input.owner.assertNoStandardBuilderDestination(context);
+    }
     if (historyOwner.adapterSessionId !== request.adapterSessionId) {
       throw denied();
     }
@@ -456,6 +473,7 @@ export const createNativeTargetOnboardingDeployment = (input: {
     const worker = selectNativeTargetInstaller(
       selectedConfiguration.sandbox.workers,
       proposal.appId,
+      selectedConfiguration.sandbox.genericInstallerWorker,
     );
     const nativeNeon = selectedConfiguration.nativeNeon;
     return nativeTargetOnboardingPlanSchema.parse({

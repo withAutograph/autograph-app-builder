@@ -1,4 +1,3 @@
-import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
 
 import type { AppBuilderWorkflowState } from "./workflow-state";
@@ -8,7 +7,6 @@ const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 /** Resolve a runnable app from the live checkout without granting build or publication approval. */
 export const runnableSelectedApp = async (input: {
   appId?: string;
-  sandbox: Pick<SandboxSession, "readTextFile">;
   state: AppBuilderWorkflowState;
   resolveRoot?: (selected: { appId: string; root: string }) => Promise<string>;
 }): Promise<{ appId: string; root: string; revision: string; reusable: boolean }> => {
@@ -49,14 +47,6 @@ export const runnableSelectedApp = async (input: {
     input.resolveRoot === undefined
       ? state.workspace.workspacePath
       : await input.resolveRoot({ appId, root: state.workspace.workspacePath });
-  const appContract = await input.sandbox.readTextFile({
-    path: `${root}/apps/${appId}/.config/app-spec.md`,
-  });
-  if (appContract === null || appContract === undefined) {
-    throw new Error(
-      `The selected checkout has no apps/${appId}/.config/app-spec.md. Choose an app that exists in this repository or repair its app contract before running preview tasks.`,
-    );
-  }
   return {
     appId,
     reusable: false,

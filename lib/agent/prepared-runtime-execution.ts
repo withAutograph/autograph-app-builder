@@ -213,7 +213,12 @@ export const resolvePreparedRuntimeExecution = async (
   const provider = await dependencies.getProvider(input.sandboxId, input.signal);
   return await restorePreparedRuntimeExecution({
     appId: input.appId,
-    browserTestBaseUrl: projection?.nativePreview?.publicOrigin,
+    browserTestEntryPath:
+      projection?.publicDelivery === undefined
+        ? undefined
+        : (projection.publicDelivery.appEntryPath ?? null),
+    browserTestBaseUrl:
+      projection?.publicDelivery?.publicOrigin ?? projection?.nativePreview?.publicOrigin,
     normalActors: projection?.normalActors,
     binding,
     observeInstallation: async (files) =>

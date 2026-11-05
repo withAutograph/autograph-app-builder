@@ -1015,6 +1015,8 @@ describe("native composition adoption boundary", () => {
         }),
     );
     const controlPlane: Awaited<ReturnType<typeof createHostedOperatorControlPlane>> = {
+      centralIntegrationHostRequest: unavailable,
+      centralIntegrationDeploymentReceiptRequest: unavailable,
       continuityRequest: unavailable,
       exportRequest: unavailable,
       readApprovedPlan: unavailable,
@@ -1086,6 +1088,10 @@ describe("native composition adoption boundary", () => {
       readSharedAuthAdoption: unavailable,
       readSharedGatewayRows: unavailable,
       reserveRealmIdentityLink: unavailable,
+      resolveRealmIdentityCallbackOwnerContext: unavailable,
+      readApprovedPublicAuthBootstrap: unavailable,
+      readOwnedAppResourceSource: unavailable,
+      checkpointOwnedAppResourceSource: unavailable,
       resolveRealmIdentityCallbackContext: unavailable,
       store: {
         compareAndSet: unavailable,

@@ -1,3 +1,9 @@
+/* oxlint-disable eslint/complexity -- Owner verification keeps every durable session, native lineage and cancellation comparison explicit. */
+import type { BuilderProvisionResponse } from "./contracts";
+import type { BuilderProvisionJournalStore } from "./journal";
+import { resolveExistingBuilderDestinationReference } from "./builder-existing-destination";
+import { isDeepStrictEqual } from "node:util";
+
 import { readParticipantSuccessorPredecessor } from "./hosted-operator-participant-successor";
 import { readUnapprovedCapturePredecessor } from "./hosted-operator-unapproved-capture-history";
 import { readAppGatewaySourcePredecessor } from "./hosted-operator-app-gateway-source-successor";
@@ -72,6 +78,9 @@ type AccessReader = Parameters<typeof readPreparedVercelAccess>[0]["readCredenti
 type VerifierKeyResolver = Parameters<typeof createOperatorWorkloadVerifier>[1];
 
 export interface HostedOperatorOwnerDependencies {
+  readProvisioning?: BuilderProvisionJournalStore["read"];
+  findProvisioningForAppRepository?: BuilderProvisionJournalStore["findSettledAppRepository"];
+
   journal?: Pick<HostedRuntimeJournalStore, "read">;
   realmContinuation?: RealmContinuationVerificationOptions;
   workloadPolicy: OperatorWorkloadPolicy;
@@ -210,6 +219,7 @@ const readCurrentOwnedSession = async (
       adapterSessionId: current.adapterSessionId,
       nativeRecoveryBinding: currentBinding,
       privateBuildDecision: current.privateBuildDecision,
+      builderDestination: current.builderDestination ?? original.builderDestination,
       resumability: current.resumability,
       stage: current.stage,
       status: current.status,
@@ -636,7 +646,7 @@ export type HostedOperatorAppOwnerDependencies = Pick<
 >;
 
 /** The same canonical app linkage protects pre-project registry and existing artifact reads. */
-const readCanonicalAppOwnerSession = async (
+export const readCanonicalAppOwnerSession = async (
   deps: HostedOperatorAppOwnerDependencies,
   input: HostedOperatorAppOwnerContext,
 ) => {
@@ -660,11 +670,258 @@ const readCanonicalAppOwnerSession = async (
   return session;
 };
 
+const standardRepository = (receipt: BuilderProvisionResponse) => {
+  const github = receipt.github;
+  const vercel = receipt.vercel;
+  return github.status === "succeeded" &&
+    vercel.status === "succeeded" &&
+    github.fullName === vercel.linkedGitHubRepository
+    ? { repositoryId: github.repositoryId, githubInstallationId: github.installationId }
+    : { repositoryId: undefined, githubInstallationId: undefined };
+};
+
+type StandardDestinationDependencies = HostedOperatorAppOwnerDependencies &
+  Pick<HostedOperatorOwnerDependencies, "readVercelCredential" | "fetch" | "apiOrigin"> & {
+    readProvisioning?: BuilderProvisionJournalStore["read"];
+    findProvisioningForAppRepository?: BuilderProvisionJournalStore["findSettledAppRepository"];
+  };
+
+/** Recover an existing app destination only from its privately acquired repository and owned normal receipt. */
+export const readOwnedStandardBuilderDestinationReference = async (
+  deps: Pick<
+    StandardDestinationDependencies,
+    | "eve"
+    | "handoffs"
+    | "membership"
+    | "realmContinuation"
+    | "workloadPolicy"
+    | "keyResolver"
+    | "findProvisioningForAppRepository"
+  >,
+  input: HostedOperatorAppOwnerContext,
+) => {
+  const session = await readCanonicalAppOwnerSession(deps, input);
+  const reference = await resolveExistingBuilderDestinationReference({
+    session,
+    authority: input.authority,
+    appId: input.target.appId,
+    findProvisioningForAppRepository: deps.findProvisioningForAppRepository,
+  });
+  if (session.builderDestination !== undefined || reference === undefined) {
+    return reference;
+  }
+  const source = session.privateBuildDecision?.existingRepositorySource;
+  const current = await readCanonicalAppOwnerSession(deps, input);
+  if (
+    !isDeepStrictEqual(current.privateBuildDecision?.existingRepositorySource, source) ||
+    current.builderDestination !== undefined
+  ) {
+    throw unavailable();
+  }
+  return reference;
+};
+
+/** Recover an existing app destination only from its privately acquired repository and owned normal receipt. */
+
+const readDirectStandardBuilderDestination = async (
+  deps: StandardDestinationDependencies,
+  input: HostedOperatorAppOwnerContext,
+  options: { requirePublicAppConfiguration?: boolean } = {},
+) => {
+  await readCanonicalAppOwnerSession(deps, input);
+  const reference = await readOwnedStandardBuilderDestinationReference(deps, input);
+  if (reference === undefined || deps.readProvisioning === undefined) {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Explicit absent destination is part of this async result.
+    return undefined;
+  }
+  if (reference.appId !== input.target.appId) {
+    throw resourceMismatch();
+  }
+  if (reference.appId !== input.target.appId) {
+    throw resourceMismatch();
+  }
+  const row = await deps.readProvisioning({
+    authority: input.authority,
+    requestId: reference.requestId,
+  });
+  if (
+    row === undefined ||
+    row.requestDigest !== reference.requestDigest ||
+    row.record.response.appId !== input.target.appId
+  ) {
+    throw resourceMismatch();
+  }
+  const project = row.record.response.vercel;
+  if (row.state !== "settled" || project.status !== "succeeded") {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- An unfinished journal is never a ready destination.
+    return undefined;
+  }
+  if (project.scope.type !== "team") {
+    throw resourceMismatch();
+  }
+  const access = await readOwnerVercelProjectAccess({
+    authority: input.authority,
+    projectId: project.projectId,
+    installationId: project.installationId,
+    expectedScope: { ...project.scope, installationId: project.installationId },
+    requireServicesRoot: true,
+    requirePublicAppConfiguration: options.requirePublicAppConfiguration,
+    requireExpectedRepositoryId: standardRepository(row.record.response).repositoryId,
+    readCredential: deps.readVercelCredential,
+    ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
+    ...(deps.apiOrigin === undefined ? {} : { apiOrigin: deps.apiOrigin }),
+  });
+  if (access.status !== "ready" || access.project?.id !== project.projectId) {
+    throw resourceMismatch();
+  }
+  await readCanonicalAppOwnerSession(deps, input);
+  const latest = await deps.readProvisioning({
+    authority: input.authority,
+    requestId: reference.requestId,
+  });
+  if (latest === undefined || latest.record.response.vercel.status !== "succeeded") {
+    throw unavailable();
+  }
+  const latestProject = latest.record.response.vercel;
+  const unchanged = [
+    isDeepStrictEqual(await readOwnedStandardBuilderDestinationReference(deps, input), reference),
+    latest.requestDigest === reference.requestDigest,
+    latest.state === "settled",
+    latestProject.projectId === project.projectId,
+    latestProject.installationId === project.installationId,
+    latestProject.scope.id === project.scope.id,
+    latestProject.scope.type === project.scope.type,
+    latestProject.scope.id === project.scope.id,
+    latestProject.scope.type === project.scope.type,
+  ].every(Boolean);
+  if (!unchanged) {
+    throw unavailable();
+  }
+  return {
+    projectId: project.projectId,
+    teamId: project.scope.id,
+    installationId: project.installationId,
+    name: access.project.name,
+    teamSlug: access.scope.slug,
+    productionBranch: access.project.productionBranch,
+
+    repository: project.linkedGitHubRepository,
+    ...standardRepository(row.record.response),
+    githubInstallationId:
+      row.record.response.github.status === "succeeded"
+        ? row.record.response.github.installationId
+        : undefined,
+    provisioningRequestId: row.requestId,
+    provisioningDigest: row.requestDigest,
+    deploymentAccess: row.record.request.deploymentAccess,
+  };
+};
+
+/** Only an existing normal Builder handoff receipt can identify this destination. */
+export const readStandardBuilderDestination = async (
+  deps: StandardDestinationDependencies,
+  input: HostedOperatorAppOwnerContext,
+  options: { requirePublicAppConfiguration?: boolean } = {},
+) => {
+  await readCanonicalAppOwnerSession(deps, input);
+  const { owner } = ownerContextFromHint(input.ownerContext);
+  if (owner.kind !== "handoff") {
+    return await readDirectStandardBuilderDestination(deps, input, options);
+  }
+  const readHandoff = async () => {
+    const handoff = builderHandoffRecordSchema.parse(
+      await deps.handoffs.read({
+        authority: owner.authority,
+        handoffId: owner.sourceHandoffId,
+      }),
+    );
+    if (
+      handoff.sessionId !== owner.sessionId ||
+      handoff.intent.appId !== input.target.appId ||
+      !sameAuthority(handoff.authority, owner.authority)
+    ) {
+      throw unavailable();
+    }
+    return handoff;
+  };
+  const handoff = await readHandoff();
+  const receipt = handoff.intent.provisioning;
+  const project = receipt?.vercel;
+  if (receipt === undefined || project?.status !== "succeeded") {
+    return await readDirectStandardBuilderDestination(deps, input, options);
+  }
+  if (receipt.appId !== input.target.appId || project.scope.type !== "team") {
+    throw resourceMismatch();
+  }
+  const access = await readPreparedVercelAccess({
+    authority: owner.authority,
+    intent: handoff.intent,
+    requireServicesRoot: true,
+    requirePublicAppConfiguration: options.requirePublicAppConfiguration,
+    requireExpectedRepositoryId: standardRepository(receipt).repositoryId,
+    readCredential: deps.readVercelCredential,
+    ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
+    ...(deps.apiOrigin === undefined ? {} : { apiOrigin: deps.apiOrigin }),
+  });
+  if (access.status !== "ready" || access.project?.id !== project.projectId) {
+    throw resourceMismatch();
+  }
+  await readCanonicalAppOwnerSession(deps, input);
+  const current = await readHandoff();
+  const latest = current.intent.provisioning;
+  if (latest === undefined || latest.vercel.status !== "succeeded") {
+    throw unavailable();
+  }
+  const unchanged = [
+    latest.requestDigest === receipt.requestDigest,
+    latest.requestId === receipt.requestId,
+    latest.vercel.projectId === project.projectId,
+    latest.vercel.installationId === project.installationId,
+    latest.vercel.scope.id === project.scope.id,
+    latest.vercel.scope.type === project.scope.type,
+    current.intent.providers?.vercelInstallationId ===
+      handoff.intent.providers?.vercelInstallationId,
+  ].every(Boolean);
+  if (!unchanged) {
+    throw unavailable();
+  }
+  return {
+    projectId: project.projectId,
+    teamId: project.scope.id,
+    installationId: project.installationId,
+    name: access.project.name,
+    teamSlug: access.scope.slug,
+    productionBranch: access.project.productionBranch,
+
+    repository: project.linkedGitHubRepository,
+    ...standardRepository(receipt),
+    githubInstallationId:
+      receipt.github.status === "succeeded" ? receipt.github.installationId : undefined,
+    provisioningRequestId: receipt.requestId,
+    provisioningDigest: receipt.requestDigest,
+    deploymentAccess: receipt.deploymentAccess,
+  };
+};
+
+/** Only an existing normal Builder handoff receipt can identify this destination. */
+
 /** No project grant or provider credential is needed to read this owner's app registration. */
 export const createHostedOperatorAppOwnerAuthority = (
   deps: HostedOperatorAppOwnerDependencies,
 ) => ({
   verifyWorkload: createOperatorWorkloadVerifier(deps.workloadPolicy, deps.keyResolver),
+  assertNoStandardBuilderDestination: async (
+    input: HostedOperatorAppOwnerContext,
+  ): Promise<void> => {
+    const session = await readCanonicalAppOwnerSession(deps, input);
+    if (
+      session.builderDestination !== undefined ||
+      session.sourceHandoffId !== undefined ||
+      session.privateBuildDecision?.existingRepositorySource !== undefined
+    ) {
+      throw new HostedOperatorError("builder_destination_configuration_required");
+    }
+  },
   assertCanonicalAppOwner: async (input: HostedOperatorAppOwnerContext): Promise<void> => {
     await readCanonicalAppOwnerSession(deps, input);
   },
@@ -777,7 +1034,11 @@ export const createHostedOperatorOwnerAuthority = (deps: HostedOperatorOwnerDepe
   return {
     verifyWorkload,
     assertArtifactAuthorized,
+    readStandardDestination: (context: HostedOperatorAppOwnerContext) =>
+      readStandardBuilderDestination(deps, context),
     assertCanonicalAppOwner,
+    assertNoStandardBuilderDestination:
+      createHostedOperatorAppOwnerAuthority(deps).assertNoStandardBuilderDestination,
     assertSandboxAuthorized,
     authorizeArtifactRead,
     assertAuthorized,

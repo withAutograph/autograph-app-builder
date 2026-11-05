@@ -1,3 +1,4 @@
+import { browserEntryPathSchema } from "../repository/browser-entry-path";
 import type { SandboxSession } from "eve/sandbox";
 import path from "node:path";
 import { z } from "zod";
@@ -5,6 +6,9 @@ import { localRuntimeEnvironmentPath } from "../repository/runtime-environment";
 import type { PreparedRuntimeExecution } from "./prepared-runtime-execution-core";
 import { browserTestSelectionSchema } from "./browser-test-selection";
 import type { BrowserTestSelection } from "./browser-test-selection";
+
+const privatePreviewPrerequisiteLine =
+  "[private browser prerequisite] private-preview-refresh-required";
 
 const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 
@@ -37,6 +41,7 @@ export const runAppBrowserTests = async (input: {
   resolveRuntime?: () => Promise<PreparedRuntimeExecution | null>;
   runtime?: PreparedRuntimeExecution | null;
   selection?: BrowserTestSelection;
+  privateBrowserEnvironment?: Readonly<Record<string, string>>;
   continuation?: {
     commandId?: string;
     commandCheckpoint: (commandId: string) => Promise<void>;
@@ -49,6 +54,27 @@ export const runAppBrowserTests = async (input: {
     appBrowserTestCommand(input.appId) + (selection === undefined ? "" : " (focused selection)");
   try {
     const runtime = input.runtime ?? (input.resolveRuntime ? await input.resolveRuntime() : null);
+    if (runtime?.browserTestEntryPath === null) {
+      return {
+        command,
+        exitCode: null,
+        status: "failed" as const,
+        problem:
+          "Browser verification needs an app-owned catalog entry. Declare autograph.browserEntryPath for ambiguous routes, then refresh the runtime binding. App creation, runtime preparation and release remain available.",
+        stderr: "",
+        stdout: "",
+      };
+    }
+    const entryPath =
+      runtime?.browserTestEntryPath === undefined
+        ? undefined
+        : browserEntryPathSchema.parse(runtime.browserTestEntryPath);
+    const browserEnvironment = {
+      ...(runtime?.browserTestBaseUrl === undefined
+        ? {}
+        : { APP_TEST_BASE_URL: runtime.browserTestBaseUrl }),
+      ...(entryPath === undefined ? {} : { APP_TEST_ENTRY_PATH: entryPath }),
+    };
     const runTask = async () => {
       if (runtime) {
         return await runtime.runTask({
@@ -56,9 +82,9 @@ export const runAppBrowserTests = async (input: {
           task: "test-e2e",
           ...(selection === undefined ? {} : { browserSelection: selection }),
           ...input.continuation,
-          ...(runtime.browserTestBaseUrl === undefined
+          ...(Object.keys(browserEnvironment).length === 0
             ? {}
-            : { environment: { APP_TEST_BASE_URL: runtime.browserTestBaseUrl } }),
+            : { environment: browserEnvironment }),
         });
       }
       if (selection !== undefined) {
@@ -67,6 +93,7 @@ export const runAppBrowserTests = async (input: {
         );
       }
       const env = {
+        ...input.privateBrowserEnvironment,
         APP_RUNTIME_STATE_DIR: path.posix.dirname(
           localRuntimeEnvironmentPath(input.root, input.appId),
         ),
@@ -109,6 +136,19 @@ export const runAppBrowserTests = async (input: {
     const stdout = safeOutput(result.stdout);
     const stderr = safeOutput(result.stderr);
     if (result.exitCode !== 0) {
+      // Parse the original line so display redaction cannot manufacture a marker.
+      if (result.stdout.split(/\r?\n/u).includes(privatePreviewPrerequisiteLine)) {
+        return {
+          command,
+          exitCode: result.exitCode,
+          status: "failed" as const,
+          reason: "private-preview-refresh-required",
+          problem:
+            "Refresh the selected app's owner-bound private preview at its current Auth origin before browser verification. Private tests require trace off and the supported bounded reporter.",
+          stdout,
+          stderr,
+        };
+      }
       return {
         command,
         exitCode: result.exitCode,

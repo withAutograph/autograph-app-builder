@@ -1,3 +1,5 @@
+import type { PrivateApplyDenialEvidence } from "../eve/private-apply-denial-evidence";
+import { isDeepStrictEqual } from "node:util";
 import { defineState } from "eve/context";
 
 export interface PrivateApplyScope {
@@ -14,6 +16,7 @@ interface PendingPrivateApply {
 interface PrivateApplyAuthority {
   grant: PrivateApplyScope | null;
   pending: PendingPrivateApply[];
+  terminalDecisions?: readonly (PrivateApplyDenialEvidence & { scope: PrivateApplyScope })[];
 }
 const authority = defineState<PrivateApplyAuthority>(
   "autograph-app-builder.private-apply-authority.v1",
@@ -61,6 +64,7 @@ export const recordApprovedPrivateApply = (scope: PrivateApplyScope, callId: str
     throw new Error("The build approval no longer matches the current proposal or private target.");
   }
   authority.update(() => ({
+    ...current,
     grant: scope,
     pending: current.pending.filter((entry) => entry.callId !== callId),
   }));
@@ -90,5 +94,58 @@ export const discardPendingPrivateApplyApproval = (callId: string): void => {
 export const assertApprovedPrivateApplySession = (scope: PrivateApplyScope): void => {
   if (!sameScope(authority.get().grant, scope)) {
     throw new Error("Private artifact capture no longer belongs to this approved build session.");
+  }
+};
+
+/** Pending approval decisions cannot be silently superseded by a new repair plan. */
+export const assertNoPendingPrivateApplyApproval = (): void => {
+  if (authority.get().pending.length !== 0) {
+    throw new Error("Finish or reconcile the pending private Build approval before replanning.");
+  }
+};
+
+/** Private authored consumers only: immutable pending bookkeeping, never a tool result. */
+export const readPrivateApplyAuthority = () => structuredClone(authority.get());
+/** Complete genuine framework denial retires bookkeeping, not approval or execution history. */
+export const retainPrivateApplyDenials = (input: {
+  expected: ReturnType<typeof readPrivateApplyAuthority>;
+  proofs: readonly PrivateApplyDenialEvidence[];
+}) => {
+  const current = authority.get();
+  if (!isDeepStrictEqual(current, input.expected)) {
+    throw new Error("The private approval authority changed during history observation.");
+  }
+  const terminal = [...(current.terminalDecisions ?? [])];
+  const retired = new Set<string>();
+  const pendingByCall = new Map(current.pending.map((entry) => [entry.callId, entry]));
+  const terminalByCall = new Map(terminal.map((entry) => [entry.callId, entry]));
+  for (const proof of input.proofs) {
+    const pending = pendingByCall.get(proof.callId);
+    if (pending === undefined) {
+      continue;
+    }
+    if (
+      pending.scope.sessionId !== proof.sessionId ||
+      !["denied-not-run", "ignored-not-run", "invalid-not-run"].includes(proof.outcome) ||
+      proof.eventIds.length < 3
+    ) {
+      throw new Error("Private denial evidence belongs to another session or incomplete decision.");
+    }
+    const prior = terminalByCall.get(proof.callId);
+    const value = { ...proof, scope: pending.scope };
+    if (prior !== undefined && !isDeepStrictEqual(prior, value)) {
+      throw new Error("Private approval terminal decision conflicts with retained evidence.");
+    }
+    if (prior === undefined) {
+      terminal.push(value);
+    }
+    retired.add(proof.callId);
+  }
+  if (retired.size > 0) {
+    authority.update(() => ({
+      ...current,
+      pending: current.pending.filter((entry) => !retired.has(entry.callId)),
+      terminalDecisions: terminal,
+    }));
   }
 };

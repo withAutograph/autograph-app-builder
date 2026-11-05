@@ -13,6 +13,9 @@ export function builderProvisionRequestDigest(input: BuilderProvisionRequest): s
     .update(
       JSON.stringify({
         appName: request.appName,
+        ...(request.deploymentAccess === undefined
+          ? {}
+          : { deploymentAccess: request.deploymentAccess }),
         providers: request.providers,
         repository: request.repository,
         requestId: request.requestId,
@@ -30,6 +33,9 @@ export function initialBuilderProvisionResponse(
   const request = builderProvisionRequestSchema.parse(input);
   return builderProvisionResponseSchema.parse({
     appId: deriveBuilderAppId(request.appName),
+    ...(request.deploymentAccess === undefined
+      ? {}
+      : { deploymentAccess: request.deploymentAccess }),
     github: request.providers.githubInstallationId
       ? { code: "provider_unavailable", retryable: true, status: "failed" }
       : { code: "not_selected", retryable: false, status: "skipped" },

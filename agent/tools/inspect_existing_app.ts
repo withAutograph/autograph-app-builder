@@ -1,3 +1,4 @@
+import { inspectCurrentProposalSource } from "@/lib/agent/proposed-source-inspection";
 import { defineDynamic, defineTool } from "eve/tools";
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -334,8 +335,34 @@ export default defineDynamic({
     "step.started": () =>
       defineTool({
         description:
-          "Read regular text files from one existing application after selecting its source. First call without paths or contentPath to list app-owned files; pass the returned nextPathIndex as pathIndex to continue discovery. For paths and contentPath, use app-relative paths such as app/page.tsx or repository-relative paths such as apps/<appId>/app/page.tsx, not absolute /workspace paths. Request a relevant set of paths for content. Content reads return the current availablePathCount and requested bytes without repeating the path index; call without paths or contentPath when the index is needed. Large files return a digest and UTF-8 byte offset; continue with contentPath, offsetBytes, and expectedDigest until no continuation remains. This is read-only and never writes or publishes.",
-        async execute({ appId, paths, pathIndex, contentPath, offsetBytes, expectedDigest }, ctx) {
+          "Read regular text files from one existing application after selecting its source. First call without paths or contentPath to list app-owned files; pass the returned nextPathIndex as pathIndex to continue discovery. For paths and contentPath, use app-relative paths such as app/page.tsx or repository-relative paths such as apps/<appId>/app/page.tsx, not absolute /workspace paths. Request a relevant set of paths for content. Content reads return the current availablePathCount and requested bytes without repeating the path index; call without paths or contentPath when the index is needed. Large files return a digest and UTF-8 byte offset; continue with contentPath, offsetBytes, and expectedDigest until no continuation remains. Default source is applied Sandbox files. To inspect only the CURRENT frozen, unapplied existing-app changes, pass source current-proposal; results are labeled UNAPPLIED and include explicit deletions. This does not read historical drafts or fall back to applied files. Use the returned proposal digest for chunk/list continuation, or supply an expected digest to pin the first read. This is read-only and never writes or publishes.",
+        async execute(
+          {
+            appId,
+            paths,
+            pathIndex,
+            contentPath,
+            offsetBytes,
+            expectedDigest,
+            source,
+            expectedProposalDigest,
+          },
+          ctx,
+        ) {
+          if (source === "current-proposal") {
+            return inspectCurrentProposalSource(
+              {
+                appId,
+                paths,
+                pathIndex,
+                contentPath,
+                offsetBytes,
+                expectedDigest,
+                expectedProposalDigest,
+              },
+              ctx,
+            );
+          }
           let state = appBuilderWorkflowState.get();
           // Local development can use its configured checkout. Hosted
           // inspection must wait for the source selected for this run.
@@ -347,8 +374,8 @@ export default defineDynamic({
             }
             try {
               await sourceStatus.execute({}, ctx);
-              const source = sourceWorkflowState.get();
-              if (source.phase !== "empty") {
+              const selectedSource = sourceWorkflowState.get();
+              if (selectedSource.phase !== "empty") {
                 await prepareWorkspace.execute({}, ctx);
               }
             } catch {
@@ -395,6 +422,11 @@ export default defineDynamic({
         inputSchema: z
           .strictObject({
             appId: z.string().min(1),
+            source: z.enum(["applied", "current-proposal"]).optional(),
+            expectedProposalDigest: z
+              .string()
+              .regex(/^[0-9a-f]{64}$/u)
+              .optional(),
             contentPath: z.string().min(1).optional(),
             expectedDigest: z
               .string()
@@ -405,6 +437,13 @@ export default defineDynamic({
             paths: z.array(z.string().min(1)).default([]),
           })
           .superRefine((input, context) => {
+            if (input.source !== "current-proposal" && input.expectedProposalDigest !== undefined) {
+              context.addIssue({
+                code: "custom",
+                message: "Only a current-proposal read accepts expectedProposalDigest.",
+                path: ["expectedProposalDigest"],
+              });
+            }
             if (
               (input.offsetBytes !== undefined || input.expectedDigest !== undefined) &&
               input.contentPath === undefined

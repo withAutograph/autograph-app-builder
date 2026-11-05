@@ -1,3 +1,7 @@
+import {
+  PRIVATE_COMPUTE_PROFILE_ID,
+  privateComputeApprovalDescription,
+} from "../sandbox/private-compute-profile";
 import { isFrameworkSessionLimitInput } from "./session-limit-input";
 import { createHash } from "node:crypto";
 
@@ -1196,11 +1200,19 @@ const inputRequest = (request: {
       : request.prompt;
   let description: string | undefined;
   if (request.kind === "tool-approval" && toolName === "apply_app_creation") {
+    // Use the standard card copy when the optional summary does not fit the card.
     description =
       z
         .object({ productSummary: z.string().trim().min(1).max(600) })
         .safeParse(request.action?.input).data?.productSummary ??
       "Build and validate the app shown above in your private workspace. This does not publish or deploy it.";
+    if (
+      z
+        .object({ privateCompute: z.literal(PRIVATE_COMPUTE_PROFILE_ID) })
+        .safeParse(request.action?.input).success
+    ) {
+      description = `${description} ${privateComputeApprovalDescription}`;
+    }
   } else if (
     request.kind === "tool-approval" &&
     toolName !== undefined &&

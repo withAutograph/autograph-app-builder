@@ -241,7 +241,12 @@ const setup = (expiresAt = new Date(Date.now() + 60_000)) => {
   };
   const description = {
     version: 1,
-    app: { id: "orchard", routes: [], workspacePath: "apps/orchard" },
+    app: {
+      id: "orchard",
+      browserEntryPath: "/orchard",
+      routes: ["/orchard"],
+      workspacePath: "apps/orchard",
+    },
     backend: {
       authorization: "declared-policy",
       kind: "generated-postgres",

@@ -1,8 +1,11 @@
+import { privateComputeLimitsSchema } from "../sandbox/private-compute-profile";
+import type { PrivateComputeLimits } from "../sandbox/private-compute-profile";
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { lstatSync, realpathSync } from "node:fs";
 import nodePath from "node:path";
+import { readLocalEveCycleBinding } from "./local-cycle-binding";
 
 import {
   parseLinkedVercelProject,
@@ -139,6 +142,7 @@ function exactRoots(repositoryRoot: string, environment: Environment) {
     applicationRoot,
     destinationRoot,
     runtimeHome,
+    runsRoot,
     sourceRoot,
     supervisorRoot,
     workflowData,
@@ -199,12 +203,28 @@ export function createLocalEveInvocation(input: {
   repositoryRoot: string;
   pinnedNode: string;
   eveCli: string;
+  resume?: boolean;
+
   oidcToken: string;
+  privateComputeLimits?: PrivateComputeLimits;
   vercelProject: Readonly<{ projectId: string; orgId: string }>;
   environment: Environment;
 }): LocalEveInvocation {
+  const limits =
+    input.privateComputeLimits === undefined
+      ? undefined
+      : privateComputeLimitsSchema.parse(input.privateComputeLimits);
+  if (
+    limits !== undefined &&
+    (limits.projectId !== input.vercelProject.projectId ||
+      limits.teamId !== input.vercelProject.orgId)
+  ) {
+    throw new Error("Private compute observation belongs to another linked project.");
+  }
   const roots = exactRoots(input.repositoryRoot, input.environment);
   const binding = exactBinding(input.environment);
+  const cycleFile = required(input.environment, "APP_BUILDER_LOCAL_EVE_CYCLE_FILE");
+  readLocalEveCycleBinding(cycleFile);
   return {
     args: [
       input.eveCli,
@@ -215,6 +235,7 @@ export function createLocalEveInvocation(input: {
       binding.port,
       "--no-ui",
       "--no-default-extensions",
+      ...(input.resume === true ? ["--resume"] : []),
     ],
     command: input.pinnedNode,
     cwd: roots.applicationRoot,
@@ -225,12 +246,15 @@ export function createLocalEveInvocation(input: {
       APP_BUILDER_DEVELOPMENT_SOURCE_SHA: binding.sourceSha,
       APP_BUILDER_DEVELOPMENT_SOURCE_TREE: binding.sourceTree,
       APP_BUILDER_DEV_RUNTIME_HOME: roots.runtimeHome,
+      APP_BUILDER_DEV_RUNS_ROOT: roots.runsRoot,
+
       APP_BUILDER_EXECUTION_BUNDLE: "local-development",
       APP_BUILDER_EXECUTION_MODE: "development",
       APP_BUILDER_FRESH_BOOTSTRAP_ENABLED: "0",
       APP_BUILDER_GITHUB_PUBLICATION_ENABLED: "0",
       APP_BUILDER_HOSTED_ARTIFACT_PROOF: "0",
       APP_BUILDER_LOCAL_ADAPTER: "1",
+      APP_BUILDER_LOCAL_EVE_CYCLE_FILE: cycleFile,
       APP_BUILDER_LOCAL_AUTH_EMULATION: "0",
       APP_BUILDER_LOCAL_PROVIDER_EMULATION: "0",
       APP_BUILDER_LOCAL_PUBLICATION: "0",
@@ -238,6 +262,7 @@ export function createLocalEveInvocation(input: {
       EVE_AGENT_HOST: `http://127.0.0.1:${binding.port}`,
       EVE_HOSTED_ADAPTER: "0",
       HOME: roots.runtimeHome,
+      XDG_DATA_HOME: nodePath.join(roots.runtimeHome, "data"),
       LANG: "C",
       LC_ALL: "C",
       NODE_ENV: "production",
@@ -247,6 +272,9 @@ export function createLocalEveInvocation(input: {
       REPOSITORY_WORKSPACE_ROOT: roots.destinationRoot,
       TMPDIR: "/tmp",
       TZ: "UTC",
+      ...(limits === undefined
+        ? {}
+        : { APP_BUILDER_PRIVATE_COMPUTE_LIMITS: JSON.stringify(limits) }),
       VERCEL_OIDC_TOKEN: input.oidcToken,
       VERCEL_PROJECT_ID: input.vercelProject.projectId,
       VERCEL_TEAM_ID: input.vercelProject.orgId,
@@ -304,6 +332,7 @@ export async function runLocalEve(input: {
   repositoryRoot: string;
   environment?: Environment;
   nowEpochSeconds?: number;
+  resume?: boolean;
 }) {
   const environment = input.environment ?? process.env;
   const repositoryRoot = ownerDirectory(input.repositoryRoot, "App Builder repository root");
@@ -324,11 +353,19 @@ export async function runLocalEve(input: {
   });
   const invocation = createLocalEveInvocation({
     environment,
+    resume: input.resume,
     eveCli: resolveInstalledEveCli(repositoryRoot),
     oidcToken,
     pinnedNode: process.execPath,
     repositoryRoot,
     vercelProject: project,
+    ...(environment.APP_BUILDER_PRIVATE_COMPUTE_LIMITS === undefined
+      ? {}
+      : {
+          privateComputeLimits: privateComputeLimitsSchema.parse(
+            JSON.parse(environment.APP_BUILDER_PRIVATE_COMPUTE_LIMITS),
+          ),
+        }),
   });
   const child: ChildProcess = spawn(invocation.command, [...invocation.args], {
     cwd: invocation.cwd,

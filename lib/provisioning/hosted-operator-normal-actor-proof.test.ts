@@ -1,4 +1,3 @@
-import { gatewayDeliverySourceForPlan } from "./hosted-operator-gateway-delivery-source";
 /* oxlint-disable eslint/require-await, unicorn/no-useless-undefined -- Fixture CAS and key ports preserve their asynchronous production interfaces. */
 import { createHash } from "node:crypto";
 import { betterAuth } from "better-auth";
@@ -188,7 +187,11 @@ const plan = hostedOperatorPlanSchema.parse({
     },
   },
 });
-const fixture = async () => {
+const fixture = async (publicRelease?: {
+  enrollmentRef: string;
+  operationRef: string;
+  planDigest: string;
+}) => {
   const { privateKey, publicKey } = await generateKeyPair("EdDSA");
   const auth = betterAuth({
     secret: "normal-owner-proof-local-fixture-long-secret",
@@ -312,6 +315,15 @@ const fixture = async () => {
         .update(values.get("nonce") ?? "")
         .digest("hex"),
       resource,
+      ...(values.has("publicEnrollmentRef")
+        ? {
+            publicRelease: {
+              enrollmentRef: values.get("publicEnrollmentRef"),
+              operationRef: values.get("publicOperationRef"),
+              planDigest: values.get("publicPlanDigest"),
+            },
+          }
+        : {}),
     })
       .setProtectedHeader({
         alg: "EdDSA",
@@ -384,6 +396,8 @@ const fixture = async () => {
     resolveRealmBinding: async () => ({
       authResourceId: plan.authDatabase.resourceId,
       bootstrapPlanDigest: operatorPlanDigest(plan),
+      ...(publicRelease === undefined ? {} : { publicRelease }),
+
       issuer: program.origin,
       audience: "https://operator.example.com",
       endpointOrigin,
@@ -479,7 +493,7 @@ const fixture = async () => {
     }
     return { ...context, plan, ...prepared, organizationId, owner };
   };
-  const completeBootstrapRefresh = async (frozenDraft = false) => {
+  const completeBootstrapRefresh = async () => {
     const store: HostedRuntimeJournalStore = {
       ...journalPorts.store,
       reserve: async () => structuredClone(row),
@@ -492,11 +506,7 @@ const fixture = async () => {
     const refreshed = hostedOperatorPlanSchema.parse({
       ...plan,
       stage: "auth-bootstrap",
-      gatewayDelivery: {
-        ...plan.gatewayDelivery,
-        gitSha: "b".repeat(40),
-        ...(frozenDraft ? { gitRef: "feature/approved-draft" } : {}),
-      },
+      gatewayDelivery: { ...plan.gatewayDelivery, gitSha: "b".repeat(40) },
       effects: [
         {
           id: "auth-resources",
@@ -652,23 +662,7 @@ const fixture = async () => {
     if (bootstrapSnapshot === undefined) {
       throw new Error("Missing completed bootstrap");
     }
-    const approvedBootstrapPlan = bootstrapSnapshot.auth.plan;
-    const source = requiredFixture(approvedBootstrapPlan.gatewayDelivery);
-    const bootstrap = inspectCompletedParticipantBootstrap(
-      {
-        ...approvedBootstrapPlan,
-        gatewayDelivery: gatewayDeliverySourceForPlan(
-          {
-            gateway: {
-              ...source,
-              gitSha: source.gitRef === undefined ? requiredFixture(source.gitSha) : "9".repeat(40),
-            },
-          },
-          approvedBootstrapPlan,
-        ),
-      },
-      row.record,
-    );
+    const bootstrap = inspectCompletedParticipantBootstrap(bootstrapSnapshot.auth.plan, row.record);
     if (bootstrap === undefined) {
       throw new Error("Bootstrap is not settled");
     }
@@ -792,26 +786,6 @@ const fixture = async () => {
 };
 
 describe("normal organization owner proof collector", () => {
-  it("continues real organization proof collection after a completed frozen-draft bootstrap without creating accounts", async () => {
-    const f = await fixture();
-    await f.completeBootstrapRefresh(true);
-    const beforeSignups = f.requests.filter(
-      (request) => new URL(request.url).pathname === "/api/auth/sign-up/email",
-    ).length;
-    const prepared = await f.proposeAccess();
-    expect(prepared.stage).toBe("app");
-    expect(prepared.gatewayDelivery?.gitRef).toBe("feature/approved-draft");
-    expect(prepared.gatewayDelivery?.gitSha).toBe("b".repeat(40));
-    expect(prepared.authMembership?.kind).toBe("create-owned-organizations");
-    expect(
-      f.row.record.accountPreparation?.organizationProofs?.every(
-        (proof) => proof.link.consumedAt !== undefined,
-      ),
-    ).toBe(true);
-    expect(
-      f.requests.filter((request) => new URL(request.url).pathname === "/api/auth/sign-up/email"),
-    ).toHaveLength(beforeSignups);
-  });
   it("preserves enrolled accounts and old proof provenance across an approved Gateway bootstrap endpoint refresh", async () => {
     const f = await fixture();
     f.malformedPrivateResponse();
@@ -1058,4 +1032,46 @@ describe("normal organization owner proof collector", () => {
     await expect(f.collect(input)).rejects.toMatchObject({ code: "auth_identity_required" });
     expect(f.requests).toHaveLength(before);
   });
+});
+
+it("carries the exact public release through durable organization nonce, Auth request and signed proof", async () => {
+  const publicRelease = {
+    enrollmentRef: "88888888-8888-4888-a888-888888888888",
+    operationRef: "99999999-9999-4999-a999-999999999999",
+    planDigest: "d".repeat(64),
+  };
+  const f = await fixture(publicRelease);
+  await f.collect(await f.input("org-one"));
+  const retained = f.row.record.accountPreparation?.organizationProofs?.[0];
+  expect(retained?.link.publicRelease).toEqual(publicRelease);
+  expect(retained?.link.consumedAt).toBeDefined();
+  const request = f.requests.find(
+    (entry) => new URL(entry.url).pathname === "/api/auth/platform/operator-link",
+  );
+  expect(request).toBeDefined();
+  const body = new URLSearchParams(await requiredFixture(request).text());
+  expect(body.get("publicEnrollmentRef")).toBe(publicRelease.enrollmentRef);
+  expect(body.get("publicOperationRef")).toBe(publicRelease.operationRef);
+  expect(body.get("publicPlanDigest")).toBe(publicRelease.planDigest);
+});
+
+it("carries the exact public release through durable organization nonce, Auth request and signed proof", async () => {
+  const publicRelease = {
+    enrollmentRef: "88888888-8888-4888-a888-888888888888",
+    operationRef: "99999999-9999-4999-a999-999999999999",
+    planDigest: "d".repeat(64),
+  };
+  const f = await fixture(publicRelease);
+  await f.collect(await f.input("org-one"));
+  const retained = f.row.record.accountPreparation?.organizationProofs?.[0];
+  expect(retained?.link.publicRelease).toEqual(publicRelease);
+  expect(retained?.link.consumedAt).toBeDefined();
+  const request = f.requests.find(
+    (entry) => new URL(entry.url).pathname === "/api/auth/platform/operator-link",
+  );
+  expect(request).toBeDefined();
+  const body = new URLSearchParams(await requiredFixture(request).text());
+  expect(body.get("publicEnrollmentRef")).toBe(publicRelease.enrollmentRef);
+  expect(body.get("publicOperationRef")).toBe(publicRelease.operationRef);
+  expect(body.get("publicPlanDigest")).toBe(publicRelease.planDigest);
 });

@@ -29,6 +29,98 @@ fabricated as settled. A provider 403 remains unexplained until independent
 evidence identifies its cause; selecting the correct product path is not proof
 that a protection setting caused or resolved that denial.
 
+## Standard Builder destinations
+
+Deployment-owned configuration may explicitly select
+`composition: "single-project-services"`. This mode requires the app and Gateway
+in the same Services project and branch, rooted at `.`, with one public
+Gateway/Auth origin. The privileged operator remains a separate project.
+A historical dedicated-target registration cannot redirect this destination.
+Configurations without this selection retain their frozen legacy semantics.
+
+The actual configuration resolver reads the current owner's normal Builder
+handoff provisioning receipt and independently checks the project ID, team,
+Services framework and root through that owner's active Vercel installation.
+It rechecks canonical ownership and membership after the provider read. It
+never creates a project, changes a registration or replays an approval.
+`builder_destination_required` means that normal Builder destination selection
+has not been established. Direct MCP sessions without a handoff do not acquire
+a fabricated receipt. `builder_destination_configuration_required` means that
+the selected receipt does not yet have coherent deployment-owned same-project
+configuration. Neither case falls back to dedicated native target creation.
+
+Saved direct sessions select a normal destination at
+`/builds/<session-id>/destination` using the existing GitHub/Vercel panels and an
+authenticated same-origin Server Action. The user selects the concrete accounts
+and repository and approves creating the app destination. The normal provisioner
+reserves its request first; an atomic owner-scoped session update then attaches
+only that request ID/digest/app reference before any provider POST. The private
+`builderDestination` field is not a successful receipt and never replaces the
+session or changes its auth principal, `sourceHandoffId`, or approval history. Reloads
+reuse the exact attached request. A different request conflicts rather than
+creating a second destination. Pending and unknown provisioning stays pending.
+
+Attachment requires the waiting session's exact adapter, generation,
+cancellation revision and checkpoint, with no current input or reserved/unknown
+native operation (including resume requests). Provider writes recheck the same
+owner and epoch through the normal provisioner's write-lease renewal, after
+credential and source work. A cancelled or changed build stops further dispatch.
+Recovery carries this reference through its existing verified lineage; it does
+not start a replacement product session. The operator reads the attached normal
+journal under current canonical ownership, accepts only settled success, and
+independently rechecks the actual project under the owner's installation.
+
+This reader does not assemble Gateway deployment/domain metadata or add
+Production runtime preparation. Those supported workflow capabilities are still
+required before claiming public create/release acceptance; a hand-written
+configuration is not that proof.
+
+## Standard Builder destinations
+
+Deployment-owned configuration may explicitly select
+`composition: "single-project-services"`. This mode requires the app and Gateway
+in the same Services project and branch, rooted at `.`, with one public
+Gateway/Auth origin. The privileged operator remains a separate project.
+A historical dedicated-target registration cannot redirect this destination.
+Configurations without this selection retain their frozen legacy semantics.
+
+The actual configuration resolver reads the current owner's normal Builder
+handoff provisioning receipt and independently checks the project ID, team,
+Services framework and root through that owner's active Vercel installation.
+It rechecks canonical ownership and membership after the provider read. It
+never creates a project, changes a registration or replays an approval.
+`builder_destination_required` means that normal Builder destination selection
+has not been established. Direct MCP sessions without a handoff do not acquire
+a fabricated receipt. `builder_destination_configuration_required` means that
+the selected receipt does not yet have coherent deployment-owned same-project
+configuration. Neither case falls back to dedicated native target creation.
+
+Saved direct sessions select a normal destination at
+`/builds/<session-id>/destination` using the existing GitHub/Vercel panels and an
+authenticated same-origin Server Action. The user selects the concrete accounts
+and repository and approves creating the app destination. The normal provisioner
+reserves its request first; an atomic owner-scoped session update then attaches
+only that request ID/digest/app reference before any provider POST. The private
+`builderDestination` field is not a successful receipt and never replaces the
+session or changes its auth principal, `sourceHandoffId`, or approval history. Reloads
+reuse the exact attached request. A different request conflicts rather than
+creating a second destination. Pending and unknown provisioning stays pending.
+
+Attachment requires the waiting session's exact adapter, generation,
+cancellation revision and checkpoint, with no current input or reserved/unknown
+native operation (including resume requests). Provider writes recheck the same
+owner and epoch through the normal provisioner's write-lease renewal, after
+credential and source work. A cancelled or changed build stops further dispatch.
+Recovery carries this reference through its existing verified lineage; it does
+not start a replacement product session. The operator reads the attached normal
+journal under current canonical ownership, accepts only settled success, and
+independently rechecks the actual project under the owner's installation.
+
+This reader does not assemble Gateway deployment/domain metadata or add
+Production runtime preparation. Those supported workflow capabilities are still
+required before claiming public create/release acceptance; a hand-written
+configuration is not that proof.
+
 ## Dedicated native Preview targets
 
 Target onboarding precedes hosted resource preparation when a new generated app has no
@@ -634,3 +726,150 @@ Provider contracts:
 [read one decrypted variable](https://vercel.com/docs/rest-api/projects/retrieve-the-decrypted-value-of-an-environment-variable-of-a-project-by-id),
 [remove an owned environment variable](https://vercel.com/docs/rest-api/projects/remove-an-environment-variable),
 and [bind branch environment variables](https://vercel.com/docs/rest-api/projects/create-one-or-more-environment-variables).
+
+Normal destination selection also reads the existing owner/app native onboarding journal.
+An active, uncertain, or accepted legacy creation must be reconciled before selecting
+another destination. The session attachment transaction locks that existing journal
+row and refuses those states without modifying it. A selected normal destination
+blocks new legacy native target plans and preparation, including the final provider
+dispatch recheck; retained plan and approval inspection remain readable. Neither
+path settles or replays a native response batch whose submission is uncertain.
+
+### Normal Builder destination runtime composition
+
+A normal destination can use the existing restricted Preview resource/schema
+installer without creating or visiting another Vercel project. Configure
+`PROTECTED_HOSTED_OPERATOR_STANDARD_RUNTIME_PROFILES` with owner/app entries:
+`authority`, `appId`, `resourceProfileId`, `publicOrigin`,
+`productionDatabaseIdentity`, and `gatewayWorkload` (`audience`, `issuer`,
+`subject`). The resource profile is the existing deployment-owned isolated
+Neon/Auth/installer custody; the production database identity is the reviewed
+`hostname/database` guard, never inferred from the development endpoint.
+
+The request resolver reads the canonical saved app's current captured descriptor
+and reviewed published source, and the recorded normal provisioning receipt with
+independent Services/root provider readback. It constructs a fresh same-project
+Gateway/app configuration from that receipt and source. It copies resource
+custody from the selected isolated profile, without carrying over an old Gateway
+project, deployment, repository or origin. Missing destination/source/profile
+configuration remains actionable setup work; it cannot fall back to a dedicated
+native onboarding target.
+
+New setup plans explicitly freeze `deploymentBoundary.composition` as
+`single-project-services`; old omitted boundaries continue requiring three
+separate projects. The new mode uses Preview only as the isolated installer
+resource context, omits cross-project trusted-source configuration, and does not
+require an already deployed Preview alias to construct its bootstrap plan.
+Production exposure and public BetterAuth settings require their separate
+ordinary public release approval. Configuration and local tests are not hosted
+or authenticated acceptance evidence.
+
+#### Owned application Auth in a Services project
+
+[Vercel Services share project environment variables](https://vercel.com/docs/services).
+The [service configuration reference](https://vercel.com/docs/services/config-reference)
+does not provide a per-service credential visibility boundary. This composition
+therefore owns one application's BetterAuth backend and app services as one
+project security boundary. It must not host a customer/shared privileged Auth
+realm or claim that another service cannot see project credentials.
+
+A standard runtime profile must explicitly declare
+`authOwnership: {kind: "dedicated-app-development", resource: ...}` with the
+exact approved Auth database/resource/runtime/installer-role tuple. The assembler
+compares that declaration with the selected isolated profile. The public release
+consumer must additionally compare the current owner-scoped approved runtime and
+private binding URLs: Auth and app databases and all four roles are distinct,
+only restricted runtime URLs are delivered, TLS verifies the endpoint, and the
+normalized development endpoint differs from the explicit Production guard.
+Prior adoption of that exact owned development resource does not authorize a
+shared customer realm or reuse another app's secret.
+
+`owned-app-auth-environment.ts` defines the closed own-app public runtime key
+set and hash manifest. Public binding, reconciliation and readiness consumers
+reject privileged provider/operator/migrator keys and unrelated database/Auth
+keys in Production rather than treating them as legitimate shared Services
+configuration. The historical separate-project Preview inventory remains
+unchanged; it filters Preview and inherited rows and does not include
+Production-only bindings. A source declaration, unit test or hash alone is not
+independent hosted database, Auth or application acceptance evidence.
+
+The standard profile also supplies an independently reviewed
+`gatewayProductionWorkload` (`issuer`, `audience`, `subject`). Its projection is
+`standardRuntime.publicRealmWorkload`, explicitly `production` and bound to the
+recorded destination project and team. A Production subject is never obtained by
+editing or substituting an existing Preview subject. Public realm enrollment
+uses that native sender identity separately from the unchanged Preview installer
+resource classification.
+
+Normal destination selection also reads the existing owner/app native onboarding journal.
+An active, uncertain, or accepted legacy creation must be reconciled before selecting
+another destination. The session attachment transaction locks that existing journal
+row and refuses those states without modifying it. A selected normal destination
+blocks new legacy native target plans and preparation, including the final provider
+dispatch recheck; retained plan and approval inspection remain readable. Neither
+path settles or replays a native response batch whose submission is uncertain.
+
+### Normal Builder destination runtime composition
+
+A normal destination can use the existing restricted Preview resource/schema
+installer without creating or visiting another Vercel project. Configure
+`PROTECTED_HOSTED_OPERATOR_STANDARD_RUNTIME_PROFILES` with owner/app entries:
+`authority`, `appId`, `resourceProfileId`, `publicOrigin`,
+`productionDatabaseIdentity`, and `gatewayWorkload` (`audience`, `issuer`,
+`subject`). The resource profile is the existing deployment-owned isolated
+Neon/Auth/installer custody; the production database identity is the reviewed
+`hostname/database` guard, never inferred from the development endpoint.
+
+The request resolver reads the canonical saved app's current captured descriptor
+and reviewed published source, and the recorded normal provisioning receipt with
+independent Services/root provider readback. It constructs a fresh same-project
+Gateway/app configuration from that receipt and source. It copies resource
+custody from the selected isolated profile, without carrying over an old Gateway
+project, deployment, repository or origin. Missing destination/source/profile
+configuration remains actionable setup work; it cannot fall back to a dedicated
+native onboarding target.
+
+New setup plans explicitly freeze `deploymentBoundary.composition` as
+`single-project-services`; old omitted boundaries continue requiring three
+separate projects. The new mode uses Preview only as the isolated installer
+resource context, omits cross-project trusted-source configuration, and does not
+require an already deployed Preview alias to construct its bootstrap plan.
+Production exposure and public BetterAuth settings require their separate
+ordinary public release approval. Configuration and local tests are not hosted
+or authenticated acceptance evidence.
+
+#### Owned application Auth in a Services project
+
+[Vercel Services share project environment variables](https://vercel.com/docs/services).
+The [service configuration reference](https://vercel.com/docs/services/config-reference)
+does not provide a per-service credential visibility boundary. This composition
+therefore owns one application's BetterAuth backend and app services as one
+project security boundary. It must not host a customer/shared privileged Auth
+realm or claim that another service cannot see project credentials.
+
+A standard runtime profile must explicitly declare
+`authOwnership: {kind: "dedicated-app-development", resource: ...}` with the
+exact approved Auth database/resource/runtime/installer-role tuple. The assembler
+compares that declaration with the selected isolated profile. The public release
+consumer must additionally compare the current owner-scoped approved runtime and
+private binding URLs: Auth and app databases and all four roles are distinct,
+only restricted runtime URLs are delivered, TLS verifies the endpoint, and the
+normalized development endpoint differs from the explicit Production guard.
+Prior adoption of that exact owned development resource does not authorize a
+shared customer realm or reuse another app's secret.
+
+`owned-app-auth-environment.ts` defines the closed own-app public runtime key
+set and hash manifest. Public binding, reconciliation and readiness consumers
+reject privileged provider/operator/migrator keys and unrelated database/Auth
+keys in Production rather than treating them as legitimate shared Services
+configuration. The historical separate-project Preview inventory remains
+unchanged; it filters Preview and inherited rows and does not include
+Production-only bindings. A source declaration, unit test or hash alone is not
+independent hosted database, Auth or application acceptance evidence.
+The standard profile also supplies an independently reviewed
+`gatewayProductionWorkload` (`issuer`, `audience`, `subject`). Its projection is
+`standardRuntime.publicRealmWorkload`, explicitly `production` and bound to the
+recorded destination project and team. A Production subject is never obtained by
+editing or substituting an existing Preview subject. Public realm enrollment
+uses that native sender identity separately from the unchanged Preview installer
+resource classification.

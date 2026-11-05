@@ -1,3 +1,9 @@
+import { chmod, mkdtemp, mkdir, realpath, rm } from "node:fs/promises";
+import path from "node:path";
+import { tmpdir } from "node:os";
+import { createLocalPrivateComputeJournal } from "./private-compute-journal";
+import { activatePrivateComputeProfile } from "./private-compute-activation";
+import { privateComputeProfileSchema } from "./private-compute-profile";
 import { APIError } from "@vercel/sandbox";
 import type { Drive, Sandbox } from "@vercel/sandbox";
 import { createHash } from "node:crypto";
@@ -37,7 +43,9 @@ const nativeFixture = () => ({
     lstat: vi.fn().mockRejectedValue(Object.assign(new Error("not found"), { code: "ENOENT" })),
     mkdir: vi.fn().mockResolvedValue(null),
   },
-  mounts: { "/workspace": { drive: "drive-owned", mode: "read-write" } },
+  mounts: {
+    "/workspace": { drive: "drive-owned", mode: "read-write" as "read-write" | "snapshot" },
+  },
   name: "owned-name",
   persistent: true,
   region: "iad1",
@@ -53,7 +61,14 @@ const nativeFixture = () => ({
   }),
   status: "running",
   stop: vi.fn().mockResolvedValue(null),
-  writeFiles: vi.fn().mockResolvedValue(null),
+  writeFiles: vi
+    .fn<
+      (
+        files: readonly { path: string; content: Uint8Array }[],
+        options: Parameters<Sandbox["writeFiles"]>[1],
+      ) => Promise<null>
+    >()
+    .mockResolvedValue(null),
 });
 
 const startedSandboxName = `app-builder-${createHash("sha256").update(context.session.id).digest("hex").slice(0, 40)}`;
@@ -100,6 +115,113 @@ const driveState = {
 } as const;
 
 describe("Builder Vercel provider", () => {
+  it("does not implicitly resume an unresolved durable compute transition after a new provider instance", async () => {
+    const root = await realpath(await mkdtemp(path.join(tmpdir(), "provider-compute-pending-")));
+    await chmod(root, 0o700);
+    await mkdir(path.join(root, "runs"), { mode: 0o700 });
+    for (const [name, value] of Object.entries({
+      APP_BUILDER_EXECUTION_MODE: "development",
+      APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+      APP_BUILDER_LOCAL_ADAPTER: "1",
+      EVE_HOSTED_ADAPTER: "0",
+      APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+      APP_BUILDER_DEV_RUNS_ROOT: path.join(root, "runs"),
+    })) {
+      vi.stubEnv(name, value);
+    }
+    try {
+      const record = {
+        sandboxId: "owned-name",
+        workspaceDrive: "drive-owned",
+        appId: "example",
+        sessionId: context.session.id,
+        proposalDigest: "a".repeat(64),
+        profileId: "private-checks-16gib-v1" as const,
+        phase: "configuring" as const,
+      };
+      const journal = await createLocalPrivateComputeJournal({
+        authority: { kind: "local", stateRoot: root, ownerUid: process.getuid?.() ?? -1 },
+        sandboxId: record.sandboxId,
+        workspaceDrive: record.workspaceDrive,
+        assertCurrent: () => {},
+      });
+      await journal.append(record, await journal.read());
+      const stopped = {
+        ...nativeFixture(),
+        status: "stopped" as "stopped" | "running",
+        vcpus: 2,
+        memory: 4096,
+      };
+      sdk.get.mockResolvedValue(stopped);
+      const saved = { name: stopped.name, version: 1 as const, workspaceDrive: driveState };
+      await expect(
+        createBuilderVercelProvider().resume(context, { files: [] }, saved),
+      ).rejects.toThrow("pending private compute operation");
+      expect(sdk.get.mock.calls.map(([options]) => options.resume)).toEqual([false]);
+      const configured = {
+        ...stopped,
+        vcpus: 8,
+        memory: 16_384,
+        update: () => {
+          throw new Error("An uncertain update must never be resent");
+        },
+        currentSession: () => ({ vcpus: 8, memory: 16_384 }),
+      };
+      const active = { ...configured, status: "running" as const };
+      const profile = privateComputeProfileSchema.parse({
+        version: 1,
+        id: record.profileId,
+        vcpus: 8,
+        memoryMiB: 16_384,
+        lintWorkers: 1,
+        target: { sandboxId: record.sandboxId, workspaceDrive: record.workspaceDrive },
+        checkPolicy: {
+          path: "apps/example/.config/mise/tasks/check",
+          beforeSha256: "b".repeat(64),
+          afterSha256: "c".repeat(64),
+        },
+        limits: {
+          version: 1,
+          projectId: "prj_test",
+          teamId: "team_test",
+          plan: "pro",
+          maxVcpus: 8,
+          limited: false,
+          observedAt: "2026-11-03T12:00:00.000Z",
+        },
+      });
+      let checkpoint = await journal.read();
+      await activatePrivateComputeProfile(
+        {
+          profile,
+          appId: "example",
+          sessionId: context.session.id,
+          proposalDigest: record.proposalDigest,
+          callId: "approved-resume",
+        },
+        {
+          read: () => Promise.resolve(configured),
+          resume: () => Promise.resolve(active),
+          readActivation: async () => {
+            checkpoint = await journal.read();
+            return checkpoint.record;
+          },
+          writeActivation: async (value) => {
+            checkpoint = await journal.append(value, checkpoint);
+          },
+          assertCurrent: () => {},
+        },
+      );
+      sdk.get.mockResolvedValue(active);
+      const handle = await createBuilderVercelProvider().resume(context, { files: [] }, saved);
+      expect(handle.sandbox.id).toBe(stopped.name);
+      expect(sdk.get.mock.calls.map(([options]) => options.resume)).toEqual([false, false]);
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   beforeEach(() => {
     sdk.create.mockReset();
     sdk.get.mockReset();
@@ -110,6 +232,171 @@ describe("Builder Vercel provider", () => {
         Promise.resolve(driveFixture(options.name)),
       );
     drives.list.mockReset().mockResolvedValue(listedDrives(driveFixture()));
+  });
+  it("uploads multiple skill seeds together with their exact binary bytes and resolved paths", async () => {
+    const native = nativeFixture();
+    const files = seedStorage(native, []);
+    sdk.create.mockResolvedValue(native);
+    const binary = Buffer.from([0, 255, 3]);
+    const started = await createBuilderVercelProvider().start(context, undefined, {
+      files: [
+        { path: "$HOME/.agents/skills/a.md", content: binary.toString("base64") },
+        { path: "$HOME/.agents/skills/b.md", content: Buffer.from("second").toString("base64") },
+      ],
+    });
+    expect(files.get("/home/vercel/.agents/skills/a.md")).toEqual(binary);
+    expect(files.get("/home/vercel/.agents/skills/b.md")).toEqual(Buffer.from("second"));
+    expect(native.writeFiles).toHaveBeenCalledOnce();
+    expect(
+      native.fs.mkdir.mock.calls.filter(
+        ([directory]) => directory === "/home/vercel/.agents/skills",
+      ),
+    ).toHaveLength(1);
+    await started.handle.onSessionStop();
+  });
+
+  it("continues bounded uploads without limiting large files or the total tree", async () => {
+    const native = nativeFixture();
+    const files = seedStorage(native, []);
+    sdk.create.mockResolvedValue(native);
+    const large = Buffer.alloc(9 * 1024 * 1024, 7);
+    const started = await createBuilderVercelProvider().start(context, undefined, {
+      files: [
+        { path: "/workspace/first", content: Buffer.from("first").toString("base64") },
+        { path: "/workspace/large", content: large.toString("base64") },
+        { path: "/workspace/last", content: Buffer.from("last").toString("base64") },
+      ],
+    });
+    expect(files.get("/workspace/first")).toEqual(Buffer.from("first"));
+    const observedLarge = files.get("/workspace/large");
+    expect(observedLarge?.byteLength).toBe(large.byteLength);
+    expect(observedLarge?.equals(large)).toBe(true);
+    expect(files.get("/workspace/last")).toEqual(Buffer.from("last"));
+    expect(
+      native.writeFiles.mock.calls.map(([values]) =>
+        values.map((file: { path: string }) => file.path),
+      ),
+    ).toEqual([["/workspace/first"], ["/workspace/large"], ["/workspace/last"]]);
+    await started.handle.onSessionStop();
+  });
+
+  it("preserves the first workspace seed when the artifact repeats a retained destination", async () => {
+    const native = nativeFixture();
+    const files = seedStorage(native, []);
+    sdk.create.mockResolvedValue(native);
+    const started = await createBuilderVercelProvider().start(context, undefined, {
+      files: [
+        { path: "same", content: Buffer.from("first").toString("base64") },
+        { path: "/workspace/same", content: Buffer.from("second").toString("base64") },
+      ],
+    });
+    expect(files.get("/workspace/same")).toEqual(Buffer.from("first"));
+    await started.handle.onSessionStop();
+  });
+
+  it("does not return a ready handle before the seed batch upload finishes", async () => {
+    const native = nativeFixture();
+    const upload = Promise.withResolvers<null>();
+    native.writeFiles.mockReturnValue(upload.promise);
+    sdk.create.mockResolvedValue(native);
+    let ready = false;
+    const pending = (async () => {
+      const result = await createBuilderVercelProvider().start(context, undefined, {
+        files: [{ path: "/workspace/seed", content: Buffer.from("seed").toString("base64") }],
+      });
+      ready = true;
+      return result;
+    })();
+    await vi.waitFor(() => expect(native.writeFiles).toHaveBeenCalled());
+    expect(ready).toBe(false);
+    upload.resolve(null);
+    const started = await pending;
+    expect(ready).toBe(true);
+    await started.handle.onSessionStop();
+  });
+  it("uploads multiple skill seeds together with their exact binary bytes and resolved paths", async () => {
+    const native = nativeFixture();
+    const files = seedStorage(native, []);
+    sdk.create.mockResolvedValue(native);
+    const binary = Buffer.from([0, 255, 3]);
+    const started = await createBuilderVercelProvider().start(context, undefined, {
+      files: [
+        { path: "$HOME/.agents/skills/a.md", content: binary.toString("base64") },
+        { path: "$HOME/.agents/skills/b.md", content: Buffer.from("second").toString("base64") },
+      ],
+    });
+    expect(files.get("/home/vercel/.agents/skills/a.md")).toEqual(binary);
+    expect(files.get("/home/vercel/.agents/skills/b.md")).toEqual(Buffer.from("second"));
+    expect(native.writeFiles).toHaveBeenCalledOnce();
+    expect(
+      native.fs.mkdir.mock.calls.filter(
+        ([directory]) => directory === "/home/vercel/.agents/skills",
+      ),
+    ).toHaveLength(1);
+    await started.handle.onSessionStop();
+  });
+
+  it("continues bounded uploads without limiting large files or the total tree", async () => {
+    const native = nativeFixture();
+    const files = seedStorage(native, []);
+    sdk.create.mockResolvedValue(native);
+    const large = Buffer.alloc(9 * 1024 * 1024, 7);
+    const started = await createBuilderVercelProvider().start(context, undefined, {
+      files: [
+        { path: "/workspace/first", content: Buffer.from("first").toString("base64") },
+        { path: "/workspace/large", content: large.toString("base64") },
+        { path: "/workspace/last", content: Buffer.from("last").toString("base64") },
+      ],
+    });
+    expect(files.get("/workspace/first")).toEqual(Buffer.from("first"));
+    const observedLarge = files.get("/workspace/large") ?? Buffer.alloc(0);
+    expect(observedLarge.byteLength).toBe(large.byteLength);
+    expect(createHash("sha256").update(observedLarge).digest("hex")).toBe(
+      createHash("sha256").update(large).digest("hex"),
+    );
+    expect(files.get("/workspace/last")).toEqual(Buffer.from("last"));
+    expect(native.writeFiles).toHaveBeenCalledTimes(3);
+    expect(native.writeFiles).toHaveBeenNthCalledWith(
+      3,
+      [{ path: "/workspace/last", content: Buffer.from("last") }],
+      {},
+    );
+    await started.handle.onSessionStop();
+  });
+
+  it("preserves the first workspace seed when the artifact repeats a retained destination", async () => {
+    const native = nativeFixture();
+    const files = seedStorage(native, []);
+    sdk.create.mockResolvedValue(native);
+    const started = await createBuilderVercelProvider().start(context, undefined, {
+      files: [
+        { path: "same", content: Buffer.from("first").toString("base64") },
+        { path: "/workspace/same", content: Buffer.from("second").toString("base64") },
+      ],
+    });
+    expect(files.get("/workspace/same")).toEqual(Buffer.from("first"));
+    await started.handle.onSessionStop();
+  });
+
+  it("does not return a ready handle before the seed batch upload finishes", async () => {
+    const native = nativeFixture();
+    const upload = Promise.withResolvers<null>();
+    native.writeFiles.mockReturnValue(upload.promise);
+    sdk.create.mockResolvedValue(native);
+    let ready = false;
+    const pending = (async () => {
+      const result = await createBuilderVercelProvider().start(context, undefined, {
+        files: [{ path: "/workspace/seed", content: Buffer.from("seed").toString("base64") }],
+      });
+      ready = true;
+      return result;
+    })();
+    await vi.waitFor(() => expect(native.writeFiles).toHaveBeenCalled());
+    expect(ready).toBe(false);
+    upload.resolve(null);
+    const started = await pending;
+    expect(ready).toBe(true);
+    await started.handle.onSessionStop();
   });
   it("prepares public resource targets without contacting Vercel or capturing source bytes", async () => {
     const provider = createBuilderVercelProvider();
@@ -124,7 +411,7 @@ describe("Builder Vercel provider", () => {
           await Promise.resolve();
           throw new Error("Not used by preparation fixture");
         },
-        resolveProjectPath: (path) => path,
+        resolveProjectPath: (filePath) => filePath,
       },
       resources: {
         skills: {
@@ -211,7 +498,15 @@ describe("Builder Vercel provider", () => {
       structuredClone(result.state),
     );
     expect(sdk.get).toHaveBeenCalledWith(
-      expect.objectContaining({ name: native.name, resume: true }),
+      expect.objectContaining({ name: native.name, resume: false }),
+    );
+    await resumed.sandbox.run({ command: "cargo --version" });
+    expect(native.runCommand).toHaveBeenLastCalledWith(
+      expect.objectContaining({ env: { MISE_DATA_DIR: "/runtime" } }),
+    );
+    await resumed.sandbox.run({ command: "cargo --version" });
+    expect(native.runCommand).toHaveBeenLastCalledWith(
+      expect.objectContaining({ env: { MISE_DATA_DIR: "/runtime" } }),
     );
     expect(sdk.create).toHaveBeenCalledOnce();
     expect(drives.getOrCreate).toHaveBeenCalledOnce();
@@ -302,13 +597,13 @@ describe("Builder Vercel provider", () => {
   });
   it("waits for its pending preview resume before stopping the resulting VM", async () => {
     const original = nativeFixture();
-    original.status = "stopped";
     sdk.get.mockResolvedValueOnce(original);
     const handle = await createBuilderVercelProvider().resume(
       context,
       { files: [] },
       { name: original.name, version: 1 },
     );
+    original.status = "stopped";
     const reattached = nativeFixture();
     const deferred = Promise.withResolvers<typeof reattached>();
     sdk.get.mockReturnValueOnce(deferred.promise);

@@ -74,6 +74,7 @@ describe("app-creation skill export", () => {
   });
 
   it.each([
+    "create-app/references/optional-integrations.md",
     "design-app/references/interactions.md",
     "design-app/references/information-composition.md",
     "next-partial-prefetching-optimizer/SKILL.md",

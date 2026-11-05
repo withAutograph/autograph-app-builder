@@ -62,7 +62,7 @@ export function DeployToSection({
       className={`${styles.sectionField} ${styles.deploySection}`}
       section="deploy-to"
       title="Deploy to"
-      description="Where do you want to deploy this app?"
+      description="Where do you want to deploy this app? Its production domain will be public; the app controls sign-in."
       label="Deployment provider"
       name="deployment-provider"
       gridClassName={`${styles.optionGrid} ${styles.providerChoiceGrid}`}
