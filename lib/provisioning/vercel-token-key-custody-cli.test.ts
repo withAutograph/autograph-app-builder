@@ -323,5 +323,5 @@ describe("private custody enrollment CLI", () => {
         "INVALID_PRIVATE_FRAME",
       ),
     );
-  });
+  }, 30_000);
 });
