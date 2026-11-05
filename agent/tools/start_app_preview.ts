@@ -17,6 +17,7 @@ import {
   resolvePreviewWorkingDirectory,
 } from "@/lib/agent/preview-working-directory";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import { priorValidatedPrivateArtifact } from "@/lib/agent/prior-validated-private-artifact";
 import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
 import { resolvePreviewPackageManager } from "@/lib/agent/preview-package-manager";
 import { ensureCheckoutDependencies } from "@/lib/agent/checkout-dependencies";
@@ -123,38 +124,78 @@ const resolveNativePreview = async (
   return null;
 };
 
+const priorPreviewLaunch = (
+  command: { executable: string; args: string[] },
+  cwd: string,
+  appDirectory: string,
+) => {
+  if (
+    command.executable !== "bun" ||
+    JSON.stringify(command.args) !== JSON.stringify(["run", "dev"]) ||
+    cwd !== appDirectory
+  ) {
+    throw new Error("Preview the prior validated artifact with bun run dev in its app directory.");
+  }
+  return { command, adjustment: undefined };
+};
+
 export default defineTool({
   description:
-    "Open the selected existing app or applied new app and return a working browser URL. An approved protected runtime publishes its verified native Gateway app route; other apps start a private Sandbox preview. For a prepared existing GitHub checkout, supply appId from the repository's apps directory; this only previews current files and does not grant build or publication approval. Discover the development script and package manager from the checkout's package.json, then use workingDirectory relative to the repository root. Configure it to listen on the supplied port. A reachable page is not proof of backend product behavior.",
+    "Open the selected existing app or applied new app and return a working browser URL. An approved protected runtime publishes its verified native Gateway app route; other apps start a private Sandbox preview. For a prepared existing GitHub checkout, supply appId from the repository's apps directory; this only previews current files and does not grant build or publication approval. Discover the development script and package manager from the checkout's package.json, then use workingDirectory relative to the repository root. Configure it to listen on the supplied port. Use artifact=prior-validated to preview the exact last validated local artifact after a newer plan was denied and never ran. A reachable page is not proof of backend product behavior.",
   // oxlint-disable-next-line eslint/complexity -- Native publication and the retained private Sandbox lifecycle are separate authority paths.
   async execute(input, ctx) {
     const current = appBuilderWorkflowState.get();
-    const native = await resolveNativePreview(input, ctx, current);
+    const native =
+      input.artifact === undefined ? await resolveNativePreview(input, ctx, current) : null;
     if (native) {
       invalidateProductBehaviorPreview("preview-replaced");
       workingPreviewState.update(() => null);
       return native;
     }
     const sandbox = await ctx.getSandbox();
-    const selected = await runnableSelectedApp({ appId: input.appId, sandbox, state: current });
+    const prior =
+      input.artifact === "prior-validated"
+        ? await priorValidatedPrivateArtifact({
+            appId: input.appId,
+            sandbox,
+            state: current,
+            sessionId: ctx.session.id,
+            signal: ctx.abortSignal,
+          })
+        : undefined;
+    const artifact =
+      prior === undefined
+        ? undefined
+        : { applyDigest: prior.revision, validationDigest: prior.validationDigest };
+    const selected =
+      prior ?? (await runnableSelectedApp({ appId: input.appId, sandbox, state: current }));
     const cwd = resolvePreviewWorkingDirectory(selected.root, input.workingDirectory);
-    const rootManifest = await sandbox.readTextFile({ path: `${selected.root}/package.json` });
-    const launch = resolvePreviewPackageManager(input.command, rootManifest);
+    const launch =
+      prior === undefined
+        ? resolvePreviewPackageManager(
+            input.command,
+            await sandbox.readTextFile({ path: `${selected.root}/package.json` }),
+          )
+        : priorPreviewLaunch(input.command, cwd, `${selected.root}/apps/${selected.appId}`);
     const evidenceGeneration = currentProductBehaviorGeneration();
     await assertHostedSandboxCommandAuthority({ sessionId: ctx.session.id });
+    prior?.assertCurrent();
     const provider = await getVercelPreviewProvider(getBuilderSandboxId(sandbox), ctx.abortSignal);
-    const runtime = await resolvePreparedRuntimeExecution({
-      appId: selected.appId,
-      root: selected.root,
-      sandboxId: getBuilderSandboxId(sandbox),
-      sessionAuth: ctx.session.auth,
-      sessionId: ctx.session.id,
-      callbackExecution: hostedOperatorCallbackExecution(ctx.session),
-      signal: ctx.abortSignal,
-      state: current,
-    });
+    const runtime =
+      prior === undefined
+        ? await resolvePreparedRuntimeExecution({
+            appId: selected.appId,
+            root: selected.root,
+            sandboxId: getBuilderSandboxId(sandbox),
+            sessionAuth: ctx.session.auth,
+            sessionId: ctx.session.id,
+            callbackExecution: hostedOperatorCallbackExecution(ctx.session),
+            signal: ctx.abortSignal,
+            state: current,
+          })
+        : null;
     const previous = workingPreviewState.get();
-    const validationDigest = validationAttemptDigest(current);
+    const validationDigest = prior?.validationDigest ?? validationAttemptDigest(current);
     const requestDigest = createHash("sha256")
       .update(
         JSON.stringify({
@@ -169,13 +210,18 @@ export default defineTool({
         }),
       )
       .digest("hex");
+    const samePriorArtifact =
+      previous?.priorValidatedArtifact?.applyDigest === artifact?.applyDigest &&
+      previous?.priorValidatedArtifact?.validationDigest === artifact?.validationDigest;
+    const reusableLaunch =
+      selected.reusable && previous?.requestDigest === requestDigest && samePriorArtifact;
     if (
-      selected.reusable &&
-      previous?.requestDigest === requestDigest &&
+      reusableLaunch &&
       hasLiveWorkingPreview(previous, getBuilderSandboxId(sandbox)) &&
       previous.providerSessionId === provider.currentSession().sessionId
     ) {
       const command = await provider.getCommand(previous.commandId, { signal: ctx.abortSignal });
+      prior?.assertCurrent();
       if (command.exitCode === null) {
         bindProductBehaviorPreview(previous.commandId, evidenceGeneration);
         return {
@@ -190,6 +236,7 @@ export default defineTool({
     const dependencyInput = {
       assertCurrent: () => {
         ctx.abortSignal.throwIfAborted();
+        prior?.assertCurrent();
         if (currentProductBehaviorGeneration() !== evidenceGeneration) {
           throw new Error(
             "The selected app changed while preparing preview dependencies. Retry the preview for the current app.",
@@ -230,18 +277,21 @@ export default defineTool({
       }
       environmentPath = localRuntimeEnvironmentPath(selected.root, appId);
     }
+    await prior?.verifyCurrent();
     invalidateProductBehaviorPreview("preview-replaced");
     workingPreviewState.update(() => null);
     let ownedAttemptId: string | undefined;
     let prepareAuthenticatedOrigin = runtime?.prepareAuthenticatedOrigin;
     if (!runtime && environmentPath !== undefined) {
       prepareAuthenticatedOrigin = async (authOrigin) => {
+        prior?.assertCurrent();
         const expectedPreviousAuthOrigin = await readLocalPreviewAuthOrigin({
           appId,
           root: selected.root,
           sandbox,
           signal: ctx.abortSignal,
         });
+        prior?.assertCurrent();
         const setup = await prepareAppLocalPreview({
           appId,
           authOrigin,
@@ -273,13 +323,16 @@ export default defineTool({
         });
       },
       prepareAuthenticatedOrigin,
+      assertCurrent: prior?.assertCurrent,
       previous,
       provider,
       requestDigest,
       sandboxId: getBuilderSandboxId(sandbox),
       signal: ctx.abortSignal,
     });
-    workingPreviewState.update(() => preview);
+    workingPreviewState.update(() =>
+      artifact === undefined ? preview : { ...preview, priorValidatedArtifact: artifact },
+    );
     bindProductBehaviorPreview(preview.commandId, evidenceGeneration);
     return {
       commandAdjustment: launch.adjustment,
@@ -289,6 +342,7 @@ export default defineTool({
     };
   },
   inputSchema: z.object({
+    artifact: z.literal("prior-validated").optional(),
     appId: z
       .string()
       .regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u)

@@ -23,6 +23,7 @@ export interface WorkingPreviewRuntime {
   /** Hash of the accepted app build and launch settings; avoids restarting the same live preview. */
   requestDigest?: string;
   receipt: PublicWorkingPreview;
+  priorValidatedArtifact?: { applyDigest: string; validationDigest: string };
 }
 
 const missingRuntimeFile = (error: unknown): null => {
@@ -377,6 +378,7 @@ const claimPreviewAttempt = async (
   }
 };
 
+// oxlint-disable-next-line eslint/complexity -- Cleanup independently fences ingress, commands, and the owned lifecycle journal.
 const cleanupPreviewAttempt = async (input: {
   provider: Sandbox;
   attempt: PreviewAttempt;
@@ -387,6 +389,7 @@ const cleanupPreviewAttempt = async (input: {
   launchDispatched: boolean;
   error: unknown;
   onAttempt?: (attempt: PreviewAttempt | null) => void;
+  // oxlint-disable-next-line sonarjs/cognitive-complexity -- Cleanup keeps each independent lease and ownership fence explicit.
 }): Promise<never> => {
   const {
     provider,
@@ -423,10 +426,12 @@ const cleanupPreviewAttempt = async (input: {
     { kind: "read" },
     AbortSignal.timeout(5000),
   ).catch(() => null);
-  const owned =
+  const sameAttempt =
     current?.attemptId === attempt.attemptId &&
-    current.providerSessionId === attempt.providerSessionId &&
-    current.status === "starting";
+    current.providerSessionId === attempt.providerSessionId;
+  const readyCommand =
+    command !== undefined && current?.status === "ready" && current.commandId === command.cmdId;
+  const owned = sameAttempt && (current.status === "starting" || readyCommand);
   const cleanup = await Promise.allSettled([
     command === undefined ? undefined : stopWorkingPreviewCommand(command),
     // Caller cancellation still closes owned ingress while the lease is live.
@@ -476,6 +481,7 @@ const cleanupPreviewAttempt = async (input: {
 };
 
 /** Runs only in the already-approved user sandbox. A ready receipt is HTTP evidence, not product verification. */
+// oxlint-disable-next-line eslint/complexity -- Native preview startup retains independent owner, cancellation, and ingress boundaries.
 export const startWorkingPreview = async (input: {
   provider: Sandbox;
   sandboxId: string;
@@ -492,6 +498,7 @@ export const startWorkingPreview = async (input: {
   probeTimeoutMs?: number;
   signal?: AbortSignal;
   onAttempt?: (attempt: PreviewAttempt | null) => void;
+  assertCurrent?: () => void;
 }): Promise<WorkingPreviewRuntime> => {
   input.signal?.throwIfAborted();
   const { provider } = input;
@@ -509,12 +516,14 @@ export const startWorkingPreview = async (input: {
     providerSessionId,
     status: "starting",
   };
+  input.assertCurrent?.();
   await claimPreviewAttempt(provider, attempt, signal);
   input.onAttempt?.(attempt);
   let command: Command | undefined;
   let launchDispatched = false;
   let diagnosticsPath: string | undefined;
   try {
+    input.assertCurrent?.();
     // Bind a deny-by-default listener before exposing any inbound port.
     await provider.update({ networkPolicy: "allow-all", ports: [] }, { signal });
     if (input.previous?.providerSessionId === providerSessionId) {
@@ -563,6 +572,7 @@ export const startWorkingPreview = async (input: {
       }),
       { signal },
     );
+    input.assertCurrent?.();
     launchDispatched = true;
     command = await provider.runCommand({
       args: [supervisorPath],
@@ -602,6 +612,7 @@ export const startWorkingPreview = async (input: {
       { kind: "assert", ...attemptIdentity(attempt) },
       signal,
     );
+    input.assertCurrent?.();
     await provider.update({ ports: [gatewayPort] }, { signal });
     const access = createWorkingPreviewAccess({
       ...accessInput,
@@ -626,6 +637,7 @@ export const startWorkingPreview = async (input: {
       { kind: "update", ...attemptIdentity(attempt), patch: { status: "ready" } },
       signal,
     );
+    input.assertCurrent?.();
     input.onAttempt?.(null);
     const runtime: WorkingPreviewRuntime = {
       commandId: command.cmdId,

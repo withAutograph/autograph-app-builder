@@ -103,6 +103,52 @@ describe("private app browser tests", () => {
     },
   );
 
+  it("requires an exact prior-artifact preview before any browser command", async () => {
+    const preview = vi.spyOn(workingPreviewState, "get").mockReturnValue({
+      sandboxId: "owned",
+      providerSessionId: "provider",
+      commandId: "ordinary",
+      receipt: {
+        appId: "spend-review",
+        expiresAt: "2026-11-06T00:00:00Z",
+        verifiedAt: "2026-11-05T00:00:00Z",
+        url: "https://preview.example",
+        status: "ready",
+      },
+    });
+    const run = vi.fn<SandboxSession["run"]>();
+    const verifyCurrent = vi.fn<() => Promise<void>>();
+    try {
+      const result = await runAppBrowserTests({
+        appId: "spend-review",
+        root: "/workspace/repository",
+        sandbox: { run },
+        execution: {
+          appId: "spend-review",
+          root: "/workspace/repository",
+          sessionId: "owner-session",
+          sandboxId: "owned",
+          sessionAuth: {},
+          state: { phase: "planned" },
+        },
+        priorArtifact: {
+          appId: "spend-review",
+          root: "/workspace/repository",
+          revision: "prior-apply",
+          validationDigest: "prior-validation",
+          reusable: true,
+          assertCurrent: vi.fn<() => void>(),
+          verifyCurrent,
+        },
+      });
+      expect(result).toMatchObject({ reason: "private-preview-refresh-required", exitCode: null });
+      expect(run).not.toHaveBeenCalled();
+      expect(verifyCurrent).not.toHaveBeenCalled();
+    } finally {
+      preview.mockRestore();
+    }
+  });
+
   it("forwards the focused selection through the prepared hosted runtime", async () => {
     const runTask = vi
       .fn<PreparedRuntimeExecution["runTask"]>()

@@ -369,11 +369,14 @@ const snapshotLine = /^(?<mode>[0-7]{3,4})\t(?<digest>[0-9a-f]{64})\t(?<path>.+)
 
 export const OVERLAY_SNAPSHOT_SCRIPT = String.raw`
 const { createHash } = require("node:crypto");
-const { lstatSync, readFileSync, readdirSync } = require("node:fs");
+const { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, readdirSync, realpathSync } = require("node:fs");
 const { join } = require("node:path");
 
+const strict = typeof expectedOverlayRoot !== "undefined";
+if (strict && realpathSync(".") !== expectedOverlayRoot) throw Error("Applied overlay root changed.");
 const files = [];
 const visit = (directory, relativeDirectory) => {
+  if (strict && realpathSync(directory) !== join(expectedOverlayRoot, relativeDirectory)) throw Error("Applied overlay directory changed.");
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const relativePath = relativeDirectory
       ? relativeDirectory + "/" + entry.name
@@ -381,7 +384,7 @@ const visit = (directory, relativeDirectory) => {
     // Tooling state can appear anywhere in a prepared repository. None of it
     // belongs in a source review or a published change set.
     if (
-      entry.isDirectory() &&
+      (entry.isDirectory() || (strict && entry.isSymbolicLink())) &&
       [".git", ".scratch", ".next", ".turbo", "node_modules", "dist", "coverage", "storybook-static", "target", "test-results", "playwright-report", "blob-report"].includes(entry.name)
     ) continue;
     if (entry.isFile() && entry.name === "next-env.d.ts") continue;
@@ -390,13 +393,28 @@ const visit = (directory, relativeDirectory) => {
       visit(absolutePath, relativePath);
       continue;
     }
-    if (!entry.isFile()) continue;
-    const stat = lstatSync(absolutePath);
-    const mode = (stat.mode & 0o7777).toString(8);
-    const fileDigest = createHash("sha256")
-      .update(readFileSync(absolutePath))
-      .digest("hex");
-    files.push({ path: relativePath, mode, digest: fileDigest });
+    if (!entry.isFile()) {
+      if (strict) throw Error("Applied overlay contains an unsupported source entry.");
+      continue;
+    }
+    const descriptor = strict
+      ? openSync(absolutePath, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
+      : undefined;
+    try {
+      const stat = strict ? fstatSync(descriptor) : lstatSync(absolutePath);
+      if (strict && (!stat.isFile() || realpathSync(absolutePath) !== join(expectedOverlayRoot, relativePath))) throw Error("Applied overlay source changed.");
+      const mode = (stat.mode & 0o7777).toString(8);
+      const fileDigest = createHash("sha256")
+        .update(readFileSync(descriptor ?? absolutePath))
+        .digest("hex");
+      if (strict) {
+        const current = lstatSync(absolutePath);
+        if (current.dev !== stat.dev || current.ino !== stat.ino || current.mode !== stat.mode) throw Error("Applied overlay source changed.");
+      }
+      files.push({ path: relativePath, mode, digest: fileDigest });
+    } finally {
+      if (descriptor !== undefined) closeSync(descriptor);
+    }
   }
 };
 
@@ -409,11 +427,15 @@ for (const file of files)
 `;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function overlaySnapshotCommand(): string {
-  if (OVERLAY_SNAPSHOT_SCRIPT.includes("'")) {
+export function overlaySnapshotCommand(exactRoot?: "/workspace/repository"): string {
+  const script =
+    exactRoot === undefined
+      ? OVERLAY_SNAPSHOT_SCRIPT
+      : `const expectedOverlayRoot = ${JSON.stringify(exactRoot)};\n${OVERLAY_SNAPSHOT_SCRIPT}`;
+  if (script.includes("'")) {
     throw new Error("The overlay snapshot script is not shell-safe.");
   }
-  return `bun -e '${OVERLAY_SNAPSHOT_SCRIPT}'`;
+  return `bun -e '${script}'`;
 }
 
 const snapshotFailureDetail = (value: string): string =>
@@ -438,11 +460,12 @@ export async function inspectApplyOverlay(
     run: (input: { command: string; workingDirectory: string }) => PromiseLike<ApplyCommandResult>;
   },
   applyRoot: string,
+  exactRoot?: "/workspace/repository",
 ): Promise<OverlaySnapshot> {
   let result: ApplyCommandResult;
   try {
     result = await sandbox.run({
-      command: overlaySnapshotCommand(),
+      command: overlaySnapshotCommand(exactRoot),
       workingDirectory: applyRoot,
     });
   } catch (error) {

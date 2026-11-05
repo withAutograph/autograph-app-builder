@@ -757,3 +757,12 @@ A browser test at that origin requires an active owner-bound working preview.
 Without it, the browser tool returns the preview prerequisite before starting
 Playwright. Ordinary local and prepared hosted browser tasks keep their
 existing execution paths.
+
+After a newer existing-app plan was explicitly denied without execution,
+`start_app_preview` and `run_app_browser_tests` can select
+`artifact: "prior-validated"` for the same private local session. The selection
+requires the exact prior validated repair base, matching approval history and
+a fresh checkout digest. Start this preview with the app’s repository-owned
+`bun run dev` command in its app directory. Browser tests use a private preview started for that
+same apply and validation receipt. Selecting it leaves the newer denied plan
+and both receipts in place and grants no publication authority.
