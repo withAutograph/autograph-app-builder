@@ -1,3 +1,4 @@
+import { workspaceBinInstallCommand } from "./workspace-bin-install";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -44,7 +45,7 @@ const fixture = (
     resolvePath: (path) => path,
     run: vi.fn<BuilderSandboxSession["run"]>(async ({ command }) => {
       await Promise.resolve();
-      if (command === "bun install") {
+      if (command === workspaceBinInstallCommand("/workspace/repository", false)) {
         events.push("install");
         expect(manifest).toBe(options.delete === true ? null : after);
         return options.installFails === true ? failure : { exitCode: 0, stderr: "", stdout: "" };
@@ -199,7 +200,7 @@ describe("existing-app dependency installation", () => {
     ]);
     expect(state.policies).toEqual(["allow-all"]);
     expect(state.sandbox.run).toHaveBeenNthCalledWith(1, {
-      command: "bun install",
+      command: workspaceBinInstallCommand("/workspace/repository", false),
       workingDirectory: "/workspace/repository",
     });
     expect(state.sandbox.run).toHaveBeenNthCalledWith(

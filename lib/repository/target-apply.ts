@@ -1,5 +1,6 @@
 import { applyPrivateComputeCheckPolicy } from "./private-compute-check-policy";
 import { sourceDeclaredToolchainActivationCommand } from "./source-toolchain";
+import { workspaceBinInstallCommand } from "./workspace-bin-install";
 import type { FrameworkVersions } from "./framework-upgrade";
 import { frameworkUpgradeCommand, frameworkSharedPaths } from "./framework-upgrade";
 import { setBuilderSandboxNetworkPolicy } from "../sandbox/builder-sandbox";
@@ -728,7 +729,10 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
     // closure into this sandbox before compilation or preview uses it.
     const installCommand =
       proposal.frameworkUpgrade === undefined ? "bun install" : "bun install --frozen-lockfile";
-    const install = await sandbox.run({ command: installCommand, workingDirectory: applyRoot });
+    const install = await sandbox.run({
+      command: workspaceBinInstallCommand(applyRoot, proposal.frameworkUpgrade !== undefined),
+      workingDirectory: applyRoot,
+    });
     if (install.exitCode !== 0) {
       const output = `${install.stderr}\n${install.stdout}`;
       let reason = "unclassified";

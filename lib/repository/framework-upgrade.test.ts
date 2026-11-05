@@ -1,3 +1,4 @@
+import { workspaceBinInstallCommand } from "./workspace-bin-install";
 import { developmentExecutionEnvironment } from "../development/execution-environment.mjs";
 /* oxlint-disable eslint/require-await -- Async sandbox and registry fixtures implement Promise-returning I/O ports without real network/process work. */
 import {
@@ -367,7 +368,7 @@ describe("framework upgrade planning and apply", () => {
     });
     expect(result.exitCode).toBe(0);
     expect(calls).toContain(frameworkUpgradeCommand(upgrade, "example"));
-    expect(calls).toContain("bun install --frozen-lockfile");
+    expect(calls).toContain(workspaceBinInstallCommand("/workspace/repository", true));
     expect(calls.some((c) => c.includes("create:app"))).toBe(false);
     expect(sandbox.writeTextFile).not.toHaveBeenCalled();
   });
@@ -419,7 +420,7 @@ describe("framework upgrade planning and apply", () => {
       applyRoot: "/workspace/repository",
       proposal: p,
     });
-    expect(calls).toContain("bun install");
+    expect(calls).toContain(workspaceBinInstallCommand("/workspace/repository", false));
     expect(calls.some((c) => c.includes("upgrade-framework"))).toBe(false);
   });
   it("exports approved shared framework files for both ordinary and baseline app review", () => {

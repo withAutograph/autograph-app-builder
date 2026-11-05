@@ -726,3 +726,11 @@ paths under `/workspace/repository`. Package exports determine actual `.js`,
 `.d.ts`, or other file names; a missing guessed file does not mean its directory
 or package is absent. Workspace entry inspection retains selected-baseline
 archive filtering and rejects paths or symlinks escaping the selected root.
+
+The approved checkout install preserves the source mode of existing workspace
+bin targets. Bun can set an executable workspace file to `0777` when linking
+it into `node_modules/.bin`. Before the apply snapshot, Builder restores the
+original executable mode only when the repository-declared target still has
+the same file identity and bytes. An existing bin must already be an owned,
+regular executable in its package. Other changes to those preimages fail the
+install boundary and remain visible for diagnosis.
