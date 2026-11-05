@@ -1,3 +1,4 @@
+import { parseRepositoryReference } from "@/lib/integrations/repository-access";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
@@ -33,7 +34,13 @@ export default defineTool({
     const resolved = await resolvePublicationTargetForTool({
       ctx,
       appId: state.appSpec.appId,
-      destination: input.destination,
+      destination:
+        input.destination === undefined
+          ? undefined
+          : {
+              ...input.destination,
+              repository: parseRepositoryReference(input.destination.repository).fullName,
+            },
       destinationReview: state.githubDestinationReview,
       githubSource: state.githubSource,
       sourceKind: state.sourceReceipt.sourceKind,
@@ -111,7 +118,7 @@ export default defineTool({
   inputSchema: z.strictObject({
     destination: z
       .strictObject({
-        repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u),
+        repository: z.string().min(3).max(221),
         selectedInstallationId: z
           .string()
           .regex(/^[1-9][0-9]*$/u)
