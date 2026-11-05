@@ -120,6 +120,7 @@ const fixture = () => {
     adapterGeneration: 1,
     originAdapterSessionId: "adapter",
     cancellationRevision: 3,
+    resumedCancellationRevision: 3,
     principal,
     createdAtEpochMs: 1,
     lastProgressAtEpochMs: 1,
