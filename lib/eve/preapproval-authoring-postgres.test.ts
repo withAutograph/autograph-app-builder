@@ -311,4 +311,79 @@ describe.skipIf(tools === undefined)("authoring custody against actual PostgreSQ
     expect(retained?.state).toBe("submission_unknown");
     expect(retained?.internalAuthoringContinuation?.deliveredTurnId).toBeUndefined();
   });
+  it("preserves the exact declined-correction binding through real SQL custody without granting Build", async () => {
+    const sessionId = "correction-public";
+    const logicalSessionId = "correction-logical";
+    const start = hostedOperationRecordSchema.parse({
+      version: 1,
+      principal,
+      operationId: "correction-start",
+      clientRequestId: "correction-start",
+      kind: "start",
+      state: "reserved",
+      requestDigest: `sha256:${"a".repeat(64)}`,
+      createdAtEpochMs: 1,
+      updatedAtEpochMs: 1,
+    });
+    await store.reserveOperation(principal, start);
+    await store.settleSucceeded({
+      principal,
+      operationId: start.operationId,
+      requestDigest: start.requestDigest,
+      nowEpochMs: 1,
+      result: { ...result, sessionId },
+      session: {
+        version: 1,
+        principal,
+        sessionId,
+        adapterSessionId: logicalSessionId,
+        status: "waiting",
+        createdAtEpochMs: 1,
+        updatedAtEpochMs: 1,
+      },
+    });
+    const correction = {
+      proposalDigest: "1".repeat(64),
+      denialEvidenceDigest: "2".repeat(64),
+      requestTurnId: "user-correction",
+      requestTurnSequence: 0,
+      requestMessageSequence: 0,
+      requestMessageDigest: "3".repeat(64),
+      inspectionCallId: "actual-inspection",
+    };
+    const correctedScope = { ...scope, authoritySessionId: logicalSessionId, correction };
+    const correctedDecision = {
+      ...decision,
+      adapterSessionId: logicalSessionId,
+      scope: correctedScope,
+      scopeDigest: authoringScopeDigest(correctedScope),
+    };
+    const retain = store.recordPreapprovalAuthoringDecision;
+    const accept = store.claimInternalAuthoringMessage;
+    assert.ok(retain);
+    assert.ok(accept);
+    await retain({ principal, sessionId, decision: correctedDecision });
+    const op = hostedOperationRecordSchema.parse({
+      ...operation("correction-send"),
+      sessionId,
+      internalAuthoringContinuation: { decision: correctedDecision, nonce: "f".repeat(64) },
+    });
+    await store.reserveOperation(principal, op);
+    const before = await store.getPrivateOperation?.(principal, op.operationId);
+    expect(before?.internalAuthoringContinuation?.decision.scope?.correction).toEqual(correction);
+    expect(before?.internalBuildContinuation).toBeUndefined();
+    const delivery = {
+      ...claim(op.operationId),
+      sessionId,
+      logicalSessionId,
+      scopeDigest: correctedDecision.scopeDigest,
+    };
+    expect(await accept({ ...delivery, scopeDigest: decision.scopeDigest })).toBe(false);
+    expect(await accept(delivery)).toBe(true);
+    const persisted = await store.getPrivateOperation?.(principal, op.operationId);
+    expect(persisted?.internalAuthoringContinuation?.decision.scope?.correction).toEqual(
+      correction,
+    );
+    expect(persisted?.internalBuildContinuation).toBeUndefined();
+  });
 });

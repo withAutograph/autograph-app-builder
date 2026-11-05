@@ -1,3 +1,4 @@
+import { currentPlannedAuthoringCorrection } from "./planned-proposal-authoring";
 import type { HookContext } from "eve/hooks";
 import { defineState } from "eve/context";
 import { continuationOwnerStore } from "./approved-build-continuation-runtime";
@@ -33,6 +34,7 @@ export const currentAuthoringDecision = (
 ) =>
   decidePreapprovalAuthoring({
     ...boundary,
+    correction: currentPlannedAuthoringCorrection(ctx),
     adapterSessionId: ctx.session.id,
     turnId: ctx.session.turn.id,
     turnSequence: ctx.session.turn.sequence,
@@ -41,6 +43,19 @@ export const currentAuthoringDecision = (
     sourcePrerequisite:
       currentLocalSourcePrerequisite(appBuilderWorkflowState.get(), ctx.session.id) !== undefined,
   });
+/** An internal correction must produce a successor, never re-request its denied Build. */
+export const internalCorrectionRequiresSuccessor = (ctx: Pick<HookContext, "session">): boolean => {
+  const delivered = authenticatedAuthoringDelivery.get();
+  if (!delivered || delivered.turnId !== ctx.session.turn.id) {
+    return false;
+  }
+  const current = currentAuthoringDecision(ctx, {
+    completed: false,
+    blocked: false,
+    pendingInput: false,
+  });
+  return current.scope?.correction !== undefined && current.scopeDigest === delivered.scopeDigest;
+};
 export const recordPreapprovalAuthoringDecision = async (
   ctx: Pick<HookContext, "session">,
   decision: PreapprovalAuthoringDecision,

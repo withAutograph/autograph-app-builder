@@ -3,6 +3,16 @@ import { z } from "zod";
 import type { AppBuilderWorkflowState } from "./workflow-state";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+export const plannedAuthoringCorrectionSchema = z.strictObject({
+  proposalDigest: digest,
+  denialEvidenceDigest: digest,
+  requestTurnId: z.string().min(1),
+  requestTurnSequence: z.number().int().nonnegative(),
+  requestMessageSequence: z.number().int().nonnegative(),
+  requestMessageDigest: digest,
+  inspectionCallId: z.string().min(1),
+});
+export type PlannedAuthoringCorrection = z.infer<typeof plannedAuthoringCorrectionSchema>;
 /** Accepted product intent only. This is never an apply or provider grant. */
 export const preapprovalAuthoringScopeSchema = z.strictObject({
   authoritySessionId: z.string().min(1),
@@ -15,6 +25,7 @@ export const preapprovalAuthoringScopeSchema = z.strictObject({
   workspaceId: z.string().min(1),
   workspaceDigest: digest,
   planningStateDigest: digest,
+  correction: plannedAuthoringCorrectionSchema.optional(),
 });
 export type PreapprovalAuthoringScope = z.infer<typeof preapprovalAuthoringScopeSchema>;
 export const authoringScopeDigest = (scope: PreapprovalAuthoringScope) =>
@@ -51,7 +62,7 @@ const marker =
   /\n\[autograph-preapproval-authoring:(?<operationId>[a-z0-9_:-]+):(?<nonce>[a-f0-9]{64})\]$/u;
 export const readInternalAuthoringMarker = (message: string) => marker.exec(message)?.groups;
 export const internalAuthoringMessage = (operationId: string, nonce: string) =>
-  "Continue drafting the accepted app's complete implementation and tests through supported planning tools. Inspect the actual current draft when needed. Do not stop at an inspection summary or list of app-owned work. Obtain the normal fresh Build approval before any implementation write. This is drafting continuation only: it grants no Build, publication, provider or release approval and changes no product requirements." +
+  "Continue drafting the accepted app's complete implementation and tests through supported planning tools. Inspect the actual current draft when needed. Do not stop at an inspection summary or list of app-owned work. When correcting a declined current draft, freeze a successor proposal; do not retry the unchanged declined Build. Obtain the normal fresh Build approval before any implementation write. This is drafting continuation only: it grants no Build, publication, provider or release approval and changes no product requirements." +
   `\n[autograph-preapproval-authoring:${operationId}:${nonce}]`;
 
 const authoringPhases = new Set([
@@ -70,6 +81,7 @@ export const decidePreapprovalAuthoring = (input: {
   pendingApproval: boolean;
   blocked: boolean;
   sourcePrerequisite: boolean;
+  correction?: PlannedAuthoringCorrection;
 }): PreapprovalAuthoringDecision => {
   const base = {
     version: 1 as const,
@@ -88,10 +100,12 @@ export const decidePreapprovalAuthoring = (input: {
   if (!("appSpec" in current)) {
     return { ...base, decision: "blocked" };
   }
-  if ("proposal" in current) {
+  const correcting =
+    current.phase === "planned" && input.correction?.proposalDigest === current.proposal.digest;
+  if ("proposal" in current && !correcting) {
     return { ...base, decision: "planned" };
   }
-  if (!authoringPhases.has(current.phase)) {
+  if (!authoringPhases.has(current.phase) && !correcting) {
     return { ...base, decision: "blocked" };
   }
   // Legacy inline AppSpecs and current durable artifact references are already
@@ -108,6 +122,7 @@ export const decidePreapprovalAuthoring = (input: {
   }
   const candidate = preapprovalAuthoringScopeSchema.safeParse({
     authoritySessionId: input.adapterSessionId,
+    ...(correcting ? { correction: input.correction } : {}),
     appId: current.appSpec.appId,
     appSpecDigest: current.appSpec.digest,
     acceptedByCallId: current.appSpec.acceptedByCallId,

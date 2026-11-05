@@ -1,3 +1,4 @@
+import { observePlannedAuthoringInspection } from "../../lib/agent/planned-proposal-authoring";
 import { defineHook } from "eve/hooks";
 import { appBuilderWorkflowState } from "../../lib/agent/workflow-state";
 import { defineState } from "eve/context";
@@ -66,6 +67,7 @@ export default defineHook({
       }));
     },
     async "action.result"(event, ctx) {
+      observePlannedAuthoringInspection(event, ctx);
       const resultFailed =
         event.data.error !== undefined ||
         (event.data.result.kind === "tool-result" && event.data.result.isError === true);

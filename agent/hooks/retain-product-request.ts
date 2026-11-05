@@ -1,3 +1,4 @@
+import { observePlannedAuthoringRequest } from "../../lib/agent/planned-proposal-authoring";
 import { authenticatedInternalAuthoringMessage } from "../../lib/agent/preapproval-authoring-runtime";
 import { authenticatedInternalBuildMessage } from "../../lib/agent/approved-build-continuation-runtime";
 import { defineHook } from "eve/hooks";
@@ -33,6 +34,7 @@ export default defineHook({
       ) {
         return;
       }
+      observePlannedAuthoringRequest(ctx, event.data);
       productRequestState.update((current) =>
         retainProductRequest(
           current,

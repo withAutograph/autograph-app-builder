@@ -1,3 +1,4 @@
+import { internalCorrectionRequiresSuccessor } from "@/lib/agent/preapproval-authoring-runtime";
 import { applyApprovedPrivateComputeProfile } from "@/lib/sandbox/private-compute-activation";
 import { PRIVATE_COMPUTE_PROFILE_ID } from "@/lib/sandbox/private-compute-profile";
 import { completionGuidance } from "@/lib/agent/completion-guidance";
@@ -34,6 +35,10 @@ import { invalidateProductBehaviorEvidence } from "@/lib/agent/product-behavior-
 
 export default defineTool({
   approval(ctx) {
+    if (internalCorrectionRequiresSuccessor(ctx)) {
+      discardPendingPrivateApplyApproval(ctx.callId);
+      return "not-applicable";
+    }
     const current = appBuilderWorkflowState.get();
     if (
       current.phase !== "planned" &&
@@ -61,9 +66,17 @@ export default defineTool({
   },
   description:
     "Build this app in the private preview checkout, then validate it for review. For a retry of the same proposal, send only repaired files: paths omitted from the retry retain their previously approved contents, and supplied paths replace them. A new proposal starts a fresh submission and requires its own approval. Repairing the same approved private build does not ask for the same approval again. When the plan selects privateCompute, send its exact profile ID; its separately visible compute footprint is included in the fresh Build approval before the same named private execution session is resized. This does not publish, deploy, provision application resources, or change the user's repository.",
-  // oxlint-disable-next-line eslint/complexity -- Keep exact current proposal, approval, workspace and implementation scope checks ordered at the effect boundary.
+  // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Keep exact current proposal, internal correction, approval, workspace and implementation scope checks ordered at the effect boundary.
   async execute(input, ctx) {
     const current = appBuilderWorkflowState.get();
+    if (internalCorrectionRequiresSuccessor(ctx)) {
+      return {
+        status: "corrected_proposal_required" as const,
+        guidance:
+          "Correct the declined draft through prepare_app_creation with explicit existingAppChanges and freeze a successor proposal before requesting its fresh Build approval. Do not retry the unchanged declined proposal.",
+        workflowPhase: current.phase,
+      };
+    }
     if (
       current.phase !== "planned" &&
       current.phase !== "apply_failed" &&
