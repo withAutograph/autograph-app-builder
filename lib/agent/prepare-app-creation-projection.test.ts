@@ -9,8 +9,13 @@ import {
   contextStorage,
 } from "../../node_modules/eve/dist/src/context/container.js";
 import { prepareAppCreation } from "./prepare-app-creation";
-import { requestPrivateApplyApproval, recordApprovedPrivateApply } from "./private-apply-authority";
-import { existingAppRepairHistory } from "./existing-app-repair-planning";
+import {
+  requestPrivateApplyApproval,
+  recordApprovedPrivateApply,
+  readPrivateApplyAuthority,
+  retainPrivateApplyDenials,
+} from "./private-apply-authority";
+import { inspectExistingAppRepair, existingAppRepairHistory } from "./existing-app-repair-planning";
 import { privateComputeProjection } from "./private-compute-planning";
 import type { preparePrivateComputePlanning } from "./private-compute-planning";
 import { appBuilderWorkflowState } from "./workflow-state";
@@ -432,5 +437,214 @@ it("does not reuse the same repair intent after its applied file has drifted", a
     }
     expect(next.proposal.digest).not.toBe(planned.proposal.digest);
     expect(existingAppRepairHistory.get()).toHaveLength(2);
+  });
+});
+
+const unappliedIterationFixture = () => {
+  const state = fixture("planned");
+  if (!("proposal" in state)) {
+    throw new Error("fixture");
+  }
+  // SAFETY: The existing typed fixture supplies immutable fields consumed by planning; external execution is unavailable.
+  return {
+    ...state,
+    proposal: {
+      ...state.proposal,
+      plannedByCallId: "compute-only-replan",
+      target: {
+        ...state.proposal.target,
+        operation: "iterate-existing-app",
+        iteration: { changes: [], digest: "iteration" },
+      },
+    },
+  } as unknown as AppBuilderWorkflowState;
+};
+
+describe("unapproved existing-app plan amendment", () => {
+  it("replans after compute-only planning without borrowing history or an old grant", async () => {
+    await run(async () => {
+      const old = appliedRepairFixture();
+      approveRepairFixture(old);
+      const current = unappliedIterationFixture();
+      if (!("proposal" in current)) {
+        throw new Error("fixture");
+      }
+      current.proposal.digest = "new-compute-only-plan";
+      appBuilderWorkflowState.update(() => current);
+      requestPrivateApplyApproval(
+        {
+          appId: "example",
+          appSpecDigest: "spec",
+          proposalDigest: "denied-plan",
+          sessionId: "session",
+          workspaceId: "workspace",
+        },
+        "denied-build",
+      );
+      retainPrivateApplyDenials({
+        expected: readPrivateApplyAuthority(),
+        proofs: [
+          {
+            sessionId: "session",
+            callId: "denied-build",
+            requestId: "framework-request",
+            outcome: "denied-not-run",
+            eventIds: ["request", "resolution", "not-run"],
+            evidenceDigest: sha256("verified-native-negative-proof"),
+          },
+        ],
+      });
+      const authority = readPrivateApplyAuthority();
+      ports.execute.mockResolvedValue({
+        contractDigest: "contract",
+        proposal: {
+          privateCompute: profile(),
+          operation: "iterate-existing-app",
+          iteration: { changes: [] },
+        },
+      });
+      const result = await prepareAppCreation({ existingAppChanges: repairFiles }, context);
+      expect(result.reused).toBe(false);
+      expect(ports.execute).toHaveBeenCalledOnce();
+      expect(readPrivateApplyAuthority()).toEqual(authority);
+      expect(existingAppRepairHistory.get()).toEqual([]);
+      const next = appBuilderWorkflowState.get();
+      if (!("proposal" in next)) {
+        throw new Error("fixture");
+      }
+      expect(next.proposal.digest).not.toBe(current.proposal.digest);
+      expect(
+        requestPrivateApplyApproval(
+          {
+            appId: "example",
+            appSpecDigest: "spec",
+            proposalDigest: next.proposal.digest,
+            sessionId: "session",
+            workspaceId: "workspace",
+          },
+          "fresh-build",
+        ),
+      ).toBe("user-approval");
+      recordApprovedPrivateApply(
+        {
+          appId: "example",
+          appSpecDigest: "spec",
+          proposalDigest: next.proposal.digest,
+          sessionId: "session",
+          workspaceId: "workspace",
+        },
+        "fresh-build",
+      );
+      expect(readPrivateApplyAuthority().terminalDecisions).toEqual(authority.terminalDecisions);
+      expect(readPrivateApplyAuthority().grant?.proposalDigest).toBe(next.proposal.digest);
+    });
+  });
+
+  it("blocks a matching approved/possibly executing proposal before planning", async () => {
+    await run(async () => {
+      const current = unappliedIterationFixture();
+      appBuilderWorkflowState.update(() => current);
+      approveRepairFixture(current);
+      await expect(
+        prepareAppCreation({ existingAppChanges: repairFiles }, context),
+      ).rejects.toThrow("approved private operation");
+      expect(ports.execute).not.toHaveBeenCalled();
+      expect(appBuilderWorkflowState.get()).toEqual(current);
+    });
+  });
+
+  it("blocks any pending approval and foreign workspaces without borrowing a grant", async () => {
+    await run(async () => {
+      const current = unappliedIterationFixture();
+      appBuilderWorkflowState.update(() => current);
+      requestPrivateApplyApproval(
+        {
+          appId: "foreign",
+          appSpecDigest: "foreign",
+          proposalDigest: "foreign",
+          sessionId: "foreign",
+          workspaceId: "foreign",
+        },
+        "pending",
+      );
+      await expect(
+        prepareAppCreation({ existingAppChanges: repairFiles }, context),
+      ).rejects.toThrow("pending");
+      expect(ports.execute).not.toHaveBeenCalled();
+    });
+    await run(async () => {
+      const current = unappliedIterationFixture();
+      appBuilderWorkflowState.update(() => current);
+      await expect(
+        inspectExistingAppRepair({
+          current,
+          changes: repairFiles,
+          // SAFETY: The fake Sandbox has only the consumed ID and read-only observation ports.
+          sandbox: { ...repairSandbox, id: "foreign" } as unknown as Parameters<
+            typeof inspectExistingAppRepair
+          >[0]["sandbox"],
+          ctx: context,
+        }),
+      ).rejects.toThrow("authority or workspace changed");
+    });
+  });
+
+  it("blocks preimage drift and authority changes during preimage reads", async () => {
+    await run(async () => {
+      const current = unappliedIterationFixture();
+      if (!("proposal" in current) || !("iteration" in current.proposal.target)) {
+        throw new Error("fixture");
+      }
+      current.proposal.target.iteration.changes = [
+        {
+          path: "apps/example/.config/mise/config.toml",
+          before: { digest: sha256("before"), mode: "644" },
+          after: { content: "after", digest: sha256("after"), mode: "644" },
+        },
+      ];
+      appBuilderWorkflowState.update(() => current);
+      ports.readBinary.mockResolvedValue(Buffer.from("drift"));
+      await expect(
+        prepareAppCreation({ existingAppChanges: repairFiles }, context),
+      ).rejects.toThrow("preimage changed");
+      ports.readBinary.mockImplementation(async () => {
+        approveRepairFixture(current);
+        await Promise.resolve();
+        return Buffer.from("before");
+      });
+      ports.run.mockResolvedValue({ exitCode: 0, stdout: "644" });
+      await expect(
+        prepareAppCreation({ existingAppChanges: repairFiles }, context),
+      ).rejects.toThrow("authority or workspace changed");
+      expect(ports.execute).not.toHaveBeenCalled();
+    });
+  });
+});
+
+it("does not classify foreign-session repair history as an unapplied plan", async () => {
+  await run(async () => {
+    const current = unappliedIterationFixture();
+    if (!("proposal" in current)) {
+      throw new Error("fixture");
+    }
+    appBuilderWorkflowState.update(() => current);
+    existingAppRepairHistory.update(() => [
+      {
+        requestDigest: "prior-request",
+        proposalDigest: current.proposal.digest,
+        sessionId: "foreign-session",
+        previousWorkflow: current,
+        // SAFETY: appliedRepairFixture constructs exactly the applied phase and its immutable receipt fields.
+        approvedBase: appliedRepairFixture() as Extract<
+          AppBuilderWorkflowState,
+          { phase: "applied" }
+        >,
+      },
+    ]);
+    await expect(prepareAppCreation({ existingAppChanges: repairFiles }, context)).rejects.toThrow(
+      "another session",
+    );
+    expect(ports.execute).not.toHaveBeenCalled();
+    expect(appBuilderWorkflowState.get()).toEqual(current);
   });
 });

@@ -11,6 +11,7 @@ import { safeSourcePath } from "../repository/source-path";
 import {
   assertApprovedPrivateApplySession,
   assertNoPendingPrivateApplyApproval,
+  readPrivateApplyAuthority,
 } from "./private-apply-authority";
 import { assertExactWorkflowState, appBuilderWorkflowState, sha256 } from "./workflow-state";
 import type { AppBuilderWorkflowState } from "./workflow-state";
@@ -125,6 +126,47 @@ const verifyPreparedPreimages = async (current: Proposed, sandbox: SandboxSessio
   }
 };
 
+/** A plan can be amended without treating a prior execution grant as approval. */
+const inspectUnapprovedPlan = async (
+  current: Extract<AppBuilderWorkflowState, { phase: "planned" }>,
+  changes: readonly ExistingAppChange[],
+  sandbox: SandboxSession,
+  ctx: Pick<ToolContext, "callId" | "abortSignal" | "session">,
+  requestDigest: string,
+) => {
+  if (
+    !("operation" in current.proposal.target) ||
+    current.proposal.target.operation !== "iterate-existing-app" ||
+    !("iteration" in current.proposal.target) ||
+    current.proposal.plannedByCallId.length === 0
+  ) {
+    throw new Error("The unapplied plan has no frozen existing-app planning binding.");
+  }
+  const authority = readPrivateApplyAuthority();
+  // The producer binds its unique call ID into the digest. Apply records this
+  // proposal's grant BEFORE any I/O; an unresolved apply must not be amended.
+  if (authority.grant?.proposalDigest === current.proposal.digest) {
+    throw new Error("Reconcile the approved private operation before amending its plan.");
+  }
+  const assertCurrent = () => {
+    ctx.abortSignal?.throwIfAborted();
+    assertExactWorkflowState(appBuilderWorkflowState.get(), current, "amend an unapplied plan");
+    assertNoPendingPrivateApplyApproval();
+    if (
+      !isDeepStrictEqual(readPrivateApplyAuthority(), authority) ||
+      getBuilderSandboxId(sandbox) !== current.workspace.workspaceId
+    ) {
+      throw new Error("The unapplied plan authority or workspace changed.");
+    }
+  };
+  assertCurrent();
+  validateRepairChanges(changes, current);
+  await verifyPreparedPreimages(current, sandbox);
+  assertCurrent();
+  // No approvedBase: the new proposal must obtain its own Build approval.
+  return { requestDigest, approvedBase: undefined, reuse: false, assertCurrent };
+};
+
 export const inspectExistingAppRepair = async (input: {
   current: AppBuilderWorkflowState;
   changes: readonly ExistingAppChange[] | undefined;
@@ -142,17 +184,21 @@ export const inspectExistingAppRepair = async (input: {
   const requestDigest = sha256(
     JSON.stringify(changes.toSorted((a, b) => a.path.localeCompare(b.path))),
   );
-  const previous = existingAppRepairHistory
+  const matchingHistory = existingAppRepairHistory
     .get()
-    .findLast(
-      (entry) =>
-        entry.proposalDigest === current.proposal.digest && entry.sessionId === ctx.session.id,
-    );
+    .filter((entry) => entry.proposalDigest === current.proposal.digest);
+  if (matchingHistory.some((entry) => entry.sessionId !== ctx.session.id)) {
+    throw new Error("The prepared repair history belongs to another session.");
+  }
+  const previous = matchingHistory.at(-1);
   let base: Settled | undefined;
   if (settled(current)) {
     base = current;
   } else if (current.phase === "planned") {
     base = previous?.approvedBase;
+  }
+  if (base === undefined && current.phase === "planned" && previous === undefined) {
+    return await inspectUnapprovedPlan(current, changes, sandbox, ctx, requestDigest);
   }
   if (base === undefined) {
     throw new Error(

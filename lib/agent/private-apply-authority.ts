@@ -64,6 +64,7 @@ export const recordApprovedPrivateApply = (scope: PrivateApplyScope, callId: str
     throw new Error("The build approval no longer matches the current proposal or private target.");
   }
   authority.update(() => ({
+    ...current,
     grant: scope,
     pending: current.pending.filter((entry) => entry.callId !== callId),
   }));

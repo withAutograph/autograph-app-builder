@@ -246,7 +246,7 @@ export const prepareAppCreation = async (
       proposal,
     }),
   });
-  if (repair !== undefined) {
+  if (repair?.approvedBase !== undefined) {
     existingAppRepairHistory.update((history) => [
       ...history,
       {
