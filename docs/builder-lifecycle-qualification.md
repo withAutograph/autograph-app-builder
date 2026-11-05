@@ -36,3 +36,10 @@ working app and the observed action supply the user outcome.
 The qualification runs outside the authoring workflow. Use isolated synthetic
 data and the ordinary approvals for external effects. Preserve uncertain
 operations and reconcile them through supported reads.
+
+Release the protected operator with the observation route before pointing the
+released Builder at it. Verify the operator's source and immutable endpoint and
+confirm both Production Builder domains serve the candidate. The observer reads
+the active Production deployment. While an older deployment remains active,
+a pending result does not establish whether a new build is running or failed.
+Use provider diagnostics to distinguish those outcomes during qualification.

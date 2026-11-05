@@ -11,6 +11,7 @@ import type { AppBuilderWorkflowState } from "./workflow-state";
 import type { PrivateApplyScope } from "./private-apply-authority";
 import type { EveSessionResult } from "../mcp/contracts";
 import type { TargetApplyFailureReceipt } from "../repository/target-apply";
+import type { TargetValidationFailureReceipt } from "../repository/target-validation";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 export const approvedBuildScopeSchema = z.strictObject({
@@ -145,6 +146,12 @@ const canRepairApplyFailure = (failure: TargetApplyFailureReceipt): boolean =>
     failure.commandFailureKind ?? "",
   );
 
+type ValidationCommandFailure = NonNullable<TargetValidationFailureReceipt["commandFailure"]>;
+const isAppValidationFailure = (
+  command: ValidationCommandFailure | undefined,
+): command is ValidationCommandFailure =>
+  command !== undefined && ["check-build", "test"].includes(command.name);
+
 /** Source-owned state, actual retained approval and validator facts determine runnable work; model prose is never an input. */
 export const decideApprovedBuildContinuation = (input: {
   state: AppBuilderWorkflowState;
@@ -243,11 +250,7 @@ export const decideApprovedBuildContinuation = (input: {
   // The validator runs the approved app's check/test command. Diagnostic paths
   // describe stack frames, not repair ownership: unchanged tests and shared
   // runtime frames must not stop the approved app's private repair loop.
-  if (
-    failure.reason !== "command-failed" ||
-    command === undefined ||
-    !["check-build", "test"].includes(command.name)
-  ) {
+  if (failure.reason !== "command-failed" || !isAppValidationFailure(command)) {
     return { ...base, decision: "blocked", scope };
   }
   return approvedBuildDecisionSchema.parse({
