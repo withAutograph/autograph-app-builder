@@ -230,7 +230,10 @@ freeze the chosen origin under their ordinary fresh approval; changing the
 choice cannot reinterpret a previously approved plan. An origin choice that conflicts
 with an explicit frozen runtime profile is reported as a configuration prerequisite
 rather than silently replacing or ignoring that profile. The generated app's public
-domain uses BetterAuth and does not require a Vercel account. Actual domain
+domain uses BetterAuth and does not require a Vercel account. Public delivery
+uses the isolated-development Auth deployment profile and carries the exact
+retained Auth resource classification into both the runtime configuration and
+realm enrollment. Actual domain
 existence/verification and public application behavior remain hosted acceptance
 checks; project creation metadata alone does not prove either.
 
