@@ -1406,6 +1406,57 @@ export const hostedGitHubPublicationJournals = pgTable(
   ],
 );
 
+/** Tenant-scoped compare-and-set journal for approved PR delivery effects. */
+export const hostedGitHubPrEffectJournals = pgTable(
+  "hosted_github_pr_effect_journal",
+  {
+    ...hostedGitHubTenantColumns,
+    intentDigest: text("intent_digest").notNull(),
+    kind: text("kind").notNull(),
+    receiptDigest: text("receipt_digest").notNull(),
+    record: jsonb("record").notNull(),
+    status: text("status").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.intentDigest,
+      ],
+      name: "hosted_github_pr_effect_journal_pk",
+    }),
+    check(
+      "hosted_github_pr_effect_journal_intent_digest_check",
+      sql`${table.intentDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "hosted_github_pr_effect_journal_receipt_digest_check",
+      sql`${table.receiptDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "hosted_github_pr_effect_journal_kind_check",
+      sql`${table.kind} IN ('pr-ready', 'pr-merge')`,
+    ),
+    check(
+      "hosted_github_pr_effect_journal_status_check",
+      sql`${table.status} IN ('pending', 'failed', 'succeeded')`,
+    ),
+    check(
+      "hosted_github_pr_effect_journal_record_check",
+      sql`jsonb_typeof(${table.record}) = 'object'`,
+    ),
+    check(
+      "hosted_github_pr_effect_journal_timestamp_check",
+      sql`${table.createdAt} <= ${table.updatedAt}`,
+    ),
+  ],
+);
+
 /** Immutable, tenant-owned evidence for adopting a verified Builder-authored draft. */
 export const hostedGitHubDraftAdoptions = pgTable(
   "hosted_github_draft_adoption",

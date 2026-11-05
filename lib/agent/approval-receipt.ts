@@ -1,3 +1,7 @@
+import {
+  describeGitHubPrDeliveryApproval,
+  githubPrDeliveryApprovalSchema,
+} from "./github-pr-delivery-approval";
 import { centralHostApprovalDescription } from "./central-integration-host-approval-description";
 import {
   continuityApprovalToolInputSchema,
@@ -575,7 +579,7 @@ const nativeTargetApprovalDescription = (input: unknown): string | undefined => 
   ].join("\n\n");
 };
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function publicApprovalDescription(input: unknown, toolName?: string): string | undefined {
+function otherPublicApprovalDescription(input: unknown, toolName?: string): string | undefined {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     return undefined;
   }
@@ -656,6 +660,17 @@ export function publicApprovalDescription(input: unknown, toolName?: string): st
   }
   return undefined;
 }
+
+export const publicApprovalDescription = (
+  input: unknown,
+  toolName?: string,
+): string | undefined => {
+  if (toolName === "finish-github-pr-delivery") {
+    const parsed = githubPrDeliveryApprovalSchema.safeParse(input);
+    return parsed.success ? describeGitHubPrDeliveryApproval(parsed.data) : undefined;
+  }
+  return otherPublicApprovalDescription(input, toolName);
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function approvalRequestDecision(input: {

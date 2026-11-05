@@ -1,3 +1,4 @@
+import { createPostgresGitHubPrEffectStore } from "../repository/postgres-github-pr-effect-store";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type { BuilderHandoffIntent } from "../handoff/contracts";
 import type * as databaseSchema from "../db/schema";
@@ -124,6 +125,7 @@ const selectedPublicationInstallation = async (
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createHostedGitHubPublicationRuntimeResolver(input: {
   enabled: boolean;
+  prEffectsEnabled?: boolean;
   openDatabase?: () => Database | Promise<Database>;
   providerFactory?: HostedGitHubPublicationProviderFactory;
   dependencies?: Partial<HostedGitHubPublicationRuntimeResolverDependencies>;
@@ -197,6 +199,9 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
         authority,
         enabled: true,
         proposals: stores.proposals,
+        ...(input.prEffectsEnabled === true
+          ? { prEffects: createPostgresGitHubPrEffectStore(pool, authority) }
+          : {}),
         receipts: stores.receipts,
       });
     },

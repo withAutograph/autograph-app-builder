@@ -1,3 +1,16 @@
+import { createGitHubPrEffectIntent } from "../repository/github-pr-effect-journal";
+import type {
+  GitHubPrEffectReceipt,
+  GitHubPrEffectStore,
+} from "../repository/github-pr-effect-journal";
+import {
+  executeApprovedGitHubPrEffect,
+  reconcileApprovedGitHubPrEffect,
+} from "../repository/github-pr-effect-executor";
+import type {
+  GitHubPrDeliveryObservation,
+  GitHubPrDeliveryRef,
+} from "../repository/github-pr-delivery";
 import {
   createDraftPullRequestProposal,
   createRepositoryObservation,
@@ -307,6 +320,20 @@ const assertDraftDestinationRepository = (
 };
 
 export interface GitHubPublicationRuntime {
+  runPublishedPullRequestEffect?: (
+    request: {
+      proposalDigest: string;
+      reviewedTarget: GitHubPrDeliveryRef;
+      approvedByCallId: string;
+      reconcileOnly?: boolean;
+      abortSignal?: AbortSignal;
+    } & ({ kind: "pr-ready" } | { kind: "pr-merge"; readyAt: string }),
+  ) => Promise<GitHubPrEffectReceipt | undefined>;
+  inspectPublishedPullRequest?: (
+    proposalDigest: string,
+  ) => Promise<
+    GitHubPrDeliveryObservation & { reviewedRevision: boolean; reviewedTarget: GitHubPrDeliveryRef }
+  >;
   inspectOwnedPublishedDraftRepairSource?: (input: {
     publishedProposalDigest: string;
     appId: string;
@@ -573,6 +600,7 @@ export function composeGitHubPublicationRuntime(input: {
   proposals?: GitHubPublicationProposalStore;
   receipts?: GitHubPublicationReceiptStore;
   adoptions?: GitHubDraftAdoptionStore;
+  prEffects?: GitHubPrEffectStore;
 }): GitHubPublicationRuntime {
   if (!input.enabled) {
     return disabledRuntime();
@@ -590,6 +618,34 @@ export function composeGitHubPublicationRuntime(input: {
   const { proposals } = input;
   const { receipts } = input;
   const { adoptions } = input;
+  const readPublishedDeliveryTarget = async (proposalDigest: string) => {
+    const proposal = await proposals.read(proposalDigest);
+    const receipt = await receipts.read(proposalDigest);
+    if (
+      proposal?.intendedOutcome !== "publish-reviewed-change-set-as-draft-pull-request" ||
+      receipt?.kind !== "draft-pull-request" ||
+      receipt.status !== "succeeded"
+    ) {
+      throw new Error("A verified Builder publication is required to read pull request status.");
+    }
+    assertExactDraftPullRequestProposal(proposal);
+    assertCanonicalGitHubMutationReceipt(receipt);
+    if (
+      receipt.proposalDigest !== proposal.digest ||
+      receipt.repositoryId !== proposal.repositoryId
+    ) {
+      throw new Error("The publication does not match the reviewed repository.");
+    }
+    const reviewedTarget = {
+      baseBranch: receipt.baseBranch,
+      headSha: receipt.branchSha,
+      name: proposal.name,
+      owner: proposal.owner,
+      pullRequestNumber: receipt.pullRequestNumber,
+      repositoryId: receipt.repositoryId,
+    };
+    return { installationIdentityDigest: proposal.installationIdentityDigest, reviewedTarget };
+  };
   const ownedDraftRecovery = (
     request: DraftInspectionRecoveryInput | undefined,
   ): OwnedDraftInspectionRecovery | undefined =>
@@ -849,6 +905,61 @@ export function composeGitHubPublicationRuntime(input: {
     },
     async inspectAppliedExistingDraftUpdate(request) {
       return await inspectAppliedExistingDraftUpdate({ adapter: draftUpdateAdapter, ...request });
+    },
+    ...(input.prEffects === undefined || adapter.prDelivery === undefined
+      ? {}
+      : {
+          async runPublishedPullRequestEffect(request) {
+            const provider = adapter.prDelivery;
+            const store = input.prEffects;
+            if (provider === undefined || store === undefined) {
+              throw new Error("GitHub pull request delivery is unavailable.");
+            }
+            const { installationIdentityDigest, reviewedTarget } =
+              await readPublishedDeliveryTarget(request.proposalDigest);
+            if (!isDeepStrictEqual(reviewedTarget, request.reviewedTarget)) {
+              throw new Error("The approved pull request revision has changed.");
+            }
+            const installation = await adapter.inspectInstallation(draftPublicationOperation);
+            if (installation.digest !== installationIdentityDigest) {
+              throw new Error("The GitHub installation differs from the approved publication.");
+            }
+            const common = {
+              ...reviewedTarget,
+              installationIdentityDigest,
+              publicationDigest: request.proposalDigest,
+            };
+            const intent = createGitHubPrEffectIntent(
+              request.kind === "pr-ready"
+                ? { ...common, kind: request.kind }
+                : { ...common, kind: request.kind, readyAt: request.readyAt },
+            );
+            const execute =
+              request.reconcileOnly === true
+                ? reconcileApprovedGitHubPrEffect
+                : executeApprovedGitHubPrEffect;
+            return await execute({
+              approvedByCallId: request.approvedByCallId,
+              ...(request.abortSignal === undefined ? {} : { abortSignal: request.abortSignal }),
+              intent,
+              provider,
+              store,
+            });
+          },
+        }),
+    async inspectPublishedPullRequest(proposalDigest) {
+      if (adapter.prDelivery === undefined) {
+        throw new Error("GitHub pull request status is unavailable for this session.");
+      }
+      const { reviewedTarget } = await readPublishedDeliveryTarget(proposalDigest);
+      const observation = await adapter.prDelivery.inspect(reviewedTarget);
+      return {
+        ...observation,
+        reviewedTarget,
+        reviewedRevision:
+          observation.headSha === reviewedTarget.headSha &&
+          observation.baseBranch === reviewedTarget.baseBranch,
+      };
     },
     async inspectOwnedPublishedDraftRepairSource(request) {
       const proposal = await proposals.read(request.publishedProposalDigest);
