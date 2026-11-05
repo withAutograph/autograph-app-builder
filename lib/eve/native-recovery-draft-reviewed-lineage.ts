@@ -12,7 +12,8 @@ import {
   deriveNormalizedChangeSet,
 } from "../repository/reviewed-change-set";
 
-const workflowKey = "autograph-app-builder.workflow.v17";
+export const draftReviewedWorkflowContextKey = "autograph-app-builder.workflow.v17";
+const workflowKey = draftReviewedWorkflowContextKey;
 export const draftReviewedLineageContextKey = "autograph-app-builder.draft-reconciliation.v1";
 const candidateKey = draftReviewedLineageContextKey;
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -93,10 +94,12 @@ const workflowSchema = z.looseObject({
   applyReceipt: applySchema,
   sourceReceipt: z.looseObject({
     digest,
-    sourceKind: z.literal("existing-repository"),
+    sourceKind: z.enum(["existing-repository", "fresh-template"]),
     contractDigest: digest,
   }),
-  githubSource: z.looseObject({ digest, repository: z.looseObject({ repositoryId: text }) }),
+  githubSource: z
+    .looseObject({ digest, repository: z.looseObject({ repositoryId: text }) })
+    .optional(),
   identityReceipt: executionBinding.extend({
     version: z.literal(1),
     identity: targetIdentitySchema,
@@ -224,6 +227,21 @@ const readReviewedWorkflow = (value: unknown): DraftReviewedWorkflow | undefined
   }
 };
 
+/** Compare only the stored JSON value; omitted undefined fields and key order are equivalent. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Native checkpoints project untrusted workflow values for equality only.
+export const samePersistedDraftReview = (left: unknown, right: unknown): boolean => {
+  try {
+    const leftJson = JSON.stringify(left);
+    const rightJson = JSON.stringify(right);
+    if (leftJson === undefined || rightJson === undefined) {
+      return leftJson === rightJson;
+    }
+    return isDeepStrictEqual(JSON.parse(leftJson), JSON.parse(rightJson));
+  } catch {
+    return false;
+  }
+};
+
 const latestReviewedCheckpoint = (
   candidates: z.infer<typeof checkpointSchema>[],
   selectedSlot: number,
@@ -244,7 +262,7 @@ const latestReviewedCheckpoint = (
       conflicting = false;
     } else if (
       slot === latest.origin.slot &&
-      !isDeepStrictEqual(
+      !samePersistedDraftReview(
         entry.serializedContext[workflowKey],
         latest.serializedContext[workflowKey],
       )
@@ -263,10 +281,14 @@ export interface DraftReviewedLineageRecoveryInput {
   serializedContext: Readonly<z.infer<typeof contextSchema>>;
 }
 
-/** Add only authenticated historical app-review lineage; no workflow rollback, new review or effect replay. */
-export const recoverDraftReviewedLineage = (
-  input: DraftReviewedLineageRecoveryInput,
-): DraftReviewedWorkflow | undefined => {
+interface RecoveryContext {
+  payload: z.infer<typeof payloadSchema>;
+  selected: z.infer<typeof originSchema>;
+  context: Readonly<z.infer<typeof contextSchema>>;
+}
+
+/** Verify the selected live checkpoint before looking at either current or prior owner history. */
+const recoveryContext = (input: DraftReviewedLineageRecoveryInput): RecoveryContext | undefined => {
   const payload = payloadSchema.safeParse(input.payload).data;
   const selected = originSchema.safeParse(input.selectedOrigin).data;
   if (payload === undefined || selected === undefined) {
@@ -304,23 +326,82 @@ export const recoverDraftReviewedLineage = (
   ) {
     return undefined;
   }
-  const latest = latestReviewedCheckpoint(payload.candidates, selected.slot);
-  if (latest === undefined) {
-    return undefined;
-  }
-  const reviewed = readReviewedWorkflow(latest.serializedContext[workflowKey]);
+  return { payload, selected, context };
+};
+
+const hasCurrentReview = (context: RecoveryContext): boolean =>
+  context.payload.candidates.some(
+    (entry) =>
+      entry.origin.slot <= context.selected.slot &&
+      z.object({ phase: z.literal("reviewed") }).safeParse(entry.serializedContext[workflowKey])
+        .success,
+  );
+
+// Historical values are authenticated native checkpoints, parsed and re-derived before use.
+const checkedLineage = (
+  context: RecoveryContext,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The historical checkpoint is parsed and its full review receipt re-derived below.
+  value: unknown,
+): DraftReviewedWorkflow | undefined => {
+  const reviewed = readReviewedWorkflow(value);
   if (reviewed === undefined) {
     return undefined;
   }
-  // SAFETY: These values are canonical checkpoint state, structurally checked above; the shared lineage resolver verifies every source/app/apply/repository binding before returning authority.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The shared resolver consumes the validated subset and returns only the independently verified historical full review.
-  const originalCandidate = context[candidateKey] as DraftReconciliationCandidate;
-  const proposed = { ...originalCandidate, reviewedLineage: reviewed };
-  // SAFETY: Only the resolver's closed identity fields are used, all parsed by workflowSchema above.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- No assertion independently grants lineage recovery.
-  const workflow = context[workflowKey] as AppBuilderWorkflowState;
-  if (resolveDraftReviewedWorkflow(workflow, proposed) !== reviewed) {
+  // SAFETY: Canonical checkpoint state was structurally checked above; the resolver verifies every source/app/apply/publication binding.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Only the checked resolver can authorize lineage.
+  const candidate = context.context[candidateKey] as DraftReconciliationCandidate;
+  // SAFETY: The resolver's identity fields were parsed by workflowSchema.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- This assertion does not itself grant authority.
+  const workflow = context.context[workflowKey] as AppBuilderWorkflowState;
+  if (
+    resolveDraftReviewedWorkflow(workflow, { ...candidate, reviewedLineage: reviewed }) !== reviewed
+  ) {
     return undefined;
   }
   return structuredClone(reviewed);
+};
+
+/** Add only authenticated historical app-review lineage; never roll back workflow or candidate. */
+export const recoverDraftReviewedLineage = (
+  input: DraftReviewedLineageRecoveryInput,
+): DraftReviewedWorkflow | undefined => {
+  const context = recoveryContext(input);
+  if (context === undefined) {
+    return undefined;
+  }
+  if (
+    context.payload.candidates.some(
+      (entry) =>
+        entry.origin.slot === context.selected.slot &&
+        z.object({ phase: z.literal("reviewed") }).safeParse(entry.serializedContext[workflowKey])
+          .success,
+    )
+  ) {
+    return undefined;
+  }
+  const latest = latestReviewedCheckpoint(context.payload.candidates, context.selected.slot);
+  return latest === undefined
+    ? undefined
+    : checkedLineage(context, latest.serializedContext[workflowKey]);
+};
+
+/** An incompatible or conflicting current-owner review must not fall back to older history. */
+export const maySearchPreviousDraftReviews = (
+  input: DraftReviewedLineageRecoveryInput,
+): boolean => {
+  const context = recoveryContext(input);
+  return context !== undefined && !hasCurrentReview(context);
+};
+
+/** Only the first (newest) verified prior-owner review may restore the original lineage. */
+export const recoverPreviousDraftReview = (
+  input: DraftReviewedLineageRecoveryInput,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Native SDK projects this checkpoint value for validation.
+  value: unknown,
+): DraftReviewedWorkflow | undefined => {
+  const context = recoveryContext(input);
+  if (context === undefined || hasCurrentReview(context)) {
+    return undefined;
+  }
+  return checkedLineage(context, value);
 };
