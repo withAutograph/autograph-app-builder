@@ -67,6 +67,8 @@ export async function HandoffContent({ params }: { params: Promise<{ id: string 
                   <a href={github.url} target="_blank" rel="noreferrer">
                     {github.fullName}
                   </a>
+                ) : github?.status === "skipped" && github.code === "not_selected" ? (
+                  <span>GitHub storage was turned off.</span>
                 ) : (
                   <span>
                     {intent.repository.resolvedFullName ?? intent.repository.requestedName} (

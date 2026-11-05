@@ -43,6 +43,24 @@ describe("authenticated handoff page", () => {
     expect(html).not.toContain("private-owner");
     expect(html).not.toContain("database error");
   });
+  it("shows that GitHub storage was turned off for a private run", async () => {
+    server.load.mockResolvedValue({
+      handoffId: id,
+      intent: {
+        appName: "Unit Converter",
+        brief: "Convert temperatures",
+        connections: [],
+        provisioning: {
+          github: { code: "not_selected", status: "skipped" },
+        },
+        repository: { private: true, requestedName: "unit-converter" },
+      },
+    });
+    const html = renderToStaticMarkup(await HandoffContent({ params }));
+    expect(html).toContain("GitHub storage was turned off.");
+    expect(html).not.toContain("unit-converter (Private)");
+    expect(html).toContain("Continue controls");
+  });
   it.each(["credential_unavailable", "provider_unavailable"])(
     "renders saved context and only offers reconnect for credential failures: %s",
     async (code) => {
