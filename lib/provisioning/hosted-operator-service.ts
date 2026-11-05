@@ -2150,10 +2150,11 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           signupReady && signupPolicy !== undefined
             ? new URL(signupPolicy.appPath, signupPolicy.origin).toString()
             : undefined;
+        const coordinatedSignup = signupPolicy?.enrollment === "protected-v1" ? "appSignup=1&" : "";
         const signupUrl =
           appUrl === undefined || signupPolicy === undefined
             ? undefined
-            : `${signupPolicy.origin}/auth/sign-up?redirectTo=${encodeURIComponent(appUrl)}`;
+            : `${signupPolicy.origin}/auth/sign-up?${coordinatedSignup}redirectTo=${encodeURIComponent(appUrl)}`;
         if (status === "prepared" && signupReady) {
           status = "waiting_for_signup";
         }

@@ -171,6 +171,40 @@ New app database resources, actor grants, trusted Preview callers and delivery
 still require their corresponding concrete approved effects. Project creation
 alone proves no authenticated behavior or deployment.
 
+### Ordinary signup for a protected app
+
+An approved signup policy selects one app, Auth resource, origin and
+organization, its eligibility, and optional business roles. An empty role list
+is valid. The app installation still includes the approved organization. The
+ordinary signup link keeps the user on the Auth continuation after creating
+an account or signing in. It opens the app only after access is observed.
+Pending access can be retried without recreating the account or the request.
+
+New `protected-v1` policies do not issue Auth-only role assignments in the
+signup hook. The Auth host derives the actor from its current persisted
+session and sends the scoped request to the operator using native workload
+identity. The operator verifies that workload against the exact enrolled
+realm, checks the settled policy approval, and reuses the private resource
+bindings, checked release and pinned installer. The installer independently
+reads the current policy, eligibility and session in the owned Auth database.
+The browser cannot choose an organization, role or fence generation.
+
+The enrollment journal has one record for the actor, app and organization
+within the owned resource pair. It uses the existing positive fence sequence
+and the same physical database locks as protected grants and cleanup. The
+installer verifies app database access before opening browser authority in
+Auth. Retry observes both databases under the original generation; a lost
+response does not allocate a new grant. An inactive grant is never reopened
+by automatic signup. Apps without business roles use an explicit human app
+access record on each side and do not gain a synthetic business role.
+
+Roll out the paired Auth, installer and generated app changes with the
+[qualified worker catalog](operator-worker-catalog.md). Existing policies keep
+their recorded behavior and approved plans. A new source build, successful CI
+or a ready deployment alone does not establish that signup works. In an
+approved isolated app, create a new eligible account, complete one protected
+operation, repeat enrollment, and verify another organization remains denied.
+
 The dedicated project persists until explicit authorized deletion. A failed
 build or session completion does not delete it; database cleanup is separate.
 Existing manually configured apps remain supported. An explicitly reviewed

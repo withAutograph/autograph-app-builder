@@ -1171,6 +1171,7 @@ const unusedCompositionControlPlane = (): Parameters<
     centralIntegrationDeploymentReceiptRequest: unexpectedPort,
     exportRequest: unexpectedPort,
     continuityRequest: unexpectedPort,
+    continueProtectedSignup: unexpectedPort,
     readNormalActorRuntimeBindings: unexpectedPort,
     ensureNormalActorCapture: unexpectedPort,
     normalActorAuthIdentityInput: unexpectedPort,

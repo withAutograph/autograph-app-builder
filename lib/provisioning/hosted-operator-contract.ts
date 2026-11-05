@@ -250,7 +250,8 @@ const hostedOperatorAuthSignupPolicyFieldsSchema = z.strictObject({
   eligibility: z.enum(["public", "approved-email"]),
   allowedEmails: z.array(z.email()).optional(),
   membershipRole: z.literal("member"),
-  appRoles: z.array(sqlName).min(1),
+  appRoles: z.array(sqlName),
+  enrollment: z.literal("protected-v1").optional(),
 });
 export const hostedOperatorAuthSignupPolicySchema =
   hostedOperatorAuthSignupPolicyFieldsSchema.superRefine((policy, ctx) => {
@@ -275,6 +276,7 @@ export const hostedOperatorAuthSignupPolicyInputSchema =
     authResourceId: true,
     appId: true,
     origin: true,
+    enrollment: true,
   });
 export type HostedOperatorAuthSignupPolicyInput = z.infer<
   typeof hostedOperatorAuthSignupPolicyInputSchema

@@ -62,7 +62,7 @@ export const hostedOperatorVercelProjectLockKeys = (plan: HostedOperatorPlan, sc
     )
     .toSorted();
 };
-const lockKey = (plan: HostedOperatorPlan, scopeId: string) => {
+export const hostedOperatorDatabaseLockKeys = (plan: HostedOperatorPlan) => {
   const databases = [plan.authDatabase, plan.appDatabase];
   const keys = [...new Set(databases.map((resource) => resource.database))].map((database) =>
     JSON.stringify([
@@ -85,9 +85,15 @@ const lockKey = (plan: HostedOperatorPlan, scopeId: string) => {
       );
     }
   }
-  keys.push(...hostedOperatorVercelProjectLockKeys(plan, scopeId));
   return [...new Set(keys)].toSorted();
 };
+const lockKey = (plan: HostedOperatorPlan, scopeId: string) =>
+  [
+    ...new Set([
+      ...hostedOperatorDatabaseLockKeys(plan),
+      ...hostedOperatorVercelProjectLockKeys(plan, scopeId),
+    ]),
+  ].toSorted();
 
 const readLeaseSnapshot = async (
   store: HostedRuntimeJournalStore,
