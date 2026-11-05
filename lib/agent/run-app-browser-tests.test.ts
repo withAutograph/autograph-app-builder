@@ -8,6 +8,9 @@ import { localRuntimeEnvironmentPath } from "../repository/runtime-environment";
 
 import { appBrowserTestCommand, runAppBrowserTests } from "../../agent/tools/run-app-browser-tests";
 
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy on the actual prepared runtime resolver for this local browser boundary.
+import * as preparedRuntime from "./prepared-runtime-execution";
+import { workingPreviewState } from "./working-preview-state";
 import type { PreparedRuntimeExecution } from "./prepared-runtime-execution";
 import { runAppBrowserTests as runResolvedAppBrowserTests } from "./app-browser-test-runner";
 
@@ -41,6 +44,61 @@ describe("private app browser tests", () => {
         expect(result).toHaveProperty("reason", "private-preview-refresh-required");
       } else {
         expect(result).not.toHaveProperty("reason");
+      }
+    },
+  );
+
+  it.each([
+    {
+      origin: "https://stale-private.vercel.run",
+      readExit: 0,
+      status: "failed",
+      runBrowser: false,
+    },
+    { origin: "http://localhost:3000", readExit: 0, status: "passed", runBrowser: true },
+    { origin: null, readExit: 0, status: "passed", runBrowser: true },
+    { origin: null, readExit: 1, status: "failed", runBrowser: false },
+  ])(
+    "uses the owned local Auth origin before unbound browser dispatch ($origin, $readExit)",
+    async ({ origin, readExit, status, runBrowser }) => {
+      const runtime = vi
+        .spyOn(preparedRuntime, "resolvePreparedRuntimeExecution")
+        .mockResolvedValue(null);
+      const preview = vi.spyOn(workingPreviewState, "get").mockReturnValue(null);
+      try {
+        const run = vi
+          .fn<SandboxSession["run"]>()
+          .mockResolvedValueOnce({ exitCode: readExit, stdout: JSON.stringify(origin), stderr: "" })
+          .mockResolvedValueOnce({ exitCode: 0, stdout: "2 passed", stderr: "" });
+        const appId = "spend-review";
+        const root = "/workspace/repository";
+        const result = await runAppBrowserTests({
+          appId,
+          root,
+          sandbox: { run },
+          execution: {
+            appId,
+            root,
+            sessionId: "owner-session",
+            sandboxId: "owned",
+            sessionAuth: {},
+            state: { phase: "validated" },
+          },
+        });
+        expect(result).toMatchObject({ status });
+        if (runBrowser) {
+          expect(run.mock.calls[1]?.[0].command).toBe(appBrowserTestCommand(appId));
+        } else {
+          expect(result).toMatchObject({
+            reason: "private-preview-refresh-required",
+            exitCode: null,
+            stdout: "",
+          });
+          expect(run).toHaveBeenCalledTimes(1);
+        }
+      } finally {
+        runtime.mockRestore();
+        preview.mockRestore();
       }
     },
   );

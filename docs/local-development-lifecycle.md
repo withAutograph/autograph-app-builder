@@ -751,3 +751,9 @@ for that exact saved workspace and source. Builder uses the matching native
 result in the owned history to order those receipts and verifies the current
 workspace manifest before replacing source. Later completed transports still require their exact manifests. A missing or failed
 reconciliation result cannot supersede a transport.
+
+Local database and Auth preparation can retain a private remote Auth origin.
+A browser test at that origin requires an active owner-bound working preview.
+Without it, the browser tool returns the preview prerequisite before starting
+Playwright. Ordinary local and prepared hosted browser tasks keep their
+existing execution paths.

@@ -28,15 +28,25 @@ describe("owned previous local preview Auth origin", () => {
       APP_DATABASE_URL: "postgres://private",
     };
     writeFileSync(file, JSON.stringify(contents), { mode: 0o600 });
-    const run = (target = file) =>
-      spawnSync(process.execPath, ["-e", localPreviewAuthOriginReadProgram(target)], {
-        encoding: "utf-8",
-      });
+    const run = (target = file, optionalBrowserOrigin = false) =>
+      spawnSync(
+        process.execPath,
+        ["-e", localPreviewAuthOriginReadProgram(target, optionalBrowserOrigin)],
+        {
+          encoding: "utf-8",
+        },
+      );
     try {
       const read = run();
       expect(read.status).toBe(0);
       expect(JSON.parse(read.stdout)).toBe(contents.BETTER_AUTH_URL);
       expect(read.stdout).not.toContain("private");
+      expect(JSON.parse(run(path.join(directory, "absent.json"), true).stdout)).toBeNull();
+      expect(run(file, true).status).not.toBe(0);
+      const matching = { ...contents, APP_TEST_BASE_URL: contents.BETTER_AUTH_URL };
+      writeFileSync(file, JSON.stringify(matching));
+      expect(JSON.parse(run(file, true).stdout)).toBe(contents.BETTER_AUTH_URL);
+      writeFileSync(file, JSON.stringify(contents));
       chmodSync(file, 0o644);
       expect(run().status).not.toBe(0);
       chmodSync(file, 0o600);

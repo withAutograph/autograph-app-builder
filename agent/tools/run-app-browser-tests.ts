@@ -1,3 +1,4 @@
+import { readOptionalLocalBrowserAuthOrigin } from "@/lib/repository/local-preview-auth-origin";
 import { workingPreviewState } from "@/lib/agent/working-preview-state";
 import { hasCurrentProductBehaviorPreview } from "@/lib/agent/product-behavior-state";
 import {
@@ -70,10 +71,7 @@ export const runAppBrowserTests = async (input: {
     return await run();
   }
   const preview = workingPreviewState.get();
-  if (!preview) {
-    return await run();
-  }
-  const identity = (value: typeof preview) =>
+  const identity = (value: NonNullable<typeof preview>) =>
     JSON.stringify([
       value.commandId,
       value.providerSessionId,
@@ -83,8 +81,21 @@ export const runAppBrowserTests = async (input: {
       value.receipt.expiresAt,
       value.requestDigest,
     ]);
-  const frozenIdentity = identity(preview);
   try {
+    if (!preview) {
+      let origin;
+      try {
+        origin = await readOptionalLocalBrowserAuthOrigin(input);
+      } catch {
+        input.signal?.throwIfAborted();
+        throw new PrivatePreviewBrowserPrerequisiteError();
+      }
+      if (origin !== null && origin !== "http://localhost:3000") {
+        throw new PrivatePreviewBrowserPrerequisiteError();
+      }
+      return await run();
+    }
+    const frozenIdentity = identity(preview);
     const assertCurrent = () => {
       const current = workingPreviewState.get();
       if (
