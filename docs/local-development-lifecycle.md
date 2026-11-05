@@ -706,3 +706,23 @@ state and still has no proposal, Builder reports
 `preapproval_authoring_no_progress`. It leaves the app unfinished and waiting for
 an ordinary user continuation instead of repeatedly queuing inspection-only turns.
 Actual dependency or identity progress is distinct from this no-progress boundary.
+
+### Repository inspection paths
+
+`inspect_repository.path` retains explicit local repository-root inspection. The
+virtual `/workspace/repository` root selects the current source overview; a
+singular path below that virtual root inspects the selected Sandbox entry,
+including immediate directory entries. Omitted mode never resolves that virtual
+descendant on the Builder host. Explicit `mode: repository` retains allowed local
+host-root inspection even when a physical host path resembles the virtual
+namespace; explicit `mode: workspace` inspects the selected Sandbox entry (including
+the root directory) and never falls back to the host. Repository mode cannot be
+combined with workspace file paths or a directory continuation. Directory results return a `directoryOffset` continuation;
+repeat the same path with that offset until continuation is absent. Entries are
+paged to the native result envelope without a total directory-size limit.
+
+Read source bytes with `paths`, using repository-relative file names or absolute
+paths under `/workspace/repository`. Package exports determine actual `.js`,
+`.d.ts`, or other file names; a missing guessed file does not mean its directory
+or package is absent. Workspace entry inspection retains selected-baseline
+archive filtering and rejects paths or symlinks escaping the selected root.
