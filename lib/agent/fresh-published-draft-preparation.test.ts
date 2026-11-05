@@ -1,5 +1,10 @@
 /* oxlint-disable anti-slop/no-module-mocking, anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type, anti-slop/no-unknown-returns, anti-slop/require-safety-comment-for-type-assertion, anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- Only external provider and Eve-state boundaries are controlled; the real preparation and source resolver run. */
 /* oxlint-disable eslint/require-await -- External provider boundaries use the production async signatures. */
+import { createHash } from "node:crypto";
+import type {
+  RepositoryAccessReceipt,
+  repositoryAccessReceiptSchema,
+} from "./repository-access-state";
 import { isDeepStrictEqual } from "node:util";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -25,11 +30,12 @@ interface Owned {
   proposal: OwnedPublicationReconciliationScope["proposal"];
   publication: OwnedPublicationReconciliationScope["publication"];
 }
-interface Access {
-  sessionId: string;
-  scope: { installationId: string };
-  repository: PublishedDraftRepairSource["source"]["repository"];
-}
+const signAccess = (
+  unsigned: Omit<RepositoryAccessReceipt, "digest">,
+): RepositoryAccessReceipt => ({
+  ...unsigned,
+  digest: createHash("sha256").update(JSON.stringify(unsigned)).digest("hex"),
+});
 interface PrepareRequest {
   previousCandidate: Candidate;
   replayPreviousCandidate?: boolean;
@@ -39,7 +45,7 @@ interface PrepareRequest {
 const mocks = vi.hoisted(() => ({
   workflow: undefined as unknown as Workflow,
   candidate: undefined as unknown as Candidate,
-  access: undefined as unknown as Access,
+  access: undefined as unknown as RepositoryAccessReceipt,
   owned: undefined as unknown as Owned,
   onOwnedRead: undefined as undefined | (() => void),
   onSourceRead: undefined as undefined | (() => void),
@@ -74,9 +80,11 @@ vi.mock("./draft-reconciliation-state", () => ({
     mocks.candidate = transition();
   },
 }));
-vi.mock("./repository-access-state", () => ({
+vi.mock("./repository-access-state", async (importOriginal) => ({
+  ...(await importOriginal<{
+    repositoryAccessReceiptSchema: typeof repositoryAccessReceiptSchema;
+  }>()),
   repositoryAccessReceiptState: { get: () => mocks.access },
-  repositoryAccessReceiptSchema: { parse: (value: unknown) => value },
 }));
 vi.mock("./deployment-github-publication-runtime", () => ({
   githubPublicationRuntimeForSession: async () => ({
@@ -126,11 +134,20 @@ describe("owned fresh-template draft preparation after review recovery", () => {
     };
     const origin = mocks.candidate.publishedOrigin;
     const scope = mocks.candidate.publicationScope;
-    mocks.access = {
+    const { defaultBranch, headSha, headTree, name, owner, repositoryId } =
+      origin.source.repository;
+    mocks.access = signAccess({
+      confirmedByCallId: "record-access",
+      providerAccessDigest: origin.source.digest,
+      repository: { defaultBranch, headSha, headTree, name, owner, repositoryId },
+      scope: {
+        accountLogin: owner,
+        accountType: "Organization",
+        installationId: origin.installationId,
+      },
       sessionId: "logical-original",
-      scope: { installationId: origin.installationId },
-      repository: origin.source.repository,
-    };
+      version: 1,
+    });
     mocks.owned = {
       draft: origin.draft,
       source: origin.source,
@@ -229,7 +246,9 @@ describe("owned fresh-template draft preparation after review recovery", () => {
   });
 
   it("refuses a foreign session before reading the owned publication", async () => {
-    mocks.access = { ...mocks.access, sessionId: "foreign" };
+    const { digest, ...unsigned } = mocks.access;
+    mocks.access = signAccess({ ...unsigned, sessionId: "foreign" });
+    expect(mocks.access.digest).not.toBe(digest);
     await expect(
       preparePublishedDraftReconciliation({ state: fixture.reviewed, ctx, pullRequestNumber: 42 }),
     ).rejects.toThrow("another session");
