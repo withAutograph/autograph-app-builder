@@ -50,9 +50,7 @@ export default defineEval({
     await session.send("Run target identity and planning.");
     t.succeeded();
 
-    await session.send("Apply the current creation proposal.");
-    session.requireInputRequest({ toolName: "apply_app_creation" });
-    const turn1 = await session.respondAll("approve");
+    const turn1 = await session.send("Apply the current creation proposal.");
     t.succeeded();
     t.check(turn1.message, includes("private preview"));
     t.check(turn1.message, staysProductFacing);
