@@ -174,7 +174,6 @@ export default defineTool({
       priorArtifact ??
       (await runnableSelectedApp({
         appId: input.appId,
-        sandbox,
         state,
         resolveRoot: async ({ appId, root }) =>
           await resolveAcceptanceRuntimeRoot({ appId, fallbackRoot: root, sandbox, state, ctx }),

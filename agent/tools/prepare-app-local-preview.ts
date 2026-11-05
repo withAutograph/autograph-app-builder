@@ -192,7 +192,6 @@ export default defineTool({
     const sandbox = await ctx.getSandbox();
     const selected = await runnableSelectedApp({
       appId: input.appId,
-      sandbox,
       state,
       resolveRoot: async ({ appId, root }) =>
         await resolveAcceptanceRuntimeRoot({ appId, fallbackRoot: root, sandbox, state, ctx }),

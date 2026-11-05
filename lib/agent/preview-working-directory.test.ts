@@ -145,7 +145,7 @@ describe("preview command working directory", () => {
       expect.objectContaining({ sandboxId: "sandbox_replacement", sessionId: "session" }),
     );
   });
-  it("opens an existing selected app before an implementation proposal", async () => {
+  it("opens an existing selected app without an app-spec marker or implementation proposal", async () => {
     mocks.workflowState = {
       githubSource: { digest: "selected-source" },
       phase: "prepared",
@@ -153,7 +153,7 @@ describe("preview command working directory", () => {
       workspace: { workspacePath: "/workspace/repository" },
     };
     const readTextFile = vi.fn(({ path }: { path: string }) =>
-      Promise.resolve(path.endsWith("package.json") ? "{}" : "# App contract"),
+      Promise.resolve(path.endsWith("package.json") ? "{}" : null),
     );
     try {
       await startAppPreview.execute(
@@ -180,9 +180,6 @@ describe("preview command working directory", () => {
           toolName: "start_app_preview",
         },
       );
-      expect(readTextFile).toHaveBeenCalledWith({
-        path: "/workspace/repository/apps/existing-app/.config/app-spec.md",
-      });
       expect(mocks.start).toHaveBeenCalledWith(
         expect.objectContaining({
           appId: "existing-app",

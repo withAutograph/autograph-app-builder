@@ -152,8 +152,7 @@ export default defineTool({
       prior === undefined
         ? undefined
         : { applyDigest: prior.revision, validationDigest: prior.validationDigest };
-    const selected =
-      prior ?? (await runnableSelectedApp({ appId: input.appId, sandbox, state: current }));
+    const selected = prior ?? (await runnableSelectedApp({ appId: input.appId, state: current }));
     const cwd = resolvePreviewWorkingDirectory(selected.root, input.workingDirectory);
     const launch = resolvePreviewPackageManager(
       input.command,

@@ -131,12 +131,21 @@ export default defineTool({
         const state = appBuilderWorkflowState.get();
         const selected = await runnableSelectedApp({
           appId: input.appId,
-          sandbox,
           state,
           resolveRoot: async ({ appId, root }) =>
             await resolveAcceptanceRuntimeRoot({ appId, fallbackRoot: root, sandbox, state, ctx }),
         });
         const root = selected.root;
+        if (!("applyReceipt" in state)) {
+          const appContract = await sandbox.readTextFile({
+            path: `${root}/apps/${selected.appId}/.config/app-spec.md`,
+          });
+          if (appContract === null || appContract === undefined) {
+            throw new Error(
+              `The selected checkout has no apps/${selected.appId}/.config/app-spec.md. Choose an app that exists in this repository or repair its app contract before running preview tasks.`,
+            );
+          }
+        }
         continuityStage = "tool_sandbox_identity";
         const runtime = {
           sandboxId: getBuilderSandboxId(sandbox),

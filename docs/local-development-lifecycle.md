@@ -556,6 +556,9 @@ compilation and validation run against the selected applied workspace even if
 separate host source has moved.
 When planning observes unchanged source, it retains that workspace without
 reading native transport history.
+Private preview and browser tasks can run an existing app in the selected
+GitHub checkout before a Build or an app-spec marker exists. The repository's
+launch or test command reports actual runtime prerequisites.
 
 A later no-op preparation may return the same frozen receipt under a new Native
 call ID. Compatibility still requires the original completed reconciliation call
