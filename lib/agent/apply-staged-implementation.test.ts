@@ -1,6 +1,7 @@
 import { completionGuidance } from "./completion-guidance";
 import type * as ImplementationModule from "./apply-implementation-files";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import applyAppCreation from "../../agent/tools/apply_app_creation";
 
 const mocks = vi.hoisted(() => ({
@@ -72,6 +73,16 @@ describe("apply tool staged repair integration", () => {
     vi.clearAllMocks();
     mocks.execute.mockResolvedValue({ ok: true, receipt: { changes: [] } });
   });
+  it("accepts optional Build summaries beyond the card's presentation budget", () => {
+    const schema = applyAppCreation.inputSchema;
+    if (!(schema instanceof z.ZodType)) {
+      throw new Error("Expected the authored Apply input schema.");
+    }
+    const productSummary = "Summarize the approved app scope. ".repeat(30).trim();
+    expect(schema.parse({ productSummary })).toMatchObject({ productSummary });
+    expect(schema.parse({ productSummary: "   " })).toMatchObject({ productSummary: "" });
+  });
+
   it("stages full UI through command failure and supplies it with the partial repair", async () => {
     mocks.current = state("repair");
     const getSandbox = vi.fn().mockResolvedValue({});

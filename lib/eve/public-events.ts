@@ -1200,6 +1200,7 @@ const inputRequest = (request: {
       : request.prompt;
   let description: string | undefined;
   if (request.kind === "tool-approval" && toolName === "apply_app_creation") {
+    // Use the standard card copy when the optional summary does not fit the card.
     description =
       z
         .object({ productSummary: z.string().trim().min(1).max(600) })

@@ -265,7 +265,7 @@ export default defineTool({
   },
   inputSchema: z.object({
     implementationFiles: implementationFilesSchema.default([]),
-    productSummary: z.string().trim().min(1).max(600).optional(),
+    productSummary: z.string().trim().optional(),
     privateCompute: z.literal(PRIVATE_COMPUTE_PROFILE_ID).optional(),
   }),
 });
