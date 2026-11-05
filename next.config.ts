@@ -5,6 +5,7 @@ import { withEmulate } from "@emulators/adapter-next";
 import createMDX from "@next/mdx";
 import { withEve } from "eve/next";
 import type { NextConfig } from "next";
+import { hostedEveBuildCommand } from "./lib/development/hosted-agent-build-command";
 import { readProductionNavigationRuntimeConfig } from "./lib/testing/production-navigation";
 
 const productionNavigationArtifact = Boolean(readProductionNavigationRuntimeConfig(process.env));
@@ -77,4 +78,4 @@ export default productionNavigationArtifact ||
 process.env.APP_BUILDER_LOCAL_AUTH_EMULATION === "1" ||
 externalDevelopmentEve
   ? tracedConfig
-  : withEve(tracedConfig);
+  : withEve(tracedConfig, { eveBuildCommand: hostedEveBuildCommand });

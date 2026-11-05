@@ -30,7 +30,8 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts",
-    ".config/mise/scripts/repository/build-operator-worker-catalog.mts"
+    ".config/mise/scripts/repository/build-operator-worker-catalog.mts",
+    ".config/mise/scripts/repository/assert-hosted-eve-build-budget.mts"
   ],
   "exclude": ["node_modules"]
 }
