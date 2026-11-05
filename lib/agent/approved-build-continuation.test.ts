@@ -20,13 +20,15 @@ import {
   currentApprovedBuildProgress,
   recordApprovedBuildDecision,
 } from "./approved-build-continuation-runtime";
-import type * as ApprovedBuildRuntime from "./approved-build-continuation-runtime";
 
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Lifecycle events are delivered directly and only remote projection persistence is stubbed.
 vi.mock("eve/hooks", () => ({ defineHook: <T>(value: T) => value }));
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Keep real workflow and progress state while isolating the hosted database adapter.
 vi.mock("./approved-build-continuation-runtime", async (importOriginal) => ({
-  ...(await importOriginal<typeof ApprovedBuildRuntime>()),
+  ...(await importOriginal<{
+    authenticatedBuildDelivery: typeof authenticatedBuildDelivery;
+    currentApprovedBuildProgress: typeof currentApprovedBuildProgress;
+  }>()),
   recordApprovedBuildDecision: vi.fn(),
 }));
 
@@ -91,14 +93,14 @@ describe("approved apply and review continuation", () => {
       // SAFETY: Only the phase, frozen proposal and scope are read before apply.
       const planned = { ...failed, phase: "planned" } as AppBuilderWorkflowState;
       // SAFETY: Only the phase, applied tree and scope are read before review.
-      const validated = { ...failed, phase: "validated" } as AppBuilderWorkflowState;
+      const validated = { ...failed, phase: "validated" } as unknown as AppBuilderWorkflowState;
       expect(decide(planned).decision).toBe("blocked");
       approveBuild();
       expect(decide(planned).decision).toBe("runnable");
       expect(decide(validated).decision).toBe("runnable");
       expect(decide(validated, { pendingInput: true }).decision).toBe("waiting-input");
       // SAFETY: Settled private review needs only the retained approved scope.
-      const reviewed = { ...failed, phase: "reviewed" } as AppBuilderWorkflowState;
+      const reviewed = { ...failed, phase: "reviewed" } as unknown as AppBuilderWorkflowState;
       expect(decide(reviewed).decision).toBe("settled");
     });
   });
@@ -151,7 +153,11 @@ describe("approved apply and review continuation", () => {
       // SAFETY: The finish hook reads only the native session and turn identities.
       const ctx = { session: { id: scope.sessionId, turn } } as HookContext;
       // SAFETY: The completed event body is unused by this handler.
-      await hook.events["turn.completed"]({} as never, ctx);
+      const complete = hook.events?.["turn.completed"];
+      if (!complete) {
+        throw new Error("Expected the approved build completion hook.");
+      }
+      await complete({} as never, ctx);
       expect(recordApprovedBuildDecision).toHaveBeenLastCalledWith(
         ctx,
         expect.objectContaining({ decision: "blocked", reason: "build_no_progress" }),
