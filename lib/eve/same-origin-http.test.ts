@@ -2423,48 +2423,54 @@ const cancellationDelta = (events: unknown[], tailIndex: number) => {
   return response;
 };
 
-it("uses a retained large-history seed and advances split cancellation settlement without replay", async () => {
-  const seed = nativeObservationStateSchema.parse({
-    ...(await cancellationSeed()),
-    nextNativeIndex: 250_000,
-  });
-  const starts: number[] = [];
-  let cancelledPosted = false;
-  let settlementReads = 0;
-  // oxlint-disable-next-line eslint/require-await -- Preserve the terminal fetch contract.
-  const fetchImplementation = vi.fn<typeof fetch>(async (request, init) => {
-    const url = new URL(String(request));
-    if (url.pathname.endsWith("/cancel")) {
-      expect(JSON.parse(String(init?.body))).toEqual({ turnId: "turn_1" });
-      cancelledPosted = true;
-      return Response.json({ ok: true, sessionId: "wrun_1", status: "accepted" }, { status: 202 });
-    }
-    const start = Number(url.searchParams.get("startIndex"));
-    starts.push(start);
-    if (!cancelledPosted) {
-      return cancellationDelta([], 249_999);
-    }
-    settlementReads += 1;
-    return settlementReads === 1
-      ? cancellationDelta([{ data: { turnId: "turn_1" }, type: "turn.cancelled" }], 250_000)
-      : cancellationDelta([{ data: {}, type: "session.waiting" }], 250_001);
-  });
-  const transport = createSameOriginEveTransport({
-    config,
-    fetchImplementation,
-    workloadIdentity: identity(),
-  });
-  await expect(
-    transport.cancelAccepted?.({
-      adapterSessionId: "wrun_1",
-      nativeObservationState: seed,
-      principal,
-      turnId: "turn_1",
-    }),
-  ).resolves.toBeUndefined();
-  expect(starts).toEqual([250_000, 250_000, 250_001]);
-  expect(settlementReads).toBe(2);
-});
+it.each(["turn.cancelled", "turn.completed", "turn.failed"] as const)(
+  "settles an accepted cancellation after %s using only incremental tails",
+  async (terminalEvent) => {
+    const seed = nativeObservationStateSchema.parse({
+      ...(await cancellationSeed()),
+      nextNativeIndex: 250_000,
+    });
+    const starts: number[] = [];
+    let cancelledPosted = false;
+    let settlementReads = 0;
+    // oxlint-disable-next-line eslint/require-await -- Preserve the terminal fetch contract.
+    const fetchImplementation = vi.fn<typeof fetch>(async (request, init) => {
+      const url = new URL(String(request));
+      if (url.pathname.endsWith("/cancel")) {
+        expect(JSON.parse(String(init?.body))).toEqual({ turnId: "turn_1" });
+        cancelledPosted = true;
+        return Response.json(
+          { ok: true, sessionId: "wrun_1", status: "accepted" },
+          { status: 202 },
+        );
+      }
+      const start = Number(url.searchParams.get("startIndex"));
+      starts.push(start);
+      if (!cancelledPosted) {
+        return cancellationDelta([], 249_999);
+      }
+      settlementReads += 1;
+      return settlementReads === 1
+        ? cancellationDelta([{ data: { turnId: "turn_1" }, type: terminalEvent }], 250_000)
+        : cancellationDelta([{ data: {}, type: "session.waiting" }], 250_001);
+    });
+    const transport = createSameOriginEveTransport({
+      config,
+      fetchImplementation,
+      workloadIdentity: identity(),
+    });
+    await expect(
+      transport.cancelAccepted?.({
+        adapterSessionId: "wrun_1",
+        nativeObservationState: seed,
+        principal,
+        turnId: "turn_1",
+      }),
+    ).resolves.toBeUndefined();
+    expect(starts).toEqual([250_000, 250_000, 250_001]);
+    expect(settlementReads).toBe(2);
+  },
+);
 
 it("rejects a foreign adapter seed before native reads or cancellation POST", async () => {
   const seed = nativeObservationStateSchema.parse({
