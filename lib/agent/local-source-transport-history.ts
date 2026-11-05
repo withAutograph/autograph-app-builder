@@ -1,5 +1,6 @@
 /* oxlint-disable eslint/complexity, sonarjs/expression-complexity -- Current private owner, complete Native cursor and recovered lineage must agree before accepting a completed transport receipt. */
 import path from "node:path";
+import { z } from "zod";
 import { readLocalEveCycleBinding } from "../eve/local-cycle-binding";
 import { isDeepStrictEqual } from "node:util";
 import { createHash } from "node:crypto";
@@ -83,12 +84,79 @@ const matchesFrozenReconciliation = (
     return false;
   }
 };
+const appCreationResult = z.object({ appId: z.string() });
+
+const completedReconciliationIndex = (
+  events: readonly MessageStreamEvent[],
+  expected: TransportOwner,
+): number => {
+  const proof = expected.reconciliation;
+  if (proof === undefined) {
+    return -1;
+  }
+  const workspace = proof.currentWorkspace;
+  const source = parseSourceReceipt(proof.sourceReceipt);
+  if (
+    workspace.workspaceId !== expected.workspaceId ||
+    workspace.workspacePath !== expected.workspacePath ||
+    workspace.sourcePath !== expected.sourcePath ||
+    source.sourcePath !== workspace.sourcePath ||
+    source.sourceSha !== workspace.sourceSha ||
+    workspace.sourceTree !== workspace.workspaceDigest.slice(0, 40)
+  ) {
+    return -1;
+  }
+  const anchor = proof.history.findLast(
+    (entry) =>
+      entry.appId === proof.appId &&
+      entry.workspaceId === workspace.workspaceId &&
+      entry.workspaceDigest === workspace.workspaceDigest &&
+      entry.sourceReceiptDigest === source.digest,
+  );
+  if (
+    anchor === undefined ||
+    !/^[a-f0-9]{40,64}$/u.test(anchor.privateSourceCommit) ||
+    !/^[a-f0-9]{40,64}$/u.test(anchor.sourceSnapshotTree)
+  ) {
+    return -1;
+  }
+  const isAnchorResult = (event: MessageStreamEvent) =>
+    event.type === "action.result" &&
+    event.data.result.kind === "tool-result" &&
+    event.data.result.callId === anchor.reconciledByCallId;
+  const index = events.findIndex(isAnchorResult);
+  if (index === -1 || index !== events.findLastIndex(isAnchorResult)) {
+    return -1;
+  }
+  const event = events[index];
+  if (
+    event?.type !== "action.result" ||
+    event.data.status !== "completed" ||
+    event.data.error !== undefined ||
+    event.data.result.kind !== "tool-result" ||
+    event.data.result.isError === true
+  ) {
+    return -1;
+  }
+  const { toolName, output } = event.data.result;
+  if (toolName === "prepare_workspace" && isDeepStrictEqual(output, workspace)) {
+    return index;
+  }
+  if (
+    toolName === "prepare_app_creation" &&
+    appCreationResult.safeParse(output).data?.appId === proof.appId
+  ) {
+    return index;
+  }
+  return -1;
+};
+
 /** Only completed private Native tool results are source transport receipts; observations and prose are not. */
 export const completedLocalSourceTransport = (
   events: readonly MessageStreamEvent[],
   expected: TransportOwner,
-): PreparedSandboxWorkspace | undefined => {
-  const event = events.findLast(
+): (PreparedSandboxWorkspace & { requiresCurrentManifestReadback?: true }) | undefined => {
+  const index = events.findLastIndex(
     (candidate) =>
       candidate.type === "action.result" &&
       candidate.data.status === "completed" &&
@@ -97,6 +165,7 @@ export const completedLocalSourceTransport = (
       candidate.data.result.toolName === "prepare_workspace" &&
       candidate.data.result.isError !== true,
   );
+  const event = events[index];
   if (event?.type !== "action.result") {
     return undefined;
   }
@@ -110,6 +179,9 @@ export const completedLocalSourceTransport = (
       !matchesFrozenReconciliation(receipt, expected, events))
   ) {
     throw new Error("The completed source transport belongs to another workspace or source.");
+  }
+  if (expected.reconciliation && index < completedReconciliationIndex(events, expected)) {
+    return { ...expected.reconciliation.currentWorkspace, requiresCurrentManifestReadback: true };
   }
   return receipt;
 };

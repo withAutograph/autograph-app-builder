@@ -745,3 +745,9 @@ native observation and the existing durable decision and reservation checks.
 Private browser results classify the legacy preview-refresh prerequisite only
 from its exact standalone reporter line on a failed test command. Test titles
 and bounded stage diagnostics do not set the prerequisite classification.
+
+A completed local planning reconciliation supersedes earlier source transports
+for that exact saved workspace and source. Builder uses the matching native
+result in the owned history to order those receipts and verifies the current
+workspace manifest before replacing source. Later completed transports still require their exact manifests. A missing or failed
+reconciliation result cannot supersede a transport.

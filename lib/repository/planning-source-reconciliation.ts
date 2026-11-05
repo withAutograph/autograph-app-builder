@@ -58,6 +58,11 @@ if (input.localSource && input.managedOverlayWorkspaceDigest !== undefined) {
   }
 }
 
+if (input.localSource && input.currentManifestDigest !== undefined) {
+  const files = JSON.parse(readFileSync(input.currentManifestPath, "utf8"));
+  if (!Array.isArray(files) || createHash("sha256").update(JSON.stringify(files)).digest("hex") !== input.currentManifestDigest) throw Error("Current workspace manifest changed before local source reconciliation.");
+}
+
 const complete = plan => {
   // The original bytes are already reachable through checkpointRef. Replaying this
   // transition repairs an interrupted checkout before another planning command runs.

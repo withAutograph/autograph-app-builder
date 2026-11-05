@@ -5,7 +5,11 @@ import type { SandboxSession } from "eve/sandbox";
 import type { SourceReceipt } from "./source-receipt";
 import type { captureLocalPlanningSource } from "./local-planning-source-capture";
 
-import { recordPreparedSandboxWorkspace } from "./supported-template";
+import {
+  readPreparedSandboxSourceManifest,
+  recordPreparedSandboxWorkspace,
+} from "./supported-template";
+import type { PreparedSandboxWorkspace } from "./supported-template";
 import {
   localPlanningGitPresenceProgram,
   initializeLocalPlanningGitBaseProgram,
@@ -36,6 +40,35 @@ const retainSourceGeneration = async (
     captured: capture,
   });
 };
+const verifyCurrentLocalManifest = async (input: {
+  verifyCurrentManifest?: PreparedSandboxWorkspace;
+  originalSourceSha: string;
+  originalWorkspaceDigest: string;
+  workspaceId: string;
+  sourceOverlay?: unknown;
+  sandbox: SandboxSession;
+  assertCurrent: () => void;
+}) => {
+  if (input.verifyCurrentManifest !== undefined) {
+    const current = input.verifyCurrentManifest;
+    if (
+      current.workspaceId !== input.workspaceId ||
+      current.sourceSha !== input.originalSourceSha ||
+      current.workspaceDigest !== input.originalWorkspaceDigest ||
+      input.sourceOverlay !== undefined
+    ) {
+      throw new Error("The current reconciliation does not match its saved workspace.");
+    }
+    await readPreparedSandboxSourceManifest(input.sandbox, current);
+    input.assertCurrent();
+    return {
+      currentManifestDigest: current.workspaceDigest,
+      currentManifestPath: "/workspace/.app-builder/source-files.json",
+    };
+  }
+  return {};
+};
+
 /** Reuse the one owned three-way reconciliation engine. No provider/GitHub operation or old approval is replayed. */
 export const reconcileLocalPlanningSource = async (
   input: {
@@ -48,6 +81,7 @@ export const reconcileLocalPlanningSource = async (
     originalWorkspaceDigest: string;
     sourceOverlay?: { sourceSha: string; workspaceDigest: string };
     workspaceId: string;
+    verifyCurrentManifest?: PreparedSandboxWorkspace;
     receipt: Pick<SourceReceipt, "sourceSha" | "sourceTree" | "eligibilityDigest">;
     capture: Awaited<ReturnType<typeof captureLocalPlanningSource>>;
   },
@@ -63,6 +97,7 @@ export const reconcileLocalPlanningSource = async (
   if (getBuilderSandboxId(sandbox) !== input.workspaceId) {
     throw new Error("The original local source belongs to another saved workspace.");
   }
+  const currentManifest = await verifyCurrentLocalManifest(input);
   // Every newly frozen source generation needs independent custody, even
   // when the candidate already has its older private Git reconciliation base.
   await retainSourceGeneration(capture, dependencies);
@@ -169,6 +204,7 @@ export const reconcileLocalPlanningSource = async (
     branchRef: "refs/app-builder/local-source",
     fetchRemote: false,
     localSource: true,
+    ...currentManifest,
     ...(input.sourceOverlay === undefined
       ? {}
       : {

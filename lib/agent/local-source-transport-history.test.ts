@@ -79,6 +79,7 @@ test("actual source-preparation service retains old validation workflow while Na
     };
     f.write(f.source, "shared.txt", "intermediate dirty shared source\n");
     const output = await prepareDevelopmentSandboxWorkspace(f.source, f.sandbox, "overlay");
+    const oldManifest = await f.sandbox.readTextFile({ path: ".app-builder/source-files.json" });
     const retained = workspacePreparationTransition(workflow, () => {
       throw new Error("An authored validation workflow must be retained");
     });
@@ -181,6 +182,55 @@ test("actual source-preparation service retains old validation workflow while Na
           history: [history],
         },
       };
+      const oldTransport = result(output);
+      const creationAnchor: MessageStreamEvent = {
+        ...result(frozen, "completed", "new-plan"),
+        type: "action.result",
+        data: {
+          sequence: 2,
+          stepIndex: 1,
+          turnId: "turn",
+          status: "completed",
+          result: {
+            kind: "tool-result",
+            toolName: "prepare_app_creation",
+            callId: history.reconciledByCallId,
+            output: { appId: appSpec.appId, reused: false },
+          },
+        },
+      };
+      const laterFailedTransport = result(output, "failed", "failed-later");
+      expect(
+        completedLocalSourceTransport(
+          [oldTransport, creationAnchor, laterFailedTransport],
+          compatibility,
+        ),
+      ).toEqual({ ...frozen, requiresCurrentManifestReadback: true });
+      expect(
+        completedLocalSourceTransport(
+          [creationAnchor, result(output, "completed", "later")],
+          compatibility,
+        ),
+      ).toEqual(output);
+      expect(completedLocalSourceTransport([oldTransport], compatibility)).toEqual(output);
+      expect(
+        completedLocalSourceTransport(
+          [oldTransport, creationAnchor, creationAnchor],
+          compatibility,
+        ),
+      ).toEqual(output);
+      expect(
+        completedLocalSourceTransport(
+          [oldTransport, result(frozen, "failed", history.reconciledByCallId)],
+          compatibility,
+        ),
+      ).toEqual(output);
+      expect(() =>
+        completedLocalSourceTransport(
+          [result({ ...output, workspaceId: "foreign" }), creationAnchor],
+          compatibility,
+        ),
+      ).toThrow("another workspace or source");
       const legacyEvent = result(frozen, "completed", "new-plan");
       const frozenBytes = JSON.stringify(frozen);
       expect(completedLocalSourceTransport([legacyEvent], compatibility)).toEqual(frozen);
@@ -327,6 +377,85 @@ test("actual source-preparation service retains old validation workflow while Na
           "utf-8",
         ),
       ).toBe("saved immutable release\n");
+      const currentManifest = await f.sandbox.readTextFile({
+        path: ".app-builder/source-files.json",
+      });
+      if (oldManifest === null || currentManifest === null) {
+        throw new Error("Missing fixture manifest");
+      }
+      f.write(f.source, "shared.txt", "next current shared source\n");
+      const next = await captureLocalPlanningSource(f.source, frozen.sourceSha);
+      try {
+        const refresh = () =>
+          reconcileLocalPlanningSource({
+            sandbox: f.sandbox,
+            assertCurrent: () => {},
+            appId: appSpec.appId,
+            sessionId: "saved-session",
+            callId: "next-plan",
+            originalSourceSha: frozen.sourceSha,
+            originalWorkspaceDigest: frozen.workspaceDigest,
+            workspaceId: frozen.workspaceId,
+            verifyCurrentManifest: frozen,
+            receipt: {
+              sourceSha: next.sourceSha,
+              sourceTree: next.generation.generation,
+              eligibilityDigest: sourceReceipt.eligibilityDigest,
+            },
+            capture: next,
+          });
+        await f.sandbox.writeTextFile({
+          path: ".app-builder/source-files.json",
+          content: oldManifest,
+        });
+        await expect(refresh()).rejects.toThrow("manifest no longer matches its receipt");
+        expect(readFileSync(path.join(f.candidate, "shared.txt"), "utf-8")).toBe(
+          "current repaired shared source\n",
+        );
+        await f.sandbox.writeTextFile({
+          path: ".app-builder/source-files.json",
+          content: currentManifest,
+        });
+        const run = f.sandbox.run.bind(f.sandbox);
+        const replaceBeforeReconcile = vi
+          .spyOn(f.sandbox, "run")
+          .mockImplementation(async (options) => {
+            if (
+              options.command.includes(
+                "Current workspace manifest changed before local source reconciliation.",
+              )
+            ) {
+              await f.sandbox.writeTextFile({
+                path: ".app-builder/source-files.json",
+                content: oldManifest,
+              });
+            }
+            return await run(options);
+          });
+        try {
+          await expect(refresh()).rejects.toThrow("Current workspace manifest changed");
+          expect(readFileSync(path.join(f.candidate, "shared.txt"), "utf-8")).toBe(
+            "current repaired shared source\n",
+          );
+        } finally {
+          replaceBeforeReconcile.mockRestore();
+        }
+        await f.sandbox.writeTextFile({
+          path: ".app-builder/source-files.json",
+          content: currentManifest,
+        });
+        await expect(refresh()).resolves.toMatchObject({
+          workspace: { workspaceDigest: next.generation.workspaceDigest },
+        });
+        expect(readFileSync(path.join(f.candidate, "shared.txt"), "utf-8")).toBe(
+          "next current shared source\n",
+        );
+        expect(readFileSync(path.join(f.candidate, "apps/example/app/page.tsx"), "utf-8")).toBe(
+          "saved private app\n",
+        );
+      } finally {
+        next.dispose();
+      }
     } finally {
       capture.dispose();
     }

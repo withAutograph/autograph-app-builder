@@ -143,6 +143,9 @@ export const refreshLocalPlanningSource = async (
       originalSourceSha: observed.baseline.sourceSha,
       originalWorkspaceDigest: observed.baseline.workspaceDigest,
       workspaceId: observed.baseline.workspaceId,
+      ...(completedTransport?.requiresCurrentManifestReadback
+        ? { verifyCurrentManifest: current.workspace }
+        : {}),
       ...(observed.baseline.sourceOverlay === undefined
         ? {}
         : { sourceOverlay: observed.baseline.sourceOverlay }),
