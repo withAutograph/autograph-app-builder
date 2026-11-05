@@ -122,6 +122,36 @@ describe("public app release lifecycle", () => {
     await f.handler.release(ctx, selected.operationRef, selected.planDigest);
     expect(f.writes).toHaveLength(2);
   });
+  it("observes a pending native deployment from a new call without repeating approved effects", async () => {
+    const f = fixture();
+    const ctx = invocation();
+    const selected = await f.handler.plan(ctx, plan.selection.appId);
+    const observation = vi.mocked(f.ports.observe);
+    observation.mockResolvedValueOnce({ status: "pending" });
+    expect(await f.handler.release(ctx, selected.operationRef, selected.planDigest)).toMatchObject({
+      status: "pending",
+    });
+    vi.mocked(f.ports.assertApproved).mockClear();
+    vi.mocked(f.ports.reconcileEffect).mockClear();
+    const followup = { ...ctx, callId: "later-read" };
+    expect(
+      await f.handler.observe(followup, selected.operationRef, selected.planDigest),
+    ).toMatchObject({ status: "ready", authenticatedBehavior: "unassessed" });
+    const readyRow = await f.store.read(authority, selected.operationRef);
+    expect(readyRow?.record.observation).toMatchObject({
+      status: "ready",
+      deploymentId: "active-native-deployment",
+    });
+    expect(f.ports.assertApproved).not.toHaveBeenCalled();
+    expect(f.ports.reconcileEffect).not.toHaveBeenCalled();
+    expect(f.writes).toEqual(["bind-production-runtime", "publish-release-source"]);
+    observation.mockResolvedValueOnce({ status: "pending" });
+    expect(
+      await f.handler.observe(followup, selected.operationRef, selected.planDigest),
+    ).toMatchObject({ status: "pending" });
+    const retainedRow = await f.store.read(authority, selected.operationRef);
+    expect(retainedRow?.record.observation).toEqual(readyRow?.record.observation);
+  });
   it("retains a dispatched unknown effect and never republishes blindly", async () => {
     const f = fixture();
     const ctx = invocation();
@@ -132,6 +162,14 @@ describe("public app release lifecycle", () => {
     ).rejects.toThrow("lost provider response");
     const saved = await f.store.read(authority, selected.operationRef);
     expect(saved?.record.effects["bind-production-runtime"]).toBe("pending");
+    expect(
+      await f.handler.observe(
+        { ...ctx, callId: "later-read" },
+        selected.operationRef,
+        selected.planDigest,
+      ),
+    ).toMatchObject({ status: "reconciliation-required", effect: "bind-production-runtime" });
+    expect(f.ports.observe).not.toHaveBeenCalled();
     f.ports.reconcileEffect = vi.fn().mockResolvedValue("unknown");
     expect(await f.handler.release(ctx, selected.operationRef, selected.planDigest)).toMatchObject({
       status: "reconciliation-required",

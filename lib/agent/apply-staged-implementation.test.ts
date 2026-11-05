@@ -83,11 +83,12 @@ describe("apply tool staged repair integration", () => {
     expect(schema.parse({ productSummary: "   " })).toMatchObject({ productSummary: "" });
   });
 
-  it("stages full UI through command failure and supplies it with the partial repair", async () => {
+  it("asks once for an ordinary Build and retains staged UI through the approved repair", async () => {
     mocks.current = state("repair");
     const getSandbox = vi.fn().mockResolvedValue({});
     const context = { callId: "apply", getSandbox, session: { id: "session" } } as never;
-    expect(await approval(context)).toBe("approved");
+    expect(await approval(context)).toBe("user-approval");
+    expect(getSandbox).not.toHaveBeenCalled();
     mocks.execute.mockResolvedValueOnce({
       ok: false,
       receipt: {
@@ -100,8 +101,9 @@ describe("apply tool staged repair integration", () => {
     ).rejects.toThrow("fixture command failure");
     expect(getSandbox).toHaveBeenCalledOnce();
     expect(mocks.execute).toHaveBeenCalledOnce();
-    expect(await approval(context)).toBe("approved");
-    await applyAppCreation.execute({ implementationFiles: [action] }, context);
+    const repairContext = { callId: "repair", getSandbox, session: { id: "session" } } as never;
+    expect(await approval(repairContext)).toBe("approved");
+    await applyAppCreation.execute({ implementationFiles: [action] }, repairContext);
     expect(mocks.wrap.mock.calls[1][1]).toEqual([page, action]);
     expect(mocks.execute).toHaveBeenCalledTimes(2);
   });
@@ -109,7 +111,7 @@ describe("apply tool staged repair integration", () => {
     mocks.current = state("advisory");
     const getSandbox = vi.fn().mockResolvedValue({});
     const context = { callId: "apply", getSandbox, session: { id: "session" } } as never;
-    expect(await approval(context)).toBe("approved");
+    expect(await approval(context)).toBe("user-approval");
     await expect(
       applyAppCreation.execute({ implementationFiles: [page] }, context),
     ).resolves.toMatchObject({
@@ -123,7 +125,7 @@ describe("apply tool staged repair integration", () => {
     mocks.current = state("reuse", "applied");
     const getSandbox = vi.fn().mockResolvedValue({});
     const context = { callId: "apply", getSandbox, session: { id: "session" } } as never;
-    expect(await approval(context)).toBe("approved");
+    expect(await approval(context)).toBe("user-approval");
     expect(await applyAppCreation.execute({ implementationFiles: [page] }, context)).toMatchObject({
       reused: true,
     });
@@ -165,7 +167,7 @@ describe("apply tool staged repair integration", () => {
         getSandbox,
         session: { id: "session" },
       } as never),
-    ).toBe("approved");
+    ).toBe("user-approval");
   });
   it("requests approval when the private plan selects a compute resize", async () => {
     const current = state("compute-resize");
@@ -189,7 +191,7 @@ describe("apply tool staged repair integration", () => {
     mocks.current = state("approved-before-swap");
     const getSandbox = vi.fn().mockResolvedValue({});
     const context = { callId: "scope-race", getSandbox, session: { id: "session" } } as never;
-    expect(await approval(context)).toBe("approved");
+    expect(await approval(context)).toBe("user-approval");
     mocks.current = state("swapped-after-policy");
     expect(await applyAppCreation.execute({ implementationFiles: [page] }, context)).toMatchObject({
       status: "build_approval_required",
@@ -206,7 +208,7 @@ describe("apply tool staged repair integration", () => {
       session: { id: "session" },
     } as never;
     mocks.current = state("same-call-proposal");
-    expect(await approval(context)).toBe("approved");
+    expect(await approval(context)).toBe("user-approval");
     mocks.current = { phase: "ui_accepted" };
     expect(await approval(context)).toBe("not-applicable");
     mocks.current = state("same-call-proposal");

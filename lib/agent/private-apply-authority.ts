@@ -39,7 +39,6 @@ const sameScope = (left: PrivateApplyScope | null, right: PrivateApplyScope): bo
 export const requestPrivateApplyApproval = (
   scope: PrivateApplyScope,
   callId: string,
-  { requiresUserApproval = true }: { requiresUserApproval?: boolean } = {},
 ): "approved" | "user-approval" => {
   const current = authority.get();
   const pending = current.pending.find((entry) => entry.callId === callId);
@@ -51,7 +50,7 @@ export const requestPrivateApplyApproval = (
   if (!pending) {
     authority.update(() => ({ ...current, pending: [...current.pending, { callId, scope }] }));
   }
-  return !requiresUserApproval || sameScope(current.grant, scope) ? "approved" : "user-approval";
+  return sameScope(current.grant, scope) ? "approved" : "user-approval";
 };
 
 /** Only call from the approved tool execution, before implementation checks that may throw. */

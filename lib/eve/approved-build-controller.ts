@@ -9,7 +9,10 @@ import type {
 } from "./hosted-store";
 import { hostedOperationRecordSchema, toDurableHostedSessionRecord } from "./hosted-store";
 import { digest, stableId } from "./hosted-operation-identifiers";
-import { internalBuildMessage } from "../agent/approved-build-continuation";
+import {
+  internalBuildMessage,
+  reportApprovedBuildNoProgress,
+} from "../agent/approved-build-continuation";
 import type { ApprovedBuildDecision } from "../agent/approved-build-continuation";
 import type { HostedEveTransport } from "./hosted-service";
 
@@ -86,7 +89,7 @@ const logContinuationDecision = (session: DurableHostedSessionRecord): void => {
       decision: decision?.decision ?? "absent",
       event: "app_builder.approved_build_continuation_decision",
       projectionPresent: decision !== undefined,
-      reason: continuationDecisionReason(session),
+      reason: decision?.reason ?? continuationDecisionReason(session),
       scopePresent: decision?.scope !== undefined,
       sessionIdentity: stableId("session", session.sessionId),
       turnIdentity: decision === undefined ? null : stableId("turn", decision.turnId),
@@ -108,7 +111,7 @@ const readyBuild = async (input: ControllerInput): Promise<ReadyBuild | undefine
   const unavailable =
     session.resumability !== "live" ||
     session.status === "cancelled" ||
-    decision?.decision !== "runnable";
+    (decision?.decision !== "runnable" && decision?.reason !== "build_no_progress");
   if (unavailable || decision === undefined) {
     return undefined;
   }
@@ -312,6 +315,9 @@ export const continueApprovedHostedBuild = async (
     return input.result;
   }
   const { decision, session } = ready;
+  if (decision.decision === "blocked" && decision.reason === "build_no_progress") {
+    return reportApprovedBuildNoProgress(input.result);
+  }
   const { principal } = session;
   const clientRequestId = stableId("approved_build", {
     scope: decision.scope,

@@ -95,5 +95,7 @@ export const publicReleaseClientForContext = async (ctx: WorkflowStepToolContext
       ),
     release: async (input: PublicReleaseApprovalInput) =>
       await send({ ...common, action: "public-release-run", input }, publicReleaseResultSchema),
+    observe: async (input: PublicReleaseApprovalInput) =>
+      await send({ ...common, action: "public-release-observe", input }, publicReleaseResultSchema),
   };
 };

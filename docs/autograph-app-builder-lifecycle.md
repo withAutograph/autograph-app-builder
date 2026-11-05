@@ -1,9 +1,8 @@
 # Autograph App Builder lifecycle
 
-Autograph App Builder takes a product idea from a short brief to a reviewed,
-validated implementation proposal. It keeps the conversation focused on the
-product and asks for input only when a decision would materially change the
-result.
+Autograph App Builder takes a brief through a working preview or the requested
+delivery. The [complete app authoring contract](full-app-authoring.md) defines
+the Build decision, implementation, review, and delivery.
 
 ## The user-facing flow
 
@@ -27,44 +26,23 @@ React UI in a disposable overlay. Navigation, controls, actions, first-use,
 empty, loading, and error states work without APIs, persistence, or backend
 implementation.
 
-### 4. Iterate with the user
+### 4. Refine the design and prepare the plan
 
-The user reacts to what feels wrong, missing, unnecessary, or unlike their
-work. The builder revises only the UI and its synchronized internal design
-manifest, then resolves the next highest-value visible uncertainty with a small
-number of focused questions. The Browser remains a pure product preview.
+Builder incorporates feedback and infers safe defaults for behavior, roles,
+persistence, and failure handling. It prepares the implementation proposal as
+part of the same conversation. It asks only about material product decisions.
 
-### 5. Finalize the reviewed UI explicitly
+### 5. Ask once to build
 
-Praise such as "looks good" does not start implementation planning. The user
-must explicitly ask to finalize functionality for the exact current UI
-revision. A later design revision invalidates that acceptance and returns the
-session to UI review.
+Builder shows the initial design and proposed scope and asks **Build this app?**
+That decision starts implementation and covers in-scope setup, preview, checks,
+and repairs. External effects retain their own approvals.
 
-### 6. Define production behavior
+### 6. Run and review the app
 
-The builder settles the production meaning behind the approved experience:
-data and integrations, routes, controls, writes, review and approval behavior,
-provenance, permissions, agent responsibilities, failure behavior, non-goals,
-and the acceptance walkthrough.
-
-### 7. Reach build-ready status
-
-The builder checks that the experience and its production behavior are complete
-enough to implement. Internal preparation and completeness repair are silent.
-The user is interrupted only if an unresolved product decision genuinely blocks
-the build.
-
-### 8. Prepare the implementation proposal
-
-The approved experience is mapped to the target repository. The builder
-produces a concrete, read-only proposal describing the app changes before any
-target checkout or external system is changed.
-
-### 9. Review and validate locally
-
-Builder implements the agreed changes, checks that they work, and presents the
-result for review. When GitHub storage is selected, the repository can be public
+Builder implements the agreed changes and starts the applied app directly.
+It diagnoses startup failures and repairs the same app. Technical validation
+and independent review establish a reviewed result separately from startup. When GitHub storage is selected, the repository can be public
 or private according to the user's selection. Builder asks before taking an action that needs separate authorization.
 
 Validation runs against the selected applied checkout. Ordinary changes in the
@@ -123,7 +101,7 @@ Schema release compilation may follow an initial validation pass. It clears
 that pass before changing the private checkout so normal app checks run again
 against the compiled result before review.
 
-### 10. Authorize consequential effects separately
+### 7. Authorize consequential effects separately
 
 Writing changes to an external repository, opening a pull request, publishing,
 deploying, changing providers, or creating external resources each requires
@@ -151,10 +129,12 @@ active-turn leases remain short-lived implementation boundaries.
 
 ## What counts as completion
 
-An accepted prototype or specification is not, by itself, a completed build.
-Completion requires evidence of the relevant later state: a reviewed proposal,
-successful local validation, or a separately authorized and proven external
-effect.
+Use the result the user requested to determine completion. A working preview
+requires the applied app to start and return a usable page. Review describes
+the checks and behavior actually exercised. A release requires the working app
+at the selected destination after the approved effects. A revision delivers
+the requested change to the same app and preserves unaffected content, data,
+and destination.
 
 ## Source documents
 

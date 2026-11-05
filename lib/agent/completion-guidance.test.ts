@@ -38,7 +38,7 @@ describe("shared app delivery guidance", () => {
 
   it("uses actual diagnostics for a failed validation without asking for renewed build approval", () => {
     expect(completionGuidance({ phase: "validation_failed" })).toContain(
-      "Repair the reported diagnostics with corrected implementationFiles and retry validate_app_creation in the same approved checkout",
+      "repair the reported diagnostics with corrected implementationFiles and retry validate_app_creation in the same approved checkout",
     );
   });
 

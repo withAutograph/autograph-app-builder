@@ -22,6 +22,8 @@ export async function prepareReviewedWorkflow(
   await session.send("Run target identity and planning.");
 
   await session.send("Apply the current creation proposal.");
+  session.requireInputRequest({ toolName: "apply_app_creation" });
+  await session.respondAll("approve");
 
   const validation = await session.send("Validate the applied creation.");
   validation.notEvent("input.requested");

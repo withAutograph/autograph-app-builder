@@ -71,18 +71,17 @@ export const createPublicReleaseDispatcher =
         await assertCurrentOwner();
         return response(result);
       }
-      // The independently owner-scoped stored frozen plan, not a caller-supplied replacement,
-      // is the authority for effects. Reject even a digest-consistent alternate payload.
+      // Both effect and observation requests must match the independently owner-scoped stored plan.
       const current = await ports.store.read(invocation.authority, input.input.operationRef);
       await assertCurrentOwner();
       if (!current || !isDeepStrictEqual(current.record.plan, input.input.plan)) {
         return response({ code: "public_release_unavailable" }, 403);
       }
-      const result = await handler.release(
-        invocation,
-        input.input.operationRef,
-        input.input.planDigest,
-      );
+      const { operationRef, planDigest } = input.input;
+      const result =
+        input.action === "public-release-observe"
+          ? await handler.observe(invocation, operationRef, planDigest)
+          : await handler.release(invocation, operationRef, planDigest);
       await assertCurrentOwner();
       return response(result);
     } catch (error) {

@@ -100,7 +100,7 @@ describe("public self-reproduction driver", () => {
     });
     expect(current.outcome).toBe("blocked_authorization_requires_product_ui");
   });
-  it("persists response idempotency before sending and replays uncertain response once on resume", async () => {
+  it("persists the batch before sending and only reads the session after a lost response", async () => {
     const current = state();
     let saved = "";
     const options = {
@@ -138,9 +138,41 @@ describe("public self-reproduction driver", () => {
       },
     });
     expect(calls).toEqual([
-      { args: { ...original, sessionId: "one-session" }, name: "autograph_respond" },
+      { args: { cursor: 1, sessionId: "one-session" }, name: "autograph_get" },
     ]);
-    expect(current.answered).toEqual(["approve-build"]);
+    expect(current.session?.status).toBe("completed");
+    expect(current.outcome).toBe("response_submission_unresolved");
+    expect(current.pendingResponse).toEqual(original);
+    expect(current.answered).toEqual([]);
+  });
+  it("retains a reported unknown response when the same approval is still shown", async () => {
+    const current = state();
+    const calls: string[] = [];
+    const options = {
+      pollMs: 1,
+      responses: [{ requestId: "approve-build", response: { kind: "approve" as const } }],
+      save: () => {},
+      state: current,
+      timeoutMs: 1000,
+      transport: {
+        call: async (name: string) => {
+          calls.push(name);
+          if (name === "autograph_respond") {
+            return { ...unresolvedStart(), sessionId: "one-session" };
+          }
+          return session("input_required", [approval]);
+        },
+      },
+    };
+    await runPublicSession(options);
+    const original = current.pendingResponse;
+    expect(original?.clientRequestId).toBeTruthy();
+    expect(current.outcome).toBe("response_submission_unresolved");
+    await runPublicSession(options);
+    expect(calls).toEqual(["autograph_start", "autograph_respond", "autograph_get"]);
+    expect(current.session?.inputRequests).toEqual([approval]);
+    expect(current.pendingResponse).toEqual(original);
+    expect(current.answered).toEqual([]);
   });
   it("recovers a lost prompt-start response by its original request ID without dispatching another start", async () => {
     const current = state();

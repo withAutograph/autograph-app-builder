@@ -1,6 +1,6 @@
 # Working app previews
 
-The shared `start_app_preview` tool opens the applied implementation in the current user's Vercel Sandbox. It accepts the repository's discovered development command as an executable and argument array, a listening port, an optional repository-relative working directory, and an optional nested landing path. Build approval and an applied implementation are required. The tool does not publish the app or provision its external resources.
+The shared `start_app_preview` tool opens the applied implementation in the current user's Vercel Sandbox. It accepts the repository's discovered development command as an executable and argument array, a listening port, an optional repository-relative working directory, and an optional nested landing path. The user’s Build decision and an applied implementation authorize startup. Lint, repository validation, and independent review are separate from starting the app. Builder uses the working preview while it checks and repairs the implementation. The tool does not publish the app or provision its external resources.
 
 The backend supplies the provider Sandbox identity; the model cannot choose another Sandbox or supply a preview URL. The official Sandbox SDK uses the project's existing OIDC credentials. Runtime scripts and access configuration live outside the applied repository under `/workspace/.autograph-working-preview`.
 
