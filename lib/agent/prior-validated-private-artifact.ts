@@ -6,13 +6,12 @@ import { assertCurrentTargetApplyReceipt, inspectApplyOverlay } from "../reposit
 import { validationBinding } from "../repository/target-validation";
 import { getBuilderSandboxId } from "../sandbox/builder-sandbox";
 import { existingAppRepairHistory } from "./existing-app-repair-planning";
-import { inspectPlannedAuthoringCandidate } from "./planned-proposal-authoring";
 import { readPrivateApplyAuthority } from "./private-apply-authority";
 import { appBuilderWorkflowState, sha256 } from "./workflow-state";
 import type { AppBuilderWorkflowState } from "./workflow-state";
 
 const unavailable = () =>
-  new Error("The prior validated private artifact cannot be verified for this denied plan.");
+  new Error("The prior validated private artifact cannot be verified for the current plan.");
 
 const digestMatches = ({ digest, ...unsigned }: { digest: string }) =>
   digest === sha256(JSON.stringify(unsigned));
@@ -61,17 +60,12 @@ export const priorValidatedPrivateArtifact = async (input: {
   }
   const authority = readPrivateApplyAuthority();
   const history = existingAppRepairHistory.get();
-  const denial = inspectPlannedAuthoringCandidate({
-    current: state,
-    authority,
-    history,
-    sessionId,
-  });
   const matches = history.filter((entry) => entry.proposalDigest === state.proposal.digest);
   const entry = matches[0];
   const prior = entry?.approvedBase;
   if (
-    denial === null ||
+    authority.pending.length !== 0 ||
+    "applyReceipt" in state ||
     matches.length !== 1 ||
     entry?.sessionId !== sessionId ||
     prior?.phase !== "validated" ||
@@ -90,7 +84,15 @@ export const priorValidatedPrivateArtifact = async (input: {
   const validation = prior.validationReceipt;
   assertCurrentTargetApplyReceipt(apply);
   const binding = validationBinding(apply, validation.testShards);
-  const approvedScope = { ...denial.scope, proposalDigest: prior.proposal.digest };
+  // A running or already dispatched apply records its grant before any writes.
+  // A merely drafted proposal does not need a denial to leave the prior app usable.
+  const approvedScope = {
+    appId: prior.appSpec.appId,
+    appSpecDigest: prior.appSpec.digest,
+    proposalDigest: prior.proposal.digest,
+    sessionId,
+    workspaceId: prior.workspace.workspaceId,
+  };
   if (
     !isDeepStrictEqual(authority.grant, approvedScope) ||
     !digestMatches(prior.proposal) ||
@@ -118,12 +120,6 @@ export const priorValidatedPrivateArtifact = async (input: {
   const assertCurrent = () => {
     signal?.throwIfAborted();
     const currentAuthority = readPrivateApplyAuthority();
-    const retainedDenial = currentAuthority.terminalDecisions?.some(
-      (row) =>
-        row.evidenceDigest === denial.denialEvidenceDigest &&
-        row.outcome === "denied-not-run" &&
-        isDeepStrictEqual(row.scope, denial.scope),
-    );
     const retained = existingAppRepairHistory
       .get()
       .filter((row) => row.proposalDigest === state.proposal.digest);
@@ -132,7 +128,6 @@ export const priorValidatedPrivateArtifact = async (input: {
       !isDeepStrictEqual(selectionBinding(appBuilderWorkflowState.get()), selected) ||
       currentAuthority.pending.length !== 0 ||
       !isDeepStrictEqual(currentAuthority.grant, approvedScope) ||
-      retainedDenial !== true ||
       retained.length !== 1 ||
       retainedEntry?.sessionId !== sessionId ||
       !isDeepStrictEqual(validationIdentity(retainedEntry.approvedBase), approved) ||

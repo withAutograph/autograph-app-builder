@@ -761,14 +761,15 @@ Without it, the browser tool returns the preview prerequisite before starting
 Playwright. Ordinary local and prepared hosted browser tasks keep their
 existing execution paths.
 
-After a newer existing-app plan was explicitly denied without execution,
+While a newer existing-app plan remains unapplied,
 `start_app_preview` and `run_app_browser_tests` can select
 `artifact: "prior-validated"` for the same private local session. The selection
-requires the exact prior validated repair base, matching approval history and
+requires the exact prior validated repair base, its prior approval and
+no unresolved Build approval or apply for the newer draft. It uses
 a fresh comparison of source paths and content against the retained apply
 receipt. File permission changes do not affect this comparison. Start this
 preview with the repository’s actual development command. Browser tests use a private preview started for that same apply
-and validation receipt. Selecting it leaves the newer denied plan and both
+and validation receipt. Selecting it leaves the newer draft and both
 receipts in place and grants no publication authority.
 
 A prior validated preview reuses available checkout dependencies. Builder

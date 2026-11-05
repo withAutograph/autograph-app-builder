@@ -37,7 +37,10 @@ const sourceFile = {
   digest: sha256("validated bytes"),
 };
 
-const seed = (denied = true, files: readonly OverlayFile[] = [sourceFile]) => {
+const seed = (
+  approval: "denied" | "pending" | "not-requested" = "denied",
+  files: readonly OverlayFile[] = [sourceFile],
+) => {
   for (const [key, value] of Object.entries(developmentExecutionEnvironment)) {
     vi.stubEnv(key, value);
   }
@@ -129,8 +132,10 @@ const seed = (denied = true, files: readonly OverlayFile[] = [sourceFile]) => {
   requestPrivateApplyApproval(previousScope, "approved");
   recordApprovedPrivateApply(previousScope, "approved");
   const currentScope = { ...scope, proposalDigest: current.proposal.digest };
-  requestPrivateApplyApproval(currentScope, "denied-call");
-  if (denied) {
+  if (approval !== "not-requested") {
+    requestPrivateApplyApproval(currentScope, "denied-call");
+  }
+  if (approval === "denied") {
     for (const event of privateApplyDenialEvents()) {
       observePrivateApplyDecisionEvent(
         event as Parameters<typeof observePrivateApplyDecisionEvent>[0],
@@ -170,9 +175,19 @@ it("selects only the denied plan's last validated private bytes without rewritin
     expect([readPrivateApplyAuthority(), existingAppRepairHistory.get()]).toEqual(retained);
   }));
 
+it("opens the prior approved app while a newer draft has never requested approval", async () =>
+  await own(async () => {
+    const f = seed("not-requested");
+    const retained = readPrivateApplyAuthority();
+    await expect(priorValidatedPrivateArtifact(f.input)).resolves.toMatchObject({
+      revision: f.prior.applyReceipt.digest,
+    });
+    expect(readPrivateApplyAuthority()).toEqual(retained);
+  }));
+
 it("denies pending approval, a current grant or a foreign owner before the Sandbox read", async () =>
   await own(async () => {
-    const f = seed(false);
+    const f = seed("pending");
     await expect(priorValidatedPrivateArtifact(f.input)).rejects.toThrow("cannot be verified");
     recordApprovedPrivateApply(f.currentScope, "denied-call");
     await expect(priorValidatedPrivateArtifact(f.input)).rejects.toThrow("cannot be verified");
@@ -219,7 +234,7 @@ it("accepts mode-only changes on both workspace bins and rechecks only paths and
       "packages/microfrontends/scripts/vercel-service-cli.mjs",
     ];
     const bins = paths.map((path) => ({ path, digest: sha256(path), mode: "755" }));
-    const f = seed(true, [sourceFile, ...bins]);
+    const f = seed("denied", [sourceFile, ...bins]);
     const retained = [readPrivateApplyAuthority(), existingAppRepairHistory.get()];
     f.run.mockResolvedValue(
       f.result([sourceFile, ...bins.map((file) => ({ ...file, mode: "777" }))]),
