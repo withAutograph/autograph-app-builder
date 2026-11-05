@@ -1,4 +1,4 @@
-import type { Command, Sandbox } from "@vercel/sandbox";
+import { APIError, type Command, type Sandbox } from "@vercel/sandbox";
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -32,6 +32,18 @@ const missingRuntimeFile = (error: unknown): null => {
   }
   throw error;
 };
+
+const getPriorPreviewCommand = (provider: Sandbox, commandId: string, signal: AbortSignal) =>
+  provider.getCommand(commandId, { signal }).catch((error: unknown) => {
+    if (
+      error instanceof APIError &&
+      error.response.status === 404 &&
+      /command not found or has exited/iu.test(error.message)
+    ) {
+      return null;
+    }
+    throw error;
+  });
 
 export const workingPreviewSupervisorSource = (input: {
   gatewaySource: string;
@@ -307,8 +319,8 @@ const reconcilePreviewAttempt = async (
       );
     }
     if (attempt.commandId !== undefined) {
-      const prior = await provider.getCommand(attempt.commandId, { signal });
-      if (prior.exitCode === null) {
+      const prior = await getPriorPreviewCommand(provider, attempt.commandId, signal);
+      if (prior?.exitCode === null) {
         throw new Error(
           "The previous preview supervisor is still running; its startup must settle before retrying.",
         );
@@ -335,10 +347,12 @@ const reconcilePreviewAttempt = async (
       attempt.providerSessionId === provider.currentSession().sessionId &&
       attempt.commandId !== undefined
     ) {
-      const command = await provider.getCommand(attempt.commandId, { signal });
-      await (command.exitCode === null
-        ? stopWorkingPreviewCommand(command)
-        : command.wait({ signal }));
+      const command = await getPriorPreviewCommand(provider, attempt.commandId, signal);
+      if (command !== null) {
+        await (command.exitCode === null
+          ? stopWorkingPreviewCommand(command)
+          : command.wait({ signal }));
+      }
     }
     await previewOwnershipOperation(
       provider,
@@ -527,11 +541,13 @@ export const startWorkingPreview = async (input: {
     // Bind a deny-by-default listener before exposing any inbound port.
     await provider.update({ networkPolicy: "allow-all", ports: [] }, { signal });
     if (input.previous?.providerSessionId === providerSessionId) {
-      const previous = await provider.getCommand(input.previous.commandId, { signal });
-      if (previous.exitCode === null) {
-        await previous.kill("SIGTERM", { abortSignal: signal });
+      const previous = await getPriorPreviewCommand(provider, input.previous.commandId, signal);
+      if (previous !== null) {
+        if (previous.exitCode === null) {
+          await previous.kill("SIGTERM", { abortSignal: signal });
+        }
+        await previous.wait({ signal });
       }
-      await previous.wait({ signal });
     }
 
     const directory = `/workspace/.autograph-working-preview/${randomUUID()}`;
