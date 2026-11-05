@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { publicRealmResourceSchema } from "./public-realm-enrollment";
 import { createFreshPublicAuthSeed } from "./public-release-auth-seed";
 import type { PublicReleaseAuthSeed } from "./public-release-auth-seed";
 import { isDeepStrictEqual } from "node:util";
@@ -52,15 +53,7 @@ const recordSchema = z.strictObject({
   scope: publicReleaseRuntimeConfigurationScopeSchema,
   sealed: sealedSchema,
 });
-const authResourceSchema = z.strictObject({
-  hostname: z.string().regex(/^[a-z0-9.-]+\.neon\.tech$/u),
-  port: z.literal(5432),
-  database: z.string().regex(/^[a-z_][a-z0-9_]*$/u),
-  schema: z.literal("public"),
-  runtimeRole: z.string().regex(/^[a-z_][a-z0-9_]*$/u),
-  migratorRole: z.string().regex(/^[a-z_][a-z0-9_]*$/u),
-  neon: z.strictObject({ projectId: id, branchId: id }),
-});
+const authResourceSchema = publicRealmResourceSchema.omit({ version: true });
 const unavailable = () => new Error("public_release_runtime_configuration_unavailable");
 const identity = (scope: PublicReleaseRuntimeConfigurationScope) => {
   const hash = createHash("sha256")
@@ -136,7 +129,6 @@ export const createFreshPublicAuthValues = (input: {
     PLATFORM_AUTH_DATABASE_URL: input.authRuntimeUrl,
     AUTH_DATABASE_RESOURCE: JSON.stringify({
       version: 1,
-      environment: "isolated-development",
       ...resource,
     }),
     AUTH_PRODUCTION_DATABASE_IDENTITY: input.productionDatabaseIdentity,

@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { publicRealmResourceSchema } from "./public-realm-enrollment";
 import { createFreshPublicAuthValues } from "./public-release-runtime-configuration";
 
 const input = {
   publicOrigin: "https://app.example",
   appId: "invoice-app",
   authResource: {
+    environment: "preview" as const,
     hostname: "ep-synthetic.aws.neon.tech",
     port: 5432 as const,
     database: "app_auth",
@@ -27,13 +29,22 @@ describe("fresh public app Auth configuration", () => {
     expect(first.BETTER_AUTH_SECRET).toHaveLength(43);
     expect(first.BETTER_AUTH_SECRET).not.toBe(second.BETTER_AUTH_SECRET);
     expect(first).not.toHaveProperty("BETTER_AUTH_API_KEY");
-    expect(JSON.parse(first.AUTH_DATABASE_RESOURCE)).toMatchObject({
-      environment: "isolated-development",
+    expect(publicRealmResourceSchema.parse(JSON.parse(first.AUTH_DATABASE_RESOURCE))).toEqual({
+      version: 1,
       ...input.authResource,
     });
     expect(first).not.toHaveProperty("VERCEL_ENV");
     expect(first).not.toHaveProperty("PLATFORM_AUTH_COOKIE_DOMAIN");
   });
+  it("retains the explicitly isolated resource classification where already enrolled", () => {
+    const authResource = { ...input.authResource, environment: "isolated-development" as const };
+    const values = createFreshPublicAuthValues({ ...input, authResource });
+    expect(publicRealmResourceSchema.parse(JSON.parse(values.AUTH_DATABASE_RESOURCE))).toEqual({
+      version: 1,
+      ...authResource,
+    });
+  });
+
   it.each([
     { productionDatabaseIdentity: "ep-synthetic-pooler.aws.neon.tech/other_database" },
     { productionDatabaseIdentity: "" },
