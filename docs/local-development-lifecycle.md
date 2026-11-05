@@ -551,7 +551,10 @@ frozen reconciliation that used that canonical identity remains readable only
 when its exact current workspace, parsed SourceReceipt and completed private
 Native call match the trusted reconciliation history. Reading it neither rewrites
 the receipt nor carries an old Build approval into a new plan. Ordinary moving
-host source is observed by the next planning reconciliation.
+host source is observed by the next planning reconciliation. Validation runs
+against the selected applied workspace even if separate host source has moved.
+When planning observes unchanged source, it retains that workspace without
+reading native transport history.
 
 A later no-op preparation may return the same frozen receipt under a new Native
 call ID. Compatibility still requires the original completed reconciliation call

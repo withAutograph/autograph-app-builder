@@ -42,17 +42,14 @@ const settledPhases = new Set([
   "reviewed",
 ]);
 export const LOCAL_SOURCE_REFRESH_GUIDANCE =
-  "The local shared source has changed. Call prepare-app-creation to reconcile it with this saved app while retaining its content and data, then continue the normal new-plan review and apply before validation. Original source, approvals and private app work remain saved.";
+  "The local shared source has changed. Call prepare-app-creation to reconcile it with this saved app while retaining its content and data, then continue the normal new-plan review and apply for those source changes. Original source, approvals and private app work remain saved.";
 
-const observe = async (
-  current: SourceWorkflow,
-  completedTransport?: Awaited<ReturnType<typeof readCompletedLocalSourceTransport>>,
-) => {
+const observe = async (current: SourceWorkflow) => {
   const receipt = await developmentSourceReceipt(current.sourceReceipt.sourceKind);
   if (receipt === undefined) {
     throw new Error("The current local planning source is unavailable.");
   }
-  const baseline = localPlanningSourceBase(current, completedTransport);
+  const baseline = localPlanningSourceBase(current);
   const capture = await captureLocalPlanningSource(receipt.sourcePath, baseline.sourceSha);
   const prior = localPlanningSourceHistory
     .get()
@@ -66,24 +63,8 @@ const observe = async (
   const changed =
     capture.generation.workspaceDigest !== baseline.workspaceDigest ||
     (prior !== undefined && prior.sourceSnapshotTree !== capture.snapshotTree);
-  return { receipt, capture, changed, baseline };
+  return { receipt, capture, changed };
 };
-/** Observe local input before opening/resuming any Sandbox. Ordinary moving source requests a new inexpensive planning input. */
-export const localPlanningSourceRefreshRequirement = async (
-  current: AppBuilderWorkflowState,
-): Promise<string | undefined> => {
-  if (!localWorkflow(current) || !settledPhases.has(current.phase)) {
-    return undefined;
-  }
-  let observed: Awaited<ReturnType<typeof observe>> | undefined;
-  try {
-    observed = await observe(current);
-    return observed.changed ? LOCAL_SOURCE_REFRESH_GUIDANCE : undefined;
-  } finally {
-    observed?.capture.dispose();
-  }
-};
-
 export const refreshLocalPlanningSource = async (
   ctx: Pick<ToolContext, "callId" | "getSandbox"> &
     Partial<Pick<ToolContext, "abortSignal">> & {
@@ -95,26 +76,7 @@ export const refreshLocalPlanningSource = async (
   if (!localWorkflow(current) || !settledPhases.has(current.phase)) {
     return undefined;
   }
-  const completedTransport = await readCompletedLocalSourceTransport({
-    sessionId: ctx.session.id,
-    ...(ctx.session.ownerRunId === undefined ? {} : { ownerRunId: ctx.session.ownerRunId }),
-    ...(ctx.session.ownerAnchorRunId === undefined
-      ? {}
-      : { ownerAnchorRunId: ctx.session.ownerAnchorRunId }),
-    expected: {
-      workspaceId: current.workspace.workspaceId,
-      workspacePath: current.workspace.workspacePath,
-      sourcePath: current.sourceReceipt.sourcePath,
-      reconciliation: {
-        appId: current.appSpec.appId,
-        currentWorkspace: current.workspace,
-        sourceReceipt: current.sourceReceipt,
-        history: localPlanningSourceHistory.get(),
-      },
-    },
-    signal: ctx.abortSignal,
-  });
-  const observed = await observe(current, completedTransport);
+  const observed = await observe(current);
   try {
     if (!observed.changed) {
       resolveLocalSourcePrerequisite(current, ctx.session.id, ctx.callId);
@@ -123,6 +85,27 @@ export const refreshLocalPlanningSource = async (
     if (purpose !== "planning") {
       throw new Error(LOCAL_SOURCE_REFRESH_GUIDANCE);
     }
+    // Native transport history identifies the retained overlay only when reconciliation is needed.
+    const completedTransport = await readCompletedLocalSourceTransport({
+      sessionId: ctx.session.id,
+      ...(ctx.session.ownerRunId === undefined ? {} : { ownerRunId: ctx.session.ownerRunId }),
+      ...(ctx.session.ownerAnchorRunId === undefined
+        ? {}
+        : { ownerAnchorRunId: ctx.session.ownerAnchorRunId }),
+      expected: {
+        workspaceId: current.workspace.workspaceId,
+        workspacePath: current.workspace.workspacePath,
+        sourcePath: current.sourceReceipt.sourcePath,
+        reconciliation: {
+          appId: current.appSpec.appId,
+          currentWorkspace: current.workspace,
+          sourceReceipt: current.sourceReceipt,
+          history: localPlanningSourceHistory.get(),
+        },
+      },
+      signal: ctx.abortSignal,
+    });
+    const baseline = localPlanningSourceBase(current, completedTransport);
     const assertCurrent = () => {
       ctx.abortSignal?.throwIfAborted();
       assertExactWorkflowState(
@@ -140,15 +123,13 @@ export const refreshLocalPlanningSource = async (
       sessionId: ctx.session.id,
       appId: current.appSpec.appId,
       callId: ctx.callId,
-      originalSourceSha: observed.baseline.sourceSha,
-      originalWorkspaceDigest: observed.baseline.workspaceDigest,
-      workspaceId: observed.baseline.workspaceId,
+      originalSourceSha: baseline.sourceSha,
+      originalWorkspaceDigest: baseline.workspaceDigest,
+      workspaceId: baseline.workspaceId,
       ...(completedTransport?.requiresCurrentManifestReadback
         ? { verifyCurrentManifest: current.workspace }
         : {}),
-      ...(observed.baseline.sourceOverlay === undefined
-        ? {}
-        : { sourceOverlay: observed.baseline.sourceOverlay }),
+      ...(baseline.sourceOverlay === undefined ? {} : { sourceOverlay: baseline.sourceOverlay }),
       receipt: observed.receipt,
       capture: observed.capture,
     });
@@ -159,7 +140,7 @@ export const refreshLocalPlanningSource = async (
       sourceReceiptDigest: observed.receipt.digest,
       previousSourceReceiptDigest: current.sourceReceipt.digest,
       workspaceDigest: reconciled.workspace.workspaceDigest,
-      previousWorkspaceDigest: observed.baseline.workspaceDigest,
+      previousWorkspaceDigest: baseline.workspaceDigest,
       sourceSnapshotTree: reconciled.sourceSnapshotTree,
       privateSourceCommit: reconciled.sourceSha,
       checkpointRef: reconciled.checkpointRef,
@@ -174,9 +155,9 @@ export const refreshLocalPlanningSource = async (
               .parse(reconciled.restoredOriginalBase),
           }
         : {}),
-      ...(observed.baseline.sourceOverlay === undefined
+      ...(baseline.sourceOverlay === undefined
         ? {}
-        : { recognizedSourceOverlay: observed.baseline.sourceOverlay }),
+        : { recognizedSourceOverlay: baseline.sourceOverlay }),
       ...("applyReceipt" in current ? { previousApplyDigest: current.applyReceipt.digest } : {}),
       ...("proposal" in current ? { previousProposalDigest: current.proposal.digest } : {}),
       acceptedAppSpecDigest: current.appSpec.digest,

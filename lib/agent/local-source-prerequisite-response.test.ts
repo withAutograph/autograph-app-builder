@@ -14,11 +14,13 @@ import { localSourcePrerequisiteResponse } from "./local-source-prerequisite-res
 
 const mocks = vi.hoisted(() => ({
   reconcile: vi.fn(),
+  captureDigest: vi.fn(() => "9".repeat(64)),
+  history: vi.fn(() => Promise.resolve()),
   dispose: vi.fn(),
   project: vi.fn(() => Promise.resolve()),
 }));
 vi.mock("./local-source-transport-history", () => ({
-  readCompletedLocalSourceTransport: () => Promise.resolve(),
+  readCompletedLocalSourceTransport: mocks.history,
 }));
 vi.mock("../repository/development-source", () => ({
   canAutoSelectDevelopmentSource: () => true,
@@ -34,7 +36,10 @@ vi.mock("./local-planning-source-base", () => ({
 }));
 vi.mock("../repository/local-planning-source", () => ({
   captureLocalPlanningSource: () =>
-    Promise.resolve({ generation: { workspaceDigest: "9".repeat(64) }, dispose: mocks.dispose }),
+    Promise.resolve({
+      generation: { workspaceDigest: mocks.captureDigest() },
+      dispose: mocks.dispose,
+    }),
   reconcileLocalPlanningSource: mocks.reconcile,
 }));
 vi.mock("./source-bound-sandbox", () => ({
@@ -72,6 +77,17 @@ const ctx = {
 beforeEach(() => {
   vi.clearAllMocks();
 });
+it("keeps the selected workspace without reading native transport history when local source is unchanged", async () => {
+  await contextStorage.run(new ContextContainer(), async () => {
+    appBuilderWorkflowState.update(() => state);
+    mocks.captureDigest.mockReturnValueOnce("d".repeat(64));
+    await expect(refreshLocalPlanningSource(ctx, "planning")).resolves.toBeUndefined();
+    expect(mocks.history).not.toHaveBeenCalled();
+    expect(mocks.reconcile).not.toHaveBeenCalled();
+    expect(mocks.dispose).toHaveBeenCalledOnce();
+    expect(appBuilderWorkflowState.get()).toEqual(state);
+  });
+});
 it("commits a typed blocked observation as a normal tool result while retaining the old workflow", async () => {
   await contextStorage.run(new ContextContainer(), async () => {
     appBuilderWorkflowState.update(() => state);
@@ -79,6 +95,10 @@ it("commits a typed blocked observation as a normal tool result while retaining 
     const error = new LocalPlanningSourcePrerequisiteError("c".repeat(40), "d".repeat(64));
     mocks.reconcile.mockRejectedValueOnce(error);
     await expect(refreshLocalPlanningSource(ctx, "planning")).rejects.toBe(error);
+    expect(mocks.history).toHaveBeenCalledOnce();
+    expect(mocks.history.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.reconcile.mock.invocationCallOrder[0] ?? 0,
+    );
     const result = await localSourcePrerequisiteResponse(error, ctx);
     expect(result.status).toBe("blocked");
     expect(result.code).toBe("local_source_baseline_required");

@@ -44,6 +44,8 @@ const mocks = vi.hoisted(() => ({
   clear: vi.fn(),
   describe: vi.fn(),
   execute: vi.fn(),
+  canReadHostSource: vi.fn(() => false),
+  hostSource: vi.fn(),
   prepare: vi.fn(),
   publish: vi.fn(),
   review: vi.fn(),
@@ -51,6 +53,11 @@ const mocks = vi.hoisted(() => ({
   state: { current: {} as Record<string, unknown>, update: vi.fn() },
 }));
 
+vi.mock(import("../repository/development-source"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  canAutoSelectDevelopmentSource: mocks.canReadHostSource,
+  developmentSourceReceipt: mocks.hostSource,
+}));
 vi.mock("./compiled-operator-artifacts", () => ({
   publishCompiledOperatorArtifactsForSession: mocks.publish,
 }));
@@ -122,6 +129,8 @@ const implementationFiles = [{ content: "updated", path: "apps/app/page.tsx" }];
 describe("behavior evidence invalidation during validation repair", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.canReadHostSource.mockReset().mockReturnValue(false);
+    mocks.hostSource.mockReset();
     mocks.attempt.mockReturnValue({ digest: "attempt" });
     mocks.prepare.mockResolvedValue(null);
     mocks.runtime.mockResolvedValue(null);
@@ -139,6 +148,21 @@ describe("behavior evidence invalidation during validation repair", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+  });
+
+  it("runs validation on the retained applied checkout independently of local planning source", async () => {
+    mocks.state.current = workflow("validated");
+    mocks.canReadHostSource.mockReturnValueOnce(true);
+    mocks.hostSource.mockRejectedValueOnce(
+      new Error("The separate local planning source is unavailable."),
+    );
+    await validateAppCreation.execute({ implementationFiles: [] }, {
+      callId: "validate-retained-application",
+      getSandbox: () => Promise.resolve({ id: "owned-applied-sandbox" }),
+      session: { id: "session" },
+    } as never);
+    expect(mocks.execute).toHaveBeenCalledOnce();
+    expect(mocks.hostSource).not.toHaveBeenCalled();
   });
 
   it("rejects deletion of an approved profile check before sandbox resolution or source writes", async () => {
