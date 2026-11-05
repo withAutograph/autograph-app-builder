@@ -39,7 +39,7 @@ The current workflow provides private implementation, review and preview, with
 separately approved publication when requested. Production activation remains a
 protected operator handoff. The fourth phase is the intended delivery contract;
 this documentation does not add an automatic deploy-and-submit operation or
-expand private build approval. Report unavailable delivery capabilities and
+expand the private build scope. Report unavailable delivery capabilities and
 remaining handoff work precisely. Preserve the original public session and all
 approval decisions throughout these phases.
 
@@ -130,7 +130,7 @@ to repair in the shared workflow, not work for the evaluator to do privately.
 Optional provider integrations use the same app-owned composition for new and
 existing apps. Follow the [optional integration authoring reference](../agent/skills/create-app/references/optional-integrations.md)
 to discover actual provider recipes, bind generated schema fields, and run
-`install-app-integrations` after private build approval. Its fixed repository
+`install-app-integrations` during the private build. Its fixed repository
 operation installs only opted-in provider ingress and an optional shared
 integrations surface. The app DAL supplies real central connection/binding
 authority and safe presentation data; a generated page or passing install is
@@ -165,7 +165,7 @@ submission, concurrent decisions and paged audit history when those behaviors
 apply. Report only scenarios actually run; source inspection and mock tests do
 not establish database or identity behavior.
 
-The private build approval covers implementation and validation. Repository
+The accepted AppSpec guides private implementation and validation. Repository
 publication, provider resources, production data changes, and activation remain
 separately approved outward effects. A blocked public run must retain its
 session and precise failed operation; manual implementation cannot replace it

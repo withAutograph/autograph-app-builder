@@ -2,21 +2,21 @@ import type { AppBuilderWorkflowState } from "@/lib/agent/workflow-state";
 
 const phaseGuidance: Partial<Record<AppBuilderWorkflowState["phase"], string>> = {
   app_spec_accepted:
-    "The AppSpec is accepted but no canonical implementation proposal exists yet. For an existing app, inspect its current app-owned files and call accept_app_spec with existingAppChanges containing complete replacement contents before requesting build approval.",
+    "The AppSpec is accepted but no canonical implementation proposal exists yet. For an existing app, inspect its current app-owned files and call accept_app_spec with existingAppChanges containing complete replacement contents before starting the private build.",
   applied:
     "Implementation files were applied. They have not passed repository validation. Call validate_app_creation next in the approved private checkout.",
   apply_failed:
     "Applying the implementation failed. Repair the actual reported error and retry the approved operation; do not claim delivery.",
   dependencies_prepared:
-    "Dependencies are ready but no canonical implementation proposal exists yet. Retry accept_app_spec with the accepted artifact and, for an existing app, exact existingAppChanges before requesting build approval.",
+    "Dependencies are ready but no canonical implementation proposal exists yet. Retry accept_app_spec with the accepted artifact and, for an existing app, exact existingAppChanges before starting the private build.",
   identity_resolved:
-    "The target app was identified but no canonical implementation proposal exists yet. Retry accept_app_spec with the accepted artifact and exact existingAppChanges before requesting build approval.",
+    "The target app was identified but no canonical implementation proposal exists yet. Retry accept_app_spec with the accepted artifact and exact existingAppChanges before starting the private build.",
   planned:
-    "The accepted AppSpec and canonical implementation proposal are ready. Continue with apply_app_creation and its normal build approval for the planned private implementation. Reuse the accepted UI reference; omission of the full UI object from planning metadata is not a reason to regenerate the prototype. Genuine product revisions still follow the design acceptance flow.",
+    "The accepted AppSpec and canonical implementation proposal are ready. Continue with apply_app_creation for the planned private implementation. A selected compute resize requires its own approval. Reuse the accepted UI reference; omission of the full UI object from planning metadata is not a reason to regenerate the prototype. Genuine product revisions still follow the design acceptance flow.",
   reviewed:
     "The change set was reviewed after repository validation. Review does not establish product behavior or a reachable app preview.",
   ui_accepted:
-    "The accepted UI is a design prototype. Record or reuse a build-ready AppSpec, then call accept_app_spec with exact existingAppChanges for an existing app. Build approval requires its planned proposal.",
+    "The accepted UI is a design prototype. Record or reuse a build-ready AppSpec, then call accept_app_spec with exact existingAppChanges for an existing app. Apply the resulting proposal in the private checkout.",
   ui_previewed:
     "The recorded UI is a design prototype. Fixture interactions do not prove that the implemented app has persistence, authentication, orchestration, or a working backend.",
   validated:

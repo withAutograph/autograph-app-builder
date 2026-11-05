@@ -10,7 +10,7 @@ import { appBuilderWorkflowState, assertUpstreamMutationAllowed } from "@/lib/ag
 
 export default defineTool({
   description:
-    "Prepare or resume the implementation plan for the already accepted AppSpec. In local development this reconciles current shared source with the same saved app, preserving app changes and historical receipts. After a settled approved private Build, explicit nonempty existingAppChanges prepares a fresh same-app repair proposal and ordinary fresh Build approval while retaining the accepted AppSpec; no-files calls reuse the current plan. Existing-app product edits use existingAppChanges; a verified local source-only refresh needs no artificial app edits. This creates a new plan for normal review and Build approval; it does not apply, publish, deploy, provision resources or connect providers.",
+    "Prepare or resume the implementation plan for the already accepted AppSpec. In local development this reconciles current shared source with the same saved app, preserving app changes and historical receipts. After a settled private build, explicit nonempty existingAppChanges prepares a fresh same-app repair proposal while retaining the accepted AppSpec; no-files calls reuse the current plan. Existing-app product edits use existingAppChanges; a verified local source-only refresh needs no artificial app edits. This creates a new plan for private execution and review; it does not apply, publish, deploy, provision resources or connect providers.",
   inputSchema: z.object({
     existingAppChanges: existingAppChangesSchema.optional(),
     frameworkUpgrade: z.literal("latest").optional(),

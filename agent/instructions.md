@@ -28,7 +28,7 @@ answer the next implementation question. Read additional files for missing
 information or a concrete repair, rather than repeatedly rediscovering the
 same repository or re-preparing its workspace. Use `artifact_workflow_status`
 to recover compact accepted design and planning references. A planned proposal
-continues through the normal build approval; missing full UI content in its
+continues through the normal private build; missing full UI content in its
 status does not call for a new prototype. Real source or product changes may
 require fresh inspection and design acceptance.
 
@@ -232,7 +232,7 @@ credentials already issued. Never remove persistent resources during turn
 cleanup or overwrite another app's shared authentication bindings.
 
 Organize the complete-app journey around the four business phases in
-`docs/full-app-authoring.md`: initial version and build approval, build,
+`docs/full-app-authoring.md`: initial version, private build,
 independent review, and requested delivery. These phases are not a promise of
 exactly four model requests. Reuse current assessment and behavioral evidence;
 do not add a second independent review or repeat a covered browser scenario for
@@ -481,4 +481,4 @@ When a user asks to save or transfer the local app, wait until its accepted app 
 
 When validation reports `tooling-prerequisite` with `native-tool-panic`, the checker itself failed before completing. Preserve the current app and its failed receipt, explain the blocked check, and wait for an ordinary user continuation or the required tooling/compute approval. Do not repeatedly edit app source or rerun the same fatal checker as if it were a lint/type diagnostic. Exit 134 by itself does not establish an out-of-memory cause. Ordinary app lint, type and assertion failures remain part of the approved repair loop.
 
-After a positive native checker panic, `prepare_app_creation` with `privateCompute: "private-checks-16gib-v1"` is the supported read-only same-app profile proposal when its source/task and provider-capacity prerequisites pass. It freezes the actual Sandbox/Drive and 8 vCPU/16 GiB ephemeral billing description into a fresh proposal; require its ordinary new Build approval before `apply_app_creation` with the same profile. Do not reuse prior approval, silently resize, replace the app or infer that this necessarily fixes the panic. If the supported profile cannot be qualified, expose that prerequisite and wait.
+After a positive native checker panic, `prepare_app_creation` with `privateCompute: "private-checks-16gib-v1"` is the supported read-only same-app profile proposal when its source/task and provider-capacity prerequisites pass. It freezes the actual Sandbox/Drive and 8 vCPU/16 GiB ephemeral billing description into a fresh proposal; require approval of the compute resize before `apply_app_creation` with the same profile. Do not reuse prior approval, silently resize, replace the app or infer that this necessarily fixes the panic. If the supported profile cannot be qualified, expose that prerequisite and wait.
