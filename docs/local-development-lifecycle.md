@@ -551,8 +551,9 @@ frozen reconciliation that used that canonical identity remains readable only
 when its exact current workspace, parsed SourceReceipt and completed private
 Native call match the trusted reconciliation history. Reading it neither rewrites
 the receipt nor carries an old Build approval into a new plan. Ordinary moving
-host source is observed by the next planning reconciliation. Validation runs
-against the selected applied workspace even if separate host source has moved.
+host source is observed by the next planning reconciliation. Local schema
+compilation and validation run against the selected applied workspace even if
+separate host source has moved.
 When planning observes unchanged source, it retains that workspace without
 reading native transport history.
 
@@ -579,11 +580,10 @@ policy, including executable mode. No-files validation, deletion, another path,
 custom recipe, or changed app/proposal/workspace cannot trigger this repair. It
 creates no approval and cannot resize compute or change provider resources.
 
-A retained typed validation tooling prerequisite also suppresses repeated
-no-files `validate_app_creation` command dispatch within the same turn. Builder
-returns the existing failure and repair hint without resetting workflow state or
-running commands. Explicit implementation repair and normal source reconciliation
-remain available; no retry counter or retry deadline is involved.
+A retained typed tooling prerequisite stops automatic validation continuation.
+An explicit `validate_app_creation` retry runs the current checkout's checks
+and reports the new result, including a current failure if the tool remains
+unavailable. The prior failure does not certify the current checkout.
 
 Private browser tasks use the checked `app:describe` catalog entry independently
 of the exact Auth origin. A restored private runtime projects that entry even

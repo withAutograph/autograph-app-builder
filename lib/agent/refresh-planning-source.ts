@@ -35,9 +35,11 @@ export const refreshPlanningSource = async (
   ctx: Pick<ToolContext, "callId" | "getSandbox"> & { session: { auth: unknown; id: string } },
   purpose: "planning" | "schema-compilation" = "planning",
 ) => {
-  const local = await refreshLocalPlanningSource(ctx, purpose);
-  if (local !== undefined) {
-    return local;
+  if (purpose === "planning") {
+    const local = await refreshLocalPlanningSource(ctx);
+    if (local !== undefined) {
+      return local;
+    }
   }
   const current = appBuilderWorkflowState.get();
   const sandbox = await getSourceBoundSandbox(ctx);

@@ -206,21 +206,6 @@ export const createAppValidationTool = (
       ) {
         throw new Error("Apply the requested changes before running the repository checks.");
       }
-      if (
-        input.implementationFiles.length === 0 &&
-        current.phase === "validation_failed" &&
-        current.validationFailure.reason === "tooling-prerequisite"
-      ) {
-        return {
-          status: "needs_repair" as const,
-          reason: "validation-tooling-prerequisite",
-          failureClass: current.validationFailure.commandFailure?.failureClass,
-          problem:
-            current.validationFailure.commandFailure?.hint ??
-            "The retained validation tooling prerequisite is unresolved. Repair it through a supported Builder operation before retrying unchanged validation.",
-          validationFailure: current.validationFailure,
-        };
-      }
       assertExistingAppImplementationFiles(input.implementationFiles, current.proposal.target);
       if (
         deletesPrivateComputeCheck(

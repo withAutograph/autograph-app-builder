@@ -43,7 +43,7 @@ export default defineTool({
         await sourceStatus.execute({}, ctx);
       }
       if (development && "appSpec" in current && current.githubSource === undefined) {
-        const reconciled = await refreshLocalPlanningSource(ctx, "planning");
+        const reconciled = await refreshLocalPlanningSource(ctx);
         if (reconciled !== undefined) {
           const refreshed = appBuilderWorkflowState.get();
           if (!("workspace" in refreshed)) {

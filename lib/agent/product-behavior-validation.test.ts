@@ -764,7 +764,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     },
   );
   it.each(["missing-app-task", "native-tool-panic"])(
-    "does not rerun unchanged validation within the same turn after %s",
+    "runs explicit validation against the current checkout after a retained %s failure",
     async (failureClass) => {
       const saved = {
         ...workflow("validated"),
@@ -781,25 +781,17 @@ describe("behavior evidence invalidation during validation repair", () => {
         },
       };
       mocks.state.current = saved;
-      const getSandbox = vi.fn();
-      for (const callId of ["first-unchanged", "second-unchanged"]) {
-        // SAFETY: The early no-effects preflight consumes only callId and the retained workflow.
-        // oxlint-disable-next-line eslint/no-await-in-loop -- Repeated calls must observe the same unchanged retained state sequentially.
-        const result = await validateAppCreation.execute({ implementationFiles: [] }, {
-          callId,
-          getSandbox,
-          session: { id: "session", auth: {} },
-        } as never);
-        expect(result).toMatchObject({
-          status: "needs_repair",
-          reason: "validation-tooling-prerequisite",
-          failureClass,
-        });
-      }
-      expect(mocks.state.current).toBe(saved);
-      expect(mocks.state.update).not.toHaveBeenCalled();
-      expect(getSandbox).not.toHaveBeenCalled();
-      expect(mocks.execute).not.toHaveBeenCalled();
+      const getSandbox = vi.fn(() => Promise.resolve({ id: "validation-sandbox" }));
+      // SAFETY: The existing faithful validation ports own all effects in this product-tool regression.
+      const result = await validateAppCreation.execute({ implementationFiles: [] }, {
+        callId: "retry-after-tooling-repair",
+        getSandbox,
+        session: { id: "session", auth: {} },
+      } as never);
+      expect(getSandbox).toHaveBeenCalledOnce();
+      expect(mocks.execute).toHaveBeenCalledOnce();
+      expect(result).toMatchObject({ status: "validated", reused: false });
+      expect(mocks.state.current).not.toHaveProperty("validationFailure");
     },
   );
   it("allows explicit ordinary app repair after a retained tooling prerequisite", async () => {

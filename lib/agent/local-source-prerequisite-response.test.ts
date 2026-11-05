@@ -81,7 +81,7 @@ it("keeps the selected workspace without reading native transport history when l
   await contextStorage.run(new ContextContainer(), async () => {
     appBuilderWorkflowState.update(() => state);
     mocks.captureDigest.mockReturnValueOnce("d".repeat(64));
-    await expect(refreshLocalPlanningSource(ctx, "planning")).resolves.toBeUndefined();
+    await expect(refreshLocalPlanningSource(ctx)).resolves.toBeUndefined();
     expect(mocks.history).not.toHaveBeenCalled();
     expect(mocks.reconcile).not.toHaveBeenCalled();
     expect(mocks.dispose).toHaveBeenCalledOnce();
@@ -94,7 +94,7 @@ it("commits a typed blocked observation as a normal tool result while retaining 
     const before = JSON.stringify(state);
     const error = new LocalPlanningSourcePrerequisiteError("c".repeat(40), "d".repeat(64));
     mocks.reconcile.mockRejectedValueOnce(error);
-    await expect(refreshLocalPlanningSource(ctx, "planning")).rejects.toBe(error);
+    await expect(refreshLocalPlanningSource(ctx)).rejects.toBe(error);
     expect(mocks.history).toHaveBeenCalledOnce();
     expect(mocks.history.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.reconcile.mock.invocationCallOrder[0] ?? 0,
@@ -117,7 +117,7 @@ it("does not classify matching diagnostic prose as a typed source prerequisite",
       "The retained original source Git bytes do not match the saved planning baseline.",
     );
     mocks.reconcile.mockRejectedValueOnce(error);
-    await expect(refreshLocalPlanningSource(ctx, "planning")).rejects.toBe(error);
+    await expect(refreshLocalPlanningSource(ctx)).rejects.toBe(error);
     await expect(localSourcePrerequisiteResponse(error, ctx)).rejects.toBe(error);
     expect(currentLocalSourcePrerequisite(state, ctx.session.id)).toBeUndefined();
     expect(mocks.project).not.toHaveBeenCalled();

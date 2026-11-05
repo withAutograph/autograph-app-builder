@@ -41,9 +41,6 @@ const settledPhases = new Set([
   "validated",
   "reviewed",
 ]);
-export const LOCAL_SOURCE_REFRESH_GUIDANCE =
-  "The local shared source has changed. Call prepare-app-creation to reconcile it with this saved app while retaining its content and data, then continue the normal new-plan review and apply for those source changes. Original source, approvals and private app work remain saved.";
-
 const observe = async (current: SourceWorkflow) => {
   const receipt = await developmentSourceReceipt(current.sourceReceipt.sourceKind);
   if (receipt === undefined) {
@@ -70,7 +67,6 @@ export const refreshLocalPlanningSource = async (
     Partial<Pick<ToolContext, "abortSignal">> & {
       session: { auth: unknown; id: string; ownerRunId?: string; ownerAnchorRunId?: string };
     },
-  purpose: "planning" | "schema-compilation",
 ): Promise<Awaited<ReturnType<typeof getSourceBoundSandbox>> | undefined> => {
   const current = appBuilderWorkflowState.get();
   if (!localWorkflow(current) || !settledPhases.has(current.phase)) {
@@ -81,9 +77,6 @@ export const refreshLocalPlanningSource = async (
     if (!observed.changed) {
       resolveLocalSourcePrerequisite(current, ctx.session.id, ctx.callId);
       return undefined;
-    }
-    if (purpose !== "planning") {
-      throw new Error(LOCAL_SOURCE_REFRESH_GUIDANCE);
     }
     // Native transport history identifies the retained overlay only when reconciliation is needed.
     const completedTransport = await readCompletedLocalSourceTransport({
