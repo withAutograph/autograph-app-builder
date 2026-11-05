@@ -59,18 +59,21 @@ describe("frozen private check policy", () => {
     ).toBe(true);
     expect(run).not.toHaveBeenCalled();
   });
-  it("qualifies real mise file-task resolution and rejects TOML override, bytes and mode drift", async () => {
+  it("qualifies real mise file-task resolution and rejects effective TOML override, bytes and mode drift", async () => {
     const root = await realpath(await mkdtemp(path.join(os.tmpdir(), "builder-check-policy-")));
     execFileSync("/usr/bin/git", ["init", "--quiet", root]);
     await writeFile(path.join(root, "mise.toml"), "monorepo_root = true\n");
     const config = path.join(root, "apps/example/.config/mise");
     await mkdir(path.join(config, "tasks"), { recursive: true });
+    await mkdir(path.join(root, "apps/example/empty-tasks"));
     await mkdir(path.join(root, ".config/mise"), { recursive: true });
     await writeFile(
       path.join(root, ".config/mise/config.toml"),
       '[settings]\nexperimental = true\n[monorepo]\nconfig_roots=["apps/*"]\n',
     );
     await writeFile(path.join(config, "config.toml"), "# discover app tasks\n");
+    const globalConfig = path.join(root, "global-mise.toml");
+    await writeFile(globalConfig, "# owned fixture global configuration\n");
     const task = path.join(root, profile.checkPolicy.path);
     await writeFile(task, PRIVATE_COMPUTE_CHECK_TASK, { mode: 0o755 });
     const selectedMise = process.env.APP_BUILDER_DEV_MISE_BIN;
@@ -89,8 +92,9 @@ describe("frozen private check policy", () => {
             cwd: root,
             env: {
               ...process.env,
-              PATH: `${path.dirname(process.execPath)}:${process.env.PATH ?? ""}:${miseDirectory}:/usr/bin:/bin`,
+              PATH: `${path.dirname(process.execPath)}:${miseDirectory}:${process.env.PATH ?? ""}:/usr/bin:/bin`,
               MISE_STATE_DIR: path.join(root, ".mise-state"),
+              MISE_GLOBAL_CONFIG_FILE: globalConfig,
               MISE_TRUSTED_CONFIG_PATHS: root,
             },
           },
@@ -113,7 +117,23 @@ describe("frozen private check policy", () => {
       });
     try {
       expect(await check()).toBe(true);
-      await writeFile(path.join(config, "config.toml"), '[tasks.check]\nrun="vp check"\n');
+      // Older mise keeps a discovered file task when an inline command has the
+      // same name. Select an empty include directory so this TOML command is a
+      // genuine effective replacement on both the pinned CI and local CLI.
+      await writeFile(
+        path.join(config, "config.toml"),
+        '[task_config]\nincludes=["empty-tasks"]\n[tasks.check]\nrun="vp check"\n',
+      );
+      const replacement = await run({
+        command: "mise tasks info //apps/example:check --json",
+        workingDirectory: "/workspace/repository",
+      });
+      expect(replacement.exitCode).toBe(0);
+      expect(
+        z
+          .object({ source: z.string(), file: z.null(), run: z.array(z.string()) })
+          .parse(JSON.parse(replacement.stdout)),
+      ).toEqual({ source: path.join(config, "config.toml"), file: null, run: ["vp check"] });
       expect(await check()).toBe(false);
       await writeFile(
         path.join(config, "config.toml"),
