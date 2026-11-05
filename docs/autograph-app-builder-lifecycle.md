@@ -65,6 +65,23 @@ target checkout or external system is changed.
 
 After the appropriate authorization, the builder prepares its changes, runs the
 fixed local checks and tests, and presents the ordered result for review.
+
+Validation runs against the selected applied checkout. Ordinary changes in the
+separate host source become input to the next plan. When planning observes no
+source change, keep the current workspace without loading native transport
+history. When reconciling changed source, use the owned transport evidence
+needed to preserve the app's edits and bind the actual workspace.
+
+Private preview and browser checks can use the retained validated artifact
+while a draft remains unapplied. Keep the selected app, owner, workspace and
+artifact identity bound to that action. When identifying retained source for a
+private preview, compare its paths and content. Ignore permission-only
+differences. Use the actual launch and dependency command results to diagnose
+failures. An absent cache marker or an unapproved draft alone must never
+require a new Build. A pending or uncertain write still needs reconciliation
+where it affects the checkout being used. Preview creates no release authority
+and never carries a prior approval into a new apply or provider effect.
+
 For a failed private apply, Builder names the failed repository command and
 exit status, includes sanitized compiler or command diagnostics, and gives a
 repair or retry instruction. If the response cannot carry all diagnostics,

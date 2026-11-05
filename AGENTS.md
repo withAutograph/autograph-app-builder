@@ -68,6 +68,16 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Do not add admission or per-step gates for normal app edits, new files,
   changed routes, metadata, package names, schemas, or repository layouts.
   Repository-produced metadata is planning input, not a fixture to match.
+- Review every new or tightened refusal on the actual user path. Identify the
+  concrete boundary it protects, such as owner or tenant isolation, approval of
+  an exact effect, cancellation, or prevention of duplicate or uncertain writes.
+  Use the narrowest facts that enforce that boundary. Remove a refusal when it
+  only compares incidental state or predicts a failure the real command can report.
+- Keep private validation and preview usable through ordinary host edits,
+  permission-only differences, and optional setup or diagnostic metadata.
+  Missing cache or dependency markers, an unapproved draft, and changed host
+  source do not by themselves justify another Build approval. See the
+  [local validation and preview contract](docs/autograph-app-builder-lifecycle.md#9-review-and-validate-locally).
 - CI assertions must exercise the functionality they claim to protect:
   commands execute, users can complete tasks, data persists, failures recover,
   and authentication, tenant isolation, approvals, and cancellation work.
