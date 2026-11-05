@@ -14,6 +14,37 @@ import { runAppBrowserTests as runResolvedAppBrowserTests } from "./app-browser-
 type SandboxRunOptions = Parameters<SandboxSession["run"]>[0];
 
 describe("private app browser tests", () => {
+  const marker = "[private browser prerequisite] private-preview-refresh-required";
+
+  it.each([
+    { stdout: `other line\n${marker}\n[private browser] run failed`, exitCode: 1, refresh: true },
+    { stdout: `other line\r\n${marker}\r\n`, exitCode: 1, refresh: true },
+    {
+      stdout: `[private browser] failed: ${marker} (tests/e2e/page.spec.ts:28)`,
+      exitCode: 1,
+      refresh: false,
+    },
+    { stdout: `\u001B${marker}`, exitCode: 1, refresh: false },
+    { stdout: `${marker} extra`, exitCode: 1, refresh: false },
+    { stdout: "[private browser stage] preview-refresh-required", exitCode: 1, refresh: false },
+    { stdout: marker, exitCode: 0, refresh: false },
+  ])(
+    "only classifies an exact standalone failure marker ($stdout)",
+    async ({ stdout, exitCode, refresh }) => {
+      const result = await runResolvedAppBrowserTests({
+        appId: "spend-review",
+        root: "/workspace/repository",
+        sandbox: { run: vi.fn().mockResolvedValue({ exitCode, stdout, stderr: "" }) },
+      });
+      expect(result).toMatchObject({ exitCode, status: exitCode === 0 ? "passed" : "failed" });
+      if (refresh) {
+        expect(result).toHaveProperty("reason", "private-preview-refresh-required");
+      } else {
+        expect(result).not.toHaveProperty("reason");
+      }
+    },
+  );
+
   it("forwards the focused selection through the prepared hosted runtime", async () => {
     const runTask = vi
       .fn<PreparedRuntimeExecution["runTask"]>()

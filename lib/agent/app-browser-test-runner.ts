@@ -7,6 +7,9 @@ import type { PreparedRuntimeExecution } from "./prepared-runtime-execution-core
 import { browserTestSelectionSchema } from "./browser-test-selection";
 import type { BrowserTestSelection } from "./browser-test-selection";
 
+const privatePreviewPrerequisiteLine =
+  "[private browser prerequisite] private-preview-refresh-required";
+
 const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 
 export const appBrowserTestCommand = (appId: string): string =>
@@ -133,7 +136,8 @@ export const runAppBrowserTests = async (input: {
     const stdout = safeOutput(result.stdout);
     const stderr = safeOutput(result.stderr);
     if (result.exitCode !== 0) {
-      if (stdout.includes("[private browser prerequisite] private-preview-refresh-required")) {
+      // Parse the original line so display redaction cannot manufacture a marker.
+      if (result.stdout.split(/\r?\n/u).includes(privatePreviewPrerequisiteLine)) {
         return {
           command,
           exitCode: result.exitCode,

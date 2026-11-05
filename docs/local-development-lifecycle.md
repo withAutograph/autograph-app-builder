@@ -741,3 +741,7 @@ Each read still verifies the canonical history against retained events. When
 neither local continuation decision is runnable, the public read skips the
 additional dispatch preflight. A possible continuation still requires a fresh
 native observation and the existing durable decision and reservation checks.
+
+Private browser results classify the legacy preview-refresh prerequisite only
+from its exact standalone reporter line on a failed test command. Test titles
+and bounded stage diagnostics do not set the prerequisite classification.
