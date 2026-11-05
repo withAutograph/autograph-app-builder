@@ -10,10 +10,12 @@ import {
   repositoryAccessReceiptState,
 } from "./repository-access-state";
 import { createPublishedDraftRepairSource } from "./published-draft-repair";
+import { resolveDraftReviewedWorkflow } from "./draft-reviewed-lineage";
 import {
   draftReconciliationCompletions,
   draftReconciliationState,
   publishedDraftRepairCompletions,
+  samePersistedDraftCandidate,
   updateExactDraftReconciliation,
 } from "./draft-reconciliation-state";
 import type {
@@ -32,8 +34,16 @@ import {
 import type { DraftReconciliationInput } from "../repository/sandbox-draft-reconciliation";
 
 type Reviewed = Extract<AppBuilderWorkflowState, { phase: "reviewed" }>;
-const assertCurrentOrigin = (expected: Reviewed): void => {
-  const current = appBuilderWorkflowState.get();
+const assertCurrentOrigin = (
+  expected: Reviewed,
+  expectedCandidate: DraftReconciliationCandidate | null,
+): void => {
+  const workflow = appBuilderWorkflowState.get();
+  const candidate = draftReconciliationState.get();
+  if (!samePersistedDraftCandidate(candidate, expectedCandidate)) {
+    throw new Error("The draft candidate changed during preparation.");
+  }
+  const current = resolveDraftReviewedWorkflow(workflow, candidate) ?? workflow;
   if (current.phase !== "reviewed") {
     throw new Error("The app is no longer reviewed for draft repair.");
   }
@@ -95,8 +105,12 @@ export const draftInspectionRecoveryForSession = (input: {
   };
 };
 
-const acquireOwnedPublishedDraft = async (input: PreparationInput) => {
+const acquireOwnedPublishedDraft = async (
+  input: PreparationInput,
+  previous: DraftReconciliationCandidate | null,
+) => {
   const { state, ctx } = input;
+  assertCurrentOrigin(state, previous);
   const proposalDigest =
     state.publishedGitHubDraftProposalDigest ?? state.githubDraftProposal?.proposal.digest;
   const savedAccess = repositoryAccessReceiptState.get();
@@ -112,6 +126,7 @@ const acquireOwnedPublishedDraft = async (input: PreparationInput) => {
   const runtime = await githubPublicationRuntimeForSession(ctx.session.auth, {
     selectedInstallationId: access.scope.installationId,
   });
+  assertCurrentOrigin(state, previous);
   if (runtime.inspectOwnedPublishedDraftRepairSource === undefined) {
     throw new Error("The publication runtime cannot prepare a same-session owned draft repair.");
   }
@@ -161,16 +176,17 @@ const acquireOwnedPublishedDraft = async (input: PreparationInput) => {
     source: owned.source,
     draft: owned.draft,
   });
-  assertCurrentOrigin(state);
+  assertCurrentOrigin(state, previous);
   return { access, runtime, owned, repair };
 };
 
 /** Acquire a second private checkout for this session's actual published app, never replace its starter. */
 export const preparePublishedDraftRepair = async (input: PreparationInput) => {
   const { state, ctx } = input;
-  const { access, owned, repair } = await acquireOwnedPublishedDraft(input);
+  const previous = structuredClone(draftReconciliationState.get());
+  const { access, owned, repair } = await acquireOwnedPublishedDraft(input, previous);
   const sandbox = await getSourceBoundSandbox(ctx);
-  const previous = draftReconciliationState.get();
+  assertCurrentOrigin(state, previous);
   const originAlreadyCarried = publishedDraftRepairCompletions
     .get()
     .some((completion) =>
@@ -205,7 +221,7 @@ export const preparePublishedDraftRepair = async (input: PreparationInput) => {
       },
     },
     prepare: async () => {
-      assertCurrentOrigin(state);
+      assertCurrentOrigin(state, previous);
       return await preparePublishedDraftRepairCandidate({
         sandbox,
         repository: repair.source.repository,
@@ -219,7 +235,7 @@ export const preparePublishedDraftRepair = async (input: PreparationInput) => {
       });
     },
   });
-  assertCurrentOrigin(state);
+  assertCurrentOrigin(state, previous);
   const { publicationScope: _publicationScope, ...preparedRepair } = prepared;
   void _publicationScope;
   const candidate = {
@@ -231,6 +247,7 @@ export const preparePublishedDraftRepair = async (input: PreparationInput) => {
     pullRequestNumber: owned.draft.number,
     githubSourceDigest: owned.source.digest,
     originalReviewDigest: state.reviewReceipt.digest,
+    reviewedLineage: structuredClone(state),
   };
   updateExactDraftReconciliation({
     expected: previous,
@@ -383,8 +400,8 @@ const reconciliationPreparationLineage = (
 /** Reconcile the owned draft with its live base without changing the accepted starter source. */
 export const preparePublishedDraftReconciliation = async (input: PreparationInput) => {
   const { state, ctx } = input;
-  const { access, runtime, owned, repair } = await acquireOwnedPublishedDraft(input);
-  const previous = draftReconciliationState.get();
+  const previous = structuredClone(draftReconciliationState.get());
+  const { access, runtime, owned, repair } = await acquireOwnedPublishedDraft(input, previous);
   const { ownedPrevious, recoveryMode, reopenCurrent, previousInput } =
     reconciliationPreparationLineage(input, previous, repair);
   const source = await runtime.inspectExistingDraftReconciliationSource({
@@ -431,7 +448,7 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
   ) {
     throw new Error("The draft branch moved during preparation. Re-observe this same draft.");
   }
-  assertCurrentOrigin(state);
+  assertCurrentOrigin(state, previous);
   const sandbox = await getSourceBoundSandbox(ctx);
   // The original full publication already carries its approved root registration.
   const changes = state.reviewReceipt.changes.filter((change) =>
@@ -460,7 +477,7 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
       },
     },
     prepare: async () => {
-      assertCurrentOrigin(state);
+      assertCurrentOrigin(state, previous);
       return await prepareDraftReconciliation({
         sandbox,
         repository: repair.source.repository,
@@ -476,7 +493,7 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
       });
     },
   });
-  assertCurrentOrigin(state);
+  assertCurrentOrigin(state, previous);
   const {
     created: _created,
     preservedCandidateRoot,
@@ -500,6 +517,7 @@ export const preparePublishedDraftReconciliation = async (input: PreparationInpu
     pullRequestNumber: owned.draft.number,
     githubSourceDigest: repair.source.digest,
     originalReviewDigest: state.reviewReceipt.digest,
+    reviewedLineage: structuredClone(state),
   };
   updateExactDraftReconciliation({
     expected: previous,

@@ -72,6 +72,15 @@ owner-authenticated native session history at the supported recovery boundary.
 Compact review summaries and unverified proposal metadata cannot reconstruct
 it. Recovery preserves the latest draft and its edits, does not roll back the
 current workflow, and grants no permission to replay an external effect.
+For a starter-created app's owned published draft, the retained full review
+must match the current starter/apply/workspace and the verified publication
+origin of the same candidate. A later recovery may look into predecessor native
+executions only through the committed, owner-authorized public recovery receipt
+chain. It checks each owner's original checkpoint boundary and orders records
+within that execution; event slots from different executions are not comparable.
+A newer conflicting or incomplete review cannot be bypassed by searching for
+an older favorable one. If the full original review or candidate is unavailable,
+recovery retains the existing state and reports the limitation.
 For an already waiting hosted session, an explicit owner `recover-idle` request
 reaches that boundary through the existing native recovery reservation and
 receipt. Normal resume keeps the healthy handle and does not reconstruct

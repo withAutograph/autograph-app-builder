@@ -2,6 +2,7 @@
 /* oxlint-disable typescript/no-unsafe-assignment, typescript/no-unsafe-call, typescript/no-unsafe-member-access, typescript/no-unsafe-return, typescript/no-unsafe-argument -- The installed compiled native collector/reconciler expose private runtime modules; only external world/storage ports use controlled fixtures. */
 /* oxlint-disable eslint/require-await -- Synthetic provider/storage ports retain their production asynchronous signatures. */
 import { createRequire } from "node:module";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
@@ -12,6 +13,18 @@ import type { TargetApplyReceipt } from "../../repository/target-apply";
 import type { TargetValidationReceipt } from "../../repository/target-validation";
 import type { DraftReconciliationCandidate } from "../../agent/draft-reconciliation-state";
 import type { DraftReviewedWorkflow } from "../../agent/draft-reviewed-lineage";
+import { createPublishedDraftRepairSource } from "../../agent/published-draft-repair";
+import { GitHubPublicationTestStore } from "../../repository/github-publication-test-store";
+import { parseSourceReceipt } from "../../repository/source-receipt";
+import {
+  GITHUB_PUBLICATION_VERSION,
+  createDraftPullRequestProposal,
+  createGitHubInstallationIdentity,
+  createRepositoryObservation,
+  publishApprovedDraftPullRequest,
+  resolveImmutableExistingSource,
+} from "../../repository/github-publication";
+import type { GitHubPublicationAdapter } from "../../repository/github-publication";
 import {
   targetCreationProposalSchema,
   targetIdentitySchema,
@@ -43,7 +56,7 @@ export const { recoverTerminalSession, activateTerminalSession, inspectNativeRec
 const { emitTurnEpilogue, setHarnessEmissionState } = await load("harness/emission.js");
 const serialization = await load("compiled/@workflow/core/serialization.js");
 export const workflowKey = "autograph-app-builder.workflow.v17";
-export const logical = "logical-original";
+export const logical = "physical-ancestor";
 export const owner = "physical-source";
 const d = "a".repeat(64);
 const sha = "b".repeat(40);
@@ -309,10 +322,203 @@ export const fixture = () => {
   return { input, reviewed, candidate, currentContext, old, current };
 };
 
-export const nativeFixture = async (
-  options: { live?: boolean; pendingApproval?: boolean; activeTurn?: boolean } = {},
-) => {
+/** Construct real provider-bound owned-publication receipts against a controlled provider. */
+export const freshFixture = async () => {
   const f = fixture();
+  const sourceEvidence = {
+    adapter: f.reviewed.sourceReceipt.adapter,
+    contractDigest: d,
+    eligibilityDigest: d,
+    releaseEnabled: false as const,
+    sourceKind: "fresh-template" as const,
+    sourceSha: sha,
+    sourceTree: sha,
+    version: 3 as const,
+  };
+  const sourceDigest = createHash("sha256").update(JSON.stringify(sourceEvidence)).digest("hex");
+  Object.assign(
+    f.reviewed.sourceReceipt,
+    parseSourceReceipt({ ...sourceEvidence, digest: sourceDigest, sourcePath: "/source" }),
+  );
+  for (const receipt of [
+    f.reviewed.applyReceipt,
+    f.reviewed.validationReceipt,
+    f.reviewed.identityReceipt,
+    f.reviewed.proposal,
+    f.reviewed.dependencyReceipt,
+  ]) {
+    receipt.sourceReceiptDigest = sourceDigest;
+  }
+  f.reviewed.reviewReceipt = createReviewedChangeSetReceipt(
+    deriveNormalizedChangeSet(f.reviewed.applyReceipt, f.reviewed.validationReceipt, d, d),
+    "original-review",
+  );
+  f.candidate.originalReviewDigest = f.reviewed.reviewReceipt.digest;
+  delete f.reviewed.githubSource;
+  const current = f.currentContext[workflowKey];
+  delete current.githubSource;
+  const installation = (operation: "resolve-existing-source" | "publish-draft-pull-request") =>
+    createGitHubInstallationIdentity({
+      accountId: "20",
+      accountLogin: "owner",
+      accountType: "Organization",
+      installationId: "10",
+      operation,
+      repositorySelection: "selected",
+      selectedRepositoryIds: ["100"],
+    });
+  const publicationInstallation = installation("publish-draft-pull-request");
+  const resolutionInstallation = installation("resolve-existing-source");
+  const repository = (installationIdentityDigest: string) =>
+    createRepositoryObservation({
+      defaultBranch: "main",
+      headSha: sha,
+      headTree: sha,
+      installationIdentityDigest,
+      name: "repository",
+      owner: "owner",
+      releaseGate: { configured: false, name: "REPOSITORY_RELEASE_ENABLED" },
+      repositoryId: "100",
+      visibility: "private",
+    });
+  const publicationRepository = repository(publicationInstallation.digest);
+  const resolutionRepository = repository(resolutionInstallation.digest);
+  const proposal = createDraftPullRequestProposal({
+    installation: publicationInstallation,
+    repository: publicationRepository,
+    review: f.reviewed.reviewReceipt,
+    changedPathsSinceBase: [],
+    title: "Owned draft",
+  });
+  const unsigned = {
+    version: GITHUB_PUBLICATION_VERSION,
+    idempotencyKey: proposal.idempotencyKey,
+    repository: publicationRepository,
+    changedPathsSinceBase: [],
+    branch: {
+      status: "present" as const,
+      branchName: proposal.branchName,
+      branchSha: sha,
+      branchTree: sha,
+      changedContentDigest: proposal.changedContentDigest,
+      idempotencyKey: proposal.idempotencyKey,
+      normalizedChangedPaths: proposal.approvedPaths,
+    },
+    pullRequest: {
+      status: "present" as const,
+      baseBranch: proposal.baseBranch,
+      baseRepositoryId: "100",
+      baseSha: sha,
+      changeSetDigest: proposal.changeSetDigest,
+      draft: true as const,
+      headBranch: proposal.branchName,
+      headRepositoryId: "100",
+      headSha: sha,
+      idempotencyKey: proposal.idempotencyKey,
+      pullRequestId: "400",
+      pullRequestNumber: 42,
+    },
+  };
+  const readBack = {
+    ...unsigned,
+    digest: createHash("sha256").update(JSON.stringify(unsigned)).digest("hex"),
+  };
+  const unavailable = async (): Promise<never> => {
+    throw new Error("Unexpected provider effect");
+  };
+  const adapter: GitHubPublicationAdapter = {
+    inspectInstallation: async (operation) =>
+      operation === "resolve-existing-source" ? resolutionInstallation : publicationInstallation,
+    inspectRepository: async () => resolutionRepository,
+    inspectDraftPublication: async () => readBack,
+    inspectExistingDraft: unavailable,
+    updateExistingDraft: unavailable,
+    inspectDestination: unavailable,
+    inspectFreshRepositoryOutcome: unavailable,
+    createPrivateFreshHistoryRepository: unavailable,
+    publishDraftPullRequest: unavailable,
+  };
+  const [publication, source] = await Promise.all([
+    publishApprovedDraftPullRequest({
+      adapter,
+      store: new GitHubPublicationTestStore(),
+      proposal,
+      review: f.reviewed.reviewReceipt,
+      approvedByCallId: "retained-fixture-approval",
+      contentSource: { readFile: unavailable },
+    }),
+    resolveImmutableExistingSource({
+      adapter,
+      expectedInstallationId: "10",
+      repositoryId: "100",
+      ref: `refs/heads/${proposal.branchName}`,
+      expectedSha: sha,
+      expectedTree: sha,
+      resolvedByCallId: "resolve-owned-draft",
+    }),
+  ]);
+  const repair = createPublishedDraftRepairSource({
+    appId: f.reviewed.appSpec.appId,
+    appSpecDigest: f.reviewed.appSpec.digest,
+    originSourceReceiptDigest: f.reviewed.sourceReceipt.digest,
+    publicationProposalDigest: proposal.digest,
+    publicationDigest: publication.digest,
+    installationId: "10",
+    source,
+    draft: {
+      repositoryId: "100",
+      owner: "owner",
+      name: "repository",
+      number: 42,
+      pullRequestId: "400",
+      draft: true,
+      state: "open",
+      headRepositoryId: "100",
+      headBranch: proposal.branchName,
+      headSha: sha,
+      headTree: sha,
+      baseRepositoryId: "100",
+      baseBranch: "main",
+      verifiedBuilderOrigin: { appId: "builder", authorId: "builder-user", marker: "owned" },
+    },
+  });
+  const publicationScope = {
+    kind: "owned-publication" as const,
+    proposal,
+    publication,
+    automaticMergeNonAppDigest: d,
+  };
+  const candidate = Object.assign(f.candidate, {
+    kind: "reconciliation" as const,
+    repositoryId: "100",
+    githubSourceDigest: source.digest,
+    publishedOrigin: repair,
+    publicationScope,
+  });
+  Reflect.set(f.old.serializedContext, draftReviewedLineageContextKey, {
+    ...candidate,
+    unpublished: "earlier draft before latest edits",
+  });
+  Object.assign(current, { publishedGitHubDraftProposalDigest: proposal.digest });
+  Object.assign(f.reviewed, { publishedGitHubDraftProposalDigest: proposal.digest });
+  return { ...f, candidate };
+};
+
+export const nativeFixture = async (
+  options: {
+    live?: boolean;
+    pendingApproval?: boolean;
+    activeTurn?: boolean;
+    fresh?: boolean;
+    priorOwnerReview?: boolean;
+    afterCutoffReview?: boolean;
+    beforeCutoffReview?: boolean;
+    malformedBeforeCutoff?: "null" | "unknown-phase";
+    omitPriorReview?: boolean;
+    paginateAncestor?: boolean;
+  } = {},
+) => {
+  const f = options.fresh === true ? await freshFixture() : fixture();
   let session = {
     sessionId: logical,
     rootSessionId: logical,
@@ -375,9 +581,55 @@ export const nativeFixture = async (
   }
   let nativeStatus = options.live === true ? "running" : "completed";
   let effectConflict = false;
+  const earlier =
+    options.omitPriorReview === true
+      ? {
+          ...f.old,
+          serializedContext: {
+            ...f.old.serializedContext,
+            [workflowKey]: f.currentContext[workflowKey],
+          },
+        }
+      : f.old;
+  const priorCutoff = {
+    ...f.current,
+    origin: { slot: 2, stepId: "step-prior-cutoff", eventId: "event-prior-cutoff" },
+    serializedContext: {
+      ...f.currentContext,
+      [draftReviewedLineageContextKey]: f.old.serializedContext[draftReviewedLineageContextKey],
+    },
+  };
+  const afterCutoff = {
+    ...f.old,
+    origin: { slot: 3, stepId: "step-after-cutoff", eventId: "event-after-cutoff" },
+    serializedContext: { ...f.old.serializedContext, [workflowKey]: fixture().reviewed },
+  };
+  const priorEntries = [earlier, priorCutoff];
+  if (options.beforeCutoffReview === true || options.malformedBeforeCutoff !== undefined) {
+    priorEntries.splice(
+      1,
+      0,
+      options.malformedBeforeCutoff === undefined
+        ? afterCutoff
+        : {
+            ...afterCutoff,
+            serializedContext: {
+              ...afterCutoff.serializedContext,
+              [workflowKey]: options.malformedBeforeCutoff === "null" ? null : { phase: "unknown" },
+            },
+          },
+    );
+  }
+  if (options.afterCutoffReview === true) {
+    priorEntries.push(afterCutoff);
+  }
+  const entries =
+    options.priorOwnerReview === true ? [...priorEntries, f.current] : [f.old, f.current];
+  const priorEntry = (index: number) =>
+    options.priorOwnerReview === true && index < priorEntries.length;
   const steps = await Promise.all(
-    [f.old, f.current].map(async (entry) => ({
-      runId: owner,
+    entries.map(async (entry, index) => ({
+      runId: priorEntry(index) ? "physical-ancestor" : owner,
       stepId: entry.origin.stepId,
       stepName:
         options.live === true ? "step//eve//turnStep" : "step//eve//terminateChildSessionsStep",
@@ -392,7 +644,7 @@ export const nativeFixture = async (
                 sessionState: createDurableSessionState({ session }),
                 serializedContext: entry.serializedContext,
               },
-              owner,
+              priorEntry(index) ? "physical-ancestor" : owner,
             ),
           }
         : {
@@ -406,31 +658,90 @@ export const nativeFixture = async (
                 ],
                 closureVars: [],
               },
-              owner,
+              priorEntry(index) ? "physical-ancestor" : owner,
             ),
           }),
     })),
   );
+  const nativeEvents = steps.map((step, index) => ({
+    runId: step.runId,
+    eventId: `evnt_${String(options.priorOwnerReview === true && step.runId === owner ? index - priorEntries.length + 1 : index + 1).padStart(26, "0")}`,
+    correlationId: step.stepId,
+    eventType: "step_completed",
+    eventData: { stepName: step.stepName },
+  }));
+  const paginate = <T>(
+    values: T[],
+    runId: string,
+    pagination?: { sortOrder?: string; cursor?: string; limit?: number },
+  ) => {
+    const ordered = pagination?.sortOrder === "desc" ? values.toReversed() : values;
+    const offset = pagination?.cursor === undefined ? 0 : Number(pagination.cursor);
+    const limit =
+      options.paginateAncestor === true && runId === "physical-ancestor"
+        ? 1
+        : (pagination?.limit ?? ordered.length);
+    const data = ordered.slice(offset, offset + limit);
+    const next = offset + data.length;
+    return {
+      data,
+      hasMore: next < ordered.length,
+      ...(next < ordered.length ? { cursor: String(next) } : {}),
+    };
+  };
   const world = {
-    runs: { get: async () => ({ runId: owner, status: nativeStatus }) },
-    events: {
-      list: async () => ({
-        data: steps.map((step, index) => ({
-          runId: owner,
-          eventId: `evnt_${String(index + 1).padStart(26, "0")}`,
-          correlationId: step.stepId,
-          eventType: "step_completed",
-          eventData: { stepName: step.stepName },
-        })),
-        hasMore: false,
+    runs: {
+      get: async (runId: string) => ({
+        runId,
+        status: runId === owner ? nativeStatus : "cancelled",
       }),
     },
+    events: {
+      list: async ({
+        runId,
+        pagination,
+      }: {
+        runId: string;
+        pagination?: { sortOrder?: string; cursor?: string; limit?: number };
+      }) =>
+        paginate(
+          nativeEvents.filter((event) => event.runId === runId),
+          runId,
+          pagination,
+        ),
+      get: async (runId: string, eventId: string) => {
+        const event = nativeEvents.find(
+          (entry) => entry.runId === runId && entry.eventId === eventId,
+        );
+        if (event === undefined) {
+          throw new Error("Unknown native event");
+        }
+        return event;
+      },
+      listByCorrelationId: async ({
+        runId,
+        correlationId,
+        pagination,
+      }: {
+        runId: string;
+        correlationId: string;
+        pagination?: { sortOrder?: string; cursor?: string; limit?: number };
+      }) =>
+        paginate(
+          nativeEvents.filter(
+            (event) => event.runId === runId && event.correlationId === correlationId,
+          ),
+          runId,
+          pagination,
+        ),
+    },
     steps: {
-      get: async (_run: string, step: string) => steps.find((entry) => entry.stepId === step),
-      list: async () => ({
+      get: async (runId: string, step: string) =>
+        steps.find((entry) => entry.runId === runId && entry.stepId === step),
+      list: async ({ runId }: { runId: string }) => ({
         data: [
-          ...steps,
-          ...(effectConflict
+          ...steps.filter((step) => step.runId === runId),
+          ...(effectConflict && runId === owner
             ? [
                 {
                   runId: owner,
@@ -461,6 +772,24 @@ export const nativeFixture = async (
     },
     now: () => 0,
   };
+  const { createHistoricalCheckpointVisitor } = await load(
+    "execution/session/historical-checkpoints.js",
+  );
+  const historicalPorts = {
+    ...collectorPorts,
+    hydrateWorkflowArguments: (value: unknown, run: string, key: unknown) =>
+      serialization.hydrateWorkflowArguments(value, run, key),
+    hydrateHookPayload: async (value: unknown, _run: string, key: unknown) =>
+      serialization.deserializePreparedReplayPayload(
+        await serialization.prepareReplayPayload(value, key),
+      ),
+    guardWorld: (value: typeof world) => value,
+    guardedDependencies: (_authorize: unknown, value: typeof world) => ({
+      ...collectorPorts,
+      getWorld: async () => value,
+    }),
+  };
+  const visitHistoricalCheckpoints = createHistoricalCheckpointVisitor(historicalPorts);
   const collect = createTerminalRecoveryCandidateCollector(collectorPorts);
   let receipt: unknown;
   let hook: { runId: string; metadata: Promise<{ recoveryBinding: unknown }> } | undefined;
@@ -491,6 +820,7 @@ export const nativeFixture = async (
   const activatedHooks = new Set<string>();
   const deps = {
     collect,
+    visitHistoricalCheckpoints,
     collectLineagePreflight: createOwnedLineagePreflightCollector(collectorPorts),
     readLineagePreflight: readOwnedLineagePreflight,
     reconcileLineagePreflight: reconcileOwnedLineagePreflight,

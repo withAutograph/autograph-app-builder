@@ -3290,10 +3290,10 @@ new file mode 100644
 +}
 diff --git a/dist/src/execution/session/terminal-recovery.d.ts b/dist/src/execution/session/terminal-recovery.d.ts
 new file mode 100644
-index 0000000000000000000000000000000000000000..8741d927145f6b0b1eadd660280c57e92d2530a0
+index 0000000000000000000000000000000000000000..45c7334f8786e41c666b42ae196aceab31bc73f6
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.d.ts
-@@ -0,0 +1,132 @@
+@@ -0,0 +1,147 @@
 +import type { SessionAuthContext } from "#channel/types.js";
 +import type { SessionCheckpoint } from "#execution/session/handoff.js";
 +import type { TerminalRecoveryWorkflowEntryInput } from "#execution/session/entry-input.js";
@@ -3330,6 +3330,18 @@ index 0000000000000000000000000000000000000000..8741d927145f6b0b1eadd660280c57e9
 +  readonly auth: SessionAuthContext;
 +  readonly descriptor: TerminalRecoveryDescriptor;
 +}
++/** Private, canonical predecessor capability. Never accepts model-provided run authority. */
++export interface TerminalRecoveryPredecessorWindow {
++  readonly ownerRunId: string;
++  readonly logicalSessionId: string;
++  readonly cutoff: TerminalRecoveryProvenance;
++  readonly authorizeRead: () => Promise<void>;
++}
++export interface HistoricalRecoveryCheckpoint {
++  readonly runIndex: number;
++  readonly origin: { readonly slot: number; readonly stepId: string; readonly eventId: string };
++  readonly value: unknown;
++}
 +/** Trusted app projection; the diagnostic sink validates primitive buckets before logging. */
 +export interface TerminalRecoveryCandidateFacts {
 +  readonly flags: Readonly<Record<string, boolean | null>>;
@@ -3350,15 +3362,18 @@ index 0000000000000000000000000000000000000000..8741d927145f6b0b1eadd660280c57e9
 +export interface TerminalRecoveryPorts {
 +  authorizeSourceObservation?(input: { auth: SessionAuthContext; source: NativeSourceObservation }): Promise<{ readonly ownerRunId: string; readonly logicalSessionId: string }>;
 +  authorize(input: TerminalRecoveryAuthorityInput): Promise<void>;
++  visitRecoveryPredecessors?(input: TerminalRecoveryAuthorityInput, visit: (window: TerminalRecoveryPredecessorWindow) => Promise<"continue" | "stop">): Promise<void>;
 +  /** Authorizes exact retained calls using app-owned call-bound repeatability proof; missing or failed decisions grant no calls. */
 +  authorizeRepeatableRecoveryCalls?(input: TerminalRecoveryRepeatableCallsInput): Promise<readonly string[] | undefined>;
 +  /** Optional trusted recovery of one missing app-state metadata field; cannot overwrite SDK context or existing fields. */
 +  readonly applicationStateRecovery?: {
 +    readonly contextKey: string;
 +    readonly field: string;
++    readonly historicalContextKey?: string;
 +    recover(input: TerminalRecoveryRepeatableCallsInput & {
 +      readonly selectedOrigin: { readonly slot: number; readonly stepId: string; readonly eventId: string };
 +      readonly serializedContext: Readonly<Record<string, unknown>>;
++      readonly visitHistoricalCheckpoints?: (visit: (checkpoint: HistoricalRecoveryCheckpoint) => Promise<"continue" | "stop">) => Promise<void>;
 +    }): Promise<unknown | undefined>;
 +  };
 +  /** Trusted read-only projection, called only inside a currently authorized exact-owner observation. */
@@ -3426,12 +3441,291 @@ index 0000000000000000000000000000000000000000..8741d927145f6b0b1eadd660280c57e9
 +}
 +/** Read-only retained native observation; never starts, resumes, reconciles or commits. */
 +export declare function observeTerminalSession(input: TerminalRecoveryAuthorityInput & { readonly ports: Pick<TerminalRecoveryPorts, "authorize" | "readReceipt" | "observeCandidateFacts" | "observeRecoveryHolderBinding"> }, dependencies: TerminalRecoveryObservationDependencies): Promise<{ readonly kind: "accepted"; readonly sessionId: string }>;
+diff --git a/dist/src/execution/session/historical-checkpoints.js b/dist/src/execution/session/historical-checkpoints.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..e8d470c6a395dcc9ea20780c0c65acd2a68e5ea3
+--- /dev/null
++++ b/dist/src/execution/session/historical-checkpoints.js
+@@ -0,0 +1,273 @@
++import { resolveTerminalCheckpointOwner } from "#execution/session/recovery-owner-provenance.js";
++
++const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
++const nameOf = (name) => String(name ?? "").split(/[/:#]/u).at(-1);
++
++/** Native-only projected historical checkpoints. No journals or authority leave this process. */
++export function createHistoricalCheckpointVisitor(deps) {
++  return async ({ descriptor, payload, contextKey, authorizeCurrent, visitPredecessors, visit }) => {
++    const visited = new Set();
++    let runIndex = 0;
++    const guarded = async (authorize, operation) => {
++      await authorize();
++      const value = await operation();
++      await authorize();
++      return value;
++    };
++    const currentAuthorize = async () => await authorizeCurrent();
++
++    const scan = async (runId, logicalSessionId, cutoff, inclusive, authorize, receiptKind) => {
++      if (visited.has(runId)) throw new Error("Historical recovery ownership cycle.");
++      visited.add(runId);
++      const index = ++runIndex;
++      const world = await guarded(authorize, () => deps.getWorld());
++      const run = await guarded(authorize, () => world.runs.get(runId, { resolveData: "all" }));
++      if (run.runId !== runId) throw new Error("Historical recovery run identity differs.");
++      if (run.expiredAt !== undefined && new Date(run.expiredAt).getTime() <= deps.now())
++        throw new Error("Historical native data expired.");
++      const key = await guarded(authorize, () => deps.resolveRunEncryptionKey(deps.guardWorld(world, authorize), run));
++      const boundary = await guarded(authorize, () => world.events.get(runId, cutoff.eventId, { resolveData: "none" }));
++      if (boundary.runId !== runId || boundary.eventId !== cutoff.eventId || boundary.correlationId !== cutoff.stepId || deps.requireEventSlot(boundary.eventId) !== cutoff.slot)
++        throw new Error("Historical recovery cutoff identity differs.");
++      const validatePair = (value) => {
++        if (!record(value?.serializedContext) || !record(value?.sessionState)) throw new Error("Historical paired checkpoint is incomplete.");
++        const session = deps.readDurableSession(value.sessionState);
++        if (session.sessionId !== logicalSessionId || value.sessionState.sessionId !== logicalSessionId || value.sessionState.snapshot?.session?.sessionId !== logicalSessionId || value.serializedContext["eve.sessionId"] !== logicalSessionId)
++          throw new Error("Historical checkpoint logical identity differs.");
++      };
++      if (receiptKind !== undefined) {
++        const step = await guarded(authorize, () => world.steps.get(runId, cutoff.stepId, { resolveData: "all" }));
++        if (step.runId !== runId || step.stepId !== cutoff.stepId) throw new Error("Historical cutoff step identity differs.");
++        let selected;
++        if (receiptKind === "committed-turn-output") {
++          if (nameOf(step.stepName) !== "turnStep" || step.status !== "completed" || boundary.eventType !== "step_completed" || step.output === undefined) throw new Error("Historical committed cutoff unavailable.");
++          selected = await guarded(authorize, () => deps.hydrateStepReturnValue(step.output, runId, key));
++        } else if (["terminal-finalizer-input", "failed-turn-input", "completed-terminal-turn-input"].includes(receiptKind)) {
++          if (step.input === undefined || (receiptKind === "terminal-finalizer-input" ? nameOf(step.stepName) !== "terminateChildSessionsStep" : nameOf(step.stepName) !== "turnStep")) throw new Error("Historical input cutoff unavailable.");
++          if (receiptKind === "failed-turn-input" && step.status !== "failed") throw new Error("Historical failed cutoff changed.");
++          if (receiptKind === "completed-terminal-turn-input") {
++            if (step.status !== "completed" || step.output === undefined) throw new Error("Historical terminal cutoff changed.");
++            const output = await guarded(authorize, () => deps.hydrateStepReturnValue(step.output, runId, key));
++            if (output?.action !== "done") throw new Error("Historical terminal cutoff changed.");
++          }
++          const args = await guarded(authorize, () => deps.hydrateStepArguments(step.input, runId, key));
++          selected = args?.args?.[0];
++        } else throw new Error("Historical cutoff kind unavailable.");
++        validatePair(selected);
++      }
++
++      // Page backwards and stop at the newest applicable committed review. The
++      // cursor is provider-owned; do not invent one from the cutoff event ID.
++      const cursors = new Set();
++      const pendingInputs = new Map();
++      const finishedSteps = new Set();
++      let previousSlot = Number.POSITIVE_INFINITY;
++      let previousEventId;
++      let cursor;
++      let boundarySeen = false;
++      let unresolvedFallback = false;
++      const firstInput = async (stepId) => {
++        let innerCursor;
++        const innerCursors = new Set();
++        let previous = 0;
++        do {
++          const page = await guarded(authorize, () => world.events.listByCorrelationId({ runId, correlationId: stepId, resolveData: "none", pagination: { limit: 128, sortOrder: "asc", ...(innerCursor === undefined ? {} : { cursor: innerCursor }) } }));
++          for (const event of page.data) {
++            if (event.runId !== runId || event.correlationId !== stepId) throw new Error("Historical input origin owner differs.");
++            const slot = deps.requireEventSlot(event.eventId);
++            if (slot <= previous) throw new Error("Historical input origin order differs.");
++            previous = slot;
++            if (slot > cutoff.slot || (!inclusive && slot === cutoff.slot)) return undefined;
++            if (event.eventType === "step_created" || event.eventType === "step_started") return { eventId: event.eventId, stepId, slot };
++          }
++          if (!page.hasMore) break;
++          if (typeof page.cursor !== "string" || innerCursors.has(page.cursor)) throw new Error("Historical input pagination did not advance.");
++          innerCursors.add(page.cursor);
++          innerCursor = page.cursor;
++        } while (true);
++        return undefined;
++      };
++      const project = (value, origin, allowUnpairedTerminal = false) => {
++        const hasContext = record(value?.serializedContext);
++        const hasState = record(value?.sessionState);
++        if (!hasContext && !hasState && allowUnpairedTerminal && value?.action === "done") return undefined;
++        if (!hasContext || !hasState) throw new Error("Historical paired checkpoint is incomplete.");
++        validatePair(value);
++        return Object.hasOwn(value.serializedContext, contextKey) ? { runIndex: index, origin, value: value.serializedContext[contextKey] } : undefined;
++      };
++      const hydrateInput = async (step, origin) => {
++        if (step.input === undefined) throw new Error("Historical checkpoint input unavailable.");
++        const args = await guarded(authorize, () => deps.hydrateStepArguments(step.input, runId, key));
++        return project(args?.args?.[0], origin);
++      };
++      do {
++        const page = await guarded(authorize, () => world.events.list({ runId, resolveData: "none", pagination: { limit: 128, sortOrder: "desc", ...(cursor === undefined ? {} : { cursor }) } }));
++        for (const event of page.data) {
++          if (event.runId !== runId) throw new Error("Historical event owner differs.");
++          const slot = deps.requireEventSlot(event.eventId);
++          if (event.eventId === previousEventId && slot === previousSlot) continue;
++          if (slot >= previousSlot) throw new Error("Historical event order differs.");
++          previousSlot = slot;
++          previousEventId = event.eventId;
++          if (!boundarySeen) {
++            if (event.eventId === cutoff.eventId && slot === cutoff.slot && event.correlationId === cutoff.stepId) boundarySeen = true;
++            else if (slot <= cutoff.slot) throw new Error("Historical cutoff missing from native history.");
++            if (!boundarySeen || !inclusive) continue;
++          }
++          if (!event.eventType.startsWith("step_") || typeof event.correlationId !== "string") continue;
++          const stepId = event.correlationId;
++          const origin = { eventId: event.eventId, stepId, slot };
++          const projected = [];
++          const pending = pendingInputs.get(stepId);
++          if (pending?.origin.eventId === event.eventId) {
++            const step = await guarded(authorize, () => world.steps.get(runId, stepId, { resolveData: "all" }));
++            if (step.runId !== runId || step.stepId !== stepId || nameOf(step.stepName) !== pending.name) throw new Error("Historical hydrated input identity differs.");
++            projected.push({ checkpoint: await hydrateInput(step, origin), uncertainOrigin: false });
++            pendingInputs.delete(stepId);
++          }
++          if (!finishedSteps.has(stepId) && ["step_completed", "step_failed", "step_started"].includes(event.eventType)) {
++            let name = typeof event.eventData?.stepName === "string" ? nameOf(event.eventData.stepName) : undefined;
++            if (name === undefined) {
++              const metadata = await guarded(authorize, () => world.steps.get(runId, stepId, { resolveData: "none" }));
++              if (metadata.runId !== runId || metadata.stepId !== stepId || typeof metadata.stepName !== "string") throw new Error("Historical step identity differs.");
++              name = nameOf(metadata.stepName);
++            }
++            if (name === "turnStep" && ["step_completed", "step_failed"].includes(event.eventType) || name === "terminateChildSessionsStep") {
++              const step = await guarded(authorize, () => world.steps.get(runId, stepId, { resolveData: "all" }));
++              if (step.runId !== runId || step.stepId !== stepId || nameOf(step.stepName) !== name) throw new Error("Historical hydrated step identity differs.");
++              if (name === "turnStep" && event.eventType === "step_failed" && step.status !== "failed") throw new Error("Historical failed step changed.");
++              finishedSteps.add(stepId);
++              let needsInput = name === "terminateChildSessionsStep" || event.eventType === "step_failed";
++              if (name === "turnStep" && event.eventType === "step_completed") {
++                if (step.status !== "completed" || step.output === undefined) throw new Error("Historical completed output unavailable.");
++                const output = await guarded(authorize, () => deps.hydrateStepReturnValue(step.output, runId, key));
++                projected.push({ checkpoint: project(output, origin, true), uncertainOrigin: false });
++                needsInput = output?.action === "done";
++              }
++              if (needsInput) {
++                if (step.input === undefined) throw new Error("Historical checkpoint input unavailable.");
++                const inputOrigin = await firstInput(stepId);
++                if (inputOrigin === undefined) projected.push({ checkpoint: await hydrateInput(step, origin), uncertainOrigin: true });
++                else if (inputOrigin.eventId === event.eventId) projected.push({ checkpoint: await hydrateInput(step, inputOrigin), uncertainOrigin: false });
++                else pendingInputs.set(stepId, { origin: inputOrigin, name });
++              }
++            }
++          }
++          // A single native event can project more than one checkpoint. Deliver
++          // all equal-slot values before honoring the app's stop response.
++          let pendingStop = false;
++          let fallbackStop = false;
++          for (const { checkpoint, uncertainOrigin } of projected) {
++            if (checkpoint === undefined) continue;
++            const action = await guarded(authorize, () => visit(checkpoint));
++            if (action !== "continue" && action !== "stop") throw new Error("Historical visitor response is invalid.");
++            if (action === "stop") {
++              if (unresolvedFallback) throw new Error("Historical checkpoint input order is ambiguous.");
++              if (uncertainOrigin) fallbackStop = true;
++              else pendingStop = true;
++            }
++          }
++          if (pendingStop) return true;
++          if (fallbackStop) unresolvedFallback = true;
++        }
++        if (!page.hasMore) break;
++        if (typeof page.cursor !== "string" || cursors.has(page.cursor)) throw new Error("Historical event pagination did not advance.");
++        cursors.add(page.cursor);
++        cursor = page.cursor;
++      } while (true);
++      if (!boundarySeen) throw new Error("Historical cutoff missing from native history.");
++      if (pendingInputs.size > 0) throw new Error("Historical checkpoint input origin unavailable.");
++      return unresolvedFallback;
++    };
++
++    const scanParents = async (chain, logicalSessionId, authorize) => {
++      for (const edge of [...chain].reverse()) {
++        const start = edge.events.find((event) => event.runId === edge.parentRunId && event.correlationId === edge.startStepId && ["step_created", "step_started"].includes(event.eventType));
++        if (start === undefined) throw new Error("Historical native handoff cutoff unavailable.");
++        const cutoff = { eventId: start.eventId, stepId: edge.startStepId, slot: deps.requireEventSlot(start.eventId) };
++        if (await scan(edge.parentRunId, logicalSessionId, cutoff, false, authorize)) return true;
++      }
++      return false;
++    };
++
++    if (await scanParents(payload.handoffChain, descriptor.logicalSessionId, currentAuthorize)) return;
++    if (visitPredecessors === undefined) return;
++    await visitPredecessors(async (window) => {
++      if (window.logicalSessionId !== descriptor.logicalSessionId) throw new Error("Historical logical session differs.");
++      // The Builder capability already revalidates current authority and the entire parent path.
++      const authorize = async () => await window.authorizeRead();
++      let ownerRunId = window.cutoff.checkpointOwnerRunId;
++      let resolved;
++      const resolve = async () => {
++        if (resolved !== undefined) return resolved;
++        const world = await guarded(authorize, () => deps.getWorld());
++        const guardedWorld = deps.guardWorld(world, authorize);
++        const anchor = await guardedWorld.runs.get(window.ownerRunId, { resolveData: "all" });
++        if (anchor.runId !== window.ownerRunId) throw new Error("Historical anchor identity differs.");
++        resolved = await (deps.resolveTerminalCheckpointOwner ?? resolveTerminalCheckpointOwner)({ world: guardedWorld, anchor, allowParked: true, binding: { ownerRunId: window.ownerRunId, logicalSessionId: window.logicalSessionId }, authorizeOwner: authorize, dependencies: deps.guardedDependencies(authorize, guardedWorld) });
++        if (resolved.kind !== "resolved") throw new Error("Historical native handoff unavailable.");
++        return resolved;
++      };
++      if (ownerRunId === undefined) ownerRunId = (await resolve()).checkpointOwnerRunId;
++      // The reauthorized, succeeded child receipt binds its exact physical
++      // checkpoint owner. Only older native parents require a new chain scan.
++      const cutoff = { eventId: window.cutoff.sourceEventId, stepId: window.cutoff.sourceStepId, slot: window.cutoff.sourceSlot };
++      if (await scan(ownerRunId, window.logicalSessionId, cutoff, true, authorize, window.cutoff.kind)) return "stop";
++      if (ownerRunId !== window.ownerRunId) {
++        const chain = await resolve();
++        if (chain.checkpointOwnerRunId !== ownerRunId) throw new Error("Historical cutoff owner differs from verified handoff.");
++        if (await scanParents(chain.chain, window.logicalSessionId, authorize)) return "stop";
++      }
++      return "continue";
++    });
++  };
++}
++
++/** Native production dependencies. Authorization wraps every World operation and hydration. */
++export async function visitHistoricalCheckpoints(input) {
++  const [runtime, serialization, durable] = await Promise.all([
++    import("#internal/workflow/runtime.js"),
++    import("#compiled/@workflow/core/serialization.js"),
++    import("#execution/durable-session-store.js"),
++  ]);
++  const revivers = Object.fromEntries(["ReadableStream", "WritableStream", "AbortController", "AbortSignal"].map((type) => [type, (value) => Object.freeze({ kind: "native-recovery-transport-reference", type, value })]));
++  const guard = async (authorize, operation) => { await authorize(); const value = await operation(); await authorize(); return value; };
++  const guardWorld = (world, authorize) => new Proxy(world, {
++    get(target, key) {
++      const namespace = Reflect.get(target, key, target);
++      if (!["runs", "steps", "events"].includes(key) || namespace === null || typeof namespace !== "object") return namespace;
++      return new Proxy(namespace, {
++        get(group, method) {
++          const value = Reflect.get(group, method, group);
++          return typeof value === "function" ? (...args) => guard(authorize, () => Reflect.apply(value, group, args)) : value;
++        },
++      });
++    },
++  });
++  const slot = (eventId) => {
++    if (!/^evnt_[0-9]{26}$/u.test(eventId)) throw new Error("Historical event has no slot identity.");
++    const value = Number(eventId.slice(5));
++    if (!Number.isSafeInteger(value) || value < 1) throw new Error("Historical event has no slot identity.");
++    return value;
++  };
++  const deps = {
++    getWorld: runtime.getWorld,
++    resolveRunEncryptionKey: runtime.resolveRunEncryptionKey,
++    hydrateWorkflowArguments: (value, runId, key) => serialization.hydrateWorkflowArguments(value, runId, key, globalThis, revivers),
++    hydrateHookPayload: async (value, _runId, key) => serialization.deserializePreparedReplayPayload(await serialization.prepareReplayPayload(value, key), globalThis, revivers),
++    hydrateStepArguments: (value, runId, key) => serialization.hydrateStepArguments(value, runId, key, [], globalThis, revivers),
++    hydrateStepReturnValue: (value, runId, key) => serialization.hydrateStepReturnValue(value, runId, key, globalThis, revivers),
++    readDurableSession: durable.readDurableSession,
++    requireEventSlot: slot,
++    now: Date.now,
++    guardWorld,
++    guardedDependencies(authorize, world) {
++      const wrapped = { ...deps, getWorld: async () => world };
++      for (const name of ["resolveRunEncryptionKey", "hydrateWorkflowArguments", "hydrateHookPayload", "hydrateStepArguments", "hydrateStepReturnValue"]) {
++        wrapped[name] = (...args) => guard(authorize, () => deps[name](...args));
++      }
++      return wrapped;
++    },
++  };
++  return await createHistoricalCheckpointVisitor(deps)(input);
++}
 diff --git a/dist/src/execution/session/terminal-recovery.js b/dist/src/execution/session/terminal-recovery.js
 new file mode 100644
-index 0000000000000000000000000000000000000000..4906d5929f96346c49e4d3d9c7c08828b4b8af0d
+index 0000000000000000000000000000000000000000..c2afff8a67385dceff096b73e3ed87ca49049515
 --- /dev/null
 +++ b/dist/src/execution/session/terminal-recovery.js
-@@ -0,0 +1,783 @@
+@@ -0,0 +1,795 @@
 +import { deriveTerminalRecoveryResumePhase } from "#execution/session/recovery-resume-phase.js";
 +export { deriveTerminalRecoveryResumePhase };
 +import { createHash } from "node:crypto";
@@ -3677,7 +3971,17 @@ index 0000000000000000000000000000000000000000..4906d5929f96346c49e4d3d9c7c08828
 +      if (record(existingState) && !Object.hasOwn(existingState, recovery.field)) {
 +        await ports.authorize(call);
 +        if (await ports.readReceipt(call) != null) throw new Error("Recovery receipt changed during application state recovery.");
-+        const value = await recovery.recover({ ...call, binding: payload.binding, payload, selectedOrigin: selected.origin, serializedContext: checkpoint.serializedContext });
++        const historicalKey = recovery.historicalContextKey;
++        if (historicalKey !== undefined && (forbidden(historicalKey) || historicalKey.startsWith("eve."))) return { kind: "unavailable", reason: "application-state-recovery-configuration" };
++        const visitHistoricalCheckpoints = historicalKey === undefined ? undefined : async (visit) => {
++          if (typeof ports.visitRecoveryPredecessors !== "function") throw new Error("Historical recovery capability unavailable.");
++          if (typeof dependencies.visitHistoricalCheckpoints !== "function") throw new Error("Historical recovery dependency unavailable.");
++          await dependencies.visitHistoricalCheckpoints({ descriptor, payload, contextKey: historicalKey, visit,
++            authorizeCurrent: async () => { await ports.authorize(call); if (await ports.readReceipt(call) != null) throw new Error("Recovery receipt changed during historical inspection."); },
++            visitPredecessors: async (visitor) => await ports.visitRecoveryPredecessors(call, visitor),
++          });
++        };
++        const value = await recovery.recover({ ...call, binding: payload.binding, payload, selectedOrigin: selected.origin, serializedContext: checkpoint.serializedContext, ...(visitHistoricalCheckpoints === undefined ? {} : { visitHistoricalCheckpoints }) });
 +        await ports.authorize(call);
 +        if (await ports.readReceipt(call) != null) throw new Error("Recovery receipt changed during application state recovery.");
 +        if (value !== undefined) checkpoint = { ...checkpoint, serializedContext: { ...checkpoint.serializedContext, [recovery.contextKey]: { ...existingState, [recovery.field]: structuredClone(value) } } };
@@ -3924,6 +4228,7 @@ index 0000000000000000000000000000000000000000..4906d5929f96346c49e4d3d9c7c08828
 +    import("#execution/session/recovery-holder-observation.js"),
 +  ]);
 +  return {
++    visitHistoricalCheckpoints: async (input) => (await import("#execution/session/historical-checkpoints.js")).visitHistoricalCheckpoints(input),
 +    collect: collector.collectTerminalRecoveryCandidate,
 +    readCandidate: collector.readTerminalRecoveryCandidate,
 +    recordObservation: diagnostic.recordTerminalRecoveryObservation,
@@ -4053,6 +4358,7 @@ index 0000000000000000000000000000000000000000..4906d5929f96346c49e4d3d9c7c08828
 +    import("#execution/session/recovery-holder-closure.js"),
 +  ]);
 +  return {
++    visitHistoricalCheckpoints: async (input) => (await import("#execution/session/historical-checkpoints.js")).visitHistoricalCheckpoints(input),
 +    collect: collector.collectTerminalRecoveryCandidate,
 +    collectLineagePreflight: collector.collectOwnedLineagePreflight,
 +    readLineagePreflight: collector.readOwnedLineagePreflight,
