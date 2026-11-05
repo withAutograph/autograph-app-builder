@@ -4,6 +4,8 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { createServer } from "node:net";
+import { once } from "node:events";
+import { z } from "zod";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import postgres from "postgres";
@@ -13,6 +15,7 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import * as schema from "../../../../lib/db/schema";
 import { createPostgresPublicReleaseStore } from "../../../../lib/provisioning/public-release-store";
 import { plan, authority } from "../../../../lib/provisioning/public-release-test-fixture";
+
 const postgresFlag = process.argv.indexOf("--postgres-bin");
 const postgresBin = postgresFlag === -1 ? undefined : process.argv[postgresFlag + 1];
 if (postgresBin === undefined || !path.isAbsolute(postgresBin)) {
@@ -24,24 +27,23 @@ const pgdata = path.join(scratch, "data");
 const passwordFile = path.join(scratch, "password");
 const password = randomBytes(24).toString("hex");
 const run = (binary: string, args: string[]) => {
-  const result = spawnSync(path.join(postgresBin, binary), args, { encoding: "utf8" });
+  const result = spawnSync(path.join(postgresBin, binary), args, { encoding: "utf-8" });
   if (result.status !== 0) {
     throw new Error(`Local PostgreSQL ${binary} failed`);
   }
 };
 const listener = createServer();
-await new Promise<void>((resolve, reject) => {
-  listener.once("error", reject);
-  listener.listen(0, "127.0.0.1", resolve);
-});
-const address = listener.address();
-if (address === null || typeof address === "string") {
+const listening = once(listener, "listening");
+listener.listen(0, "127.0.0.1");
+await listening;
+const address = z.object({ port: z.number().int().positive() }).safeParse(listener.address());
+if (!address.success) {
   throw new Error("Local fixture port unavailable");
 }
-const port = address.port;
-await new Promise<void>((resolve, reject) =>
-  listener.close((error) => (error ? reject(error) : resolve())),
-);
+const port = address.data.port;
+const closed = once(listener, "close");
+listener.close();
+await closed;
 let started = false;
 let admin: ReturnType<typeof postgres> | undefined;
 let writer: ReturnType<typeof postgres> | undefined;
@@ -69,7 +71,12 @@ try {
   const dsn = new URL(`postgres://127.0.0.1:${port}/postgres?sslmode=disable`);
   dsn.username = "fixture_admin";
   dsn.password = password;
-  admin = postgres(dsn.toString(), { max: 2, onnotice: () => {} });
+  admin = postgres(dsn.toString(), {
+    max: 2,
+    onnotice: () => {
+      /* Keep SQL/private connection notices out of retained fixture output. */
+    },
+  });
   await migrate(drizzle(admin), { migrationsFolder: path.resolve("drizzle") });
   await admin.unsafe(`CREATE ROLE public_release_writer LOGIN PASSWORD '${password}'`);
   await admin.unsafe(
@@ -79,11 +86,17 @@ try {
     "GRANT UPDATE(record, revision, state, updated_at) ON public.builder_provisioning_journal TO public_release_writer",
   );
   dsn.username = "public_release_writer";
-  writer = postgres(dsn.toString(), { max: 2, onnotice: () => {} });
+  writer = postgres(dsn.toString(), {
+    max: 2,
+    onnotice: () => {
+      /* Keep SQL/private connection notices out of retained fixture output. */
+    },
+  });
   const store = createPostgresPublicReleaseStore(drizzle(writer, { schema }));
   const initial = await store.reserve(plan);
   assert.equal(initial.revision, 1);
-  assert.equal((await store.reserve(plan)).revision, 1);
+  const reused = await store.reserve(plan);
+  assert.equal(reused.revision, 1);
   assert.equal(
     await store.read({ ...authority, ownerUserId: "foreign" }, initial.operationRef),
     undefined,
@@ -127,11 +140,8 @@ try {
   await admin`INSERT INTO public.builder_provisioning_journal (issuer,audience,workspace_id,owner_user_id,request_id,request_digest,revision,state,record,created_at,updated_at) VALUES (${authority.issuer},${authority.audience},${authority.workspaceId},${authority.ownerUserId},${otherRef},${"f".repeat(64)},1,'pending',${JSON.stringify({ kind: "native-target-onboarding" })}::jsonb,now(),now())`;
   assert.equal(await store.read(authority, otherRef), undefined);
   const restarted = createPostgresPublicReleaseStore(drizzle(writer, { schema }));
-  assert.equal(
-    (await restarted.read(authority, initial.operationRef))?.record.bindings.APP_DATABASE_URL
-      .acceptedEnvId,
-    "env-observed",
-  );
+  const restartedOperation = await restarted.read(authority, initial.operationRef);
+  assert.equal(restartedOperation?.record.bindings.APP_DATABASE_URL.acceptedEnvId, "env-observed");
   console.log(
     "Public release PostgreSQL proof passed: restricted writer, restart readback, stale CAS, immutable target/row receipt, foreign owner and record-kind isolation.",
   );

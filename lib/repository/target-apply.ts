@@ -950,11 +950,12 @@ export async function executeProposalBoundApply(input: {
     before = await snapshotter(input.sandbox, overlay.applyRoot);
     if ("operation" in input.proposal) {
       before = iterationBaselineSnapshot(before, input.proposal.iteration.changes);
-      if (input.proposal.applicationSourceImport !== undefined)
+      if (input.proposal.applicationSourceImport !== undefined) {
         before = applicationImportBaselineSnapshot(
           before,
           `apps/${input.proposal.applicationSourceImport.appId}`,
         );
+      }
     }
     if (input.proposal.frameworkUpgrade !== undefined) {
       before = iterationBaselineSnapshot(before, input.proposal.frameworkUpgrade.baseline);

@@ -20,15 +20,15 @@ const configuration = z
       z.object({ source: z.string(), destination: z.object({ service: z.string() }) }),
     ),
   })
-  .parse(JSON.parse(await readFile(path.join(projectRoot, "vercel.json"), "utf8")));
+  .parse(JSON.parse(await readFile(path.join(projectRoot, "vercel.json"), "utf-8")));
 // The owned temporary directory is nested only so Node resolves the same pinned operator workspace dependencies.
 const scratch = await mkdtemp(path.join(projectRoot, ".compiled-operator-proof-"));
 const artifact = path.join(scratch, "operator.mjs");
 const run = (binary: string, args: string[]) => {
   const result = spawnSync(binary, args, {
     cwd: root,
-    encoding: "utf8",
-    env: { PATH: process.env.PATH ?? "" },
+    encoding: "utf-8",
+    env: { PATH: process.env.PATH ?? "", NODE_ENV: "test" },
   });
   assert.equal(result.status, 0, `${path.basename(binary)} failed: ${result.stderr}`);
   return result.stdout;

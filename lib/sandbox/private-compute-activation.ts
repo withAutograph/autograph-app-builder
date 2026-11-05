@@ -10,7 +10,8 @@ import {
 } from "./private-compute-profile";
 import type { PrivateComputeActivation, PrivateComputeProfile } from "./private-compute-profile";
 import { assertHostedSandboxCommandAuthority } from "./deployment-execution-lease";
-export type { PrivateComputeActivation };
+
+export type { PrivateComputeActivation } from "./private-compute-profile";
 
 export type PrivateComputeNative = Pick<
   Sandbox,
@@ -206,8 +207,9 @@ export const applyApprovedPrivateComputeProfile = async (input: {
     }
     throw error;
   }
-  if (original !== undefined)
+  if (original !== undefined) {
     replaceVercelPreviewProvider(input.profile.target.sandboxId, original, replacement);
+  }
   return {
     profileId: input.profile.id,
     vcpus: replacement.currentSession().vcpus,
@@ -225,6 +227,8 @@ export const applyPrivateComputeWhenSelected = async (
   if (input.profile !== undefined) {
     return await applyApprovedPrivateComputeProfile({ ...input, profile: input.profile });
   }
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- An unselected profile explicitly performs no operation and returns no provider state.
+  return undefined;
 };
 export const assertPrivateComputeInput = (
   requested: PrivateComputeProfile["id"] | undefined,

@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/complexity, sonarjs/cognitive-complexity -- The native capture transaction retains ordered source selection, owner scope, signed sender and cleanup checks; no effect is retried or parallelized. */
 import { isDeepStrictEqual } from "node:util";
 import { verifyVercelOidcToken } from "@vercel/oidc";
 import { createRemoteJWKSet, customFetch } from "jose";
@@ -32,7 +33,6 @@ export interface NormalActorCaptureDeploymentResources {
     | "readPendingNormalActorCapture"
     | "readPendingRealmIdentityLinkForStaging"
     | "close"
-    | "resolveRealmIdentityCallbackOwnerContext"
     | "resolveRealmIdentityCallbackOwnerContext"
   >;
 }
@@ -162,8 +162,9 @@ export const createNormalActorCaptureDeploymentPorts = (
           const latest = await controlPlane.readPendingNormalActorCapture(selector);
           // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Revalidate public release authority after the canonical current capture snapshot.
           const latestStaging = await controlPlane.readPendingRealmIdentityLinkForStaging(selector);
-          if (!isDeepStrictEqual(latestStaging.publicRealm, resources.publicRealm))
+          if (!isDeepStrictEqual(latestStaging.publicRealm, resources.publicRealm)) {
             throw unavailable();
+          }
           // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Revalidate public release authority after the canonical current capture snapshot.
           // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Revalidate public release authority after the canonical current capture snapshot.
 
@@ -238,15 +239,19 @@ export const createNormalActorCaptureDeploymentHandler =
         // nonce, public approval, signed proof and actual cookie before capture.
         const clone = request.clone();
         const reader = clone.body?.getReader();
-        if (reader === undefined) throw unavailable();
+        if (reader === undefined) {
+          throw unavailable();
+        }
         const chunks: Uint8Array[] = [];
         let size = 0;
         for (;;) {
           // oxlint-disable-next-line eslint/no-await-in-loop -- Consume the bounded routing copy in stream order.
           const next = await reader.read();
-          if (next.done) break;
+          if (next.done) {
+            break;
+          }
           size += next.value.byteLength;
-          if (size > 32768) {
+          if (size > 32_768) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- Stop the bounded stream before rejecting an oversized routing copy.
             await reader.cancel();
             throw unavailable();
@@ -254,7 +259,7 @@ export const createNormalActorCaptureDeploymentHandler =
           chunks.push(next.value);
         }
         const hint = normalActorCaptureRequestSchema.parse(
-          JSON.parse(Buffer.concat(chunks).toString("utf8")),
+          JSON.parse(Buffer.concat(chunks).toString("utf-8")),
         );
         const selector = {
           ownerSessionId: hint.ownerSessionId,
@@ -399,8 +404,9 @@ export const createNormalActorCaptureDeploymentHandler =
       if (
         initialResources !== undefined &&
         initialResources.controlPlane !== resources?.controlPlane
-      )
+      ) {
         await initialResources.controlPlane.close();
+      }
       if (
         initialResources !== undefined &&
         initialResources.controlPlane !== resources?.controlPlane

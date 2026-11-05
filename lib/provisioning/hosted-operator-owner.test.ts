@@ -1,3 +1,4 @@
+/* oxlint-disable sonarjs/no-identical-functions -- Distinct original-owner and recovered-owner fixtures intentionally assert the same authorization boundary without sharing mutable session state. */
 import { recordRepositoryAccessReceipt } from "../agent/repository-access-state";
 import { initialBuilderProvisionJournalRecord } from "./journal";
 import type { BuilderProvisionJournalRow } from "./journal";
@@ -3658,7 +3659,9 @@ describe("attached direct-session standard destination", () => {
         url: "https://github.com/owned/vendor-onboarding",
         visibility: "private",
       };
-      if (row.record.response.vercel.status !== "succeeded") throw new Error("missing project");
+      if (row.record.response.vercel.status !== "succeeded") {
+        throw new Error("missing project");
+      }
       row.record.response.vercel.linkedGitHubRepository = "owned/vendor-onboarding";
       const existingRepositorySource = recordRepositoryAccessReceipt({
         current: undefined,

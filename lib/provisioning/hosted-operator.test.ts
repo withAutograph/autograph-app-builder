@@ -4462,8 +4462,9 @@ it("completes resource preparation without claiming a bound or deployed app", as
 });
 it("completes resource preparation without claiming a bound or deployed app", async () => {
   const f = fixture();
-  if (plan.deploymentBoundary === undefined || plan.publicGateway === undefined)
+  if (plan.deploymentBoundary === undefined || plan.publicGateway === undefined) {
     throw new Error("missing fixture boundary");
+  }
   const resources = hostedOperatorPlanSchema.parse({
     ...plan,
     runtimePreparation: "single-project-resources-v1",

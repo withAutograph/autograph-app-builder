@@ -1,3 +1,4 @@
+import { centralEffectReceiptMatches } from "./central-integration-host-checkpoint";
 import { describe, expect, it } from "vitest";
 import {
   centralHostSetupPlanSchema,
@@ -5,6 +6,7 @@ import {
   centralHostPlanDigest,
 } from "./central-integration-host-contract";
 import { plan, ready, activation, keys } from "./central-integration-host-test-fixture";
+
 describe("Separate isolated central infrastructure authority", () => {
   it("binds complete scope canonically while preserving object construction freedom", () => {
     expect(centralHostPlanDigest({ ...plan, authority: { ...plan.authority } })).toBe(
@@ -100,4 +102,22 @@ it("preserves absent legacy source mode while requiring receipt-backed exact gra
       source: { ...plan.source, serviceIds: ["gateway", "apps", "integrations"] },
     }),
   ).toThrow();
+});
+
+it("keeps an app-caller authorization receipt outside infrastructure setup authority", () => {
+  expect(
+    centralEffectReceiptMatches(
+      plan,
+      {
+        effect: "authorize-app-central-caller",
+        projectId: plan.target.projectId,
+        callerProjectId: plan.inspector.projectId,
+        environment: plan.inspector.environment,
+        targetEnvironment: "preview",
+        trustedSourcesSha256: "a".repeat(64),
+        trustedSourcesGrantSha256: "b".repeat(64),
+      },
+      1,
+    ),
+  ).toBe(false);
 });

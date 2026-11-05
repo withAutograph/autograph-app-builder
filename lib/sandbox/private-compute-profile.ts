@@ -15,11 +15,12 @@ export const privateComputeLimitsSchema = z
   })
   .superRefine((value, ctx) => {
     const limit = { hobby: 4, pro: 8, enterprise: 32 }[value.plan];
-    if (value.maxVcpus !== limit)
+    if (value.maxVcpus !== limit) {
       ctx.addIssue({
         code: "custom",
         message: "Compute limit must match the observed provider plan.",
       });
+    }
   });
 export type PrivateComputeLimits = z.infer<typeof privateComputeLimitsSchema>;
 export const privateComputeProfileSchema = z
@@ -27,7 +28,7 @@ export const privateComputeProfileSchema = z
     version: z.literal(1),
     id: z.literal(PRIVATE_COMPUTE_PROFILE_ID),
     vcpus: z.literal(8),
-    memoryMiB: z.literal(16384),
+    memoryMiB: z.literal(16_384),
     lintWorkers: z.literal(1),
     checkPolicy: z.strictObject({
       path: z.string().regex(/^apps\/[a-z][a-z0-9-]*\/\.config\/mise\/tasks\/check$/u),
@@ -47,16 +48,18 @@ export const readPrivateComputeLimits = (
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ) => {
   const raw = environment.APP_BUILDER_PRIVATE_COMPUTE_LIMITS;
-  if (raw === undefined || raw === "")
+  if (raw === undefined || raw === "") {
     throw new Error(
       "The private compute profile needs the supported local launcher's current provider team-plan observation. Restart the same local cycle to obtain it; do not supply a model-authored limit or change resources manually.",
     );
+  }
   const observed = privateComputeLimitsSchema.parse(JSON.parse(raw));
   if (
     observed.projectId !== environment.VERCEL_PROJECT_ID ||
     observed.teamId !== environment.VERCEL_TEAM_ID
-  )
+  ) {
     throw new Error("The compute observation does not match this provider project and team.");
+  }
   return observed;
 };
 

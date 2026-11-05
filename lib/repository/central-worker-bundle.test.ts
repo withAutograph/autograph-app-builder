@@ -17,12 +17,14 @@ const fixture = async (link?: string) => {
   const git = (...args: string[]) =>
     // oxlint-disable-next-line sonarjs/no-os-command-from-path -- Invoke installed Git, never repository content.
     execFileSync("git", ["-C", sourceRoot, ...args], {
-      encoding: "utf8",
+      encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
     }).trim();
   git("init", "-q");
   await writeFile(path.join(sourceRoot, "source.ts"), "export const version = 1;\n");
-  if (link !== undefined) await symlink(link, path.join(sourceRoot, "link"));
+  if (link !== undefined) {
+    await symlink(link, path.join(sourceRoot, "link"));
+  }
   git("add", ".");
   git(
     "-c",
@@ -49,7 +51,9 @@ const fixture = async (link?: string) => {
   const files = [
     { path: "source.ts", mode: "100644", sha256: hash("export const version = 1;\n") },
   ];
-  if (link !== undefined) files.push({ path: "link", mode: "120000", sha256: hash(link) });
+  if (link !== undefined) {
+    files.push({ path: "link", mode: "120000", sha256: hash(link) });
+  }
   const receipt = {
     version: 1,
     sourceSha: git("rev-parse", "HEAD"),
@@ -79,7 +83,7 @@ it("packages tracked Git bytes and exact executable artifacts while excluding lo
   const input = await fixture("source.ts");
   const result = await assembleCentralWorkerBundle(input);
   expect(result.sourceSha).toBe(input.reviewedSourceSha);
-  expect(await readFile(path.join(input.destination, "repository/link"), "utf8")).toBe(
+  expect(await readFile(path.join(input.destination, "repository/link"), "utf-8")).toBe(
     "export const version = 1;\n",
   );
   await expect(
@@ -89,7 +93,7 @@ it("packages tracked Git bytes and exact executable artifacts while excluding lo
     readFile(path.join(input.destination, "repository/.git/config")),
   ).rejects.toMatchObject({ code: "ENOENT" });
   expect(
-    JSON.parse(await readFile(path.join(input.destination, "bundle.json"), "utf8")),
+    JSON.parse(await readFile(path.join(input.destination, "bundle.json"), "utf-8")),
   ).toMatchObject({ receiptSha256: input.receiptSha256 });
   await expect(assembleCentralWorkerBundle(input)).rejects.toMatchObject({ code: "EEXIST" });
 });

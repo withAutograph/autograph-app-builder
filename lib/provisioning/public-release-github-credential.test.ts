@@ -52,7 +52,7 @@ const fixture = () => {
     }
     return Response.json({
       token: "private-synthetic-installation-token",
-      expires_at: new Date(Date.now() + 3600000).toISOString(),
+      expires_at: new Date(Date.now() + 3_600_000).toISOString(),
       permissions: { contents: "write", metadata: "read" },
       repository_selection: "selected",
       repositories: [{ id: 123 }],
@@ -64,7 +64,7 @@ const fixture = () => {
       GITHUB_APP_PRIVATE_KEY: privateKey.export({ format: "pem", type: "pkcs8" }),
     },
     installations: {
-      read: async () => undefined,
+      read: async () => {},
       list: async (authority) => {
         expect(authority).toEqual(plan.authority);
         return [

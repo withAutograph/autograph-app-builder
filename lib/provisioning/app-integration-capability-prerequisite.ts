@@ -1,7 +1,10 @@
 import { z } from "zod";
+
 const actions = {
-  app_integration_resource_provenance_required: "Select the shared platform control resource’s actual approved owner-scoped custody receipt and independently verify its dedicated development Neon identity. Reflected runtime IDs, app/Auth policy selections and old onboarding approvals cannot substitute.",
-  app_integration_caller_registration_required: "Prepare a fresh ordinary normal caller-registration approval for this recorded app project and the verified existing platform reference. No isolated Preview setup, old caller approval or operator identity can substitute.",
+  app_integration_resource_provenance_required:
+    "Select the shared platform control resource’s actual approved owner-scoped custody receipt and independently verify its dedicated development Neon identity. Reflected runtime IDs, app/Auth policy selections and old onboarding approvals cannot substitute.",
+  app_integration_caller_registration_required:
+    "Prepare a fresh ordinary normal caller-registration approval for this recorded app project and the verified existing platform reference. No isolated Preview setup, old caller approval or operator identity can substitute.",
   app_integration_existing_platform_required:
     "Select and independently verify this app’s already-owned normal Services Integrations reference with dedicated development resources and QuickBooks Sandbox access. No isolated Preview setup or alternate project is selected.",
   app_integration_profile_required:

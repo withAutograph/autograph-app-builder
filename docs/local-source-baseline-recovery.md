@@ -55,19 +55,25 @@ binding. It never creates a cycle or infers the root from an outer command-line
   "originalSourceRoot": "/absolute/genuine-git-checkout",
   "originalSourceSha": "<40 lowercase hex characters>",
   "workspaceDigest": "<64 lowercase hex characters from the frozen plan>",
-  "archives": [{
-    "path": "/absolute/source-only.tar.gz",
-    "sha256": "<actual archive SHA256>",
-    "files": [{
-      "path": "apps/example/source.ts",
-      "mode": "100644",
-      "sha256": "<actual raw file SHA256>"
-    }],
-    "ignoredMetadata": [{
-      "path": "recovery-manifest.json",
-      "sha256": "<actual raw metadata SHA256>"
-    }]
-  }]
+  "archives": [
+    {
+      "path": "/absolute/source-only.tar.gz",
+      "sha256": "<actual archive SHA256>",
+      "files": [
+        {
+          "path": "apps/example/source.ts",
+          "mode": "100644",
+          "sha256": "<actual raw file SHA256>"
+        }
+      ],
+      "ignoredMetadata": [
+        {
+          "path": "recovery-manifest.json",
+          "sha256": "<actual raw metadata SHA256>"
+        }
+      ]
+    }
+  ]
 }
 ```
 

@@ -1,14 +1,15 @@
-import { readIntegrationCapabilityEffect } from "./app-integration-capability-contract";
+/* oxlint-disable sonarjs/expression-complexity -- Immutable approval, owner, physical target and receipt comparisons remain explicit at each custody read. */
+import {
+  readIntegrationCapabilityEffect,
+  appIntegrationCapabilityPlanDigest,
+  appIntegrationCapabilityOperationRef,
+  appIntegrationCapabilityRecordSchema,
+} from "./app-integration-capability-contract";
 import { isDeepStrictEqual } from "node:util";
 import { and, eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import { builderProvisioningJournals } from "../db/schema";
-import {
-  appIntegrationCapabilityPlanDigest,
-  appIntegrationCapabilityOperationRef,
-  appIntegrationCapabilityRecordSchema,
-} from "./app-integration-capability-contract";
 import type {
   AppIntegrationCapabilityPlan,
   AppIntegrationCapabilityRecord,
@@ -45,20 +46,27 @@ const preservesEffect = (
       after.retiredAttempts.slice(0, before.retiredAttempts.length),
       before.retiredAttempts,
     )
-  )
+  ) {
     return false;
-  if (before.state === "applied") return isDeepStrictEqual(before, after);
-  if (before.state === "idle")
+  }
+  if (before.state === "applied") {
+    return isDeepStrictEqual(before, after);
+  }
+  if (before.state === "idle") {
     return (
       isDeepStrictEqual(before.retiredAttempts, after.retiredAttempts) &&
       (after.state !== "pending" || after.attemptGeneration === fence)
     );
-  if (after.state === "idle") return false;
-  if (before.attemptGeneration === after.attemptGeneration)
+  }
+  if (after.state === "idle") {
+    return false;
+  }
+  if (before.attemptGeneration === after.attemptGeneration) {
     return (
       isDeepStrictEqual(before.retiredAttempts, after.retiredAttempts) &&
       (before.receipt === undefined || isDeepStrictEqual(before.receipt, after.receipt))
     );
+  }
   return (
     before.receipt === undefined &&
     after.state === "pending" &&
@@ -101,8 +109,9 @@ const parse = (
     row.audience !== record.plan.authority.audience ||
     row.workspaceId !== record.plan.authority.workspaceId ||
     row.ownerUserId !== record.plan.authority.ownerUserId
-  )
+  ) {
     throw unavailable();
+  }
   return { operationRef: row.requestId, revision: row.revision, record };
 };
 /** The existing typed provision journal is the only effect ledger. Credentials live in separate encrypted custody kinds. */
@@ -136,7 +145,9 @@ export const createPostgresAppIntegrationCapabilityStore = (
         })
         .onConflictDoNothing();
       const row = await read(plan.authority, operationRef);
-      if (row === undefined || !isDeepStrictEqual(row.record.plan, plan)) throw unavailable();
+      if (row === undefined || !isDeepStrictEqual(row.record.plan, plan)) {
+        throw unavailable();
+      }
       return row;
     },
     compareAndSet: async (row, value) => {
@@ -162,8 +173,9 @@ export const createPostgresAppIntegrationCapabilityStore = (
               previous.executionLease?.fenceGeneration,
             ),
         )
-      )
+      ) {
         throw unavailable();
+      }
       const rows = await database
         .update(builderProvisioningJournals)
         .set({

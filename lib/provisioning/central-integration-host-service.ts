@@ -235,7 +235,9 @@ export const createCentralHostService = (ports: CentralHostServicePorts) => {
         const receipt = await ports.resolveReady(invocation, request);
         if (receipt !== undefined) {
           const ready = centralHostReadyReceiptSchema.parse(receipt);
-          if (!isDeepStrictEqual(ready.authority, invocation.authority)) throw fail();
+          if (!isDeepStrictEqual(ready.authority, invocation.authority)) {
+            throw fail();
+          }
           invocation.signal.throwIfAborted();
           return { status: "ready" as const, receipt: ready, ...ready.callerSetup };
         }

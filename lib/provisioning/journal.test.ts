@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/require-await -- Provider-shaped test ports return promises while external provider effects remain unavailable. */
 import { describe, expect, it } from "vitest";
 
 import { initialBuilderProvisionJournalRecord, updateBuilderProvisionJournal } from "./journal";
@@ -228,6 +229,8 @@ describe("builder provisioning journal", () => {
     const result = await executeBuilderProvisioning({
       authority,
       request: selected,
+      // SAFETY: The fixture provides the real in-memory journal and only terminal token/fetch ports used by this Vercel-only request; GitHub effects are unreachable.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Deliberately bounded terminal-port fixture; runtime schemas and journal replay checks remain real.
       dependencies: dependencies as never,
     });
     expect(result.vercel).toMatchObject({
@@ -242,6 +245,8 @@ describe("builder provisioning journal", () => {
     const retry = await executeBuilderProvisioning({
       authority,
       request: selected,
+      // SAFETY: The fixture provides the real in-memory journal and only terminal token/fetch ports used by this Vercel-only request; GitHub effects are unreachable.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Deliberately bounded terminal-port fixture; runtime schemas and journal replay checks remain real.
       dependencies: dependencies as never,
     });
     expect(retry.vercel).toMatchObject({ status: "failed", code: "reconciliation_uncertain" });

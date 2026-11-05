@@ -6,6 +6,7 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import path from "node:path";
 import { test, vi } from "vitest";
+import { z } from "zod";
 
 const require = createRequire(import.meta.url);
 const sdk = path.dirname(require.resolve("eve/package.json"));
@@ -111,7 +112,10 @@ test("actual Eve keeps in-flight A, dispatches idle B static/dynamic, restores t
       timeout: 30_000,
       interval: 20,
     });
-    const before = readActiveDevelopmentRuntimeArtifactsSnapshot(first.app)?.runtimeAppRoot;
+    const before = z
+      .string()
+      .min(1)
+      .parse(readActiveDevelopmentRuntimeArtifactsSnapshot(first.app)?.runtimeAppRoot);
     assert.ok(before);
     await first.writeGeneration("B");
     await vi.waitFor(
@@ -202,11 +206,12 @@ test("actual pending approval survives B activation and restore with its A execu
     const prior = readActiveDevelopmentRuntimeArtifactsSnapshot(f.app)?.runtimeAppRoot;
     await f.writeGeneration("B");
     await vi.waitFor(
-      () =>
+      () => {
         assert.notEqual(
           readActiveDevelopmentRuntimeArtifactsSnapshot(f.app)?.runtimeAppRoot,
           prior,
-        ),
+        );
+      },
       { timeout: 60_000, interval: 50 },
     );
     await f.stop();

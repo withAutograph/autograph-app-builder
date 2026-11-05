@@ -168,6 +168,7 @@ its own concrete scope and approval.
 - [Hosted runtime and protected Preview contract](../hosted-app-runtime.md)
 - [Public MCP contract](../public-mcp-contract.md)
 - [Production handoff](../production-readiness-handoff.md)
+
 ## Resource preparation and public release are separate approvals
 
 Fresh standard single-project setup plans carry

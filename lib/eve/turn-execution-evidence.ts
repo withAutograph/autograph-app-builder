@@ -53,8 +53,12 @@ const executionTools = new Set([
   "prepare-app-integration-capability",
 ]);
 const category = (toolName: string): NativeExecutionAttempt["category"] => {
-  if (statusTools.has(toolName)) return "status-read";
-  if (executionTools.has(toolName)) return "execution";
+  if (statusTools.has(toolName)) {
+    return "status-read";
+  }
+  if (executionTools.has(toolName)) {
+    return "execution";
+  }
   return "unclassified";
 };
 const invalid = () => new Error("native_turn_evidence_unavailable");
@@ -62,7 +66,9 @@ const invalid = () => new Error("native_turn_evidence_unavailable");
 // oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- Closed metadata descriptor boundary; never traverse source bodies or errors.
 const own = (value: unknown, key: string): unknown => {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Object descriptor APIs require an object; this does not authorize its contents.
-  if (value === null || typeof value !== "object") return undefined;
+  if (value === null || typeof value !== "object") {
+    return undefined;
+  }
   return Object.getOwnPropertyDescriptor(value, key)?.value;
 };
 const identifierSchema = z.string().regex(/^[A-Za-z0-9_.:-]{1,512}$/u);
@@ -122,7 +128,9 @@ const recordStart = (
   index: number,
 ) => {
   const turnId = identifier(event.data.turnId);
-  if (turns.has(turnId)) throw invalid();
+  if (turns.has(turnId)) {
+    throw invalid();
+  }
   turns.set(turnId, {
     turnId,
     sequence: event.data.sequence,
@@ -137,11 +145,17 @@ const recordRequests = (
   index: number,
 ) => {
   const turn = turns.get(event.data.turnId);
-  if (turn === undefined) throw invalid();
+  if (turn === undefined) {
+    throw invalid();
+  }
   for (const action of event.data.actions) {
-    if (action.kind !== "tool-call" && action.kind !== "workflow-tool-call") continue;
+    if (action.kind !== "tool-call" && action.kind !== "workflow-tool-call") {
+      continue;
+    }
     const callId = identifier(action.callId);
-    if (turn.attempts.has(callId)) throw invalid();
+    if (turn.attempts.has(callId)) {
+      throw invalid();
+    }
     turn.attempts.set(callId, {
       turnId: turn.turnId,
       callId,
@@ -158,9 +172,13 @@ const recordResult = (
   index: number,
 ) => {
   const result = event.data.result;
-  if (result.kind !== "tool-result") return;
+  if (result.kind !== "tool-result") {
+    return;
+  }
   const turn = turns.get(event.data.turnId);
-  if (turn === undefined) throw invalid();
+  if (turn === undefined) {
+    throw invalid();
+  }
   const callId = identifier(result.callId);
   const attempt = turn.attempts.get(callId) ?? {
     turnId: turn.turnId,
@@ -169,66 +187,94 @@ const recordResult = (
     category: category(result.toolName),
     commandReferences: [],
   };
-  if (attempt.toolName !== result.toolName || attempt.result !== undefined) throw invalid();
+  if (attempt.toolName !== result.toolName || attempt.result !== undefined) {
+    throw invalid();
+  }
   attempt.result = { ...reference(event, index), status: event.data.status };
   const command = commandIdSchema.safeParse(own(own(result, "output"), "commandId"));
-  if (command.success)
+  if (command.success) {
     attempt.commandReferences.push({ commandId: command.data, nativeIndex: index });
+  }
   turn.attempts.set(callId, attempt);
 };
 const recordEvent = (turns: Map<string, Turn>, event: MessageStreamEvent, index: number) => {
+  // oxlint-disable-next-line typescript/switch-exhaustiveness-check -- Only turn/action boundaries establish dispatch; unrelated framework events intentionally remain unassessed.
   switch (event.type) {
-    case "turn.started":
+    case "turn.started": {
       recordStart(turns, event, index);
       break;
-    case "actions.requested":
+    }
+    case "actions.requested": {
       recordRequests(turns, event, index);
       break;
-    case "action.result":
+    }
+    case "action.result": {
       recordResult(turns, event, index);
       break;
-    case "message.received":
+    }
+    case "message.received": {
       turns.get(event.data.turnId)?.messages.push(reference(event, index));
       break;
+    }
     case "turn.completed": {
       const turn = turns.get(event.data.turnId);
-      if (turn !== undefined) turn.boundary = { ...reference(event, index), kind: "completed" };
+      if (turn !== undefined) {
+        turn.boundary = { ...reference(event, index), kind: "completed" };
+      }
       break;
     }
     case "turn.failed": {
       const turn = turns.get(event.data.turnId);
-      if (turn !== undefined) turn.boundary = { ...reference(event, index), kind: "failed" };
+      if (turn !== undefined) {
+        turn.boundary = { ...reference(event, index), kind: "failed" };
+      }
       break;
     }
     case "turn.cancelled": {
       const turn = turns.get(event.data.turnId);
-      if (turn !== undefined) turn.boundary = { ...reference(event, index), kind: "cancelled" };
+      if (turn !== undefined) {
+        turn.boundary = { ...reference(event, index), kind: "cancelled" };
+      }
       break;
     }
-    default:
+    default: {
       break;
+    }
   }
 };
 const matches = (turn: Turn, selector: NativeTurnSelector) => {
-  if ("turnId" in selector) return turn.turnId === selector.turnId;
-  if ("messageIndex" in selector)
+  if ("turnId" in selector) {
+    return turn.turnId === selector.turnId;
+  }
+  if ("messageIndex" in selector) {
     return turn.messages.some((message) => message.nativeIndex === selector.messageIndex);
+  }
   return turn.messages.some((message) => message.deliveryIds.includes(selector.deliveryId));
 };
 const selectTurn = (turns: Map<string, Turn>, selector?: NativeTurnSelector) => {
   const values = [...turns.values()];
-  if (selector === undefined) return values.at(-1);
+  if (selector === undefined) {
+    return values.at(-1);
+  }
   const matching = values.filter((turn) => matches(turn, selector));
-  if (matching.length === 1) return matching[0];
+  if (matching.length === 1) {
+    return matching[0];
+  }
   // oxlint-disable-next-line unicorn/no-useless-undefined -- Explicit absent match preserves this optional selection contract.
   return undefined;
 };
 const selectionKind = (
   selector?: NativeTurnSelector,
 ): NativeTurnExecutionEvidence["selectedBy"] => {
-  if (selector === undefined) return "latest-observed-turn";
-  if ("turnId" in selector) return "turn-id";
-  if ("messageIndex" in selector) return "native-message-index";
+  if (selector === undefined) {
+    return "latest-observed-turn";
+  }
+  if ("turnId" in selector) {
+    return "turn-id";
+  }
+  if ("messageIndex" in selector) {
+    return "native-message-index";
+  }
   return "delivery-id";
 };
 const disposition = (
@@ -237,29 +283,41 @@ const disposition = (
   const executions = attempts.filter(
     (attempt) => attempt.category === "execution" && attempt.requested !== undefined,
   );
-  if (executions.some((attempt) => attempt.result !== undefined)) return "result-observed";
-  if (executions.length > 0) return "requested";
+  if (executions.some((attempt) => attempt.result !== undefined)) {
+    return "result-observed";
+  }
+  if (executions.length > 0) {
+    return "requested";
+  }
   if (
     attempts.every(
       (attempt) => attempt.category === "status-read" && attempt.requested !== undefined,
     )
-  )
+  ) {
     return "unexercised";
+  }
   return "unassessed";
 };
 const historicalFailure = (turns: Map<string, Turn>, selected: Turn) => {
   let failure: NativeExecutionAttempt | undefined;
   for (const turn of turns.values()) {
-    if (turn.started.nativeIndex >= selected.started.nativeIndex) continue;
+    if (turn.started.nativeIndex >= selected.started.nativeIndex) {
+      continue;
+    }
     for (const attempt of turn.attempts.values()) {
       if (
         attempt.category !== "execution" ||
         attempt.requested === undefined ||
         attempt.result?.status !== "failed"
-      )
+      ) {
         continue;
-      if (failure === undefined || attempt.result.nativeIndex > (failure.result?.nativeIndex ?? -1))
+      }
+      if (
+        failure === undefined ||
+        attempt.result.nativeIndex > (failure.result?.nativeIndex ?? -1)
+      ) {
         failure = attempt;
+      }
     }
   }
   return failure;
@@ -272,10 +330,13 @@ export const summarizeNativeTurnExecution = (input: {
   nativeCursor: number;
   selector?: NativeTurnSelector;
 }): NativeTurnExecutionEvidence => {
-  if (input.nativeCursor !== input.events.length || input.ownerLineage[0] !== input.sessionId)
+  if (input.nativeCursor !== input.events.length || input.ownerLineage[0] !== input.sessionId) {
     throw invalid();
+  }
   identifier(input.sessionId);
-  for (const owner of input.ownerLineage) identifier(owner);
+  for (const owner of input.ownerLineage) {
+    identifier(owner);
+  }
   const turns = new Map<string, Turn>();
   const unassociatedEvents: NativeTurnExecutionEvidence["unassociatedEvents"] = [];
   for (const [index, event] of input.events.entries()) {
@@ -294,7 +355,9 @@ export const summarizeNativeTurnExecution = (input: {
     recordEvent(turns, event, index);
   }
   const selected = selectTurn(turns, input.selector);
-  if (selected === undefined) throw invalid();
+  if (selected === undefined) {
+    throw invalid();
+  }
   const attempts = [...selected.attempts.values()];
   const historical = historicalFailure(turns, selected);
   return {

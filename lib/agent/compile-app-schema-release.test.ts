@@ -382,14 +382,12 @@ it("retains the compiler error category before a redacted structured diagnostic"
     appId: "example",
     root: "/workspace/repository",
     sandbox: {
-      run: vi
-        .fn()
-        .mockResolvedValue({
-          exitCode: 1,
-          stdout: "",
-          stderr:
-            '[app:compile] schema-compiler: manifest compilation failed: invalid role grants: ["private-grant-canary"]\n[app:compile] Retry: compile the selected schema',
-        }),
+      run: vi.fn().mockResolvedValue({
+        exitCode: 1,
+        stdout: "",
+        stderr:
+          '[app:compile] schema-compiler: manifest compilation failed: invalid role grants: ["private-grant-canary"]\n[app:compile] Retry: compile the selected schema',
+      }),
     },
   });
   expect(result.stderr).toContain(

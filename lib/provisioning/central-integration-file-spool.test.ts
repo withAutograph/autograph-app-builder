@@ -8,6 +8,7 @@ import type {
   CentralIntegrationContextWire,
   CentralSourceCaptureContextWire,
 } from "./hosted-operator-sandbox-launcher";
+
 const runId = "11111111-1111-4111-a111-111111111111";
 const sha = "a".repeat(64);
 const worker = {
@@ -71,14 +72,17 @@ const fixture = (mutation = false, write = false, capture = false) => {
       })),
     },
     writeFiles: vi.fn(async (rows: { path: string; content: Buffer }[]) => {
-      for (const row of rows) files.set(row.path, row.content);
+      for (const row of rows) {
+        files.set(row.path, row.content);
+      }
     }),
     readFileToBuffer: vi.fn(async ({ path }: { path: string }) => files.get(path) ?? null),
     delete: stop,
     extendTimeout: vi.fn(async () => {}),
     runCommand: vi.fn(async (options: { detached?: boolean; args: string[] }) => {
-      if (options.detached !== true)
+      if (options.detached !== true) {
         return { exitCode: 0, stdout: async () => `${sha}  /worker/integration\n` };
+      }
       const spool = options.args[2];
       frame(`${spool}/requests/1.json`, {
         kind: mutation ? "authorize_effect" : "check_fence",
@@ -130,7 +134,7 @@ const fixture = (mutation = false, write = false, capture = false) => {
       return {
         kill: vi.fn(async () => {}),
         wait: async () => ({ exitCode: 0 }),
-        logs: async function* () {
+        async *logs() {
           for (const [kind, frameId] of [
             ["protected_installer_lifecycle_ready", 1],
             ["protected_installer_frame_ready", 1],

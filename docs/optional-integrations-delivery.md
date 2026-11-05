@@ -345,6 +345,7 @@ delivery and observation cannot accept that prior deployment as the result.
 Unchanged runtime values may reuse the provider's actual active deployment.
 The snapshot excludes stale evidence; it never selects, promotes or aliases a
 deployment. Provider activation and the public domain remain independently read.
+
 ### Fixed optional-capability worker transport
 
 Optional integration setup uses the existing project-OIDC, immutable-worker,
@@ -357,6 +358,7 @@ Private connection and sealed-authority files travel through owner-only SDK file
 writes. They are not shell arguments or public tool results. Control database
 allocation uses the existing fixed resource worker with the explicit
 `integration_control_database` scope, independently from the app's Neon branch.
+
 ### Normal existing-platform reference
 
 Fresh capability plans use version 3. The new existing-platform READY receipt

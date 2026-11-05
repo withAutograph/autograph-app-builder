@@ -15,6 +15,7 @@ import {
   appIntegrationOptionalEnvironmentKeys,
 } from "./app-integration-release-contract";
 import { PublicReleasePrerequisiteError } from "./public-release-prerequisite";
+
 const fail = () =>
   new PublicReleasePrerequisiteError("public_release_integration_capability_required");
 export interface RetentionProviderBinding {

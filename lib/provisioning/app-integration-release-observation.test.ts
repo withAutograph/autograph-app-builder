@@ -4,6 +4,7 @@ import { z } from "zod";
 import { expect, test, vi } from "vitest";
 import { observeAppIntegrationPublicRelease } from "./app-integration-release-observation";
 import { integrationTestAttachment as attachment } from "./app-integration-release-test-fixture";
+
 const secret = "r".repeat(32);
 const seconds = 1_800_000_000;
 const challengeSchema = z.object({

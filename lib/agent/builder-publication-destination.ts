@@ -1,3 +1,4 @@
+/* oxlint-disable sonarjs/expression-complexity -- Destination authority requires all exact recorded repository, installation and provider project comparisons. */
 import { isDeepStrictEqual } from "node:util";
 import { resolveExistingBuilderDestinationReference } from "../provisioning/builder-existing-destination";
 import type { ToolContext } from "eve/tools";
@@ -29,6 +30,7 @@ export const createBuilderPublicationDestinationReader =
     const selected = await deps.readSelection();
     const ref = selected.destination;
     if (ref === undefined) {
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- The optional destination reader must distinguish no recorded destination from authorized publication.
       return undefined;
     }
     const row = await deps.readProvisioning({

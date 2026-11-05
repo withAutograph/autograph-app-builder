@@ -1,4 +1,5 @@
 import { integrationCapabilityPlan as legacy } from "./app-integration-capability-test-fixture";
+
 export const integrationCapabilityV2PlanInput = () => ({
   ...legacy,
   version: 2,

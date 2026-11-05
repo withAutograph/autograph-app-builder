@@ -1,4 +1,5 @@
 /* oxlint-disable eslint/no-await-in-loop -- Stage one verified file at a time without loading an entire repository into memory. */
+/* oxlint-disable react-doctor/async-await-in-loop -- Bound source staging memory and resolve archived links only after the complete graph exists. */
 /* oxlint-disable eslint/no-bitwise -- POSIX executable mode bits are the artifact contract. */
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -58,7 +59,7 @@ const git = (root: string, args: string[]) =>
   // The maintainer uses the installed Git executable; no repository-provided command is invoked.
   // oxlint-disable-next-line sonarjs/no-os-command-from-path
   execFileSync("git", ["-C", root, ...args], {
-    encoding: "utf8",
+    encoding: "utf-8",
     stdio: ["ignore", "pipe", "pipe"],
   });
 
@@ -74,53 +75,10 @@ const readRegularSource = async (root: string, filename: string, executable: boo
   }
   return await readFile(filename);
 };
-const copySource = async (
-  sourceRoot: string,
+const verifyStagedLinks = async (
   repository: string,
-  files: Receipt["files"],
-  tree: Map<string, { mode: string; blob: string }>,
+  links: readonly { filename: string; target: string }[],
 ) => {
-  const links: { filename: string; target: string }[] = [];
-  for (const file of files) {
-    safePath(file.path);
-    const entry = tree.get(file.path);
-    if (!entry || entry.mode !== file.mode) throw new Error("central_bundle_inventory_mismatch");
-    tree.delete(file.path);
-    const from = path.join(sourceRoot, file.path);
-    const state = await lstat(from);
-    let bytes: Buffer;
-    if (file.mode === "120000") {
-      if (!state.isSymbolicLink()) throw new Error("central_bundle_mode_mismatch");
-      const target = await readlink(from);
-      if (
-        path.isAbsolute(target) ||
-        !inside(repository, path.resolve(repository, path.dirname(file.path), target))
-      )
-        throw new Error("central_bundle_link_escape");
-      bytes = Buffer.from(target);
-      links.push({ filename: file.path, target });
-    } else {
-      bytes = await readRegularSource(sourceRoot, from, file.mode === "100755");
-    }
-    if (
-      sha256(bytes) !== file.sha256 ||
-      // Git SHA-1 is an additional provenance relation; SHA-256 above pins actual bytes.
-      // oxlint-disable-next-line sonarjs/hashing
-      createHash("sha1").update(`blob ${bytes.byteLength}\0`).update(bytes).digest("hex") !==
-        entry.blob
-    )
-      throw new Error("central_bundle_source_bytes_mismatch");
-    if (file.mode !== "120000") {
-      const to = path.join(repository, file.path);
-      await mkdir(path.dirname(to), { recursive: true });
-      await writeFile(to, bytes, { flag: "wx", mode: file.mode === "100755" ? 0o755 : 0o644 });
-    }
-  }
-  for (const link of links) {
-    const to = path.join(repository, link.filename);
-    await mkdir(path.dirname(to), { recursive: true });
-    await symlink(link.target, to);
-  }
   // Resolve the complete staged graph: lexical normalization alone misses
   // links followed by parent traversal through another archived link.
   for (const link of links) {
@@ -134,6 +92,62 @@ const copySource = async (
       throw new Error("central_bundle_link_escape");
     }
   }
+};
+
+const copySource = async (
+  sourceRoot: string,
+  repository: string,
+  files: Receipt["files"],
+  tree: Map<string, { mode: string; blob: string }>,
+) => {
+  const links: { filename: string; target: string }[] = [];
+  for (const file of files) {
+    safePath(file.path);
+    const entry = tree.get(file.path);
+    if (!entry || entry.mode !== file.mode) {
+      throw new Error("central_bundle_inventory_mismatch");
+    }
+    tree.delete(file.path);
+    const from = path.join(sourceRoot, file.path);
+    const state = await lstat(from);
+    let bytes: Buffer;
+    if (file.mode === "120000") {
+      if (!state.isSymbolicLink()) {
+        throw new Error("central_bundle_mode_mismatch");
+      }
+      const target = await readlink(from);
+      if (
+        path.isAbsolute(target) ||
+        !inside(repository, path.resolve(repository, path.dirname(file.path), target))
+      ) {
+        throw new Error("central_bundle_link_escape");
+      }
+      bytes = Buffer.from(target);
+      links.push({ filename: file.path, target });
+    } else {
+      bytes = await readRegularSource(sourceRoot, from, file.mode === "100755");
+    }
+    if (
+      sha256(bytes) !== file.sha256 ||
+      // Git SHA-1 is an additional provenance relation; SHA-256 above pins actual bytes.
+      // oxlint-disable-next-line sonarjs/hashing
+      createHash("sha1").update(`blob ${bytes.byteLength}\0`).update(bytes).digest("hex") !==
+        entry.blob
+    ) {
+      throw new Error("central_bundle_source_bytes_mismatch");
+    }
+    if (file.mode !== "120000") {
+      const to = path.join(repository, file.path);
+      await mkdir(path.dirname(to), { recursive: true });
+      await writeFile(to, bytes, { flag: "wx", mode: file.mode === "100755" ? 0o755 : 0o644 });
+    }
+  }
+  for (const link of links) {
+    const to = path.join(repository, link.filename);
+    await mkdir(path.dirname(to), { recursive: true });
+    await symlink(link.target, to);
+  }
+  await verifyStagedLinks(repository, links);
 };
 
 /** Offline release packaging only. Live Builder planning never requires this artifact. */
@@ -154,16 +168,20 @@ export const assembleCentralWorkerBundle = async (input: {
     await realpath(path.dirname(requestedDestination)),
     path.basename(requestedDestination),
   );
-  if (inside(sourceRoot, destination) || inside(artifactRoot, destination))
+  if (inside(sourceRoot, destination) || inside(artifactRoot, destination)) {
     throw new Error("central_bundle_destination_inside_input");
+  }
   const raw = await readFile(path.join(artifactRoot, receiptPath));
-  if (sha256(raw) !== input.receiptSha256) throw new Error("central_bundle_receipt_mismatch");
-  const receipt = receiptSchema.parse(JSON.parse(raw.toString("utf8")));
+  if (sha256(raw) !== input.receiptSha256) {
+    throw new Error("central_bundle_receipt_mismatch");
+  }
+  const receipt = receiptSchema.parse(JSON.parse(raw.toString("utf-8")));
   if (
     receipt.sourceSha !== input.reviewedSourceSha ||
     git(sourceRoot, ["rev-parse", `${receipt.sourceSha}^{tree}`]).trim() !== receipt.sourceTree
-  )
+  ) {
     throw new Error("central_bundle_source_mismatch");
+  }
   const entries = git(sourceRoot, ["ls-tree", "-rz", "--full-tree", receipt.sourceSha])
     .split("\0")
     .filter(Boolean);
@@ -171,11 +189,15 @@ export const assembleCentralWorkerBundle = async (input: {
     entries.map((entry) => {
       const match =
         /^(?<mode>100644|100755|120000) blob (?<blob>[a-f0-9]{40})\t(?<filename>.+)$/su.exec(entry);
-      if (!match?.groups) throw new Error("central_bundle_unsupported_git_entry");
-      return [match[3]!, { mode: match[1]!, blob: match[2]! }] as const;
+      if (!match?.groups) {
+        throw new Error("central_bundle_unsupported_git_entry");
+      }
+      return [match[3], { mode: match[1], blob: match[2] }] as const;
     }),
   );
-  if (tree.size !== receipt.files.length) throw new Error("central_bundle_inventory_mismatch");
+  if (tree.size !== receipt.files.length) {
+    throw new Error("central_bundle_inventory_mismatch");
+  }
   // Exclusive staging preserves existing artifacts on failure; no cleanup is inferred.
   await mkdir(destination, { mode: 0o700 });
   const repository = path.join(destination, "repository");
@@ -193,14 +215,16 @@ export const assembleCentralWorkerBundle = async (input: {
       !state.isFile() ||
       (state.mode & 0o111) === 0 ||
       !inside(artifactRoot, await realpath(from))
-    )
+    ) {
       throw new Error("central_bundle_worker_not_executable");
+    }
     const bytes = await readFile(from);
     if (
       sha256(bytes) !== workers[name].sha256 ||
       !bytes.subarray(0, 19).equals(Buffer.from("#!/usr/bin/env bun\n"))
-    )
+    ) {
       throw new Error("central_bundle_worker_mismatch");
+    }
     const to = path.join(repository, workerPaths[name]);
     await mkdir(path.dirname(to), { recursive: true });
     await writeFile(to, bytes, { flag: "wx", mode: 0o755 });

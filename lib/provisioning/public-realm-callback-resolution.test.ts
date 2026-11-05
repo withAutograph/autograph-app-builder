@@ -21,6 +21,7 @@ import {
   ownedAppPublicEnvironmentManifest,
 } from "./owned-app-auth-environment";
 import { plan as basePlan, authority } from "./public-release-test-fixture";
+
 const resource = (name: string) => ({
   database: name,
   migratorRole: `${name}_owner`,
@@ -281,13 +282,21 @@ it.each(["duplicate", "not-ready", "missing-consent", "wrong-release", "wrong-ow
   "rejects %s without reading enrollment or runtime credentials",
   async (kind) => {
     const f = fixture();
-    if (kind === "duplicate") f.setRows([f.candidate, structuredClone(f.candidate)]);
-    if (kind === "not-ready") f.record.observation = { status: "pending" };
-    if (kind === "missing-consent") f.record.approvalReceipts = [];
-    if (kind === "wrong-release" && f.record.observation?.status === "ready")
+    if (kind === "duplicate") {
+      f.setRows([f.candidate, structuredClone(f.candidate)]);
+    }
+    if (kind === "not-ready") {
+      f.record.observation = { status: "pending" };
+    }
+    if (kind === "missing-consent") {
+      f.record.approvalReceipts = [];
+    }
+    if (kind === "wrong-release" && f.record.observation?.status === "ready") {
       f.record.observation.releaseId = "another-release";
-    if (kind === "wrong-owner")
+    }
+    if (kind === "wrong-owner") {
       f.context.authority = { ...f.context.authority, ownerUserId: "another-owner" };
+    }
     await expect(f.resolve(f.context)).rejects.toThrow();
     expect(f.deps.readEnrollment).not.toHaveBeenCalled();
     expect(f.deps.readValues).not.toHaveBeenCalled();

@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import type { AppIntegrationReleaseAttachment } from "./app-integration-release-contract";
+
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const observationSchema = z.strictObject({
   version: z.literal(1),

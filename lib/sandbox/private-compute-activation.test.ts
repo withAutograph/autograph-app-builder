@@ -8,7 +8,7 @@ const profile = () =>
     version: 1,
     id: "private-checks-16gib-v1",
     vcpus: 8,
-    memoryMiB: 16384,
+    memoryMiB: 16_384,
     lintWorkers: 1,
     target: { sandboxId: "owned-sandbox", workspaceDrive: "owned-drive" },
     checkPolicy: {
@@ -54,7 +54,9 @@ const fixture = () => {
     },
     update: (input) => {
       effects.push("update");
-      if (uncertainUpdate) return Promise.reject(new Error("Lost provider reply"));
+      if (uncertainUpdate) {
+        return Promise.reject(new Error("Lost provider reply"));
+      }
       vcpus = input.resources?.vcpus ?? vcpus;
       return Promise.resolve();
     },
@@ -89,7 +91,9 @@ const fixture = () => {
     get record() {
       return record;
     },
-    observeStatus: (value: PrivateComputeNative["status"]) => { status = value; },
+    observeStatus: (value: PrivateComputeNative["status"]) => {
+      status = value;
+    },
     uncertain: () => {
       uncertainUpdate = true;
     },
@@ -103,7 +107,7 @@ describe("approved private compute transition", () => {
     const f = fixture();
     await expect(activatePrivateComputeProfile(f.input, f.ports)).resolves.toBe(f.native);
     expect(f.effects).toEqual(["stop", "update", "resume"]);
-    expect(f.native.currentSession()).toEqual({ vcpus: 8, memory: 16384 });
+    expect(f.native.currentSession()).toEqual({ vcpus: 8, memory: 16_384 });
     expect(f.record).toMatchObject({ phase: "ready", proposalDigest: f.input.proposalDigest });
     await activatePrivateComputeProfile({ ...f.input, proposalDigest: "2".repeat(64) }, f.ports);
     expect(f.effects).toEqual(["stop", "update", "resume"]);
@@ -126,7 +130,9 @@ describe("approved private compute transition", () => {
     for (const status of ["stopping", "snapshotting"] as const) {
       f.observeStatus(status);
       // oxlint-disable-next-line eslint/no-await-in-loop -- Each independent observed native state must deny effects.
-      await expect(activatePrivateComputeProfile(f.input, f.ports)).rejects.toThrow("still transitioning");
+      await expect(activatePrivateComputeProfile(f.input, f.ports)).rejects.toThrow(
+        "still transitioning",
+      );
     }
     expect(f.effects).toEqual([]);
   });

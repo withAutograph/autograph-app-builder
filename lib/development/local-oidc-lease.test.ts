@@ -13,9 +13,12 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { afterEach, expect, it } from "vitest";
 import { publishLocalDevelopmentOidcLease } from "./local-oidc-lease";
+
 const roots: string[] = [];
 afterEach(() => {
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0)) {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 const fixture = () => {
   const root = realpathSync(mkdtempSync(path.join(tmpdir(), "builder-oidc-lease-")));
@@ -28,8 +31,9 @@ const fixture = () => {
     applicationRoot,
     runtimeHome,
     path.join(repositoryRoot, ".vercel"),
-  ])
+  ]) {
     mkdirSync(directory, { mode: 0o700, recursive: true });
+  }
   const project = { projectId: "prj_owned", orgId: "team_owned", projectName: "builder" };
   writeFileSync(path.join(repositoryRoot, ".vercel/project.json"), JSON.stringify(project), {
     mode: 0o600,
@@ -54,10 +58,11 @@ const fixture = () => {
       ).toString("base64url"),
       "fixture",
     ].join(".");
-  const install = (value: string) =>
+  const install = (value: string) => {
     writeFileSync(path.join(repositoryRoot, ".env.local"), `VERCEL_OIDC_TOKEN=${value}\n`, {
       mode: 0o600,
     });
+  };
   return { root, repositoryRoot, applicationRoot, runtimeHome, token, install, project };
 };
 it("the actual OIDC SDK recovers an expired process token from the renewed isolated project lease", () => {
@@ -83,7 +88,7 @@ it("the actual OIDC SDK recovers an expired process token from the renewed isola
         VERCEL_OIDC_TOKEN: f.token(now - 1),
         EXPECTED_FIXTURE_TOKEN: current,
       },
-      encoding: "utf8",
+      encoding: "utf-8",
     },
   );
   expect(probe.status, probe.stderr).toBe(0);

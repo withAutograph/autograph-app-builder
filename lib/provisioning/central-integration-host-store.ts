@@ -53,7 +53,9 @@ export const centralHostRecordSchema = z
         plan.effects.some(
           (effect, index) =>
             (record.effects[effect] !== "idle" && attempts[effect] === undefined) ||
-            (firstUnfinished >= 0 && index > firstUnfinished && record.effects[effect] !== "idle"),
+            (firstUnfinished !== -1 &&
+              index > firstUnfinished &&
+              record.effects[effect] !== "idle"),
         ) ||
         (Object.keys(attempts).length > 0 && (record.approvalReceipts?.length ?? 0) === 0)
       ) {
@@ -132,11 +134,12 @@ export const centralHostRecordSchema = z
           record.observation.deployment.configurationSha256 !== plan.central.configurationSha256 ||
           record.observation.caller.projectId !== plan.caller.projectId ||
           record.observation.caller.ownerId !== plan.caller.ownerId))
-    )
+    ) {
       ctx.addIssue({
         code: "custom",
         message: "Exact completed central host setup and caller authority required",
       });
+    }
   });
 export type CentralHostRecord = z.infer<typeof centralHostRecordSchema>;
 export interface CentralHostRow {
@@ -150,13 +153,24 @@ const nativeTransitionAllowed = (
   before: CentralHostRecord["nativeDeployment"],
   after: CentralHostRecord["nativeDeployment"],
 ) => {
-  if (before === undefined) return after === undefined;
-  if (after === undefined) return false;
-  if (before.status === "conflict") return isDeepStrictEqual(before, after);
-  if (before.status === "empty") return after.status !== "conflict";
-  if (after.status === "empty") return false;
-  if (after.status === "conflict")
+  if (before === undefined) {
+    return after === undefined;
+  }
+  if (after === undefined) {
+    return false;
+  }
+  if (before.status === "conflict") {
+    return isDeepStrictEqual(before, after);
+  }
+  if (before.status === "empty") {
+    return after.status !== "conflict";
+  }
+  if (after.status === "empty") {
+    return false;
+  }
+  if (after.status === "conflict") {
     return after.providerDeploymentIds.includes(before.providerDeploymentId);
+  }
   return (
     before.providerDeploymentId === after.providerDeploymentId &&
     before.immutableOrigin === after.immutableOrigin &&
@@ -238,8 +252,9 @@ const parse = (raw: typeof builderProvisioningJournals.$inferSelect): CentralHos
     raw.audience !== record.plan.authority.audience ||
     raw.workspaceId !== record.plan.authority.workspaceId ||
     raw.ownerUserId !== record.plan.authority.ownerUserId
-  )
+  ) {
     throw fail();
+  }
   return { operationRef: raw.requestId, revision: raw.revision, record };
 };
 export const createPostgresCentralHostStore = (database: Database) => {
@@ -286,7 +301,9 @@ export const createPostgresCentralHostStore = (database: Database) => {
       const selectedRaw = rows.at(0);
       const row =
         selectedRaw === undefined ? await read(plan.authority, operationRef) : parse(selectedRaw);
-      if (row === undefined || !isDeepStrictEqual(row.record.plan, record.plan)) throw fail();
+      if (row === undefined || !isDeepStrictEqual(row.record.plan, record.plan)) {
+        throw fail();
+      }
       return row;
     },
     async compareAndSet(row: CentralHostRow, raw: CentralHostRecord) {
@@ -313,7 +330,9 @@ export const createPostgresCentralHostStore = (database: Database) => {
       return selectedRaw === undefined ? undefined : parse(selectedRaw);
     },
     async readSetupForSubscription(owners: readonly Authority[], subscriptionRef: string) {
-      if (owners.length === 0) throw fail();
+      if (owners.length === 0) {
+        throw fail();
+      }
       const rows = await database
         .select()
         .from(builderProvisioningJournals)
@@ -325,7 +344,9 @@ export const createPostgresCentralHostStore = (database: Database) => {
           ),
         )
         .limit(2);
-      if (rows.length > 1) throw fail();
+      if (rows.length > 1) {
+        throw fail();
+      }
       return rows[0] === undefined ? undefined : parse(rows[0]);
     },
     async findSetupForProfile(
@@ -333,7 +354,9 @@ export const createPostgresCentralHostStore = (database: Database) => {
       profileDigest: string,
       projectId: string,
     ) {
-      if (owners.length === 0) throw fail();
+      if (owners.length === 0) {
+        throw fail();
+      }
       const rows = await database
         .select()
         .from(builderProvisioningJournals)
@@ -346,7 +369,9 @@ export const createPostgresCentralHostStore = (database: Database) => {
           ),
         )
         .limit(2);
-      if (rows.length > 1) throw fail();
+      if (rows.length > 1) {
+        throw fail();
+      }
       return rows[0] === undefined ? undefined : parse(rows[0]);
     },
     async readReadyCaller(authority: Authority, appProjectId: string) {
@@ -363,32 +388,35 @@ export const createPostgresCentralHostStore = (database: Database) => {
         )
         .limit(2);
       // Multiple retained destinations need explicit supported reconciliation, never latest-row election.
-      if (rows.length > 1) throw fail();
+      if (rows.length > 1) {
+        throw fail();
+      }
       const selectedRaw = rows.at(0);
       return selectedRaw === undefined ? undefined : parse(selectedRaw);
     },
   };
 };
 /** Reads only canonical retained state and reobserves actual provider/SQL/caller authority before returning readiness. */
-export const createReadCentralIntegrationHostReady = (input: {
-  store: Pick<ReturnType<typeof createPostgresCentralHostStore>, "read" | "readReadyCaller">;
-  assertSetupAuthorized: (
-    request: Parameters<ReadCentralIntegrationHostReady>[0],
-    setup: CentralHostRow,
-  ) => Promise<void>;
-  observe: (
-    request: Parameters<ReadCentralIntegrationHostReady>[0],
-    caller: CentralHostRow,
-    setup: CentralHostRow,
-  ) => Promise<z.infer<typeof centralHostReadyReceiptSchema>>;
-}): ReadCentralIntegrationHostReady => {
-  return async (request) => {
+export const createReadCentralIntegrationHostReady =
+  (input: {
+    store: Pick<ReturnType<typeof createPostgresCentralHostStore>, "read" | "readReadyCaller">;
+    assertSetupAuthorized: (
+      request: Parameters<ReadCentralIntegrationHostReady>[0],
+      setup: CentralHostRow,
+    ) => Promise<void>;
+    observe: (
+      request: Parameters<ReadCentralIntegrationHostReady>[0],
+      caller: CentralHostRow,
+      setup: CentralHostRow,
+    ) => Promise<z.infer<typeof centralHostReadyReceiptSchema>>;
+  }): ReadCentralIntegrationHostReady =>
+  async (request) => {
     request.signal.throwIfAborted();
     await request.assertCurrentOwner();
     const caller = await input.store.readReadyCaller(request.authority, request.appProjectId);
     if (caller === undefined) {
       // oxlint-disable-next-line unicorn/no-useless-undefined -- Absence is explicit in the optional readiness port.
-      return;
+      return undefined;
     }
     if (
       caller.record.plan.kind !== "central-integration-host-caller-v1" ||
@@ -396,8 +424,9 @@ export const createReadCentralIntegrationHostReady = (input: {
       caller.record.plan.caller.projectId !== request.appProjectId ||
       caller.record.plan.selection.initiatingAppId !== request.appId ||
       caller.record.observation === undefined
-    )
+    ) {
       throw fail();
+    }
     const setup = await input.store.read(
       caller.record.plan.setupAuthority,
       caller.record.plan.setup.operationRef,
@@ -415,8 +444,9 @@ export const createReadCentralIntegrationHostReady = (input: {
       (setup.record.approvalReceipts?.length ?? 0) === 0 ||
       setup.record.plan.target.teamId !== request.teamId ||
       caller.record.plan.central.teamId !== request.teamId
-    )
+    ) {
       throw fail();
+    }
     await input.assertSetupAuthorized(request, setup);
     const retained = caller.record.observation;
     const frozen = setup.record.plan;
@@ -432,13 +462,15 @@ export const createReadCentralIntegrationHostReady = (input: {
       retained.deployment.installationId !== frozen.target.installationId ||
       retained.deployment.configurationRef !== frozen.source.configurationRef ||
       retained.deployment.configurationSha256 !== frozen.source.configurationSha256
-    )
+    ) {
       throw fail();
+    }
     const actual = centralHostReadyReceiptSchema.parse(await input.observe(request, caller, setup));
     request.signal.throwIfAborted();
     await request.assertCurrentOwner();
     await input.assertSetupAuthorized(request, setup);
-    if (!isDeepStrictEqual(actual, caller.record.observation)) throw fail();
+    if (!isDeepStrictEqual(actual, caller.record.observation)) {
+      throw fail();
+    }
     return actual;
   };
-};

@@ -245,18 +245,32 @@ describe("local native terminal recovery authority", () => {
     const question = (id: string): MessageStreamEvent => ({
       type: "input.requested",
       data: {
-        sequence: 1, stepIndex: 1, turnId: "turn-current",
-        requests: [{
-          kind: "question", requestId: id, prompt: "Continue?", allowFreeform: true,
-          action: { kind: "tool-call", callId: `${id}-call`, toolName: "ask_question", input: {} },
-        }],
+        sequence: 1,
+        stepIndex: 1,
+        turnId: "turn-current",
+        requests: [
+          {
+            kind: "question",
+            requestId: id,
+            prompt: "Continue?",
+            allowFreeform: true,
+            action: {
+              kind: "tool-call",
+              callId: `${id}-call`,
+              toolName: "ask_question",
+              input: {},
+            },
+          },
+        ],
       },
       meta: { ...waiting.meta, id },
     });
     const resolution = (id: string): MessageStreamEvent => ({
       type: "input.resolved",
       data: {
-        sequence: 2, stepIndex: 1, turnId: "turn-current",
+        sequence: 2,
+        stepIndex: 1,
+        turnId: "turn-current",
         resolutions: [{ kind: "question", requestId: id, outcome: "answered" }],
       },
       meta: { ...waiting.meta, id: `${id}-resolved` },
@@ -296,7 +310,9 @@ describe("local native terminal recovery authority", () => {
       }),
     );
     const native = withLocalRecoveredSessions(f.client, f.recovery);
-    const cancel = vi.fn(() => Promise.resolve({ sessionId: "wrun_original", status: "accepted" as const }));
+    const cancel = vi.fn(() =>
+      Promise.resolve({ sessionId: "wrun_original", status: "accepted" as const }),
+    );
     const service = createLocalEveSessionService(
       {
         sessions: {

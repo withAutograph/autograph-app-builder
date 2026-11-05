@@ -1,3 +1,4 @@
+/* oxlint-disable sonarjs/no-nested-functions -- The nested object faithfully represents the read-only Drizzle selection chain, with no mutation port. */
 import { describe, expect, it, vi } from "vitest";
 import type { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import {
@@ -8,6 +9,7 @@ import {
 import { hostedRuntimeJournalRecordSchema } from "./hosted-runtime-journal";
 import { operatorOwnerContextSchema } from "./hosted-operator-contract";
 import { readPublicReleasePreparedRuntime } from "./public-release-readiness";
+
 const bootstrap = () => {
   const { record } = captureFixture();
   const auth = requiredFixture(record.retainedAuth);
@@ -47,7 +49,8 @@ describe("public bootstrap runtime staging", () => {
     const record = bootstrap();
     expect(record.proof).toBeUndefined();
     expect(record.status).toBe("pending");
-    expect((await read([record])).purpose).toBe("auth-bootstrap");
+    const observed = await read([record]);
+    expect(observed.purpose).toBe("auth-bootstrap");
   });
   it("denies missing Auth schema receipt, approval and a mismatched exact destination", async () => {
     const record = bootstrap();

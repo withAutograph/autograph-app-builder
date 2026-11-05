@@ -250,7 +250,9 @@ export const createBuilderVercelProvider = (
         if (native.status === "running") {
           return { native, recovered: true };
         }
-        await assertPrivateComputeResumeAllowed(native, () => {});
+        await assertPrivateComputeResumeAllowed(native, () => {
+          // The enclosing SDK/name/Drive checks establish this reconciled provider handle.
+        });
         const resumed = await Sandbox.get({
           ...transport,
           name: input.name,

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { parseLinkedVercelProject, readOwnerBoundLocalFile } from "../eve/local-vercel-oidc";
 import { privateComputeLimitsSchema } from "../sandbox/private-compute-profile";
 
+// oxlint-disable-next-line typescript/strict-void-return -- Node execFile returns a ChildProcess handle alongside its callback; the official promisify adapter intentionally uses callback completion.
 const execute = promisify(execFile);
 const teamSchema = z.object({
   id: z.string(),
@@ -41,8 +42,9 @@ export const observePrivateComputeLimits = async (input: {
       },
     );
     const team = teamSchema.parse(JSON.parse(stdout));
-    if (team.id !== project.orgId || team.limited === true)
+    if (team.id !== project.orgId || team.limited === true) {
       throw new Error("Provider team unavailable");
+    }
     return privateComputeLimitsSchema.parse({
       version: 1,
       teamId: team.id,

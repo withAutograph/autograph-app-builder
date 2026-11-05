@@ -1,3 +1,4 @@
+/* oxlint-disable sonarjs/expression-complexity, sonarjs/no-nested-conditional -- Preserve the exact frozen v1/v2/v3 destination and ingress guards together; no capability or version is inferred. */
 import { existingPlatformIntegrationPlanReferenceSchema } from "./existing-platform-integration-contract";
 import { integrationProviderDiagnosticSchema } from "./app-integration-provider-diagnostic";
 import {

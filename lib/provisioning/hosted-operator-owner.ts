@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/complexity -- Owner verification keeps every durable session, native lineage and cancellation comparison explicit. */
 import type { BuilderProvisionResponse } from "./contracts";
 import type { BuilderProvisionJournalStore } from "./journal";
 import { resolveExistingBuilderDestinationReference } from "./builder-existing-destination";

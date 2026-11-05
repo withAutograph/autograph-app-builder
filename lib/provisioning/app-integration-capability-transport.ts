@@ -7,6 +7,7 @@ import {
   preparedAppIntegrationCapabilitySchema,
   integrationCapabilityEffectSchema,
 } from "./app-integration-capability-contract";
+
 const common = {
   ownerContext: operatorOwnerContextSchema,
   adapterSessionId: z.string().min(1),

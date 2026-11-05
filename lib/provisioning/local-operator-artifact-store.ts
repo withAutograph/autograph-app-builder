@@ -126,7 +126,9 @@ const writeOnce = async (file: string, content: string, durable = false, exclusi
       if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") {
         throw error;
       }
-      if (exclusive) return false;
+      if (exclusive) {
+        return false;
+      }
     }
     if (durable) {
       const handle = await open(path.dirname(file), constants.O_RDONLY);

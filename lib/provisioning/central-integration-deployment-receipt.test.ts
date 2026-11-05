@@ -5,6 +5,7 @@ import {
   verifyCentralNativeDeploymentReceipt,
   retainCentralNativeDeploymentReceipt,
 } from "./central-integration-deployment-receipt";
+
 const secret = randomUUID();
 const envelope = {
   id: "delivery-one",
@@ -63,7 +64,9 @@ it("ignores other branches and projects without adopting their deployment", () =
 });
 it("preserves idempotent out-of-order ready/created receipts without treating READY as acceptance", () => {
   const created = verifyCentralNativeDeploymentReceipt(signed());
-  if (!created) throw new Error("fixture receipt required");
+  if (!created) {
+    throw new Error("fixture receipt required");
+  }
   const ready = { ...created, eventId: "delivery-ready", eventType: "deployment.ready" as const };
   const first = retainCentralNativeDeploymentReceipt({ status: "empty" }, ready);
   const both = retainCentralNativeDeploymentReceipt(first, created);
@@ -75,7 +78,9 @@ it("preserves idempotent out-of-order ready/created receipts without treating RE
 });
 it("retains conflicting native IDs or changed delivery bytes as a conflict rather than choosing a target", () => {
   const receipt = verifyCentralNativeDeploymentReceipt(signed());
-  if (!receipt) throw new Error("fixture receipt required");
+  if (!receipt) {
+    throw new Error("fixture receipt required");
+  }
   const initial = retainCentralNativeDeploymentReceipt({ status: "empty" }, receipt);
   const conflict = retainCentralNativeDeploymentReceipt(initial, {
     ...receipt,

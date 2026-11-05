@@ -1808,8 +1808,9 @@ const handleBindingsOperation = async (input: {
       plan,
       operationRef,
     });
-    if (!isDeepStrictEqual(latestDelivery, publicDelivery))
-      {throw new HostedOperatorError("resource_mismatch");}
+    if (!isDeepStrictEqual(latestDelivery, publicDelivery)) {
+      throw new HostedOperatorError("resource_mismatch");
+    }
   }
   await deps.assertAuthorized({ ...context, plan });
   const latest = await read();
@@ -1881,24 +1882,27 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
       OPERATOR_PREPARATION_PROGRESS_PREFERENCE;
     try {
       if (request.method === "POST" && new URL(request.url).pathname === "/v1/app-integrations") {
-        if (deps.appIntegrationCapabilityRequest === undefined)
-          {return response({ code: "protected_operator_required" }, 503);}
+        if (deps.appIntegrationCapabilityRequest === undefined) {
+          return response({ code: "protected_operator_required" }, 503);
+        }
         return await deps.appIntegrationCapabilityRequest(request);
       }
       if (
         request.method === "POST" &&
         new URL(request.url).pathname === "/v1/central-integrations"
       ) {
-        if (deps.centralIntegrationHostRequest === undefined)
-          {return response({ code: "protected_operator_required" }, 503);}
+        if (deps.centralIntegrationHostRequest === undefined) {
+          return response({ code: "protected_operator_required" }, 503);
+        }
         return await deps.centralIntegrationHostRequest(request);
       }
       if (
         request.method === "POST" &&
         new URL(request.url).pathname === "/v1/central-deployment-events"
       ) {
-        if (deps.centralIntegrationDeploymentReceiptRequest === undefined)
-          {return response({ code: "protected_operator_required" }, 503);}
+        if (deps.centralIntegrationDeploymentReceiptRequest === undefined) {
+          return response({ code: "protected_operator_required" }, 503);
+        }
         return await deps.centralIntegrationDeploymentReceiptRequest(request);
       }
       if (request.method === "POST" && new URL(request.url).pathname === "/v1/public-release") {

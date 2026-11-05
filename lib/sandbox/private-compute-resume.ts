@@ -9,7 +9,10 @@ export const readPrivateComputeProviderState = async (
 ) => {
   await assertCurrent();
   const authority = await readLocalOperatorArtifactAuthority();
-  if (authority === undefined) return undefined;
+  if (authority === undefined) {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing optional metadata is a deliberate unavailable result, never permission to execute.
+    return undefined;
+  }
   const mount = native.mounts?.["/workspace"];
   const journal = await createLocalPrivateComputeJournal({
     authority,
@@ -21,10 +24,11 @@ export const readPrivateComputeProviderState = async (
   if (
     checkpoint.record !== undefined &&
     (mount?.mode !== "read-write" || checkpoint.record.workspaceDrive !== mount.drive)
-  )
+  ) {
     throw new Error(
       "The private compute journal belongs to another preserved workspace Drive; no resume was sent.",
     );
+  }
   return {
     sandboxId: native.name,
     status: native.status,
@@ -40,8 +44,9 @@ export const assertPrivateComputeResumeAllowed = async (
   assertCurrent: () => void | Promise<void>,
 ) => {
   const observed = await readPrivateComputeProviderState(native, assertCurrent);
-  if (observed !== undefined && observed.phase !== "not-requested" && observed.phase !== "ready")
+  if (observed !== undefined && observed.phase !== "not-requested" && observed.phase !== "ready") {
     throw new Error(
       "This workspace has a pending private compute operation. Read its provider state and continue its approved resource flow before starting another VM session; no resume was sent.",
     );
+  }
 };

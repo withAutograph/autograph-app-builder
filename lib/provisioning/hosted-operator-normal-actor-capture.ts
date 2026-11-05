@@ -3,8 +3,6 @@ import { isDeepStrictEqual } from "node:util";
 import { publicRealmEnrollmentSchema } from "./public-realm-enrollment";
 import type { PublicRealmEnrollment } from "./public-realm-enrollment";
 
-
-
 import { createHash } from "node:crypto";
 import type { JWTVerifyGetKey } from "jose";
 import { z } from "zod";
@@ -158,10 +156,6 @@ export const createNormalActorCaptureHandler =
       const { link, context } = pending;
       if (ports.sender.environment === "production") {
         const enrollment = publicRealmEnrollmentSchema.parse(ports.sender.publicEnrollment);
-        if (link.publicRelease?.enrollmentRef !== enrollment.enrollmentRef || link.ownerSessionId !== enrollment.ownerSessionId || input.origin !== enrollment.publicOrigin || context.target.appId !== enrollment.appId || !isDeepStrictEqual(context.authority,enrollment.authority) || !isDeepStrictEqual(pending.resource,enrollment.resource) || ports.sender.projectId !== enrollment.project.projectId || ports.sender.ownerId !== enrollment.project.ownerId) throw new Error("realm_browser_session_capture_unavailable");
-      } else if (link.publicRelease !== undefined) throw new Error("realm_browser_session_capture_unavailable");
-      if (ports.sender.environment === "production") {
-        const enrollment = publicRealmEnrollmentSchema.parse(ports.sender.publicEnrollment);
         if (
           link.publicRelease?.enrollmentRef !== enrollment.enrollmentRef ||
           link.ownerSessionId !== enrollment.ownerSessionId ||
@@ -171,10 +165,12 @@ export const createNormalActorCaptureHandler =
           !isDeepStrictEqual(pending.resource, enrollment.resource) ||
           ports.sender.projectId !== enrollment.project.projectId ||
           ports.sender.ownerId !== enrollment.project.ownerId
-        )
-          {throw new Error("realm_browser_session_capture_unavailable");}
-      } else if (link.publicRelease !== undefined)
-        {throw new Error("realm_browser_session_capture_unavailable");}
+        ) {
+          throw new Error("realm_browser_session_capture_unavailable");
+        }
+      } else if (link.publicRelease !== undefined) {
+        throw new Error("realm_browser_session_capture_unavailable");
+      }
       if (
         link.consumedAt !== undefined ||
         link.ownerSessionId !== input.ownerSessionId ||

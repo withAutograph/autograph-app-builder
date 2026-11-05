@@ -622,8 +622,9 @@ export const createHostedOperatorClient = (input: {
       if (value.nativePreview) {
         assertOperatorNativePreview(value.nativePreview, value.plan, request.operationRef);
       }
-      if (value.publicDelivery)
-        {assertPublicRuntimeBinding(value.publicDelivery, value.plan, request.operationRef);}
+      if (value.publicDelivery) {
+        assertPublicRuntimeBinding(value.publicDelivery, value.plan, request.operationRef);
+      }
       if (
         value.normalActors &&
         value.normalActors.origin !==

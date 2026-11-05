@@ -961,7 +961,9 @@ const verifyPreparedSandboxFiles = async (
   files: readonly PreparedSourceFile[],
   checksumsPath: string,
 ): Promise<void> => {
-  if (files.length === 0) {return;}
+  if (files.length === 0) {
+    return;
+  }
   if (fixtureSandboxEnabled()) {
     for (const file of files) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow

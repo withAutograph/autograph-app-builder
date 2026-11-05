@@ -9,6 +9,7 @@ import {
   preparedIntegrationScopeDigest,
   appIntegrationReleaseAttachmentSchema,
 } from "./app-integration-release-contract";
+
 const resource = (value: typeof plan.control.database) => ({
   resourceId: value.resourceId,
   hostname: value.hostname,

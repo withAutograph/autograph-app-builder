@@ -57,8 +57,9 @@ export const createOwnedAppResourceCustody = (deps: {
       normal === undefined ||
       plan.runtimePreparation !== "single-project-resources-v1" ||
       plan.authAdoption !== undefined
-    )
+    ) {
       throw fail();
+    }
     const scope = {
       authority: hostedTenantAuthoritySchema.parse(context.authority),
       appId: context.target.appId,
@@ -92,15 +93,18 @@ export const createOwnedAppResourceCustody = (deps: {
       .limit(1);
     await deps.assertCurrentOwner(context);
     const row = rows[0];
-    if (row === undefined) return { identity };
+    if (row === undefined) {
+      return { identity };
+    }
     const record = recordSchema.parse(row.record);
     if (
       row.state !== "settled" ||
       row.requestDigest !== identity.digest ||
       !isDeepStrictEqual(record.scope, identity.scope) ||
       record.reference.scopeDigest !== identity.digest
-    )
+    ) {
       throw fail();
+    }
     return { identity, reference: record.reference };
   };
   const completed = (record: HostedRuntimeJournalRecord) =>
@@ -121,8 +125,9 @@ export const createOwnedAppResourceCustody = (deps: {
               entry.planDigest === reference.source.planDigest,
           );
     const sameTarget = isDeepStrictEqual(sourceContext.target, context.target);
-    if (row === undefined || setup === undefined || row.record.privateState === undefined)
+    if (row === undefined || setup === undefined || row.record.privateState === undefined) {
       throw fail();
+    }
     const same = [
       hash(JSON.stringify(row.record.privateState)) === reference.source.checkpointSha256,
       sameTarget ||
@@ -134,7 +139,9 @@ export const createOwnedAppResourceCustody = (deps: {
       setup.plan.runtimePreparation === "single-project-resources-v1",
       setup.plan.selection.projectId === context.target.projectId,
     ].every(Boolean);
-    if (!same) throw fail();
+    if (!same) {
+      throw fail();
+    }
     const approval = await deps.readApproval({
       ...sourceContext,
       action: "prepare",
@@ -149,8 +156,9 @@ export const createOwnedAppResourceCustody = (deps: {
         approval?.callId === setup.approvedByCallId,
         approval?.planDigest === setup.planDigest,
       ].every(Boolean)
-    )
+    ) {
       throw new HostedOperatorError("authorization_required");
+    }
     await deps.assertCurrentOwner(context);
     return { context: sourceContext, record: row.record, setup };
   };
@@ -198,9 +206,12 @@ export const createOwnedAppResourceCustody = (deps: {
           setup === undefined ||
           record.privateState === undefined ||
           setup.plan.runtimePreparation !== "single-project-resources-v1"
-        )
+        ) {
           continue;
-        if (selected !== undefined) throw fail();
+        }
+        if (selected !== undefined) {
+          throw fail();
+        }
         selected = ownedAppResourceSourceSchema.parse({
           kind: "owned-app-resources-v1",
           scopeDigest,
@@ -212,10 +223,14 @@ export const createOwnedAppResourceCustody = (deps: {
           },
         });
       }
-      if (rows.length < 128) break;
+      if (rows.length < 128) {
+        break;
+      }
       cursor = rows.at(-1)?.requestId;
     }
-    if (selected === undefined) throw fail();
+    if (selected === undefined) {
+      throw fail();
+    }
     await sourceInput(context, plan, selected);
     return selected;
   };
@@ -238,7 +253,9 @@ export const createOwnedAppResourceCustody = (deps: {
   ) => {
     const { identity, reference: known } = await readCustody(context, plan);
     if (known !== undefined) {
-      if (!isDeepStrictEqual(known, reference)) throw fail();
+      if (!isDeepStrictEqual(known, reference)) {
+        throw fail();
+      }
       return;
     }
     await deps.database
@@ -255,7 +272,9 @@ export const createOwnedAppResourceCustody = (deps: {
       })
       .onConflictDoNothing();
     const current = await readCustody(context, plan);
-    if (!isDeepStrictEqual(current.reference, reference)) throw fail();
+    if (!isDeepStrictEqual(current.reference, reference)) {
+      throw fail();
+    }
   };
   const assertFreshApproval = async (
     context: HostedOperatorContext,
@@ -267,8 +286,9 @@ export const createOwnedAppResourceCustody = (deps: {
       operator === undefined ||
       operator.planDigest !== operatorPlanDigest(plan) ||
       record.approvedByCallId === "operator:unapproved-plan"
-    )
+    ) {
       throw new HostedOperatorError("authorization_required");
+    }
     const approval = await deps.readApproval({
       ...context,
       action: "prepare",
@@ -283,8 +303,9 @@ export const createOwnedAppResourceCustody = (deps: {
         approval?.callId === record.approvedByCallId,
         approval?.planDigest === operator.planDigest,
       ].every(Boolean)
-    )
+    ) {
       throw new HostedOperatorError("authorization_required");
+    }
   };
   return {
     readReference,
@@ -295,8 +316,9 @@ export const createOwnedAppResourceCustody = (deps: {
     ) {
       await assertFreshApproval(context, plan, record);
       const reference = plan.existingResources;
-      if (reference === undefined || reference.scopeDigest !== scopeFor(context, plan).digest)
+      if (reference === undefined || reference.scopeDigest !== scopeFor(context, plan).digest) {
         throw fail();
+      }
       const source = await sourceInput(context, plan, reference);
       const privateState = rewrapOwnedAppResourceCredentials({
         source: {
@@ -318,8 +340,9 @@ export const createOwnedAppResourceCustody = (deps: {
     ) => {
       const row = await deps.store.read(context);
       const operator = row?.record.operator;
-      if (row === undefined || operator === undefined || row.record.privateState === undefined)
+      if (row === undefined || operator === undefined || row.record.privateState === undefined) {
         throw fail();
+      }
       const matches = [
         operator.approvalId !== undefined,
         operator.planDigest === operatorPlanDigest(plan),
@@ -330,15 +353,18 @@ export const createOwnedAppResourceCustody = (deps: {
         preparation.runtimeRole === plan.authDatabase.runtimeRole,
         preparation.targetDigest === plan.authSchema?.targetDigest,
       ].every(Boolean);
-      if (!matches) throw fail();
+      if (!matches) {
+        throw fail();
+      }
       await assertFreshApproval(context, plan, row.record);
       const { identity, reference } = await readCustody(context, plan);
       if (reference !== undefined) {
         if (
           plan.existingResources !== undefined &&
           !isDeepStrictEqual(reference, plan.existingResources)
-        )
+        ) {
           throw fail();
+        }
         return;
       }
       const next =

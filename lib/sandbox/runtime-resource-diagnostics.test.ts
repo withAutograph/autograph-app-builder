@@ -14,7 +14,9 @@ describe("bounded runtime resource diagnostics", () => {
   it("runs the actual fixed observation program and preserves advisory scope", async () => {
     const observed = await inspectSandboxRuntimeResources({ run: () => Promise.resolve(facts()) });
     expect(observed.available).toBe(true);
-    if (!observed.available) throw new Error("Expected actual process observation");
+    if (!observed.available) {
+      throw new Error("Expected actual process observation");
+    }
     expect(observed.observations.availableParallelism).toBeGreaterThan(0);
     expect(observed.observations.installed.map(({ name }) => name)).toEqual(["oxlint", "vp"]);
     expect(observed).not.toHaveProperty("ready");
@@ -35,19 +37,21 @@ describe("bounded runtime resource diagnostics", () => {
     // oxlint-disable-next-line sonarjs/code-eval -- Execute only the repository-owned fixed diagnostic program with closed fixture I/O.
     runInNewContext(runtimeResourceDiagnosticProgram, {
       require: (name: string) => {
-        if (name === "node:fs")
+        if (name === "node:fs") {
           return {
             readFileSync: (file: string) => files.get(file),
             realpathSync: (file: string) => file,
           };
-        if (name === "node:os")
+        }
+        if (name === "node:os") {
           return {
             platform: () => "linux",
             arch: () => "x64",
             availableParallelism: () => 2,
             totalmem: () => 4_000_000_000,
           };
-        if (name === "node:child_process")
+        }
+        if (name === "node:child_process") {
           return {
             spawnSync: (_file: string, args: string[]) => ({
               status: 0,
@@ -55,6 +59,7 @@ describe("bounded runtime resource diagnostics", () => {
               stderr: args[0] === "--version" ? "vp v0.3.1\nprivate" : "private",
             }),
           };
+        }
         throw new Error("Unexpected dependency");
       },
       process: {

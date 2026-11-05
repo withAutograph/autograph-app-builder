@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/complexity, sonarjs/expression-complexity -- Keep the complete public release, binding and current authorization predicate visible without changing admission semantics. */
 import { browserEntryPathSchema } from "../repository/browser-entry-path";
 import { z } from "zod";
 import { operatorPlanDigest, HostedOperatorError } from "./hosted-operator-contract";
@@ -88,15 +89,15 @@ export const readVerifiedPublicRuntimeBinding = async (input: {
     plan.environment.some(
       (entry) =>
         record.bindings[entry.key]?.state !== "applied" ||
-        !record.bindings[entry.key]?.acceptedEnvId,
+        (record.bindings[entry.key]?.acceptedEnvId ?? "") === "",
     ) ||
-    !record.approvalReceipts?.length
+    (record.approvalReceipts?.length ?? 0) === 0
   ) {
     throw fail();
   }
   for (const receipt of record.approvalReceipts ?? []) {
     // Consent is re-read sequentially from the actual owner's native history.
-    // oxlint-disable-next-line eslint/no-await-in-loop -- Each complete consent is independently verified before the public read.
+    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Each complete consent is independently verified before the public read.
     await input.assertApproved(plan, receipt);
   }
   const observed = await input.observe(plan);

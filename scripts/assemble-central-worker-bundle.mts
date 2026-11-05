@@ -12,11 +12,14 @@ const flags = [
 for (let index = 0; index < args.length; index += 2) {
   const flag = args[index];
   const value = args[index + 1];
-  if (!flag || !value || !flags.includes(flag) || values.has(flag))
+  if (!flag || !value || !flags.includes(flag) || values.has(flag)) {
     throw new Error("Expected unique supported --name value pairs");
+  }
   values.set(flag, value);
 }
-if (flags.some((flag) => !values.has(flag))) throw new Error(`Required: ${flags.join(", ")}`);
+if (flags.some((flag) => !values.has(flag))) {
+  throw new Error(`Required: ${flags.join(", ")}`);
+}
 const required = (flag: string) => {
   const value = values.get(flag);
   if (value === undefined) {

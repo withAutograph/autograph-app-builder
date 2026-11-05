@@ -5144,8 +5144,9 @@ it("forwards all additive native delivery contracts through the actual request-s
   ];
   const seen: string[] = [];
   const delegated = async (incomingRequest: Request) => {
-    if (incomingRequest.headers.get("authorization") !== "Bearer exact-workload")
+    if (incomingRequest.headers.get("authorization") !== "Bearer exact-workload") {
       return Response.json({ code: "denied" }, { status: 403 });
+    }
     seen.push(new URL(incomingRequest.url).pathname);
     return Response.json({ status: "native-owner-bound" });
   };

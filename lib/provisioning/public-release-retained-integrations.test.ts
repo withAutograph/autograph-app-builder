@@ -17,6 +17,7 @@ import { operatorOwnerContextSchema } from "./hosted-operator-contract";
 import { integrationCapabilityPlan as capPlan } from "./app-integration-capability-test-fixture";
 import { integrationTestAttachment as attachment } from "./app-integration-release-test-fixture";
 import { plan as base } from "./public-release-test-fixture";
+
 const fixture = () => {
   const sourcePlan = publicReleasePlanSchema.parse({
     ...base,

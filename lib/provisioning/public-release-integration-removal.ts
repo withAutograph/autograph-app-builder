@@ -30,8 +30,9 @@ export interface PublicReleaseIntegrationRemovalPorts {
 export const requireIntegrationRemovalPorts = (
   ports: PublicReleaseIntegrationRemovalPorts | undefined,
 ) => {
-  if (ports === undefined)
-    {throw new PublicReleasePrerequisiteError("public_release_integration_removal_required");}
+  if (ports === undefined) {
+    throw new PublicReleasePrerequisiteError("public_release_integration_removal_required");
+  }
   return ports;
 };
 export const readPublicReleaseIntegrationRemoval = async (input: {
@@ -65,7 +66,8 @@ export const readPublicReleaseIntegrationRemoval = async (input: {
     observed.authority.configurationRef === source.capability.privateConfiguration.reference,
     observed.authority.configurationSha256 === source.capability.privateConfiguration.sha256,
   ];
-  if (matches.includes(false))
-    {throw new PublicReleasePrerequisiteError("public_release_integration_removal_required");}
+  if (matches.includes(false)) {
+    throw new PublicReleasePrerequisiteError("public_release_integration_removal_required");
+  }
   return observed;
 };

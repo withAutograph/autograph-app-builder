@@ -4,6 +4,7 @@ import { expect, it, vi } from "vitest";
 import { z } from "zod";
 import { runAppIntegrationFileSpool } from "./hosted-operator-sandbox-launcher";
 import type { ProtectedInstallContextWire } from "./hosted-operator-sandbox-launcher";
+
 const runId = "11111111-1111-4111-a111-111111111111";
 const sha = "a".repeat(64);
 const worker = {
@@ -66,14 +67,17 @@ const fixture = (
       })),
     },
     writeFiles: vi.fn(async (rows: { path: string; content: Buffer }[]) => {
-      for (const row of rows) files.set(row.path, row.content);
+      for (const row of rows) {
+        files.set(row.path, row.content);
+      }
     }),
     readFileToBuffer: vi.fn(async ({ path }: { path: string }) => files.get(path) ?? null),
     delete: stop,
     extendTimeout: vi.fn(async () => {}),
     runCommand: vi.fn(async (options: { detached?: boolean; args: string[] }) => {
-      if (!options.detached)
+      if (options.detached !== true) {
         return { exitCode: 0, stdout: async () => `${sha}  /worker/integration\n` };
+      }
       const spool = options.args[2];
       frame(`${spool}/requests/1.json`, {
         kind: mutation ? "authorize_effect" : "check_fence",
@@ -97,7 +101,7 @@ const fixture = (
             z
               .instanceof(Buffer)
               .parse(files.get(`${spool}/requests/1.json`))
-              .toString("utf8"),
+              .toString("utf-8"),
           ),
         );
         for (const [frameId, kind] of [
@@ -115,7 +119,7 @@ const fixture = (
               ? { receipt: { state: "applied", readback_sha256: "d".repeat(64) } }
               : {}),
           });
-          if (kind === "checkpoint_effect")
+          if (kind === "checkpoint_effect") {
             frame(`${spool}/requests/${frameId}.json`, {
               kind,
               version: 1,
@@ -128,6 +132,7 @@ const fixture = (
               tenant_id: null,
               receipt: { state: "applied", readback_sha256: "d".repeat(64) },
             });
+          }
           frame(`${spool}/requests/${frameId}.ready`, {
             version: 1,
             run_id: runId,
@@ -251,9 +256,9 @@ it("rejects a foreign worker before allocation", async () => {
 });
 
 it("authorizes the stopped snapshot only at the app fence frame, not narrow owner polls, then ACKs its receipt", async () => {
-  const f = fixture(false, true),
-    authorize = vi.fn(async () => {}),
-    checkpoint = vi.fn(async () => {});
+  const f = fixture(false, true);
+  const authorize = vi.fn(async () => {});
+  const checkpoint = vi.fn(async () => {});
   await runAppIntegrationFileSpool(
     config,
     {

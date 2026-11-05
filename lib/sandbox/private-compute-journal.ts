@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/require-await, sonarjs/expression-complexity -- The promise-shaped journal factory rejects invalid ownership asynchronously and checks the complete immutable causal prefix in order. */
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { constants } from "node:fs";
@@ -32,8 +33,9 @@ export const createLocalPrivateComputeJournal = async (input: {
   workspaceDrive?: string;
   assertCurrent: () => void | Promise<void>;
 }) => {
-  if (input.authority.ownerUid !== process.getuid?.())
+  if (input.authority.ownerUid !== process.getuid?.()) {
     throw new Error("The private compute journal belongs to another local owner.");
+  }
   const root = path.join(input.authority.stateRoot, "private-compute-resources");
   const directory = path.join(root, hash(input.sandboxId));
   const ensure = async () => {
@@ -53,17 +55,20 @@ export const createLocalPrivateComputeJournal = async (input: {
     for (;;) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- Read the complete immutable journal prefix in causal order.
       const content = await localOperatorPrivateIo.read(path.join(directory, `${revision}.json`));
-      if (content === undefined) break;
+      if (content === undefined) {
+        break;
+      }
       const entry = entrySchema.parse(JSON.parse(content));
       if (
         entry.revision !== revision ||
         entry.previous !== previous ||
         entry.record.sandboxId !== input.sandboxId ||
         (input.workspaceDrive !== undefined && entry.record.workspaceDrive !== input.workspaceDrive)
-      )
+      ) {
         throw new Error(
           "The private compute resource journal does not match its preserved causal history.",
         );
+      }
       previous = hash(content);
       record = entry.record;
       revision += 1;
@@ -79,10 +84,11 @@ export const createLocalPrivateComputeJournal = async (input: {
     ) => {
       await ensure();
       const latest = await read();
-      if (latest.revision !== expected.revision || latest.previous !== expected.previous)
+      if (latest.revision !== expected.revision || latest.previous !== expected.previous) {
         throw new Error(
           "The private compute resource journal advanced; read its pending outcome before another effect.",
         );
+      }
       const content = JSON.stringify(entrySchema.parse({ ...expected, record }));
       await input.assertCurrent();
       if (
@@ -92,15 +98,17 @@ export const createLocalPrivateComputeJournal = async (input: {
           true,
           true,
         ))
-      )
+      ) {
         throw new Error(
           "Another compute operation already owns this journal position; no provider effect was sent.",
         );
+      }
       const observed = await read();
-      if (observed.revision !== expected.revision + 1 || observed.previous !== hash(content))
+      if (observed.revision !== expected.revision + 1 || observed.previous !== hash(content)) {
         throw new Error(
           "The compute intent did not receive its exact durable acknowledgement; no provider effect was sent.",
         );
+      }
       return observed;
     },
   };

@@ -1,3 +1,4 @@
+/* oxlint-disable anti-slop/no-module-mocking, anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- Only terminal repository-access ports are mocked; the actual source/destination selector and ownership checks run against a bounded context fixture. */
 /* oxlint-disable eslint/require-await -- Asynchronous owner/access ports preserve production semantics. */
 import type { ToolContext } from "eve/tools";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -6,6 +7,7 @@ import { recordRepositoryAccessReceipt } from "./repository-access-state";
 import { resolvePublicationTargetForTool } from "./github-publication-destination";
 import { readBuilderPublicationDestinationForTool } from "./builder-publication-destination";
 import { resolveRepositoryAccessForTool } from "./repository-access-tool";
+
 vi.mock("./builder-publication-destination", () => ({
   readBuilderPublicationDestinationForTool: vi.fn(),
 }));
@@ -14,6 +16,7 @@ vi.mock("./deployment-repository-access-runtime", () => ({
   repositoryAccessRuntimeForSession: vi.fn(),
 }));
 const owned = { repository: "owner/app", repositoryId: "123", selectedInstallationId: "456" };
+// SAFETY: Only callId and this exact session/auth projection are consumed; repository/provider effect ports are unavailable in this fixture.
 const ctx = { callId: "review", session: { id: "saved", auth: {} } } as unknown as ToolContext;
 const repository = {
   version: 2 as const,
@@ -101,6 +104,7 @@ it("denies canonical destination drift during revision access readback", async (
   await expect(resolvePublicationTargetForTool(request)).rejects.toThrow("destination changed");
 });
 it("retains the ordinary acquired source path for apps without a normal destination", async () => {
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- Vitest requires an explicit absent result for this optional destination port.
   vi.mocked(readBuilderPublicationDestinationForTool).mockResolvedValue(undefined);
   expect(await resolvePublicationTargetForTool(request)).toEqual({
     kind: "ready",

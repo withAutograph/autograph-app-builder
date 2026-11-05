@@ -45,19 +45,25 @@ export const createPrivateAppIntegrationCapabilityApprovalCapture = (input: {
           if (
             request.kind !== "tool-approval" ||
             request.action.toolName !== "prepare-app-integration-capability"
-          )
+          ) {
             continue;
+          }
           const parsed = appIntegrationCapabilityApprovalInputSchema.safeParse(
             request.action.input,
           );
-          if (parsed.success && isDeepStrictEqual(parsed.data, expected))
+          if (parsed.success && isDeepStrictEqual(parsed.data, expected)) {
             capture.acceptRequest(request.requestId, request.action.callId);
+          }
         }
-      } else if (event.type === "approval.settled") capture.settle(event);
+      } else if (event.type === "approval.settled") {
+        capture.settle(event);
+      }
     },
     read() {
       // A prior cancellation denies the same plan, even when the new call has consent.
-      if (capture.snapshot().entries.some((entry) => entry.cancelled)) return null;
+      if (capture.snapshot().entries.some((entry) => entry.cancelled)) {
+        return null;
+      }
       return capture.read();
     },
     snapshot: capture.snapshot,

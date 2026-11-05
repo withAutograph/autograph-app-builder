@@ -60,12 +60,14 @@ export const publishLocalDevelopmentOidcLease = (input: {
   directory(metadata);
   const projectFile = path.join(metadata, "project.json");
   try {
-    const existing = parseLinkedVercelProject(readFileSync(projectFile, "utf8"));
+    const existing = parseLinkedVercelProject(readFileSync(projectFile, "utf-8"));
     if (existing.projectId !== project.projectId || existing.orgId !== project.orgId) {
       throw new Error("Development OIDC lease project changed.");
     }
   } catch (error) {
-    if (!Error.isError(error) || !("code" in error) || error.code !== "ENOENT") throw error;
+    if (!Error.isError(error) || !("code" in error) || error.code !== "ENOENT") {
+      throw error;
+    }
   }
   const data = path.join(input.runtimeHome, "data");
   directory(data);

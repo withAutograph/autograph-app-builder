@@ -4,11 +4,14 @@ import type { MessageStreamEvent } from "eve/client";
 import { summarizeNativeTurnExecution } from "./turn-execution-evidence";
 
 let id = 0;
-const meta = (deliveryIds: string[] = []) => ({
-  id: `event_${(id += 1)}`,
-  at: "2026-11-04T00:03:22.986Z",
-  deliveryIds,
-});
+const meta = (deliveryIds: string[] = []) => {
+  id += 1;
+  return {
+    id: `event_${id}`,
+    at: "2026-11-04T00:03:22.986Z",
+    deliveryIds,
+  };
+};
 const start = (turnId: string, sequence: number): MessageStreamEvent => ({
   type: "turn.started",
   data: { turnId, sequence },
@@ -169,8 +172,9 @@ describe("per-turn native execution evidence", () => {
       throw new Error("private");
     });
     for (const event of events) {
-      if (event.type === "actions.requested")
+      if (event.type === "actions.requested") {
         Object.defineProperty(event.data.actions[0], "input", { get: getter });
+      }
       if (event.type === "action.result") {
         Object.defineProperty(event.data.result, "output", { get: getter });
         Object.defineProperty(event.data, "error", { get: getter });

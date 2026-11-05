@@ -5,10 +5,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { BuilderSandboxSession } from "../sandbox/builder-sandbox";
 import { prepareDevelopmentSandboxWorkspace } from "./supported-template";
+
 export const localPlanningSourceArchiveFixture = async () => {
-  const root = realpathSync(mkdtempSync(path.join(tmpdir(), "owned-archive-source-"))),
-    source = path.join(root, "source"),
-    workspace = path.join(root, "workspace");
+  const root = realpathSync(mkdtempSync(path.join(tmpdir(), "owned-archive-source-")));
+  const source = path.join(root, "source");
+  const workspace = path.join(root, "workspace");
   mkdirSync(source);
   mkdirSync(workspace);
   const write = (base: string, file: string, content: string) => {
@@ -86,10 +87,15 @@ export const localPlanningSourceArchiveFixture = async () => {
     },
     readBinaryFile: async (options) => read(options.path),
     readTextFile: async (options) => read(options.path)?.toString("utf-8") ?? null,
-    writeFile: async (options) =>
-      store(options.path, new Uint8Array(await new Response(options.content).arrayBuffer())),
-    writeBinaryFile: async (options) => store(options.path, options.content),
-    writeTextFile: async (options) => store(options.path, options.content),
+    writeFile: async (options) => {
+      store(options.path, new Uint8Array(await new Response(options.content).arrayBuffer()));
+    },
+    writeBinaryFile: async (options) => {
+      store(options.path, options.content);
+    },
+    writeTextFile: async (options) => {
+      store(options.path, options.content);
+    },
     removePath: async (options) => {
       rmSync(translate(options.path), {
         force: options.force ?? false,
@@ -114,6 +120,8 @@ export const localPlanningSourceArchiveFixture = async () => {
     original,
     git,
     write,
-    dispose: () => rmSync(root, { force: true, recursive: true }),
+    dispose: () => {
+      rmSync(root, { force: true, recursive: true });
+    },
   };
 };

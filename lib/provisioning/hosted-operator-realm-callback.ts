@@ -221,8 +221,9 @@ export const createRealmIdentityHandoffSenderVerifier =
       if (
         sender.projectId !== enrollment.project.projectId ||
         sender.ownerId !== enrollment.project.ownerId
-      )
+      ) {
         throw new Error("realm_handoff_sender");
+      }
     }
     const verified = await verify(bearer, {
       audience: sender.audience,

@@ -36,7 +36,9 @@ export const refreshPlanningSource = async (
   purpose: "planning" | "schema-compilation" = "planning",
 ) => {
   const local = await refreshLocalPlanningSource(ctx, purpose);
-  if (local !== undefined) return local;
+  if (local !== undefined) {
+    return local;
+  }
   const current = appBuilderWorkflowState.get();
   const sandbox = await getSourceBoundSandbox(ctx);
   if (!canRefreshSource(current, purpose)) {

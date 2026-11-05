@@ -1,3 +1,4 @@
+/* oxlint-disable sonarjs/expression-complexity -- The provider replacement must match every exact owned name, Drive and active registration guard. */
 import { assertPrivateComputeResumeAllowed } from "./private-compute-resume";
 import { Sandbox } from "@vercel/sandbox";
 
@@ -58,10 +59,11 @@ export const getVercelPreviewProvider = async (
     registration.resuming ??= (async () => {
       try {
         const observed = await Sandbox.get({ name: provider.name, resume: false, signal });
-        if (observed.status !== "running")
+        if (observed.status !== "running") {
           await assertPrivateComputeResumeAllowed(observed, () => {
             signal?.throwIfAborted();
           });
+        }
         const reattached =
           observed.status === "running"
             ? observed
@@ -97,8 +99,9 @@ export const replaceVercelPreviewProvider = (
     expected.name !== id ||
     replacement.name !== id ||
     JSON.stringify(expected.mounts) !== JSON.stringify(replacement.mounts)
-  )
+  ) {
     throw new Error("The provider registration changed during the private compute transition.");
+  }
   registration.provider = replacement;
 };
 

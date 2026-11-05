@@ -5,7 +5,9 @@ it("drops oversized secret lines completely before retaining a redacted diagnost
   const stream = (chunks: string[]) =>
     new ReadableStream<Uint8Array>({
       start(controller) {
-        for (const chunk of chunks) {controller.enqueue(new TextEncoder().encode(chunk));}
+        for (const chunk of chunks) {
+          controller.enqueue(new TextEncoder().encode(chunk));
+        }
         controller.close();
       },
     });
@@ -13,8 +15,8 @@ it("drops oversized secret lines completely before retaining a redacted diagnost
   const spawn = vi.fn().mockResolvedValue({
     stdout: stream([]),
     stderr: stream([
-      `https://user:password@private.example/${  "x".repeat(5900)}`,
-      `${"x".repeat(900) + suffix  }\nThe recorded Auth origin cannot change\n`,
+      `https://user:password@private.example/${"x".repeat(5900)}`,
+      `${"x".repeat(900) + suffix}\nThe recorded Auth origin cannot change\n`,
     ]),
     wait: () => Promise.resolve({ exitCode: 1 }),
     kill: () => Promise.resolve(),

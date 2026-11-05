@@ -15,6 +15,7 @@ import {
   integrationTestAttachment as integration,
   integrationTestConfiguration,
 } from "./app-integration-release-test-fixture";
+
 const authValues = Object.fromEntries(
   ownedAppPublicEnvironmentKeys(base.selection.appId).map((key) => [key, `unit-${key}`]),
 );
@@ -42,7 +43,9 @@ const retained = (
 }));
 test("only a separately approved attachment admits exactly its two private configuration hashes", () => {
   expect(manifest).toHaveLength(17);
-  expect(() => assertOwnedAppProductionEnvironment(published, Object.keys(values))).not.toThrow();
+  expect(() => {
+    assertOwnedAppProductionEnvironment(published, Object.keys(values));
+  }).not.toThrow();
   expect(() => ownedAppReleaseEnvironmentManifest(base.selection.appId, values)).toThrow();
   expect(() =>
     ownedAppReleaseEnvironmentManifest(
@@ -76,13 +79,15 @@ test("fresh Auth bootstrap retains proven optional rows read-only while its writ
   expect(bootstrap.environment.some((entry) => entry.key.startsWith("APP_INTEGRATIONS_"))).toBe(
     false,
   );
-  expect(() => assertOwnedAppProductionEnvironment(bootstrap, Object.keys(values))).not.toThrow();
-  expect(() =>
+  expect(() => {
+    assertOwnedAppProductionEnvironment(bootstrap, Object.keys(values));
+  }).not.toThrow();
+  expect(() => {
     assertOwnedAppProductionEnvironment(
       { ...bootstrap, retainedOptionalBindings: undefined },
       Object.keys(values),
-    ),
-  ).toThrow();
+    );
+  }).toThrow();
   expect(publicReleasePlanSchema.safeParse({ ...bootstrap, purpose: "application" }).success).toBe(
     false,
   );

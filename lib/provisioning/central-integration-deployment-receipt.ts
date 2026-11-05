@@ -2,6 +2,7 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import type { CentralHostSetupPlan } from "./central-integration-host-contract";
+
 const id = z.string().min(1).max(256);
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
 const origin = z.url().refine((value) => {
@@ -47,30 +48,37 @@ export const verifyCentralNativeDeploymentReceipt = (input: {
   secret: string;
 }): CentralNativeDeploymentReceipt | undefined => {
   if (
-    input.raw.byteLength > 262144 ||
+    input.raw.byteLength > 262_144 ||
     input.secret.length === 0 ||
     !/^[a-f0-9]{40}$/u.test(input.signature)
-  )
+  ) {
     throw unavailable();
+  }
   const actual = Buffer.from(input.signature, "hex");
   const expected = createHmac("sha1", input.secret).update(input.raw).digest();
-  if (!timingSafeEqual(actual, expected)) throw unavailable();
+  if (!timingSafeEqual(actual, expected)) {
+    throw unavailable();
+  }
   let payload: unknown;
   try {
-    payload = JSON.parse(input.raw.toString("utf8"));
+    payload = JSON.parse(input.raw.toString("utf-8"));
   } catch {
     throw unavailable();
   }
   const parsed = eventSchema.safeParse(payload);
-  if (!parsed.success) throw unavailable();
+  if (!parsed.success) {
+    throw unavailable();
+  }
   const event = parsed.data;
   if (
     event.payload.project.id !== input.plan.target.projectId ||
     event.payload.team.id !== input.plan.target.teamId ||
     event.payload.deployment.meta.githubCommitRef !== input.plan.source.operationBranch ||
     event.payload.deployment.meta.githubCommitSha !== input.plan.source.reviewedSourceSha
-  )
-    return;
+  ) {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing optional metadata is a deliberate unavailable result, never permission to execute.
+    return undefined;
+  }
   return centralNativeDeploymentReceiptSchema.parse({
     eventId: event.id,
     eventType: event.type,
@@ -102,27 +110,33 @@ export const retainCentralNativeDeploymentReceipt = (
 ): CentralNativeDeploymentState => {
   const state = centralNativeDeploymentStateSchema.parse(input);
   const receipt = centralNativeDeploymentReceiptSchema.parse(raw);
-  if (state.status === "conflict") return state;
-  if (state.status === "empty")
+  if (state.status === "conflict") {
+    return state;
+  }
+  if (state.status === "empty") {
     return {
       status: "accepted",
       providerDeploymentId: receipt.providerDeploymentId,
       immutableOrigin: receipt.immutableOrigin,
       events: [receipt],
     };
+  }
   if (
     state.providerDeploymentId !== receipt.providerDeploymentId ||
     state.immutableOrigin !== receipt.immutableOrigin ||
     state.events.some(
       (event) => event.eventId === receipt.eventId && event.bodySha256 !== receipt.bodySha256,
     )
-  )
+  ) {
     return {
       status: "conflict",
       providerDeploymentIds: [
         ...new Set([state.providerDeploymentId, receipt.providerDeploymentId]),
       ],
     };
-  if (state.events.some((event) => event.eventType === receipt.eventType)) return state;
+  }
+  if (state.events.some((event) => event.eventType === receipt.eventType)) {
+    return state;
+  }
   return { ...state, events: [...state.events, receipt] };
 };

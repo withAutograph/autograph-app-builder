@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/require-await -- The build port is asynchronous by contract; this source-only test double performs no I/O. */
 import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";

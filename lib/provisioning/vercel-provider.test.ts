@@ -204,9 +204,10 @@ describe("Vercel project provisioning", () => {
     // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
     const request = vi.fn<typeof fetch>(async (_url, init) => {
       if (init?.method !== "POST") return Response.json({}, { status: 404 });
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This negative table deliberately supplies raw text and structured provider error bodies to the actual sanitizer.
       return typeof body === "string"
-        ? new Response(body, { status: 403, headers: { "x-vercel-id": String(requestRef) } })
-        : Response.json(body, { status: 403, headers: { "x-vercel-id": String(requestRef) } });
+        ? new Response(body, { status: 403, headers: { "x-vercel-id": requestRef } })
+        : Response.json(body, { status: 403, headers: { "x-vercel-id": requestRef } });
     });
     const result = await provisionVercelProject({
       appId: "vendor-portal",

@@ -51,12 +51,13 @@ export default defineTool({
   async execute(input, ctx) {
     if (input.computeState === true) {
       const current = appBuilderWorkflowState.get();
-      if (!("workspace" in current))
+      if (!("workspace" in current)) {
         return {
           diagnosticOnly: true,
           status: "no-private-workspace",
           readinessScope: "private-compute-observation",
         };
+      }
       await assertHostedSandboxCommandAuthority({ sessionId: ctx.session.id });
       const native = await Sandbox.get({ name: current.workspace.workspaceId, resume: false });
       const computeState = await readPrivateComputeProviderState(native, async () => {

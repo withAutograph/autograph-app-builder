@@ -12,6 +12,7 @@ import {
   centralHostReadyReceiptSchema,
 } from "./central-integration-host-contract";
 import { plan as original, ready as originalReady } from "./central-integration-host-test-fixture";
+
 const fixture = () => {
   const setupPlan = {
     ...original,

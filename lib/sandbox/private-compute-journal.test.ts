@@ -30,7 +30,8 @@ describe("durable private compute resource journal", () => {
       const empty = await first.read();
       await first.append(record, empty);
       const restarted = await createLocalPrivateComputeJournal(input);
-      expect((await restarted.read()).record).toEqual(record);
+      const restartedRead = await restarted.read();
+      expect(restartedRead.record).toEqual(record);
       await expect(
         restarted.append({ ...record, proposalDigest: "b".repeat(64) }, empty),
       ).rejects.toThrow("advanced");
@@ -42,7 +43,9 @@ describe("durable private compute resource journal", () => {
       ]);
       expect(writes.filter(({ status }) => status === "fulfilled")).toHaveLength(1);
       expect(writes.filter(({ status }) => status === "rejected")).toHaveLength(1);
-      expect((await (await createLocalPrivateComputeJournal(input)).read()).revision).toBe(2);
+      const next = await createLocalPrivateComputeJournal(input);
+      const nextRead = await next.read();
+      expect(nextRead.revision).toBe(2);
       await expect(
         createLocalPrivateComputeJournal({
           ...input,

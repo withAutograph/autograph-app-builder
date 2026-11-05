@@ -539,12 +539,16 @@ describe("private normal actor bindings producer", () => {
 const publicBoundFixture = async () => {
   const f = await boundFixture();
   const row = f.base.row;
-  if (!row?.record.operator) throw new Error("Missing prepared fixture");
+  if (!row?.record.operator) {
+    throw new Error("Missing prepared fixture");
+  }
   const {
     delivery: _delivery,
     gatewayDelivery: _gatewayDelivery,
     ...prior
   } = row.record.operator.plan;
+  void _delivery;
+  void _gatewayDelivery;
   const selectedPlan = hostedOperatorPlanSchema.parse({
     ...prior,
     runtimePreparation: "single-project-resources-v1",
@@ -617,7 +621,9 @@ const publicBoundFixture = async () => {
       readCandidates,
       assertApproved,
       observe,
-      assertCurrent: async () => await f.deps.assertAuthorized(input),
+      assertCurrent: async () => {
+        await f.deps.assertAuthorized(input);
+      },
     });
   return { ...f, record, observation, readCandidates, assertApproved, observe, selectedPlan };
 };
@@ -741,16 +747,27 @@ describe("normal public application runtime handoff", () => {
     "revoked consent",
   ])("denies %s before exporting jars", async (fault) => {
     const f = await publicBoundFixture();
-    if (fault === "pending") f.record.effects["publish-release-source"] = "pending";
-    if (fault === "missing env receipt")
+    if (fault === "pending") {
+      f.record.effects["publish-release-source"] = "pending";
+    }
+    if (fault === "missing env receipt") {
       delete f.record.bindings[f.record.plan.environment[0].key].acceptedEnvId;
-    if (fault === "missing consent") f.record.approvalReceipts = [];
-    if (fault === "runtime mismatch")
+    }
+    if (fault === "missing consent") {
+      f.record.approvalReceipts = [];
+    }
+    if (fault === "runtime mismatch") {
       f.record.plan.runtime.operationRef = "99999999-9999-4999-a999-999999999999";
-    if (fault === "public identity mismatch")
+    }
+    if (fault === "public identity mismatch") {
       f.observe.mockResolvedValue({ ...f.observation, deploymentId: "dpl_foreign" });
-    if (fault === "missing projection") delete f.deps.publicRuntimeBinding;
-    if (fault === "revoked consent") f.assertApproved.mockRejectedValue(new Error("revoked"));
+    }
+    if (fault === "missing projection") {
+      delete f.deps.publicRuntimeBinding;
+    }
+    if (fault === "revoked consent") {
+      f.assertApproved.mockRejectedValue(new Error("revoked"));
+    }
     await expect(f.client.bindings(f.request)).rejects.toThrow();
     expect(f.producer).not.toHaveBeenCalled();
   });

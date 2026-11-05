@@ -199,8 +199,9 @@ const readOwnedManifest = async (root: string, uid: number) => {
   );
   try {
     const info = await handle.stat();
-    if (!info.isFile() || info.uid !== uid || (info.mode & 0o077) !== 0)
-      {throw new Error("source_baseline_manifest_unavailable");}
+    if (!info.isFile() || info.uid !== uid || (info.mode & 0o077) !== 0) {
+      throw new Error("source_baseline_manifest_unavailable");
+    }
     return localSourceBaselineManifestSchema.parse(JSON.parse(await handle.readFile("utf-8")));
   } finally {
     await handle.close();

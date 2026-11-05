@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { integrationCapabilityMembershipSchema } from "./app-integration-capability-contract";
 import { AppIntegrationCapabilityPrerequisiteError } from "./app-integration-capability-prerequisite";
+
 const id = z.string().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 export const appIntegrationCapabilityProfileSchema = z

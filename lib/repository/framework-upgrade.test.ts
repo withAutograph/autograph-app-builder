@@ -488,7 +488,8 @@ describe("framework upgrade planning and apply", () => {
 });
 
 it("plans an unchanged imported application under its own fresh Build proposal", () => {
-  const { frameworkUpgrade: _upgrade, ...base } = proposal();
+  const { frameworkUpgrade: priorUpgrade, ...base } = proposal();
+  void priorUpgrade;
   expect(() => targetIterationProposalSchema.parse(base)).toThrow();
   const imported = targetIterationProposalSchema.parse({
     ...base,

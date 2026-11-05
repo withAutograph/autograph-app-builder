@@ -97,8 +97,9 @@ export const centralHostReadyPlanResultSchema = z
     if (
       value.operationRef !== value.receipt.callerSetup.operationRef ||
       value.planDigest !== value.receipt.callerSetup.planDigest
-    )
+    ) {
       context.addIssue({ code: "custom", message: "Canonical caller receipt pointer required" });
+    }
   });
 export const centralHostPlanResultSchema = z.union([
   centralHostApprovalInputSchema,

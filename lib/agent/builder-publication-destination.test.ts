@@ -62,12 +62,17 @@ const fixture = () => {
   let drift = false;
   let reads = 0;
   const read = createBuilderPublicationDestinationReader({
-    readSelection: async () => ({
-      authority,
-      appId: "saved-app",
-      destination: { appId: "saved-app", requestId: request.requestId, requestDigest: digest },
-      owner: { adapterGeneration: drift ? (epoch += 1) : epoch },
-    }),
+    readSelection: async () => {
+      if (drift) {
+        epoch += 1;
+      }
+      return {
+        authority,
+        appId: "saved-app",
+        destination: { appId: "saved-app", requestId: request.requestId, requestDigest: digest },
+        owner: { adapterGeneration: epoch },
+      };
+    },
     readProvisioning: async (input) => {
       reads += 1;
       expect(input.authority).toEqual(authority);

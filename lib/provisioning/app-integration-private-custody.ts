@@ -11,6 +11,7 @@ import {
 } from "../integrations/vercel-installation";
 import type { VercelTokenKeyringConfig } from "../integrations/vercel-installation";
 import { integrationCapabilityResourceSchema } from "./app-integration-capability-contract";
+
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 export const integrationPrivateAppScopeSchema = z.strictObject({
   authority: hostedTenantAuthoritySchema,

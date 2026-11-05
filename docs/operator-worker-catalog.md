@@ -29,13 +29,13 @@ mise run source:operator-worker-catalog -- /absolute/arrusted-source /absolute/f
 The output directory must not exist and must be outside both source checkouts.
 The operation invokes the maintained builders with Bun 1.3.14 for Linux x64:
 
-| Family | Maintained source/build |
-| --- | --- |
+| Family                        | Maintained source/build                                                                                             |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | Generic install/access/export | Arrusted `build-protected-generated-app-worker.mjs`; `packages/generated-app-runtime/protected-installer-worker.ts` |
-| Auth proposal | Arrusted `build-protected-auth-proposal.mjs`; `auth-schema-proposal.ts` |
-| Auth schema/membership/signup | Arrusted `build-protected-auth-worker.mjs`, then explicit Linux compilation |
-| Neon resources | Arrusted `build-neon-resource-bootstrap-worker.mjs`, then explicit Linux compilation |
-| Managed runtime | Builder `scripts/build-managed-runtime-worker.mjs`, importing Builder runtime and Arrusted Gateway verifier |
+| Auth proposal                 | Arrusted `build-protected-auth-proposal.mjs`; `auth-schema-proposal.ts`                                             |
+| Auth schema/membership/signup | Arrusted `build-protected-auth-worker.mjs`, then explicit Linux compilation                                         |
+| Neon resources                | Arrusted `build-neon-resource-bootstrap-worker.mjs`, then explicit Linux compilation                                |
+| Managed runtime               | Builder `scripts/build-managed-runtime-worker.mjs`, importing Builder runtime and Arrusted Gateway verifier         |
 
 The catalog binds both repositories because managed runtime imports both.
 `catalog.json` is written last, after actual ELF x64, mode, bytes and SHA256

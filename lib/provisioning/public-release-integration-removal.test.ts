@@ -6,6 +6,7 @@ import { plan } from "./public-release-test-fixture";
 import { publicReleasePlanDigest, publicReleasePlanSchema } from "./public-release-contract";
 import { readPublicReleaseIntegrationRemoval } from "./public-release-integration-removal";
 import type { PublicReleaseIntegrationRemovalPorts } from "./public-release-integration-removal";
+
 const fixture = () => {
   const ports: PublicReleaseIntegrationRemovalPorts = {
     readPreflight: vi.fn(async () => structuredClone(removal)),
@@ -68,13 +69,19 @@ test.each(["source", "scope", "generation", "configuration"])(
   async (change) => {
     const f = fixture();
     const wrong = structuredClone(removal);
-    if (change === "source") wrong.sourceCapability.planDigest = "e".repeat(64);
-    if (change === "scope") wrong.scopeSha256 = "e".repeat(64);
+    if (change === "source") {
+      wrong.sourceCapability.planDigest = "e".repeat(64);
+    }
+    if (change === "scope") {
+      wrong.scopeSha256 = "e".repeat(64);
+    }
     if (change === "generation") {
       wrong.authority.principalGeneration += 1;
       wrong.authority.expectedFencedGeneration += 1;
     }
-    if (change === "configuration") wrong.authority.configurationSha256 = "e".repeat(64);
+    if (change === "configuration") {
+      wrong.authority.configurationSha256 = "e".repeat(64);
+    }
     f.ports.readPreflight = vi.fn(async () => wrong);
     await expect(readPublicReleaseIntegrationRemoval(f)).rejects.toMatchObject({
       code: "public_release_integration_removal_required",

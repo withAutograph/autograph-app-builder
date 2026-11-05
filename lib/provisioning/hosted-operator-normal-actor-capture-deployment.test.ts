@@ -599,7 +599,9 @@ it("uses the canonical enrolled Production sender without relabeling the Preview
   };
   const signing = await generateKeyPair("EdDSA");
   const key = await exportJWK(signing.publicKey);
-  if (key.x === undefined) throw new Error("missing public key");
+  if (key.x === undefined) {
+    throw new Error("missing public key");
+  }
   f.resources.publicRealm = {
     binding: {
       enrollmentRef: "11111111-1111-4111-a111-111111111111",

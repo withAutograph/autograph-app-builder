@@ -61,6 +61,7 @@ export default defineTool({
   },
   description:
     "Build this app in the private preview checkout, then validate it for review. For a retry of the same proposal, send only repaired files: paths omitted from the retry retain their previously approved contents, and supplied paths replace them. A new proposal starts a fresh submission and requires its own approval. Repairing the same approved private build does not ask for the same approval again. When the plan selects privateCompute, send its exact profile ID; its separately visible compute footprint is included in the fresh Build approval before the same named private execution session is resized. This does not publish, deploy, provision application resources, or change the user's repository.",
+  // oxlint-disable-next-line eslint/complexity -- Keep exact current proposal, approval, workspace and implementation scope checks ordered at the effect boundary.
   async execute(input, ctx) {
     const current = appBuilderWorkflowState.get();
     if (
@@ -74,13 +75,14 @@ export default defineTool({
         workflowPhase: current.phase,
       };
     }
-    if (input.privateCompute !== current.proposal.target.privateCompute?.id)
+    if (input.privateCompute !== current.proposal.target.privateCompute?.id) {
       return {
         status: "compute_profile_required" as const,
         privateCompute: current.proposal.target.privateCompute?.id,
         guidance:
           "Use the exact private compute profile from the current plan so its footprint is shown on the normal Build approval.",
       };
+    }
     const scope = {
       appId: current.proposal.target.contract.appId,
       appSpecDigest: current.appSpec.digest,

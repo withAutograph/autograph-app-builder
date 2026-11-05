@@ -1,7 +1,5 @@
-import {
-  privateComputeLimitsSchema,
-  type PrivateComputeLimits,
-} from "../sandbox/private-compute-profile";
+import { privateComputeLimitsSchema } from "../sandbox/private-compute-profile";
+import type { PrivateComputeLimits } from "../sandbox/private-compute-profile";
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { once } from "node:events";
@@ -220,8 +218,9 @@ export function createLocalEveInvocation(input: {
     limits !== undefined &&
     (limits.projectId !== input.vercelProject.projectId ||
       limits.teamId !== input.vercelProject.orgId)
-  )
+  ) {
     throw new Error("Private compute observation belongs to another linked project.");
+  }
   const roots = exactRoots(input.repositoryRoot, input.environment);
   const binding = exactBinding(input.environment);
   const cycleFile = required(input.environment, "APP_BUILDER_LOCAL_EVE_CYCLE_FILE");

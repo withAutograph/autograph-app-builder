@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { preparedAppIntegrationCapabilitySchema } from "./app-integration-capability-contract";
+
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 export const appIntegrationCapabilityPointerSchema = z.strictObject({
   operationRef: z.uuid(),
@@ -79,11 +80,12 @@ export const appIntegrationRemovalSchema = z
     }),
   })
   .superRefine((value, context) => {
-    if (value.authority.expectedFencedGeneration !== value.authority.principalGeneration + 1)
+    if (value.authority.expectedFencedGeneration !== value.authority.principalGeneration + 1) {
       context.addIssue({
         code: "custom",
         message: "A removal approval freezes exactly the next app-only authority generation",
       });
+    }
   });
 export const appIntegrationRemovalFenceProofSchema = z
   .strictObject({

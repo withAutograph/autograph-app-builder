@@ -25,7 +25,7 @@ import {
   readAppIntegrationCapabilityProfile,
   selectedAppIntegrationCapabilityProfile,
 } from "./app-integration-capability-profile";
-import { AppIntegrationCapabilityPrerequisiteError } from "./app-integration-capability-prerequisite";
+
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const unavailable = () => new Error("public_release_integration_capability_unavailable");
 const requirePrepared = (row: AppIntegrationCapabilityRow | undefined, digest: string) => {
@@ -115,8 +115,9 @@ export const readAppIntegrationCapabilityForRelease = async (input: {
     central.deployment.immutableOrigin !== plan.control.origin ||
     central.caller.projectId !== plan.project.projectId ||
     central.caller.ownerId !== plan.project.teamId
-  )
+  ) {
     throw unavailable();
+  }
   const approval = createAppIntegrationCapabilityApprovalAuthority({
     database: input.database,
     builderOrigin: input.builderOrigin,

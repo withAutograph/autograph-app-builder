@@ -18,9 +18,7 @@ export const createBuilderSessionDestinationAction =
   (ports: {
     origin: string;
     enabled: () => Promise<boolean>;
-    open: (
-      headers: Headers,
-    ) => Promise<{
+    open: (headers: Headers) => Promise<{
       principal: HostedPrincipal;
       service: Pick<ReturnType<typeof createBuilderSessionDestinationService>, "select">;
     }>;

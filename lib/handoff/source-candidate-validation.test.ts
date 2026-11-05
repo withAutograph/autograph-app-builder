@@ -18,12 +18,14 @@ const verified = validateApplicationSourceArtifact({
     appId: "supplier-spend",
     displayName: "Supplier Spend",
     sourceSessionId: "local-source",
-    files: [{
-      path: "apps/supplier-spend/README.md",
-      mode: "100644",
-      bytes: content.length,
-      sha256: createHash("sha256").update(content).digest("hex"),
-    }],
+    files: [
+      {
+        path: "apps/supplier-spend/README.md",
+        mode: "100644",
+        bytes: content.length,
+        sha256: createHash("sha256").update(content).digest("hex"),
+      },
+    ],
     omissions: [],
   },
   files: [{ path: "apps/supplier-spend/README.md", contentBase64: content.toString("base64") }],

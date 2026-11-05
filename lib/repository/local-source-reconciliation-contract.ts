@@ -1,4 +1,5 @@
 import { z } from "zod";
+
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 /** Fresh private planning provenance; this is not a provider, app-data or publication approval. */
 export const localSourceReconciliationSchema = z.strictObject({

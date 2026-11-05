@@ -21,17 +21,24 @@ const neon = z.strictObject({
 const controlResource = integrationCapabilityResourceSchema.omit({ runtimeRole: true });
 const planPointer = z.strictObject({ operationRef: z.uuid(), planDigest: digest });
 const canonical = (value: z.infer<ReturnType<typeof z.json>>): string => {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (Array.isArray(value)) {
+    return `[${value.map(canonical).join(",")}]`;
+  }
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Canonical serialization branches only on a parsed JSON representation.
-  if (value !== null && typeof value === "object")
+  if (value !== null && typeof value === "object") {
     return `{${Object.entries(value)
       .toSorted(([a], [b]) => {
-        if (a < b) return -1;
-        if (a > b) return 1;
+        if (a < b) {
+          return -1;
+        }
+        if (a > b) {
+          return 1;
+        }
         return 0;
       })
       .map(([key, child]) => `${JSON.stringify(key)}:${canonical(child)}`)
       .join(",")}}`;
+  }
   return JSON.stringify(value);
 };
 const hash = (text: string | Buffer) => createHash("sha256").update(text).digest("hex");
@@ -237,14 +244,16 @@ export const centralHostReadyReceiptSchema = z
   })
   .superRefine((receipt, context) => {
     try {
-      if (!receipt.activation.publicKeyPem.startsWith("-----BEGIN PUBLIC KEY-----"))
+      if (!receipt.activation.publicKeyPem.startsWith("-----BEGIN PUBLIC KEY-----")) {
         throw new Error("public_key_required");
+      }
       const key = createPublicKey(receipt.activation.publicKeyPem);
       if (
         key.asymmetricKeyType !== "ed25519" ||
         hash(key.export({ format: "der", type: "spki" })) !== receipt.activation.publicKeySha256
-      )
+      ) {
         throw new Error("public_key_mismatch");
+      }
     } catch {
       context.addIssue({
         code: "custom",

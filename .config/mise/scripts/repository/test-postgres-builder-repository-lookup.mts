@@ -43,7 +43,7 @@ const passwordFile = path.join(scratch, "password");
 const command = (name: string, args: string[]) => {
   const result = spawnSync(path.join(postgresBin, name), args, {
     encoding: "utf-8",
-    env: { PATH: process.env.PATH, LANG: "C", LC_ALL: "C" },
+    env: { PATH: process.env.PATH, NODE_ENV: "test", LANG: "C", LC_ALL: "C" },
   });
   assert.equal(result.status, 0, `Owned PostgreSQL ${name} failed`);
 };
@@ -87,7 +87,8 @@ try {
       assert.ok(notice.message !== undefined);
     },
   });
-  const database = drizzle(client, { schema });
+  const openedClient = client;
+  const database = drizzle(openedClient, { schema });
   await migrate(database, { migrationsFolder: path.join(repositoryRoot, "drizzle") });
   const store = createPostgresBuilderProvisionJournalStore(database);
   const lookup = store.findSettledAppRepository;
@@ -122,47 +123,49 @@ try {
       ...reserved.record,
       response: {
         ...reserved.record.response,
-        status: options.pending ? "pending" : "settled",
-        github: options.githubFailed
-          ? { status: "failed", code: "provider_unavailable", retryable: true }
-          : {
-              status: "succeeded",
-              defaultBranch: "main",
-              fullName: "fixture/lookup-app",
-              headSha: "a".repeat(40),
-              headTree: "b".repeat(40),
-              installationId: "101",
-              name: "lookup-app",
-              owner: "fixture",
-              repositoryId: "501",
-              scope: { id: "201", login: "fixture", type: "organization" },
-              starter: {
-                sourceSha: "c".repeat(40),
-                sourceTree: "d".repeat(40),
-                method: "git-clone-v1",
-                receiptVersion: 4,
-                ref: "refs/heads/main",
-                repository: "https://github.com/fixture/starter",
-                contractDigest: "a".repeat(64),
-                eligibilityDigest: "b".repeat(64),
-                readinessDigest: "c".repeat(64),
-                sourceReceiptDigest: "d".repeat(64),
+        status: options.pending === true ? "pending" : "settled",
+        github:
+          options.githubFailed === true
+            ? { status: "failed", code: "provider_unavailable", retryable: true }
+            : {
+                status: "succeeded",
+                defaultBranch: "main",
+                fullName: "fixture/lookup-app",
+                headSha: "a".repeat(40),
+                headTree: "b".repeat(40),
+                installationId: "101",
+                name: "lookup-app",
+                owner: "fixture",
+                repositoryId: "501",
+                scope: { id: "201", login: "fixture", type: "organization" },
+                starter: {
+                  sourceSha: "c".repeat(40),
+                  sourceTree: "d".repeat(40),
+                  method: "git-clone-v1",
+                  receiptVersion: 4,
+                  ref: "refs/heads/main",
+                  repository: "https://github.com/fixture/starter",
+                  contractDigest: "a".repeat(64),
+                  eligibilityDigest: "b".repeat(64),
+                  readinessDigest: "c".repeat(64),
+                  sourceReceiptDigest: "d".repeat(64),
+                },
+                url: "https://github.com/fixture/lookup-app",
+                visibility: "private",
               },
-              url: "https://github.com/fixture/lookup-app",
-              visibility: "private",
-            },
-        vercel: options.vercelFailed
-          ? { status: "failed", code: "provider_unavailable", retryable: true }
-          : {
-              status: "succeeded",
-              dashboardUrl: "https://vercel.com/fixture/apps-lookup-app",
-              framework: "services",
-              installationId: "icfg_lookup",
-              name: "apps-lookup-app",
-              projectId: "prj_lookup",
-              rootDirectory: ".",
-              scope: { id: "team_lookup", slug: "fixture", type: "team" },
-            },
+        vercel:
+          options.vercelFailed === true
+            ? { status: "failed", code: "provider_unavailable", retryable: true }
+            : {
+                status: "succeeded",
+                dashboardUrl: "https://vercel.com/fixture/apps-lookup-app",
+                framework: "services",
+                installationId: "icfg_lookup",
+                name: "apps-lookup-app",
+                projectId: "prj_lookup",
+                rootDirectory: ".",
+                scope: { id: "team_lookup", slug: "fixture", type: "team" },
+              },
       },
     });
     const saved = await store.compareAndSet({
@@ -173,8 +176,8 @@ try {
       now,
     });
     assert.ok(saved);
-    if (options.tagged) {
-      await client`update builder_provisioning_journals set record = record || '{"kind":"not-normal-provisioning"}'::jsonb where request_id = ${request.requestId}`;
+    if (options.tagged === true) {
+      await openedClient`update builder_provisioning_journals set record = record || '{"kind":"not-normal-provisioning"}'::jsonb where request_id = ${request.requestId}`;
     }
     return saved;
   };
@@ -183,7 +186,11 @@ try {
   assert.deepEqual(await lookup(input), [selected]);
   let checks = 2;
   for (const authority of [
-    { ...principal, issuer: "https://other-builder.example/api/auth", audience: "https://other-builder.example/mcp" },
+    {
+      ...principal,
+      issuer: "https://other-builder.example/api/auth",
+      audience: "https://other-builder.example/mcp",
+    },
     { ...principal, workspaceId: "other-workspace" },
     { ...principal, ownerUserId: "other-owner" },
   ]) {
@@ -210,10 +217,10 @@ try {
     checks += 1;
   }
   const before =
-    await client`select request_id, state, revision, record from builder_provisioning_journals order by request_id`;
+    await openedClient`select request_id, state, revision, record from builder_provisioning_journals order by request_id`;
   assert.deepEqual(await lookup(input), [selected]);
   const after =
-    await client`select request_id, state, revision, record from builder_provisioning_journals order by request_id`;
+    await openedClient`select request_id, state, revision, record from builder_provisioning_journals order by request_id`;
   assert.deepEqual(after, before);
   checks += 1;
   const second = await seed();

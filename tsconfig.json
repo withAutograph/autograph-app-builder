@@ -31,6 +31,10 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts",
     ".config/mise/scripts/repository/build-operator-worker-catalog.mts",
+    ".config/mise/scripts/repository/test-postgres-builder-repository-lookup.mts",
+    ".config/mise/scripts/repository/test-postgres-public-release.mts",
+    ".config/mise/scripts/repository/inspect-turn-execution.mts",
+    ".config/mise/scripts/repository/compiled-operator-proof.mts",
     ".config/mise/scripts/repository/assert-hosted-eve-build-budget.mts"
   ],
   "exclude": ["node_modules"]

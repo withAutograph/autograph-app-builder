@@ -28,6 +28,7 @@ import {
   centralHostApprovalInputSchema,
 } from "./central-integration-host-transport";
 import { retainCentralNativeDeploymentReceipt } from "./central-integration-deployment-receipt";
+
 const id = "11111111-1111-4111-a111-111111111111";
 const receiptFor = (context: CentralHostEffectContext): CentralEffectReceipt => {
   const plan = context.plan;
@@ -43,14 +44,15 @@ const receiptFor = (context: CentralHostEffectContext): CentralEffectReceipt => 
     };
   }
   switch (context.effect) {
-    case "prepare-central-resources":
+    case "prepare-central-resources": {
       return {
         effect: context.effect,
         resourceId: plan.control.resource.resourceId,
         resourceVersion: "resource-v1",
         readbackSha256: "a".repeat(64),
       };
-    case "install-central-schema":
+    }
+    case "install-central-schema": {
       return {
         effect: context.effect,
         resourceProfileId: plan.resourceProfileId,
@@ -58,13 +60,15 @@ const receiptFor = (context: CentralHostEffectContext): CentralEffectReceipt => 
         configurationSha256: plan.source.configurationSha256,
         centralPrincipalGeneration: context.attemptGeneration,
       };
-    case "register-deployment-receiver":
+    }
+    case "register-deployment-receiver": {
       return {
         effect: context.effect,
         id: "accepted-provider-webhook",
         secretSha256: "a".repeat(64),
       };
-    case "authorize-central-inspector":
+    }
+    case "authorize-central-inspector": {
       return {
         effect: context.effect,
         projectId: plan.target.projectId,
@@ -74,17 +78,24 @@ const receiptFor = (context: CentralHostEffectContext): CentralEffectReceipt => 
         trustedSourcesSha256: "a".repeat(64),
         trustedSourcesGrantSha256: "b".repeat(64),
       };
-    case "bind-central-preview-runtime":
+    }
+    case "bind-central-preview-runtime": {
       return { effect: context.effect, environmentSha256: "a".repeat(64) };
-    case "publish-central-host-source":
+    }
+    case "publish-central-host-source": {
       return {
         effect: context.effect,
         repositoryId: plan.source.repositoryId,
         branch: plan.source.operationBranch,
         sourceSha: plan.source.reviewedSourceSha,
       };
-    case "authorize-app-central-caller":
+    }
+    case "authorize-app-central-caller": {
       throw new Error("wrong effect");
+    }
+    default: {
+      throw new Error("unrecognized fixture effect");
+    }
   }
 };
 const fixture = (plan: CentralHostSetupPlan | CentralHostCallerPlan = original) => {
@@ -342,24 +353,26 @@ test("real store transition rejects phase regression, replaced receipts, removed
   await expect(f.service.prepare(f.invocation, f.select)).rejects.toThrow();
   const before = f.row().record;
   const changed = (patch: Partial<CentralHostRecord>) => ({ ...before, ...patch });
-  expect(() =>
+  expect(() => {
     assertCentralHostTransition(
       before,
       changed({ effects: { ...before.effects, [original.effects[0]]: "idle" } }),
-    ),
-  ).toThrow();
-  expect(() => assertCentralHostTransition(before, changed({ approvalReceipts: [] }))).toThrow();
-  expect(() =>
+    );
+  }).toThrow();
+  expect(() => {
+    assertCentralHostTransition(before, changed({ approvalReceipts: [] }));
+  }).toThrow();
+  expect(() => {
     assertCentralHostTransition(
       before,
       changed({ executionLease: { leaseId: id, fenceGeneration: 0 } }),
-    ),
-  ).toThrow();
+    );
+  }).toThrow();
   const attempt = before.attempts?.[original.effects[0]];
   if (attempt === undefined) {
     throw new Error("missing attempt");
   }
-  expect(() =>
+  expect(() => {
     assertCentralHostTransition(
       before,
       changed({
@@ -376,8 +389,8 @@ test("real store transition rejects phase regression, replaced receipts, removed
           },
         },
       }),
-    ),
-  ).toThrow();
+    );
+  }).toThrow();
 });
 test("caller enrollment performs only its one approved effect and persists the independently observed receipt", async () => {
   const plan = centralHostCallerPlanSchema.parse({
@@ -455,15 +468,15 @@ test("provider grant and per-key accepted IDs stay in the same row and cannot be
   if (binding?.state !== "applied") {
     throw new Error("missing binding");
   }
-  expect(() =>
+  expect(() => {
     assertCentralHostTransition(before, {
       ...before,
       runtimeBindings: {
         ...before.runtimeBindings,
         [original.environment[0].key]: { ...binding, acceptedEnvId: "foreign-env" },
       },
-    }),
-  ).toThrow();
+    });
+  }).toThrow();
 });
 test("wrong worker generation cannot settle pending schema or advance to receiver", async () => {
   const f = fixture();

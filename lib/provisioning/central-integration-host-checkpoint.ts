@@ -1,5 +1,9 @@
-import type {CentralHostSetupPlan,CentralHostCallerPlan} from "./central-integration-host-contract";
+import type {
+  CentralHostSetupPlan,
+  CentralHostCallerPlan,
+} from "./central-integration-host-contract";
 import { z } from "zod";
+
 const id = z.string().min(1).max(256);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const generation = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
@@ -58,7 +62,7 @@ export const centralRuntimeBindingSchema = z.discriminatedUnion("state", [
 ]);
 export type CentralRuntimeBinding = z.infer<typeof centralRuntimeBindingSchema>;
 export const centralEffectReceiptMatches = (
-  plan: CentralHostSetupPlan|CentralHostCallerPlan,
+  plan: CentralHostSetupPlan | CentralHostCallerPlan,
   receipt: CentralEffectReceipt,
   attemptGeneration: number,
 ): boolean => {
@@ -71,32 +75,43 @@ export const centralEffectReceiptMatches = (
     );
   }
   switch (receipt.effect) {
-    case "prepare-central-resources":
+    case "prepare-central-resources": {
       return receipt.resourceId === plan.control.resource.resourceId;
-    case "install-central-schema":
+    }
+    case "install-central-schema": {
       return (
         receipt.resourceProfileId === plan.resourceProfileId &&
         receipt.schemaSha256 === plan.control.schemaSha256 &&
         receipt.configurationSha256 === plan.source.configurationSha256 &&
         receipt.centralPrincipalGeneration === attemptGeneration
       );
-    case "register-deployment-receiver":
+    }
+    case "register-deployment-receiver": {
       return true;
-    case "authorize-central-inspector":
+    }
+    case "authorize-central-inspector": {
       return (
         receipt.projectId === plan.target.projectId &&
         receipt.callerProjectId === plan.inspector.projectId &&
         receipt.environment === plan.inspector.environment
       );
-    case "bind-central-preview-runtime":
+    }
+    case "bind-central-preview-runtime": {
       return true;
-    case "publish-central-host-source":
+    }
+    case "publish-central-host-source": {
       return (
         receipt.repositoryId === plan.source.repositoryId &&
         receipt.branch === plan.source.operationBranch &&
         receipt.sourceSha === plan.source.reviewedSourceSha
       );
-    default:
+    }
+    // A caller grant cannot satisfy a distinct infrastructure setup effect.
+    case "authorize-app-central-caller": {
       return false;
+    }
+    default: {
+      return false;
+    }
   }
 };

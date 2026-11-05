@@ -28,7 +28,9 @@ const readIdentifier = z
   .max(512)
   .refine(
     (value) =>
+      // oxlint-disable-next-line unicorn/prefer-spread -- Retain the established Unicode iterator and frozen ASCII-control predicate.
       !Array.from(value).some(
+        // oxlint-disable-next-line unicorn/prefer-code-point -- This predicate rejects only ASCII control units; retain its frozen accepted-character semantics.
         (character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127,
       ),
   );
@@ -47,15 +49,29 @@ export const appIntegrationReadObjectsSchema = z
     }),
   )
   .refine((value) => Object.keys(value).length > 0);
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Recursive canonicalization receives only values admitted by appIntegrationReadObjectsSchema at the exported boundary.
 const canonicalReadConfiguration = (value: unknown): string => {
-  if (Array.isArray(value)) return `[${value.map(canonicalReadConfiguration).join(",")}]`;
-  if (value !== null && typeof value === "object")
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalReadConfiguration).join(",")}]`;
+  }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Recursion branches over data already admitted by the strict exported configuration schema.
+  if (value !== null && typeof value === "object") {
     return `{${Object.entries(value)
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .toSorted(([a], [b]) => {
+        if (a < b) {
+          return -1;
+        }
+        if (a > b) {
+          return 1;
+        }
+        return 0;
+      })
       .map(([key, item]) => `${JSON.stringify(key)}:${canonicalReadConfiguration(item)}`)
       .join(",")}}`;
+  }
   return JSON.stringify(value);
 };
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This is the actual schema parsing boundary for external read-object configuration.
 export const appIntegrationReadObjectsDigest = (value: unknown) =>
   createHash("sha256")
     .update(canonicalReadConfiguration(appIntegrationReadObjectsSchema.parse(value)))
@@ -70,11 +86,12 @@ export const appIntegrationProviderConfigurationSchema = z
     readObjectsSha256: z.string().regex(/^[a-f0-9]{64}$/u),
   })
   .superRefine((entry, context) => {
-    if (appIntegrationReadObjectsDigest(entry.readObjects) !== entry.readObjectsSha256)
+    if (appIntegrationReadObjectsDigest(entry.readObjects) !== entry.readObjectsSha256) {
       context.addIssue({
         code: "custom",
         message: "Exact provider read configuration digest required",
       });
+    }
   });
 export const appIntegrationMachineIngressSchema = z
   .array(
