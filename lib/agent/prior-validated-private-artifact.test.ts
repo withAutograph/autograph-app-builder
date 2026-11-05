@@ -185,6 +185,17 @@ it("opens the prior approved app while a newer draft has never requested approva
     expect(readPrivateApplyAuthority()).toEqual(retained);
   }));
 
+it("keeps the approved app available after a second unapplied revision", async () =>
+  await own(async () => {
+    const f = seed("not-requested");
+    existingAppRepairHistory.update((history) =>
+      history.map((entry) => ({ ...entry, previousWorkflow: f.current })),
+    );
+    await expect(priorValidatedPrivateArtifact(f.input)).resolves.toMatchObject({
+      revision: f.prior.applyReceipt.digest,
+    });
+  }));
+
 it("denies pending approval, a current grant or a foreign owner before the Sandbox read", async () =>
   await own(async () => {
     const f = seed("pending");

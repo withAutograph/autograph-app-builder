@@ -654,8 +654,8 @@ native state to repair a dependency installation.
 
 An explicit app-file change may replace an existing-app plan before its Build
 approval has executed. This is planning only: retain prior grants and terminal
-decisions (including across the later genuine approval), read the frozen file preimages, and produce a new proposal requiring
-its own ordinary Build approval. Do not manufacture a settled apply receipt or
+decisions across later approval, and produce a proposal with current workspace
+preimages. The new proposal requires its own ordinary Build approval. Do not manufacture a settled apply receipt or
 borrow a different proposal's repair history.
 
 The producer includes the unique planning call ID in every proposal digest.
@@ -663,8 +663,9 @@ Apply records that exact proposal's grant before any execution I/O, and cannot
 approve another proposal while this exact planned workflow remains current.
 Therefore this amendment is permitted only for a current planned iteration with
 no matching repair-history entry, no pending approval in any scope, no grant
-for the current proposal, and unchanged workflow, authority, workspace and
-frozen preimages throughout planning. A matching grant can represent an
+for the current proposal, and the same workflow, authority, and workspace
+throughout planning. If a prepared repair's preimages changed, plan again
+from the current checkout. A matching grant can represent an
 unresolved execution and remains blocked; missing or conflicting required
 state is not evidence of an unapplied plan. Existing settled repairs continue
 to require their exact approved base and receipt binding.
@@ -734,8 +735,8 @@ The approved checkout install preserves the source mode of existing workspace
 bin targets. Bun can set an executable workspace file to `0777` when linking
 it into `node_modules/.bin`. Before the apply snapshot, Builder restores the
 original executable mode only when the repository-declared target still has
-the same file identity and bytes. An existing bin must already be an owned,
-regular executable in its package. Other changes to those preimages fail the
+the same file identity and bytes. An existing bin must be an owned,
+regular file in its package. Other changes to those preimages fail the
 install boundary and remain visible for diagnosis.
 
 A local public read of a recovered session checks the receipt-bound lineage and

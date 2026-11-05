@@ -69,7 +69,6 @@ export const priorValidatedPrivateArtifact = async (input: {
     matches.length !== 1 ||
     entry?.sessionId !== sessionId ||
     prior?.phase !== "validated" ||
-    !isDeepStrictEqual(validationIdentity(entry.previousWorkflow), validationIdentity(prior)) ||
     prior.githubSource !== undefined ||
     state.appSpec.digest !== prior.appSpec.digest ||
     state.sourceReceipt.digest !== prior.sourceReceipt.digest ||

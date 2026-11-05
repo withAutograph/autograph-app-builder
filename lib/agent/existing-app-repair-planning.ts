@@ -98,9 +98,9 @@ const validateRepairChanges = (changes: readonly ExistingAppChange[], current: P
     throw new Error("The repair must preserve the exact reviewed private compute check policy.");
   }
 };
-const verifyPreparedPreimages = async (current: Proposed, sandbox: SandboxSession) => {
+const hasUnchangedPreparedPreimages = async (current: Proposed, sandbox: SandboxSession) => {
   if (!("iteration" in current.proposal.target)) {
-    throw new Error("The prepared repair has no frozen app change inventory.");
+    return false;
   }
   for (const change of current.proposal.target.iteration.changes) {
     // Ordered reads bind reuse to actual unchanged prepared preimages, never an old applied repair.
@@ -110,9 +110,7 @@ const verifyPreparedPreimages = async (current: Proposed, sandbox: SandboxSessio
       (bytes === null) !== (change.before === undefined) ||
       (bytes !== null && createHash("sha256").update(bytes).digest("hex") !== change.before?.digest)
     ) {
-      throw new Error(
-        "The prepared repair preimage changed; reconcile its source before replanning.",
-      );
+      return false;
     }
     if (bytes !== null) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- Preserve ordered path/mode observation.
@@ -120,14 +118,15 @@ const verifyPreparedPreimages = async (current: Proposed, sandbox: SandboxSessio
         command: `stat -c %a '/workspace/repository/${change.path.replaceAll("'", "'\"'\"'")}'`,
       });
       if (mode.exitCode !== 0 || mode.stdout.trim() !== change.before?.mode) {
-        throw new Error("The prepared repair mode changed.");
+        return false;
       }
     }
   }
+  return true;
 };
 
 /** A plan can be amended without treating a prior execution grant as approval. */
-const inspectUnapprovedPlan = async (
+const inspectUnapprovedPlan = (
   current: Extract<AppBuilderWorkflowState, { phase: "planned" }>,
   changes: readonly ExistingAppChange[],
   sandbox: SandboxSession,
@@ -161,8 +160,7 @@ const inspectUnapprovedPlan = async (
   };
   assertCurrent();
   validateRepairChanges(changes, current);
-  await verifyPreparedPreimages(current, sandbox);
-  assertCurrent();
+  // The target planner captures the current preimages for the successor.
   // No approvedBase: the new proposal must obtain its own Build approval.
   return { requestDigest, approvedBase: undefined, reuse: false, assertCurrent };
 };
@@ -198,7 +196,7 @@ export const inspectExistingAppRepair = async (input: {
     base = previous?.approvedBase;
   }
   if (base === undefined && current.phase === "planned" && previous === undefined) {
-    return await inspectUnapprovedPlan(current, changes, sandbox, ctx, requestDigest);
+    return inspectUnapprovedPlan(current, changes, sandbox, ctx, requestDigest);
   }
   if (base === undefined) {
     throw new Error(
@@ -230,11 +228,9 @@ export const inspectExistingAppRepair = async (input: {
   };
   validateRepairChanges(changes, current);
   if (current.phase === "planned" && previous?.requestDigest === requestDigest) {
-    await verifyPreparedPreimages(current, sandbox);
-    ctx.abortSignal?.throwIfAborted();
-    assertExactWorkflowState(appBuilderWorkflowState.get(), current, "reuse the prepared repair");
+    const reuse = await hasUnchangedPreparedPreimages(current, sandbox);
     assertCurrent();
-    return { requestDigest, approvedBase: base, reuse: true, assertCurrent };
+    return { requestDigest, approvedBase: base, reuse, assertCurrent };
   }
   ctx.abortSignal?.throwIfAborted();
   assertExactWorkflowState(

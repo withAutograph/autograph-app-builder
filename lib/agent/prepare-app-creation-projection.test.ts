@@ -285,13 +285,52 @@ describe("explicit same-app private repair through the real planning producer", 
       expect(repeated.reused).toBe(true);
       expect(ports.execute).toHaveBeenCalledTimes(1);
       ports.readBinary.mockResolvedValue(Buffer.from("drift"));
-      await expect(
-        prepareAppCreation({ existingAppChanges: repairFiles }, context),
-      ).rejects.toThrow("preimage changed");
-      expect(appBuilderWorkflowState.get()).toEqual(next);
-      expect(ports.run).not.toHaveBeenCalled();
+      const replanned = await prepareAppCreation(
+        { existingAppChanges: repairFiles },
+        { ...context, callId: "repair-new-preimage" },
+      );
+      expect(replanned.reused).toBe(false);
+      expect(ports.execute).toHaveBeenCalledTimes(2);
+      expect(appBuilderWorkflowState.get()).not.toEqual(next);
     });
   });
+  it("replans the same repair intent after a permission-only change", async () => {
+    await run(async () => {
+      const old = appliedRepairFixture();
+      appBuilderWorkflowState.update(() => old);
+      approveRepairFixture(old);
+      ports.readBinary.mockResolvedValue(Buffer.from("current source"));
+      ports.run.mockResolvedValue({ exitCode: 0, stdout: "777" });
+      ports.execute.mockResolvedValue({
+        contractDigest: "contract",
+        proposal: {
+          privateCompute: profile(),
+          operation: "iterate-existing-app",
+          iteration: {
+            changes: [
+              {
+                path: repairFiles[0].path,
+                before: { digest: sha256("current source"), mode: "755" },
+                after: {
+                  content: repairFiles[0].content,
+                  digest: sha256(repairFiles[0].content),
+                  mode: "755",
+                },
+              },
+            ],
+          },
+        },
+      });
+      await prepareAppCreation({ existingAppChanges: repairFiles }, context);
+      const result = await prepareAppCreation(
+        { existingAppChanges: repairFiles },
+        { ...context, callId: "replan-permissions-changed" },
+      );
+      expect(result.reused).toBe(false);
+      expect(ports.execute).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it.each(["validation_pending", "apply_failed", "publication_pending"])(
     "does not supersede %s",
     async (phase) => {
@@ -589,7 +628,7 @@ describe("unapproved existing-app plan amendment", () => {
     });
   });
 
-  it("blocks preimage drift and authority changes during preimage reads", async () => {
+  it("plans amendments from the live source without checking superseded preimages", async () => {
     await run(async () => {
       const current = unappliedIterationFixture();
       if (!("proposal" in current) || !("iteration" in current.proposal.target)) {
@@ -604,19 +643,22 @@ describe("unapproved existing-app plan amendment", () => {
       ];
       appBuilderWorkflowState.update(() => current);
       ports.readBinary.mockResolvedValue(Buffer.from("drift"));
-      await expect(
-        prepareAppCreation({ existingAppChanges: repairFiles }, context),
-      ).rejects.toThrow("preimage changed");
-      ports.readBinary.mockImplementation(async () => {
-        approveRepairFixture(current);
-        await Promise.resolve();
-        return Buffer.from("before");
+      ports.execute.mockResolvedValue({
+        contractDigest: "fresh-contract",
+        proposal: {
+          privateCompute: profile(),
+          operation: "iterate-existing-app",
+          iteration: { changes: [] },
+        },
       });
-      ports.run.mockResolvedValue({ exitCode: 0, stdout: "644" });
-      await expect(
-        prepareAppCreation({ existingAppChanges: repairFiles }, context),
-      ).rejects.toThrow("authority or workspace changed");
-      expect(ports.execute).not.toHaveBeenCalled();
+      const result = await prepareAppCreation(
+        { existingAppChanges: repairFiles },
+        { ...context, callId: "fresh-amendment" },
+      );
+      expect(result.reused).toBe(false);
+      expect(ports.execute).toHaveBeenCalledOnce();
+      expect(ports.readBinary).not.toHaveBeenCalled();
+      expect(ports.run).not.toHaveBeenCalled();
     });
   });
 });
