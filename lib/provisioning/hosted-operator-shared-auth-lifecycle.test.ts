@@ -383,6 +383,8 @@ const composed = (active = true) => {
     return preparedCredentials(input);
   });
   const controlPlane: ControlPlane = {
+    centralIntegrationHostRequest: unavailable,
+    centralIntegrationDeploymentReceiptRequest: unavailable,
     continuityRequest: unavailable,
     exportRequest: unavailable,
     readApprovedPlan: unavailable,
@@ -478,6 +480,10 @@ const composed = (active = true) => {
     readSharedAuthAdoption: unavailable,
     readSharedGatewayRows: unavailable,
     reserveRealmIdentityLink: unavailable,
+    resolveRealmIdentityCallbackOwnerContext: unavailable,
+    readApprovedPublicAuthBootstrap: unavailable,
+    readOwnedAppResourceSource: unavailable,
+    checkpointOwnedAppResourceSource: unavailable,
     resolveRealmIdentityCallbackContext: unavailable,
     store: {
       compareAndSet: unavailable,

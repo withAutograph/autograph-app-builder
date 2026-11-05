@@ -3,7 +3,8 @@ import postcss from "postcss";
 import { describe, expect, it, vi } from "vitest";
 
 import type { UiPreviewInput } from "./ui-preview";
-import { uiPreviewRendererFiles } from "./ui-preview-renderer";
+import { workspaceBinInstallCommand } from "../repository/workspace-bin-install";
+import { renderUiPreview, uiPreviewRendererFiles } from "./ui-preview-renderer";
 
 describe("preview runtime initialization", () => {
   it.each([true, false])("initializes charts only when used (%s)", (usesCharts) => {
@@ -128,4 +129,47 @@ describe("preview stylesheet provenance", () => {
     expect(renderer).toContain("const bundledStyle = bundledCss.join");
     expect(renderer).toContain("</style><style>' + bundledStyle");
   });
+});
+
+it("preserves workspace executable modes when the preview compiler needs dependencies", async () => {
+  const input: UiPreviewInput = {
+    appId: "missing-preview-dependency",
+    catalogGaps: [],
+    files: [{ content: "export default function Page() { return null; }", path: "src/page.tsx" }],
+    manifest: {
+      assumptions: [],
+      decisions: [],
+      fixtureFacts: [],
+      implementationNotes: [],
+      openQuestions: [],
+      productionComponents: [],
+      productionCompositions: [],
+      productionIcons: [],
+      screens: [{ entry: "src/page.tsx", id: "home", route: "/", title: "Home" }],
+      version: 1,
+    },
+    routes: ["/"],
+  };
+  const success = { exitCode: 0, stderr: "", stdout: "" };
+  const run = vi
+    .fn()
+    .mockResolvedValueOnce({ ...success, exitCode: 1, stderr: "Could not resolve package" })
+    .mockResolvedValue(success);
+  const html = "<html>Preview</html>";
+  await expect(
+    renderUiPreview(input, {
+      run,
+      readTextFile: vi.fn().mockResolvedValue(html),
+      writeTextFile: vi.fn(() => Promise.resolve()),
+    }),
+  ).resolves.toBe(html);
+  const command = {
+    command: `bun ${uiPreviewRendererFiles(input).root}/render.mts`,
+    workingDirectory: "/workspace/repository",
+  };
+  expect(run.mock.calls).toEqual([
+    [command],
+    [{ ...command, command: workspaceBinInstallCommand("/workspace/repository", false) }],
+    [command],
+  ]);
 });

@@ -80,7 +80,6 @@ metadata row uses the storage table's `settled` vocabulary. Changed source/polic
 must expose the original saved assembly; do not overwrite it or transfer consent.
 Only completed Auth resource/schema custody supplies private startup bindings;
 actual native activation and runtime readback remain required for realm eligibility.
-
 Every effect requires the real held physical-target lease, with its actual
 monotone generation recorded before dispatch. Use the maintained common project,
 resource, role and source lock namespaces so other writers of the same physical

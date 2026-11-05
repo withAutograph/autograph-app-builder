@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from "node:util";
+import { publicRealmReleaseBindingSchema } from "./public-realm-enrollment";
 import { createHash } from "node:crypto";
 import { jwtVerify } from "jose";
 import type { JWTVerifyGetKey } from "jose";
@@ -12,7 +14,7 @@ export const realmBrowserSessionCorrelationSchema = z.strictObject({
 });
 export const realmPhysicalResourceSchema = z.strictObject({
   database: id,
-  environment: z.enum(["local", "preview", "production"]),
+  environment: z.enum(["local", "preview", "production", "isolated-development"]),
   hostname: id,
   migratorRole: id,
   neon: z.strictObject({ branchId: id, projectId: id }).optional(),
@@ -22,6 +24,7 @@ export const realmPhysicalResourceSchema = z.strictObject({
   version: z.literal(1),
 });
 export const realmLinkClaimsSchema = z.strictObject({
+  publicRelease: publicRealmReleaseBindingSchema.optional(),
   aud: z.url(),
   browserSession: realmBrowserSessionCorrelationSchema
     .extend({
@@ -42,6 +45,7 @@ export const realmLinkClaimsSchema = z.strictObject({
   sub: id,
 });
 export const pendingRealmIdentityLinkSchema = z.object({
+  publicRelease: publicRealmReleaseBindingSchema.optional(),
   audience: z.url(),
   browserSession: realmBrowserSessionCorrelationSchema.optional(),
   authResourceId: id,
@@ -108,6 +112,7 @@ const verifySignedRealmIdentityProof = async (input: {
   });
   const claims = realmLinkClaimsSchema.parse(result.payload);
   const matches = [
+    isDeepStrictEqual(claims.publicRelease, pending.publicRelease),
     claims.ownerSessionId === pending.ownerSessionId,
     claims.authResourceId === pending.authResourceId,
     claims.bootstrapPlanDigest === pending.bootstrapPlanDigest,
@@ -266,6 +271,11 @@ export const createRealmIdentityBrowserUrl = (input: {
   if (link.browserSession) {
     url.searchParams.set("operationRef", link.browserSession.operationRef);
     url.searchParams.set("participantProgramDigest", link.browserSession.participantProgramDigest);
+  }
+  if (link.publicRelease !== undefined) {
+    url.searchParams.set("publicEnrollmentRef", link.publicRelease.enrollmentRef);
+    url.searchParams.set("publicOperationRef", link.publicRelease.operationRef);
+    url.searchParams.set("publicPlanDigest", link.publicRelease.planDigest);
   }
   return url.toString();
 };

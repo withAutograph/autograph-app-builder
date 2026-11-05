@@ -147,6 +147,28 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    the CUE model and policies from the accepted product decisions, compile the
    checked release, and implement the authenticated server reads and actions.
    The user supplies product meaning, not schema source or backend code.
+   When accepted access requirements name application roles, declare the CUE
+   `authorization.roles` and matching model/operation/field/row `grants` in the
+   app schema. Follow the selected repository's generated-data-operations
+   contract. Use the compiler's canonical role IDs throughout app policy and
+   runtime consumers; product labels are not PostgreSQL identifiers. Inspect
+   `app:describe` after compiling: its checked release must expose the intended
+   roles. AppSpec prose, a role literal in application code, or a fixture actor
+   does not declare a schema grant. If authenticated local setup reports no
+   schema roles, repair that app's schema/policy through ordinary implementation
+   repairs and retry validation. Never invent a default role or manually inject
+   `APP_RUNTIME_ROLES` to bypass missing app authorization.
+   When accepted access requirements name application roles, declare the CUE
+   `authorization.roles` and matching model/operation/field/row `grants` in the
+   app schema. Follow the selected repository's generated-data-operations
+   contract. Use the compiler's canonical role IDs throughout app policy and
+   runtime consumers; product labels are not PostgreSQL identifiers. Inspect
+   `app:describe` after compiling: its checked release must expose the intended
+   roles. AppSpec prose, a role literal in application code, or a fixture actor
+   does not declare a schema grant. If authenticated local setup reports no
+   schema roles, repair that app's schema/policy through ordinary implementation
+   repairs and retry validation. Never invent a default role or manually inject
+   `APP_RUNTIME_ROLES` to bypass missing app authorization.
    Preserve `catalog:` and `workspace:*` references. The generator profile owns
    the standard scaffold toolset, not every app-specific dependency. Additional
    dependencies need the appropriate reviewed app manifest/lockfile changes,
@@ -215,7 +237,8 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    Preserve unrelated changes. Repair actual reported technical failures
    through the supported tools when safe, without requesting the same approval
    again. If recovery is unavailable, explain the incomplete product outcome.
-8. When the user requests restoration of the currently published app and defers
+8. For an explicitly protected Preview journey, when the user requests
+   restoration of the currently published app and defers
    unpublished changes, recover the existing hosted Preview before continuing
    private candidate validation or review. Preserve the candidate and its
    diagnostics for later iteration. Use `plan-app-hosted-runtime` with
@@ -235,8 +258,15 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    changes; do not reset it or pin ongoing revision work to published source.
    For delivery of applied changes with approved optional integrations, run
    `install-app-integrations` against the executable app definition after apply
-   and before validation. After apply and any requested integration installation
-   succeed, continue with `validate_app_creation`. It runs the repository's normal
+   and before validation. When an accepted revision explicitly defers integrations,
+   remove the executable provider selection and reconcile it with that same
+   operation; `status: "omitted"` proceeds with normal app/Auth delivery without
+   connecting a provider or changing retained bindings/data. Follow the optional
+   integration reference for app-owned UI conflicts and source-only removal.
+   After apply and any requested integration installation
+   succeed, start a requested private preview directly with `start_app_preview`.
+   Lint is advisory for private previews and must not precede or block startup.
+   For reviewed delivery, continue with `validate_app_creation`. It runs the repository's normal
    commands against the current applied app. When it
    reports a repairable failure, provide corrected `implementationFiles` to
    `validate_app_creation` and retry in the same approved checkout. Use the
@@ -442,6 +472,59 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    JSON, or other internal verification values. One approval never authorizes
    another outcome. Keep internal execution mechanics out of the public
    conversation.
+
+## Normal public app delivery
+
+When the requested result is a public app URL with application sign-in, use the
+normal Builder destination and public-release capability. Vercel account sign-in
+is not an app access requirement. Do not start a separate native Preview target,
+acceptance project or Auth project to satisfy this journey.
+
+- Keep the accepted app and saved session. Use its normal owned provisioned
+  destination. If setup reports `builder_destination_required`, direct the user
+  to the returned normal Store In / Deploy To destination control and continue
+  that session. Builder owns reservation, attachment, creation and independent
+  project readback. Do not invent a handoff, adopt a project by name, or copy an
+  old approval to a different destination.
+- Keep Gateway, Auth and the app in that same repository-root Services project.
+  The privileged operator is separate infrastructure. Preserve the normal
+  `apps-<app-id>` naming and recorded project for later revisions.
+- Finish technical validation, source review and the ordinary separately
+  approved publication path. Record its actual reviewed source association.
+  A draft PR or local source change is not public delivery. Use the shared
+  runtime setup tools for the selected isolated resources and compiled release.
+  A fresh Preview resource-installation plan may prepare schema and Auth in
+  this same project; it does not require visiting a Vercel-protected Preview or
+  create another delivery destination.
+- Use `plan-app-public-release` and the separate exact-plan approval from
+  `release-app-public-release`. An Auth-bootstrap plan first makes the normal
+  public Auth entry point available. It does not prove app schema readiness,
+  login or application behavior. Follow its ordinary signup and identity
+  continuation in this same Builder session. Then finish the app's restricted
+  schema and assignment setup and request a fresh application-release plan.
+  Bootstrap consent is not consent for that later plan.
+- Public release uses Standard Protection and a public production domain, with
+  Better Auth enforcing user sessions, organizations and app assignments.
+  Public delivery may use explicitly isolated development provider resources;
+  it does not grant customer Production provider access. Never weaken operator
+  protection, insert base/admin credentials, manually deploy, promote or alias,
+  or select a deployment by a source SHA or Git history.
+- Read the release result and open its ordinary public app URL. Exercise real
+  Better Auth login/logout and a persistent app action before calling the app
+  usable. For integrations, additionally exercise the approved provider
+  lifecycle and independent data/isolation readbacks. Keep all these results
+  separate from source tests, deployment readiness and prototype observations.
+- Preserve old protected Preview intents and history. Changed targets and
+  exposure require new supported plans and ordinary approvals. Unknown effects
+  stay visible and are reconciled through the saved operation; never resend an
+  uncertain public response or start a replacement app to hide the outcome.
+
+When developing Builder itself, use the local Builder and parallel isolated
+instances described in `docs/local-development-lifecycle.md`. Fix shared
+mechanics, then continue the saved work. Do not finish generated app files or
+force private stages on the evaluator's behalf. Local runs remain local proof;
+hosted acceptance still requires the app's actual public delivery and provider
+behavior.
 
 ## Boundaries
 

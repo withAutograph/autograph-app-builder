@@ -1030,6 +1030,38 @@ describe("installed Eve 0.68 projection", () => {
     expect(JSON.stringify(projected.map(toPublicEvent))).not.toContain("apply_app_creation");
   });
 
+  it("shows the selected private compute footprint and ephemeral billing on the ordinary Build card", () => {
+    const projected = projectInstalledEveEvent(
+      installedEvent({
+        type: "input.requested",
+        data: {
+          requests: [
+            {
+              kind: "tool-approval",
+              requestId: "compute-build",
+              prompt: "Build",
+              action: {
+                kind: "tool-call",
+                toolName: "apply_app_creation",
+                input: {
+                  productSummary: "Build the reviewed app.",
+                  privateCompute: "private-checks-16gib-v1",
+                },
+              },
+            },
+          ],
+        },
+      }),
+      4,
+    );
+    const text = JSON.stringify(projected.map(toPublicEvent));
+    expect(text).toContain("Build this app?");
+    expect(text).toContain("8 vCPUs");
+    expect(text).toContain("16 GiB");
+    expect(text).toContain("one lint worker");
+    expect(text).toContain("actual ephemeral usage");
+    expect(text).not.toContain("apply_app_creation");
+  });
   it("fails closed without exposing a malformed receipt or raw arguments", () => {
     const requested = installedEvent({
       data: {

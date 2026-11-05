@@ -9,7 +9,7 @@ interface FixtureState {
   applyReceipt: { digest: string; applyRoot: string };
   dependencyReceipt: { digest: string };
   proposal: { digest: string };
-  githubSource: {
+  githubSource?: {
     digest: string;
     repository: { name: string; owner: string; repositoryId: string };
     resolvedRef: string;
@@ -21,12 +21,16 @@ const mocks = vi.hoisted(() => ({
   accessUpdate: vi.fn(),
   classify: vi.fn(),
   inspect: vi.fn(),
+  observeLocal: vi.fn(() => Promise.resolve()),
   prepare: vi.fn(),
   reconcile: vi.fn(),
   sandbox: { id: "owned-sandbox" },
   sourceUpdate: vi.fn(),
   state: {} as FixtureState,
   updateWorkflow: vi.fn<(transition: (state: FixtureState) => FixtureState) => void>(),
+}));
+vi.mock("./refresh-local-planning-source", () => ({
+  refreshLocalPlanningSource: mocks.observeLocal,
 }));
 vi.mock("./app-baseline-state", () => ({ appBaselineState: { get: () => {} } }));
 vi.mock("./source-bound-sandbox", () => ({
@@ -105,6 +109,15 @@ describe("shared source refresh before schema compilation", () => {
       };
     });
   });
+  it("binds local schema compilation to the applied checkout without observing the moving host", async () => {
+    delete mocks.state.githubSource;
+    await expect(refreshPlanningSource(ctx as never, "schema-compilation")).resolves.toBe(
+      mocks.sandbox,
+    );
+    expect(mocks.observeLocal).not.toHaveBeenCalled();
+    expect(mocks.classify).not.toHaveBeenCalled();
+    expect(mocks.reconcile).not.toHaveBeenCalled();
+  });
   it("refreshes shared code while preserving applied product, approval and dependency receipts", async () => {
     const original = mocks.state;
     await expect(refreshPlanningSource(ctx as never, "schema-compilation")).resolves.toBe(
@@ -133,6 +146,7 @@ describe("shared source refresh before schema compilation", () => {
   });
   it("keeps ordinary planning refresh out of already applied builds", async () => {
     await refreshPlanningSource(ctx as never);
+    expect(mocks.observeLocal).toHaveBeenCalledWith(ctx);
     expect(mocks.classify).not.toHaveBeenCalled();
     expect(mocks.reconcile).not.toHaveBeenCalled();
   });

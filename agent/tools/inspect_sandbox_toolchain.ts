@@ -1,3 +1,8 @@
+import { Sandbox } from "@vercel/sandbox";
+import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import { readPrivateComputeProviderState } from "@/lib/sandbox/private-compute-resume";
+import { assertHostedSandboxCommandAuthority } from "@/lib/sandbox/deployment-execution-lease";
+import { inspectSandboxRuntimeResources } from "@/lib/sandbox/runtime-resource-diagnostics";
 import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
 import { defineTool } from "eve/tools";
 import type { SandboxSession } from "eve/sandbox";
@@ -42,8 +47,24 @@ export const inspectSandboxCommand = async (
 
 export default defineTool({
   description:
-    "Read advisory Sandbox command availability/version and image/cache observations without installing packages or mutating the workspace. toolchainReady and required.matches describe this inspector's configuration comparisons, not repository access, workspace readiness or build admission. Optional image/cache metadata or version mismatches alone do not require installation, reconnection or source re-resolution. Retain and diagnose actual backend blockers and command failures.",
-  async execute(_input, ctx) {
+    "Read advisory Sandbox command availability/version and image/cache observations without installing packages or mutating the workspace. toolchainReady and required.matches describe this inspector's configuration comparisons, not repository access, workspace readiness or build admission. Optional image/cache metadata or version mismatches alone do not require installation, reconnection or source re-resolution. Retain and diagnose actual backend blockers and command failures. computeState=true reads only the saved provider resource metadata and pending journal, without opening or resuming a VM. Set runtimeDiagnostics to read bounded CPU/memory/process-limit facts and installed repository-local Oxlint/Vite+ versions when an actual tool crashes; this never changes resource limits, dependencies, lint rules or build admission.",
+  async execute(input, ctx) {
+    if (input.computeState === true) {
+      const current = appBuilderWorkflowState.get();
+      if (!("workspace" in current)) {
+        return {
+          diagnosticOnly: true,
+          status: "no-private-workspace",
+          readinessScope: "private-compute-observation",
+        };
+      }
+      await assertHostedSandboxCommandAuthority({ sessionId: ctx.session.id });
+      const native = await Sandbox.get({ name: current.workspace.workspaceId, resume: false });
+      const computeState = await readPrivateComputeProviderState(native, async () => {
+        await assertHostedSandboxCommandAuthority({ sessionId: ctx.session.id });
+      });
+      return { diagnosticOnly: true, readinessScope: "private-compute-observation", computeState };
+    }
     const sandbox = await ctx.getSandbox();
     const tools = await Promise.all(
       commands.map(async (command) => await inspectSandboxCommand(sandbox, command)),
@@ -93,7 +114,13 @@ export default defineTool({
       toolchainReady:
         execution !== undefined && cache !== undefined && required.every((tool) => tool.matches),
       tools,
+      ...(input.runtimeDiagnostics === true
+        ? { runtimeResources: await inspectSandboxRuntimeResources(sandbox) }
+        : {}),
     };
   },
-  inputSchema: z.object({}),
+  inputSchema: z.object({
+    computeState: z.boolean().optional(),
+    runtimeDiagnostics: z.boolean().optional(),
+  }),
 });

@@ -27,6 +27,11 @@ import {
 } from "@/lib/repository/supported-template";
 
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
+import {
+  inspectWorkspacePath,
+  isWorkspaceDescendant,
+  normalizedWorkspacePath,
+} from "@/lib/repository/workspace-path-inspection";
 import { appBaselineState } from "@/lib/agent/app-baseline-state";
 import { readableAppBaselinePaths } from "@/lib/repository/app-baseline";
 
@@ -201,16 +206,61 @@ export const readRepositoryInspectionPage = async (input: {
   return finish();
 };
 
+const inspectionNamespace = (input: {
+  path: string;
+  paths?: string[];
+  mode?: "repository" | "workspace";
+  directoryOffset?: number;
+}) => {
+  const files = input.paths?.length ? input.paths : undefined;
+  const virtualChild = isWorkspaceDescendant(input.path);
+  const explicitWorkspaceRoot =
+    input.mode === "workspace" && input.path === developmentWorkspacePath;
+  const directoryCursorAllowed =
+    files === undefined && input.mode !== "repository" && (virtualChild || explicitWorkspaceRoot);
+  const conflictingFiles = input.mode === "repository" && files !== undefined;
+  const conflictingCursor = input.directoryOffset !== undefined && !directoryCursorAllowed;
+  if (conflictingFiles || conflictingCursor) {
+    throw new Error(
+      "Directory continuation or file paths conflict with the selected inspection mode.",
+    );
+  }
+  if (input.mode === "repository") {
+    return { kind: "repository" as const, path: input.path };
+  }
+  const selectedPath =
+    input.mode === "workspace" || virtualChild ? normalizedWorkspacePath(input.path) : input.path;
+  if (files !== undefined) {
+    return { kind: "files" as const, paths: files };
+  }
+  if (input.mode === "workspace" || isWorkspaceDescendant(selectedPath)) {
+    return { kind: "entry" as const, path: selectedPath };
+  }
+  if (input.directoryOffset !== undefined) {
+    throw new Error("Directory continuation requires the same workspace directory path.");
+  }
+  return { kind: "overview" as const, path: selectedPath };
+};
+
 export default defineTool({
   description:
-    "Inspect the selected repository's original creation workspace. With paths, read text files relative to /workspace/repository, including public component exports, implementations, stories, and documentation. This does not inspect a separately edited draft PR candidate; read that candidate through edit_github_draft_pr_candidate with kind: read and validate it with validate_github_draft_pr_reconciliation. Resolve public imports from the inspected repository's tsconfig, workspace path maps, or package exports before requesting barrels. Read actual component props before composing a preview; do not guess APIs. Large results are paged. Repeat the same paths with the returned continuation.pathIndex and continuation.offsetBytes verbatim until continuation is absent; append each file chunk at its offsetBytes (omitted means byte 0). If a file chunk includes restartedFromOffsetBytes, replace that file's previously collected partial content with the returned chunk, then resume with the returned continuation verbatim. Without paths, return the repository overview. Never writes or publishes.",
-  async execute({ path, paths, pathIndex, offsetBytes }, ctx) {
+    "Inspect the selected repository's original creation workspace. With paths, read text files relative to /workspace/repository, including public component exports, implementations, stories, and documentation. This does not inspect a separately edited draft PR candidate; read that candidate through edit_github_draft_pr_candidate with kind: read and validate it with validate_github_draft_pr_reconciliation. Resolve public imports from the inspected repository's tsconfig, workspace path maps, or package exports before requesting barrels. Read actual component props before composing a preview; do not guess APIs. Large results are paged. Repeat the same paths with the returned continuation.pathIndex and continuation.offsetBytes verbatim until continuation is absent; append each file chunk at its offsetBytes (omitted means byte 0). If a file chunk includes restartedFromOffsetBytes, replace that file's previously collected partial content with the returned chunk, then resume with the returned continuation verbatim. Without paths, path selects a repository root for its overview; virtual descendants such as /workspace/repository/packages inspect the selected Sandbox entry and page immediate directory entries. For directory pages repeat the same path with continuation.directoryOffset until absent. A file entry points to the exact path to read using paths. Use mode: repository to explicitly inspect an allowed local host root even if its physical path resembles the virtual namespace; mode: workspace never falls back to host inspection. Never writes or publishes.",
+  async execute({ path, paths, pathIndex, offsetBytes, directoryOffset, mode }, ctx) {
     if (!canAutoSelectDevelopmentSource() && sourceWorkflowState.get().phase === "empty") {
       throw new Error(
         "Select the app source before repository inspection: source_status for a new app or resolve_github_source for an existing GitHub app.",
       );
     }
-    if (paths?.length) {
+    const namespace = inspectionNamespace({ path, paths, mode, directoryOffset });
+    if (namespace.kind === "repository") {
+      if (!canAutoSelectDevelopmentSource()) {
+        throw new Error(
+          "Host repository inspection is available only in the configured local development source mode.",
+        );
+      }
+      return inspectSupportedRepository(namespace.path);
+    }
+    if (namespace.kind === "files") {
       const sandbox = await getSourceBoundSandbox(ctx);
       return await readRepositoryInspectionPage({
         baseline: appBaselineState.get()?.selection,
@@ -221,17 +271,33 @@ export default defineTool({
         },
         offsetBytes,
         pathIndex,
-        paths,
+        paths: namespace.paths,
         sandbox,
       });
     }
+    if (namespace.kind === "entry") {
+      const sandbox = await getSourceBoundSandbox(ctx);
+      return await inspectWorkspacePath({
+        path: namespace.path,
+        directoryOffset,
+        sandbox,
+        baseline: appBaselineState.get()?.selection,
+        metadata: {
+          callId: ctx.callId,
+          toolName: "inspect_repository",
+          turnId: ctx.session.turn.id,
+        },
+        signal: ctx.abortSignal,
+      });
+    }
+    const selectedPath = namespace.path;
     // Some models use the runtime-visible workspace path for their first
     // repository inspection. In local development that path does not exist on
     // the host running this tool yet. Treat it as the single configured source
     // only, materialize the writable sandbox overlay, and inspect the live
     // checkout. This keeps setup out of the conversation without granting any
     // other path special treatment.
-    if (path === developmentWorkspacePath && canAutoSelectDevelopmentSource()) {
+    if (selectedPath === developmentWorkspacePath && canAutoSelectDevelopmentSource()) {
       const receipt = await developmentSourceReceipt("existing-repository");
       if (receipt === undefined) {
         throw new Error("The configured development source was unavailable.");
@@ -266,7 +332,7 @@ export default defineTool({
       return inspectSupportedRepository(receipt.sourcePath);
     }
     if (canAutoSelectDevelopmentSource()) {
-      return inspectSupportedRepository(path);
+      return inspectSupportedRepository(selectedPath);
     }
 
     const sandbox = await ctx.getSandbox();
@@ -295,8 +361,33 @@ export default defineTool({
     };
   },
   inputSchema: z.object({
-    path: z.string().min(1).default(developmentWorkspacePath),
-    paths: z.array(z.string().min(1)).optional(),
+    mode: z
+      .enum(["repository", "workspace"])
+      .optional()
+      .describe(
+        "Explicit namespace when needed: repository inspects an allowed local host repository root; workspace inspects the selected Sandbox entry. Omitted mode preserves the root overview and routes virtual descendants to the Sandbox.",
+      ),
+    path: z
+      .string()
+      .min(1)
+      .default(developmentWorkspacePath)
+      .describe(
+        "Repository root for overview, or an absolute /workspace/repository descendant for selected Sandbox entry inspection. Explicit local host repository roots retain their existing meaning.",
+      ),
+    paths: z
+      .array(z.string().min(1))
+      .optional()
+      .describe(
+        "Text files relative to the selected repository, or absolute /workspace/repository file paths. Read package.json exports to resolve actual file names.",
+      ),
+    directoryOffset: z
+      .number()
+      .int()
+      .nonnegative()
+      .optional()
+      .describe(
+        "Repeat the same workspace directory path with the returned continuation.directoryOffset; do not combine with paths.",
+      ),
     pathIndex: z.number().int().nonnegative().optional(),
     offsetBytes: z.number().int().nonnegative().optional(),
   }),

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { completionGuidance } from "./completion-guidance";
 
 describe("shared app delivery guidance", () => {
-  it("recovers accepted existing-app designs by planning exact edits before build approval", () => {
+  it("recovers accepted existing-app designs by planning exact edits before building", () => {
     for (const phase of [
       "app_spec_accepted",
       "dependencies_prepared",
@@ -12,18 +12,18 @@ describe("shared app delivery guidance", () => {
       const guidance = completionGuidance({ phase });
       expect(guidance).toContain("accept_app_spec");
       expect(guidance).toContain("existingAppChanges");
-      expect(guidance).toContain("before requesting build approval");
+      expect(guidance).toContain("before starting the build");
     }
   });
-  it("continues an applied implementation into validation", () => {
+  it("starts requested private previews before reviewed delivery validation", () => {
     const result = completionGuidance({ phase: "applied" });
     expect(result).toContain("They have not passed repository validation");
-    expect(result).toContain("Call validate_app_creation next");
+    expect(result).toContain("start a requested private preview directly");
   });
 
   it("continues a planned implementation without regenerating its accepted design", () => {
     const guidance = completionGuidance({ phase: "planned" });
-    expect(guidance).toContain("apply_app_creation and its normal build approval");
+    expect(guidance).toContain("apply_app_creation for the planned implementation");
     expect(guidance).toContain("Reuse the accepted UI reference");
     expect(guidance).toContain("not a reason to regenerate the prototype");
     expect(guidance).toContain("Genuine product revisions still follow the design acceptance flow");

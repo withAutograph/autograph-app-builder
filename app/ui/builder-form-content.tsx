@@ -1,3 +1,4 @@
+import { BuilderSourceUpload } from "./builder-source-upload";
 import { SectionShell } from "@/components/create-app/choice-card";
 
 import {
@@ -26,6 +27,7 @@ export function BuilderFormContent({ connectionsEnabled }: { connectionsEnabled:
         </div>
       </div>
       <BuilderProviderNotices />
+      <BuilderSourceUpload />
       <fieldset
         className={`${styles.sectionField} ${styles.appDetailsSection}`}
         data-create-app-section="app-details"

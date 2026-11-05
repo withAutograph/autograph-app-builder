@@ -1,4 +1,4 @@
-import { and, eq, lt, lte, ne, notExists, sql } from "drizzle-orm";
+import { and, eq, lt, lte, ne, notExists, or, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import {
@@ -78,6 +78,36 @@ function integrationTenantPredicate(
     eq(table.ownerUserId, authority.ownerUserId),
   );
 }
+
+/** Persistent typed metadata is not expiring provider-operation history. Explicit tenant forget remains separate. */
+export const persistentProvisioningJournalKinds = [
+  "vercel-token-key-custody-v1",
+  "builder-public-origin-choice-v1",
+  "owned-app-resource-source-v1",
+] as const;
+export const provisioningJournalRetentionPredicate = (
+  input: Parameters<HostedAdminStore["applyRetention"]>[0],
+) =>
+  and(
+    integrationTenantPredicate(builderProvisioningJournals, input.authority),
+    ...persistentProvisioningJournalKinds.map(
+      (kind) => sql`${builderProvisioningJournals.record} ->> 'kind' IS DISTINCT FROM ${kind}`,
+    ),
+    // Keep only the exact same-owner runtime row required by a persistent revision-custody pointer.
+    or(
+      sql`${builderProvisioningJournals.record} ->> 'kind' IS DISTINCT FROM 'app-runtime'`,
+      notExists(sql`(SELECT 1 FROM ${builderProvisioningJournals} AS retained_owned_resource_custody
+        WHERE retained_owned_resource_custody.issuer = ${builderProvisioningJournals.issuer}
+          AND retained_owned_resource_custody.audience = ${builderProvisioningJournals.audience}
+          AND retained_owned_resource_custody.workspace_id = ${builderProvisioningJournals.workspaceId}
+          AND retained_owned_resource_custody.owner_user_id = ${builderProvisioningJournals.ownerUserId}
+          AND retained_owned_resource_custody.state = 'settled'
+          AND retained_owned_resource_custody.record ->> 'kind' = 'owned-app-resource-source-v1'
+          AND retained_owned_resource_custody.record #> '{reference,source,target}' = ${builderProvisioningJournals.record} -> 'request')`),
+    ),
+    eq(builderProvisioningJournals.state, "settled"),
+    lt(builderProvisioningJournals.updatedAt, input.deleteBefore),
+  );
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function deleteExpired(
@@ -187,14 +217,7 @@ async function deleteExpired(
     });
   const provisioningJournals = await transaction
     .delete(builderProvisioningJournals)
-    .where(
-      and(
-        integrationTenantPredicate(builderProvisioningJournals, input.authority),
-        sql`${builderProvisioningJournals.record} ->> 'kind' IS DISTINCT FROM 'vercel-token-key-custody-v1'`,
-        eq(builderProvisioningJournals.state, "settled"),
-        lt(builderProvisioningJournals.updatedAt, input.deleteBefore),
-      ),
-    )
+    .where(provisioningJournalRetentionPredicate(input))
     .returning({ requestId: builderProvisioningJournals.requestId });
   const githubCredentials = await transaction
     .delete(hostedGitHubUserCredentials)

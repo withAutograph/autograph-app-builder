@@ -44,7 +44,9 @@ export type DevelopmentArguments = Readonly<{
   arrustedRoot: string;
   stateRoot?: string;
   destinationRoot?: string;
+  resumeCycle?: string;
   emulatedWeb?: boolean;
+  installPlugin?: boolean;
   webCertificate?: string;
   webKey?: string;
   webCa?: string;
@@ -83,11 +85,19 @@ const port = (value: string, name: string) => {
   return parsed;
 };
 
-const parseEmulatedWeb = (value: string) => {
-  if (value !== "true" && value !== "false") {
-    throw new Error("--emulated-web must be true or false.");
+const applyBooleanArgument = (
+  parsed: { emulatedWeb?: boolean; installPlugin?: boolean },
+  name: string,
+  value: string,
+) => {
+  if (name !== "--emulated-web" && name !== "--install-plugin") {
+    return false;
   }
-  return value === "true";
+  if (value !== "true" && value !== "false") {
+    throw new Error(`${name} must be true or false.`);
+  }
+  parsed[name === "--emulated-web" ? "emulatedWeb" : "installPlugin"] = value === "true";
+  return true;
 };
 
 const parseNextBundler = (value: string): NonNullable<DevelopmentArguments["nextBundler"]> => {
@@ -123,7 +133,9 @@ export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentA
     arrustedRoot?: string;
     stateRoot?: string;
     destinationRoot?: string;
+    resumeCycle?: string;
     emulatedWeb?: boolean;
+    installPlugin?: boolean;
     webCertificate?: string;
     webKey?: string;
     webCa?: string;
@@ -148,12 +160,12 @@ export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentA
         parsed.stateRoot = value;
         break;
       }
-      case "--destination-root": {
-        parsed.destinationRoot = value;
+      case "--resume-cycle": {
+        parsed.resumeCycle = value;
         break;
       }
-      case "--emulated-web": {
-        parsed.emulatedWeb = parseEmulatedWeb(value);
+      case "--destination-root": {
+        parsed.destinationRoot = value;
         break;
       }
       case "--web-certificate": {
@@ -192,6 +204,9 @@ export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentA
         break;
       }
       default: {
+        if (applyBooleanArgument(parsed, name, value)) {
+          break;
+        }
         throw new Error(`Development option ${name} is unsupported.`);
       }
     }
@@ -207,6 +222,12 @@ export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentA
   }
   if (parsed.destinationRoot !== undefined && !isAbsolute(parsed.destinationRoot)) {
     throw new Error("--destination-root must be absolute.");
+  }
+  if (
+    parsed.resumeCycle !== undefined &&
+    (!isAbsolute(parsed.resumeCycle) || parsed.stateRoot === undefined)
+  ) {
+    throw new Error("--resume-cycle requires an absolute cycle path and explicit --state-root.");
   }
   parsed.stateRoot = defaultStateRoot(parsed.stateRoot, parsed.emulatedWeb);
   return { ...parsed, arrustedRoot: parsed.arrustedRoot };
@@ -544,10 +565,18 @@ export const createDevelopmentSnapshot = async (input: {
       cwd: root,
       env: gitEnvironment(),
     });
-    execFileSync("/usr/bin/git", ["add", "--all", "--", "."], {
-      cwd: root,
-      env: gitEnvironment(),
-    });
+    // A fresh repository would reapply ignore rules to paths already tracked
+    // by the selected source. Stage exactly the captured inventory, including
+    // those files, without traversing ignored dependencies or private state.
+    execFileSync(
+      "/usr/bin/git",
+      ["--literal-pathspecs", "add", "--force", "--pathspec-from-file=-", "--pathspec-file-nul"],
+      {
+        cwd: root,
+        env: gitEnvironment(),
+        input: Buffer.from(`${entries.map((entry) => entry.path).join("\0")}\0`),
+      },
+    );
     execFileSync(
       "/usr/bin/git",
       [

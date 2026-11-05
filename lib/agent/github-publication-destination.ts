@@ -1,3 +1,5 @@
+import { readBuilderPublicationDestinationForTool } from "./builder-publication-destination";
+
 import type { GitHubPublicationDestinationIdentity } from "./github-publication-runtime";
 import { repositoryAccessReceiptSchema } from "./repository-access-state";
 import type { RepositoryAccessReceipt } from "./repository-access-state";
@@ -52,18 +54,46 @@ export const publicationDestinationFromReview = (
 };
 
 /** Use the ordinary owned connection flow without replacing an acquired checkout. */
-export const resolvePublicationTargetForTool = async (input: {
-  ctx: ToolContext;
-  destination?: PublicationDestinationSelector;
-  githubSource?: ImmutableGitHubSourceReceipt;
-  sourceKind: SourceKind;
-  destinationReview?: GitHubDestinationReviewBinding;
-}): Promise<
-  | { kind: "ready"; target: PublicationTarget }
-  | { kind: "missing" }
-  | { kind: "selection"; access: RepositoryAccessResult }
-> => {
+interface PublicationResolverPorts<Context> {
+  readOwnedDestination: (
+    ctx: Context,
+    appId: string,
+  ) => ReturnType<typeof readBuilderPublicationDestinationForTool>;
+  resolveAccess: (
+    destination: PublicationDestinationSelector,
+    ctx: Context,
+  ) => ReturnType<typeof resolveRepositoryAccessForTool>;
+}
+const assertPublicationDestinationConstraints = (
+  input: {
+    destination?: PublicationDestinationSelector;
+    githubSource?: ImmutableGitHubSourceReceipt;
+  },
+  ownedDestination: Awaited<ReturnType<typeof readBuilderPublicationDestinationForTool>>,
+) => {
+  if (ownedDestination !== undefined && input.destination !== undefined) {
+    const selectedInstallation =
+      input.destination.selectedInstallationId ?? ownedDestination.selectedInstallationId;
+    if (
+      input.destination.repository.toLowerCase() !== ownedDestination.repository.toLowerCase() ||
+      selectedInstallation !== ownedDestination.selectedInstallationId
+    ) {
+      throw new Error("Publication must retain this Builder app's recorded repository.");
+    }
+  }
   if (input.githubSource !== undefined) {
+    if (
+      ownedDestination !== undefined &&
+      input.githubSource.repository.repositoryId !== ownedDestination.repositoryId
+    ) {
+      throw new Error("The revision source differs from this Builder app's repository.");
+    }
+    if (
+      ownedDestination !== undefined &&
+      input.githubSource.repository.repositoryId !== ownedDestination.repositoryId
+    ) {
+      throw new Error("The revision source differs from this Builder app's repository.");
+    }
     if (
       input.destination !== undefined &&
       input.destination.repository.toLowerCase() !==
@@ -71,39 +101,77 @@ export const resolvePublicationTargetForTool = async (input: {
     ) {
       throw new Error("The publication destination differs from the selected GitHub repository.");
     }
-    return { kind: "ready", target: { githubSource: input.githubSource } };
   }
-  if (input.sourceKind !== "fresh-template") {
-    throw new Error("Restore the selected GitHub source before preparing its destination review.");
-  }
-  const retained =
-    input.destinationReview === undefined
-      ? undefined
-      : publicationDestinationFromReview(input.destinationReview);
-  const destination =
-    input.destination ??
-    (retained === undefined
-      ? undefined
-      : {
-          repository: `${retained.owner}/${retained.name}`,
-          selectedInstallationId: retained.installationId,
-        });
-  if (destination === undefined) {
-    return { kind: "missing" };
-  }
-  const access = await resolveRepositoryAccessForTool(
-    {
-      repository: destination.repository,
-      selectedInstallationId: destination.selectedInstallationId ?? undefined,
-    },
-    input.ctx,
-    await repositoryAccessRuntimeForSession(input.ctx.session.auth),
-  );
-  if (access.kind === "selection") {
-    return { kind: "selection", access: access.access };
-  }
-  return {
-    kind: "ready",
-    target: { destination: publicationDestinationFromAccess(access.receipt, input.ctx.session.id) },
-  };
 };
+
+export const createPublicationTargetResolver =
+  <Context extends { session: { id: string } }>(ports: PublicationResolverPorts<Context>) =>
+  async (input: {
+    ctx: Context;
+    destination?: PublicationDestinationSelector;
+    githubSource?: ImmutableGitHubSourceReceipt;
+    sourceKind: SourceKind;
+    destinationReview?: GitHubDestinationReviewBinding;
+    appId: string;
+  }): Promise<
+    | { kind: "ready"; target: PublicationTarget }
+    | { kind: "missing" }
+    | { kind: "selection"; access: RepositoryAccessResult }
+  > => {
+    const ownedDestination = await ports.readOwnedDestination(input.ctx, input.appId);
+    assertPublicationDestinationConstraints(input, ownedDestination);
+    if (input.githubSource !== undefined && ownedDestination === undefined) {
+      return { kind: "ready", target: { githubSource: input.githubSource } };
+    }
+    if (input.githubSource === undefined && input.sourceKind !== "fresh-template") {
+      throw new Error(
+        "Restore the selected GitHub source before preparing its destination review.",
+      );
+    }
+    const retained =
+      input.destinationReview === undefined
+        ? undefined
+        : publicationDestinationFromReview(input.destinationReview);
+    const destination =
+      ownedDestination ??
+      input.destination ??
+      (retained === undefined
+        ? undefined
+        : {
+            repository: `${retained.owner}/${retained.name}`,
+            selectedInstallationId: retained.installationId,
+          });
+    if (destination === undefined) {
+      return { kind: "missing" };
+    }
+    const access = await ports.resolveAccess(destination, input.ctx);
+    if (access.kind === "selection") {
+      return { kind: "selection", access: access.access };
+    }
+    const selected = publicationDestinationFromAccess(access.receipt, input.ctx.session.id);
+    if (ownedDestination !== undefined) {
+      const current = await ports.readOwnedDestination(input.ctx, input.appId);
+      if (
+        selected.repositoryId !== ownedDestination.repositoryId ||
+        selected.installationId !== ownedDestination.selectedInstallationId ||
+        JSON.stringify(current) !== JSON.stringify(ownedDestination)
+      ) {
+        throw new Error("The saved Builder app destination changed during publication review.");
+      }
+    }
+    return { kind: "ready", target: { destination: selected } };
+  };
+
+// oxlint-disable-next-line eslint/complexity -- Canonical app destination checks preserve the existing fresh, revision, retained-review and access-selection branches.
+export const resolvePublicationTargetForTool = createPublicationTargetResolver<ToolContext>({
+  readOwnedDestination: readBuilderPublicationDestinationForTool,
+  resolveAccess: async (destination, ctx) =>
+    await resolveRepositoryAccessForTool(
+      {
+        repository: destination.repository,
+        selectedInstallationId: destination.selectedInstallationId ?? undefined,
+      },
+      ctx,
+      await repositoryAccessRuntimeForSession(ctx.session.auth),
+    ),
+});

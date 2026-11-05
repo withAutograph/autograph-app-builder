@@ -1,7 +1,17 @@
 /* oxlint-disable eslint/require-await -- Async SDK doubles and async generators preserve the native Promise/iterator contracts. */
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -36,31 +46,166 @@ const text = async (stream: ReadableStream<Uint8Array>) => {
 };
 
 describe("Builder SDK session I/O", () => {
-  it("writes streaming files incrementally and forwards cancellation without retaining the whole file", async () => {
+  const diskFixture = () => {
+    const directory = mkdtempSync(path.join(os.tmpdir(), "builder-linear-stream-"));
     const native = fixture();
-    const session = createVercelSdkSession(native);
-    const { signal } = new AbortController();
-    const content = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(Buffer.from("first"));
-        controller.enqueue(Buffer.from("second"));
-        controller.close();
+    const uploads: Buffer[] = [];
+    native.fs.mkdir.mockImplementation(async (target: string, options: { recursive: true }) => {
+      mkdirSync(target, options);
+    });
+    native.fs.rm.mockImplementation(
+      async (target: string, options: { recursive: true; force: true }) => {
+        rmSync(target, options);
       },
-    });
-    await session.writeFile({ abortSignal: signal, content, path: "directory/new.txt" });
-    expect(native.fs.mkdir).toHaveBeenCalledWith("/workspace/directory", {
-      recursive: true,
-      signal,
-    });
-    expect(native.fs.writeFile).toHaveBeenCalledWith(
-      "/workspace/directory/new.txt",
-      Buffer.alloc(0),
-      { signal },
     );
-    expect(native.fs.appendFile.mock.calls).toEqual([
-      ["/workspace/directory/new.txt", Buffer.from("first"), { signal }],
-      ["/workspace/directory/new.txt", Buffer.from("second"), { signal }],
-    ]);
+    native.writeFiles.mockImplementation(
+      async (files: { path: string; content: Buffer; mode?: number }[]) => {
+        for (const file of files) {
+          uploads.push(file.content);
+          writeFileSync(file.path, file.content, { mode: file.mode });
+        }
+      },
+    );
+    native.runCommand.mockImplementation(async (options: { args?: string[] }) => {
+      const result = spawnSync(process.execPath, options.args ?? [], { encoding: "utf-8" });
+      if (result.error) {
+        throw result.error;
+      }
+      return {
+        wait: async () => ({ exitCode: result.status ?? 1 }),
+        kill: vi.fn().mockResolvedValue(null),
+      };
+    });
+    return {
+      directory,
+      native,
+      uploads,
+
+      target: path.join(directory, "output.bin"),
+      cleanup: () => {
+        rmSync(directory, { recursive: true, force: true });
+      },
+    };
+  };
+
+  it("uploads each byte once in bounded chunks and atomically preserves exact final bytes and mode", async () => {
+    const f = diskFixture();
+    try {
+      writeFileSync(f.target, "prior");
+      chmodSync(f.target, 0o750);
+      const bytes = Buffer.alloc(17 * 1024 * 1024 + 71);
+      for (let index = 0; index < bytes.length; index += 1) {
+        bytes[index] = index % 251;
+      }
+      const content = new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (let offset = 0; offset < bytes.length; offset += 131_071) {
+            controller.enqueue(bytes.subarray(offset, offset + 131_071));
+          }
+          controller.close();
+        },
+      });
+      const controller = new AbortController();
+      await createVercelSdkSession(f.native).writeFile({
+        abortSignal: controller.signal,
+        content,
+        path: f.target,
+      });
+      expect(readFileSync(f.target).equals(bytes)).toBe(true);
+      // oxlint-disable-next-line eslint/no-bitwise -- Verify the existing executable permissions survive atomic replacement.
+      expect(statSync(f.target).mode & 0o777).toBe(0o750);
+      const uploaded = f.uploads;
+      expect(uploaded.reduce((total, file) => total + file.byteLength, 0)).toBe(bytes.length);
+      expect(uploaded.every((file) => file.byteLength <= 8 * 1024 * 1024)).toBe(true);
+      expect(f.native.fs.appendFile).not.toHaveBeenCalled();
+      expect(f.native.readFileToBuffer).not.toHaveBeenCalled();
+      expect(readdirSync(f.directory)).toEqual(["output.bin"]);
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  it.each(["abort", "stream-error"])(
+    "preserves the existing target and cleans owned staging on %s after an upload",
+    async (outcome) => {
+      const f = diskFixture();
+      try {
+        writeFileSync(f.target, "prior bytes");
+        const controller = new AbortController();
+        let pulls = 0;
+        const content = new ReadableStream<Uint8Array>(
+          {
+            pull(stream) {
+              pulls += 1;
+              if (pulls === 1) {
+                stream.enqueue(Buffer.alloc(8 * 1024 * 1024, 1));
+              } else if (outcome === "abort") {
+                controller.abort(new Error("cancelled-transfer"));
+                stream.enqueue(Buffer.from("later"));
+              } else {
+                stream.error(new Error("failed-stream"));
+              }
+            },
+          },
+          { highWaterMark: 0 },
+        );
+        await expect(
+          createVercelSdkSession(f.native).writeFile({
+            abortSignal: controller.signal,
+            content,
+            path: f.target,
+          }),
+        ).rejects.toThrow();
+        expect(readFileSync(f.target, "utf-8")).toBe("prior bytes");
+        expect(f.native.writeFiles).toHaveBeenCalledTimes(1);
+        expect(readdirSync(f.directory)).toEqual(["output.bin"]);
+        expect(f.native.fs.appendFile).not.toHaveBeenCalled();
+      } finally {
+        f.cleanup();
+      }
+    },
+  );
+
+  it("commits an empty stream and does not publish a failed final assembly", async () => {
+    const f = diskFixture();
+    try {
+      const empty = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.close();
+        },
+      });
+      await createVercelSdkSession(f.native).writeFile({ content: empty, path: f.target });
+      expect(statSync(f.target).size).toBe(0);
+      writeFileSync(f.target, "prior");
+      const original = f.native.writeFiles.getMockImplementation();
+      if (!original) {
+        throw new Error("Missing file fixture");
+      }
+      f.native.writeFiles.mockImplementation(
+        async (
+          files: { path: string; content: Buffer; mode?: number }[],
+          options?: { signal?: AbortSignal },
+        ) => {
+          await original(files, options);
+          for (const file of files) {
+            rmSync(file.path);
+          }
+        },
+      );
+      const content = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(Buffer.from("new"));
+          controller.close();
+        },
+      });
+      await expect(
+        createVercelSdkSession(f.native).writeFile({ content, path: f.target }),
+      ).rejects.toThrow("could not complete");
+      expect(readFileSync(f.target, "utf-8")).toBe("prior");
+      expect(readdirSync(f.directory)).toEqual(["output.bin"]);
+    } finally {
+      f.cleanup();
+    }
   });
   it("preserves missing-file, streamed-read, text line and strict UTF-8 semantics", async () => {
     const native = fixture();
@@ -474,4 +619,100 @@ it("kills a running command when renewal fails and leaves no idle renewal", asyn
   } finally {
     vi.useRealTimers();
   }
+});
+
+it("reapplies configured toolchain environment to commands on a replacement native handle, preserving command overrides", async () => {
+  const native = fixture();
+  native.runCommand.mockResolvedValue({
+    stdout: async () => "",
+    stderr: async () => "",
+    wait: async () => ({ exitCode: 0 }),
+    kill: async () => {},
+  });
+  const replacement = fixture();
+  replacement.runCommand.mockResolvedValue({
+    stdout: async () => "",
+    stderr: async () => "",
+    wait: async () => ({ exitCode: 0 }),
+    kill: async () => {},
+  });
+  let active = native;
+  const session = createVercelSdkSession(native, () => active, undefined, {
+    CARGO_HOME: "/private/cargo",
+    MISE_DATA_DIR: "/private/mise",
+    PATH: "/private/bin:/usr/bin",
+  });
+  await session.run({ command: "cargo --version", env: { EXPLICIT: "retained" } });
+  expect(native.runCommand).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      env: {
+        CARGO_HOME: "/private/cargo",
+        MISE_DATA_DIR: "/private/mise",
+        PATH: "/private/bin:/usr/bin",
+        EXPLICIT: "retained",
+      },
+    }),
+  );
+  active = replacement;
+  await session.run({
+    command: "mise exec -- rustc --version",
+    env: { PATH: "/command/bin:/usr/bin" },
+  });
+  expect(replacement.runCommand).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      env: {
+        CARGO_HOME: "/private/cargo",
+        MISE_DATA_DIR: "/private/mise",
+        PATH: "/command/bin:/usr/bin",
+      },
+    }),
+  );
+});
+
+it("reapplies configured toolchain environment to commands on a replacement native handle, preserving command overrides", async () => {
+  const native = fixture();
+  native.runCommand.mockResolvedValue({
+    stdout: async () => "",
+    stderr: async () => "",
+    wait: async () => ({ exitCode: 0 }),
+    kill: async () => {},
+  });
+  const replacement = fixture();
+  replacement.runCommand.mockResolvedValue({
+    stdout: async () => "",
+    stderr: async () => "",
+    wait: async () => ({ exitCode: 0 }),
+    kill: async () => {},
+  });
+  let active = native;
+  const session = createVercelSdkSession(native, () => active, undefined, {
+    CARGO_HOME: "/private/cargo",
+    MISE_DATA_DIR: "/private/mise",
+    PATH: "/private/bin:/usr/bin",
+  });
+  await session.run({ command: "cargo --version", env: { EXPLICIT: "retained" } });
+  expect(native.runCommand).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      env: {
+        CARGO_HOME: "/private/cargo",
+        MISE_DATA_DIR: "/private/mise",
+        PATH: "/private/bin:/usr/bin",
+        EXPLICIT: "retained",
+      },
+    }),
+  );
+  active = replacement;
+  await session.run({
+    command: "mise exec -- rustc --version",
+    env: { PATH: "/command/bin:/usr/bin" },
+  });
+  expect(replacement.runCommand).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      env: {
+        CARGO_HOME: "/private/cargo",
+        MISE_DATA_DIR: "/private/mise",
+        PATH: "/command/bin:/usr/bin",
+      },
+    }),
+  );
 });

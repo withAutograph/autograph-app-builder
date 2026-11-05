@@ -1,3 +1,4 @@
+import { continueHostedPreapprovalAuthoring } from "./preapproval-authoring-controller";
 import type { HostedSubmissionVerificationStep } from "./hosted-submission-unknown-error";
 import {
   captureResourceApprovalResponse,
@@ -1107,7 +1108,12 @@ export function createHostedEveSessionService(input: {
     if (operation.nativeRecovery === undefined || session.version !== 2) {
       return session;
     }
-    const { privateBuildDecision: _storeOwnedDecision, ...comparable } = session;
+    const {
+      privateBuildDecision: _storeOwnedDecision,
+      privateAuthoringDecision: _storeOwnedAuthoring,
+      ...comparable
+    } = session;
+    void _storeOwnedAuthoring;
     void _storeOwnedDecision;
     return comparable as T;
   };
@@ -2013,6 +2019,7 @@ export function createHostedEveSessionService(input: {
         if (
           operation.sendDelivery === undefined ||
           operation.internalBuildContinuation !== undefined ||
+          operation.internalAuthoringContinuation !== undefined ||
           (operation.state !== "reserved" && operation.state !== "submission_unknown")
         ) {
           throw new HostedSubmissionUnknownError();
@@ -2166,7 +2173,11 @@ export function createHostedEveSessionService(input: {
         return queued.result;
       }
       const stoppedTurns = inputs === undefined ? [] : sessionLimitCancelledTurns(inputs);
-      if (current.privateBuildDecision !== undefined && inputs !== undefined) {
+      if (
+        (current.privateBuildDecision !== undefined ||
+          current.privateAuthoringDecision !== undefined) &&
+        inputs !== undefined
+      ) {
         for (const resolved of inputs.resolved) {
           if (resolved.stopSettled !== true) {
             continue;
@@ -2180,15 +2191,33 @@ export function createHostedEveSessionService(input: {
             stoppedTurns.push(stop.internalSessionLimitResponse.stoppedBuildTurnId);
           }
         }
-        if (stoppedTurns.includes(current.privateBuildDecision.turnId)) {
+        if (
+          current.privateBuildDecision !== undefined &&
+          stoppedTurns.includes(current.privateBuildDecision.turnId)
+        ) {
           return controlled;
         }
       }
-      return await continueApprovedHostedBuild({
+      const approved = await continueApprovedHostedBuild({
         assertCurrentOwner: assertHostedBuildDecisionOwner,
         now,
         principal,
         result: controlled,
+        sessionId,
+        store: input.store,
+        transport: input.transport,
+      });
+      if (
+        current.privateAuthoringDecision !== undefined &&
+        stoppedTurns.includes(current.privateAuthoringDecision.turnId)
+      ) {
+        return approved;
+      }
+      return await continueHostedPreapprovalAuthoring({
+        assertCurrentOwner: assertHostedBuildDecisionOwner,
+        now,
+        principal,
+        result: approved,
         sessionId,
         store: input.store,
         transport: input.transport,

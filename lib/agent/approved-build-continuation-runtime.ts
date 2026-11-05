@@ -1,3 +1,6 @@
+import { currentLocalSourcePrerequisite } from "./local-source-prerequisite-state";
+import { repositoryAccessReceiptState } from "./repository-access-state";
+
 import { defineState } from "eve/context";
 import { hostedOperatorCallbackExecution } from "../provisioning/hosted-operator-callback-owner";
 import { hasTestCapability } from "../testing/test-capability";
@@ -19,7 +22,7 @@ export const diagnosticBuildDecisionState = defineState<ApprovedBuildDecision | 
 );
 
 // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Authenticate the current owner before opening its private persistence adapter.
-const ownerStore = async (ctx: Pick<HookContext, "session">) => {
+export const continuationOwnerStore = async (ctx: Pick<HookContext, "session">) => {
   const { authority, principal } = exactForwardedSessionAuthority(ctx.session.auth);
   const { resolveHostedOperatorOwnerContext } =
     await import("../provisioning/hosted-operator-owner-context");
@@ -96,7 +99,7 @@ export const recordApprovedBuildDecision = async (
     await recordLocalBuildDecision(ctx, parsed);
     return;
   }
-  const { owner, principal, store } = await ownerStore(ctx);
+  const { owner, principal, store } = await continuationOwnerStore(ctx);
   await persistHostedBuildDecision({
     decision: parsed,
     ownerSessionId: owner.sessionId,
@@ -121,7 +124,7 @@ const verifyInternalBuildMessage = async (
       operationId: marker.operationId,
     });
   }
-  const { owner, principal, store } = await ownerStore(ctx);
+  const { owner, principal, store } = await continuationOwnerStore(ctx);
   return await claimHostedBuildMessage({
     logicalSessionId: ctx.session.id,
     messageSequence: input.messageSequence,
@@ -149,6 +152,7 @@ export const emitCurrentBuildWorkflowProjection = async (
   ]);
   const decision = decideApprovedBuildContinuation({
     adapterSessionId: ctx.session.id,
+    repositoryAccess: repositoryAccessReceiptState.get(),
     approvalMatches: (scope) => {
       try {
         assertApprovedPrivateApplySession(scope);
@@ -160,6 +164,10 @@ export const emitCurrentBuildWorkflowProjection = async (
     blocked: false,
     pendingInput: false,
     state: appBuilderWorkflowState.get(),
+    sourcePrerequisite: currentLocalSourcePrerequisite(
+      appBuilderWorkflowState.get(),
+      ctx.session.id,
+    ),
     turnId: ctx.session.turn.id,
     turnSequence: ctx.session.turn.sequence,
   });

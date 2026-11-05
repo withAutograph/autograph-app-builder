@@ -1,3 +1,4 @@
+import { readLocalPreviewAuthOrigin } from "@/lib/repository/local-preview-auth-origin";
 import { hostedOperatorCallbackExecution } from "@/lib/provisioning/hosted-operator-callback-owner";
 import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
 import { createHash } from "node:crypto";
@@ -16,6 +17,7 @@ import {
   resolvePreviewWorkingDirectory,
 } from "@/lib/agent/preview-working-directory";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import { priorValidatedPrivateArtifact } from "@/lib/agent/prior-validated-private-artifact";
 import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
 import { resolvePreviewPackageManager } from "@/lib/agent/preview-package-manager";
 import { ensureCheckoutDependencies } from "@/lib/agent/checkout-dependencies";
@@ -54,29 +56,6 @@ const validationAttemptDigest = (
     return state.validationAttempt.digest;
   }
   return undefined;
-};
-
-const nextDependencyManifest = z.object({
-  dependencies: z.object({ next: z.string().optional() }).optional(),
-  devDependencies: z.object({ next: z.string().optional() }).optional(),
-});
-
-const usesNext = (source: string | null): boolean => {
-  if (source === null) {
-    return false;
-  }
-  try {
-    const parsed = nextDependencyManifest.safeParse(JSON.parse(source));
-    return (
-      parsed.success &&
-      (parsed.data.dependencies?.next !== undefined ||
-        parsed.data.devDependencies?.next !== undefined)
-    );
-  } catch {
-    throw new Error(
-      "The selected app's package.json is not valid JSON. Repair its manifest before starting the private preview.",
-    );
-  }
 };
 
 const dependencyLogStore = (ctx: ToolContext): ValidationLogStore | undefined => {
@@ -147,36 +126,57 @@ const resolveNativePreview = async (
 
 export default defineTool({
   description:
-    "Open the selected existing app or applied new app and return a working browser URL. An approved protected runtime publishes its verified native Gateway app route; other apps start a private Sandbox preview. For a prepared existing GitHub checkout, supply appId from the repository's apps directory; this only previews current files and does not grant build or publication approval. Discover the development script and package manager from the checkout's package.json, then use workingDirectory relative to the repository root. Configure it to listen on the supplied port. A reachable page is not proof of backend product behavior.",
+    "Open the selected existing app or applied new app and return a working browser URL. An approved protected runtime publishes its verified native Gateway app route; other apps start a private Sandbox preview. For a prepared existing GitHub checkout, supply appId from the repository's apps directory; this only previews current files and does not grant build or publication approval. Discover the development script and package manager from the checkout's package.json, then use workingDirectory relative to the repository root. Configure it to listen on the supplied port. Use artifact=prior-validated to preview the exact last validated local artifact while a newer plan remains unapplied. A reachable page is not proof of backend product behavior.",
   // oxlint-disable-next-line eslint/complexity -- Native publication and the retained private Sandbox lifecycle are separate authority paths.
   async execute(input, ctx) {
     const current = appBuilderWorkflowState.get();
-    const native = await resolveNativePreview(input, ctx, current);
+    const native =
+      input.artifact === undefined ? await resolveNativePreview(input, ctx, current) : null;
     if (native) {
       invalidateProductBehaviorPreview("preview-replaced");
       workingPreviewState.update(() => null);
       return native;
     }
     const sandbox = await ctx.getSandbox();
-    const selected = await runnableSelectedApp({ appId: input.appId, sandbox, state: current });
+    const prior =
+      input.artifact === "prior-validated"
+        ? await priorValidatedPrivateArtifact({
+            appId: input.appId,
+            sandbox,
+            state: current,
+            sessionId: ctx.session.id,
+            signal: ctx.abortSignal,
+          })
+        : undefined;
+    const artifact =
+      prior === undefined
+        ? undefined
+        : { applyDigest: prior.revision, validationDigest: prior.validationDigest };
+    const selected = prior ?? (await runnableSelectedApp({ appId: input.appId, state: current }));
     const cwd = resolvePreviewWorkingDirectory(selected.root, input.workingDirectory);
-    const rootManifest = await sandbox.readTextFile({ path: `${selected.root}/package.json` });
-    const launch = resolvePreviewPackageManager(input.command, rootManifest);
+    const launch = resolvePreviewPackageManager(
+      input.command,
+      await sandbox.readTextFile({ path: `${selected.root}/package.json` }),
+    );
     const evidenceGeneration = currentProductBehaviorGeneration();
     await assertHostedSandboxCommandAuthority({ sessionId: ctx.session.id });
+    prior?.assertCurrent();
     const provider = await getVercelPreviewProvider(getBuilderSandboxId(sandbox), ctx.abortSignal);
-    const runtime = await resolvePreparedRuntimeExecution({
-      appId: selected.appId,
-      root: selected.root,
-      sandboxId: getBuilderSandboxId(sandbox),
-      sessionAuth: ctx.session.auth,
-      sessionId: ctx.session.id,
-      callbackExecution: hostedOperatorCallbackExecution(ctx.session),
-      signal: ctx.abortSignal,
-      state: current,
-    });
+    const runtime =
+      prior === undefined
+        ? await resolvePreparedRuntimeExecution({
+            appId: selected.appId,
+            root: selected.root,
+            sandboxId: getBuilderSandboxId(sandbox),
+            sessionAuth: ctx.session.auth,
+            sessionId: ctx.session.id,
+            callbackExecution: hostedOperatorCallbackExecution(ctx.session),
+            signal: ctx.abortSignal,
+            state: current,
+          })
+        : null;
     const previous = workingPreviewState.get();
-    const validationDigest = validationAttemptDigest(current);
+    const validationDigest = prior?.validationDigest ?? validationAttemptDigest(current);
     const requestDigest = createHash("sha256")
       .update(
         JSON.stringify({
@@ -191,13 +191,18 @@ export default defineTool({
         }),
       )
       .digest("hex");
+    const samePriorArtifact =
+      previous?.priorValidatedArtifact?.applyDigest === artifact?.applyDigest &&
+      previous?.priorValidatedArtifact?.validationDigest === artifact?.validationDigest;
+    const reusableLaunch =
+      selected.reusable && previous?.requestDigest === requestDigest && samePriorArtifact;
     if (
-      selected.reusable &&
-      previous?.requestDigest === requestDigest &&
+      reusableLaunch &&
       hasLiveWorkingPreview(previous, getBuilderSandboxId(sandbox)) &&
       previous.providerSessionId === provider.currentSession().sessionId
     ) {
       const command = await provider.getCommand(previous.commandId, { signal: ctx.abortSignal });
+      prior?.assertCurrent();
       if (command.exitCode === null) {
         bindProductBehaviorPreview(previous.commandId, evidenceGeneration);
         return {
@@ -208,31 +213,48 @@ export default defineTool({
       }
     }
     const { appId } = selected;
-    const packageManifest = await sandbox.readTextFile({ path: `${cwd}/package.json` });
-    const logStore = dependencyLogStore(ctx);
-    const dependencyInput = {
-      checkoutIdentity: selected.revision,
-      logStore,
-      onAttempt: (attempt: DependencyAttemptResult) => {
-        appBuilderWorkflowState.update((state) =>
-          state.phase === "empty"
-            ? state
-            : {
-                ...state,
-                checkoutDependencyAttempts: [...(state.checkoutDependencyAttempts ?? []), attempt],
-              },
+    const assertCurrentDependencies = () => {
+      ctx.abortSignal.throwIfAborted();
+      prior?.assertCurrent();
+      if (currentProductBehaviorGeneration() !== evidenceGeneration) {
+        throw new Error(
+          "The selected app changed while preparing preview dependencies. Retry the preview for the current app.",
         );
-      },
+      }
+    };
+    const dependencyInput = {
+      assertCurrent: assertCurrentDependencies,
       root: selected.root,
       sandbox,
-      sessionId: ctx.session.id,
       signal: ctx.abortSignal,
     };
-    const dependencies = await ensureCheckoutDependencies(
-      usesNext(packageManifest)
-        ? { ...dependencyInput, requiredExecutable: "next" }
-        : dependencyInput,
-    );
+    const dependencies =
+      prior === undefined
+        ? await ensureCheckoutDependencies({
+            ...dependencyInput,
+            checkoutIdentity: selected.revision,
+            logStore: dependencyLogStore(ctx),
+            onAttempt: (attempt: DependencyAttemptResult) => {
+              appBuilderWorkflowState.update((state) =>
+                state.phase === "empty"
+                  ? state
+                  : {
+                      ...state,
+                      checkoutDependencyAttempts: [
+                        ...(state.checkoutDependencyAttempts ?? []),
+                        attempt,
+                      ],
+                    },
+              );
+            },
+            reconcileWorkspace: true,
+            sessionId: ctx.session.id,
+          })
+        : await ensureCheckoutDependencies({
+            ...dependencyInput,
+            checkoutIdentity: selected.revision,
+            sessionId: ctx.session.id,
+          });
     let environmentPath = runtime?.environmentPath;
     if (!runtime && (await appDeclaresLocalSetup({ appId, root: selected.root, sandbox }))) {
       const setup = await prepareAppLocalPreview({
@@ -248,21 +270,33 @@ export default defineTool({
       }
       environmentPath = localRuntimeEnvironmentPath(selected.root, appId);
     }
+    await prior?.verifyCurrent();
     invalidateProductBehaviorPreview("preview-replaced");
     workingPreviewState.update(() => null);
     let ownedAttemptId: string | undefined;
     let prepareAuthenticatedOrigin = runtime?.prepareAuthenticatedOrigin;
     if (!runtime && environmentPath !== undefined) {
       prepareAuthenticatedOrigin = async (authOrigin) => {
+        prior?.assertCurrent();
+        const expectedPreviousAuthOrigin = await readLocalPreviewAuthOrigin({
+          appId,
+          root: selected.root,
+          sandbox,
+          signal: ctx.abortSignal,
+        });
+        prior?.assertCurrent();
         const setup = await prepareAppLocalPreview({
           appId,
           authOrigin,
+          expectedPreviousAuthOrigin,
           root: selected.root,
           sandbox,
           signal: ctx.abortSignal,
         });
         if (setup.status === "failed") {
-          throw new Error(setup.problem);
+          const diagnostic =
+            setup.stderr || setup.stdout || "No setup command output was returned.";
+          throw new Error(`${setup.problem}\n${diagnostic}`);
         }
       };
     }
@@ -282,13 +316,16 @@ export default defineTool({
         });
       },
       prepareAuthenticatedOrigin,
+      assertCurrent: prior?.assertCurrent,
       previous,
       provider,
       requestDigest,
       sandboxId: getBuilderSandboxId(sandbox),
       signal: ctx.abortSignal,
     });
-    workingPreviewState.update(() => preview);
+    workingPreviewState.update(() =>
+      artifact === undefined ? preview : { ...preview, priorValidatedArtifact: artifact },
+    );
     bindProductBehaviorPreview(preview.commandId, evidenceGeneration);
     return {
       commandAdjustment: launch.adjustment,
@@ -298,6 +335,7 @@ export default defineTool({
     };
   },
   inputSchema: z.object({
+    artifact: z.literal("prior-validated").optional(),
     appId: z
       .string()
       .regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u)

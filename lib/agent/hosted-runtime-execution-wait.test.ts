@@ -224,6 +224,7 @@ const fixture = () => {
     operator,
     read,
     prepare,
+    retain,
     calls,
     setObserved: (next: OperatorPublicResult) => {
       observed = next;
@@ -378,6 +379,22 @@ describe("automatic observation of one approved execution", () => {
         code: "authorization_required",
       });
       expect(f.calls).toEqual([]);
+    },
+  );
+  it.each([undefined, 2])(
+    "rejects an unacknowledged Stop when resumed cancellation revision is %s",
+    async (resumedCancellationRevision) => {
+      const f = fixture();
+      if (resumedCancellationRevision === undefined) {
+        delete f.session.resumedCancellationRevision;
+      } else {
+        f.session.resumedCancellationRevision = resumedCancellationRevision;
+      }
+      await expect(f.read(f.approved, f.context, f.snapshot, 1000)).rejects.toMatchObject({
+        code: "authorization_required",
+      });
+      expect(f.calls).toEqual([]);
+      expect(f.retain).not.toHaveBeenCalled();
     },
   );
   it("does not publish a recovered result or selection when cancellation changes during materialization", async () => {

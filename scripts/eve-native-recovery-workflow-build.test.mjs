@@ -32,3 +32,9 @@ it("builds the actual recovery workflow graph with server-only validation behind
     await rm(directory, { recursive: true, force: true });
   }
 }, 0);
+
+it("bundles the actual public Eve channel as one authored module with source retention wired", async () => {
+  const { bundleAuthoredModuleCode } = await import(`${sdk}internal/authored-module-loader.js`);
+  const code = await bundleAuthoredModuleCode(path.join(process.cwd(), "agent/channels/eve.ts"));
+  assert.ok(code.length > 0);
+}, 0);

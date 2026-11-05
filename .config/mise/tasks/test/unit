@@ -2,5 +2,9 @@
 #MISE description="Run repository unit tests with brokered structural test authority"
 set -eu
 
+# Pass the selected CLI explicitly; the trusted child intentionally has no ambient PATH.
+APP_BUILDER_DEV_MISE_BIN="$(command -v mise)"
+export APP_BUILDER_DEV_MISE_BIN
+
 exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
   "$(mise which node)" --import tsx scripts/run-vitest.mts run "$@"

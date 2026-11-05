@@ -1,0 +1,4 @@
+#!/bin/sh
+#MISE description="Build an offline source-bound Linux catalog for all hosted operator worker families"
+set -eu
+exec .config/mise/scripts/trusted-node-launcher "$(mise which node)" --import tsx .config/mise/scripts/repository/build-operator-worker-catalog.mts "$@"

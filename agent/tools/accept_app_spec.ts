@@ -1,3 +1,4 @@
+import { applicationSourceImportState } from "@/lib/agent/application-source-import-state";
 import { emitCurrentBuildWorkflowProjection } from "@/lib/agent/approved-build-continuation-runtime";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
@@ -92,13 +93,14 @@ const planAcceptedAppSpec = async (
         ctx,
       );
     },
-    planComplete: "proposal" in latest,
+    planComplete: "proposal" in latest && existingAppChanges === undefined,
   });
 };
 
 export default defineTool({
   description:
     "Silently accept the current AppSpec artifact with explicit build-ready intent and continue planning. Before authoring it, read design-app references/app-spec.md for product coverage guidance; section names, order, and Markdown formatting are advisory. Preserve the user's actual requirements and declare readiness with JSON status build-ready only when the product intent is ready; a later draft status keeps planning open. For an existing app, include existingAppChanges with complete replacement contents for each app-owned file to change; if recording the AppSpec said planning needs changes, call this tool with the accepted artifact and those changes before requesting build approval. No new approval receipt is required. This does not publish or change an external repository.",
+  // oxlint-disable-next-line eslint/complexity -- Preserve the accepted-spec resume protocol while forwarding explicit repair intent.
   async execute(
     {
       appId,
@@ -109,6 +111,13 @@ export default defineTool({
     },
     ctx,
   ) {
+    const imported = applicationSourceImportState.get();
+    if (
+      imported !== undefined &&
+      (imported.reference.appId !== appId || imported.importedSessionId !== ctx.session.id)
+    ) {
+      throw new Error("Preserve the imported application identity in this session.");
+    }
     if (!validAppId(appId)) {
       throw new Error("App id must be one lowercase kebab-case segment.");
     }

@@ -24,8 +24,12 @@ Required:
 Options:
   --state-root PATH        Owner-only state and cache root. Defaults to
                            .artifacts/development.
+  --resume-cycle PATH      Explicitly reuse a stopped owner-bound cycle in this state root,
+                           retaining its saved Eve sessions while loading current Builder code.
   --destination-root PATH  Builder-owned generated-work root. Defaults to
                            .artifacts/development/destination.
+  --install-plugin BOOL    Install in the active Codex profile (default true).
+                           Set false for explicit endpoint clients without profile changes.
   --next-port PORT         Loopback App Builder and /mcp port. Default: 3000.
   --hosted-session-resource URL
                            Access an existing hosted Builder through the local
@@ -44,7 +48,7 @@ Options:
   -h, --help               Show this help.
 
 The command snapshots Arrusted, starts loopback /mcp, checks MCP transport
-readiness, and installs app-builder@autograph-dev in the active
+readiness, and (unless --install-plugin false) installs app-builder@autograph-dev in the active
 CODEX_HOME, disabled globally and enabled by this repository's .codex/config.toml.
 The local development worker cannot publish, deploy, or mutate providers.
 The optional existing-session connector preserves hosted authority and approvals.

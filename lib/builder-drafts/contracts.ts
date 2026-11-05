@@ -1,3 +1,4 @@
+import { sourceCandidateReferenceSchema } from "../handoff/application-source-contract";
 import { z } from "zod";
 
 const uuidSchema = z.string().uuid();
@@ -7,6 +8,7 @@ const connectionSchema = z.string().trim().min(1).max(120);
 export const builderDraftFormSchema = z
   .object({
     appName: boundedText(120),
+    sourceCandidate: sourceCandidateReferenceSchema.optional(),
     brief: boundedText(16_000),
     buildDestination: z.enum(["web", "codex", "cursor"]),
     connections: z.array(connectionSchema).max(100),

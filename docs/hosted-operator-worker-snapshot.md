@@ -44,3 +44,10 @@ pinned worker then reconciles the existing database and resumes a matching
 prepared revision. Unknown or conflicting state remains unresolved. No journal
 editing, replacement app, resource recreation or relaxed binary verification is
 part of this recovery.
+For a newly planned app, an explicitly configured app installer takes precedence
+and must support the generated-app install operation. Without that declaration,
+the effective request catalog must contain exactly one compatible immutable
+descriptor. Identical descriptor aliases count once; distinct IDs, paths or
+executable hashes remain ambiguous regardless of object insertion order. Resolve
+that configuration explicitly before offering a new plan. Existing frozen plans
+retain their approved descriptor and are not reselected from a newer catalog.

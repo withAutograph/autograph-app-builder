@@ -12,6 +12,7 @@ const exactRuntimeFiles = new Set([
   ".codex-plugin/plugin.json",
   "package.json",
   "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
   "tsconfig.json",
 ]);
 const runtimePrefixes = [
@@ -19,11 +20,9 @@ const runtimePrefixes = [
   "skills/",
   "schemas/",
   "app/mcp/",
-  "lib/agent/",
-  "lib/eve/",
-  "lib/mcp/",
-  "lib/repository/",
-  "lib/sandbox/",
+  // Auth, provisioning and provider adapters are transitive authored-runtime imports.
+  "lib/",
+  "patches/",
 ] as const;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -166,3 +165,28 @@ export function waitForDevelopmentRuntimeChange(input: {
   }
   return promise;
 }
+
+/** Observe edits without terminating the worker that owns existing local sessions. */
+export const observeDevelopmentRuntimeChanges = async (input: {
+  repositoryRoot: string;
+  expectedFingerprint: string;
+  signal: AbortSignal;
+  onChanged: () => void;
+  debounceMs?: number;
+  auditMs?: number;
+}): Promise<void> => {
+  let observedFingerprint = input.expectedFingerprint;
+  while (!input.signal.aborted) {
+    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Rearm after each distinct edit; the watcher debounces and audits without spinning.
+    const changed = await waitForDevelopmentRuntimeChange({
+      ...input,
+      expectedFingerprint: observedFingerprint,
+    });
+    if (!changed || input.signal.aborted) return;
+    // Refresh the baseline before rearming, so one edit cannot cause repeated notifications.
+    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop
+    observedFingerprint = await fingerprintDevelopmentRuntime(input.repositoryRoot);
+    if (input.signal.aborted) return;
+    input.onChanged();
+  }
+};

@@ -1,4 +1,5 @@
 // oxlint-disable eslint/require-await -- In-memory store operations and fixture failures implement asynchronous provider contracts.
+import { workspaceBinInstallCommand } from "../repository/workspace-bin-install";
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import type { SandboxSession } from "eve/sandbox";
@@ -136,13 +137,19 @@ describe("replacement checkout dependencies", () => {
       workingDirectory: "/workspace/repository",
     });
     expect(spawn).toHaveBeenNthCalledWith(2, {
-      command: "bun install --frozen-lockfile",
+      command: workspaceBinInstallCommand("/workspace/repository", true),
       workingDirectory: "/workspace/repository",
     });
     const [, install] = result.attempts;
     if (install === undefined) {
       throw new Error("Missing install attempt");
     }
+    expect(install).toMatchObject({
+      executionCommand: "bun install --frozen-lockfile",
+      dispatchedCommandDigest: createHash("sha256")
+        .update(workspaceBinInstallCommand("/workspace/repository", true))
+        .digest("hex"),
+    });
     expect(install.excerpt.length).toBeLessThanOrEqual(2400);
     expect(install.truncated).toBe(true);
     await command.kill();
@@ -480,7 +487,7 @@ describe("saved validation dependency recovery", () => {
     await repairCheckoutDependenciesAfterValidationFailure(request);
     expect(request.prepareInstall).toHaveBeenCalledBefore(spawn);
     expect(spawn).toHaveBeenCalledExactlyOnceWith({
-      command: "bun install",
+      command: workspaceBinInstallCommand("/workspace/repository", false),
       workingDirectory: "/workspace/repository",
     });
     expect(request.onAttempt.mock.calls.map(([attempt]) => attempt.completion)).toEqual([
@@ -583,5 +590,49 @@ describe("saved validation dependency recovery", () => {
       repairCheckoutDependenciesAfterValidationFailure({ ...request, signal: controller.signal }),
     ).rejects.toThrow("cancelled");
     expect(spawn).not.toHaveBeenCalled();
+  });
+});
+
+describe("authored workspace preview dependencies", () => {
+  it("retains a failed reconciliation attempt instead of reporting installed dependencies", async () => {
+    const attempts: DependencyAttemptResult[] = [];
+    const spawn = vi.fn().mockResolvedValue(process(1, [], ["workspace dependency missing"]));
+    await expect(
+      ensureCheckoutDependencies({
+        ...input(spawn),
+        reconcileWorkspace: true,
+        onAttempt: (attempt) => {
+          attempts.push(attempt);
+        },
+      }),
+    ).rejects.toThrow(/bun install.*status 1/u);
+    expect(spawn).toHaveBeenCalledExactlyOnceWith({
+      command: workspaceBinInstallCommand("/workspace/repository", false),
+      workingDirectory: "/workspace/repository",
+    });
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]).toMatchObject({
+      command: "dependency-install",
+      exitCode: 1,
+      completion: "complete",
+    });
+  });
+
+  it("rechecks the selected app after installation before allowing startup", async () => {
+    let checks = 0;
+    const spawn = vi.fn().mockResolvedValue(process(0));
+    await expect(
+      ensureCheckoutDependencies({
+        ...input(spawn),
+        reconcileWorkspace: true,
+        assertCurrent: () => {
+          checks += 1;
+          if (checks === 2) {
+            throw new Error("app changed");
+          }
+        },
+      }),
+    ).rejects.toThrow("app changed");
+    expect(checks).toBe(2);
   });
 });

@@ -55,3 +55,60 @@ Builder controls, inspect the proposed repair, answer its concrete fresh Build
 approval, and verify actual check/e2e discovery before continuing BetterAuth
 login, public release and revision acceptance. Passing source tests alone does
 not complete A-469.
+
+## Implemented source boundary
+
+The planning producer checks the actual retained private Build grant and exact
+settled apply/spec/source/workspace identity before treating explicit changes as
+a repair. Pending approvals, partial/unknown apply failure, pending validation,
+foreign app paths and private-policy deletion remain denied. Prior full workflow
+snapshots live in a separate linear Eve history key; they are not recursively
+embedded into new workflow receipts. Existing proposal contracts stay unchanged.
+
+A repeated prepared repair rereads its frozen file preimages and executable modes
+before reuse. The same request after an applied repair always plans again rather
+than assuming its files still exist. The selected private profile can observe an
+explicit prospective canonical task replacement without writing the file;
+changed physical targets or reviewed policy still require their separate normal
+planning flow. Prospective TOML contents are only frozen as app-owned source,
+never evaluated for task discovery during this planning operation. Effective
+mise task checks remain after approved apply.
+
+Source qualification uses the actual planning producer and installed Eve state
+with controlled provider/file I/O ports, plus the maintained effective check
+fixture. Actual saved-app Build, task discovery and browser acceptance are
+separate follow-through evidence and remain required.
+
+Qualification of this implementation: 34 focused tests passed across normal
+planning/spec resume/profile/effective-task fixtures; full Node 24 types passed;
+the maintained actual Eve build passed (`mw1w3rjl-28f9336b-2f27-4923-9bfe-5eeaa3256364`).
+These results qualify shared source and module discovery, not the saved app's
+later Build, BetterAuth behavior or hosted release.
+
+## Terminal private approval bookkeeping
+
+A rejected Build can leave an older pending authority entry when a prior worker
+lacked a terminal-decision hook. That entry is not a live approval and must not
+block every later repair indefinitely. The maintained hook observes the genuine
+framework request, denied resolution and rejected `TOOL_EXECUTION_DENIED` /
+`not_run` result. It retains bounded terminal-decision evidence with the original
+scope and retires only the matching pending bookkeeping. It never changes the
+current grant or fabricates an approved result.
+
+For an existing local cycle, planning may catch up through the maintained
+owner-only local SDK history reader and its actual recovered-session composition.
+The reader proves the same canonical cycle/server/session/lineage before and
+after a complete snapshot; a current authority compare-and-swap fences the
+result. Only the uniquely paired genuine denial and not-run outcome can retire
+that call. Missing, partial, conflicting, approved or differently owned evidence
+remains blocked. An obsolete proposal or absent public card alone is no proof.
+History bodies are private transient input; only bounded event references,
+digests and terminal scope are retained. No public tool, control request,
+approval replay, journal rewrite or provider action is part of catch-up.
+
+The installed framework also explicitly classifies continued-without-answer
+requests as `ignored`, and invalid responses as `invalid`. These can retire the
+matching pending entry only when the same genuine terminal resolution and
+rejected not-run result agree. Neither outcome grants consent. Missing responses
+without that actual terminal evidence, ordinary failures and conflicting approved
+settlements remain blocked.

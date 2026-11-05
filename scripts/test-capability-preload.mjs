@@ -60,6 +60,7 @@ const allowedWorkerEnvironment = new Set([
   "APP_BUILDER_EVAL_BROWSER_EXECUTABLE",
   "ARRUSTED_MANAGED_RUNTIME_TEST_ROOT",
   "BUN_BINARY",
+  "APP_BUILDER_DEV_MISE_BIN",
 ]);
 delete process.env.NODE_OPTIONS;
 

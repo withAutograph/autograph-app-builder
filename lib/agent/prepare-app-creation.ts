@@ -1,3 +1,11 @@
+import { inspectExistingAppRepair, existingAppRepairHistory } from "./existing-app-repair-planning";
+import { applicationSourceImportState } from "./application-source-import-state";
+import {
+  preparePrivateComputePlanning,
+  privateComputeProjection,
+} from "./private-compute-planning";
+import type { PRIVATE_COMPUTE_PROFILE_ID } from "../sandbox/private-compute-profile";
+import { localSourceReconciliationForPlanning } from "./refresh-local-planning-source";
 import { resolveLatestFrameworkVersions } from "../repository/framework-upgrade";
 import { refreshPlanningSource } from "./refresh-planning-source";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
@@ -30,13 +38,20 @@ const frameworkPlanningOptions = (fixture: boolean, requested?: "latest", accept
   ...(fixture ? {} : { resolveFrameworkVersions: resolveLatestFrameworkVersions }),
 });
 
+// oxlint-disable-next-line eslint/complexity -- Preserve the existing phase protocol and explicit same-app repair boundary in one producer.
 export const prepareAppCreation = async (
   {
     existingAppChanges,
     frameworkUpgrade,
-  }: { existingAppChanges?: ExistingAppChange[]; frameworkUpgrade?: "latest" },
+    privateCompute,
+  }: {
+    existingAppChanges?: ExistingAppChange[];
+    frameworkUpgrade?: "latest";
+    privateCompute?: typeof PRIVATE_COMPUTE_PROFILE_ID;
+  },
   ctx: ToolContext,
 ) => {
+  ctx.abortSignal?.throwIfAborted();
   const state = appBuilderWorkflowState.get();
   if (
     state.phase === "empty" ||
@@ -49,6 +64,21 @@ export const prepareAppCreation = async (
     );
   }
   const sandboxForPlanning = await refreshPlanningSource(ctx);
+  const planningState = appBuilderWorkflowState.get();
+  const repair = await inspectExistingAppRepair({
+    current: planningState,
+    changes: existingAppChanges,
+    sandbox: sandboxForPlanning,
+    ctx,
+  });
+  const computeProfile = await preparePrivateComputePlanning({
+    state: planningState,
+    ...(repair === undefined ? {} : { repairChanges: existingAppChanges }),
+    sandbox: sandboxForPlanning,
+    requested: privateCompute,
+    callId: ctx.callId,
+  });
+  repair?.assertCurrent();
   const stateForPlanning = appBuilderWorkflowState.get();
   if (
     stateForPlanning.phase === "empty" ||
@@ -67,18 +97,20 @@ export const prepareAppCreation = async (
   const { sandbox } = prepared;
   const execution = targetExecutionBinding(undefined, process.env);
   if (
-    current.phase === "planned" ||
-    current.phase === "apply_failed" ||
-    current.phase === "applied" ||
-    current.phase === "validation_pending" ||
-    current.phase === "validation_failed" ||
-    current.phase === "validated" ||
-    current.phase === "reviewed"
+    (current.phase === "planned" ||
+      current.phase === "apply_failed" ||
+      current.phase === "applied" ||
+      current.phase === "validation_pending" ||
+      current.phase === "validation_failed" ||
+      current.phase === "validated" ||
+      current.phase === "reviewed") &&
+    (repair === undefined || repair.reuse)
   ) {
     return {
       appId: current.appSpec.appId,
       productAcceptance: productAcceptanceObligations(current.appSpec),
       reused: true,
+      ...privateComputeProjection(current.proposal.target.privateCompute),
     };
   }
 
@@ -106,7 +138,25 @@ export const prepareAppCreation = async (
     current.appSpec.version === 2
       ? { appSpecStream: resolveAcceptedAppSpecStream(appSpecReference) }
       : { appSpecContent: await resolveAcceptedAppSpecContent(appSpecReference) };
+  const imported = applicationSourceImportState.get();
+  if (
+    imported !== undefined &&
+    (imported.reference.appId !== current.appSpec.appId ||
+      imported.importedSessionId !== ctx.session.id ||
+      imported.platformSourceReceiptDigest !== current.sourceReceipt.digest)
+  ) {
+    throw new Error("The app plan must retain its exact imported application source.");
+  }
   const result = await executeTargetIdentityAndPlanning({
+    ...(imported === undefined
+      ? {}
+      : {
+          applicationSourceImport: {
+            appId: imported.reference.appId,
+            manifestDigest: imported.reference.manifestDigest,
+            importedSessionId: imported.importedSessionId,
+          },
+        }),
     appId: current.appSpec.appId,
     ...appSpecSource,
     appSpecDigest: current.appSpec.digest,
@@ -116,6 +166,8 @@ export const prepareAppCreation = async (
       ? fixtureTargetCommandExecutor()
       : sandboxTargetCommandExecutor(sandbox),
     existingAppChanges,
+    localSourceReconciliation: localSourceReconciliationForPlanning(current),
+    privateCompute: computeProfile,
     ...frameworkPlanningOptions(
       execution.fixture,
       frameworkUpgrade,
@@ -136,6 +188,10 @@ export const prepareAppCreation = async (
         digest: sha256(JSON.stringify(unsigned)),
       };
       identityReceipt = recordedIdentityReceipt;
+      if (repair !== undefined) {
+        // Keep the settled workflow intact until the entire new proposal is ready.
+        return;
+      }
       const identityState = {
         phase: "identity_resolved",
         preparedByCallId: current.preparedByCallId,
@@ -171,6 +227,8 @@ export const prepareAppCreation = async (
     target: result.proposal,
   };
   const proposal = { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
+  ctx.abortSignal?.throwIfAborted();
+  repair?.assertCurrent();
   updateExactWorkflow({
     expected: workflowBeforeProposal,
     operation: "target proposal recording",
@@ -188,9 +246,22 @@ export const prepareAppCreation = async (
       proposal,
     }),
   });
+  if (repair?.approvedBase !== undefined) {
+    existingAppRepairHistory.update((history) => [
+      ...history,
+      {
+        requestDigest: repair.requestDigest,
+        proposalDigest: proposal.digest,
+        sessionId: ctx.session.id,
+        previousWorkflow: current,
+        approvedBase: repair.approvedBase,
+      },
+    ]);
+  }
   return {
     appId: current.appSpec.appId,
     productAcceptance: productAcceptanceObligations(current.appSpec),
     reused: false,
+    ...privateComputeProjection(computeProfile),
   };
 };

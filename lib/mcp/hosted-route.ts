@@ -1,3 +1,4 @@
+import { createSourceCandidateValidator } from "../handoff/source-candidate-validation";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as databaseSchema from "../db/schema";
 import { openHostedPostgresDatabase } from "../db/hosted-postgres";
@@ -118,6 +119,7 @@ export function createDeploymentMcpRequestHandler(input: {
         });
         const handoffService = createBuilderHandoffService({
           store: createPostgresBuilderHandoffStore(database),
+          validateSourceCandidate: createSourceCandidateValidator(database),
         });
         hostedHandler = createMcpRequestHandler({
           environment: input.environment,

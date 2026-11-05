@@ -21,7 +21,8 @@ cursor pagination, sanitized errors, complete approval-batch validation,
 tenant and audience isolation, idempotent mutation retries, unknown-submission
 handling, lost-response recovery, and cooperative cancellation settlement.
 The internal Eve routes, adapter session identifiers, storage records, and
-transport protocol remain implementation details.
+transport protocol remain implementation details. If work finishes before cancellation takes effect, Builder reports the actual
+outcome once the session settles.
 
 The [complete-app phases](full-app-authoring.md#build-phases-and-delivery) are
 initial version and build approval, build, independent review, and requested

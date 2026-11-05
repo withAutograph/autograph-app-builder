@@ -24,7 +24,7 @@ const privateRoot = join(input.stateRoot, createHash("sha256").update(root + inp
 mkdirSync(privateRoot, { recursive: true, mode: 448 });
 const key = createHash("sha256").update(input.sessionId).digest("hex");
 const planPath = join(privateRoot, key + ".json");
-const checkpointRef = "refs/app-builder/source-checkpoints/" + key;
+let checkpointRef = "refs/app-builder/source-checkpoints/" + key;
 const temporary = mkdtempSync(join(privateRoot, "index-"));
 const { APP_BUILDER_SOURCE_READ_TOKEN: sourceReadToken, ...childEnvironment } = process.env;
 const baseEnv = { ...childEnvironment, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_SYSTEM: "/dev/null", GIT_CONFIG_GLOBAL: "/dev/null", GIT_ATTR_NOSYSTEM: "1", GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "/usr/bin/false", SSH_ASKPASS: "/usr/bin/false", GIT_AUTHOR_NAME: "Autograph Builder", GIT_AUTHOR_EMAIL: "builder@autograph.so", GIT_COMMITTER_NAME: "Autograph Builder", GIT_COMMITTER_EMAIL: "builder@autograph.so" };
@@ -42,8 +42,27 @@ const updateIndex = records => { if (records.length) git(["update-index", "-z", 
 const setEntry = (file, entry) => entry ? entry.mode + " " + entry.objectId + "\t" + file : "0 " + "0".repeat(40) + "\t" + file;
 const writePlan = plan => { writeFileSync(planPath + ".pending", JSON.stringify(plan), { mode: 384 }); renameSync(planPath + ".pending", planPath); };
 const ownedApp = file => file.startsWith("apps/" + input.appId + "/") || [".config/app-specs/" + input.appId + ".cue", ".config/app-specs/" + input.appId + ".md"].includes(file);
-const product = file => ownedApp(file) && !file.startsWith("apps/" + input.appId + "/.config/mise/");
+const product = file => ownedApp(file) && (input.localSource || !file.startsWith("apps/" + input.appId + "/.config/mise/"));
 const releasePrefix = "apps/" + input.appId + "/schema/release/";
+// Only an owner-retained completed source transport may identify managed overlay
+// bytes. The candidate or manifest alone never selects a new merge base.
+let managedOverlay;
+if (input.localSource && input.managedOverlayWorkspaceDigest !== undefined) {
+  if (!/^[a-f0-9]{64}$/.test(input.managedOverlayWorkspaceDigest)) throw Error("Recorded source overlay identity is invalid.");
+  const files = JSON.parse(readFileSync(input.managedOverlayManifestPath, "utf8"));
+  if (!Array.isArray(files) || createHash("sha256").update(JSON.stringify(files)).digest("hex") !== input.managedOverlayWorkspaceDigest) throw Error("Recorded source overlay does not match the retained transport manifest; authored bytes are retained.");
+  managedOverlay = new Map();
+  for (const file of files) {
+    if (!file || !safe(file.path) || !["100644", "100755"].includes(file.mode) || !/^[a-f0-9]{64}$/.test(file.sha256) || file.objectId !== file.sha256.slice(0, 40) || managedOverlay.has(file.path)) throw Error("Recorded source overlay manifest is invalid.");
+    managedOverlay.set(file.path, file);
+  }
+}
+
+if (input.localSource && input.currentManifestDigest !== undefined) {
+  const files = JSON.parse(readFileSync(input.currentManifestPath, "utf8"));
+  if (!Array.isArray(files) || createHash("sha256").update(JSON.stringify(files)).digest("hex") !== input.currentManifestDigest) throw Error("Current workspace manifest changed before local source reconciliation.");
+}
+
 const complete = plan => {
   // The original bytes are already reachable through checkpointRef. Replaying this
   // transition repairs an interrupted checkout before another planning command runs.
@@ -98,15 +117,26 @@ try {
     execFileSync(gitExecutable, fetchArgs, { env: { ...baseEnv, GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "http.extraHeader", GIT_CONFIG_VALUE_0: "Authorization: Basic " + Buffer.from("x-access-token:" + token).toString("base64") }, stdio: ["ignore", "pipe", "pipe"] });
     git(["-c", "protocol.allow=never", "-c", "protocol.file.allow=always", "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", "--no-recurse-submodules", fetchRoot, input.targetSha]);
   }
-  const sourceSha = git(["rev-parse", input.targetSha + "^{commit}"]).trim();
+  let sourceSha = git(["rev-parse", input.targetSha + "^{commit}"]).trim();
   const sourceTree = git(["rev-parse", sourceSha + "^{tree}"]).trim();
   const oldHead = git(["rev-parse", "HEAD"]).trim();
-  if (oldHead === sourceSha) { rmSync(temporary, { force: true, recursive: true }); console.log(JSON.stringify({ changed: false, checkpointRef, sourceSha, sourceTree })); process.exit(0); }
+  if (input.localSource) checkpointRef = "refs/app-builder/local-source-checkpoints/" + key + "/" + oldHead + "/" + input.targetSha;
+  if (input.localSource) {
+    // The incoming local working tree is a new private planning base. Its
+    // sibling parent must be the actual previous base, including prior local
+    // edits, so ordinary dirty-source iteration has an honest three-way base.
+    git(["cat-file", "-e", input.originalSourceSha + "^{commit}"]);
+    if (git(["rev-parse", oldHead + "^{tree}"]).trim() !== sourceTree) {
+      sourceSha = git(["commit-tree", sourceTree, "-p", oldHead], { input: "Current trusted local planning source\n", env: { GIT_AUTHOR_DATE: "2000-01-01T00:00:00Z", GIT_COMMITTER_DATE: "2000-01-01T00:00:00Z" } }).trim();
+    } else sourceSha = oldHead;
+  }
+  if (oldHead === sourceSha && !input.localSource) { rmSync(temporary, { force: true, recursive: true }); console.log(JSON.stringify({ changed: false, checkpointRef, sourceSha, sourceTree })); process.exit(0); }
   const oldEntries = entries(oldHead);
   const targetEntries = entries(sourceSha);
   git(["read-tree", oldHead], { env: indexEnv });
   const paths = git(["ls-files", "-z", "--cached", "--others", "--exclude-standard"]).split("\0").filter(file => file && !file.startsWith(".app-builder/"));
   const records = [];
+  const currentFileHashes = new Map();
   for (const file of new Set(paths)) {
     if (!safe(file)) throw Error("Source reconciliation encountered an unsafe source path.");
     const absolute = resolve(root, file);
@@ -121,6 +151,7 @@ try {
     if (!stat.isFile() && !stat.isSymbolicLink()) throw Error("Source reconciliation encountered a non-file source entry.");
     const bytes = stat.isSymbolicLink() ? Buffer.from(readlinkSync(absolute)) : readFileSync(absolute);
     const objectId = git(["hash-object", "-w", "--stdin", "--no-filters"], { input: bytes }).trim();
+    if (stat.isFile() && !stat.isSymbolicLink()) currentFileHashes.set(file, createHash("sha256").update(bytes).digest("hex"));
     records.push(setEntry(file, { mode: stat.isSymbolicLink() ? "120000" : stat.mode & 64 ? "100755" : "100644", objectId }));
   }
   updateIndex(records);
@@ -131,6 +162,16 @@ try {
   // Historical product bytes are an explicit baseline, not a merge conflict with
   // the newer app implementation. Repository-owned app tooling merges normally.
   updateIndex([...new Set([...oldEntries.keys(), ...snapshotEntries.keys()])].filter(product).map(file => setEntry(file, oldEntries.get(file))));
+  if (managedOverlay) {
+    const recognized = [...snapshotEntries].filter(([file, entry]) => {
+      const transported = managedOverlay.get(file);
+      return !ownedApp(file) && transported && entry.mode === transported.mode && currentFileHashes.get(file) === transported.sha256;
+    });
+    // Neutralize only byte-identical, non-app managed input in the private
+    // three-way tree. The actual working tree/checkpoint is untouched here;
+    // authored shared deltas continue through ordinary conflict detection.
+    updateIndex(recognized.map(([file]) => setEntry(file, oldEntries.get(file))));
+  }
   const mergeInputTree = git(["write-tree"], { env: indexEnv }).trim();
   const mergeInputCommit = git(["commit-tree", mergeInputTree, "-p", oldHead], { input: "Reconcile authored platform changes\n" }).trim();
   const merge = spawnSync(gitExecutable, [...args, "merge-tree", "--write-tree", "--name-only", sourceSha, mergeInputCommit], { env: baseEnv, encoding: "utf8", maxBuffer: Infinity, stdio: ["ignore", "pipe", "pipe"] });
@@ -148,7 +189,7 @@ try {
   for (const file of new Set([...mergedEntries.keys(), ...snapshotEntries.keys()])) {
     if (!product(file)) continue;
     let preserved = snapshotEntries.get(file);
-    if (releasePrefix && file.startsWith(releasePrefix)) {
+    if (!input.localSource && releasePrefix && file.startsWith(releasePrefix)) {
       const current = snapshotEntries.get(file);
       const added = targetEntries.get(file);
       if (current && added && (current.objectId !== added.objectId || current.mode !== added.mode)) throw Error("An immutable app release has conflicting source bytes: " + file);

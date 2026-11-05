@@ -96,7 +96,7 @@ export type ResourceCredentialInput = HostedOperatorContext & {
   record: HostedRuntimeJournalRecord;
 };
 
-const resourceIdentity = (plan: HostedOperatorPlan) => {
+export const ownedAppResourceIdentity = (plan: HostedOperatorPlan) => {
   const identity = identitySchema.parse({
     appDatabase: plan.appDatabase,
     appId: plan.selection.appId,
@@ -153,7 +153,7 @@ const assertActiveBundle = (
   const { plan } = input;
   const preparation = bundle.verification.authPreparation;
   const incompatible = [
-    !isDeepStrictEqual(bundle.identity, resourceIdentity(plan)),
+    !isDeepStrictEqual(bundle.identity, ownedAppResourceIdentity(plan)),
     !isDeepStrictEqual(bundle.adoption, plan.authAdoption),
     !isDeepStrictEqual(input.record.request, input.target),
     !sameOperatorSelection(plan.selection, input.target),
@@ -179,7 +179,7 @@ const readMatchingBundle = (input: ResourceCredentialInput) => {
   if (bundle.version !== 1) {
     throw new HostedOperatorError("reconciliation_required");
   }
-  if (!isDeepStrictEqual(bundle.identity, resourceIdentity(input.plan))) {
+  if (!isDeepStrictEqual(bundle.identity, ownedAppResourceIdentity(input.plan))) {
     throw new Error("Protected resource credential checkpoint belongs to different resources.");
   }
   return bundle;
@@ -257,7 +257,7 @@ export const prepareHostedOperatorResourceCredentials = (
   if (input.plan.authAdoption !== undefined && input.database === "authDatabase") {
     throw new HostedOperatorError("reconciliation_required");
   }
-  const identity = resourceIdentity(input.plan);
+  const identity = ownedAppResourceIdentity(input.plan);
   const files = decryptHostedRuntimeFiles(input);
   let bundle: ReturnType<typeof readMatchingBundle>;
   let { privateState } = input.record;
@@ -393,7 +393,7 @@ const assertAdoptionTarget = (
   if (incompatible) {
     throw new HostedOperatorError("resource_mismatch");
   }
-  const identity = resourceIdentity(target.plan);
+  const identity = ownedAppResourceIdentity(target.plan);
   const { appDatabase: _app, appId: _appId, ...physical } = identity;
   void _app;
   void _appId;
@@ -485,7 +485,7 @@ export const activateHostedOperatorSharedAuth = (input: {
   if (
     bundle.version !== 2 ||
     !isDeepStrictEqual(bundle.adoption, adoption) ||
-    !isDeepStrictEqual(bundle.identity, resourceIdentity(target.plan)) ||
+    !isDeepStrictEqual(bundle.identity, ownedAppResourceIdentity(target.plan)) ||
     !isDeepStrictEqual(bundle.authDatabase, readMatchingBundle(source).authDatabase)
   ) {
     throw new HostedOperatorError("resource_mismatch");
@@ -578,3 +578,66 @@ export const verifyPendingHostedOperatorSharedAuth = async (input: {
   }
   return proof;
 };
+
+/** Rewrap both exact owned password pairs into a fresh session boundary without returning plaintext. */
+export const rewrapOwnedAppResourceCredentials = (input: {
+  source: ResourceCredentialInput;
+  target: ResourceCredentialInput;
+}) => {
+  const { source, target } = input;
+  const reference = target.plan.existingResources;
+  if (reference === undefined || source.record.privateState === undefined) {
+    throw new HostedOperatorError("resource_mismatch");
+  }
+  const sourceCheckpoint = [source.record.operator, source.record.retainedAuth].find(
+    (entry) =>
+      entry?.operationRef === reference.source.operationRef &&
+      entry.planDigest === reference.source.planDigest,
+  );
+  const incompatible = [
+    sourceCheckpoint === undefined,
+    source.plan.runtimePreparation !== "single-project-resources-v1",
+    target.plan.runtimePreparation !== "single-project-resources-v1",
+    source.plan.authAdoption !== undefined,
+    target.plan.authAdoption !== undefined,
+    !isDeepStrictEqual(source.authority, target.authority),
+    source.target.projectId !== target.target.projectId,
+    source.target.installationId !== target.target.installationId,
+    source.target.scopeId !== target.target.scopeId,
+    source.target.scopeType !== target.target.scopeType,
+    !sameOperatorSelection(source.plan.selection, source.target),
+    !sameOperatorSelection(target.plan.selection, target.target),
+    !isDeepStrictEqual(source.record.request, source.target),
+    !isDeepStrictEqual(target.record.request, target.target),
+    source.target.scopeType !== target.target.scopeType,
+    !sameOperatorSelection(source.plan.selection, source.target),
+    !sameOperatorSelection(target.plan.selection, target.target),
+    !isDeepStrictEqual(source.record.request, source.target),
+    !isDeepStrictEqual(target.record.request, target.target),
+    !isDeepStrictEqual(source.target, reference.source.target),
+    operatorPlanDigest(source.plan) !== reference.source.planDigest,
+    createHash("sha256").update(JSON.stringify(source.record.privateState)).digest("hex") !==
+      reference.source.checkpointSha256,
+    !isDeepStrictEqual(
+      ownedAppResourceIdentity(source.plan),
+      ownedAppResourceIdentity(target.plan),
+    ),
+  ].some(Boolean);
+  if (incompatible) {
+    throw new HostedOperatorError("resource_mismatch");
+  }
+  const original = readMatchingBundle(source);
+  if (original.version !== 1) {
+    throw new HostedOperatorError("resource_mismatch");
+  }
+  if (target.record.privateState !== undefined) {
+    const current = readMatchingBundle(target);
+    if (!isDeepStrictEqual(current, original)) {
+      throw new HostedOperatorError("resource_mismatch");
+    }
+    return target.record.privateState;
+  }
+  return encryptHostedRuntimeFiles({ ...target, files: { [fileName]: JSON.stringify(original) } });
+};
+
+/** Rewrap both exact owned password pairs into a fresh session boundary without returning plaintext. */

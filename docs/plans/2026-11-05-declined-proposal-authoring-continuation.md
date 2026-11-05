@@ -30,6 +30,12 @@ this correction lane and needs its own ordinary fresh Build approval. Pending
 questions/approvals, cancellation, failed or uncertain calls, changed owner or
 source, and current approved execution remain blocking boundaries.
 
+The authenticated internal correction turn cannot request Build for its unchanged
+declined proposal. That tool call receives a read-only corrected-proposal
+prerequisite before approval registration or implementation. A genuinely new
+external request and a corrected successor proposal retain their ordinary fresh
+Build path; the guard does not treat either as previously approved.
+
 Existing accepted-without-proposal behavior and frozen decision shapes remain
 compatible. Add only an optional correction binding to the drafting scope; do not
 widen approved-build schemas, fabricate tool results, clear native authority,

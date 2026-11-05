@@ -11,6 +11,41 @@ import { HandoffProvisioningProgress } from "../../../ui/handoff-provisioning-pr
 import styles from "../../../ui/app-builder.module.css";
 import handoffStyles from "../../../ui/handoff.module.css";
 
+type HandoffIntent = NonNullable<Awaited<ReturnType<typeof getBuilderHandoffPageData>>>["intent"];
+
+const GitHubResource = ({ intent, returnTo }: { intent: HandoffIntent; returnTo: string }) => {
+  const github = intent.provisioning?.github;
+  const skipped = github?.status === "skipped" && github.code === "not_selected";
+  const visibility = intent.repository.private ? "Private" : "Public";
+  const repositoryLabel = skipped
+    ? "GitHub storage was turned off."
+    : `${intent.repository.resolvedFullName ?? intent.repository.requestedName} (${visibility})`;
+  return (
+    <article>
+      <div>
+        <strong>GitHub repository</strong>
+        {github?.status === "succeeded" ? (
+          <a href={github.url} target="_blank" rel="noreferrer">
+            {github.fullName}
+          </a>
+        ) : (
+          <span>{repositoryLabel}</span>
+        )}
+        {github?.status === "failed" ? (
+          <small>
+            GitHub setup needs attention. Continue in Autograph to recover; your saved brief is
+            retained.
+          </small>
+        ) : null}
+        {github?.status === "failed" &&
+        ["credential_unavailable", "installation_inactive"].includes(github.code) ? (
+          <Link href={`/github/installations?returnTo=${returnTo}`}>Reconnect GitHub</Link>
+        ) : null}
+      </div>
+    </article>
+  );
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function HandoffContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -49,7 +84,6 @@ export async function HandoffContent({ params }: { params: Promise<{ id: string 
     );
   }
   const { intent, ...controls } = data;
-  const github = intent.provisioning?.github;
   const vercel = intent.provisioning?.vercel;
   const returnTo = encodeURIComponent(`/handoff/${encodeURIComponent(data.handoffId)}`);
   return (
@@ -60,31 +94,7 @@ export async function HandoffContent({ params }: { params: Promise<{ id: string 
           <h1>{intent.appName}</h1>
           <p>Your prepared app and existing provider connections are saved with Autograph.</p>
           <div className={handoffStyles.resources} aria-label="Prepared resources">
-            <article>
-              <div>
-                <strong>GitHub repository</strong>
-                {github?.status === "succeeded" ? (
-                  <a href={github.url} target="_blank" rel="noreferrer">
-                    {github.fullName}
-                  </a>
-                ) : (
-                  <span>
-                    {intent.repository.resolvedFullName ?? intent.repository.requestedName} (
-                    {intent.repository.private ? "Private" : "Public"})
-                  </span>
-                )}
-                {github?.status === "failed" ? (
-                  <small>
-                    GitHub setup needs attention. Continue in Autograph to recover; your saved brief
-                    is retained.
-                  </small>
-                ) : null}
-                {github?.status === "failed" &&
-                ["credential_unavailable", "installation_inactive"].includes(github.code) ? (
-                  <Link href={`/github/installations?returnTo=${returnTo}`}>Reconnect GitHub</Link>
-                ) : null}
-              </div>
-            </article>
+            <GitHubResource intent={intent} returnTo={returnTo} />
             {vercel && !(vercel.status === "skipped" && vercel.code === "not_selected") ? (
               <article>
                 <div>

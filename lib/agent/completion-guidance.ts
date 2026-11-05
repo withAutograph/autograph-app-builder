@@ -2,21 +2,21 @@ import type { AppBuilderWorkflowState } from "@/lib/agent/workflow-state";
 
 const phaseGuidance: Partial<Record<AppBuilderWorkflowState["phase"], string>> = {
   app_spec_accepted:
-    "The AppSpec is accepted but no canonical implementation proposal exists yet. For an existing app, inspect its current app-owned files and call accept_app_spec with existingAppChanges containing complete replacement contents before requesting build approval.",
+    "The AppSpec is accepted but no canonical implementation proposal exists yet. For an existing app, inspect its current app-owned files and call accept_app_spec with existingAppChanges containing complete replacement contents before starting the build.",
   applied:
-    "Implementation files were applied. They have not passed repository validation. Call validate_app_creation next in the approved private checkout.",
+    "Implementation files were applied. They have not passed repository validation. For a requested private preview, start the applied app directly with start_app_preview. Run repository validation separately for reviewed delivery.",
   apply_failed:
     "Applying the implementation failed. Repair the actual reported error and retry the approved operation; do not claim delivery.",
   dependencies_prepared:
-    "Dependencies are ready but no canonical implementation proposal exists yet. Retry accept_app_spec with the accepted artifact and, for an existing app, exact existingAppChanges before requesting build approval.",
+    "Dependencies are ready but no canonical implementation proposal exists yet. Retry accept_app_spec with the accepted artifact and, for an existing app, exact existingAppChanges before starting the build.",
   identity_resolved:
-    "The target app was identified but no canonical implementation proposal exists yet. Retry accept_app_spec with the accepted artifact and exact existingAppChanges before requesting build approval.",
+    "The target app was identified but no canonical implementation proposal exists yet. Retry accept_app_spec with the accepted artifact and exact existingAppChanges before starting the build.",
   planned:
-    "The accepted AppSpec and canonical implementation proposal are ready. Continue with apply_app_creation and its normal build approval for the planned private implementation. Reuse the accepted UI reference; omission of the full UI object from planning metadata is not a reason to regenerate the prototype. Genuine product revisions still follow the design acceptance flow.",
+    "The accepted AppSpec and canonical implementation proposal are ready. Continue with apply_app_creation for the planned implementation. A selected compute resize requires its own approval. Reuse the accepted UI reference; omission of the full UI object from planning metadata is not a reason to regenerate the prototype. Genuine product revisions still follow the design acceptance flow.",
   reviewed:
     "The change set was reviewed after repository validation. Review does not establish product behavior or a reachable app preview.",
   ui_accepted:
-    "The accepted UI is a design prototype. Record or reuse a build-ready AppSpec, then call accept_app_spec with exact existingAppChanges for an existing app. Build approval requires its planned proposal.",
+    "The accepted UI is a design prototype. Record or reuse a build-ready AppSpec, then call accept_app_spec with exact existingAppChanges for an existing app. Apply the resulting proposal in the private checkout.",
   ui_previewed:
     "The recorded UI is a design prototype. Fixture interactions do not prove that the implemented app has persistence, authentication, orchestration, or a working backend.",
   validated:
@@ -34,7 +34,7 @@ export const completionGuidance = (state: Pick<AppBuilderWorkflowState, "phase">
     `Workflow phase: ${state.phase}.`,
     phaseGuidance[state.phase] ??
       "Use the current tool results to describe what has actually completed; this phase alone is not proof of working product behavior.",
-    "Later tool results supersede this turn-start snapshot. After apply_app_creation succeeds, always continue with validate_app_creation; applied does not mean validated.",
+    "Later tool results supersede this turn-start snapshot. After apply_app_creation succeeds, start a requested private preview directly. Run validate_app_creation separately for reviewed delivery.",
     "Distinguish app-owned repairs from external blockers. When the accepted AppSpec requires authenticated persistence, migrate remaining app-owned fixture-only data reads, actions, reset flows and tests to the repository's documented trusted request context and prepared runtime. Inspect current exports and complete the typed integration in the same private checkout. Returning a list of remaining app-owned changes or re-running the same failing tests does not complete this work. Preserve actual role/tenant enforcement and test the accepted outcomes. If the repair changes the accepted product scope or needs a new outward effect, use the corresponding public question or approval instead.",
     "When a Builder operation fails, report the exact operation, the concrete error or command diagnostic, what it means for this app, and the supported next repair action. Preserve useful file paths, exit codes, and the provider's safe cause. Never replace a specific failure with a generic statement that app preparation could not finish. If the provider gave no cause, say the diagnostic is missing and identify the operation and session for repair.",
     "Successful repository commands establish technical validation only. A fixture preview is a prototype, not a running implementation. Verify the accepted product outcomes with real implementation evidence and describe unverified outcomes honestly.",

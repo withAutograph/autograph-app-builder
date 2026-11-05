@@ -1,3 +1,4 @@
+import { centralHostApprovalDescription } from "./central-integration-host-approval-description";
 import {
   continuityApprovalToolInputSchema,
   continuityApprovalIntentId,
@@ -579,6 +580,8 @@ export function publicApprovalDescription(input: unknown, toolName?: string): st
     return undefined;
   }
   const record = input as Record<string, unknown>;
+  if (toolName === "prepare-app-central-integrations")
+    return centralHostApprovalDescription(record);
   if (toolName === "prepare-app-native-target") return nativeTargetApprovalDescription(record);
   if (toolName === "run-app-continuity-tests") return continuityApprovalDescription(record);
   if (toolName === "export-app-hosted-data") {

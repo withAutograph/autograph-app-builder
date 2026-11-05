@@ -93,6 +93,78 @@ it("freezes configured project settings alongside the selected release source", 
     projectSettings,
   });
 });
+it.each(["apps/spend-review", "apps/revised-product"])(
+  "retains the standard Services destination when %s describes its app build",
+  (workspacePath) => {
+    const projectSettings = { framework: "services", rootDirectory: ".", buildCommand: null };
+    const publishedSource = {
+      branch: "codex/generated-app",
+      changeSetDigest: "d".repeat(64),
+      gitSha: "e".repeat(40),
+      gitTree: "f".repeat(40),
+      repositoryId: "generated-repository",
+      reviewDigest: "b".repeat(64),
+    };
+    const description = appDescriptionSchema.parse({
+      app: { id: "spend-review", routes: ["/"], workspacePath },
+      backend: { kind: "static" },
+      deployment: {
+        framework: "nextjs",
+        buildCommand: "bun run build:app",
+        sourceFilesOutsideRootDirectory: true,
+      },
+      validation: { browser: null, check: { task: "check" }, test: { shards: 1, task: "test" } },
+      version: 1,
+    });
+    const delivery = resolvePublishedAppDelivery(
+      { ...application, projectSettings },
+      { ...release, publishedSource },
+      description,
+    );
+    expect(delivery.projectSettings).toEqual(projectSettings);
+    expect(delivery.projectId).toBe(application.projectId);
+    expect(delivery.repoId).toBe(publishedSource.repositoryId);
+    expect(delivery.gitSha).toBe(publishedSource.gitSha);
+    expect(delivery.branch).toBe(publishedSource.branch);
+  },
+);
+
+it.each(["apps/spend-review", "apps/revised-product"])(
+  "retains the standard Services destination when %s describes its app build",
+  (workspacePath) => {
+    const projectSettings = { framework: "services", rootDirectory: ".", buildCommand: null };
+    const publishedSource = {
+      branch: "codex/generated-app",
+      changeSetDigest: "d".repeat(64),
+      gitSha: "e".repeat(40),
+      gitTree: "f".repeat(40),
+      repositoryId: "generated-repository",
+      reviewDigest: "b".repeat(64),
+    };
+    const description = appDescriptionSchema.parse({
+      app: { id: "spend-review", routes: ["/"], workspacePath },
+      backend: { kind: "static" },
+      deployment: {
+        framework: "nextjs",
+        buildCommand: "bun run build:app",
+        sourceFilesOutsideRootDirectory: true,
+      },
+      validation: { browser: null, check: { task: "check" }, test: { shards: 1, task: "test" } },
+      version: 1,
+    });
+    const delivery = resolvePublishedAppDelivery(
+      { ...application, projectSettings },
+      { ...release, publishedSource },
+      description,
+    );
+    expect(delivery.projectSettings).toEqual(projectSettings);
+    expect(delivery.projectId).toBe(application.projectId);
+    expect(delivery.repoId).toBe(publishedSource.repositoryId);
+    expect(delivery.gitSha).toBe(publishedSource.gitSha);
+    expect(delivery.branch).toBe(publishedSource.branch);
+  },
+);
+
 it("uses the captured source profile and exact described workspace for a new selected release", () => {
   const publishedSource = {
     branch: "codex/generated-app",

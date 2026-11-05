@@ -54,6 +54,7 @@ const config: StorybookConfig = {
           replacement,
         }));
     const storybookBuilderActions = path.join(import.meta.dirname, "builder-actions.ts");
+    const storybookSourceActions = path.join(import.meta.dirname, "source-handoff-actions.ts");
     const storybookBuilderDraftActions = path.join(import.meta.dirname, "builder-draft-actions.ts");
     const { connectionsEnabled, comingSoonEnabled, provisioningEnabled } =
       await resolveBuilderFlagsForStorybook();
@@ -74,6 +75,11 @@ const config: StorybookConfig = {
     viteConfig.resolve = {
       ...viteConfig.resolve,
       alias: [
+        { find: "@/app/actions/source-handoff", replacement: storybookSourceActions },
+        {
+          find: /[/\\]app[/\\]actions[/\\]source-handoff(?:\.ts)?$/u,
+          replacement: storybookSourceActions,
+        },
         {
           find: "@/app/actions/builder-drafts",
           replacement: storybookBuilderDraftActions,

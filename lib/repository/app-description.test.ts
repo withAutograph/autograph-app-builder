@@ -25,6 +25,23 @@ const runDescription = async (exitCode: number, stdout: string, stderr = "") =>
   });
 
 describe("repository app description", () => {
+  it("retains the installed optional integration readiness contract without inventing runtime readiness", async () => {
+    const integrations = {
+      contract: "app-integrations-development-v1",
+      readinessPath: "/spend-review/api/integrations/readiness",
+    };
+    const result = await runDescription(0, JSON.stringify({ ...descriptor, integrations }));
+    expect(result.integrations).toEqual(integrations);
+    await expect(
+      runDescription(
+        0,
+        JSON.stringify({
+          ...descriptor,
+          integrations: { ...integrations, readinessPath: "//foreign.example/readiness" },
+        }),
+      ),
+    ).rejects.toThrow();
+  });
   it("accepts absent optional tests and authenticated schema receipt without inventing proof", async () => {
     const result = await runDescription(
       0,

@@ -28,6 +28,12 @@ agent tools/hooks, normal Services assembly and required sandbox initialization.
 Do not change Next compilation, CI topology, build-machine billing, application
 compute approvals, protection, credentials or provider permissions.
 
+An early Node preload checks the actual V8 heap limit before Eve initializes.
+Conflicting percentage-based Node settings can override an absolute old-space
+flag, so they must not silently defeat the budget. The guard permits 256 MiB of
+Node 24 young-generation overhead and otherwise reports a fixed actionable error
+without printing option values. This is a V8 heap boundary, not a total-RSS claim.
+
 Qualify the effective generated Services command through the real SDK, then run
 actual agent compilation with the bounded command. Preserve a fresh source/tree
 and artifact record. Credential-free Services qualification must still refuse

@@ -1,0 +1,267 @@
+name: Ubuntu 26.04 isolated tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/ubuntu-26.04-canary.yml
+
+permissions:
+  contents: read
+
+jobs:
+  protected-operator-recovery:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: docker.io/library/postgres@sha256:48c8ad3a7284b82be4482a52076d47d879fd6fb084a1cbfccbd551f9331b0e40
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 54328:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 1s
+          --health-timeout 2s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v3
+        with:
+          version: "2026.9.2"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: mise run dependencies:install
+      - run: |
+          set -euo pipefail
+          mkdir -p .artifacts/protected-operator-recovery
+          mise run test:postgres-hosted-operator-recovery -- --database-url 'postgres://postgres@127.0.0.1:54328/postgres?sslmode=disable' | tee .artifacts/protected-operator-recovery/result.log
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: protected-operator-recovery-${{ github.sha }}
+          path: .artifacts/protected-operator-recovery
+          if-no-files-found: warn
+
+  repository:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v3
+        with:
+          version: "2026.9.2"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: mise run dependencies:install
+      - name: Prepare Ubuntu package mirror and Playwright dependencies
+        run: |
+          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+            sudo sed -i -e 's|http://azure.archive.ubuntu.com/ubuntu|https://azure.archive.ubuntu.com/ubuntu|g' -e 's|http://archive.ubuntu.com/ubuntu|https://azure.archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          fi
+          sudo apt-get -o Acquire::Retries=3 update
+          pnpm exec playwright install-deps chromium
+      - run: mise run storybook:install-browser
+      - run: mise run ci-repository
+
+  eve-general:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v3
+        with:
+          version: "2026.9.2"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: mise run dependencies:install
+      - run: mise run ci-eve-general
+
+  eve-fresh-bootstrap:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v3
+        with:
+          version: "2026.9.2"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: mise run dependencies:install
+      - run: mise run ci-eve-fresh-bootstrap
+
+  product-quality:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v3
+        with:
+          version: "2026.9.2"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: mise run dependencies:install
+      - name: Prepare Ubuntu package mirror and Playwright dependencies
+        run: |
+          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+            sudo sed -i -e 's|http://azure.archive.ubuntu.com/ubuntu|https://azure.archive.ubuntu.com/ubuntu|g' -e 's|http://archive.ubuntu.com/ubuntu|https://azure.archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          fi
+          sudo apt-get -o Acquire::Retries=3 update
+          pnpm exec playwright install-deps chromium
+      - run: mise run storybook:install-browser
+      - run: mise run ci-product-quality
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: ubuntu-26-product-quality-${{ github.sha }}
+          path: .artifacts/product-quality
+          if-no-files-found: warn
+
+  sandbox-toolchain:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v3
+        with:
+          version: "2026.9.2"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: mise run dependencies:install
+      - run: mise run ci-sandbox-toolchain
+
+  package-build:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v3
+        with:
+          version: "2026.9.2"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: mise run dependencies:install
+      - run: mise run ci-package-build
+
+  auth-e2e-emulated:
+    name: auth-e2e-emulated (shard ${{ matrix.shard }}/2)
+    runs-on: ubuntu-26.04
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    timeout-minutes: 25
+    env:
+      APP_BUILDER_DATABASE_PORT: "54329"
+      APP_BUILDER_EXTERNAL_DATABASE: "1"
+    services:
+      postgres:
+        image: docker.io/library/postgres@sha256:48c8ad3a7284b82be4482a52076d47d879fd6fb084a1cbfccbd551f9331b0e40
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: autograph_app_builder
+        ports:
+          - 54329:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d autograph_app_builder"
+          --health-interval 1s
+          --health-timeout 2s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v3
+        with:
+          version: "2026.9.2"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: mise run dependencies:install
+      - name: Prepare Ubuntu package mirror and Playwright dependencies
+        run: |
+          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+            sudo sed -i -e 's|http://azure.archive.ubuntu.com/ubuntu|https://azure.archive.ubuntu.com/ubuntu|g' -e 's|http://archive.ubuntu.com/ubuntu|https://azure.archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          fi
+          sudo apt-get -o Acquire::Retries=3 update
+          pnpm exec playwright install-deps chromium
+      - run: mise run ci-auth-e2e-emulated -- --shard=${{ matrix.shard }}/2
+
+  production-navigation:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v3
+        with:
+          version: "2026.9.2"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: mise run dependencies:install
+      - name: Prepare Ubuntu package mirror and Playwright dependencies
+        run: |
+          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+            sudo sed -i -e 's|http://azure.archive.ubuntu.com/ubuntu|https://azure.archive.ubuntu.com/ubuntu|g' -e 's|http://archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          fi
+          sudo apt-get -o Acquire::Retries=3 update
+          pnpm exec playwright install-deps chromium
+      - run: mise run storybook:install-browser
+      - run: mise run test:production-navigation
+      - uses: actions/upload-artifact@v4
+        if: ${{ failure() }}
+        with:
+          name: ubuntu-26-production-navigation-${{ github.sha }}
+          path: .artifacts/production-navigation
+          if-no-files-found: ignore
+
+  test-only-check:
+    name: Ubuntu 26.04 test-only aggregate
+    if: ${{ always() }}
+    needs:
+      - protected-operator-recovery
+      - repository
+      - eve-general
+      - eve-fresh-bootstrap
+      - product-quality
+      - sandbox-toolchain
+      - package-build
+      - auth-e2e-emulated
+      - production-navigation
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Require every substantive test lane
+        run: |
+          test "${{ needs.protected-operator-recovery.result }}" = success
+          test "${{ needs.repository.result }}" = success
+          test "${{ needs.eve-general.result }}" = success
+          test "${{ needs.eve-fresh-bootstrap.result }}" = success
+          test "${{ needs.product-quality.result }}" = success
+          test "${{ needs.sandbox-toolchain.result }}" = success
+          test "${{ needs.package-build.result }}" = success
+          test "${{ needs.auth-e2e-emulated.result }}" = success
+          test "${{ needs.production-navigation.result }}" = success

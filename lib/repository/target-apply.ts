@@ -1,3 +1,6 @@
+import { applyPrivateComputeCheckPolicy } from "./private-compute-check-policy";
+import { sourceDeclaredToolchainActivationCommand } from "./source-toolchain";
+import { workspaceBinInstallCommand } from "./workspace-bin-install";
 import type { FrameworkVersions } from "./framework-upgrade";
 import { frameworkUpgradeCommand, frameworkSharedPaths } from "./framework-upgrade";
 import { setBuilderSandboxNetworkPolicy } from "../sandbox/builder-sandbox";
@@ -83,6 +86,17 @@ export const iterationBaselineSnapshot = (
     files: normalized,
     treeDigest: createHash("sha256").update(JSON.stringify(normalized)).digest("hex"),
   };
+};
+
+/** Import provenance proves this app root was absent in the acquired platform base. */
+export const applicationImportBaselineSnapshot = (
+  snapshot: OverlaySnapshot,
+  appRoot: string,
+): OverlaySnapshot => {
+  const files = canonicalOverlayFiles(
+    snapshot.files.filter((file) => !file.path.startsWith(`${appRoot}/`)),
+  );
+  return { files, treeDigest: createHash("sha256").update(JSON.stringify(files)).digest("hex") };
 };
 
 // Existing-app review follows the selected app. Unrelated repository or
@@ -355,11 +369,14 @@ const snapshotLine = /^(?<mode>[0-7]{3,4})\t(?<digest>[0-9a-f]{64})\t(?<path>.+)
 
 export const OVERLAY_SNAPSHOT_SCRIPT = String.raw`
 const { createHash } = require("node:crypto");
-const { lstatSync, readFileSync, readdirSync } = require("node:fs");
+const { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, readdirSync, realpathSync } = require("node:fs");
 const { join } = require("node:path");
 
+const strict = typeof expectedOverlayRoot !== "undefined";
+if (strict && realpathSync(".") !== expectedOverlayRoot) throw Error("Applied overlay root changed.");
 const files = [];
 const visit = (directory, relativeDirectory) => {
+  if (strict && realpathSync(directory) !== join(expectedOverlayRoot, relativeDirectory)) throw Error("Applied overlay directory changed.");
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const relativePath = relativeDirectory
       ? relativeDirectory + "/" + entry.name
@@ -367,7 +384,7 @@ const visit = (directory, relativeDirectory) => {
     // Tooling state can appear anywhere in a prepared repository. None of it
     // belongs in a source review or a published change set.
     if (
-      entry.isDirectory() &&
+      (entry.isDirectory() || (strict && entry.isSymbolicLink())) &&
       [".git", ".scratch", ".next", ".turbo", "node_modules", "dist", "coverage", "storybook-static", "target", "test-results", "playwright-report", "blob-report"].includes(entry.name)
     ) continue;
     if (entry.isFile() && entry.name === "next-env.d.ts") continue;
@@ -376,13 +393,30 @@ const visit = (directory, relativeDirectory) => {
       visit(absolutePath, relativePath);
       continue;
     }
-    if (!entry.isFile()) continue;
-    const stat = lstatSync(absolutePath);
-    const mode = (stat.mode & 0o7777).toString(8);
-    const fileDigest = createHash("sha256")
-      .update(readFileSync(absolutePath))
-      .digest("hex");
-    files.push({ path: relativePath, mode, digest: fileDigest });
+    if (!entry.isFile()) {
+      if (strict) throw Error("Applied overlay contains an unsupported source entry.");
+      continue;
+    }
+    const descriptor = strict
+      ? openSync(absolutePath, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
+      : undefined;
+    try {
+      const stat = strict ? fstatSync(descriptor) : lstatSync(absolutePath);
+      if (strict && (!stat.isFile() || realpathSync(absolutePath) !== join(expectedOverlayRoot, relativePath))) throw Error("Applied overlay source changed.");
+      // The exact-root private preview reads paths and bytes. Keep the wire shape
+      // shared with the apply snapshot without making permissions part of that read.
+      const mode = strict ? "000" : (stat.mode & 0o7777).toString(8);
+      const fileDigest = createHash("sha256")
+        .update(readFileSync(descriptor ?? absolutePath))
+        .digest("hex");
+      if (strict) {
+        const current = lstatSync(absolutePath);
+        if (current.dev !== stat.dev || current.ino !== stat.ino) throw Error("Applied overlay source changed.");
+      }
+      files.push({ path: relativePath, mode, digest: fileDigest });
+    } finally {
+      if (descriptor !== undefined) closeSync(descriptor);
+    }
   }
 };
 
@@ -395,11 +429,15 @@ for (const file of files)
 `;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function overlaySnapshotCommand(): string {
-  if (OVERLAY_SNAPSHOT_SCRIPT.includes("'")) {
+export function overlaySnapshotCommand(exactRoot?: "/workspace/repository"): string {
+  const script =
+    exactRoot === undefined
+      ? OVERLAY_SNAPSHOT_SCRIPT
+      : `const expectedOverlayRoot = ${JSON.stringify(exactRoot)};\n${OVERLAY_SNAPSHOT_SCRIPT}`;
+  if (script.includes("'")) {
     throw new Error("The overlay snapshot script is not shell-safe.");
   }
-  return `bun -e '${OVERLAY_SNAPSHOT_SCRIPT}'`;
+  return `bun -e '${script}'`;
 }
 
 const snapshotFailureDetail = (value: string): string =>
@@ -424,11 +462,12 @@ export async function inspectApplyOverlay(
     run: (input: { command: string; workingDirectory: string }) => PromiseLike<ApplyCommandResult>;
   },
   applyRoot: string,
+  exactRoot?: "/workspace/repository",
 ): Promise<OverlaySnapshot> {
   let result: ApplyCommandResult;
   try {
     result = await sandbox.run({
-      command: overlaySnapshotCommand(),
+      command: overlaySnapshotCommand(exactRoot),
       workingDirectory: applyRoot,
     });
   } catch (error) {
@@ -633,22 +672,6 @@ async function stageCreatedAppSpec(input: {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function sourceDeclaredCueActivationCommand() {
-  return String.raw`set -euo pipefail
-config_file="$PWD/.config/mise/config.toml"
-runtime_bin="$(dirname "$(command -v bun)")"
-test -f "$config_file"
-test -x "$runtime_bin/bun"
-export MISE_CONFIG_FILE="$config_file"
-mise trust --yes "$config_file"
-mise install --locked cue
-cue_bin="$(mise which cue)"
-test -x "$cue_bin"
-ln -sfn "$cue_bin" "$runtime_bin/cue"
-"$runtime_bin/cue" version >/dev/null`;
-}
-
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
   return async ({ sandbox, appId, applyRoot, proposal }) => {
     if ("operation" in proposal) {
@@ -685,6 +708,35 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
             }));
       }
     }
+    if ("operation" in proposal && proposal.applicationSourceImport !== undefined) {
+      const registration = proposal.applicationSourceImport.registration;
+      if (
+        registration === undefined ||
+        registration.projectName !== appId ||
+        sha256(registration.proposedBytes) !== registration.newDigest
+      ) {
+        return {
+          exitCode: 2,
+          stdout: "",
+          stderr: "Imported app registration is missing from the approved proposal.",
+          failedCommand: "verify approved application registration",
+        };
+      }
+      const topologyPath = `${applyRoot.replace(/^\/workspace\//u, "")}/microfrontends.json`;
+      const currentTopology = await sandbox.readTextFile({ path: topologyPath });
+      if (
+        currentTopology === null ||
+        ![registration.oldDigest, registration.newDigest].includes(sha256(currentTopology))
+      ) {
+        return {
+          exitCode: 2,
+          stdout: "",
+          stderr: "Imported app registration preimage changed.",
+          failedCommand: "verify approved application registration",
+        };
+      }
+      await sandbox.writeTextFile({ path: topologyPath, content: registration.proposedBytes });
+    }
     // The writable checkout is the execution environment. Prepared dependency
     // roots are only a cache optimization; a checkout-backed flow can have no
     // roots at all. Let Bun establish the repository's actual dependency state
@@ -702,7 +754,10 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
     // closure into this sandbox before compilation or preview uses it.
     const installCommand =
       proposal.frameworkUpgrade === undefined ? "bun install" : "bun install --frozen-lockfile";
-    const install = await sandbox.run({ command: installCommand, workingDirectory: applyRoot });
+    const install = await sandbox.run({
+      command: workspaceBinInstallCommand(applyRoot, proposal.frameworkUpgrade !== undefined),
+      workingDirectory: applyRoot,
+    });
     if (install.exitCode !== 0) {
       const output = `${install.stderr}\n${install.stdout}`;
       let reason = "unclassified";
@@ -726,21 +781,27 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
       return { ...install, failedCommand: installCommand };
     }
     const cue = await sandbox.run({
-      command: sourceDeclaredCueActivationCommand(),
+      command: sourceDeclaredToolchainActivationCommand(),
       workingDirectory: applyRoot,
     });
     if (cue.exitCode !== 0) {
-      return { ...cue, failedCommand: sourceDeclaredCueActivationCommand() };
+      return { ...cue, failedCommand: sourceDeclaredToolchainActivationCommand() };
     }
     if ("operation" in proposal) {
-      const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
+      const oldDigest =
+        proposal.applicationSourceImport?.registration?.oldDigest ??
+        proposal.plan.topology.currentDigest ??
+        "0".repeat(64);
       const receipt: TargetApplyCommandReceipt = {
         appId: proposal.contract.appId,
         mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
         omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
         recovered: false,
         topology: {
-          newDigest: proposal.plan.topology.proposedDigest ?? oldDigest,
+          newDigest:
+            proposal.applicationSourceImport?.registration?.newDigest ??
+            proposal.plan.topology.proposedDigest ??
+            oldDigest,
           oldDigest,
           path: "microfrontends.json",
         },
@@ -918,6 +979,12 @@ export async function executeProposalBoundApply(input: {
     before = await snapshotter(input.sandbox, overlay.applyRoot);
     if ("operation" in input.proposal) {
       before = iterationBaselineSnapshot(before, input.proposal.iteration.changes);
+      if (input.proposal.applicationSourceImport !== undefined) {
+        before = applicationImportBaselineSnapshot(
+          before,
+          `apps/${input.proposal.applicationSourceImport.appId}`,
+        );
+      }
     }
     if (input.proposal.frameworkUpgrade !== undefined) {
       before = iterationBaselineSnapshot(before, input.proposal.frameworkUpgrade.baseline);
@@ -938,6 +1005,13 @@ export async function executeProposalBoundApply(input: {
       proposal: input.proposal,
       sandbox: input.sandbox,
     });
+    if (command.exitCode === 0 && input.proposal.privateCompute !== undefined) {
+      await applyPrivateComputeCheckPolicy({
+        sandbox: input.sandbox,
+        applyRoot: overlay.applyRoot,
+        profile: input.proposal.privateCompute,
+      });
+    }
     await stageCreatedAppSpec({
       acceptedAppSpec: overlay.acceptedAppSpec,
       applyRoot: overlay.applyRoot,

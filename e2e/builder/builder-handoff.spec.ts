@@ -180,6 +180,14 @@ test("multiple handoffs reload independently without replacing saved app context
       const boundary = await browserBoundaryState(activePage);
       expect(boundary.clipboard.at(-1)).toContain(handoff.id);
       expect(boundary.clipboard.at(-1)).not.toContain(otherHandoff.id);
+      if (destination === "Codex") {
+        expect(boundary.clipboard.at(-1)).toContain("codex mcp login app-builder");
+        expect(boundary.clipboard.at(-1)).toContain(
+          `"clientRequestId":"web-handoff:${handoff.id}"`,
+        );
+      } else {
+        expect(boundary.clipboard.at(-1)).not.toContain("codex mcp login app-builder");
+      }
     }
   } finally {
     await otherPage.close();
@@ -471,7 +479,11 @@ test("Codex handoff carries only opaque server-owned state and supports reset", 
   await expect(page.getByText("Launch requested for Codex", { exact: false })).toBeVisible();
   await expect(page.getByText("Continued in your app", { exact: false })).toHaveCount(0);
   await page.getByText("Set up Autograph in Codex", { exact: true }).click();
-  await expect(page.locator("pre code")).toContainText("codex plugin add app-builder@autograph");
+  await expect(
+    page.getByText("Autograph will help Codex connect and continue your saved app.", {
+      exact: false,
+    }),
+  ).toBeVisible();
   await page.getByRole("link", { name: "Create another app" }).click();
   await expect(page.getByRole("heading", { name: "Build an app" })).toBeVisible();
 });
