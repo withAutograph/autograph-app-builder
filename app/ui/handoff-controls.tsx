@@ -273,8 +273,10 @@ export function HandoffControls({ initial }: { initial: HandoffControlData }) {
             handoffs need a connection configured for that environment.
           </p>
           <p>
-            Install the official App Builder plugin in Codex, enable it, and connect to Autograph.
-            If prompted to reload, open a fresh task and resend the prepared prompt.
+            Open in Codex starts setup if needed. If Codex says the plugin is disabled, open Plugins
+            in Codex and enable Autograph App Builder. Complete any browser sign-in with the account
+            used here. If the tools are still unavailable, reload Codex and use Open in Codex on
+            this same page to continue your saved app.
           </p>
           <pre style={{ whiteSpace: "pre-wrap" }}>
             <code>{codexInstallCommand}</code>

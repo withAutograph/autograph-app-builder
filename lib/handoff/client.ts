@@ -21,11 +21,11 @@ export function buildAppHandoffPrompt(
 
 First check whether app-builder@autograph is installed and enabled and whether its autograph_start tool is callable. If callable, immediately use the start input below. Do not reinstall or upgrade a working plugin.
 
-If the official plugin is missing, disabled, or outdated, you are authorized to install, enable, or update it automatically. Run the necessary commands yourself, subject to native client approval requirements:
+If the official plugin is missing or outdated, install or update it automatically. Run the necessary commands yourself, subject to native client approval requirements:
 
 ${codexInstallCommand}
 
-Verify that app-builder@autograph is enabled, then rediscover its tools and continue with autograph_start.
+Verify the effective plugin status in this workspace. If it is installed but disabled, use a supported Codex enable control if available. Otherwise tell the user to open Plugins in Codex, enable Autograph App Builder, and reopen this prepared app. If it still shows disabled in this workspace, explain that its workspace settings may override the user setting. Recheck tool availability before continuing.
 
 If the official plugin is installed and enabled but its tools remain unavailable, treat this as a connection or tool-loading problem, not proof that an update is needed. Run codex mcp login app-builder yourself if the connection needs sign-in or its authorization status is unknown. Let Codex open the browser or share the authorization URL it prints. Ask the user only to complete the browser authorization using the same Autograph account as the web form. Keep the login command running until it reports success, then use supported reconnect or reload capabilities and rediscover the tools. If the current session cannot load newly authorized tools, ask the user to reopen this same prepared handoff after reloading Codex. Continue with the same start input below. Do not substitute the development plugin or another app builder, and do not edit a repository directly.
 
