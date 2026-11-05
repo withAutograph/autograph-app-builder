@@ -281,6 +281,16 @@ describe("explicit same-app private repair through the real planning producer", 
       ).toBe("user-approval");
       const { discardPendingPrivateApplyApproval } = await import("./private-apply-authority");
       discardPendingPrivateApplyApproval("new-build");
+      // Relocated source and refreshed diagnostic metadata do not change the selected app or workspace.
+      appBuilderWorkflowState.update(() => ({
+        ...next,
+        appSpec: { ...next.appSpec, uiRevision: "recorded-ui-revision" },
+        workspace: {
+          ...next.workspace,
+          sourcePath: "/owned-relocated-source",
+          eligibilityDigest: sha256("refreshed-eligibility-metadata"),
+        },
+      }));
       const repeated = await prepareAppCreation({ existingAppChanges: repairFiles }, context);
       expect(repeated.reused).toBe(true);
       expect(ports.execute).toHaveBeenCalledTimes(1);

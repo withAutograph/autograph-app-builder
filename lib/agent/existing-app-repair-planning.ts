@@ -46,8 +46,12 @@ type Proposed = Extract<AppBuilderWorkflowState, { proposal: unknown }>;
 /* oxlint-disable sonarjs/expression-complexity -- Keep every immutable source/receipt comparison visible at one authorization boundary. */
 const assertRepairBinding = (current: Proposed, base: Settled, sandbox: SandboxSession) => {
   if (
-    !isDeepStrictEqual(base.appSpec, current.appSpec) ||
-    !isDeepStrictEqual(base.workspace, current.workspace) ||
+    base.appSpec.appId !== current.appSpec.appId ||
+    base.appSpec.digest !== current.appSpec.digest ||
+    base.workspace.workspacePath !== current.workspace.workspacePath ||
+    base.workspace.workspaceDigest !== current.workspace.workspaceDigest ||
+    base.workspace.sourceSha !== current.workspace.sourceSha ||
+    base.workspace.sourceTree !== current.workspace.sourceTree ||
     !(
       (base.proposal.target.privateCompute === undefined &&
         current.proposal.target.privateCompute === undefined) ||

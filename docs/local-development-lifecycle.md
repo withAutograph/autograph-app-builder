@@ -671,7 +671,10 @@ throughout planning. If a prepared repair's preimages changed, plan again
 from the current checkout. A matching grant can represent an
 unresolved execution and remains blocked; missing or conflicting required
 state is not evidence of an unapplied plan. Existing settled repairs continue
-to require their exact approved base and receipt binding.
+to require their exact approved base and receipt binding. Compare the app and
+selected workspace's source identity for that binding. Optional AppSpec
+metadata, a relocated host source path, and workspace eligibility metadata do
+not invalidate the retained approval scope by themselves.
 
 ### Inspect the current unapplied proposal
 
