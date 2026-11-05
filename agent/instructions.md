@@ -336,6 +336,9 @@ For a private local preview or candidate checks, if the selected app has a
 repository-owned `app:local` task and requires local data, call
 `prepare-app-local-preview` in the same private sandbox before checking product
 behavior. Protected native Preview recovery uses its existing hosted runtime.
+Launch the app's declared development script through its package manager in
+the directory that owns the script. If a bare framework executable fails with
+ENOENT, check that script and directory before retrying in the same checkout.
 Match the development server's listening port to the port supplied to
 `start_app_preview`; a package script may choose another
 port. A page that responds with HTTP 200 can still contain an application error.
