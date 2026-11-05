@@ -20,7 +20,10 @@ import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { priorValidatedPrivateArtifact } from "@/lib/agent/prior-validated-private-artifact";
 import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
 import { resolvePreviewPackageManager } from "@/lib/agent/preview-package-manager";
-import { ensureCheckoutDependencies } from "@/lib/agent/checkout-dependencies";
+import {
+  ensureCheckoutDependencies,
+  verifyRetainedPreviewDependencies,
+} from "@/lib/agent/checkout-dependencies";
 import { nativeWorkingPreview } from "@/lib/agent/native-working-preview";
 import {
   resolveProtectedRuntimeBindings,
@@ -232,36 +235,44 @@ export default defineTool({
       }
     }
     const { appId } = selected;
-    const logStore = dependencyLogStore(ctx);
-    const dependencyInput = {
-      assertCurrent: () => {
-        ctx.abortSignal.throwIfAborted();
-        prior?.assertCurrent();
-        if (currentProductBehaviorGeneration() !== evidenceGeneration) {
-          throw new Error(
-            "The selected app changed while preparing preview dependencies. Retry the preview for the current app.",
-          );
-        }
-      },
-      checkoutIdentity: selected.revision,
-      logStore,
-      onAttempt: (attempt: DependencyAttemptResult) => {
-        appBuilderWorkflowState.update((state) =>
-          state.phase === "empty"
-            ? state
-            : {
-                ...state,
-                checkoutDependencyAttempts: [...(state.checkoutDependencyAttempts ?? []), attempt],
-              },
+    const assertCurrentDependencies = () => {
+      ctx.abortSignal.throwIfAborted();
+      prior?.assertCurrent();
+      if (currentProductBehaviorGeneration() !== evidenceGeneration) {
+        throw new Error(
+          "The selected app changed while preparing preview dependencies. Retry the preview for the current app.",
         );
-      },
-      reconcileWorkspace: true,
+      }
+    };
+    const dependencyInput = {
+      assertCurrent: assertCurrentDependencies,
       root: selected.root,
       sandbox,
-      sessionId: ctx.session.id,
       signal: ctx.abortSignal,
     };
-    const dependencies = await ensureCheckoutDependencies(dependencyInput);
+    const dependencies =
+      prior === undefined
+        ? await ensureCheckoutDependencies({
+            ...dependencyInput,
+            checkoutIdentity: selected.revision,
+            logStore: dependencyLogStore(ctx),
+            onAttempt: (attempt: DependencyAttemptResult) => {
+              appBuilderWorkflowState.update((state) =>
+                state.phase === "empty"
+                  ? state
+                  : {
+                      ...state,
+                      checkoutDependencyAttempts: [
+                        ...(state.checkoutDependencyAttempts ?? []),
+                        attempt,
+                      ],
+                    },
+              );
+            },
+            reconcileWorkspace: true,
+            sessionId: ctx.session.id,
+          })
+        : await verifyRetainedPreviewDependencies(dependencyInput);
     let environmentPath = runtime?.environmentPath;
     if (!runtime && (await appDeclaresLocalSetup({ appId, root: selected.root, sandbox }))) {
       const setup = await prepareAppLocalPreview({

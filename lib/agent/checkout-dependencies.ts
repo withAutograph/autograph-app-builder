@@ -317,6 +317,47 @@ export const repairCheckoutDependenciesAfterValidationFailure = async (
   input.assertCurrent();
 };
 
+export class RetainedPreviewDependenciesRequiredError extends Error {
+  readonly code = "retained-preview-dependencies-required";
+  constructor() {
+    super(
+      "The prior validated preview requires its retained checkout dependencies. Prepare a fresh reviewed Build if they are unavailable.",
+    );
+    this.name = "RetainedPreviewDependenciesRequiredError";
+  }
+}
+
+const checkoutDependencyDirectoryProbe = "test -d node_modules/.bin";
+
+/** Historical preview may read dependency readiness without reinstalling source. */
+export const verifyRetainedPreviewDependencies = async (input: {
+  root: string;
+  sandbox: Pick<SandboxSession, "run">;
+  signal?: AbortSignal;
+  assertCurrent: () => void;
+}) => {
+  input.signal?.throwIfAborted();
+  input.assertCurrent();
+  let ready: boolean;
+  try {
+    const result = await input.sandbox.run({
+      command: checkoutDependencyDirectoryProbe,
+      workingDirectory: input.root,
+      abortSignal: input.signal,
+    });
+    ready = result.exitCode === 0;
+  } catch {
+    input.signal?.throwIfAborted();
+    throw new RetainedPreviewDependenciesRequiredError();
+  }
+  input.signal?.throwIfAborted();
+  input.assertCurrent();
+  if (!ready) {
+    throw new RetainedPreviewDependenciesRequiredError();
+  }
+  return { status: "reused" as const, attempts: [] };
+};
+
 /** Reconcile authored workspaces, or restore a frozen checkout missing its dependencies. */
 export const ensureCheckoutDependencies = async (
   input: DependencyRecoveryInput,
@@ -337,7 +378,7 @@ export const ensureCheckoutDependencies = async (
     input,
     "dependency-probe",
     input.requiredExecutable === undefined
-      ? "test -d node_modules/.bin"
+      ? checkoutDependencyDirectoryProbe
       : `test -x node_modules/.bin/${input.requiredExecutable}`,
   );
   const attempts = [probe];

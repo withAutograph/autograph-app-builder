@@ -766,3 +766,7 @@ a fresh checkout digest. Start this preview with the app’s repository-owned
 `bun run dev` command in its app directory. Browser tests use a private preview started for that
 same apply and validation receipt. Selecting it leaves the newer denied plan
 and both receipts in place and grants no publication authority.
+
+A prior validated preview probes the retained checkout dependency directory
+without reinstalling or changing the saved workflow. If dependencies are
+missing, that preview requires a fresh reviewed Build to restore them.

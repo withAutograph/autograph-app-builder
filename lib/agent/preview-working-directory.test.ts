@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import type { DependencyAttemptResult } from "./checkout-dependencies";
+import type {
+  DependencyAttemptResult,
+  verifyRetainedPreviewDependencies,
+} from "./checkout-dependencies";
 import startAppPreview from "../../agent/tools/start_app_preview";
 import {
   previewWorkingDirectorySchema,
@@ -28,6 +31,7 @@ const mocks = vi.hoisted(() => {
     invalidate: vi.fn(),
     nativeBindings: vi.fn().mockResolvedValue(null),
     nativePreview: vi.fn(),
+    prior: vi.fn(),
     prepare: vi.fn().mockResolvedValue({ status: "prepared" }),
     previewStateUpdate:
       vi.fn<(transition: (state: { commandId: string } | null) => null) => void>(),
@@ -66,7 +70,15 @@ vi.mock("./prepared-runtime-execution", () => ({
   resolveProtectedRuntimeBindings: mocks.nativeBindings,
 }));
 vi.mock("./native-working-preview", () => ({ nativeWorkingPreview: mocks.nativePreview }));
-vi.mock("./checkout-dependencies", () => ({ ensureCheckoutDependencies: mocks.dependencies }));
+vi.mock("./checkout-dependencies", async (importOriginal) => ({
+  ...(await importOriginal<{
+    verifyRetainedPreviewDependencies: typeof verifyRetainedPreviewDependencies;
+  }>()),
+  ensureCheckoutDependencies: mocks.dependencies,
+}));
+vi.mock("./prior-validated-private-artifact", () => ({
+  priorValidatedPrivateArtifact: mocks.prior,
+}));
 vi.mock("../../agent/tools/prepare-app-local-preview", () => ({
   appDeclaresLocalSetup: async ({
     appId,
@@ -190,6 +202,75 @@ describe("preview command working directory", () => {
       };
     }
   });
+  it.each([true, false])(
+    "only probes retained dependencies for a prior preview (ready: %s)",
+    async (ready) => {
+      const saved = mocks.workflowState;
+      const run = vi.fn().mockResolvedValue({ exitCode: ready ? 0 : 1, stdout: "", stderr: "" });
+      const assertCurrent = vi.fn(() => {
+        expect(mocks.workflowState).toBe(saved);
+      });
+      mocks.prior.mockResolvedValueOnce({
+        appId: "app",
+        root: "/workspace/repository",
+        revision: "prior-apply",
+        validationDigest: "prior-validation",
+        reusable: true,
+        assertCurrent,
+        verifyCurrent: vi.fn(),
+      });
+      mocks.dependencies.mockClear();
+      mocks.start.mockClear();
+      const signal = new AbortController().signal;
+      const result = startAppPreview.execute(
+        {
+          artifact: "prior-validated",
+          command: { args: ["run", "dev"], executable: "bun" },
+          landingPath: "/app",
+          port: 3000,
+          workingDirectory: "apps/app",
+        },
+        {
+          abortSignal: signal,
+          callId: "call-prior",
+          getSandbox: vi.fn().mockResolvedValue({
+            id: "sandbox",
+            run,
+            readTextFile: vi.fn().mockResolvedValue(null),
+          }),
+          getToken: vi.fn(),
+          requireAuth: (): never => {
+            throw new Error("Unexpected auth request in prior preview test");
+          },
+          session: {
+            auth: { current: null, initiator: null },
+            id: "session",
+            turn: { id: "turn", sequence: 0 },
+          },
+          toolName: "start_app_preview",
+        },
+      );
+      if (ready) {
+        await expect(result).resolves.toMatchObject({
+          dependencies: { status: "reused", attempts: [] },
+        });
+        expect(mocks.start).toHaveBeenCalledOnce();
+      } else {
+        await expect(result).rejects.toMatchObject({
+          code: "retained-preview-dependencies-required",
+        });
+        expect(mocks.start).not.toHaveBeenCalled();
+      }
+      expect(run).toHaveBeenCalledExactlyOnceWith({
+        command: "test -d node_modules/.bin",
+        workingDirectory: "/workspace/repository",
+        abortSignal: signal,
+      });
+      expect(mocks.dependencies).not.toHaveBeenCalled();
+      expect(mocks.workflowState).toBe(saved);
+    },
+  );
+
   it("defaults to the existing applied repository root", () => {
     expect(resolvePreviewWorkingDirectory("/workspace/repository", parseDirectory())).toBe(
       "/workspace/repository",
