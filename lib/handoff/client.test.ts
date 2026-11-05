@@ -8,7 +8,7 @@ describe("destination-specific handoff setup", () => {
     const prompt = buildAppHandoffPrompt(handoffId, "codex");
     expect(prompt).toContain("Do not reinstall or upgrade a working plugin");
     expect(prompt).toContain("install or update it automatically");
-    expect(prompt).toContain("Run the necessary commands yourself");
+    expect(prompt).toContain("run the necessary commands yourself");
     expect(prompt).toContain("subject to native client approval requirements");
     expect(prompt).toContain("enable Autograph App Builder, and reopen this prepared app");
     expect(prompt).toContain("codex mcp login app-builder");

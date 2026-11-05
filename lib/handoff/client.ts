@@ -21,7 +21,7 @@ export function buildAppHandoffPrompt(
 
 First check whether app-builder@autograph is installed and enabled and whether its autograph_start tool is callable. If callable, immediately use the start input below. Do not reinstall or upgrade a working plugin.
 
-If the official plugin is missing or outdated, install or update it automatically. Run the necessary commands yourself, subject to native client approval requirements:
+If the official plugin is missing or outdated, install or update it automatically. Use supported Codex plugin controls or run the necessary commands yourself, subject to native client approval requirements. Add the marketplace only if missing, refresh it if an update is needed, and install the official plugin:
 
 ${codexInstallCommand}
 
@@ -29,7 +29,7 @@ Verify the effective plugin status in this workspace. If it is installed but dis
 
 If the official plugin is installed and enabled but its tools remain unavailable, treat this as a connection or tool-loading problem, not proof that an update is needed. Run codex mcp login app-builder yourself if the connection needs sign-in or its authorization status is unknown. Let Codex open the browser or share the authorization URL it prints. Ask the user only to complete the browser authorization using the same Autograph account as the web form. Keep the login command running until it reports success, then use supported reconnect or reload capabilities and rediscover the tools. If the current session cannot load newly authorized tools, ask the user to reopen this same prepared handoff after reloading Codex. Continue with the same start input below. Do not substitute the development plugin or another app builder, and do not edit a repository directly.
 
-Do not ask the user to run installation or upgrade commands. If recovery requires a user-only action, explain the specific blocker and request only that minimal action. Never claim the handoff has started until autograph_start succeeds.`
+Try every applicable supported setup step yourself before handing anything back to the user. If a command is unavailable, try the equivalent supported Codex control. Do not ask the user to run installation or upgrade commands. If neither route can install the plugin, direct the user to Plugins in Codex to install Autograph App Builder from the Autograph marketplace. If a step requires the user, explain the specific blocker, give only the next action, and preserve this handoff for continuation. Never claim the handoff has started until autograph_start succeeds.`
       : `Use the Autograph MCP connection in Cursor. If it is unavailable, return to the prepared app's web handoff page and use “Add Autograph to Cursor”, then enable the connection and resend this prompt.`;
   return `${setup}
 
