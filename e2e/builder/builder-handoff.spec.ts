@@ -180,6 +180,12 @@ test("multiple handoffs reload independently without replacing saved app context
       const boundary = await browserBoundaryState(activePage);
       expect(boundary.clipboard.at(-1)).toContain(handoff.id);
       expect(boundary.clipboard.at(-1)).not.toContain(otherHandoff.id);
+      if (destination === "Codex") {
+        expect(boundary.clipboard.at(-1)).toContain("codex mcp login app-builder");
+        expect(boundary.clipboard.at(-1)).toContain(`"clientRequestId":"web-handoff:${handoff.id}"`);
+      } else {
+        expect(boundary.clipboard.at(-1)).not.toContain("codex mcp login app-builder");
+      }
     }
   } finally {
     await otherPage.close();
