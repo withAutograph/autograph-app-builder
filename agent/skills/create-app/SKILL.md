@@ -266,6 +266,11 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    After apply and any requested integration installation
    succeed, start a requested private preview directly with `start_app_preview`.
    Lint is advisory for private previews and must not precede or block startup.
+   If the applied app is still a scaffold or its preview needs a repair, use
+   `validate_app_creation` with `repairOnly: true` and the corrected
+   `implementationFiles`. This writes under the original Build approval and
+   returns before running repository checks. Then open the updated app with
+   `start_app_preview`. Keep the existing proposal for these repairs.
    For reviewed delivery, continue with `validate_app_creation`. It runs the repository's normal
    commands against the current applied app. When it
    reports a repairable failure, provide corrected `implementationFiles` to

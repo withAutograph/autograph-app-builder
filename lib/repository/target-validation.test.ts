@@ -731,7 +731,7 @@ describe("target validation", () => {
             exitCode: 134,
             failureClass: "native-tool-panic",
             // oxlint-disable-next-line typescript/no-unsafe-assignment -- Vitest asymmetric matcher checks the safe prerequisite hint.
-            hint: expect.stringContaining("ordinary fresh Build approval"),
+            hint: expect.stringContaining("repairOnly"),
           },
         },
       });

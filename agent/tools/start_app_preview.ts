@@ -183,6 +183,7 @@ export default defineTool({
           appId: selected.appId,
           command: launch.command,
           cwd,
+          evidenceGeneration,
           landingPath: input.landingPath,
           port: input.port,
           revision: selected.revision,
