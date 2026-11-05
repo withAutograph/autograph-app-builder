@@ -762,27 +762,19 @@ After a newer existing-app plan was explicitly denied without execution,
 `start_app_preview` and `run_app_browser_tests` can select
 `artifact: "prior-validated"` for the same private local session. The selection
 requires the exact prior validated repair base, matching approval history and
-a fresh checkout digest. Start this preview with the app’s repository-owned
-`bun run dev` command in its app directory. Browser tests use a private preview started for that
-same apply and validation receipt. Selecting it leaves the newer denied plan
-and both receipts in place and grants no publication authority.
+a fresh comparison of source paths and content against the retained apply
+receipt. File permission changes do not affect this comparison. Start this
+preview with the app’s repository-owned `bun run dev` command in its app
+directory. Browser tests use a private preview started for that same apply
+and validation receipt. Selecting it leaves the newer denied plan and both
+receipts in place and grants no publication authority.
 
 A prior validated preview probes the retained checkout dependency directory
 without reinstalling or changing the saved workflow. If dependencies are
 missing, that preview requires a fresh reviewed Build to restore them.
 
-An explicitly approved retained preview repair can restore Bun-widened
-executable modes on unchanged workspace bin files. Builder first inspects the
-whole owned overlay and freezes the exact file and inode preimages. The
-separate repair approval authorizes only restoring `0777` to the prior
-`0755` modes. A full post-repair overlay must match the validated apply
-receipt. Builder retains a checkout-local reservation before changing modes.
-If dispatch is uncertain, inspection can confirm restoration or report that
-reconciliation is required. The reservation blocks repeat writes even when
-the tool turn is interrupted before its result is retained.
-
 Builder's checkout dependency installation preserves the original modes of
 workspace bin files when Bun widens them during installation. Ordinary preview
 reconciliation, frozen dependency restoration, validation recovery and the
-UI preview renderer fallback use the same guard as apply. Dependency receipts keep the Bun recipe and record the
-digest of the actual wrapped command.
+UI preview renderer fallback use the same guard as apply. Dependency receipts
+keep the Bun recipe and record the digest of the actual wrapped command.

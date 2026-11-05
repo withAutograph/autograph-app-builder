@@ -1,9 +1,10 @@
 // Bun links workspace bins into node_modules and can chmod the source target.
 // Keep that installation detail out of the owned checkout's source snapshot.
-export const WORKSPACE_BIN_CAPTURE_SCRIPT = String.raw`
+const installProgram = String.raw`
 const fs = require("node:fs");
 const path = require("node:path");
 const { createHash } = require("node:crypto");
+const { spawnSync } = require("node:child_process");
 const root = process.cwd();
 const statMode = (stat) => stat.mode & 0o7777;
 const hash = (fd) => createHash("sha256").update(fs.readFileSync(fd)).digest("hex");
@@ -24,7 +25,7 @@ function withFile(file, inspect) {
   }
 }
 
-function capture(exactIdentity = false) {
+function capture() {
   const manifests = new Set();
   const targets = new Map();
   const declared = readManifest(path.join(root, "package.json")).workspaces;
@@ -57,22 +58,12 @@ function capture(exactIdentity = false) {
       withFile(target, (fd, stat) => {
         const mode = statMode(stat);
         if (!(mode & 0o100) || (mode & 0o7000)) throw Error();
-        targets.set(target, {
-          stat,
-          mode,
-          digest: hash(fd),
-          identity: exactIdentity ? fs.fstatSync(fd, { bigint: true }) : undefined,
-        });
+        targets.set(target, { stat, mode, digest: hash(fd) });
       });
     }
   }
   return targets;
 }
-
-`;
-
-const installProgram = String.raw`${WORKSPACE_BIN_CAPTURE_SCRIPT}
-const { spawnSync } = require("node:child_process");
 
 function restore(targets) {
   let valid = true;

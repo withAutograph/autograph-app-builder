@@ -367,7 +367,7 @@ export async function materializeFreshApplyOverlay(input: {
 
 const snapshotLine = /^(?<mode>[0-7]{3,4})\t(?<digest>[0-9a-f]{64})\t(?<path>.+)$/u;
 
-export const OVERLAY_SNAPSHOT_INVENTORY_SCRIPT = String.raw`
+export const OVERLAY_SNAPSHOT_SCRIPT = String.raw`
 const { createHash } = require("node:crypto");
 const { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, readdirSync, realpathSync } = require("node:fs");
 const { join } = require("node:path");
@@ -403,13 +403,15 @@ const visit = (directory, relativeDirectory) => {
     try {
       const stat = strict ? fstatSync(descriptor) : lstatSync(absolutePath);
       if (strict && (!stat.isFile() || realpathSync(absolutePath) !== join(expectedOverlayRoot, relativePath))) throw Error("Applied overlay source changed.");
-      const mode = (stat.mode & 0o7777).toString(8);
+      // The exact-root private preview reads paths and bytes. Keep the wire shape
+      // shared with the apply snapshot without making permissions part of that read.
+      const mode = strict ? "000" : (stat.mode & 0o7777).toString(8);
       const fileDigest = createHash("sha256")
         .update(readFileSync(descriptor ?? absolutePath))
         .digest("hex");
       if (strict) {
         const current = lstatSync(absolutePath);
-        if (current.dev !== stat.dev || current.ino !== stat.ino || current.mode !== stat.mode) throw Error("Applied overlay source changed.");
+        if (current.dev !== stat.dev || current.ino !== stat.ino) throw Error("Applied overlay source changed.");
       }
       files.push({ path: relativePath, mode, digest: fileDigest });
     } finally {
@@ -422,9 +424,6 @@ visit(".", "");
 files.sort((left, right) =>
   Buffer.compare(Buffer.from(left.path), Buffer.from(right.path)),
 );
-`;
-
-export const OVERLAY_SNAPSHOT_SCRIPT = String.raw`${OVERLAY_SNAPSHOT_INVENTORY_SCRIPT}
 for (const file of files)
   process.stdout.write(file.mode + "\t" + file.digest + "\t" + file.path + "\n");
 `;
