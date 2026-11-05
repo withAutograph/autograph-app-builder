@@ -30,12 +30,17 @@ export const publicReleaseTransportRequestSchema = z
       action: z.literal("public-release-run"),
       input: publicReleaseApprovalInputSchema,
     }),
+    z.strictObject({
+      ...common,
+      action: z.literal("public-release-observe"),
+      input: publicReleaseApprovalInputSchema,
+    }),
   ])
   .superRefine((input, context) => {
     if (
       input.adapterSessionId !== input.ownerContext.adapterSessionId ||
       input.execution.logicalSessionId !== input.adapterSessionId ||
-      (input.action === "public-release-run" &&
+      (input.action !== "public-release-plan" &&
         input.input.plan.selection.sessionId !== input.ownerContext.sessionId)
     ) {
       context.addIssue({ code: "custom", message: "Public release callback owner differs" });

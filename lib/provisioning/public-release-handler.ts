@@ -110,6 +110,55 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
     }
     return next;
   };
+  const loadOperation = async (
+    invocation: PublicReleaseInvocation,
+    operationRef: string,
+    planDigest: string,
+  ) => {
+    invocation.signal.throwIfAborted();
+    const row = await ports.store.read(invocation.authority, operationRef);
+    if (!row || row.record.planDigest !== planDigest) {
+      throw unavailable();
+    }
+    const plan = publicReleasePlanSchema.parse(row.record.plan);
+    if (
+      publicReleasePlanDigest(plan) !== planDigest ||
+      publicReleaseOperationRef(plan) !== operationRef
+    ) {
+      throw unavailable();
+    }
+    return { row, plan };
+  };
+  const observeDelivery = async (
+    invocation: PublicReleaseInvocation,
+    plan: PublicReleasePlan,
+    row: PublicReleaseRow,
+    approvalRequired: boolean,
+  ) => {
+    const observation = publicReleaseObservationSchema.parse(await ports.observe(invocation, plan));
+    await authorize(invocation, plan, approvalRequired);
+    if (
+      observation.status === "ready" &&
+      (observation.projectId !== plan.project.projectId ||
+        observation.publicOrigin !== plan.publicOrigin ||
+        observation.releaseId !== plan.runtime.releaseId)
+    ) {
+      throw unavailable();
+    }
+    if (
+      !isDeepStrictEqual(row.record.observation, observation) &&
+      (observation.status === "ready" || row.record.observation?.status !== "ready")
+    ) {
+      await checkpoint(row, { ...row.record, observation });
+    }
+    return {
+      status: observation.status,
+      ...(plan.purpose === undefined ? {} : { purpose: plan.purpose }),
+      operationRef: row.operationRef,
+      observation,
+      authenticatedBehavior: "unassessed" as const,
+    };
+  };
   return {
     async plan(invocation: PublicReleaseInvocation, appId: string) {
       const selection = publicReleaseSelectionSchema.parse({
@@ -128,19 +177,20 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
       }
       return { operationRef: row.operationRef, planDigest: row.record.planDigest, plan };
     },
+    async observe(invocation: PublicReleaseInvocation, operationRef: string, planDigest: string) {
+      const { row, plan } = await loadOperation(invocation, operationRef, planDigest);
+      await authorize(invocation, plan, false);
+      const unfinished = plan.effects.find((effect) => row.record.effects[effect] !== "applied");
+      if (unfinished !== undefined) {
+        if (row.record.effects[unfinished] === "pending") {
+          return { status: "reconciliation-required" as const, operationRef, effect: unfinished };
+        }
+        throw unavailable();
+      }
+      return await observeDelivery(invocation, plan, row, false);
+    },
     async release(invocation: PublicReleaseInvocation, operationRef: string, planDigest: string) {
-      invocation.signal.throwIfAborted();
-      const initial = await ports.store.read(invocation.authority, operationRef);
-      if (!initial || initial.record.planDigest !== planDigest) {
-        throw unavailable();
-      }
-      const plan = publicReleasePlanSchema.parse(initial.record.plan);
-      if (
-        publicReleasePlanDigest(plan) !== planDigest ||
-        publicReleaseOperationRef(plan) !== operationRef
-      ) {
-        throw unavailable();
-      }
+      const { plan } = await loadOperation(invocation, operationRef, planDigest);
       await authorize(invocation, plan, true);
       return await ports.withTargetLease(invocation, plan, async () => {
         let row = await ports.store.read(invocation.authority, operationRef);
@@ -273,26 +323,7 @@ export const createPublicReleaseHandler = (ports: PublicReleasePorts) => {
           }
           await authorize(invocation, plan, true);
           phase = "observe-production";
-          const observation = publicReleaseObservationSchema.parse(
-            await ports.observe(invocation, plan),
-          );
-          await authorize(invocation, plan, true);
-          if (
-            observation.status === "ready" &&
-            (observation.projectId !== plan.project.projectId ||
-              observation.publicOrigin !== plan.publicOrigin ||
-              observation.releaseId !== plan.runtime.releaseId)
-          ) {
-            throw unavailable();
-          }
-          await checkpoint(row, { ...row.record, observation });
-          return {
-            status: observation.status,
-            ...(plan.purpose === undefined ? {} : { purpose: plan.purpose }),
-            operationRef,
-            observation,
-            authenticatedBehavior: "unassessed" as const,
-          };
+          return await observeDelivery(invocation, plan, row, true);
         } catch (error) {
           if (error instanceof PublicReleaseProviderError) {
             await authorize(invocation, plan, true);

@@ -94,6 +94,20 @@ const fixture = async () => {
   };
 };
 describe("canonical approved private build continuation", () => {
+  it("reports a settled internal turn without dispatching unchanged work again", async () => {
+    const f = await fixture();
+    await f.store.recordPrivateBuildDecision({
+      decision: { ...decision, decision: "blocked", reason: "build_no_progress" },
+      principal,
+      sessionId: result.sessionId,
+    });
+    expect(await continueApprovedHostedBuild(f)).toMatchObject({
+      status: "waiting",
+      error: { code: "approved_build_no_progress" },
+    });
+    expect(f.sendAccepted).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["session_access_denied", "session_access_denied"],
     ["private-secret-error", "transport_rejected"],

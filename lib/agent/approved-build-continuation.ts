@@ -9,6 +9,8 @@ import type { RepositoryAccessReceipt } from "./repository-access-state";
 
 import type { AppBuilderWorkflowState } from "./workflow-state";
 import type { PrivateApplyScope } from "./private-apply-authority";
+import type { EveSessionResult } from "../mcp/contracts";
+import type { TargetApplyFailureReceipt } from "../repository/target-apply";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 export const approvedBuildScopeSchema = z.strictObject({
@@ -33,6 +35,7 @@ export const approvedBuildDecisionSchema = z.strictObject({
   existingRepositorySource: repositoryAccessReceiptSchema.optional(),
 
   decision: z.enum(["working", "runnable", "waiting-input", "blocked", "settled"]),
+  reason: z.literal("build_no_progress").optional(),
   scope: approvedBuildScopeSchema.optional(),
   sourcePrerequisite: localSourcePrerequisiteObservationSchema.optional(),
   turnId: z.string().min(1),
@@ -57,11 +60,52 @@ export const internalBuildContinuationSchema = z.strictObject({
   nonce: z.string().regex(/^[a-f0-9]{64}$/u),
 });
 export type InternalBuildContinuation = z.infer<typeof internalBuildContinuationSchema>;
+
+/** Compare the work that remains, ignoring fresh turn and attempt identifiers. */
+export const approvedBuildProgress = (state: AppBuilderWorkflowState): string => {
+  const proposal = "proposal" in state ? state.proposal.digest : null;
+  const appliedTree = "applyReceipt" in state ? state.applyReceipt.postTreeDigest : null;
+  if (state.phase === "apply_failed") {
+    const failure = state.applyFailure;
+    return JSON.stringify([
+      state.phase,
+      proposal,
+      failure.postTreeDigest,
+      failure.reason,
+      failure.command.name,
+      failure.command.exitCode,
+      failure.commandFailureKind,
+    ]);
+  }
+  if (state.phase === "validation_failed") {
+    const { commandFailure, reason } = state.validationFailure;
+    return JSON.stringify([
+      state.phase,
+      proposal,
+      appliedTree,
+      reason,
+      commandFailure?.name,
+      commandFailure?.exitCode,
+      commandFailure?.failureClass,
+    ]);
+  }
+  return JSON.stringify([state.phase, proposal, appliedTree]);
+};
+
+export const reportApprovedBuildNoProgress = (result: EveSessionResult): EveSessionResult => ({
+  ...result,
+  error: result.error ?? {
+    code: "approved_build_no_progress",
+    message:
+      "Builder reached the same unfinished build step again. Your work is saved. Continue this session to inspect the last operation and repair the remaining issue.",
+  },
+});
+
 const marker =
   /\n\[autograph-private-build:(?<operationId>[a-z0-9_:-]+):(?<nonce>[a-f0-9]{64})\]$/u;
 export const readInternalBuildMarker = (message: string) => marker.exec(message)?.groups;
 export const internalBuildMessage = (operationId: string, nonce: string) =>
-  "Continue the existing approved private app build. Resolve its remaining app-owned repair and validation through supported workflow capabilities. Keep the current session and scope. Wait for actual provider, human-input, or outward-effect approval boundaries. This runtime continuation is not a new user requirement or approval." +
+  "Continue the existing approved private app build from its latest tool result. Apply the approved plan, repair concrete app errors, start a requested working preview directly, or finish review for requested delivery, as appropriate. Stop when the requested result is ready or when an actual provider, human-input, or outward-effect approval boundary requires it. Keep the current session and scope. This runtime continuation grants no new approval." +
   `\n[autograph-private-build:${operationId}:${nonce}]`;
 
 const projectExistingRepositorySource = (
@@ -93,6 +137,13 @@ const projectExistingRepositorySource = (
   }
   return repositoryAccessReceiptSchema.parse(access);
 };
+
+const canRepairApplyFailure = (failure: TargetApplyFailureReceipt): boolean =>
+  failure.reason === "command-failed" &&
+  failure.command.exitCode > 0 &&
+  !["app-lock", "partial-state", "stale-proposal", "timeout"].includes(
+    failure.commandFailureKind ?? "",
+  );
 
 /** Source-owned state, actual retained approval and validator facts determine runnable work; model prose is never an input. */
 export const decideApprovedBuildContinuation = (input: {
@@ -146,7 +197,7 @@ export const decideApprovedBuildContinuation = (input: {
   if (sourcePrerequisite !== undefined) {
     return { ...base, decision: "blocked", sourcePrerequisite };
   }
-  if (input.blocked || !("applyReceipt" in input.state)) {
+  if (input.blocked || !("proposal" in input.state)) {
     return { ...base, decision: "blocked" };
   }
   const { state } = input;
@@ -160,7 +211,14 @@ export const decideApprovedBuildContinuation = (input: {
   if (!input.approvalMatches(scope)) {
     return { ...base, decision: "blocked" };
   }
-  if (state.phase === "applied" || state.phase === "validation_pending") {
+  if (state.phase === "apply_failed") {
+    return {
+      ...base,
+      decision: canRepairApplyFailure(state.applyFailure) ? "runnable" : "blocked",
+      scope,
+    };
+  }
+  if (["planned", "applied", "validation_pending", "validated"].includes(state.phase)) {
     return { ...base, decision: "runnable", scope };
   }
   if (state.phase !== "validation_failed") {

@@ -77,7 +77,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   permission-only differences, and optional setup or diagnostic metadata.
   Missing cache or dependency markers, an unapproved draft, and changed host
   source do not by themselves justify another Build approval. See the
-  [local validation and preview contract](docs/autograph-app-builder-lifecycle.md#9-review-and-validate-locally).
+  [local validation and preview contract](docs/autograph-app-builder-lifecycle.md#6-run-and-review-the-app).
 - CI assertions must exercise the functionality they claim to protect:
   commands execute, users can complete tasks, data persists, failures recover,
   and authentication, tenant isolation, approvals, and cancellation work.

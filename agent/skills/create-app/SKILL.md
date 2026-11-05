@@ -509,7 +509,10 @@ acceptance project or Auth project to satisfy this journey.
   it does not grant customer Production provider access. Never weaken operator
   protection, insert base/admin credentials, manually deploy, promote or alias,
   or select a deployment by a source SHA or Git history.
-- Read the release result and open its ordinary public app URL. Exercise real
+- If the release reports pending, use `observe-app-public-release` with the
+  same frozen plan to continue reading the native deployment. Preserve the
+  operation and its approval while the provider is still working. When ready,
+  open the app's ordinary public URL. Exercise real
   Better Auth login/logout and a persistent app action before calling the app
   usable. For integrations, additionally exercise the approved provider
   lifecycle and independent data/isolation readbacks. Keep all these results

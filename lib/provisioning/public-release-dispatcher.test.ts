@@ -122,6 +122,24 @@ describe("public release HTTP authority boundary", () => {
     expect(f.ports.withTargetLease).not.toHaveBeenCalled();
     expect(f.ports.applyEffect).not.toHaveBeenCalled();
   });
+  it("refuses observation before approved effects have run", async () => {
+    const f = fixture();
+    const result = await f.handler(
+      request({
+        ...common,
+        action: "public-release-observe",
+        input: {
+          plan,
+          operationRef: publicReleaseOperationRef(plan),
+          planDigest: publicReleasePlanDigest(plan),
+        },
+      }),
+    );
+    expect(result.status).toBe(403);
+    expect(f.ports.assertApproved).not.toHaveBeenCalled();
+    expect(f.ports.observe).not.toHaveBeenCalled();
+    expect(f.ports.withTargetLease).not.toHaveBeenCalled();
+  });
   it("rejects crossed adapter identity and wrong routes without planning", async () => {
     const f = fixture();
     expect(

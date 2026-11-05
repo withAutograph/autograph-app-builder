@@ -29,6 +29,7 @@ import {
   continueApprovedLocalBuild,
   readLocalBuildDecision,
 } from "../agent/local-build-continuation";
+import { reportApprovedBuildNoProgress } from "../agent/approved-build-continuation";
 import { Client, ClientError, parseInputResponses } from "eve/client";
 import type { ClientSession, MessageStreamEvent } from "eve/client";
 import { setTimeout as delay } from "node:timers/promises";
@@ -59,6 +60,38 @@ import {
 
 const DEVELOPMENT_BUNDLE = "local-development";
 const DEVELOPMENT_MODE = "development";
+
+const localContinuationFailure = async (
+  sessionId: string,
+  result: EveSessionResult,
+): Promise<EveSessionResult> => {
+  const build = await readLocalBuildDecision(sessionId);
+  if (build?.decision === "blocked" && build.reason === "build_no_progress") {
+    return reportApprovedBuildNoProgress(result);
+  }
+  if ((await readLocalAuthoringDispatchState(sessionId)) === "blocked") {
+    return {
+      ...result,
+      error: {
+        code: "preapproval_authoring_continuation_blocked",
+        message:
+          "Current ownership, input or source blocks the drafting continuation. Preserve this session and continue through ordinary controls.",
+      },
+    };
+  }
+  const decision = await readLocalAuthoringDecision(sessionId);
+  if (decision?.decision === "blocked" && decision.reason === "authoring_no_progress") {
+    return {
+      ...result,
+      error: {
+        code: "preapproval_authoring_no_progress",
+        message:
+          "Builder completed the drafting continuation without producing a proposal. The accepted app is unfinished; continue through an ordinary user turn to revise the plan.",
+      },
+    };
+  }
+  return result;
+};
 
 export class AdapterNotConfiguredError extends Error {
   constructor() {
@@ -1213,25 +1246,7 @@ export function createLocalEveSessionService(
       return { ...result, status: "working" };
     }
     if (result.status === "waiting" && localAuthoringConfigured()) {
-      if ((await readLocalAuthoringDispatchState(sessionId)) === "blocked")
-        return {
-          ...result,
-          error: {
-            code: "preapproval_authoring_continuation_blocked",
-            message:
-              "Current ownership, input or source blocks the drafting continuation. Preserve this session and continue through ordinary controls.",
-          },
-        };
-      const decision = await readLocalAuthoringDecision(sessionId);
-      if (decision?.decision === "blocked" && decision.reason === "authoring_no_progress")
-        return {
-          ...result,
-          error: {
-            code: "preapproval_authoring_no_progress",
-            message:
-              "Builder completed the drafting continuation without producing a proposal. The accepted app is unfinished; continue through an ordinary user turn to revise the plan.",
-          },
-        };
+      return await localContinuationFailure(sessionId, result);
     }
     return result;
   };

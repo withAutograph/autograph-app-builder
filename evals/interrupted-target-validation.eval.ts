@@ -17,6 +17,8 @@ export default defineEval({
     await session.send("Prepare offline target dependencies.");
     await session.send("Run target identity and planning.");
     await session.send("Apply the current creation proposal.");
+    session.requireInputRequest({ toolName: "apply_app_creation" });
+    await session.respondAll("approve");
     t.succeeded();
 
     const validation = await session.send("Validate the applied creation.");

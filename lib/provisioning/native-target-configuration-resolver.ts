@@ -83,7 +83,9 @@ const configurationRequestSchema = z.union([
 ]);
 type ConfigurationRequest = z.infer<typeof configurationRequestSchema>;
 const isPublicReleaseRequest = (input: ConfigurationRequest) =>
-  input.action === "public-release-plan" || input.action === "public-release-run";
+  input.action === "public-release-plan" ||
+  input.action === "public-release-run" ||
+  input.action === "public-release-observe";
 
 interface RegistryInvocation {
   request: Request;
@@ -126,6 +128,7 @@ const selectedApp = async (
   }
   if (
     input.action === "public-release-run" ||
+    input.action === "public-release-observe" ||
     input.action === "app-integration-capability-prepare"
   ) {
     return input.input.plan.selection;
