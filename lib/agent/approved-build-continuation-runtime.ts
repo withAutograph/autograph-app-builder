@@ -22,7 +22,7 @@ export const diagnosticBuildDecisionState = defineState<ApprovedBuildDecision | 
 );
 
 // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Authenticate the current owner before opening its private persistence adapter.
-const ownerStore = async (ctx: Pick<HookContext, "session">) => {
+export const continuationOwnerStore = async (ctx: Pick<HookContext, "session">) => {
   const { authority, principal } = exactForwardedSessionAuthority(ctx.session.auth);
   const { resolveHostedOperatorOwnerContext } =
     await import("../provisioning/hosted-operator-owner-context");
@@ -99,7 +99,7 @@ export const recordApprovedBuildDecision = async (
     await recordLocalBuildDecision(ctx, parsed);
     return;
   }
-  const { owner, principal, store } = await ownerStore(ctx);
+  const { owner, principal, store } = await continuationOwnerStore(ctx);
   await persistHostedBuildDecision({
     decision: parsed,
     ownerSessionId: owner.sessionId,
@@ -124,7 +124,7 @@ const verifyInternalBuildMessage = async (
       operationId: marker.operationId,
     });
   }
-  const { owner, principal, store } = await ownerStore(ctx);
+  const { owner, principal, store } = await continuationOwnerStore(ctx);
   return await claimHostedBuildMessage({
     logicalSessionId: ctx.session.id,
     messageSequence: input.messageSequence,

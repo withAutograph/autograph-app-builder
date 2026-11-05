@@ -1,3 +1,10 @@
+import {
+  continueLocalPreapprovalAuthoring,
+  readLocalAuthoringDecision,
+  blockLocalAuthoringContinuation,
+  localAuthoringConfigured,
+  readLocalAuthoringDispatchState,
+} from "../agent/local-preapproval-authoring";
 import { latestInstalledApplicationSource } from "./public-application-source";
 import { appendCurrentLocalSnapshot, appendImmutableLocalEvent } from "./immutable-local-events";
 import {
@@ -930,12 +937,35 @@ export function createLocalEveSessionService(
         const decision = await readLocalBuildDecision(sessionId);
         if (decision !== undefined && stoppedTurns.includes(decision.turnId)) return false;
       }
-      return await continueApprovedLocalBuild({
+      const approved = await continueApprovedLocalBuild({
         active: status === "working",
         dispatch: async (message) => await dispatchLocalBuildMessage(sessionId, message),
         pendingInput: outstandingInstalledEveRequests(snapshot.events).length > 0,
         sessionId,
       });
+      if (approved) return true;
+      if (!localAuthoringConfigured()) return false;
+      const drafting = await readLocalAuthoringDecision(sessionId);
+      if (drafting !== undefined && stoppedTurns.includes(drafting.turnId)) return false;
+      const outcome = await continueLocalPreapprovalAuthoring({
+        sessionId,
+        active: status !== "waiting",
+        pendingInput: outstandingInstalledEveRequests(snapshot.events).length > 0,
+        dispatch: async (message) => await dispatchLocalBuildMessage(sessionId, message),
+        assertCurrent: async (decision) => {
+          const fresh = await readLocalSnapshot(sessionId);
+          const unavailable =
+            state.unavailableSessions.has(sessionId) || localActiveResponses.has(sessionId);
+          const active =
+            deriveInstalledEveStatus(fresh.events) !== "waiting" ||
+            outstandingInstalledEveRequests(fresh.events).length > 0;
+          const changed = !isDeepStrictEqual(await readLocalAuthoringDecision(sessionId), decision);
+          if (unavailable || active || changed)
+            throw new Error("The accepted authoring boundary changed.");
+          await requireSettledModelTurn(sessionId);
+        },
+      });
+      return outcome === "queued" || outcome === "unknown";
     };
     const promise = work();
     state.continuationPumps.set(sessionId, promise);
@@ -1146,7 +1176,41 @@ export function createLocalEveSessionService(
       result.status === "waiting" &&
       (await continueLocalApprovedWork(sessionId))
     ) {
+      if (
+        localAuthoringConfigured() &&
+        (await readLocalAuthoringDispatchState(sessionId)) === "unknown"
+      )
+        return {
+          ...result,
+          status: "working",
+          error: {
+            code: "preapproval_authoring_continuation_unknown",
+            message:
+              "The drafting continuation may have been accepted. Preserve this session and observe its outcome without resending.",
+          },
+        };
       return { ...result, status: "working" };
+    }
+    if (result.status === "waiting" && localAuthoringConfigured()) {
+      if ((await readLocalAuthoringDispatchState(sessionId)) === "blocked")
+        return {
+          ...result,
+          error: {
+            code: "preapproval_authoring_continuation_blocked",
+            message:
+              "Current ownership, input or source blocks the drafting continuation. Preserve this session and continue through ordinary controls.",
+          },
+        };
+      const decision = await readLocalAuthoringDecision(sessionId);
+      if (decision?.decision === "blocked" && decision.reason === "authoring_no_progress")
+        return {
+          ...result,
+          error: {
+            code: "preapproval_authoring_no_progress",
+            message:
+              "Builder completed the drafting continuation without producing a proposal. The accepted app is unfinished; continue through an ordinary user turn to revise the plan.",
+          },
+        };
     }
     return result;
   };
@@ -1350,6 +1414,7 @@ export function createLocalEveSessionService(
   };
   service.cancel = async ({ sessionId, turnId }) => {
     await options.cancelRecovery?.(sessionId);
+    if (localAuthoringConfigured()) await blockLocalAuthoringContinuation(sessionId, turnId);
     if (state.unavailableSessions.has(sessionId)) {
       throw new LocalSessionRecoveryUnavailableError();
     }

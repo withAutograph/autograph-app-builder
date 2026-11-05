@@ -1,9 +1,11 @@
+import { preapprovalAuthoringDecisionSchema } from "../agent/preapproval-authoring";
 import { isDeepStrictEqual } from "node:util";
 import {
   attachBuilderDestinationRecord,
   isProvedSessionLimitResponse,
   isProvedResourceApprovalResponse,
   isProvedSendDelivery,
+  isDeliveredInternalContinuation,
   mayReviveCancelledSession,
   bindSendDelivery,
   hostedOperationRecordSchema,
@@ -25,6 +27,7 @@ import {
   assertNativeRecoverySessionReceipt,
   assertRecoveredBuildContinuationChild,
   recoveredBuildDecision,
+  recoveredAuthoringDecision,
   inheritRecoveryBuildDecision,
   matchesNativeExecutionTransferCheckpoint,
 } from "./hosted-store";
@@ -552,6 +555,70 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         return true;
       });
     },
+    async claimInternalAuthoringMessage(input) {
+      const principal = hostedPrincipalSchema.parse(input.principal);
+      return await database.transaction(async (transaction) => {
+        const priorOperation =
+          input.logicalSessionId === undefined
+            ? await operationById(transaction, principal, input.operationId, false)
+            : null;
+        const logicalSessionId =
+          input.logicalSessionId ??
+          priorOperation?.internalAuthoringContinuation?.decision.adapterSessionId;
+        if (logicalSessionId === undefined) {
+          return false;
+        }
+        const current = await currentBuildSession(
+          transaction,
+          principal,
+          input.sessionId,
+          logicalSessionId,
+        );
+        // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Lock the current owner before the marker operation to keep a consistent transaction order.
+        const operation = await operationById(transaction, principal, input.operationId, true);
+        const marker = operation?.internalAuthoringContinuation;
+        if (
+          current.status === "cancelled" ||
+          (current.cancellationRevision ?? 0) !== (current.resumedCancellationRevision ?? 0) ||
+          operation === null ||
+          marker === undefined ||
+          operation.state === "rejected" ||
+          operation.sessionId !== current.sessionId ||
+          marker.decision.adapterSessionId !== current.adapterSessionId ||
+          marker.decision.scopeDigest !== input.scopeDigest ||
+          marker.nonce !== input.nonce ||
+          input.turnSequence <= marker.decision.turnSequence
+        ) {
+          return false;
+        }
+        if (marker.deliveredTurnId !== undefined) {
+          return (
+            marker.deliveredTurnId === input.turnId &&
+            marker.deliveredMessageSequence === input.messageSequence
+          );
+        }
+        const updated = hostedOperationRecordSchema.parse({
+          ...operation,
+          internalAuthoringContinuation: {
+            ...marker,
+            deliveredMessageSequence: input.messageSequence,
+            deliveredTurnId: input.turnId,
+          },
+        });
+        const rows = await transaction
+          .update(agentOperations)
+          .set(operationValues(updated))
+          .where(
+            and(tenantPredicate(principal), eq(agentOperations.operationId, input.operationId)),
+          )
+          .returning();
+        if (rows.length !== 1) {
+          throw new Error("Internal continuation receipt was not durable.");
+        }
+        parseHostedOperationRow(rows[0]);
+        return true;
+      });
+    },
 
     async getPrivateOperation(principal, operationId) {
       return await operationById(database, hostedPrincipalSchema.parse(principal), operationId);
@@ -981,6 +1048,40 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         parseHostedSessionRow(rows[0]);
       });
     },
+    async recordPreapprovalAuthoringDecision(input) {
+      const principal = hostedPrincipalSchema.parse(input.principal);
+      await database.transaction(async (transaction) => {
+        const decision = preapprovalAuthoringDecisionSchema.parse(input.decision);
+        const current = await currentBuildSession(
+          transaction,
+          principal,
+          input.sessionId,
+          decision.adapterSessionId,
+        );
+        const boundDecision = recoveredAuthoringDecision(decision, current);
+        if (boundDecision === undefined) {
+          throw new Error(SESSION_NOT_FOUND);
+        }
+        if ((current.privateAuthoringDecision?.turnSequence ?? -1) > decision.turnSequence) {
+          return;
+        }
+        const updated = durableHostedSessionRecordSchema.parse({
+          ...current,
+          privateAuthoringDecision: boundDecision,
+        });
+        const rows = await transaction
+          .update(agentSessions)
+          .set(sessionValues(updated))
+          .where(
+            and(sessionTenantPredicate(principal), eq(agentSessions.sessionId, current.sessionId)),
+          )
+          .returning();
+        if (rows.length !== 1) {
+          throw new Error("Private build decision was not durable.");
+        }
+        parseHostedSessionRow(rows[0]);
+      });
+    },
 
     recordCancellationIntent(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
@@ -1089,6 +1190,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
             inArray(agentOperations.state, ["reserved", "submission_unknown"]),
             sql`${agentOperations.record}->'sendDelivery' IS NOT NULL`,
             sql`${agentOperations.record}->'internalBuildContinuation' IS NULL`,
+            sql`${agentOperations.record}->'internalAuthoringContinuation' IS NULL`,
             input.operationId === undefined
               ? undefined
               : eq(agentOperations.operationId, input.operationId),
@@ -1609,11 +1711,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         }
         const replayableStart =
           operation.kind === "start" && operation.state === "submission_unknown";
-        const deliveredInternal =
-          operation.kind === "send" &&
-          operation.state === "submission_unknown" &&
-          operation.internalBuildContinuation?.deliveredTurnId !== undefined &&
-          operation.internalBuildContinuation.deliveredMessageSequence !== undefined;
+        const deliveredInternal = isDeliveredInternalContinuation(operation);
         const current =
           (operation.internalSessionLimitResponse !== undefined ||
             operation.kind === "send" ||
@@ -1661,6 +1759,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         if (
           operation.kind === "send" &&
           operation.internalBuildContinuation === undefined &&
+          operation.internalAuthoringContinuation === undefined &&
           !provedSend
         ) {
           throw new Error("Canonical SEND delivery is not proved.");
@@ -1782,11 +1881,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         }
         const replayableStart =
           operation.kind === "start" && operation.state === "submission_unknown";
-        const deliveredInternal =
-          operation.kind === "send" &&
-          operation.state === "submission_unknown" &&
-          operation.internalBuildContinuation?.deliveredTurnId !== undefined &&
-          operation.internalBuildContinuation.deliveredMessageSequence !== undefined;
+        const deliveredInternal = isDeliveredInternalContinuation(operation);
         if (operation.state !== "reserved" && !replayableStart && !deliveredInternal) {
           throw new Error(OPERATION_CANNOT_SETTLE);
         }

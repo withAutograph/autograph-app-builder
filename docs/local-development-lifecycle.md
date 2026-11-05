@@ -682,3 +682,27 @@ UTF-8 byte offset; use `contentPath`, `expectedDigest`, `offsetBytes`, and the s
 `expectedProposalDigest` for every continuation. If the current proposal changes,
 restart from its actual new digest. Reading grants no approval, executes no code,
 and never applies, publishes, acquires or reconfigures a Sandbox.
+
+### Accepted app drafting before Build approval
+
+An accepted AppSpec remains unfinished work when the native agent completes after
+only inspecting source. A separate **preapproval authoring** decision binds that
+intent to its original logical session, accepted artifact revision, source receipt,
+workspace and planning progress. It may queue a drafting turn through the existing
+public session. It grants no Build, application write, publication or provider
+permission. A proposal or pending input stops this continuation; normal fresh Build
+approval remains mandatory.
+
+The local owner files and hosted canonical store reserve the exact internal SEND
+before dispatch. An uncertain acknowledgement is observed without resending.
+Cancellation, failed or unfinished native calls, changed ownership or source, and
+retained source prerequisites block dispatch. Authenticated internal markers do
+not become product requirements; user-supplied lookalike text remains ordinary
+input. Recovery preserves the accepted logical identity and rebinds only its
+independently proven physical owner.
+
+If that authenticated drafting turn completes with the same accepted/planning
+state and still has no proposal, Builder reports
+`preapproval_authoring_no_progress`. It leaves the app unfinished and waiting for
+an ordinary user continuation instead of repeatedly queuing inspection-only turns.
+Actual dependency or identity progress is distinct from this no-progress boundary.

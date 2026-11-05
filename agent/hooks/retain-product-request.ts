@@ -1,3 +1,4 @@
+import { authenticatedInternalAuthoringMessage } from "../../lib/agent/preapproval-authoring-runtime";
 import { authenticatedInternalBuildMessage } from "../../lib/agent/approved-build-continuation-runtime";
 import { defineHook } from "eve/hooks";
 import {
@@ -19,11 +20,16 @@ export default defineHook({
     },
     async "message.received"(event, ctx) {
       if (
-        await authenticatedInternalBuildMessage(ctx, {
+        (await authenticatedInternalBuildMessage(ctx, {
           message: event.data.message,
           messageSequence: event.data.sequence,
           turnId: event.data.turnId,
-        })
+        })) ||
+        (await authenticatedInternalAuthoringMessage(ctx, {
+          message: event.data.message,
+          messageSequence: event.data.sequence,
+          turnId: event.data.turnId,
+        }))
       ) {
         return;
       }
