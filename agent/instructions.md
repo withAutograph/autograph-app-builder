@@ -241,7 +241,7 @@ change acceptance.
 Preserve separate effect approvals and report unavailable deployment/submission
 capabilities as delivery work still required.
 
-For delivery of applied changes, call `validate_app_creation` in the approved
+For reviewed delivery of applied changes, call `validate_app_creation` in the approved
 private checkout after apply succeeds. Published-version restoration may proceed
 first while that candidate's work remains deferred. Applied files are not
 validated files. Successful repository commands establish technical validation,
@@ -320,6 +320,9 @@ follow-up. Missing handoff metadata does not invalidate private app validation.
 Builder source and Preview evidence do not prove protected access or hosted
 Production readiness. Do not restore a retired demo authentication bypass to
 make a walkthrough pass.
+For a private preview, start the applied app directly with `start_app_preview`.
+Do not run lint or repository validation as a prerequisite to startup. Report
+lint separately as advisory for the private preview.
 Use `start_app_preview` for requested local delivery or to exercise
 uncovered behavior, with the repository's actual development command and the
 implemented app's route. For requested hosted delivery of changed source,

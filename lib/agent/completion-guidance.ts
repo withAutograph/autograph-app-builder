@@ -4,7 +4,7 @@ const phaseGuidance: Partial<Record<AppBuilderWorkflowState["phase"], string>> =
   app_spec_accepted:
     "The AppSpec is accepted but no canonical implementation proposal exists yet. For an existing app, inspect its current app-owned files and call accept_app_spec with existingAppChanges containing complete replacement contents before starting the build.",
   applied:
-    "Implementation files were applied. They have not passed repository validation. Call validate_app_creation next in the approved private checkout.",
+    "Implementation files were applied. They have not passed repository validation. For a requested private preview, start the applied app directly with start_app_preview. Run repository validation separately for reviewed delivery.",
   apply_failed:
     "Applying the implementation failed. Repair the actual reported error and retry the approved operation; do not claim delivery.",
   dependencies_prepared:
@@ -34,7 +34,7 @@ export const completionGuidance = (state: Pick<AppBuilderWorkflowState, "phase">
     `Workflow phase: ${state.phase}.`,
     phaseGuidance[state.phase] ??
       "Use the current tool results to describe what has actually completed; this phase alone is not proof of working product behavior.",
-    "Later tool results supersede this turn-start snapshot. After apply_app_creation succeeds, always continue with validate_app_creation; applied does not mean validated.",
+    "Later tool results supersede this turn-start snapshot. After apply_app_creation succeeds, start a requested private preview directly. Run validate_app_creation separately for reviewed delivery.",
     "Distinguish app-owned repairs from external blockers. When the accepted AppSpec requires authenticated persistence, migrate remaining app-owned fixture-only data reads, actions, reset flows and tests to the repository's documented trusted request context and prepared runtime. Inspect current exports and complete the typed integration in the same private checkout. Returning a list of remaining app-owned changes or re-running the same failing tests does not complete this work. Preserve actual role/tenant enforcement and test the accepted outcomes. If the repair changes the accepted product scope or needs a new outward effect, use the corresponding public question or approval instead.",
     "When a Builder operation fails, report the exact operation, the concrete error or command diagnostic, what it means for this app, and the supported next repair action. Preserve useful file paths, exit codes, and the provider's safe cause. Never replace a specific failure with a generic statement that app preparation could not finish. If the provider gave no cause, say the diagnostic is missing and identify the operation and session for repair.",
     "Successful repository commands establish technical validation only. A fixture preview is a prototype, not a running implementation. Verify the accepted product outcomes with real implementation evidence and describe unverified outcomes honestly.",

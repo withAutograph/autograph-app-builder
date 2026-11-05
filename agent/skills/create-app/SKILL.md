@@ -264,7 +264,9 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    connecting a provider or changing retained bindings/data. Follow the optional
    integration reference for app-owned UI conflicts and source-only removal.
    After apply and any requested integration installation
-   succeed, continue with `validate_app_creation`. It runs the repository's normal
+   succeed, start a requested private preview directly with `start_app_preview`.
+   Lint is advisory for private previews and must not precede or block startup.
+   For reviewed delivery, continue with `validate_app_creation`. It runs the repository's normal
    commands against the current applied app. When it
    reports a repairable failure, provide corrected `implementationFiles` to
    `validate_app_creation` and retry in the same approved checkout. Use the
