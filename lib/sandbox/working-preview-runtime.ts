@@ -1,4 +1,5 @@
-import { APIError, type Command, type Sandbox } from "@vercel/sandbox";
+import { APIError } from "@vercel/sandbox";
+import type { Command, Sandbox } from "@vercel/sandbox";
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -33,17 +34,26 @@ const missingRuntimeFile = (error: unknown): null => {
   throw error;
 };
 
-const getPriorPreviewCommand = (provider: Sandbox, commandId: string, signal: AbortSignal) =>
-  provider.getCommand(commandId, { signal }).catch((error: unknown) => {
-    if (
-      error instanceof APIError &&
-      error.response.status === 404 &&
-      /command not found or has exited/iu.test(error.message)
-    ) {
+const isMissingPreviewCommand = (error: unknown): boolean =>
+  error instanceof APIError &&
+  error.response.status === 404 &&
+  /command not found or has exited/iu.test(error.message);
+
+const getPriorPreviewCommand = async (
+  provider: Sandbox,
+  commandId: string,
+  signal: AbortSignal,
+) => {
+  try {
+    return await provider.getCommand(commandId, { signal });
+  } catch (error) {
+    signal.throwIfAborted();
+    if (isMissingPreviewCommand(error)) {
       return null;
     }
     throw error;
-  });
+  }
+};
 
 export const workingPreviewSupervisorSource = (input: {
   gatewaySource: string;
@@ -235,8 +245,11 @@ const waitForPreview = async (input: {
       // oxlint-disable-next-line eslint/no-await-in-loop -- Observe the existing supervisor without collecting output.
       const supervisor = await input.provider
         .getCommand(input.commandId, { signal: probeSignal() })
-        .catch(() => {
+        .catch((error: unknown) => {
           input.signal.throwIfAborted();
+          if (isMissingPreviewCommand(error)) {
+            throw new Error("The new preview supervisor is no longer available.", { cause: error });
+          }
           return null;
         });
       if (supervisor !== null && supervisor.exitCode !== null) {
@@ -293,10 +306,32 @@ const waitForPreview = async (input: {
 };
 
 /** A successful signal request is not evidence that its listener has terminated. */
-export const stopWorkingPreviewCommand = async (command: Command): Promise<void> => {
-  const signal = AbortSignal.timeout(10_000);
-  await command.kill("SIGTERM", { abortSignal: signal });
-  await command.wait({ signal });
+export const stopWorkingPreviewCommand = async (
+  command: Command,
+  signal = AbortSignal.timeout(10_000),
+): Promise<void> => {
+  try {
+    if (command.exitCode === null) {
+      await command.kill("SIGTERM", { abortSignal: signal });
+    }
+    await command.wait({ signal });
+  } catch (error) {
+    signal.throwIfAborted();
+    if (!isMissingPreviewCommand(error)) {
+      throw error;
+    }
+  }
+};
+
+const retirePriorPreviewCommand = async (
+  provider: Sandbox,
+  commandId: string,
+  signal: AbortSignal,
+): Promise<void> => {
+  const command = await getPriorPreviewCommand(provider, commandId, signal);
+  if (command !== null) {
+    await stopWorkingPreviewCommand(command, signal);
+  }
 };
 
 const attemptIdentity = (attempt: PreviewAttempt) => ({
@@ -347,12 +382,7 @@ const reconcilePreviewAttempt = async (
       attempt.providerSessionId === provider.currentSession().sessionId &&
       attempt.commandId !== undefined
     ) {
-      const command = await getPriorPreviewCommand(provider, attempt.commandId, signal);
-      if (command !== null) {
-        await (command.exitCode === null
-          ? stopWorkingPreviewCommand(command)
-          : command.wait({ signal }));
-      }
+      await retirePriorPreviewCommand(provider, attempt.commandId, signal);
     }
     await previewOwnershipOperation(
       provider,
@@ -541,13 +571,7 @@ export const startWorkingPreview = async (input: {
     // Bind a deny-by-default listener before exposing any inbound port.
     await provider.update({ networkPolicy: "allow-all", ports: [] }, { signal });
     if (input.previous?.providerSessionId === providerSessionId) {
-      const previous = await getPriorPreviewCommand(provider, input.previous.commandId, signal);
-      if (previous !== null) {
-        if (previous.exitCode === null) {
-          await previous.kill("SIGTERM", { abortSignal: signal });
-        }
-        await previous.wait({ signal });
-      }
+      await retirePriorPreviewCommand(provider, input.previous.commandId, signal);
     }
 
     const directory = `/workspace/.autograph-working-preview/${randomUUID()}`;

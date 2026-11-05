@@ -1,5 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
-import { APIError, type Sandbox } from "@vercel/sandbox";
+import { APIError } from "@vercel/sandbox";
+import type { Sandbox } from "@vercel/sandbox";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { startWorkingPreview, stopWorkingPreviewCommand } from "./working-preview-runtime";
@@ -427,7 +428,11 @@ describe("safe interrupted startup diagnostics", () => {
 describe("preview command termination", () => {
   it("does not finish cleanup on signal acknowledgement before command termination", async () => {
     const exited = Promise.withResolvers<null>();
-    const command = { kill: vi.fn(() => Promise.resolve()), wait: vi.fn(() => exited.promise) };
+    const command = {
+      exitCode: null,
+      kill: vi.fn(() => Promise.resolve()),
+      wait: vi.fn(() => exited.promise),
+    };
     let settled = false;
     const cleanup = stopWorkingPreviewCommand(
       command as unknown as Parameters<typeof stopWorkingPreviewCommand>[0],
